@@ -14,6 +14,11 @@ related:
 Transport is serialization and delivery only. It converts `MuJoCoState` into a
 JSON-compatible payload for the viewer or other consumers.
 
+`mujoco_state_to_payload()` is the v0 serializer for this contract. It converts
+`MuJoCoState` into a JSON-compatible payload and shallow-copies `metadata`.
+`metadata` is diagnostic or transport helper data only and is expected to
+already be JSON-compatible.
+
 ## Rules
 
 - Transport must carry a payload version.

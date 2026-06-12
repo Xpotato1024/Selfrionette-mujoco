@@ -48,6 +48,10 @@ InputSource
 - `MuJoCoState` is the backend physical snapshot.
 - Transport payloads are JSON-compatible delivery artifacts derived from
   `MuJoCoState`.
+- Step 5-A adds `mujoco_state_to_payload()` as the v0 serializer for that
+  payload contract.
+- Transport stays serialization/delivery only and does not own IK, FK,
+  physics, or `mj_step`.
 - Input sources stop at `RawInputFrame`.
 - Input interpreters stop at `InputIntent`.
 - Motion and IK stop at `MotionCommand`.
