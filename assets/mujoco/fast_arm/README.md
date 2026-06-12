@@ -1,15 +1,26 @@
-# fast_arm MuJoCo Assets
+# Canonical fast_arm MuJoCo Assets
 
-This directory is the placeholder for MuJoCo fast arm model assets.
+This directory is the canonical location for the adopted `fast_arm` MuJoCo
+assets.
 
-Planned roles:
+## Roles
 
-- `arm.xml`: arm model definition.
-- `scene.xml`: scene wrapper and model inclusion.
-- `meshes/`: STL or other mesh assets.
+- `arm.xml`: canonical arm model definition.
+- `scene.xml`: canonical scene wrapper that includes `arm.xml`.
+- `meshes/`: canonical STL mesh directory for the arm model.
 
-No adopted asset has been moved here in this architecture lock PR.
+## Path Contract
 
-If mesh scale, axis, origin, MJCF names, XML structure, or units change, document
-the change in `docs/contracts/assets.md`. Visual mesh and collision geometry may
-be separated when the model contract is defined.
+- `arm.xml` must resolve meshes from `meshes/` with `meshdir="meshes"`.
+- `scene.xml` must include `arm.xml` from the same directory.
+- STL filenames keep the legacy asset names, including the existing
+  `Sholder` spelling.
+
+## Change Rules
+
+- Changing mesh scale, axis, origin, or units requires a docs update first.
+- Joint, body, site, actuator, default pose, geom shape, inertial parameters,
+  joint ranges, and control ranges are model contract data and should not be
+  edited in this adoption step.
+- The assets come from `legacy/fast_arm_control`, but legacy Python code must
+  not be imported or executed from the new implementation.

@@ -13,8 +13,25 @@ related:
 This is the canonical contract for MJCF, XML, STL, scale, axis, origin, and mesh
 placement assumptions.
 
-The implementation has not started. Future PRs will fix adopted asset paths,
-mesh scale, coordinate axis, origins, visual/collision separation, and model
-validation expectations here.
+## fast_arm canonical assets
+
+- Canonical path: `assets/mujoco/fast_arm/`
+- Required files:
+  - `arm.xml`
+  - `scene.xml`
+  - `meshes/BaseLink.stl`
+  - `meshes/SholderLink1.stl`
+  - `meshes/SholderLink2.stl`
+  - `meshes/UpperArmLink.stl`
+  - `meshes/ForeArmLink.stl`
+- `arm.xml` must use the canonical mesh directory contract
+  `meshdir="meshes"` and resolve mesh files from `assets/mujoco/fast_arm/meshes/`.
+- `scene.xml` must include `arm.xml` from the same directory.
+- STL filenames keep the legacy asset names, including the existing
+  `Sholder` spelling.
+- Joint, body, and site names are part of the model contract and should be
+  treated as stable identifiers.
+- Path fixes only are allowed in this adoption step; model semantics changes are
+  forbidden here.
 
 Other documents should link here instead of restating asset rules.
