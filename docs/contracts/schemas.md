@@ -33,3 +33,6 @@ here instead of restating field lists.
   behavior.
 - Schema additions should preserve the layer boundaries documented in
   `docs/architecture/dependency-boundaries.md`.
+- `MuJoCoState` snapshot generation lives in `mujoco_backend` and is fed by
+  `mj_forward`; `mj_step` is reserved for later layers and not part of the
+  snapshot contract.
