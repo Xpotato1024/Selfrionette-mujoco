@@ -67,6 +67,10 @@ input_sources
 `docs/architecture/dependency-boundaries.md` と
 `docs/architecture/runtime-composition.md` を参照する。
 
+この図は data flow であり、import dependency ではない。
+import boundary は docs/architecture/dependency-boundaries.md と
+tests/architecture/test_import_boundaries.py を正とする。
+
 ## 4. Documentation SoT
 
 `doc/` は使用しない。ドキュメントは `docs/` に統一する。
