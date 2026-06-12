@@ -6,6 +6,8 @@ canonical_for:
   - schema contracts
 related:
   - src/selfrionette/schemas/README.md
+  - docs/contracts/motion-command.md
+  - docs/contracts/mujoco-state.md
 ---
 
 # Schema Contracts
@@ -21,9 +23,11 @@ here instead of restating field lists.
 - `InputIntent`: interpreted input sent from `input_interpreters` to `motion`.
 - `TargetCommand`: target-space command used by motion generation.
 - `JointCommand`: joint-space command used by motion and kinematics stubs.
-- `MotionCommand`: motion-layer output consumed by `mujoco_backend`.
+- `MotionCommand`: motion-layer command consumed by `mujoco_backend`; see
+  `docs/contracts/motion-command.md`.
 - `BodyTransform`, `SiteTransform`: rigid transforms extracted by the backend.
-- `MuJoCoState`: backend snapshot passed to transport and viewer layers.
+- `MuJoCoState`: backend snapshot passed to transport and viewer layers; see
+  `docs/contracts/mujoco-state.md`.
 - `RenderState`: placeholder render contract for viewer-side state handoff.
 
 ## Responsibility Notes
@@ -33,6 +37,9 @@ here instead of restating field lists.
   behavior.
 - Schema additions should preserve the layer boundaries documented in
   `docs/architecture/dependency-boundaries.md`.
+- `MotionCommand` is a command, not state.
 - `MuJoCoState` snapshot generation lives in `mujoco_backend` and is fed by
-  `mj_forward`; `mj_step` is reserved for later layers and not part of the
+  `mj_forward`; `mj_step` is reserved for later layers and is not part of the
   snapshot contract.
+- Transport payloads are derived from `MuJoCoState` and do not change schema
+  ownership.

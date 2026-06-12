@@ -24,21 +24,25 @@ fills one layer at a time.
 
 ```text
 Step 1:
-  完全なスケルトンを作る
+  Build the complete skeleton
 
 Step 2:
-  各層に stub 実装を入れる
+  Add stubs to each layer
 
 Step 3:
-  stub 同士を runtime で結線する
+  Wire the stubs together in runtime
 
 Step 4:
-  その後、各 stub の中身を 1 つずつ実装する
+  Implement each stub one by one
+
+Step 5:
+  Freeze the parallel work contracts
 ```
 
-This PR locks Step 2 schema / Protocol / stub placement only. Do not add IK,
-FK, MuJoCo loading, WebSocket servers, device input, or Three.js rendering
-behavior in the architecture lock round.
+Step 5-0 locks the parallel work contracts that keep control, transport,
+viewer, input, and IK work from drifting apart. Do not add IK, FK, MuJoCo
+loading, WebSocket servers, device input, or Three.js rendering behavior in
+this contract-lock round.
 
 ## Responsibility Drift Guardrail
 

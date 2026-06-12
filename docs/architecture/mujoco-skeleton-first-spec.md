@@ -16,17 +16,22 @@ related:
 
 MuJoCo is the physical source of truth. Three.js is rendering only. The runtime
 directory is the only composition root. Schemas define layer contracts. Legacy
-is reference only. Assets are model assets.
+is reference only. Assets are model assets. Transport is serialization and
+delivery only.
 
 Correct flow:
 
 ```text
-MotionCommand
-  → MuJoCo model / data
-  → body transform
-  → site transform
-  → MuJoCoState
-  → Three.js display
+InputSource
+  -> RawInputFrame
+  -> InputInterpreter
+  -> InputIntent
+  -> MotionGenerator / IK
+  -> MotionCommand
+  -> MuJoCo backend
+  -> MuJoCoState
+  -> transport payload
+  -> Three.js display
 ```
 
 Forbidden structure:
@@ -36,8 +41,8 @@ MuJoCo
 FK
 Three.js hierarchy
 Rapier body
-旧 PoseState
-がそれぞれ別々にアーム姿勢を持つ
+old PoseState
+any duplicate arm-pose source of truth
 ```
 
 ## Layers
@@ -84,6 +89,7 @@ runtime, render Three.js, or own a WebSocket server.
 
 Serializes and sends `MuJoCoState`, logs frames, and records replay data. It
 must not perform IK, update targets, step MuJoCo, read input devices, or render.
+Transport is payload delivery only. It does not own a physics state.
 
 ### `runtime/`
 
@@ -96,6 +102,36 @@ loop. Other layers must not depend on runtime.
 The Three.js rendering layer. It receives `MuJoCoState` and applies body/site
 transforms to meshes, markers, and overlays. It must not implement FK, IK,
 joint generation, MuJoCo stepping, or Rapier physics.
+
+## Step 5-0 Parallel Work Contracts
+
+This issue locks the contracts that let the following work proceed in parallel
+without splitting source of truth:
+
+```text
+InputSource
+  -> RawInputFrame
+  -> InputInterpreter
+  -> InputIntent
+  -> MotionGenerator / IK
+  -> MotionCommand
+  -> MuJoCo backend
+  -> MuJoCoState
+  -> transport payload
+  -> viewer rendering
+```
+
+Rules:
+
+- Data flow and import dependency are not the same thing.
+- Runtime is the only layer allowed to compose multiple layers.
+- Viewer, transport, input, and IK must not compose the MuJoCo backend
+  directly.
+- Viewer renders `MuJoCoState` or a transport payload; it does not create its
+  own physics state.
+- MotionCommand, MuJoCoState, transport payload, viewer, and input/IK contracts
+  are fixed by `docs/contracts/`.
+- This issue does not add implementation behavior.
 
 ## Stub Policy
 
@@ -147,3 +183,9 @@ This issue adds the runtime entry for the real headless MuJoCo backend:
 - return `MuJoCoState` from `snapshot()`
 - defer motion-to-qpos/ctrl, transport, viewer, and hardware work to later
   issues
+
+### Step 5-0
+
+This issue freezes the parallel work contracts for input, motion, IK,
+transport, and viewer work. It does not add new behavior. Use the canonical
+contracts under `docs/contracts/` when implementing later steps.

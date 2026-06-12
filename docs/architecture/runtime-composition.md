@@ -6,6 +6,7 @@ canonical_for:
   - runtime composition root
 related:
   - docs/architecture/data-flow.md
+  - docs/contracts/parallel-work-contracts.md
 ---
 
 # Runtime Composition
@@ -14,6 +15,10 @@ related:
 
 Only runtime may connect multiple layers. Individual layers must not depend on
 runtime or instantiate peer layers directly.
+
+Viewer, transport, input, and IK layers do not compose the MuJoCo backend on
+their own. They receive the contracts produced by runtime and stay limited to
+their own responsibility boundary.
 
 Runtime responsibilities:
 
@@ -42,3 +47,6 @@ The headless backend keeps `apply_command()` as command retention only and
 
 Layer implementations must expose contracts that runtime can compose without
 creating reverse dependencies.
+
+Step 5-0 freezes the parallel work contracts for input, motion, IK, transport,
+and viewer work. The contract details live in `docs/contracts/`.
