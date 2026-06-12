@@ -19,7 +19,7 @@ a controller state, transport state, or viewer state.
 ## Fields
 
 - `frame_index`: runtime/backend frame counter.
-- `time_s`: MuJoCo `data.time`.
+- `time_s`: MuJoCo `data.time` after backend stepping.
 - `qpos`: MuJoCo `qpos` in model order.
 - `qvel`: MuJoCo `qvel` in model order.
 - `bodies`: body transforms derived from MuJoCo model/data.
@@ -39,5 +39,6 @@ a controller state, transport state, or viewer state.
 ## Notes
 
 - `base_link` and `tip` are canonical model names for the fast arm assets.
-- `mj_step` is not part of this contract.
+- `frame_index` increments once per backend step.
+- Step 5-D uses `mj_step` in the backend before building the next snapshot.
 - Other documents should link here instead of restating the field rules.
