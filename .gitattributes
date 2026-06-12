@@ -1,0 +1,11 @@
+*.md text eol=lf
+*.py text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+*.txt text eol=lf
+.env.example text eol=lf
+
+*.csv binary
+*.png binary
+*.jpg binary
+*.jpeg binary
