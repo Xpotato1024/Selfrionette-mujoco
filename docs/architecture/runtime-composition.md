@@ -30,5 +30,15 @@ Step 3 adds a NoOp runtime pipeline that connects the existing stubs.
 The runtime directory remains the only composition root.
 The NoOp pipeline is for wiring validation, not implementation detail.
 
+Step 4-D adds the first runtime entry to inject a real headless MuJoCo backend
+into `RuntimePipeline`.
+`build_noop_pipeline()` remains available for stub wiring checks, and
+`build_mujoco_pipeline()` composes `StaticInputSource` +
+`NoOpInputInterpreter` + `NoOpMotionGenerator` +
+`HeadlessMuJoCoSimulator` + `NoOpStatePublisher`.
+The headless backend keeps `apply_command()` as command retention only and
+`step(dt_s)` as frame index bookkeeping only; it does not call `mj_step` yet.
+`snapshot()` returns `MuJoCoState` from the backend model/data snapshot path.
+
 Layer implementations must expose contracts that runtime can compose without
 creating reverse dependencies.
