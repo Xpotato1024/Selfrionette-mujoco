@@ -103,3 +103,9 @@ Step 2 adds schema dataclasses, layer `Protocol` definitions, and NoOp / static
 stubs in the documented layers. Stub files must stay inside the correct layer
 and must not bypass the dependency rules. Runtime composition remains out of
 scope until Step 3.
+
+Step 3 connects `StaticInputSource` -> `NoOpInputInterpreter` ->
+`NoOpMotionGenerator` -> `NoOpMuJoCoSimulator` -> `NoOpStatePublisher`.
+It does not introduce real MuJoCo, WebSocket, Three.js, or device input
+behavior.
+Step 4 replaces each stub implementation individually.

@@ -25,5 +25,10 @@ Runtime responsibilities:
 - create transport
 - manage the main loop
 
+Step 3 adds a NoOp runtime pipeline that connects the existing stubs.
+`RuntimePipeline` is the composition object for those connections.
+The runtime directory remains the only composition root.
+The NoOp pipeline is for wiring validation, not implementation detail.
+
 Layer implementations must expose contracts that runtime can compose without
 creating reverse dependencies.
