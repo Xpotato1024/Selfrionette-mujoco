@@ -46,10 +46,18 @@ input_sources       → mujoco_backend
 input_sources       → transport
 input_sources       → runtime
 
+input_interpreters  → input_sources
 input_interpreters  → motion
+input_interpreters  → kinematics
 input_interpreters  → mujoco_backend
 input_interpreters  → transport
 input_interpreters  → runtime
+
+motion              → input_sources
+motion              → input_interpreters
+motion              → mujoco_backend
+motion              → transport
+motion              → runtime
 
 kinematics          → input_sources
 kinematics          → input_interpreters

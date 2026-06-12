@@ -16,7 +16,16 @@ FORBIDDEN_IMPORTS = {
         "selfrionette.runtime",
     ],
     "input_interpreters": [
+        "selfrionette.input_sources",
         "selfrionette.motion",
+        "selfrionette.kinematics",
+        "selfrionette.mujoco_backend",
+        "selfrionette.transport",
+        "selfrionette.runtime",
+    ],
+    "motion": [
+        "selfrionette.input_sources",
+        "selfrionette.input_interpreters",
         "selfrionette.mujoco_backend",
         "selfrionette.transport",
         "selfrionette.runtime",
