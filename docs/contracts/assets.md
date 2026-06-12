@@ -33,5 +33,10 @@ placement assumptions.
   treated as stable identifiers.
 - Path fixes only are allowed in this adoption step; model semantics changes are
   forbidden here.
+- Step 4-B uses `assets/mujoco/fast_arm/scene.xml` as the canonical load path
+  for the headless model loader.
+- MuJoCo imports must stay inside `src/selfrionette/mujoco_backend/`.
+- The loader and inspection helpers do not connect to runtime yet.
+- `MuJoCoState` snapshot generation is deferred to #10.
 
 Other documents should link here instead of restating asset rules.
