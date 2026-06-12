@@ -28,6 +28,7 @@ def test_noop_input_interpreter_returns_intent() -> None:
     frame = RawInputFrame(
         source="gamepad",
         timestamp_s=4.5,
+        values=(0.25, -0.5),
         buttons=(True, False),
         metadata={"origin": "test"},
     )
@@ -37,9 +38,11 @@ def test_noop_input_interpreter_returns_intent() -> None:
     assert isinstance(intent, InputIntent)
     assert intent.source == "gamepad"
     assert intent.timestamp_s == 4.5
+    assert intent.values == (0.25, -0.5)
     assert intent.target_delta_m == (0.0, 0.0, 0.0)
     assert intent.joint_delta_rad == ()
     assert intent.buttons == (True, False)
+    assert intent.metadata == {"origin": "test"}
 
 
 def test_noop_motion_generator_returns_command() -> None:

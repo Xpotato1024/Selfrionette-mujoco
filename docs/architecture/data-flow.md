@@ -29,6 +29,21 @@ InputSource
 Data flow and import dependency are different things. Runtime is the only
 composition root allowed to connect multiple layers.
 
+Step 5-E adds the deterministic replay input slice:
+
+```text
+ReplayInputSource
+  -> RawInputFrame
+  -> ReplayInputInterpreter
+  -> InputIntent
+```
+
+`InputIntent` is the minimal input-layer result and is not a
+`MotionCommand`. Motion command generation belongs to `motion` / IK in later
+steps.
+
+The input layer does not import `mujoco_backend`, `transport`, or `viewer`.
+
 Three.js must not calculate FK or IK. It renders transforms that come from
 `MuJoCoState` or the derived transport payload.
 

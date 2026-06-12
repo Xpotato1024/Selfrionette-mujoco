@@ -1,22 +1,19 @@
 from __future__ import annotations
 
-from selfrionette.input_interpreters.base import InputInterpreter
 from selfrionette.schemas import InputIntent, RawInputFrame
 
 
-class NoOpInputInterpreter:
-    """No-op input interpreter stub, not a real input processing pipeline."""
+class ReplayInputInterpreter:
+    """Deterministic replay interpreter that preserves the raw frame payload."""
 
     def interpret(self, frame: RawInputFrame) -> InputIntent:
         return InputIntent(
             source=frame.source,
             timestamp_s=frame.timestamp_s,
             values=frame.values,
-            target_delta_m=(0.0, 0.0, 0.0),
-            joint_delta_rad=(),
             buttons=frame.buttons,
             metadata=dict(frame.metadata),
         )
 
 
-__all__ = ["InputInterpreter", "NoOpInputInterpreter"]
+__all__ = ["ReplayInputInterpreter"]
