@@ -119,3 +119,15 @@ This issue adds the first headless MuJoCo backend slice:
 - inspect joint, body, and site names only
 - do not connect the loader to runtime yet
 - do not build `MuJoCoState` snapshots here; that is reserved for #10
+
+### Step 4-C
+
+This issue adds the headless `MuJoCoState` snapshot slice:
+
+- build `MuJoCoState` from `MjModel` / `MjData` in `mujoco_backend` only
+- call `mj_forward` before reading data
+- do not call `mj_step`
+- map body transforms to `BodyTransform`
+- map site transforms to `SiteTransform`
+- store quaternions as `wxyz`
+- keep runtime connection deferred to #11
