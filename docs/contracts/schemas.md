@@ -10,11 +10,26 @@ related:
 
 # Schema Contracts
 
-This is the canonical contract for shared schemas such as `RawInputFrame`,
-`InputIntent`, `TargetCommand`, `JointCommand`, `MotionCommand`, `MuJoCoState`,
-and `RenderState`.
+This is the canonical contract for shared schemas. Other documents should link
+here instead of restating field lists.
 
-The implementation has not started. Future PRs will define exact fields,
-serialization rules, immutability expectations, and compatibility policy here.
+## Schemas
 
-Other documents should not restate schema fields. Link to this document.
+- `Vector3`, `QuaternionWXYZ`, `JointVector`, `ScalarVector`: shared tuple
+  aliases for layer contracts.
+- `RawInputFrame`: raw device/replay input captured by `input_sources`.
+- `InputIntent`: interpreted input sent from `input_interpreters` to `motion`.
+- `TargetCommand`: target-space command used by motion generation.
+- `JointCommand`: joint-space command used by motion and kinematics stubs.
+- `MotionCommand`: motion-layer output consumed by `mujoco_backend`.
+- `BodyTransform`, `SiteTransform`: rigid transforms extracted by the backend.
+- `MuJoCoState`: backend snapshot passed to transport and viewer layers.
+- `RenderState`: placeholder render contract for viewer-side state handoff.
+
+## Responsibility Notes
+
+- Schemas define shared data contracts only.
+- Schemas must not import runtime composition, MuJoCo, WebSocket, or Three.js
+  behavior.
+- Schema additions should preserve the layer boundaries documented in
+  `docs/architecture/dependency-boundaries.md`.

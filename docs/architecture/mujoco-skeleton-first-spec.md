@@ -99,5 +99,7 @@ joint generation, MuJoCo stepping, or Rapier physics.
 
 ## Stub Policy
 
-Step 2 may add stubs after this lock PR. Stub files must be placed in the
-correct layer and must not bypass the dependency rules.
+Step 2 adds schema dataclasses, layer `Protocol` definitions, and NoOp / static
+stubs in the documented layers. Stub files must stay inside the correct layer
+and must not bypass the dependency rules. Runtime composition remains out of
+scope until Step 3.

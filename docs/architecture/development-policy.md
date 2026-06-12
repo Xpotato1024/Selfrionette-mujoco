@@ -36,9 +36,9 @@ Step 4:
   その後、各 stub の中身を 1 つずつ実装する
 ```
 
-This PR completes Step 1 only. Do not add IK, FK, MuJoCo loading, WebSocket
-servers, device input, or Three.js rendering behavior in the architecture lock
-round.
+This PR locks Step 2 schema / Protocol / stub placement only. Do not add IK,
+FK, MuJoCo loading, WebSocket servers, device input, or Three.js rendering
+behavior in the architecture lock round.
 
 ## Responsibility Drift Guardrail
 
