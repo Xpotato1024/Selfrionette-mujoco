@@ -109,3 +109,13 @@ Step 3 connects `StaticInputSource` -> `NoOpInputInterpreter` ->
 It does not introduce real MuJoCo, WebSocket, Three.js, or device input
 behavior.
 Step 4 replaces each stub implementation individually.
+
+### Step 4-B
+
+This issue adds the first headless MuJoCo backend slice:
+
+- canonical model path: `assets/mujoco/fast_arm/scene.xml`
+- load the scene in `mujoco_backend` only
+- inspect joint, body, and site names only
+- do not connect the loader to runtime yet
+- do not build `MuJoCoState` snapshots here; that is reserved for #10

@@ -2,7 +2,9 @@
 name = "selfrionette-mujoco"
 version = "0.0.0"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "mujoco>=3.9.0",
+]
 
 [dependency-groups]
 dev = [
