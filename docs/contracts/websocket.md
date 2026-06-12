@@ -16,5 +16,9 @@ WebSocket is one possible delivery mechanism. It does not define the
 simulation, physics, or viewer contract.
 
 The Step 5-A transport payload serializer is intentionally independent of any
-WebSocket server/client implementation. WebSocket remains a delivery concern
-for a later issue.
+WebSocket server/client implementation.
+
+Step 5-B adds a minimal WebSocket state publisher skeleton that serializes
+`MuJoCoState` through `mujoco_state_to_payload()` and forwards the JSON string
+to a sender adapter. WebSocket remains a delivery concern and does not own the
+payload contract, physics, or viewer behavior.
