@@ -141,3 +141,50 @@ dry-run、build、typecheck、MuJoCo model load を hardware validation と書�
 ## 10. 最重要原則
 
 動くものを早く作ることより、ズレない構造を先に作ることを優先する。
+
+## 11. Architecture Boundary Tests
+
+- import boundary は `docs/architecture/dependency-boundaries.md` と `tests/architecture/test_import_boundaries.py` を正とする。
+- AGENTS.md の層図は data flow の説明であり、import dependency ではない。
+- dependency boundary を変更する場合は、docs と test を同時に更新する。
+- `tests/architecture` を削除・無効化してはならない。
+
+## 12. PR / 作業報告の最低項目
+
+PR本文と作業報告には、最低限以下を含める。
+
+- Summary
+- Changed Files
+- Architecture Impact
+- Validation
+- Scope Exclusions
+- Hardware Validation
+- Serial / OSC / Hardware Access
+- Remaining Risks
+
+## 13. Scope Check
+
+各作業報告では以下を明示する。
+
+```md
+legacy changed: 
+legacy imported/executed:
+assets changed:
+schema breaking change:
+import boundary changed:
+MuJoCo package imported:
+MuJoCo model load included:
+MuJoCo forward included:
+MuJoCo step included:
+MuJoCoState snapshot included:
+runtime composition included:
+Three.js FK/IK included:
+WebSocket included:
+serial port opened:
+OSC sent:
+hardware validation included:
+node_modules included:
+dist included:
+.env.local included:
+docs / SoT impact checked:
+```
