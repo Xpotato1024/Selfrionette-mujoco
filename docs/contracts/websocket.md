@@ -1,18 +1,16 @@
 ---
-status: canonical
+status: supporting
 owner: architecture
 last_verified: 2026-06-12
-canonical_for:
-  - WebSocket contract
+canonical_for: []
 related:
-  - docs/contracts/mujoco-state.md
+  - docs/contracts/transport-payload.md
 ---
 
 # WebSocket Contract
 
-This is the canonical contract for transport-layer communication.
+This file is a channel-specific reference. The canonical payload contract lives
+in `docs/contracts/transport-payload.md`.
 
-The implementation has not started. Future PRs will define endpoint paths,
-message envelopes, frame ordering, replay/log behavior, and error handling here.
-
-Other documents should not duplicate the protocol details. Link to this file.
+WebSocket is one possible delivery mechanism. It does not define the
+simulation, physics, or viewer contract.

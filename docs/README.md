@@ -17,22 +17,24 @@ Do not create or use `doc/`.
 
 | Topic | Canonical document | Notes |
 |---|---|---|
-| 開発方針 | `docs/architecture/development-policy.md` | skeleton-first の上位方針 |
-| 詳細仕様 | `docs/architecture/mujoco-skeleton-first-spec.md` | レイヤー・stub・runtime結線 |
-| ドキュメントSoT | `docs/architecture/documentation-sot-policy.md` | canonical/supporting/historical 等のルール |
-| 命名・単位・座標系 | `docs/conventions.md` | 用語・座標軸・単位の正本 |
-| 依存方向 | `docs/architecture/dependency-boundaries.md` | import boundary test と同期 |
-| データフロー | `docs/architecture/data-flow.md` | input→motion→mujoco→viewer |
-| runtime結線 | `docs/architecture/runtime-composition.md` | composition root |
-| schema契約 | `docs/contracts/schemas.md` | RawInputFrame 等の契約 |
-| MuJoCoState契約 | `docs/contracts/mujoco-state.md` | backend→viewer JSON |
-| WebSocket契約 | `docs/contracts/websocket.md` | transport層の通信契約 |
-| asset契約 | `docs/contracts/assets.md` | MJCF/STL/scale/axis |
-| Git/PR運用 | `docs/operations/git-pr-workflow.md` | branch / PR / diff gate |
-| 検証方針 | `docs/operations/validation.md` | validation category |
-| hardware安全 | `docs/operations/hardware-safety.md` | serial/OSC/実機 |
-| legacy移行 | `docs/migration/legacy-to-new-layer-map.md` | legacy → 新層対応 |
-| 設計判断履歴 | `docs/design/adr/` | ADR |
+| Development policy | `docs/architecture/development-policy.md` | skeleton-first policy |
+| Skeleton spec | `docs/architecture/mujoco-skeleton-first-spec.md` | layer responsibilities and step order |
+| Documentation SoT | `docs/architecture/documentation-sot-policy.md` | canonical/supporting/historical rules |
+| Naming and units | `docs/conventions.md` | canonical naming and unit rules |
+| Import boundaries | `docs/architecture/dependency-boundaries.md` | import direction and test contract |
+| Data flow | `docs/architecture/data-flow.md` | input -> motion -> MuJoCo -> transport -> viewer |
+| Runtime composition | `docs/architecture/runtime-composition.md` | composition root |
+| Schema contracts | `docs/contracts/schemas.md` | shared contract types |
+| MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
+| Parallel work contracts | `docs/contracts/parallel-work-contracts.md` | Step 5-0 contract lock |
+| MotionCommand contract | `docs/contracts/motion-command.md` | command not state |
+| Transport payload contract | `docs/contracts/transport-payload.md` | versioned JSON-compatible payload |
+| Asset contract | `docs/contracts/assets.md` | MJCF/STL/scale/axis rules |
+| Git and PR workflow | `docs/operations/git-pr-workflow.md` | branch / PR / diff gate |
+| Validation policy | `docs/operations/validation.md` | validation categories |
+| Hardware safety | `docs/operations/hardware-safety.md` | serial / OSC / hardware rules |
+| Legacy map | `docs/migration/legacy-to-new-layer-map.md` | legacy reference only |
+| ADRs | `docs/design/adr/` | design decision history |
 
 ## Directory Roles
 
