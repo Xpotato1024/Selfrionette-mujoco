@@ -184,6 +184,18 @@ This issue adds the runtime entry for the real headless MuJoCo backend:
 - defer motion-to-qpos/ctrl, transport, viewer, and hardware work to later
   issues
 
+### Step 5-D
+
+This issue adds the first real command-to-simulation bridge in the headless
+backend:
+
+- reflect `MotionCommand.joint` directly into MuJoCo `qpos`
+- use MuJoCo model joint order and joint `qpos` addresses from the backend
+- call `mj_step` to advance `data.time` and the simulation state
+- keep actuator ctrl, PID, controller, IK, input, transport, and viewer work
+  out of scope
+- build `MuJoCoState` snapshots from the progressed backend state
+
 ### Step 5-0
 
 This issue freezes the parallel work contracts for input, motion, IK,

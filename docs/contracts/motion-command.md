@@ -34,6 +34,12 @@ destructively.
 - `target` and `joint` are the currently modeled command buckets.
 - Actuator commands are not introduced in this issue. If they are needed later,
   add them in a separate issue with schema review.
+- Step 5-D adds the first backend path that reflects `MotionCommand.joint`
+  directly into MuJoCo `qpos` before `mj_step`.
+- The current fast-arm backend accepts only the existing joint tuple shape and
+  uses MuJoCo model joint order for the reflection.
+- Unsupported target commands, unknown joint contracts, and unsupported joint
+  shapes must fail explicitly in the real backend.
 
 ## Unsupported Commands
 
