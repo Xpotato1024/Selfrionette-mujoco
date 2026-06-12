@@ -34,3 +34,7 @@ Three.js must not calculate FK or IK. It renders transforms that come from
 
 MuJoCo owns physical state. The viewer must not keep a separate arm pose as a
 physics or kinematics authority.
+
+For the Step 5-C viewer skeleton, the renderer consumes transport payload v0
+markers for `bodies`, `sites`, and optional `target_position_m`, keeps
+`base_link` and `tip` recognizable, and does not recalculate pose from `qpos`.
