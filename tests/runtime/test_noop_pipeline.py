@@ -30,7 +30,7 @@ def test_build_noop_pipeline_can_flow_custom_frame() -> None:
     state = asyncio.run(pipeline.run_once())
 
     assert isinstance(pipeline.simulator, NoOpMuJoCoSimulator)
-    assert pipeline.simulator._last_command is not None
+    assert pipeline.simulator.last_command is not None
     assert pipeline.publisher.last_state == state
 
 
@@ -43,4 +43,3 @@ def test_run_once_honors_dt_override() -> None:
     assert first.time_s == 0.5
     assert second.time_s == 0.75
     assert second.frame_index == 2
-

@@ -15,6 +15,10 @@ class NoOpMuJoCoSimulator:
     def apply_command(self, command: MotionCommand) -> None:
         self._last_command = command
 
+    @property
+    def last_command(self) -> MotionCommand | None:
+        return self._last_command
+
     def step(self, dt_s: float) -> None:
         self._time_s += dt_s
         self._frame_index += 1
