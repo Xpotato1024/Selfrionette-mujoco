@@ -130,4 +130,20 @@ This issue adds the headless `MuJoCoState` snapshot slice:
 - map body transforms to `BodyTransform`
 - map site transforms to `SiteTransform`
 - store quaternions as `wxyz`
-- keep runtime connection deferred to #11
+- do not connect this snapshot slice to runtime yet
+
+### Step 4-D
+
+This issue adds the runtime entry for the real headless MuJoCo backend:
+
+- keep `build_noop_pipeline()` for stub wiring checks
+- add `build_mujoco_pipeline()` to compose the headless backend into
+  `RuntimePipeline`
+- use `assets/mujoco/fast_arm/scene.xml` by default when no model path is
+  supplied
+- keep `apply_command()` as command retention only
+- keep `step(dt_s)` as frame index bookkeeping only
+- do not call `mj_step`
+- return `MuJoCoState` from `snapshot()`
+- defer motion-to-qpos/ctrl, transport, viewer, and hardware work to later
+  issues
