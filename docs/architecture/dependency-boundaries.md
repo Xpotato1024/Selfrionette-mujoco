@@ -83,3 +83,7 @@ transport           -> runtime
 
 Any change to these boundaries must update this document, the import boundary
 test, and the PR Architecture Impact.
+
+`apps/mujoco-viewer/src` is checked by `tests/architecture/test_layer_import_boundaries.py`
+and must remain rendering-only; it must not import MuJoCo, IK/FK, or Rapier
+layers.

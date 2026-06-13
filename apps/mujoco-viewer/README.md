@@ -8,8 +8,17 @@ This app is the Three.js rendering layer.
 - TypeScript: `tsc`
 - Install: `npm ci`
 - Typecheck: `npm run typecheck`
-- Build: `npm run build` (`tsc --noEmit`)
+- Build: `npm run build` (`tsc --noEmit`; alias of `typecheck`)
 - CI: GitHub Actions runs `npm ci`, `npm run typecheck`, and `npm run build`
+
+## Notes
+
+- `package.json` pins TypeScript with a semver range, and `package-lock.json`
+  freezes the resolved version used by CI.
+- The `build` script is a typecheck alias, not a browser bundle or runtime
+  artifact.
+- CI validation for the viewer toolchain is already locked in by the
+  repository workflow.
 
 ## Responsibilities
 

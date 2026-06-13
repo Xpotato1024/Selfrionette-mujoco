@@ -98,6 +98,9 @@ class HeadlessMuJoCoSimulator:
     def step(self, dt_s: float) -> None:
         mujoco = self._import_mujoco()
 
+        if dt_s <= 0.0:
+            raise ValueError("dt_s must be positive")
+
         if self._pending_command is not None:
             command = self._pending_command
             if command.target is not None:
@@ -109,6 +112,7 @@ class HeadlessMuJoCoSimulator:
         mujoco.mj_step(self.model, self.data)
 
         if self._pending_command is not None and self._pending_command.joint is not None:
+            # Keep the backend snapshot aligned with the commanded qpos path.
             self._apply_joint_command(self._pending_command.joint)
 
         self._last_dt_s = dt_s

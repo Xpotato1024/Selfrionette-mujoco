@@ -41,4 +41,7 @@ a controller state, transport state, or viewer state.
 - `base_link` and `tip` are canonical model names for the fast arm assets.
 - `frame_index` increments once per backend step.
 - Step 5-D uses `mj_step` in the backend before building the next snapshot.
+- The backend keeps the pending command until a later `apply_command()`
+  overwrites it, and it re-applies joint qpos after `mj_step` so the snapshot
+  stays aligned with the direct qpos reflection contract.
 - Other documents should link here instead of restating the field rules.

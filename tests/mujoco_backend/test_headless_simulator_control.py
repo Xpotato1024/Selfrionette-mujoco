@@ -7,7 +7,9 @@ from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, NoOpMuJoCoSimul
 from selfrionette.schemas import JointCommand, MotionCommand
 
 
-def test_headless_simulator_reports_unknown_joint_contract_explicitly(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_headless_simulator_reports_fast_arm_joint_contract_mismatch_explicitly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
     command = MotionCommand(timestamp_s=1.0, joint=JointCommand(joint_angles_rad=(0.1, 0.2, 0.3, 0.4)))
 

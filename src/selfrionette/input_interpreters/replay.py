@@ -4,7 +4,11 @@ from selfrionette.schemas import InputIntent, RawInputFrame
 
 
 class ReplayInputInterpreter:
-    """Deterministic replay interpreter that preserves the raw frame payload."""
+    """Deterministic replay interpreter that preserves raw replay payloads.
+
+    Metadata is handled as a Mapping and copied shallowly. Nested metadata
+    objects are intentionally not deep-copied.
+    """
 
     def interpret(self, frame: RawInputFrame) -> InputIntent:
         return InputIntent(
