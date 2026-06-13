@@ -69,6 +69,15 @@ delivery entry. The entry reuses the replay pipeline, publishes payload v0
 JSON to connected clients, defaults to loopback, and stays outside production
 server/deployment scope.
 
+R6-C-P4 freezes that delivery skeleton as the Phase C handoff:
+
+- the runtime composition remains local/dev only
+- the browser viewer still receives payload v0 through a WebSocket client
+- viewer runtime state remains the only browser-side receiver state
+- marker rendering remains skeleton-only
+- production server, auth, TLS, and public exposure remain out of scope
+- MuJoCo, IK, FK, and `qpos` recompute do not move into the browser viewer
+
 R6-A-P4 closes Phase A by auditing that dry-run path and documenting the
 handoff into Phase B. Phase B consumes payload v0 as input to the rendering-only
 viewer runtime. The viewer must not import MuJoCo, `mujoco_backend`, IK, or FK,

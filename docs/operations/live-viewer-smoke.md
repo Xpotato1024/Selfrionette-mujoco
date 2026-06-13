@@ -44,6 +44,10 @@ The smoke command uses a grace period so the browser can connect before the
 first payload is published. If the browser is not connected before the grace
 window expires, payloads are still dropped by the runner.
 
+R6-C-P4 treats this smoke path as the Phase C completion handoff and does not
+expand the scope beyond the local/dev publisher, browser viewer, and marker
+summary update skeleton.
+
 ## What the Smoke Path Proves
 
 - Python replay dry-run still produces payload v0.

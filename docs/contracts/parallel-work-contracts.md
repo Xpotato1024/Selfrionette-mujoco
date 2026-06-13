@@ -122,6 +122,12 @@ InputSource
   endpoint configuration and connection status display on the viewer side.
 - R6-C-P3 does not change the transport schema; it adds the local smoke path
   and docs that tie the publisher runner to the browser viewer runtime.
+- R6-C-P4 audits and freezes the completed Phase C live delivery skeleton:
+  `Python runtime dry-run pipeline -> WebSocket publisher runner -> browser
+  viewer WebSocket client -> viewer runtime state -> marker skeleton update`.
+  This state stays local/dev only, keeps the viewer rendering-only, and does
+  not introduce a production server, hardware/serial/OSC access, FK, IK,
+  `qpos` pose recompute, or Three.js real scene mutation.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 
