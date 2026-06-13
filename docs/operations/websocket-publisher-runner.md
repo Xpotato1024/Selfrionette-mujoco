@@ -73,3 +73,13 @@ default:
 present, the viewer stays disconnected and shows `WebSocket: disabled`. R6-C-P2
 adds that endpoint configuration and connection status display on the viewer
 side; the Python publisher runner remains unchanged.
+
+R6-C-P3 adds the smoke handoff doc and command that pair this runner with the
+browser viewer endpoint configuration:
+
+- `docs/operations/live-viewer-smoke.md`
+- `scripts/run_live_viewer_smoke.py`
+
+The smoke path remains rendering-only on the browser side and stops at marker
+summary updates. It does not add Three.js real scene mutation, production
+hosting, auth, TLS, serial, OSC, or hardware access.

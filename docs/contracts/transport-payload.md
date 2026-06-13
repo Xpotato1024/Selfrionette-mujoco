@@ -33,6 +33,11 @@ selection into viewer configuration. The browser viewer can point at an
 explicit WebSocket endpoint such as `?websocketUrl=ws://127.0.0.1:8766`, but
 that query handling is a viewer concern and does not change payload shape.
 
+R6-C-P3 keeps the payload schema unchanged again while adding a smoke path
+that exercises the publisher runner, browser WebSocket client, viewer runtime
+state, and marker skeleton update in sequence. The payload contract is still
+payload v0 JSON and still stops short of real scene mutation.
+
 R6-A-P4 freezes the handoff contract for R6-B:
 
 - payload version remains `0`
@@ -60,6 +65,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
   change the transport schema.
 - The local/dev WebSocket publisher runner does not add envelope fields or a
   new payload version.
+- The live viewer smoke path does not add a new payload version, a new
+  schema, or extra transport envelope fields.
 
 ## v0 Shape
 

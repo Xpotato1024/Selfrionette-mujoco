@@ -132,6 +132,28 @@ The browser viewer reads an explicit `websocketUrl` query parameter, accepts
 provided. The status text stays separate from payload marker rendering and the
 Python publisher runner remains unchanged.
 
+R6-C-P3 adds the deterministic smoke path that uses the Python publisher
+runner plus the configured browser endpoint:
+
+```text
+ReplayInputSource
+  -> RawInputFrame
+  -> ReplayInputInterpreter
+  -> InputIntentMotionGenerator
+  -> HeadlessMuJoCoSimulator
+  -> MuJoCoState
+  -> transport publisher skeleton
+  -> payload v0 JSON
+  -> local/dev WebSocket publisher runner
+  -> browser viewer WebSocket client
+  -> viewer runtime state
+  -> marker rendering skeleton
+```
+
+This smoke path confirms that the received payload still updates summary text,
+scene placeholder text, and root attributes without introducing Three.js real
+scene mutation, FK, IK, or MuJoCo imports into the browser viewer.
+
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 
 - the emitted payload version is `0`

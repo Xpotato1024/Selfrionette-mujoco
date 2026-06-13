@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import socket
+import time
 
 import pytest
 from websockets.asyncio.client import connect
@@ -66,6 +67,22 @@ def test_replay_mujoco_websocket_publisher_increments_frame_index_for_multiple_s
     payloads = asyncio.run(_collect_payloads(3))
 
     assert [payload["frame_index"] for payload in payloads] == [1, 2, 3]
+
+
+def test_replay_mujoco_websocket_publisher_exits_without_client() -> None:
+    port = _find_free_port()
+    started = time.monotonic()
+
+    run_replay_mujoco_websocket_publisher(
+        host="127.0.0.1",
+        port=port,
+        steps=1,
+        dt_s=1.0 / 60.0,
+        interval_s=0.0,
+        grace_period_s=0.0,
+    )
+
+    assert time.monotonic() - started < 5.0
 
 
 @pytest.mark.parametrize(

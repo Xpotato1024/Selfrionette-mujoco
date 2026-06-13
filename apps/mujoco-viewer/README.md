@@ -46,6 +46,9 @@ This app is the Three.js rendering layer.
 - R6-B-P4 closes the Phase B handoff by auditing that browser runtime,
   WebSocket client, and marker skeleton wiring are in place without adding a
   WebSocket server or real scene mutation.
+- R6-C-P3 adds the deterministic local smoke path that pairs this runtime
+  with the Python publisher runner through an explicit `websocketUrl`
+  endpoint and keeps marker updates limited to the skeleton summary path.
 
 ## Phase B Handoff
 
@@ -78,6 +81,24 @@ This app is the Three.js rendering layer.
 - `src/viewerRuntime.ts` shows the current connection status in the DOM.
 - R6-C-P2 adds endpoint selection and status visibility without changing the
   payload schema or marker rendering skeleton.
+- R6-C-P3 smoke uses the same endpoint configuration plus the local/dev
+  Python publisher runner to verify the payload reaches the viewer runtime
+  state and marker summary path.
+
+## Local Smoke
+
+```bash
+uv run python scripts/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --steps 3 --grace-period-s 5
+```
+
+Open the viewer manually with:
+
+```text
+apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+```
+
+The smoke path stops at marker summary updates. It does not mutate a real
+Three.js scene, recalculate FK/IK, or use hardware, serial, or OSC.
 
 ## Prohibited
 
