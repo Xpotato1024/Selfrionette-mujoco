@@ -45,6 +45,17 @@ The headless backend keeps `apply_command()` as command retention only and
 `step(dt_s)` as frame index bookkeeping only; it does not call `mj_step` yet.
 `snapshot()` returns `MuJoCoState` from the backend model/data snapshot path.
 
+R6-A-P1 adds `build_replay_mujoco_pipeline()` as the first runtime factory that
+connects deterministic replay, motion generation, and the real headless
+MuJoCo backend. It composes `ReplayInputSource`, `ReplayInputInterpreter`,
+`InputIntentMotionGenerator`, `HeadlessMuJoCoSimulator`, and
+`NoOpStatePublisher`.
+
+This remains composition-only inside `runtime/`; input, motion, and
+`mujoco_backend` layers still do not depend on runtime. Transport publisher
+connection is deferred to R6-A-P2, and viewer / WebSocket connection is
+deferred to R6-B.
+
 Layer implementations must expose contracts that runtime can compose without
 creating reverse dependencies.
 
