@@ -65,6 +65,11 @@ InputSource
 - Input interpreters stop at `InputIntent`.
 - Step 5-F adds the minimal motion skeleton:
   `InputIntent -> MotionGenerator -> MotionCommand`.
+- R6-A-P1 connects deterministic replay through motion and the real headless
+  MuJoCo backend at the runtime composition root:
+  `ReplayInputSource -> RawInputFrame -> ReplayInputInterpreter -> InputIntent
+  -> MotionGenerator -> MotionCommand -> HeadlessMuJoCoSimulator ->
+  MuJoCoState`.
 - Motion and IK stop at `MotionCommand`.
 - `InputIntent.values` still carries raw replay/input payload data and does
   not yet define motion semantics.
@@ -75,9 +80,11 @@ InputSource
 - `InputIntent.joint_delta_rad` is not threaded into a joint command in this
   issue because Step 5-D already fixed joint commands as direct qpos
   reflection at the backend boundary.
-- This issue generates `MotionCommand` objects but does not connect them to
-  `mujoco_backend`.
+- This issue connects `MotionCommand` objects to `mujoco_backend` only
+  through runtime composition.
 - Input layers do not import `mujoco_backend`, `transport`, or `viewer`.
+- Transport publisher wiring is deferred to R6-A-P2.
+- Viewer and WebSocket wiring are deferred to R6-B.
 
 ## Unresolved Items
 

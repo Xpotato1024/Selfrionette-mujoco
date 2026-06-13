@@ -56,8 +56,23 @@ have motion semantics yet. In this issue, `target_delta_m` may become
 joint command because Step 5-D already treats joint commands as direct qpos
 reflection at the backend boundary.
 
-This issue stops at command generation. It does not connect `MotionCommand`
-to `mujoco_backend`, `qpos`, `mj_step`, transport, or viewer runtime wiring.
+R6-A-P1 connects the replay slice through motion to the real headless MuJoCo
+backend:
+
+```text
+ReplayInputSource
+  -> RawInputFrame
+  -> ReplayInputInterpreter
+  -> InputIntent
+  -> InputIntentMotionGenerator
+  -> MotionCommand
+  -> HeadlessMuJoCoSimulator
+  -> MuJoCoState
+```
+
+The runtime factory performs this wiring at the composition root only. It does
+not add transport publisher wiring, WebSocket delivery, viewer runtime
+integration, target command backend support, or new motion semantics.
 
 The input layer does not import `mujoco_backend`, `transport`, or `viewer`.
 
