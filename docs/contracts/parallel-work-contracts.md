@@ -58,7 +58,17 @@ InputSource
   physics, or `mj_step`.
 - Input sources stop at `RawInputFrame`.
 - Input interpreters stop at `InputIntent`.
+- Step 5-F adds the minimal motion skeleton:
+  `InputIntent -> MotionGenerator -> MotionCommand`.
 - Motion and IK stop at `MotionCommand`.
+- `InputIntent.values` still carries raw replay/input payload data and does
+  not yet define motion semantics.
+- `InputIntent.target_delta_m` may become `TargetCommand(delta_m=...)`.
+- `InputIntent.joint_delta_rad` is not threaded into a joint command in this
+  issue because Step 5-D already fixed joint commands as direct qpos
+  reflection at the backend boundary.
+- This issue generates `MotionCommand` objects but does not connect them to
+  `mujoco_backend`.
 - Input layers do not import `mujoco_backend`, `transport`, or `viewer`.
 
 ## Unresolved Items
