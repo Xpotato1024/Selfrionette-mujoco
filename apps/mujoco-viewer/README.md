@@ -28,6 +28,8 @@ This app is the Three.js rendering layer.
   while `npm test` and `browser:build` stay as local required checks.
 - `index.html` references `./dist/browser/main.js`; `browser:build` is the
   command that produces that artifact.
+- Browser runtime requires `npm ci` before opening `index.html` directly,
+  because the import map resolves `three` from local `node_modules`.
 
 ## Responsibilities
 
