@@ -13,6 +13,7 @@ from selfrionette.runtime.websocket_publisher_runner import (
 )
 
 DEFAULT_LIVE_VIEWER_SMOKE_GRACE_PERIOD_S = 5.0
+DEFAULT_LIVE_VIEWER_SMOKE_VIEWER_PATH = "apps/mujoco-viewer/index.html"
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,8 +26,27 @@ class LiveViewerSmokeConfig:
     grace_period_s: float = DEFAULT_LIVE_VIEWER_SMOKE_GRACE_PERIOD_S
 
 
-def build_live_viewer_smoke_viewer_url(host: str, port: int) -> str:
+def build_live_viewer_smoke_endpoint(host: str, port: int) -> str:
     return f"ws://{host}:{port}"
+
+
+def build_live_viewer_smoke_viewer_url(
+    host: str,
+    port: int,
+    viewer_path: str = DEFAULT_LIVE_VIEWER_SMOKE_VIEWER_PATH,
+) -> str:
+    return f"{viewer_path}?websocketUrl={build_live_viewer_smoke_endpoint(host, port)}"
+
+
+def build_live_viewer_smoke_report_lines(
+    host: str,
+    port: int,
+    viewer_path: str = DEFAULT_LIVE_VIEWER_SMOKE_VIEWER_PATH,
+) -> tuple[str, str]:
+    return (
+        f"WebSocket endpoint: {build_live_viewer_smoke_endpoint(host, port)}",
+        f"Viewer URL: {build_live_viewer_smoke_viewer_url(host, port, viewer_path=viewer_path)}",
+    )
 
 
 def _host(value: str) -> str:
@@ -107,8 +127,11 @@ def run_live_viewer_smoke(
 
 __all__ = [
     "DEFAULT_LIVE_VIEWER_SMOKE_GRACE_PERIOD_S",
+    "DEFAULT_LIVE_VIEWER_SMOKE_VIEWER_PATH",
     "LiveViewerSmokeConfig",
     "build_live_viewer_smoke_parser",
+    "build_live_viewer_smoke_endpoint",
+    "build_live_viewer_smoke_report_lines",
     "build_live_viewer_smoke_viewer_url",
     "run_live_viewer_smoke",
 ]

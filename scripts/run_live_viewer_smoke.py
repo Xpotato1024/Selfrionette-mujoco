@@ -11,7 +11,7 @@ if str(SRC_DIR) not in sys.path:
 
 from selfrionette.runtime.live_viewer_smoke import (
     build_live_viewer_smoke_parser,
-    build_live_viewer_smoke_viewer_url,
+    build_live_viewer_smoke_report_lines,
     run_live_viewer_smoke,
 )
 
@@ -20,8 +20,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_live_viewer_smoke_parser()
     args = parser.parse_args(argv)
 
-    viewer_url = build_live_viewer_smoke_viewer_url(args.host, args.port)
-    print(f"Viewer URL: {viewer_url}")
+    for line in build_live_viewer_smoke_report_lines(args.host, args.port):
+        print(line)
     run_live_viewer_smoke(
         host=args.host,
         port=args.port,
