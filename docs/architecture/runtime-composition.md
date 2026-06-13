@@ -63,14 +63,21 @@ NDJSON, and can write to stdout or an output file. It stays inside the runtime
 composition root and does not introduce WebSocket, viewer, or browser
 composition.
 
+R6-C-P1 adds `run_replay_mujoco_websocket_publisher()` and
+`scripts/run_replay_mujoco_websocket_publisher.py` as a local/dev WebSocket
+delivery entry. The entry reuses the replay pipeline, publishes payload v0
+JSON to connected clients, defaults to loopback, and stays outside production
+server/deployment scope.
+
 R6-A-P4 closes Phase A by auditing that dry-run path and documenting the
 handoff into Phase B. Phase B consumes payload v0 as input to the rendering-only
 viewer runtime. The viewer must not import MuJoCo, `mujoco_backend`, IK, or FK,
 and the browser WebSocket client is first introduced in R6-B.
 
 This remains composition-only inside `runtime/`; input, motion, transport, and
-`mujoco_backend` layers still do not depend on runtime. Viewer / WebSocket
-connection is deferred to R6-B.
+`mujoco_backend` layers still do not depend on runtime. Browser viewer
+connection is deferred to R6-B, while the local/dev WebSocket publisher entry
+lands in R6-C.
 
 Layer implementations must expose contracts that runtime can compose without
 creating reverse dependencies.

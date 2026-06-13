@@ -97,9 +97,25 @@ ReplayInputSource
   -> stdout / output file
 ```
 
+R6-C-P1 keeps the payload contract unchanged and adds a local/dev WebSocket
+delivery hop after the transport publisher skeleton:
+
+```text
+ReplayInputSource
+  -> RawInputFrame
+  -> ReplayInputInterpreter
+  -> InputIntentMotionGenerator
+  -> HeadlessMuJoCoSimulator
+  -> MuJoCoState
+  -> transport publisher skeleton
+  -> payload v0 JSON
+  -> local/dev WebSocket publisher runner
+  -> connected client
+```
+
 The runtime factory performs this wiring at the composition root only. It does
-not add a WebSocket server, viewer runtime integration, target command backend
-support, or new motion semantics.
+not add a production WebSocket server, viewer runtime integration, target
+command backend support, or new motion semantics.
 
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 

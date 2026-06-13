@@ -76,6 +76,10 @@ InputSource
 - R6-A-P3 exposes that same replay path through
   `run_replay_mujoco_dry_run()` / `scripts/run_replay_mujoco_dry_run.py` as a
   deterministic NDJSON entrypoint for stdout or file output.
+- R6-C-P1 adds `run_replay_mujoco_websocket_publisher()` /
+  `scripts/run_replay_mujoco_websocket_publisher.py` as a local/dev delivery
+  entry that reuses the replay pipeline and publishes payload v0 JSON to
+  connected clients.
 - Motion and IK stop at `MotionCommand`.
 - `InputIntent.values` still carries raw replay/input payload data and does
   not yet define motion semantics.
@@ -91,7 +95,8 @@ InputSource
 - Input layers do not import `mujoco_backend`, `transport`, or `viewer`.
 - Transport publisher wiring is now handled by R6-A-P2 at the runtime
   composition root.
-- Viewer and WebSocket wiring are deferred to R6-B.
+- Browser viewer wiring is deferred to R6-B, while local/dev WebSocket
+  publishing is handled in R6-C.
 - R6-B-P1 adds the browser runtime entry for the viewer. It mounts a
   rendering-only shell against `#app`, may use the static payload v0 fixture
   for initial status, emits browser ESM via TypeScript to `dist/browser/`,
@@ -104,6 +109,8 @@ InputSource
 - R6-B-P3 keeps received payload v0 in viewer runtime state and feeds the
   existing marker rendering skeleton so the summary and placeholder scene
   update without introducing FK, IK, or MuJoCo imports.
+- R6-C-P1 does not change the viewer contract; it only adds a local/dev
+  WebSocket publisher runner on the Python side.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 

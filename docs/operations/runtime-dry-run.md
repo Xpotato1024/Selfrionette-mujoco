@@ -86,3 +86,7 @@ Phase B handoff:
 
 The R6-A dry-run path remains disconnected from WebSocket server, browser
 runtime, and viewer runtime wiring.
+
+For a local/dev WebSocket delivery entry that reuses the same replay pipeline
+and publishes payload v0 JSON to connected clients, see
+`docs/operations/websocket-publisher-runner.md`.
