@@ -83,6 +83,10 @@ InputSource
 - R6-C-P2 adds browser-side endpoint selection and connection status
   visibility for `apps/mujoco-viewer/` without changing the payload contract
   or the Python publisher runner.
+- R6-C-P3 adds a deterministic smoke handoff that pairs the Python publisher
+  runner with the configured browser viewer endpoint and keeps the viewer
+  contract rendering-only while the marker skeleton updates from received
+  payloads.
 - Motion and IK stop at `MotionCommand`.
 - `InputIntent.values` still carries raw replay/input payload data and does
   not yet define motion semantics.
@@ -116,6 +120,8 @@ InputSource
   WebSocket publisher runner on the Python side.
 - R6-C-P2 does not change the transport schema; it only adds explicit browser
   endpoint configuration and connection status display on the viewer side.
+- R6-C-P3 does not change the transport schema; it adds the local smoke path
+  and docs that tie the publisher runner to the browser viewer runtime.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 

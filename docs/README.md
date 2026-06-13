@@ -26,6 +26,7 @@ Do not create or use `doc/`.
 | Runtime composition | `docs/architecture/runtime-composition.md` | composition root |
 | Runtime dry-run entry | `docs/operations/runtime-dry-run.md` | deterministic replay to payload v0 NDJSON |
 | WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0 |
+| Live viewer smoke path | `docs/operations/live-viewer-smoke.md` | deterministic dry-run payload -> browser viewer smoke path for R6-C-P3 |
 | Viewer browser runtime entry | `docs/architecture/data-flow.md` | browser mount entry for payload v0 handoff; R6-B-P2 adds the WebSocket client skeleton; R6-B-P3 connects received payloads to marker rendering; R6-C-P2 adds endpoint configuration and connection status visibility; R6-B-P4 audits and freezes the completed Phase B handoff |
 | Schema contracts | `docs/contracts/schemas.md` | shared contract types |
 | MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
