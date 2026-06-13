@@ -10,12 +10,16 @@ export interface ViewerWebSocketLike {
     type: "message",
     listener: (event: ViewerWebSocketMessageEventLike) => void,
   ): void;
-  addEventListener(type: "error", listener: () => void): void;
+  addEventListener(type: "open", listener: (event: Event) => void): void;
+  addEventListener(type: "close", listener: (event: Event) => void): void;
+  addEventListener(type: "error", listener: (event: Event) => void): void;
   removeEventListener?(
     type: "message",
     listener: (event: ViewerWebSocketMessageEventLike) => void,
   ): void;
-  removeEventListener?(type: "error", listener: () => void): void;
+  removeEventListener?(type: "open", listener: (event: Event) => void): void;
+  removeEventListener?(type: "close", listener: (event: Event) => void): void;
+  removeEventListener?(type: "error", listener: (event: Event) => void): void;
   close(): void;
 }
 
@@ -25,7 +29,10 @@ export interface ViewerWebSocketClientOptions {
   url: string;
   WebSocketCtor?: ViewerWebSocketConstructorLike;
   onPayload?: (payload: TransportPayloadV0) => void;
-  onError?: (error: Error) => void;
+  onPayloadError?: (error: Error) => void;
+  onConnectionError?: (error: Event | Error) => void;
+  onOpen?: () => void;
+  onClose?: () => void;
 }
 
 export interface ViewerWebSocketClient {
@@ -56,7 +63,7 @@ export function createViewerWebSocketClient(
 
   const handleMessage = (event: ViewerWebSocketMessageEventLike): void => {
     if (typeof event.data !== "string") {
-      options.onError?.(buildError("Viewer WebSocket client expects string message data"));
+      options.onPayloadError?.(buildError("Viewer WebSocket client expects string message data"));
       return;
     }
 
@@ -65,7 +72,7 @@ export function createViewerWebSocketClient(
       latestPayload = payload;
       options.onPayload?.(payload);
     } catch (error) {
-      options.onError?.(
+      options.onPayloadError?.(
         error instanceof Error
           ? error
           : buildError("Viewer WebSocket client failed to parse transport payload", error),
@@ -73,8 +80,16 @@ export function createViewerWebSocketClient(
     }
   };
 
-  const handleError = (): void => {
-    options.onError?.(buildError("Viewer WebSocket client received an error event"));
+  const handleOpen = (_event: Event): void => {
+    options.onOpen?.();
+  };
+
+  const handleClose = (_event: Event): void => {
+    options.onClose?.();
+  };
+
+  const handleError = (event: Event): void => {
+    options.onConnectionError?.(event);
   };
 
   return {
@@ -84,6 +99,8 @@ export function createViewerWebSocketClient(
       }
 
       socket = new WebSocketCtor(options.url);
+      socket.addEventListener("open", handleOpen);
+      socket.addEventListener("close", handleClose);
       socket.addEventListener("message", handleMessage);
       socket.addEventListener("error", handleError);
     },
@@ -92,6 +109,8 @@ export function createViewerWebSocketClient(
         return;
       }
 
+      socket.removeEventListener?.("open", handleOpen);
+      socket.removeEventListener?.("close", handleClose);
       socket.removeEventListener?.("message", handleMessage);
       socket.removeEventListener?.("error", handleError);
       socket.close();

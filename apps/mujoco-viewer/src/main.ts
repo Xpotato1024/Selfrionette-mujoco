@@ -1,12 +1,16 @@
+import { readViewerEndpointConfig } from "./config/websocketEndpoint.js";
 import { payloadV0Fixture } from "./fixtures/payloadV0.js";
 import { createViewerRuntime, type ViewerRuntime } from "./viewerRuntime.js";
 
-function getWebSocketUrl(): string | undefined {
+function getViewerEndpointConfig() {
   if (typeof window === "undefined") {
-    return undefined;
+    return {
+      websocketUrl: null,
+      source: "disabled" as const,
+    };
   }
 
-  return new URL(window.location.href).searchParams.get("websocketUrl") ?? undefined;
+  return readViewerEndpointConfig(window.location);
 }
 
 function registerLifecycle(runtime: ViewerRuntime): void {
@@ -20,9 +24,10 @@ function registerLifecycle(runtime: ViewerRuntime): void {
 }
 
 export function bootstrapViewerRuntime(): ViewerRuntime {
+  const endpointConfig = getViewerEndpointConfig();
   const runtime = createViewerRuntime({
     payload: payloadV0Fixture,
-    websocketUrl: getWebSocketUrl(),
+    websocketUrl: endpointConfig.websocketUrl,
   });
   runtime.start();
   registerLifecycle(runtime);
