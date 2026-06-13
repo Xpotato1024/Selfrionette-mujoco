@@ -35,14 +35,18 @@ The CLI prints both values so the endpoint and browser page are not mixed up.
 
 ## Recommended Order
 
-1. Open the browser viewer URL.
-2. Start the smoke command.
-3. Confirm the viewer status changes to `WebSocket: open`.
-4. Confirm the marker summary reflects payload v0 frame updates.
+1. Start the smoke command in terminal 1.
+2. Copy the Viewer URL printed by the CLI.
+3. Open the Viewer URL in the browser during the grace period.
+4. Confirm the viewer status changes to `WebSocket: open`.
+5. Confirm the marker summary reflects payload v0 frame updates.
 
-The smoke command uses a grace period so the browser can connect before the
-first payload is published. If the browser is not connected before the grace
-window expires, payloads are still dropped by the runner.
+The smoke command uses a grace period so the browser can connect after the
+local WebSocket server starts and before the first payload is published.
+The viewer WebSocket client does not currently implement reconnect, so opening
+the browser before the server is ready may leave the viewer in an error state.
+If the browser is not connected before the grace window expires, payloads are
+still dropped by the runner.
 
 R6-C-P4 treats this smoke path as the Phase C completion handoff and does not
 expand the scope beyond the local/dev publisher, browser viewer, and marker

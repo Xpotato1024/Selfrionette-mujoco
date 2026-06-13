@@ -54,13 +54,19 @@ Python runtime dry-run pipeline
 
 ## Live Smoke Path
 
-1. Open the browser viewer URL printed by the smoke helper.
-2. Start the local smoke command.
-3. Wait for `WebSocket: open`.
-4. Confirm the marker summary advances with received payload v0 frames.
+1. Start the smoke command in terminal 1.
+2. Copy the Viewer URL printed by the CLI.
+3. Open the Viewer URL in the browser during the grace period.
+4. Confirm the viewer status changes to `WebSocket: open`.
+5. Confirm the marker summary advances with received payload v0 frames and
+   that `frame_index`, body count, and site count update.
 
 The smoke helper prints the WebSocket endpoint and browser viewer URL as
 separate lines so they are not confused during handoff.
+The viewer WebSocket client does not currently implement reconnect, so opening
+the browser before the local WebSocket server is ready may leave the viewer in
+an error state. Use the smoke command grace period to open the viewer after
+the server starts and before the first frame is published.
 
 ## Validation
 
