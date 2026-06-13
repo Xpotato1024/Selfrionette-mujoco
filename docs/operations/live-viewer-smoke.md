@@ -54,6 +54,10 @@ summary update skeleton.
 R6-D-P1 adds the Three.js scene object registry skeleton on the viewer side,
 and R6-D-P2 applies the payload marker coordinates directly to the Three.js
 objects without changing the browser viewer's rendering-only role.
+R6-D-P4 closes the Phase D completion audit in
+`docs/operations/r6-d-completion-audit.md` and keeps the next handoff focused
+on IK / command integration skeleton work, not on a rendered arm mesh or an
+already-completed IK path.
 
 ## What the Smoke Path Proves
 
@@ -101,4 +105,4 @@ R6-D-P3 documents the browser-visible DOM and scene-object smoke state in
 animation loop work.
 
 The next issue is R6-D-P4 / #67, the Phase D completion audit and IK phase
-handoff.
+handoff, which is documented in `docs/operations/r6-d-completion-audit.md`.
