@@ -101,6 +101,16 @@ The runtime factory performs this wiring at the composition root only. It does
 not add a WebSocket server, viewer runtime integration, target command backend
 support, or new motion semantics.
 
+R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
+
+- the emitted payload version is `0`
+- `base_link` is present in `bodies`
+- `tip` is present in `sites`
+- `qpos` and `qvel` are preserved in every payload line
+- the viewer consumes payload v0 as rendering-only input in R6-B
+- the viewer does not import MuJoCo, `mujoco_backend`, IK, or FK
+- browser WebSocket client wiring is deferred to R6-B
+
 The input layer does not import `mujoco_backend`, `transport`, or `viewer`.
 
 Three.js must not calculate FK or IK. It renders transforms that come from

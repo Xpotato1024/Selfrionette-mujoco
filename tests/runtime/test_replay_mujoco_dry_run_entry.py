@@ -47,4 +47,10 @@ def test_run_replay_mujoco_dry_run_writes_ndjson_output_file(tmp_path) -> None:
 
     lines = run_replay_mujoco_dry_run(steps=2, output=output_path)
 
-    assert output_path.read_text(encoding="utf-8").splitlines() == lines
+    file_lines = output_path.read_text(encoding="utf-8").splitlines()
+    assert file_lines == lines
+    assert len(file_lines) == 2
+
+    payloads = [json.loads(line) for line in file_lines]
+    assert [payload["version"] for payload in payloads] == [0, 0]
+    assert [payload["frame_index"] for payload in payloads] == [1, 2]
