@@ -43,6 +43,16 @@ def test_headless_simulator_reflects_joint_command_into_qpos() -> None:
     assert state.time_s > 0.0
 
 
+def test_headless_simulator_rejects_non_positive_dt_s() -> None:
+    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+
+    with pytest.raises(ValueError, match="dt_s must be positive"):
+        simulator.step(0.0)
+
+    with pytest.raises(ValueError, match="dt_s must be positive"):
+        simulator.step(-1.0 / 60.0)
+
+
 def test_headless_simulator_rejects_target_commands_explicitly() -> None:
     simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
     command = MotionCommand(timestamp_s=1.0, target=TargetCommand())
@@ -67,3 +77,17 @@ def test_headless_simulator_rejects_unsupported_joint_velocity_shape() -> None:
 
     with pytest.raises(ValueError, match="joint velocities are not supported"):
         simulator.step(1.0 / 60.0)
+
+
+def test_headless_simulator_retains_pending_command_after_step() -> None:
+    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    command = MotionCommand(
+        timestamp_s=1.0,
+        joint=JointCommand(joint_angles_rad=(0.1, -0.2, 0.3, -0.4)),
+    )
+
+    simulator.apply_command(command)
+    simulator.step(1.0 / 60.0)
+
+    assert simulator.last_command is command
+    assert simulator._pending_command is command

@@ -5,7 +5,8 @@ from selfrionette.schemas import InputIntent, RawInputFrame
 
 
 def test_replay_input_interpreter_preserves_raw_frame_fields() -> None:
-    metadata = {"preset": "unit"}
+    nested = {"count": 1}
+    metadata = {"preset": "unit", "nested": nested}
     frame = RawInputFrame(
         source="replay",
         timestamp_s=0.0,
@@ -21,6 +22,7 @@ def test_replay_input_interpreter_preserves_raw_frame_fields() -> None:
     assert intent.source == frame.source
     assert intent.metadata == metadata
     assert intent.metadata is not metadata
+    assert intent.metadata["nested"] is nested
 
 
 def test_replay_input_interpreter_does_not_create_motion_command_shape() -> None:

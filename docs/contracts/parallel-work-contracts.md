@@ -52,6 +52,11 @@ InputSource
   `MuJoCoState`.
 - Step 5-E adds the deterministic replay path:
   `ReplayInputSource -> RawInputFrame -> ReplayInputInterpreter -> InputIntent`.
+- `ReplayInputSource` is deterministic frame replay only; it is not hardware
+  input.
+- `ReplayInputSource` returns the stored frozen `RawInputFrame` reference
+  without cloning it, and the replay interpreter only performs a shallow
+  metadata copy.
 - Step 5-A adds `mujoco_state_to_payload()` as the v0 serializer for that
   payload contract.
 - Transport stays serialization/delivery only and does not own IK, FK,
@@ -64,6 +69,9 @@ InputSource
 - `InputIntent.values` still carries raw replay/input payload data and does
   not yet define motion semantics.
 - `InputIntent.target_delta_m` may become `TargetCommand(delta_m=...)`.
+- `TargetToJointMotionGenerator` may inspect a temporary `target_position_m`
+  compatibility attribute, but that is not a formal schema field and is not
+  the canonical path.
 - `InputIntent.joint_delta_rad` is not threaded into a joint command in this
   issue because Step 5-D already fixed joint commands as direct qpos
   reflection at the backend boundary.

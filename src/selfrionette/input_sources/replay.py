@@ -6,7 +6,11 @@ from selfrionette.schemas import RawInputFrame
 
 
 class ReplayInputSource:
-    """Deterministic replay source that yields pre-recorded raw frames."""
+    """Deterministic replay source that yields stored RawInputFrame objects.
+
+    The source returns the frozen frame reference it owns; it does not clone
+    the frame or its metadata on read.
+    """
 
     def __init__(self, frames: Sequence[RawInputFrame], *, loop: bool = False) -> None:
         if not frames:

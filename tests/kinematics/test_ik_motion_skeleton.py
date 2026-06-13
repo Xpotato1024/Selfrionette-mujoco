@@ -20,7 +20,7 @@ class RecordingIKSolver:
 
 
 @dataclass(slots=True)
-class IntentWithTargetPosition:
+class FutureTargetPositionCompatibleIntent:
     source: str
     timestamp_s: float
     target_delta_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
@@ -29,9 +29,9 @@ class IntentWithTargetPosition:
     target_position_m: tuple[float, float, float] | None = None
 
 
-def test_target_position_triggers_optional_ik_solver() -> None:
+def test_target_position_triggers_optional_ik_solver_for_future_compatible_object() -> None:
     solver = RecordingIKSolver()
-    intent = IntentWithTargetPosition(
+    intent = FutureTargetPositionCompatibleIntent(
         source="replay",
         timestamp_s=2.0,
         metadata={"origin": "ik"},

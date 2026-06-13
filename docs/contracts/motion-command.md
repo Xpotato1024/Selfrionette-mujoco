@@ -40,6 +40,9 @@ destructively.
 - `joint` is reserved for explicit joint commands. Step 5-F does not map
   `InputIntent.joint_delta_rad` into `MotionCommand.joint`; that delta/absolute
   ambiguity is left explicit for a later issue.
+- `TargetToJointMotionGenerator` may look for a temporary `target_position_m`
+  compatibility attribute while IK remains skeletal, but that hook is not a
+  formal schema field.
 - Actuator commands are not introduced in this issue. If they are needed later,
   add them in a separate issue with schema review.
 - Step 5-D adds the first backend path that reflects `MotionCommand.joint`

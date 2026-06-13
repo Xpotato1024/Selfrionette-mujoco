@@ -13,8 +13,8 @@ def test_replay_input_source_returns_frames_in_order() -> None:
     )
     source = ReplayInputSource(frames)
 
-    assert source.read_frame() == frames[0]
-    assert source.read_frame() == frames[1]
+    assert source.read_frame() is frames[0]
+    assert source.read_frame() is frames[1]
 
 
 def test_replay_input_source_raises_stop_iteration_at_eof() -> None:
