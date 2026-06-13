@@ -96,4 +96,9 @@ deterministic.
 
 ## Hand-off
 
-The next issue is R6-D-P3, the browser visual smoke and operation docs step.
+R6-D-P3 documents the browser-visible DOM and scene-object smoke state in
+`docs/operations/browser-visual-smoke.md` without adding renderer, camera, or
+animation loop work.
+
+The next issue is R6-D-P4 / #67, the Phase D completion audit and IK phase
+handoff.
