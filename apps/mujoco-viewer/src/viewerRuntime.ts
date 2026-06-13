@@ -42,6 +42,7 @@ export interface ViewerRuntimeOptions {
   WebSocketCtor?: ViewerWebSocketConstructorLike;
   onPayload?: (payload: TransportPayloadV0) => void;
   onError?: (error: Error) => void;
+  onSceneSynced?: (scene: Scene) => void;
 }
 
 export interface ViewerRuntime {
@@ -237,6 +238,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
 
     const snapshot = buildViewerRuntimeSnapshot(getActivePayload(), connectionStatus, websocketUrl);
     syncThreeSceneObjectRegistry(markerObjectRegistry, snapshot.markerScene);
+    options.onSceneSynced?.(threeScene);
     updateRuntimeView(mountedView, snapshot);
   }
 

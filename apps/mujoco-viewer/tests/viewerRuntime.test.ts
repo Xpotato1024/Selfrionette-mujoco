@@ -1,3 +1,5 @@
+import { Scene } from "three";
+
 import { payloadV0Fixture } from "../src/fixtures/payloadV0.js";
 import { readViewerEndpointConfig } from "../src/config/websocketEndpoint.js";
 import {
@@ -306,6 +308,7 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   const { document, app } = createAppShell();
   const receivedPayloads: TransportPayloadV0[] = [];
   let socket: FakeWebSocket | null = null;
+  let syncedScene: Scene | null = null;
 
   class InjectedFakeWebSocketCtor extends FakeWebSocket {
     constructor(url: string) {
@@ -321,6 +324,9 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     WebSocketCtor: InjectedFakeWebSocketCtor,
     onPayload(payload) {
       receivedPayloads.push(payload);
+    },
+    onSceneSynced(scene) {
+      syncedScene = scene;
     },
   });
 
@@ -355,11 +361,13 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   const initialStatusText = statusSection?.textContent ?? "";
   const updatedPayload = JSON.parse(JSON.stringify(payloadV0Fixture)) as TransportPayloadV0;
   updatedPayload.frame_index = 3;
+  updatedPayload.bodies[0].position_m = [0.7, 0.8, 0.9];
   updatedPayload.bodies.push({
     name: "elbow_link",
     position_m: [0.2, 0.3, 0.4],
     quaternion_wxyz: [1, 0, 0, 0],
   });
+  updatedPayload.sites[0].position_m = [0.11, 0.22, 0.33];
   updatedPayload.sites.push({
     name: "wrist_site",
     position_m: [0.4, 0.5, 0.6],
@@ -406,6 +414,20 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     root.attributes.get("data-marker-object-count") === "4",
     "runtime should publish the received marker object count on the root",
   );
+  assert(syncedScene !== null, "runtime should expose the synced Three.js scene through the test hook");
+  const activeScene = syncedScene as Scene;
+  const baseLinkObject = activeScene.children.find((child) => child.name === "body:base_link");
+  const tipObject = activeScene.children.find((child) => child.name === "site:tip");
+  const targetObject = activeScene.children.find((child) => child.name === "target:target");
+  assert(baseLinkObject !== undefined, "scene should keep the base_link object");
+  assert(baseLinkObject.position.x === 0.7, "base_link x position should follow the payload marker scene");
+  assert(baseLinkObject.position.y === 0.8, "base_link y position should follow the payload marker scene");
+  assert(baseLinkObject.position.z === 0.9, "base_link z position should follow the payload marker scene");
+  assert(tipObject !== undefined, "scene should keep the tip object");
+  assert(tipObject.position.x === 0.11, "tip x position should follow the payload marker scene");
+  assert(tipObject.position.y === 0.22, "tip y position should follow the payload marker scene");
+  assert(tipObject.position.z === 0.33, "tip z position should follow the payload marker scene");
+  assert(targetObject === undefined, "scene should not create a target object when target is absent");
 
   activeSocket.dispatchClose();
   assert(

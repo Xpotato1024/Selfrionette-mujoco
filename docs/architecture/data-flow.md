@@ -183,7 +183,25 @@ payload v0
 
 The registry creates and retains named body/site/target objects from the
 marker scene model, but it does not apply final position mapping yet. Body,
-site, and target position reflection remains in R6-D-P2.
+site, and target position reflection is handled in R6-D-P2 with direct payload
+coordinate application.
+
+R6-D-P2 applies the payload marker coordinates directly to the Three.js
+objects while keeping the viewer rendering-only:
+
+```text
+payload v0
+  -> buildPayloadMarkerScene(payload)
+  -> marker scene model
+  -> buildMarkerObjectDescriptors(markerScene)
+  -> Three.js scene object registry
+  -> Object3D.position.set(x, y, z)
+```
+
+This step uses the payload marker scene model as the source and copies the
+marker scene `x` / `y` / `z` values straight into the marker objects. Final
+scene coordinate mapping can still be adjusted in a later issue if needed, but
+R6-D-P2 does not introduce a broader conversion layer.
 
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 

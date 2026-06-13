@@ -130,6 +130,8 @@ InputSource
   `qpos` pose recompute, or Three.js real scene mutation.
 - R6-D-P1 adds the minimal Three.js scene object registry skeleton while
   keeping body/site/target position mapping out of scope.
+- R6-D-P2 applies the payload marker coordinates directly to the Three.js
+  objects through the marker scene model and registry.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 
@@ -144,10 +146,11 @@ R6-B-P4 audits that the viewer-side contract is closed:
 
 ## Unresolved Items
 
-- Scene coordinate conversion is not decided here. Do not import legacy
-  Selfrionette transforms to fill that gap.
-- Body/site/target position reflection into the Three.js objects is deferred
-  to R6-D-P2.
+- Scene coordinate conversion is still intentionally minimal in this issue:
+  direct payload marker coordinates are applied to the Three.js objects, and
+  any broader mapping should be handled later if requirements change.
+- Body/site/target position reflection into the Three.js objects is now
+  handled in R6-D-P2.
 - Command extensibility is not expanded in this issue. Add new command shapes
   in a later issue if the schema needs them.
 - Unsupported future command types should fail explicitly in the real
