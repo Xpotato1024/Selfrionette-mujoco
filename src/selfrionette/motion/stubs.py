@@ -12,7 +12,7 @@ class NoOpMotionGenerator:
             timestamp_s=intent.timestamp_s,
             target=None,
             joint=None,
-            metadata=intent.metadata,
+            metadata=dict(intent.metadata),
         )
 
 

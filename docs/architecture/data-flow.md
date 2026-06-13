@@ -42,6 +42,23 @@ ReplayInputSource
 `MotionCommand`. Motion command generation belongs to `motion` / IK in later
 steps.
 
+Step 5-F adds the minimal motion skeleton:
+
+```text
+InputIntent
+  -> MotionGenerator
+  -> MotionCommand
+```
+
+`InputIntent.values` still carries raw replay/input payload data and does not
+have motion semantics yet. In this issue, `target_delta_m` may become
+`TargetCommand(delta_m=...)`, but `joint_delta_rad` is not threaded into a
+joint command because Step 5-D already treats joint commands as direct qpos
+reflection at the backend boundary.
+
+This issue stops at command generation. It does not connect `MotionCommand`
+to `mujoco_backend`, `qpos`, `mj_step`, transport, or viewer runtime wiring.
+
 The input layer does not import `mujoco_backend`, `transport`, or `viewer`.
 
 Three.js must not calculate FK or IK. It renders transforms that come from

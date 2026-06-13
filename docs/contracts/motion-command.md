@@ -12,6 +12,9 @@ related:
 # MotionCommand Contract
 
 `MotionCommand` is a command object. It is not a state snapshot.
+Motion generation happens in the `motion` / IK layers. Runtime may later
+connect the command to `mujoco_backend`, but Step 5-F only adds the motion
+skeleton and does not perform that wiring yet.
 
 ## Current Shape
 
@@ -32,6 +35,11 @@ destructively.
 - Reflection into `qpos` or `ctrl` happens at the MuJoCo backend or controller
   boundary, not in input, viewer, or transport.
 - `target` and `joint` are the currently modeled command buckets.
+- `target` may carry `TargetCommand(delta_m=...)` when the motion layer is
+  driven by `InputIntent.target_delta_m`.
+- `joint` is reserved for explicit joint commands. Step 5-F does not map
+  `InputIntent.joint_delta_rad` into `MotionCommand.joint`; that delta/absolute
+  ambiguity is left explicit for a later issue.
 - Actuator commands are not introduced in this issue. If they are needed later,
   add them in a separate issue with schema review.
 - Step 5-D adds the first backend path that reflects `MotionCommand.joint`
@@ -40,6 +48,8 @@ destructively.
   uses MuJoCo model joint order for the reflection.
 - Unsupported target commands, unknown joint contracts, and unsupported joint
   shapes must fail explicitly in the real backend.
+- Step 5-F generates `MotionCommand` objects but does not send them to
+  `mujoco_backend`.
 
 ## Unsupported Commands
 

@@ -40,8 +40,15 @@ here instead of restating field lists.
   `docs/architecture/dependency-boundaries.md`.
 - `MotionCommand` is a command, not state.
 - `InputIntent` is the replay/input-layer result, not a motion command.
+- `InputIntent.values` is raw replay/input payload data and does not carry
+  motion semantics yet.
+- `InputIntent.target_delta_m` may be translated into
+  `TargetCommand(delta_m=...)` by the motion layer.
+- `InputIntent.joint_delta_rad` is intentionally not normalized into a joint
+  command in Step 5-F because Step 5-D already fixed joint commands as direct
+  qpos reflection at the backend boundary.
 - `MuJoCoState` snapshot generation lives in `mujoco_backend` and is fed by
-  `mj_forward`; `mj_step` is reserved for later layers and is not part of the
-  snapshot contract.
+  `mj_forward`; `mj_step` remains part of backend stepping and is not part of
+  the snapshot contract.
 - Transport payloads are derived from `MuJoCoState` and do not change schema
   ownership.
