@@ -1,4 +1,5 @@
 import { payloadV0Fixture } from "../src/fixtures/payloadV0.js";
+import { readViewerEndpointConfig } from "../src/config/websocketEndpoint.js";
 import {
   buildViewerRuntimeSnapshot,
   createViewerRuntime,
@@ -94,7 +95,9 @@ class FakeDocument implements ViewerDocumentLike {
 
 class FakeWebSocket implements ViewerWebSocketLike {
   public readonly messageListeners: Array<(event: ViewerWebSocketMessageEventLike) => void> = [];
-  public readonly errorListeners: Array<() => void> = [];
+  public readonly openListeners: Array<(event: Event) => void> = [];
+  public readonly closeListeners: Array<(event: Event) => void> = [];
+  public readonly errorListeners: Array<(event: Event) => void> = [];
   public closed = false;
 
   constructor(public readonly url: string) {}
@@ -103,27 +106,45 @@ class FakeWebSocket implements ViewerWebSocketLike {
     type: "message",
     listener: (event: ViewerWebSocketMessageEventLike) => void,
   ): void;
-  addEventListener(type: "error", listener: () => void): void;
+  addEventListener(type: "open", listener: (event: Event) => void): void;
+  addEventListener(type: "close", listener: (event: Event) => void): void;
+  addEventListener(type: "error", listener: (event: Event) => void): void;
   addEventListener(
-    type: "message" | "error",
-    listener: ((event: ViewerWebSocketMessageEventLike) => void) | (() => void),
+    type: "message" | "open" | "close" | "error",
+    listener:
+      | ((event: ViewerWebSocketMessageEventLike) => void)
+      | ((event: Event) => void),
   ): void {
     if (type === "message") {
       this.messageListeners.push(listener as (event: ViewerWebSocketMessageEventLike) => void);
       return;
     }
 
-    this.errorListeners.push(listener as () => void);
+    if (type === "open") {
+      this.openListeners.push(listener as (event: Event) => void);
+      return;
+    }
+
+    if (type === "close") {
+      this.closeListeners.push(listener as (event: Event) => void);
+      return;
+    }
+
+    this.errorListeners.push(listener as (event: Event) => void);
   }
 
   removeEventListener(
     type: "message",
     listener: (event: ViewerWebSocketMessageEventLike) => void,
   ): void;
-  removeEventListener(type: "error", listener: () => void): void;
+  removeEventListener(type: "open", listener: (event: Event) => void): void;
+  removeEventListener(type: "close", listener: (event: Event) => void): void;
+  removeEventListener(type: "error", listener: (event: Event) => void): void;
   removeEventListener(
-    type: "message" | "error",
-    listener: ((event: ViewerWebSocketMessageEventLike) => void) | (() => void),
+    type: "message" | "open" | "close" | "error",
+    listener:
+      | ((event: ViewerWebSocketMessageEventLike) => void)
+      | ((event: Event) => void),
   ): void {
     if (type === "message") {
       const index = this.messageListeners.indexOf(listener as (event: ViewerWebSocketMessageEventLike) => void);
@@ -133,7 +154,23 @@ class FakeWebSocket implements ViewerWebSocketLike {
       return;
     }
 
-    const index = this.errorListeners.indexOf(listener as () => void);
+    if (type === "open") {
+      const index = this.openListeners.indexOf(listener as (event: Event) => void);
+      if (index >= 0) {
+        this.openListeners.splice(index, 1);
+      }
+      return;
+    }
+
+    if (type === "close") {
+      const index = this.closeListeners.indexOf(listener as (event: Event) => void);
+      if (index >= 0) {
+        this.closeListeners.splice(index, 1);
+      }
+      return;
+    }
+
+    const index = this.errorListeners.indexOf(listener as (event: Event) => void);
     if (index >= 0) {
       this.errorListeners.splice(index, 1);
     }
@@ -146,6 +183,24 @@ class FakeWebSocket implements ViewerWebSocketLike {
   dispatchMessage(data: unknown): void {
     for (const listener of this.messageListeners) {
       listener({ data });
+    }
+  }
+
+  dispatchOpen(): void {
+    for (const listener of this.openListeners) {
+      listener(new Event("open"));
+    }
+  }
+
+  dispatchClose(): void {
+    for (const listener of this.closeListeners) {
+      listener(new Event("close"));
+    }
+  }
+
+  dispatchError(): void {
+    for (const listener of this.errorListeners) {
+      listener(new Event("error"));
     }
   }
 }
@@ -163,16 +218,25 @@ function testBuildViewerRuntimeSnapshot(): void {
 
   assert(snapshot.payloadVersion === 0, "snapshot should keep payload version 0");
   assert(snapshot.frameIndex === 1, "snapshot should reflect the fixture frame");
-  assert(snapshot.statusText.includes("payload v0"), "snapshot should advertise payload v0");
+  assert(snapshot.statusText.includes("disabled"), "snapshot should advertise disabled websocket state");
   assert(snapshot.summaryText.includes("base_link"), "snapshot should include base_link");
   assert(snapshot.summaryText.includes("tip"), "snapshot should include tip");
   assert(snapshot.markerScene.bodies.length === 1, "fixture should produce one body marker");
   assert(snapshot.markerScene.sites.length === 1, "fixture should produce one site marker");
 }
 
+function testReadViewerEndpointConfig(): void {
+  const config = readViewerEndpointConfig({
+    search: "?websocketUrl=ws://127.0.0.1:8766",
+  });
+
+  assert(config.websocketUrl === "ws://127.0.0.1:8766", "endpoint helper should read websocketUrl");
+  assert(config.source === "query", "endpoint helper should mark query sources");
+}
+
 function testCreateViewerRuntimeMountsAndStops(): void {
   const { document, app } = createAppShell();
-  const runtime = createViewerRuntime({ document, payload: payloadV0Fixture });
+  const runtime = createViewerRuntime({ document, payload: payloadV0Fixture, websocketUrl: null });
 
   runtime.start();
 
@@ -213,6 +277,10 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   assert(
     statusSection?.textContent?.includes("frame 1") ?? false,
     "viewer runtime should show the fixture frame in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("WebSocket: disabled") ?? false,
+    "viewer runtime should show the disabled websocket status",
   );
   assert(
     statusSection?.textContent?.includes("base_link") ?? false,
@@ -256,10 +324,28 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(app.children.length === 1, "viewer runtime should still mount a single root");
   assert(socket !== null, "viewer runtime should start the optional websocket client");
   const activeSocket = socket as FakeWebSocket;
-
   const root = app.children[0];
   const sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
   const statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
+  assert(
+    root.attributes.get("data-websocket-status") === "connecting",
+    "viewer runtime should expose the connecting status before open",
+  );
+  assert(
+    statusSection?.textContent?.includes("WebSocket: connecting ws://example.test/payload") ?? false,
+    "viewer runtime should display the configured endpoint while connecting",
+  );
+
+  activeSocket.dispatchOpen();
+
+  assert(
+    root.attributes.get("data-websocket-status") === "open",
+    "viewer runtime should expose the open status after websocket open",
+  );
+  assert(
+    statusSection?.textContent?.includes("WebSocket: open ws://example.test/payload") ?? false,
+    "viewer runtime should display the open websocket status",
+  );
   const initialSceneText = sceneSection?.textContent ?? "";
   const initialStatusText = statusSection?.textContent ?? "";
   const updatedPayload = JSON.parse(JSON.stringify(payloadV0Fixture)) as TransportPayloadV0;
@@ -310,6 +396,12 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(
     root.attributes.get("data-marker-site-count") === "2",
     "runtime should publish the received site count on the root",
+  );
+
+  activeSocket.dispatchClose();
+  assert(
+    root.attributes.get("data-websocket-status") === "closed",
+    "runtime should expose the closed status after websocket close",
   );
 
   runtime.stop();
@@ -372,9 +464,56 @@ function testCreateViewerRuntimeIgnoresInvalidPayloads(): void {
   runtime.stop();
 }
 
+function testCreateViewerRuntimeReportsConnectionErrors(): void {
+  const { document, app } = createAppShell();
+  const errors: Error[] = [];
+  let socket: FakeWebSocket | null = null;
+
+  class InjectedFakeWebSocketCtor extends FakeWebSocket {
+    constructor(url: string) {
+      super(url);
+      socket = this;
+    }
+  }
+
+  const runtime = createViewerRuntime({
+    document,
+    payload: payloadV0Fixture,
+    websocketUrl: "ws://example.test/payload",
+    WebSocketCtor: InjectedFakeWebSocketCtor,
+    onError(error) {
+      errors.push(error);
+    },
+  });
+
+  runtime.start();
+
+  assert(app.children.length === 1, "viewer runtime should mount before connection errors");
+  assert(socket !== null, "viewer runtime should start the websocket client");
+  const activeSocket = socket as FakeWebSocket;
+  activeSocket.dispatchError();
+
+  const root = app.children[0];
+  const statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
+
+  assert(errors.length === 1, "connection errors should be surfaced");
+  assert(
+    root.attributes.get("data-websocket-status") === "error",
+    "connection errors should mark the websocket status as error",
+  );
+  assert(
+    statusSection?.textContent?.includes("WebSocket: error ws://example.test/payload") ?? false,
+    "connection errors should be visible in the status text",
+  );
+
+  runtime.stop();
+}
+
+testReadViewerEndpointConfig();
 testBuildViewerRuntimeSnapshot();
 testCreateViewerRuntimeMountsAndStops();
 testCreateViewerRuntimeStartsOptionalWebSocketClient();
 testCreateViewerRuntimeIgnoresInvalidPayloads();
+testCreateViewerRuntimeReportsConnectionErrors();
 
 console.log("viewer runtime tests passed");

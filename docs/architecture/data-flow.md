@@ -117,6 +117,21 @@ The runtime factory performs this wiring at the composition root only. It does
 not add a production WebSocket server, viewer runtime integration, target
 command backend support, or new motion semantics.
 
+R6-C-P2 keeps the viewer rendering-only and adds endpoint selection plus
+connection status visibility on the browser side:
+
+```text
+browser query / config
+  -> websocket endpoint selection
+  -> viewer runtime start
+  -> connection status display
+```
+
+The browser viewer reads an explicit `websocketUrl` query parameter, accepts
+`ws` as a compatible alias, and does not auto-connect when no endpoint is
+provided. The status text stays separate from payload marker rendering and the
+Python publisher runner remains unchanged.
+
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 
 - the emitted payload version is `0`

@@ -80,6 +80,9 @@ InputSource
   `scripts/run_replay_mujoco_websocket_publisher.py` as a local/dev delivery
   entry that reuses the replay pipeline and publishes payload v0 JSON to
   connected clients.
+- R6-C-P2 adds browser-side endpoint selection and connection status
+  visibility for `apps/mujoco-viewer/` without changing the payload contract
+  or the Python publisher runner.
 - Motion and IK stop at `MotionCommand`.
 - `InputIntent.values` still carries raw replay/input payload data and does
   not yet define motion semantics.
@@ -111,6 +114,8 @@ InputSource
   update without introducing FK, IK, or MuJoCo imports.
 - R6-C-P1 does not change the viewer contract; it only adds a local/dev
   WebSocket publisher runner on the Python side.
+- R6-C-P2 does not change the transport schema; it only adds explicit browser
+  endpoint configuration and connection status display on the viewer side.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 

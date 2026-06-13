@@ -28,6 +28,11 @@ R6-C-P1 keeps the payload schema unchanged and adds a local/dev WebSocket
 publisher runner on the Python side. The runner sends the same payload v0 JSON
 to connected clients and remains loopback-first by default.
 
+R6-C-P2 keeps the payload schema unchanged and moves browser endpoint
+selection into viewer configuration. The browser viewer can point at an
+explicit WebSocket endpoint such as `?websocketUrl=ws://127.0.0.1:8766`, but
+that query handling is a viewer concern and does not change payload shape.
+
 R6-A-P4 freezes the handoff contract for R6-B:
 
 - payload version remains `0`

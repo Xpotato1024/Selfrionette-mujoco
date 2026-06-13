@@ -59,3 +59,17 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 
 - No multi-room or multi-topic routing.
 - No hardware, serial, or OSC access.
 - No viewer changes.
+
+## Viewer Connection
+
+The browser viewer connects by explicit query parameter, not by automatic
+default:
+
+```text
+?websocketUrl=ws://127.0.0.1:8766
+```
+
+`?ws=ws://127.0.0.1:8766` is accepted as an alias. When no endpoint query is
+present, the viewer stays disconnected and shows `WebSocket: disabled`. R6-C-P2
+adds that endpoint configuration and connection status display on the viewer
+side; the Python publisher runner remains unchanged.

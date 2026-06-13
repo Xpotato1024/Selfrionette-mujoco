@@ -27,11 +27,13 @@ export interface ViewerDocumentLike {
   createElement(tagName: string): ViewerElementLike;
 }
 
+export type ViewerConnectionStatus = "disabled" | "connecting" | "open" | "closed" | "error";
+
 export interface ViewerRuntimeOptions {
   document?: ViewerDocumentLike;
   mountId?: string;
   payload?: TransportPayloadV0;
-  websocketUrl?: string;
+  websocketUrl?: string | null;
   WebSocketCtor?: ViewerWebSocketConstructorLike;
   onPayload?: (payload: TransportPayloadV0) => void;
   onError?: (error: Error) => void;
@@ -48,13 +50,14 @@ export interface ViewerRuntimeSnapshot {
   title: string;
   statusText: string;
   summaryText: string;
+  connectionStatus: ViewerConnectionStatus;
+  websocketUrl: string | null;
   canonicalMarkers: CanonicalPayloadMarkers;
   markerScene: PayloadMarkerScene;
   targetPosition_m: Vector3 | null;
 }
 
 interface ViewerRuntimeView {
-  documentLike: ViewerDocumentLike;
   root: ViewerElementLike;
   statusSection: ViewerElementLike;
   sceneSection: ViewerElementLike;
@@ -70,6 +73,19 @@ function requireMountPoint(
   }
 
   return mountPoint;
+}
+
+function buildConnectionStatusText(
+  connectionStatus: ViewerConnectionStatus,
+  websocketUrl: string | null,
+): string {
+  if (connectionStatus === "disabled") {
+    return "WebSocket: disabled";
+  }
+
+  return websocketUrl === null
+    ? `WebSocket: ${connectionStatus}`
+    : `WebSocket: ${connectionStatus} ${websocketUrl}`;
 }
 
 function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
@@ -103,6 +119,8 @@ function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
 
 export function buildViewerRuntimeSnapshot(
   payload: TransportPayloadV0 = payloadV0Fixture,
+  connectionStatus: ViewerConnectionStatus = "disabled",
+  websocketUrl: string | null = null,
 ): ViewerRuntimeSnapshot {
   const canonicalMarkers = getCanonicalPayloadMarkers(payload);
   const markerScene = buildPayloadMarkerScene(payload);
@@ -111,8 +129,10 @@ export function buildViewerRuntimeSnapshot(
     payloadVersion: payload.version,
     frameIndex: payload.frame_index,
     title: "mujoco-viewer browser runtime",
-    statusText: "Viewer runtime ready for payload v0",
+    statusText: buildConnectionStatusText(connectionStatus, websocketUrl),
     summaryText: "",
+    connectionStatus,
+    websocketUrl,
     canonicalMarkers,
     markerScene,
     targetPosition_m: payload.target_position_m,
@@ -136,6 +156,8 @@ function buildRuntimeView(
   root.className = "viewer-runtime";
   root.setAttribute("data-runtime", "mujoco-viewer");
   root.setAttribute("data-runtime-phase", "browser-entry");
+  root.setAttribute("data-websocket-status", snapshot.connectionStatus);
+  root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
 
   const header = documentLike.createElement("header");
   header.className = "viewer-runtime__header";
@@ -145,7 +167,7 @@ function buildRuntimeView(
   const statusSection = documentLike.createElement("section");
   statusSection.className = "viewer-runtime__details";
   statusSection.setAttribute("data-role", "viewer-status");
-  statusSection.textContent = snapshot.summaryText;
+  statusSection.textContent = [snapshot.statusText, snapshot.summaryText].join(" | ");
 
   const sceneSection = documentLike.createElement("section");
   sceneSection.className = "viewer-runtime__scene";
@@ -156,7 +178,6 @@ function buildRuntimeView(
   root.appendChild(statusSection);
   root.appendChild(sceneSection);
   return {
-    documentLike,
     root,
     statusSection,
     sceneSection,
@@ -168,7 +189,9 @@ function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnaps
   view.root.setAttribute("data-payload-version", String(snapshot.payloadVersion));
   view.root.setAttribute("data-marker-body-count", String(snapshot.markerScene.bodies.length));
   view.root.setAttribute("data-marker-site-count", String(snapshot.markerScene.sites.length));
-  view.statusSection.textContent = snapshot.summaryText;
+  view.root.setAttribute("data-websocket-status", snapshot.connectionStatus);
+  view.root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
+  view.statusSection.textContent = [snapshot.statusText, snapshot.summaryText].join(" | ");
   view.sceneSection.textContent = buildSceneText(snapshot);
 }
 
@@ -183,9 +206,15 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
 
   const mountId = options.mountId ?? "app";
   const payload = options.payload ?? payloadV0Fixture;
+  const websocketUrl =
+    options.websocketUrl === undefined || options.websocketUrl === null || options.websocketUrl.trim() === ""
+      ? null
+      : options.websocketUrl;
   let mountedView: ViewerRuntimeView | null = null;
   let websocketClient: ViewerWebSocketClient | null = null;
   let receivedPayload: TransportPayloadV0 | null = null;
+  let connectionStatus: ViewerConnectionStatus = websocketUrl === null ? "disabled" : "connecting";
+
   const getActivePayload = (): TransportPayloadV0 => receivedPayload ?? payload;
 
   function renderCurrentState(): void {
@@ -193,11 +222,19 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       return;
     }
 
-    updateRuntimeView(mountedView, buildViewerRuntimeSnapshot(getActivePayload()));
+    updateRuntimeView(
+      mountedView,
+      buildViewerRuntimeSnapshot(getActivePayload(), connectionStatus, websocketUrl),
+    );
+  }
+
+  function setConnectionStatus(nextStatus: ViewerConnectionStatus): void {
+    connectionStatus = nextStatus;
+    renderCurrentState();
   }
 
   function ensureWebSocketClient(): ViewerWebSocketClient | null {
-    if (options.websocketUrl === undefined) {
+    if (websocketUrl === null) {
       return null;
     }
 
@@ -206,15 +243,29 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
     }
 
     websocketClient = createViewerWebSocketClient({
-      url: options.websocketUrl,
+      url: websocketUrl,
       WebSocketCtor: options.WebSocketCtor,
       onPayload(receivedPayloadFromSocket) {
         receivedPayload = receivedPayloadFromSocket;
         renderCurrentState();
         options.onPayload?.(receivedPayloadFromSocket);
       },
-      onError(error) {
+      onPayloadError(error) {
         options.onError?.(error);
+      },
+      onOpen() {
+        setConnectionStatus("open");
+      },
+      onClose() {
+        setConnectionStatus("closed");
+      },
+      onConnectionError(error) {
+        setConnectionStatus("error");
+        if (error instanceof Error) {
+          options.onError?.(error);
+        } else {
+          options.onError?.(new Error("Viewer WebSocket client received a connection error event"));
+        }
       },
     });
 
@@ -228,14 +279,16 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       }
 
       const mountPoint = requireMountPoint(documentLike, mountId);
-      const snapshot = buildViewerRuntimeSnapshot(payload);
+      const snapshot = buildViewerRuntimeSnapshot(payload, connectionStatus, websocketUrl);
       mountedView = buildRuntimeView(documentLike, snapshot);
       mountPoint.replaceChildren(mountedView.root);
 
       const activeWebSocketClient = ensureWebSocketClient();
       if (activeWebSocketClient !== null) {
+        setConnectionStatus("connecting");
         activeWebSocketClient.start();
       }
+
       renderCurrentState();
     },
     stop() {

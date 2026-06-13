@@ -75,7 +75,9 @@ function testParseTransportPayloadV0MessageRejectsMissingRequiredFields(): void 
 
 class FakeWebSocket implements ViewerWebSocketLike {
   public readonly messageListeners: Array<(event: ViewerWebSocketMessageEventLike) => void> = [];
-  public readonly errorListeners: Array<() => void> = [];
+  public readonly openListeners: Array<(event: Event) => void> = [];
+  public readonly closeListeners: Array<(event: Event) => void> = [];
+  public readonly errorListeners: Array<(event: Event) => void> = [];
   public closed = false;
 
   constructor(public readonly url: string) {}
@@ -84,27 +86,45 @@ class FakeWebSocket implements ViewerWebSocketLike {
     type: "message",
     listener: (event: ViewerWebSocketMessageEventLike) => void,
   ): void;
-  addEventListener(type: "error", listener: () => void): void;
+  addEventListener(type: "open", listener: (event: Event) => void): void;
+  addEventListener(type: "close", listener: (event: Event) => void): void;
+  addEventListener(type: "error", listener: (event: Event) => void): void;
   addEventListener(
-    type: "message" | "error",
-    listener: ((event: ViewerWebSocketMessageEventLike) => void) | (() => void),
+    type: "message" | "open" | "close" | "error",
+    listener:
+      | ((event: ViewerWebSocketMessageEventLike) => void)
+      | ((event: Event) => void),
   ): void {
     if (type === "message") {
       this.messageListeners.push(listener as (event: ViewerWebSocketMessageEventLike) => void);
       return;
     }
 
-    this.errorListeners.push(listener as () => void);
+    if (type === "open") {
+      this.openListeners.push(listener as (event: Event) => void);
+      return;
+    }
+
+    if (type === "close") {
+      this.closeListeners.push(listener as (event: Event) => void);
+      return;
+    }
+
+    this.errorListeners.push(listener as (event: Event) => void);
   }
 
   removeEventListener(
     type: "message",
     listener: (event: ViewerWebSocketMessageEventLike) => void,
   ): void;
-  removeEventListener(type: "error", listener: () => void): void;
+  removeEventListener(type: "open", listener: (event: Event) => void): void;
+  removeEventListener(type: "close", listener: (event: Event) => void): void;
+  removeEventListener(type: "error", listener: (event: Event) => void): void;
   removeEventListener(
-    type: "message" | "error",
-    listener: ((event: ViewerWebSocketMessageEventLike) => void) | (() => void),
+    type: "message" | "open" | "close" | "error",
+    listener:
+      | ((event: ViewerWebSocketMessageEventLike) => void)
+      | ((event: Event) => void),
   ): void {
     if (type === "message") {
       const index = this.messageListeners.indexOf(listener as (event: ViewerWebSocketMessageEventLike) => void);
@@ -114,7 +134,23 @@ class FakeWebSocket implements ViewerWebSocketLike {
       return;
     }
 
-    const index = this.errorListeners.indexOf(listener as () => void);
+    if (type === "open") {
+      const index = this.openListeners.indexOf(listener as (event: Event) => void);
+      if (index >= 0) {
+        this.openListeners.splice(index, 1);
+      }
+      return;
+    }
+
+    if (type === "close") {
+      const index = this.closeListeners.indexOf(listener as (event: Event) => void);
+      if (index >= 0) {
+        this.closeListeners.splice(index, 1);
+      }
+      return;
+    }
+
+    const index = this.errorListeners.indexOf(listener as (event: Event) => void);
     if (index >= 0) {
       this.errorListeners.splice(index, 1);
     }
@@ -130,9 +166,21 @@ class FakeWebSocket implements ViewerWebSocketLike {
     }
   }
 
+  dispatchOpen(): void {
+    for (const listener of this.openListeners) {
+      listener(new Event("open"));
+    }
+  }
+
+  dispatchClose(): void {
+    for (const listener of this.closeListeners) {
+      listener(new Event("close"));
+    }
+  }
+
   dispatchError(): void {
     for (const listener of this.errorListeners) {
-      listener();
+      listener(new Event("error"));
     }
   }
 }
@@ -155,7 +203,7 @@ function testViewerWebSocketClientRoutesMalformedMessageToErrorCallback(): void 
     onPayload(payload) {
       payloads.push(payload);
     },
-    onError(error) {
+    onPayloadError(error) {
       errors.push(error);
     },
   });
@@ -189,7 +237,7 @@ function testViewerWebSocketClientDeliversValidPayloadThroughInjectedSocket(): v
     onPayload(payload) {
       payloads.push(payload);
     },
-    onError(error) {
+    onPayloadError(error) {
       errors.push(error);
     },
   });
@@ -227,18 +275,33 @@ function testViewerWebSocketClientRoutesSocketErrorsToErrorCallback(): void {
   const client = createViewerWebSocketClient({
     url: "ws://example.test/payload",
     WebSocketCtor: InjectedFakeWebSocketCtor,
-    onError(error) {
-      errors.push(error);
+    onConnectionError(error) {
+      if (error instanceof Error) {
+        errors.push(error);
+        return;
+      }
+
+      errors.push(new Error("connection error event"));
+    },
+    onOpen() {
+      errors.push(new Error("open"));
+    },
+    onClose() {
+      errors.push(new Error("close"));
     },
   });
 
   client.start();
   assert(socket !== null, "websocket should be created");
   const activeSocket = socket as FakeWebSocket;
+  activeSocket.dispatchOpen();
   activeSocket.dispatchError();
+  activeSocket.dispatchClose();
 
-  assert(errors.length === 1, "socket error should be routed");
-  assert(errors[0].message.includes("error event"), "socket error should mention error event");
+  assert(errors.length === 3, "socket lifecycle events should be routed");
+  assert(errors[0].message === "open", "open event should be routed");
+  assert(errors[1].message.includes("connection error"), "socket error should mention connection error");
+  assert(errors[2].message === "close", "close event should be routed");
   client.stop();
 }
 

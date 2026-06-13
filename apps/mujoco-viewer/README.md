@@ -69,6 +69,16 @@ This app is the Three.js rendering layer.
 - `index.html` reads `dist/browser/main.js`, which is emitted by
   `npm run browser:build`.
 
+## Endpoint Configuration
+
+- The viewer reads an explicit WebSocket endpoint from the URL query string.
+- Preferred query parameter: `?websocketUrl=ws://127.0.0.1:8766`
+- Alias supported for compatibility: `?ws=ws://127.0.0.1:8766`
+- If no endpoint query is present, the viewer does not auto-connect.
+- `src/viewerRuntime.ts` shows the current connection status in the DOM.
+- R6-C-P2 adds endpoint selection and status visibility without changing the
+  payload schema or marker rendering skeleton.
+
 ## Prohibited
 
 - Do not reimplement FK in Three.js.
