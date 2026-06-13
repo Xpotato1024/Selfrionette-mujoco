@@ -5,6 +5,9 @@ declare module "three" {
     children: Object3D[];
     userData: Record<string, unknown>;
     position: {
+      x: number;
+      y: number;
+      z: number;
       set(x: number, y: number, z: number): void;
     };
   }

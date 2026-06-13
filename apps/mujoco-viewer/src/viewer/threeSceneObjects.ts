@@ -7,10 +7,17 @@ import type {
 
 export type MarkerObjectKind = "body" | "site" | "target" | "unknown";
 
+export interface MarkerObjectPosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface MarkerObjectDescriptor {
   key: string;
   kind: MarkerObjectKind;
   label: string;
+  position: MarkerObjectPosition;
 }
 
 export interface ThreeSceneObjectRegistry {
@@ -34,17 +41,23 @@ function buildMarkerObjectDescriptor(marker: PayloadMarkerRenderSpec): MarkerObj
     key: `${kind}:${marker.name}`,
     kind,
     label: marker.label ?? marker.name,
+    position: {
+      x: marker.position_m[0],
+      y: marker.position_m[1],
+      z: marker.position_m[2],
+    },
   };
 }
 
 function createMarkerObject(descriptor: MarkerObjectDescriptor): Object3D {
   const object = new Object3D();
   object.name = descriptor.key;
-  object.position.set(0, 0, 0);
+  object.position.set(descriptor.position.x, descriptor.position.y, descriptor.position.z);
   object.userData = {
     markerKey: descriptor.key,
     markerKind: descriptor.kind,
     markerLabel: descriptor.label,
+    position: descriptor.position,
   };
   return object;
 }
@@ -72,10 +85,12 @@ export function createThreeSceneObjectRegistry(scene: Scene): ThreeSceneObjectRe
       const existingObject = objectsByKey.get(descriptor.key);
       if (existingObject !== undefined) {
         existingObject.name = descriptor.key;
+        existingObject.position.set(descriptor.position.x, descriptor.position.y, descriptor.position.z);
         existingObject.userData = {
           markerKey: descriptor.key,
           markerKind: descriptor.kind,
           markerLabel: descriptor.label,
+          position: descriptor.position,
         };
         if (existingObject.parent !== scene) {
           scene.add(existingObject);

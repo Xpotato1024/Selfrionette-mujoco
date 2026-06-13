@@ -58,6 +58,8 @@ This app is the Three.js rendering layer.
   kinematics logic.
 - R6-D-P1 adds the Three.js scene object registry skeleton and keeps body,
   site, and target position mapping for a later issue.
+- R6-D-P2 applies payload marker coordinates directly to the Three.js
+  objects through the marker scene model and registry.
 
 ## Phase B Handoff
 
@@ -96,6 +98,8 @@ This app is the Three.js rendering layer.
   state and marker summary path.
 - R6-D-P1 keeps the runtime rendering-only while the marker object registry
   skeleton manages named Three.js objects without final position mapping yet.
+- R6-D-P2 keeps the runtime rendering-only while the registry applies direct
+  payload marker positions to the live Three.js objects.
 
 ## Local Smoke
 
@@ -109,9 +113,11 @@ Open the viewer manually with:
 apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 
-The smoke path stops at marker summary updates. It does not mutate a real
-Three.js scene, recalculate FK/IK, or use hardware, serial, or OSC. R6-D-P1
-adds object registry skeleton management only.
+The smoke path stops at marker summary updates and direct marker position
+assignment. It does not mutate a real Three.js scene beyond those payload
+coordinates, recalculate FK/IK, or use hardware, serial, or OSC. R6-D-P1
+adds object registry skeleton management only, and R6-D-P2 applies the direct
+payload marker positions.
 
 ## Prohibited
 
@@ -122,6 +128,7 @@ adds object registry skeleton management only.
 - Do not import `mujoco_backend`.
 - Do not bring Rapier physics into the new viewer.
 - Do not import MuJoCo, `mujoco_backend`, IK, FK, or Rapier layers.
+- Do not reintroduce `@types/three`.
 - Do not connect received payloads to marker rendering in R6-B-P1.
 - Do not introduce a bundler or framework for the browser artifact path.
 
