@@ -124,3 +124,17 @@ markers for `bodies`, `sites`, and optional `target_position_m`, keeps
 `base_link` and `tip` recognizable, and does not recalculate pose from `qpos`.
 The viewer skeleton in `apps/mujoco-viewer/` is typechecked with a minimal
 `npm` + TypeScript toolchain and remains rendering-only.
+
+R6-B-P1 adds the browser runtime entry in `apps/mujoco-viewer/`:
+
+- `index.html` mounts `#app`.
+- `src/main.ts` boots the browser runtime.
+- `src/viewerRuntime.ts` owns the minimal `start()` / `stop()` lifecycle.
+- the runtime may use the static payload v0 fixture for initial status only.
+- the runtime does not open a WebSocket client.
+- the runtime does not connect received payloads to marker rendering.
+- the runtime does not recalculate pose from `qpos`.
+
+Phase A dry-run payload v0 is the upstream input contract for this browser
+runtime handoff. R6-B-P2 adds the WebSocket client skeleton, and R6-B-P3
+connects received payloads to marker rendering.

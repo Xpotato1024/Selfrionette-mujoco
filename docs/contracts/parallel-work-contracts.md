@@ -92,6 +92,11 @@ InputSource
 - Transport publisher wiring is now handled by R6-A-P2 at the runtime
   composition root.
 - Viewer and WebSocket wiring are deferred to R6-B.
+- R6-B-P1 adds the browser runtime entry for the viewer. It mounts a
+  rendering-only shell against `#app`, may use the static payload v0 fixture
+  for initial status, emits browser ESM via TypeScript to `dist/browser/`,
+  and does not open a WebSocket client or connect received payloads to marker
+  rendering.
 
 ## Unresolved Items
 
