@@ -33,3 +33,11 @@ def test_live_viewer_smoke_report_lines_include_endpoint_and_viewer_url() -> Non
 
     assert lines[0] == "WebSocket endpoint: ws://127.0.0.1:8766"
     assert lines[1] == "Viewer URL: apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766"
+
+
+def test_live_viewer_smoke_report_lines_keep_endpoint_and_viewer_url_separate() -> None:
+    lines = build_live_viewer_smoke_report_lines("127.0.0.1", 8766)
+
+    assert lines[0] != lines[1]
+    assert lines[0].startswith("WebSocket endpoint:")
+    assert lines[1].startswith("Viewer URL:")

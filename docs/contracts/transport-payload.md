@@ -38,6 +38,16 @@ that exercises the publisher runner, browser WebSocket client, viewer runtime
 state, and marker skeleton update in sequence. The payload contract is still
 payload v0 JSON and still stops short of real scene mutation.
 
+R6-C-P4 freezes that completion state without changing the payload schema:
+
+- payload version remains `0`
+- the local/dev publisher runner may drop payloads when no client is connected
+- the viewer keeps the received payload in runtime state and updates the
+  marker skeleton summary
+- the viewer remains rendering-only
+- production server, auth, TLS, and public network exposure remain out of
+  scope
+
 R6-A-P4 freezes the handoff contract for R6-B:
 
 - payload version remains `0`
@@ -67,6 +77,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
   new payload version.
 - The live viewer smoke path does not add a new payload version, a new
   schema, or extra transport envelope fields.
+- The Phase C completion audit does not add a new payload version, new schema,
+  or browser scene mutation path.
 
 ## v0 Shape
 

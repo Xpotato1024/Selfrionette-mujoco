@@ -154,6 +154,22 @@ This smoke path confirms that the received payload still updates summary text,
 scene placeholder text, and root attributes without introducing Three.js real
 scene mutation, FK, IK, or MuJoCo imports into the browser viewer.
 
+R6-C-P4 audits and freezes the completed Phase C live skeleton:
+
+```text
+Python runtime dry-run pipeline
+  -> WebSocket publisher runner
+  -> browser viewer WebSocket client
+  -> viewer runtime state
+  -> marker skeleton update
+```
+
+This completion state remains local/dev only. It is not a production WebSocket
+server, it does not add auth, TLS, deployment, or public network exposure, and
+it keeps the viewer rendering-only. The browser viewer still does not own
+MuJoCo, `mujoco_backend`, IK, FK, `qpos` pose recompute, or Three.js real
+scene mutation.
+
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 
 - the emitted payload version is `0`

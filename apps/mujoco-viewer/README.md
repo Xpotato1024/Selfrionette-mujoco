@@ -14,6 +14,8 @@ This app is the Three.js rendering layer.
 - Typecheck: `npm run typecheck`
 - Build: `npm run build` (`tsc --noEmit`; alias of `typecheck`)
 - CI: GitHub Actions runs `npm ci`, `npm run typecheck`, and `npm run build`
+  only; `npm test` and `npm run browser:build` remain local required
+  validation
 
 ## Notes
 
@@ -22,8 +24,8 @@ This app is the Three.js rendering layer.
 - The `build` script is a typecheck alias, not a browser bundle or runtime
   artifact.
 - `browser:build` emits browser-ready ESM files under `dist/browser/`.
-- CI validation for the viewer toolchain is already locked in by the
-  repository workflow.
+- CI validation for the viewer toolchain currently covers typecheck/build,
+  while `npm test` and `browser:build` stay as local required checks.
 - `index.html` references `./dist/browser/main.js`; `browser:build` is the
   command that produces that artifact.
 
@@ -49,6 +51,9 @@ This app is the Three.js rendering layer.
 - R6-C-P3 adds the deterministic local smoke path that pairs this runtime
   with the Python publisher runner through an explicit `websocketUrl`
   endpoint and keeps marker updates limited to the skeleton summary path.
+- R6-C-P4 freezes the completed Phase C live skeleton without adding a
+  production server, real scene mutation, or any browser-side physics or
+  kinematics logic.
 
 ## Phase B Handoff
 
