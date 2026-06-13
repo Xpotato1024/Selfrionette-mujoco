@@ -45,9 +45,13 @@ InputSource
 ## Contract Pointers
 
 - `MotionCommand` is a command object, not a state snapshot.
+- `InputIntent` is the minimal replay/input-layer contract, not a
+  `MotionCommand`.
 - `MuJoCoState` is the backend physical snapshot.
 - Transport payloads are JSON-compatible delivery artifacts derived from
   `MuJoCoState`.
+- Step 5-E adds the deterministic replay path:
+  `ReplayInputSource -> RawInputFrame -> ReplayInputInterpreter -> InputIntent`.
 - Step 5-A adds `mujoco_state_to_payload()` as the v0 serializer for that
   payload contract.
 - Transport stays serialization/delivery only and does not own IK, FK,
@@ -55,6 +59,7 @@ InputSource
 - Input sources stop at `RawInputFrame`.
 - Input interpreters stop at `InputIntent`.
 - Motion and IK stop at `MotionCommand`.
+- Input layers do not import `mujoco_backend`, `transport`, or `viewer`.
 
 ## Unresolved Items
 

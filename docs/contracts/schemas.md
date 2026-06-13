@@ -20,7 +20,8 @@ here instead of restating field lists.
 - `Vector3`, `QuaternionWXYZ`, `JointVector`, `ScalarVector`: shared tuple
   aliases for layer contracts.
 - `RawInputFrame`: raw device/replay input captured by `input_sources`.
-- `InputIntent`: interpreted input sent from `input_interpreters` to `motion`.
+- `InputIntent`: interpreted replay/input-layer contract sent from
+  `input_interpreters` to the next layer; it is not a `MotionCommand`.
 - `TargetCommand`: target-space command used by motion generation.
 - `JointCommand`: joint-space command used by motion and kinematics stubs.
 - `MotionCommand`: motion-layer command consumed by `mujoco_backend`; see
@@ -38,6 +39,7 @@ here instead of restating field lists.
 - Schema additions should preserve the layer boundaries documented in
   `docs/architecture/dependency-boundaries.md`.
 - `MotionCommand` is a command, not state.
+- `InputIntent` is the replay/input-layer result, not a motion command.
 - `MuJoCoState` snapshot generation lives in `mujoco_backend` and is fed by
   `mj_forward`; `mj_step` is reserved for later layers and is not part of the
   snapshot contract.

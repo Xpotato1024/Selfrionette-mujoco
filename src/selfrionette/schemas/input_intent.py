@@ -10,6 +10,7 @@ from selfrionette.schemas.types import Vector3
 class InputIntent:
     source: str
     timestamp_s: float
+    values: tuple[float, ...] = ()
     target_delta_m: Vector3 = (0.0, 0.0, 0.0)
     joint_delta_rad: tuple[float, ...] = ()
     buttons: tuple[bool, ...] = ()

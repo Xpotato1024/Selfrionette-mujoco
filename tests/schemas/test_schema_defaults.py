@@ -34,6 +34,7 @@ def test_schema_defaults_and_independent_metadata() -> None:
 
     assert raw.source == "keyboard"
     assert intent.source == "keyboard"
+    assert intent.values == ()
     assert target.delta_m == (0.0, 0.0, 0.0)
     assert joint.joint_angles_rad == ()
     assert motion.target is None
