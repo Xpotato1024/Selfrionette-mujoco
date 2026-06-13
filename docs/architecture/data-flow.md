@@ -70,3 +70,5 @@ physics or kinematics authority.
 For the Step 5-C viewer skeleton, the renderer consumes transport payload v0
 markers for `bodies`, `sites`, and optional `target_position_m`, keeps
 `base_link` and `tip` recognizable, and does not recalculate pose from `qpos`.
+The viewer skeleton in `apps/mujoco-viewer/` is typechecked with a minimal
+`npm` + TypeScript toolchain and remains rendering-only.
