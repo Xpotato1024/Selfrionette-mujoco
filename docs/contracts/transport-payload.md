@@ -32,6 +32,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
 - the browser WebSocket client and viewer runtime are introduced in R6-B
 - R6-B-P2 parses payload v0 JSON in the viewer client and keeps received
   payloads in state or callback form only
+- R6-B-P3 keeps the received payload in viewer runtime state and reuses the
+  marker rendering skeleton for summary and placeholder updates
 - the dry-run NDJSON entry remains the Phase A source of payload v0
 
 ## Rules

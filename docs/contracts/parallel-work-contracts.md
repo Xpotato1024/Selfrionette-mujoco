@@ -101,6 +101,9 @@ InputSource
   WebSocket constructor and URL, parses payload v0 JSON with minimal
   validation, forwards valid payloads to runtime state or callback handlers,
   and routes malformed or invalid payloads to error handlers.
+- R6-B-P3 keeps received payload v0 in viewer runtime state and feeds the
+  existing marker rendering skeleton so the summary and placeholder scene
+  update without introducing FK, IK, or MuJoCo imports.
 
 ## Unresolved Items
 

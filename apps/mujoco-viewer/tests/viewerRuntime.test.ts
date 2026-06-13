@@ -195,8 +195,32 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   assert(statusSection !== undefined, "viewer runtime should render a status section");
   assert(sceneSection !== undefined, "viewer runtime should render a scene placeholder");
   assert(
+    root.attributes.get("data-frame-index") === "1",
+    "viewer runtime should publish the initial frame index on the root",
+  );
+  assert(
+    root.attributes.get("data-marker-body-count") === "1",
+    "viewer runtime should publish the initial body count on the root",
+  );
+  assert(
+    root.attributes.get("data-marker-site-count") === "1",
+    "viewer runtime should publish the initial site count on the root",
+  );
+  assert(
     sceneSection?.textContent?.includes("Marker rendering placeholder") ?? false,
     "viewer runtime should advertise the placeholder scene",
+  );
+  assert(
+    statusSection?.textContent?.includes("frame 1") ?? false,
+    "viewer runtime should show the fixture frame in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("base_link") ?? false,
+    "viewer runtime should show the base link in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("tip") ?? false,
+    "viewer runtime should show the tip site in the summary",
   );
 
   runtime.stop();
@@ -235,15 +259,57 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
 
   const root = app.children[0];
   const sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
+  const statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
   const initialSceneText = sceneSection?.textContent ?? "";
+  const initialStatusText = statusSection?.textContent ?? "";
+  const updatedPayload = JSON.parse(JSON.stringify(payloadV0Fixture)) as TransportPayloadV0;
+  updatedPayload.frame_index = 3;
+  updatedPayload.bodies.push({
+    name: "elbow_link",
+    position_m: [0.2, 0.3, 0.4],
+    quaternion_wxyz: [1, 0, 0, 0],
+  });
+  updatedPayload.sites.push({
+    name: "wrist_site",
+    position_m: [0.4, 0.5, 0.6],
+    quaternion_wxyz: [1, 0, 0, 0],
+  });
 
-  activeSocket.dispatchMessage(JSON.stringify(payloadV0Fixture));
+  activeSocket.dispatchMessage(JSON.stringify(updatedPayload));
 
   assert(receivedPayloads.length === 1, "runtime should forward received payloads to the callback");
   assert(receivedPayloads[0].version === 0, "runtime callback should receive payload v0");
   assert(
-    sceneSection?.textContent === initialSceneText,
-    "runtime should not connect received payloads to marker rendering",
+    sceneSection?.textContent !== initialSceneText,
+    "runtime should connect received payloads to marker rendering",
+  );
+  assert(
+    statusSection?.textContent !== initialStatusText,
+    "runtime should refresh the summary when payload changes",
+  );
+  assert(
+    statusSection?.textContent?.includes("frame 3") ?? false,
+    "runtime should reflect the received frame index in the summary",
+  );
+  assert(
+    sceneSection?.textContent?.includes("elbow_link") ?? false,
+    "runtime should reflect the received body marker names in the scene placeholder",
+  );
+  assert(
+    sceneSection?.textContent?.includes("wrist_site") ?? false,
+    "runtime should reflect the received site marker names in the scene placeholder",
+  );
+  assert(
+    root.attributes.get("data-frame-index") === "3",
+    "runtime should publish the received frame index on the root",
+  );
+  assert(
+    root.attributes.get("data-marker-body-count") === "2",
+    "runtime should publish the received body count on the root",
+  );
+  assert(
+    root.attributes.get("data-marker-site-count") === "2",
+    "runtime should publish the received site count on the root",
   );
 
   runtime.stop();
@@ -251,8 +317,56 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(activeSocket.closed, "runtime stop should close the websocket client");
 }
 
+function testCreateViewerRuntimeIgnoresInvalidPayloads(): void {
+  const { document, app } = createAppShell();
+  const errors: Error[] = [];
+  let socket: FakeWebSocket | null = null;
+
+  class InjectedFakeWebSocketCtor extends FakeWebSocket {
+    constructor(url: string) {
+      super(url);
+      socket = this;
+    }
+  }
+
+  const runtime = createViewerRuntime({
+    document,
+    payload: payloadV0Fixture,
+    websocketUrl: "ws://example.test/payload",
+    WebSocketCtor: InjectedFakeWebSocketCtor,
+    onError(error) {
+      errors.push(error);
+    },
+  });
+
+  runtime.start();
+
+  assert(app.children.length === 1, "viewer runtime should mount before invalid payloads");
+  assert(socket !== null, "viewer runtime should start the websocket client");
+  const activeSocket = socket as FakeWebSocket;
+  const root = app.children[0];
+  const initialFrameIndex = root.attributes.get("data-frame-index");
+  const initialSummary = root.children.find((child) => child.attributes.get("data-role") === "viewer-status")?.textContent ?? "";
+
+  activeSocket.dispatchMessage(JSON.stringify({ ...payloadV0Fixture, version: 1 }));
+
+  assert(errors.length === 1, "invalid payload should be routed to the error callback");
+  assert(
+    errors[0].message.includes("version must be 0"),
+    "invalid payload error should mention the version check",
+  );
+  assert(root.attributes.get("data-frame-index") === initialFrameIndex, "invalid payload should not update frame index");
+  assert(
+    root.children.find((child) => child.attributes.get("data-role") === "viewer-status")?.textContent === initialSummary,
+    "invalid payload should not update the summary",
+  );
+
+  runtime.stop();
+}
+
 testBuildViewerRuntimeSnapshot();
 testCreateViewerRuntimeMountsAndStops();
 testCreateViewerRuntimeStartsOptionalWebSocketClient();
+testCreateViewerRuntimeIgnoresInvalidPayloads();
 
 console.log("viewer runtime tests passed");
