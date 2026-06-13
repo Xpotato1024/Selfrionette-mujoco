@@ -221,6 +221,18 @@ viewer remains rendering-only, the final coordinate mapping is not frozen,
 and this step still does not add a rendered arm mesh, camera/renderer
 pipeline, IK, FK, or `qpos` pose recompute.
 
+R6-D-P4 freezes the Phase D completion audit and the next handoff boundary:
+
+- browser visual smoke is complete
+- the viewer remains rendering-only
+- the next handoff is IK / command integration skeleton work
+- the rendered arm mesh is not implemented yet
+- the final coordinate mapping is not frozen yet
+
+The next phase candidate is the viewer/runtime IK handoff. Phase D does not
+expand into IK, FK, qpos pose recompute, or MuJoCo backend changes in the
+browser.
+
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 
 - the emitted payload version is `0`

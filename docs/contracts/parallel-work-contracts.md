@@ -140,6 +140,13 @@ InputSource
   positions.
 - Final coordinate mapping is not frozen in this issue. No rendered arm mesh,
   camera/renderer pipeline, IK, FK, or `qpos` pose recompute is introduced.
+- R6-D-P4 freezes the completion audit for the browser visual smoke path and
+  records the next handoff into IK / command integration skeleton work.
+- Browser visual smoke is complete for Phase D, but the viewer remains
+  rendering-only and does not claim a rendered arm mesh or final coordinate
+  mapping layer.
+- The next handoff is IK / command integration skeleton work in a later
+  phase.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 

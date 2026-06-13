@@ -95,6 +95,10 @@ target is present, otherwise body + site.
   the marker scene model.
 - The browser smoke only proves direct payload coordinate reflection, not a
   final coordinate mapping layer.
+- The Phase D completion audit is recorded in
+  `docs/operations/r6-d-completion-audit.md`.
+- The next handoff is IK / command integration skeleton work, not a rendered
+  arm mesh or a finished IK path.
 
 ## What Is Intentionally Not Visualized Yet
 

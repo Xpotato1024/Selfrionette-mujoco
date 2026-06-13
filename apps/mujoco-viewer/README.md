@@ -63,6 +63,10 @@ This app is the Three.js rendering layer.
 - R6-D-P3 freezes the browser visual smoke path that confirms DOM status,
   marker summary, marker object count, and direct `Object3D.position`
   mutation from payload coordinates.
+- R6-D-P4 closes the Phase D completion audit in
+  `docs/operations/r6-d-completion-audit.md` and documents the next IK /
+  command integration handoff without claiming a rendered arm mesh or IK
+  implementation.
 
 ## Phase B Handoff
 
@@ -136,6 +140,8 @@ R6-D-P3 adds the operation smoke that a human can verify in the browser:
 - No hardware, serial, or OSC access is involved.
 - Browser direct open still requires `npm ci` because the import map resolves
   `three` from local `node_modules`.
+- The Phase D completion audit and Phase E handoff live in
+  `docs/operations/r6-d-completion-audit.md`.
 
 ## Prohibited
 
