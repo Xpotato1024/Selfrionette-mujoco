@@ -5,6 +5,11 @@ import {
   type ViewerWebSocketConstructorLike,
 } from "./transport/websocketClient.js";
 import { buildPayloadMarkerScene, getCanonicalPayloadMarkers } from "./viewer/payloadMarkers.js";
+import {
+  createThreeSceneObjectRegistry,
+  syncThreeSceneObjectRegistry,
+} from "./viewer/threeSceneObjects.js";
+import { Scene } from "three";
 import type {
   CanonicalPayloadMarkers,
   PayloadMarkerScene,
@@ -54,6 +59,7 @@ export interface ViewerRuntimeSnapshot {
   websocketUrl: string | null;
   canonicalMarkers: CanonicalPayloadMarkers;
   markerScene: PayloadMarkerScene;
+  markerObjectCount: number;
   targetPosition_m: Vector3 | null;
 }
 
@@ -124,6 +130,8 @@ export function buildViewerRuntimeSnapshot(
 ): ViewerRuntimeSnapshot {
   const canonicalMarkers = getCanonicalPayloadMarkers(payload);
   const markerScene = buildPayloadMarkerScene(payload);
+  const markerObjectCount =
+    markerScene.bodies.length + markerScene.sites.length + (markerScene.target === null ? 0 : 1);
 
   const snapshot: ViewerRuntimeSnapshot = {
     payloadVersion: payload.version,
@@ -135,6 +143,7 @@ export function buildViewerRuntimeSnapshot(
     websocketUrl,
     canonicalMarkers,
     markerScene,
+    markerObjectCount,
     targetPosition_m: payload.target_position_m,
   };
 
@@ -158,6 +167,7 @@ function buildRuntimeView(
   root.setAttribute("data-runtime-phase", "browser-entry");
   root.setAttribute("data-websocket-status", snapshot.connectionStatus);
   root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
+  root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
 
   const header = documentLike.createElement("header");
   header.className = "viewer-runtime__header";
@@ -189,6 +199,7 @@ function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnaps
   view.root.setAttribute("data-payload-version", String(snapshot.payloadVersion));
   view.root.setAttribute("data-marker-body-count", String(snapshot.markerScene.bodies.length));
   view.root.setAttribute("data-marker-site-count", String(snapshot.markerScene.sites.length));
+  view.root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
   view.root.setAttribute("data-websocket-status", snapshot.connectionStatus);
   view.root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
   view.statusSection.textContent = [snapshot.statusText, snapshot.summaryText].join(" | ");
@@ -210,6 +221,8 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
     options.websocketUrl === undefined || options.websocketUrl === null || options.websocketUrl.trim() === ""
       ? null
       : options.websocketUrl;
+  const threeScene = new Scene();
+  const markerObjectRegistry = createThreeSceneObjectRegistry(threeScene);
   let mountedView: ViewerRuntimeView | null = null;
   let websocketClient: ViewerWebSocketClient | null = null;
   let receivedPayload: TransportPayloadV0 | null = null;
@@ -222,10 +235,9 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       return;
     }
 
-    updateRuntimeView(
-      mountedView,
-      buildViewerRuntimeSnapshot(getActivePayload(), connectionStatus, websocketUrl),
-    );
+    const snapshot = buildViewerRuntimeSnapshot(getActivePayload(), connectionStatus, websocketUrl);
+    syncThreeSceneObjectRegistry(markerObjectRegistry, snapshot.markerScene);
+    updateRuntimeView(mountedView, snapshot);
   }
 
   function setConnectionStatus(nextStatus: ViewerConnectionStatus): void {
@@ -302,6 +314,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       websocketClient?.stop();
       websocketClient = null;
       receivedPayload = null;
+      markerObjectRegistry.clear();
       mountedView.root.remove();
       mountedView = null;
     },

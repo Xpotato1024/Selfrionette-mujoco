@@ -28,6 +28,8 @@ This app is the Three.js rendering layer.
   while `npm test` and `browser:build` stay as local required checks.
 - `index.html` references `./dist/browser/main.js`; `browser:build` is the
   command that produces that artifact.
+- Browser runtime requires `npm ci` before opening `index.html` directly,
+  because the import map resolves `three` from local `node_modules`.
 
 ## Responsibilities
 
@@ -36,7 +38,7 @@ This app is the Three.js rendering layer.
 - Receive transport payload v0.
 - Parse payload v0 JSON from a WebSocket client skeleton.
 - Render meshes, markers, and overlays.
-- Apply body/site transforms from the payload to mesh / marker / overlay
+- Keep body/site/target transforms available for mesh / marker / overlay
   objects.
 - Keep the viewer rendering-only.
 - Treat transport payload v0 as input data only.
@@ -54,6 +56,8 @@ This app is the Three.js rendering layer.
 - R6-C-P4 freezes the completed Phase C live skeleton without adding a
   production server, real scene mutation, or any browser-side physics or
   kinematics logic.
+- R6-D-P1 adds the Three.js scene object registry skeleton and keeps body,
+  site, and target position mapping for a later issue.
 
 ## Phase B Handoff
 
@@ -62,6 +66,7 @@ This app is the Three.js rendering layer.
 - Viewer re-renders the existing marker skeleton from that runtime state.
 - Viewer remains rendering-only and does not recompute pose from `qpos`.
 - Viewer does not own the physics source of truth.
+- Viewer keeps a Three.js scene object registry skeleton for marker objects.
 - WebSocket server and backend publisher server are not implemented here.
 - Three.js real scene mutation remains out of scope.
 - The next step is a real Python transport publisher or browser viewer
@@ -89,6 +94,8 @@ This app is the Three.js rendering layer.
 - R6-C-P3 smoke uses the same endpoint configuration plus the local/dev
   Python publisher runner to verify the payload reaches the viewer runtime
   state and marker summary path.
+- R6-D-P1 keeps the runtime rendering-only while the marker object registry
+  skeleton manages named Three.js objects without final position mapping yet.
 
 ## Local Smoke
 
@@ -103,7 +110,8 @@ apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 
 The smoke path stops at marker summary updates. It does not mutate a real
-Three.js scene, recalculate FK/IK, or use hardware, serial, or OSC.
+Three.js scene, recalculate FK/IK, or use hardware, serial, or OSC. R6-D-P1
+adds object registry skeleton management only.
 
 ## Prohibited
 

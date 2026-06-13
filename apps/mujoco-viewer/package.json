@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "tsc -p tsconfig.test.json && node ./dist/test/tests/websocketEndpoint.test.js && node ./dist/test/tests/websocketClient.test.js && node ./dist/test/tests/viewerRuntime.test.js",
+    "test": "tsc -p tsconfig.test.json && node ./dist/test/tests/websocketEndpoint.test.js && node ./dist/test/tests/websocketClient.test.js && node ./dist/test/tests/threeSceneObjects.test.js && node ./dist/test/tests/viewerRuntime.test.js",
     "test:build": "tsc -p tsconfig.test.json",
     "browser:build": "tsc -p tsconfig.browser.json",
     "typecheck": "tsc --noEmit",
@@ -12,5 +12,8 @@
   },
   "devDependencies": {
     "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "three": "^0.184.0"
   }
 }

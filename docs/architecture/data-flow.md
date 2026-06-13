@@ -170,6 +170,21 @@ it keeps the viewer rendering-only. The browser viewer still does not own
 MuJoCo, `mujoco_backend`, IK, FK, `qpos` pose recompute, or Three.js real
 scene mutation.
 
+R6-D-P1 adds the minimal Three.js scene object registry skeleton while keeping
+the rendering-only boundary intact:
+
+```text
+payload v0
+  -> buildPayloadMarkerScene(payload)
+  -> marker scene model
+  -> Three.js scene object registry
+  -> marker object skeleton
+```
+
+The registry creates and retains named body/site/target objects from the
+marker scene model, but it does not apply final position mapping yet. Body,
+site, and target position reflection remains in R6-D-P2.
+
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 
 - the emitted payload version is `0`
