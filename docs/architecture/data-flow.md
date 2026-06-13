@@ -136,5 +136,7 @@ R6-B-P1 adds the browser runtime entry in `apps/mujoco-viewer/`:
 - the runtime does not recalculate pose from `qpos`.
 
 Phase A dry-run payload v0 is the upstream input contract for this browser
-runtime handoff. R6-B-P2 adds the WebSocket client skeleton, and R6-B-P3
-connects received payloads to marker rendering.
+runtime handoff. R6-B-P2 adds the WebSocket client skeleton, parses and
+minimally validates payload v0 JSON, and keeps received payloads in runtime
+state or callback form only. R6-B-P3 connects received payloads to marker
+rendering.

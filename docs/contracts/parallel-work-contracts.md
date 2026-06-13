@@ -97,6 +97,10 @@ InputSource
   for initial status, emits browser ESM via TypeScript to `dist/browser/`,
   and does not open a WebSocket client or connect received payloads to marker
   rendering.
+- R6-B-P2 adds the viewer WebSocket client skeleton. It accepts an injected
+  WebSocket constructor and URL, parses payload v0 JSON with minimal
+  validation, forwards valid payloads to runtime state or callback handlers,
+  and routes malformed or invalid payloads to error handlers.
 
 ## Unresolved Items
 
