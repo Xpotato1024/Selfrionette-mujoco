@@ -53,6 +53,13 @@ export interface ViewerRuntimeSnapshot {
   targetPosition_m: Vector3 | null;
 }
 
+interface ViewerRuntimeView {
+  documentLike: ViewerDocumentLike;
+  root: ViewerElementLike;
+  statusSection: ViewerElementLike;
+  sceneSection: ViewerElementLike;
+}
+
 function requireMountPoint(
   documentLike: ViewerDocumentLike,
   mountId: string,
@@ -79,6 +86,19 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
     tipSiteName,
     targetText,
   ].join(" | ");
+}
+
+function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
+  const bodyNames = snapshot.markerScene.bodies.map((marker) => marker.name).join(", ") || "none";
+  const siteNames = snapshot.markerScene.sites.map((marker) => marker.name).join(", ") || "none";
+  const targetText = snapshot.targetPosition_m === null ? "target: none" : "target: fixture";
+
+  return [
+    "Marker rendering placeholder.",
+    `body markers: ${snapshot.markerScene.bodies.length} (${bodyNames})`,
+    `site markers: ${snapshot.markerScene.sites.length} (${siteNames})`,
+    targetText,
+  ].join(" ");
 }
 
 export function buildViewerRuntimeSnapshot(
@@ -111,7 +131,7 @@ function createSection(documentLike: ViewerDocumentLike, tagName: string, text: 
 function buildRuntimeView(
   documentLike: ViewerDocumentLike,
   snapshot: ViewerRuntimeSnapshot,
-): ViewerElementLike {
+): ViewerRuntimeView {
   const root = documentLike.createElement("section");
   root.className = "viewer-runtime";
   root.setAttribute("data-runtime", "mujoco-viewer");
@@ -122,24 +142,35 @@ function buildRuntimeView(
   header.appendChild(createSection(documentLike, "h1", snapshot.title));
   header.appendChild(createSection(documentLike, "p", snapshot.statusText));
 
-  const details = documentLike.createElement("section");
-  details.className = "viewer-runtime__details";
-  details.setAttribute("data-role", "viewer-status");
-  details.appendChild(createSection(documentLike, "p", snapshot.summaryText));
+  const statusSection = documentLike.createElement("section");
+  statusSection.className = "viewer-runtime__details";
+  statusSection.setAttribute("data-role", "viewer-status");
+  statusSection.textContent = snapshot.summaryText;
 
-  const scene = documentLike.createElement("section");
-  scene.className = "viewer-runtime__scene";
-  scene.setAttribute("data-role", "viewer-scene");
-  scene.textContent = [
-    "Marker rendering placeholder.",
-    "WebSocket client arrives in R6-B-P2.",
-    "Received payload wiring arrives in R6-B-P3.",
-  ].join(" ");
+  const sceneSection = documentLike.createElement("section");
+  sceneSection.className = "viewer-runtime__scene";
+  sceneSection.setAttribute("data-role", "viewer-scene");
+  sceneSection.textContent = buildSceneText(snapshot);
 
   root.appendChild(header);
-  root.appendChild(details);
-  root.appendChild(scene);
-  return root;
+  root.appendChild(statusSection);
+  root.appendChild(sceneSection);
+  return {
+    documentLike,
+    root,
+    statusSection,
+    sceneSection,
+  };
+}
+
+function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnapshot): void {
+  view.root.setAttribute("data-frame-index", String(snapshot.frameIndex));
+  view.root.setAttribute("data-payload-version", String(snapshot.payloadVersion));
+  view.root.setAttribute("data-marker-body-count", String(snapshot.markerScene.bodies.length));
+  view.root.setAttribute("data-marker-site-count", String(snapshot.markerScene.sites.length));
+  view.statusSection.replaceChildren(createSection(view.documentLike, "p", snapshot.summaryText));
+  view.statusSection.textContent = snapshot.summaryText;
+  view.sceneSection.textContent = buildSceneText(snapshot);
 }
 
 export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerRuntime {
@@ -153,9 +184,18 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
 
   const mountId = options.mountId ?? "app";
   const payload = options.payload ?? payloadV0Fixture;
-  let mountedRoot: ViewerElementLike | null = null;
+  let mountedView: ViewerRuntimeView | null = null;
   let websocketClient: ViewerWebSocketClient | null = null;
   let receivedPayload: TransportPayloadV0 | null = null;
+  const getActivePayload = (): TransportPayloadV0 => receivedPayload ?? payload;
+
+  function renderCurrentState(): void {
+    if (mountedView === null) {
+      return;
+    }
+
+    updateRuntimeView(mountedView, buildViewerRuntimeSnapshot(getActivePayload()));
+  }
 
   function ensureWebSocketClient(): ViewerWebSocketClient | null {
     if (options.websocketUrl === undefined) {
@@ -171,6 +211,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       WebSocketCtor: options.WebSocketCtor,
       onPayload(receivedPayloadFromSocket) {
         receivedPayload = receivedPayloadFromSocket;
+        renderCurrentState();
         options.onPayload?.(receivedPayloadFromSocket);
       },
       onError(error) {
@@ -183,22 +224,23 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
 
   return {
     start() {
-      if (mountedRoot !== null) {
+      if (mountedView !== null) {
         return;
       }
 
       const mountPoint = requireMountPoint(documentLike, mountId);
       const snapshot = buildViewerRuntimeSnapshot(payload);
-      mountedRoot = buildRuntimeView(documentLike, snapshot);
-      mountPoint.replaceChildren(mountedRoot);
+      mountedView = buildRuntimeView(documentLike, snapshot);
+      mountPoint.replaceChildren(mountedView.root);
 
       const activeWebSocketClient = ensureWebSocketClient();
       if (activeWebSocketClient !== null) {
         activeWebSocketClient.start();
       }
+      renderCurrentState();
     },
     stop() {
-      if (mountedRoot === null) {
+      if (mountedView === null) {
         websocketClient?.stop();
         websocketClient = null;
         receivedPayload = null;
@@ -208,8 +250,8 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       websocketClient?.stop();
       websocketClient = null;
       receivedPayload = null;
-      mountedRoot.remove();
-      mountedRoot = null;
+      mountedView.root.remove();
+      mountedView = null;
     },
   };
 }

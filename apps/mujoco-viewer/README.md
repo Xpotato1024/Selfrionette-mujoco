@@ -35,8 +35,10 @@ This app is the Three.js rendering layer.
 - Keep the viewer rendering-only.
 - Treat transport payload v0 as input data only.
 - Use the static payload v0 fixture for initial status only.
-- Keep received WebSocket payloads in state or callback form only until
-  R6-B-P3 connects them to marker rendering.
+- Keep received WebSocket payloads in state and update the marker rendering
+  skeleton from viewer runtime state.
+- R6-B-P3 connects received payload v0 to the existing marker rendering
+  skeleton without adding FK, IK, or MuJoCo imports.
 
 ## Browser Runtime Entry
 
