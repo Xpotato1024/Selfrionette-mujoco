@@ -128,6 +128,8 @@ InputSource
   This state stays local/dev only, keeps the viewer rendering-only, and does
   not introduce a production server, hardware/serial/OSC access, FK, IK,
   `qpos` pose recompute, or Three.js real scene mutation.
+- R6-D-P1 adds the minimal Three.js scene object registry skeleton while
+  keeping body/site/target position mapping out of scope.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 
@@ -144,6 +146,8 @@ R6-B-P4 audits that the viewer-side contract is closed:
 
 - Scene coordinate conversion is not decided here. Do not import legacy
   Selfrionette transforms to fill that gap.
+- Body/site/target position reflection into the Three.js objects is deferred
+  to R6-D-P2.
 - Command extensibility is not expanded in this issue. Add new command shapes
   in a later issue if the schema needs them.
 - Unsupported future command types should fail explicitly in the real

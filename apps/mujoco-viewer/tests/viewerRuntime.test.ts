@@ -223,6 +223,7 @@ function testBuildViewerRuntimeSnapshot(): void {
   assert(snapshot.summaryText.includes("tip"), "snapshot should include tip");
   assert(snapshot.markerScene.bodies.length === 1, "fixture should produce one body marker");
   assert(snapshot.markerScene.sites.length === 1, "fixture should produce one site marker");
+  assert(snapshot.markerObjectCount === 2, "fixture should produce two marker objects");
 }
 
 function testReadViewerEndpointConfig(): void {
@@ -269,6 +270,10 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   assert(
     root.attributes.get("data-marker-site-count") === "1",
     "viewer runtime should publish the initial site count on the root",
+  );
+  assert(
+    root.attributes.get("data-marker-object-count") === "2",
+    "viewer runtime should publish the initial marker object count on the root",
   );
   assert(
     sceneSection?.textContent?.includes("Marker rendering placeholder") ?? false,
@@ -397,6 +402,10 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     root.attributes.get("data-marker-site-count") === "2",
     "runtime should publish the received site count on the root",
   );
+  assert(
+    root.attributes.get("data-marker-object-count") === "4",
+    "runtime should publish the received marker object count on the root",
+  );
 
   activeSocket.dispatchClose();
   assert(
@@ -455,6 +464,10 @@ function testCreateViewerRuntimeIgnoresInvalidPayloads(): void {
   assert(
     root.attributes.get("data-marker-site-count") === "1",
     "invalid payload should not update the site count",
+  );
+  assert(
+    root.attributes.get("data-marker-object-count") === "2",
+    "invalid payload should not update the object count",
   );
   assert(
     root.children.find((child) => child.attributes.get("data-role") === "viewer-status")?.textContent === initialSummary,

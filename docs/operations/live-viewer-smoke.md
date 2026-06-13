@@ -51,6 +51,8 @@ still dropped by the runner.
 R6-C-P4 treats this smoke path as the Phase C completion handoff and does not
 expand the scope beyond the local/dev publisher, browser viewer, and marker
 summary update skeleton.
+R6-D-P1 adds the Three.js scene object registry skeleton on the viewer side,
+but the smoke path still stops before body/site/target position reflection.
 
 ## What the Smoke Path Proves
 
@@ -60,6 +62,8 @@ summary update skeleton.
 - The viewer runtime keeps the received payload in state.
 - The marker rendering skeleton updates summary text, scene placeholder text,
   and root attributes from the latest payload.
+- The viewer keeps a Three.js scene object registry alive for marker
+  skeleton objects without applying final position mapping yet.
 
 ## Success Condition
 
@@ -84,8 +88,9 @@ deterministic.
 - No public network exposure.
 - No serial, OSC, or hardware access.
 - No Three.js real scene mutation.
+- No body/site/target position mapping into Three.js objects.
 - No FK or IK.
 
 ## Hand-off
 
-The next issue is R6-C-P4, the Phase C completion audit and docs handoff.
+The next issue is R6-D-P1, the Three.js scene object registry skeleton.
