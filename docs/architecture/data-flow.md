@@ -141,3 +141,18 @@ minimally validates payload v0 JSON, and keeps received payloads in runtime
 state or callback form only. R6-B-P3 keeps that received payload in runtime
 state and re-runs the marker rendering skeleton so the marker summary and
 placeholder view reflect the latest frame.
+
+R6-B-P4 audits and freezes the viewer-side handoff:
+
+- `apps/mujoco-viewer/index.html` loads `dist/browser/main.js`, which is
+  emitted by `npm run browser:build`.
+- `src/main.ts` boots the browser runtime and the runtime lifecycle stays
+  limited to `start()` / `stop()`.
+- The WebSocket client skeleton parses payload v0 JSON with minimal
+  validation and updates viewer runtime state.
+- The runtime forwards received payloads to the existing marker rendering
+  skeleton so summary text, scene placeholder text, and root attributes stay
+  in sync with the latest payload.
+- Invalid payloads do not advance the rendered state.
+- WebSocket server, backend publisher server, and Three.js real scene mutation
+  remain out of scope.

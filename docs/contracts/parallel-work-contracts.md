@@ -105,6 +105,17 @@ InputSource
   existing marker rendering skeleton so the summary and placeholder scene
   update without introducing FK, IK, or MuJoCo imports.
 
+R6-B-P4 audits that the viewer-side contract is closed:
+
+- `apps/mujoco-viewer/index.html` points at `dist/browser/main.js`, which is
+  emitted by `npm run browser:build`.
+- `npm test` covers the Node-compiled viewer runtime and WebSocket skeleton
+  tests.
+- The received payload path continues to update viewer runtime state and the
+  marker rendering skeleton only.
+- The viewer remains rendering-only and does not introduce a WebSocket server,
+  backend publisher server, or Three.js real scene mutation.
+
 ## Unresolved Items
 
 - Scene coordinate conversion is not decided here. Do not import legacy

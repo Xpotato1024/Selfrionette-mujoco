@@ -357,6 +357,14 @@ function testCreateViewerRuntimeIgnoresInvalidPayloads(): void {
   );
   assert(root.attributes.get("data-frame-index") === initialFrameIndex, "invalid payload should not update frame index");
   assert(
+    root.attributes.get("data-marker-body-count") === "1",
+    "invalid payload should not update the body count",
+  );
+  assert(
+    root.attributes.get("data-marker-site-count") === "1",
+    "invalid payload should not update the site count",
+  );
+  assert(
     root.children.find((child) => child.attributes.get("data-role") === "viewer-status")?.textContent === initialSummary,
     "invalid payload should not update the summary",
   );

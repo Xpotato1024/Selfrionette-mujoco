@@ -7,8 +7,10 @@ This app is the Three.js rendering layer.
 - Package manager: `npm`
 - TypeScript: `tsc`
 - Install: `npm ci`
-- Test: `npm test`
-- Browser build: `npm run browser:build`
+- Test: `npm test` compiles the Node test bundle and runs the viewer runtime /
+  WebSocket skeleton tests.
+- Browser build: `npm run browser:build` emits `dist/browser/main.js` for
+  `index.html`.
 - Typecheck: `npm run typecheck`
 - Build: `npm run build` (`tsc --noEmit`; alias of `typecheck`)
 - CI: GitHub Actions runs `npm ci`, `npm run typecheck`, and `npm run build`
@@ -22,6 +24,8 @@ This app is the Three.js rendering layer.
 - `browser:build` emits browser-ready ESM files under `dist/browser/`.
 - CI validation for the viewer toolchain is already locked in by the
   repository workflow.
+- `index.html` references `./dist/browser/main.js`; `browser:build` is the
+  command that produces that artifact.
 
 ## Responsibilities
 
@@ -39,6 +43,21 @@ This app is the Three.js rendering layer.
   skeleton from viewer runtime state.
 - R6-B-P3 connects received payload v0 to the existing marker rendering
   skeleton without adding FK, IK, or MuJoCo imports.
+- R6-B-P4 closes the Phase B handoff by auditing that browser runtime,
+  WebSocket client, and marker skeleton wiring are in place without adding a
+  WebSocket server or real scene mutation.
+
+## Phase B Handoff
+
+- Viewer receives payload v0 through the WebSocket client skeleton.
+- Viewer keeps the latest received payload in runtime state.
+- Viewer re-renders the existing marker skeleton from that runtime state.
+- Viewer remains rendering-only and does not recompute pose from `qpos`.
+- Viewer does not own the physics source of truth.
+- WebSocket server and backend publisher server are not implemented here.
+- Three.js real scene mutation remains out of scope.
+- The next step is a real Python transport publisher or browser viewer
+  connection path in a later issue.
 
 ## Browser Runtime Entry
 
