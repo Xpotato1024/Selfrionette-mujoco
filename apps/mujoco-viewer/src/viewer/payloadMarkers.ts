@@ -6,7 +6,7 @@ import type {
   TransportPayloadV0,
   TransportSitePayload,
   Vector3,
-} from "../types/transportPayload";
+} from "../types/transportPayload.js";
 
 const BASE_LINK_NAME = "base_link";
 const TIP_SITE_NAME = "tip";

@@ -1,4 +1,4 @@
-import type { TransportPayloadV0 } from "../types/transportPayload";
+import type { TransportPayloadV0 } from "../types/transportPayload.js";
 
 export const payloadV0Fixture: TransportPayloadV0 = {
   version: 0,

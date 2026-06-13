@@ -25,6 +25,7 @@ Do not create or use `doc/`.
 | Data flow | `docs/architecture/data-flow.md` | input -> motion -> MuJoCo -> transport -> viewer |
 | Runtime composition | `docs/architecture/runtime-composition.md` | composition root |
 | Runtime dry-run entry | `docs/operations/runtime-dry-run.md` | deterministic replay to payload v0 NDJSON |
+| Viewer browser runtime entry | `docs/architecture/data-flow.md` | browser mount entry for payload v0 handoff; WebSocket client deferred to R6-B-P2 |
 | Schema contracts | `docs/contracts/schemas.md` | shared contract types |
 | MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
 | Parallel work contracts | `docs/contracts/parallel-work-contracts.md` | Step 5-0 contract lock |
