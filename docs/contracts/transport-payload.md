@@ -24,6 +24,14 @@ R6-A-P2 connects that serializer through the runtime pipeline so
 payload v0 JSON in-memory. This phase does not open a WebSocket server or
 connect a viewer client.
 
+R6-A-P4 freezes the handoff contract for R6-B:
+
+- payload version remains `0`
+- the viewer consumes payload v0 as rendering-only input
+- the viewer must not import MuJoCo, `mujoco_backend`, IK, or FK
+- the browser WebSocket client and viewer runtime are introduced in R6-B
+- the dry-run NDJSON entry remains the Phase A source of payload v0
+
 ## Rules
 
 - Transport must carry a payload version.
