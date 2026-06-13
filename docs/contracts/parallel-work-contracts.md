@@ -94,8 +94,9 @@ InputSource
 - Viewer and WebSocket wiring are deferred to R6-B.
 - R6-B-P1 adds the browser runtime entry for the viewer. It mounts a
   rendering-only shell against `#app`, may use the static payload v0 fixture
-  for initial status, and does not open a WebSocket client or connect received
-  payloads to marker rendering.
+  for initial status, emits browser ESM via TypeScript to `dist/browser/`,
+  and does not open a WebSocket client or connect received payloads to marker
+  rendering.
 
 ## Unresolved Items
 

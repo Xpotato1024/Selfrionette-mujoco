@@ -6,6 +6,7 @@
   "scripts": {
     "test": "tsc -p tsconfig.test.json && node ./dist/test/tests/viewerRuntime.test.js",
     "test:build": "tsc -p tsconfig.test.json",
+    "browser:build": "tsc -p tsconfig.browser.json",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit"
   },
