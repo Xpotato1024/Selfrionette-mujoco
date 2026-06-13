@@ -70,9 +70,22 @@ ReplayInputSource
   -> MuJoCoState
 ```
 
+R6-A-P2 extends that path through the transport publisher skeleton:
+
+```text
+ReplayInputSource
+  -> RawInputFrame
+  -> ReplayInputInterpreter
+  -> InputIntentMotionGenerator
+  -> HeadlessMuJoCoSimulator
+  -> MuJoCoState
+  -> transport publisher skeleton
+  -> payload v0 JSON
+```
+
 The runtime factory performs this wiring at the composition root only. It does
-not add transport publisher wiring, WebSocket delivery, viewer runtime
-integration, target command backend support, or new motion semantics.
+not add a WebSocket server, viewer runtime integration, target command backend
+support, or new motion semantics.
 
 The input layer does not import `mujoco_backend`, `transport`, or `viewer`.
 
