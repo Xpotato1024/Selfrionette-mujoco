@@ -97,3 +97,6 @@ deterministic.
 ## Hand-off
 
 The next issue is R6-D-P3, the browser visual smoke and operation docs step.
+That phase documents the browser-visible DOM and scene-object state in
+`docs/operations/browser-visual-smoke.md` without adding renderer, camera, or
+animation loop work.

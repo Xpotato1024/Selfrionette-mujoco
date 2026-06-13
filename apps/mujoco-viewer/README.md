@@ -60,6 +60,9 @@ This app is the Three.js rendering layer.
   site, and target position mapping for a later issue.
 - R6-D-P2 applies payload marker coordinates directly to the Three.js
   objects through the marker scene model and registry.
+- R6-D-P3 freezes the browser visual smoke path that confirms DOM status,
+  marker summary, marker object count, and direct `Object3D.position`
+  mutation from payload coordinates.
 
 ## Phase B Handoff
 
@@ -118,6 +121,21 @@ assignment. It does not mutate a real Three.js scene beyond those payload
 coordinates, recalculate FK/IK, or use hardware, serial, or OSC. R6-D-P1
 adds object registry skeleton management only, and R6-D-P2 applies the direct
 payload marker positions.
+
+## Browser Visual Smoke
+
+R6-D-P3 adds the operation smoke that a human can verify in the browser:
+
+- The viewer consumes payload v0 over WebSocket.
+- The marker object registry receives body, site, and target marker positions.
+- The browser smoke verifies DOM status plus Three.js scene object state.
+- The root element exposes marker object count and payload/frame attributes.
+- The scene object positions follow the payload marker coordinates directly.
+- No camera, renderer, or animation loop exists yet.
+- No IK, FK, or `qpos` pose recompute exists yet.
+- No hardware, serial, or OSC access is involved.
+- Browser direct open still requires `npm ci` because the import map resolves
+  `three` from local `node_modules`.
 
 ## Prohibited
 

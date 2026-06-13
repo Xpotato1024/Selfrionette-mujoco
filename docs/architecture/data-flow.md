@@ -203,6 +203,24 @@ marker scene `x` / `y` / `z` values straight into the marker objects. Final
 scene coordinate mapping can still be adjusted in a later issue if needed, but
 R6-D-P2 does not introduce a broader conversion layer.
 
+R6-D-P3 freezes the browser-visible smoke state for the same direct payload
+marker path:
+
+```text
+payload v0
+  -> buildPayloadMarkerScene(payload)
+  -> marker scene model
+  -> Three.js object registry
+  -> Object3D.position.set(x, y, z)
+  -> browser smoke observable state
+```
+
+The observable state is the DOM status, marker summary, root marker count
+attributes, and the retained Three.js scene object names and positions. The
+viewer remains rendering-only, the final coordinate mapping is not frozen,
+and this step still does not add a rendered arm mesh, camera/renderer
+pipeline, IK, FK, or `qpos` pose recompute.
+
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 
 - the emitted payload version is `0`

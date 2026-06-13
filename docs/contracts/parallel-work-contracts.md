@@ -132,6 +132,14 @@ InputSource
   keeping body/site/target position mapping out of scope.
 - R6-D-P2 applies the payload marker coordinates directly to the Three.js
   objects through the marker scene model and registry.
+- R6-D-P3 freezes the browser-visible smoke state for the same marker scene
+  path: `payload v0 -> marker scene model -> Three.js object registry ->
+  Object3D.position.set(...) -> browser smoke observable state`.
+- The viewer remains rendering-only. Browser smoke is limited to DOM status,
+  marker summary, root marker count attributes, and retained scene object
+  positions.
+- Final coordinate mapping is not frozen in this issue. No rendered arm mesh,
+  camera/renderer pipeline, IK, FK, or `qpos` pose recompute is introduced.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 
