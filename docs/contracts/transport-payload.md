@@ -24,6 +24,10 @@ R6-A-P2 connects that serializer through the runtime pipeline so
 payload v0 JSON in-memory. This phase does not open a WebSocket server or
 connect a viewer client.
 
+R6-C-P1 keeps the payload schema unchanged and adds a local/dev WebSocket
+publisher runner on the Python side. The runner sends the same payload v0 JSON
+to connected clients and remains loopback-first by default.
+
 R6-A-P4 freezes the handoff contract for R6-B:
 
 - payload version remains `0`
@@ -49,6 +53,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
   the transport layer.
 - Viewer client parsing may reject malformed payload v0 JSON, but it does not
   change the transport schema.
+- The local/dev WebSocket publisher runner does not add envelope fields or a
+  new payload version.
 
 ## v0 Shape
 
