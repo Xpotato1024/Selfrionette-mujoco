@@ -35,6 +35,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
 - R6-B-P3 keeps the received payload in viewer runtime state and reuses the
   marker rendering skeleton for summary and placeholder updates
 - the dry-run NDJSON entry remains the Phase A source of payload v0
+- R6-B-P4 confirms that the payload contract itself is unchanged while the
+  browser viewer handoff is completed
 
 ## Rules
 
@@ -45,6 +47,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
   `target_position_m`, and `metadata` into a delivery payload.
 - Viewer code reads the payload contract; it does not infer new physics from
   the transport layer.
+- Viewer client parsing may reject malformed payload v0 JSON, but it does not
+  change the transport schema.
 
 ## v0 Shape
 

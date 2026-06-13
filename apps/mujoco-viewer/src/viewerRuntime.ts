@@ -168,7 +168,6 @@ function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnaps
   view.root.setAttribute("data-payload-version", String(snapshot.payloadVersion));
   view.root.setAttribute("data-marker-body-count", String(snapshot.markerScene.bodies.length));
   view.root.setAttribute("data-marker-site-count", String(snapshot.markerScene.sites.length));
-  view.statusSection.replaceChildren(createSection(view.documentLike, "p", snapshot.summaryText));
   view.statusSection.textContent = snapshot.summaryText;
   view.sceneSection.textContent = buildSceneText(snapshot);
 }
