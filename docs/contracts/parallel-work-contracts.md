@@ -70,6 +70,9 @@ InputSource
   `ReplayInputSource -> RawInputFrame -> ReplayInputInterpreter -> InputIntent
   -> MotionGenerator -> MotionCommand -> HeadlessMuJoCoSimulator ->
   MuJoCoState`.
+- R6-A-P2 extends that runtime composition to the transport publisher
+  skeleton, so `MuJoCoState` can be serialized to payload v0 JSON in-memory
+  without opening a WebSocket server.
 - Motion and IK stop at `MotionCommand`.
 - `InputIntent.values` still carries raw replay/input payload data and does
   not yet define motion semantics.
@@ -83,7 +86,8 @@ InputSource
 - This issue connects `MotionCommand` objects to `mujoco_backend` only
   through runtime composition.
 - Input layers do not import `mujoco_backend`, `transport`, or `viewer`.
-- Transport publisher wiring is deferred to R6-A-P2.
+- Transport publisher wiring is now handled by R6-A-P2 at the runtime
+  composition root.
 - Viewer and WebSocket wiring are deferred to R6-B.
 
 ## Unresolved Items

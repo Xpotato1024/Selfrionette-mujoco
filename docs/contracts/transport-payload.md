@@ -19,6 +19,11 @@ JSON-compatible payload for the viewer or other consumers.
 `metadata` is diagnostic or transport helper data only and is expected to
 already be JSON-compatible.
 
+R6-A-P2 connects that serializer through the runtime pipeline so
+`MuJoCoState` can be handed to a transport publisher skeleton and observed as
+payload v0 JSON in-memory. This phase does not open a WebSocket server or
+connect a viewer client.
+
 ## Rules
 
 - Transport must carry a payload version.

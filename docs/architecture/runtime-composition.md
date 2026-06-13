@@ -51,10 +51,14 @@ MuJoCo backend. It composes `ReplayInputSource`, `ReplayInputInterpreter`,
 `InputIntentMotionGenerator`, `HeadlessMuJoCoSimulator`, and
 `NoOpStatePublisher`.
 
-This remains composition-only inside `runtime/`; input, motion, and
-`mujoco_backend` layers still do not depend on runtime. Transport publisher
-connection is deferred to R6-A-P2, and viewer / WebSocket connection is
-deferred to R6-B.
+R6-A-P2 extends that runtime pipeline so `MuJoCoState` reaches the transport
+publisher skeleton. Runtime now composes the replay path through
+`StatePublisher`, so a `MuJoCoState` snapshot can be serialized to the v0 JSON
+payload contract without opening a WebSocket server or connecting a viewer.
+
+This remains composition-only inside `runtime/`; input, motion, transport, and
+`mujoco_backend` layers still do not depend on runtime. Viewer / WebSocket
+connection is deferred to R6-B.
 
 Layer implementations must expose contracts that runtime can compose without
 creating reverse dependencies.
