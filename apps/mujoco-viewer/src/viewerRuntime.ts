@@ -1,4 +1,9 @@
 import { payloadV0Fixture } from "./fixtures/payloadV0.js";
+import {
+  createViewerWebSocketClient,
+  type ViewerWebSocketClient,
+  type ViewerWebSocketConstructorLike,
+} from "./transport/websocketClient.js";
 import { buildPayloadMarkerScene, getCanonicalPayloadMarkers } from "./viewer/payloadMarkers.js";
 import type {
   CanonicalPayloadMarkers,
@@ -26,6 +31,10 @@ export interface ViewerRuntimeOptions {
   document?: ViewerDocumentLike;
   mountId?: string;
   payload?: TransportPayloadV0;
+  websocketUrl?: string;
+  WebSocketCtor?: ViewerWebSocketConstructorLike;
+  onPayload?: (payload: TransportPayloadV0) => void;
+  onError?: (error: Error) => void;
 }
 
 export interface ViewerRuntime {
@@ -145,6 +154,32 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
   const mountId = options.mountId ?? "app";
   const payload = options.payload ?? payloadV0Fixture;
   let mountedRoot: ViewerElementLike | null = null;
+  let websocketClient: ViewerWebSocketClient | null = null;
+  let receivedPayload: TransportPayloadV0 | null = null;
+
+  function ensureWebSocketClient(): ViewerWebSocketClient | null {
+    if (options.websocketUrl === undefined) {
+      return null;
+    }
+
+    if (websocketClient !== null) {
+      return websocketClient;
+    }
+
+    websocketClient = createViewerWebSocketClient({
+      url: options.websocketUrl,
+      WebSocketCtor: options.WebSocketCtor,
+      onPayload(receivedPayloadFromSocket) {
+        receivedPayload = receivedPayloadFromSocket;
+        options.onPayload?.(receivedPayloadFromSocket);
+      },
+      onError(error) {
+        options.onError?.(error);
+      },
+    });
+
+    return websocketClient;
+  }
 
   return {
     start() {
@@ -156,12 +191,23 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       const snapshot = buildViewerRuntimeSnapshot(payload);
       mountedRoot = buildRuntimeView(documentLike, snapshot);
       mountPoint.replaceChildren(mountedRoot);
+
+      const activeWebSocketClient = ensureWebSocketClient();
+      if (activeWebSocketClient !== null) {
+        activeWebSocketClient.start();
+      }
     },
     stop() {
       if (mountedRoot === null) {
+        websocketClient?.stop();
+        websocketClient = null;
+        receivedPayload = null;
         return;
       }
 
+      websocketClient?.stop();
+      websocketClient = null;
+      receivedPayload = null;
       mountedRoot.remove();
       mountedRoot = null;
     },

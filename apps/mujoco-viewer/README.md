@@ -28,19 +28,22 @@ This app is the Three.js rendering layer.
 - Mount the browser runtime entry from `index.html` and `src/main.ts`.
 - Keep the runtime lifecycle small and explicit (`start()` / `stop()`).
 - Receive transport payload v0.
+- Parse payload v0 JSON from a WebSocket client skeleton.
 - Render meshes, markers, and overlays.
 - Apply body/site transforms from the payload to mesh / marker / overlay
   objects.
 - Keep the viewer rendering-only.
 - Treat transport payload v0 as input data only.
-- Use the static payload v0 fixture for initial status only until the
-  WebSocket client arrives in R6-B-P2.
+- Use the static payload v0 fixture for initial status only.
+- Keep received WebSocket payloads in state or callback form only until
+  R6-B-P3 connects them to marker rendering.
 
 ## Browser Runtime Entry
 
 - `index.html` provides the `#app` mount point.
 - `src/main.ts` bootstraps the browser runtime and starts it on load.
-- `src/viewerRuntime.ts` owns the minimal mount lifecycle.
+- `src/viewerRuntime.ts` owns the minimal mount lifecycle and optional
+  WebSocket client skeleton wiring.
 - `tests/viewerRuntime.test.ts` smoke-tests the mount and stop behavior.
 - `index.html` reads `dist/browser/main.js`, which is emitted by
   `npm run browser:build`.

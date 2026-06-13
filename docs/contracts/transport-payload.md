@@ -30,6 +30,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
 - the viewer consumes payload v0 as rendering-only input
 - the viewer must not import MuJoCo, `mujoco_backend`, IK, or FK
 - the browser WebSocket client and viewer runtime are introduced in R6-B
+- R6-B-P2 parses payload v0 JSON in the viewer client and keeps received
+  payloads in state or callback form only
 - the dry-run NDJSON entry remains the Phase A source of payload v0
 
 ## Rules
