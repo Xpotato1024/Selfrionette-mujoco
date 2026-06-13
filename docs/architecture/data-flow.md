@@ -83,6 +83,20 @@ ReplayInputSource
   -> payload v0 JSON
 ```
 
+R6-A-P3 exposes that pipeline as a deterministic dry-run entry:
+
+```text
+ReplayInputSource
+  -> RawInputFrame
+  -> ReplayInputInterpreter
+  -> InputIntentMotionGenerator
+  -> HeadlessMuJoCoSimulator
+  -> MuJoCoState
+  -> transport publisher skeleton
+  -> payload v0 JSON
+  -> stdout / output file
+```
+
 The runtime factory performs this wiring at the composition root only. It does
 not add a WebSocket server, viewer runtime integration, target command backend
 support, or new motion semantics.

@@ -73,6 +73,9 @@ InputSource
 - R6-A-P2 extends that runtime composition to the transport publisher
   skeleton, so `MuJoCoState` can be serialized to payload v0 JSON in-memory
   without opening a WebSocket server.
+- R6-A-P3 exposes that same replay path through
+  `run_replay_mujoco_dry_run()` / `scripts/run_replay_mujoco_dry_run.py` as a
+  deterministic NDJSON entrypoint for stdout or file output.
 - Motion and IK stop at `MotionCommand`.
 - `InputIntent.values` still carries raw replay/input payload data and does
   not yet define motion semantics.

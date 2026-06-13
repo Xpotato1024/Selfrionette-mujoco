@@ -56,6 +56,13 @@ publisher skeleton. Runtime now composes the replay path through
 `StatePublisher`, so a `MuJoCoState` snapshot can be serialized to the v0 JSON
 payload contract without opening a WebSocket server or connecting a viewer.
 
+R6-A-P3 adds `run_replay_mujoco_dry_run()` and
+`scripts/run_replay_mujoco_dry_run.py` as a deterministic replay entry. The
+entry reuses the runtime replay pipeline, emits transport payload v0 JSON as
+NDJSON, and can write to stdout or an output file. It stays inside the runtime
+composition root and does not introduce WebSocket, viewer, or browser
+composition.
+
 This remains composition-only inside `runtime/`; input, motion, transport, and
 `mujoco_backend` layers still do not depend on runtime. Viewer / WebSocket
 connection is deferred to R6-B.
