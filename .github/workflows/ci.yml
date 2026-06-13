@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  python-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+      - name: Run tests
+        run: uv run pytest tests/architecture tests/schemas tests/stubs tests/runtime tests/assets tests/mujoco_backend tests/transport tests/input_sources tests/input_interpreters tests/motion tests/kinematics -q
+      - name: Compile Python files
+        run: uv run python -m compileall src tests
+      - name: Check diff whitespace
+        run: git diff --check
+
+  viewer-validation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mujoco-viewer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/mujoco-viewer/package-lock.json
+      - name: Install viewer dependencies
+        run: npm ci
+      - name: Typecheck viewer
+        run: npm run typecheck
+      - name: Build viewer
+        run: npm run build
