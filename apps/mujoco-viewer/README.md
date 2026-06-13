@@ -6,9 +6,10 @@ This app is the Three.js rendering layer.
 
 - Package manager: `npm`
 - TypeScript: `tsc`
-- Install: `npm install`
+- Install: `npm ci`
 - Typecheck: `npm run typecheck`
-- Build: `npm run build`
+- Build: `npm run build` (`tsc --noEmit`)
+- CI: GitHub Actions runs `npm ci`, `npm run typecheck`, and `npm run build`
 
 ## Responsibilities
 
