@@ -29,6 +29,7 @@ Do not create or use `doc/`.
 | Live viewer smoke path | `docs/operations/live-viewer-smoke.md` | deterministic dry-run payload -> browser viewer smoke path for R6-C-P3 |
 | Browser visual smoke | `docs/operations/browser-visual-smoke.md` | R6-D-P3 viewer runtime / marker object operation smoke |
 | R6-D completion audit | `docs/operations/r6-d-completion-audit.md` | viewer real scene mutation skeleton completion audit and IK phase handoff |
+| R6-E completion audit | `docs/operations/r6-e-completion-audit.md` | Phase E completion audit and old Selfrionette Webview parity handoff |
 | Target marker / desired endpoint contract | `docs/contracts/target-marker-desired-endpoint.md` | runtime target intent and viewer-visible target marker boundary for Phase E |
 | Phase C completion audit | `docs/operations/r6-c-completion-audit.md` | Python publisher / browser viewer live skeleton completion audit |
 | Viewer browser runtime entry | `docs/architecture/data-flow.md` | browser mount entry for payload v0 handoff; R6-B-P2 adds the WebSocket client skeleton; R6-B-P3 connects received payloads to marker rendering; R6-C-P2 adds endpoint configuration and connection status visibility; R6-D-P1 adds the Three.js scene object registry skeleton; R6-D-P2 applies payload marker positions to Three.js objects; R6-B-P4 audits and freezes the completed Phase B handoff |

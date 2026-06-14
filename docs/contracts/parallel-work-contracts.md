@@ -158,6 +158,9 @@ InputSource
   Phase E issues consume. `desired endpoint` stays on the runtime / command
   side, while `target_position_m` remains the viewer-facing payload feedback
   field for target marker positioning.
+- R6-E-P5 freezes the completion audit for that Phase E skeleton and records
+  the next handoff into old Selfrionette Webview parity / rendered arm mesh /
+  UI parity work without widening the viewer boundary.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 

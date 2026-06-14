@@ -91,6 +91,16 @@ For a local/dev WebSocket delivery entry that reuses the same replay pipeline
 and publishes payload v0 JSON to connected clients, see
 `docs/operations/websocket-publisher-runner.md`.
 
+R6-E-P5 は、この dry-run / smoke の契約を変更せずに Phase E の completion
+state を文書として固定する。詳細な handoff は
+`docs/operations/r6-e-completion-audit.md` に集約する。
+
+- 完了済み child issue は #75, #76, #77, #78 である
+- `target_position_m` は payload feedback のまま維持する
+- `MotionCommand.joint` は qpos command boundary の入力として扱う
+- viewer は rendering-only のまま維持する
+- この節は runtime implementation を追加しない
+
 ## R6-E-P4 Smoke
 
 R6-E-P4 では、replay / dry-run 系を Phase E の target marker と
