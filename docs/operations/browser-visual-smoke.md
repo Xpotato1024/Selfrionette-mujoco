@@ -8,6 +8,7 @@ related:
   - docs/architecture/data-flow.md
   - docs/contracts/parallel-work-contracts.md
   - docs/operations/live-viewer-smoke.md
+  - docs/operations/r6-f-p5-old-web-view-reference-audit.md
   - apps/mujoco-viewer/README.md
 ---
 
@@ -168,3 +169,8 @@ connection がある場合は body + site + arm skeleton になる。target と 
 - `data-dof-ring-count` は descriptor count の互換 alias として扱い、
   present / absent の内訳は `data-dof-ring-present-count` と
   `data-dof-ring-absent-count` で読む。
+
+R6-F-P5 uses this smoke path only as an observable reference point for the
+already accepted viewer elements. It does not turn the smoke into a full old
+Web View parity contract, and it keeps the useful display elements separated
+from the excluded legacy UI.
