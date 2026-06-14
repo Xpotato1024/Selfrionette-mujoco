@@ -9,6 +9,7 @@ related:
   - docs/contracts/parallel-work-contracts.md
   - docs/operations/live-viewer-smoke.md
   - docs/operations/r6-f-p5-old-web-view-reference-audit.md
+  - docs/operations/r6-f-completion-audit.md
   - apps/mujoco-viewer/README.md
 ---
 
@@ -173,3 +174,8 @@ connection がある場合は body + site + arm skeleton になる。target と 
 R6-F-P5 では、この smoke path を採用済み viewer 表示要素の観測点としてのみ
 扱う。これは旧 Web View の full parity contract ではなく、有用な表示要素と
 除外する legacy UI を分離するための基準である。
+
+R6-F-P6 の completion audit は、この smoke path が成立済みであることを
+文書化し、Sweep_x visual demo と viewer 可視化 boundary の完了状態を
+`docs/operations/r6-f-completion-audit.md` に固定する。browser visual smoke は
+引き続き rendering-only の観測手順であり、新しい feature 追加の場ではない。

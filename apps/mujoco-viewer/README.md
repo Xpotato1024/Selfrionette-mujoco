@@ -96,6 +96,9 @@ This app is the Three.js rendering layer.
 
 - R6-F-P5 では、旧 Web View を viewer の reference audit として固定し、
   full parity、legacy UI replay、browser-side kinematics は scope 外に置く。
+- R6-F-P6 では、R6-F の completion audit を追加し、Sweep_x visual demo と
+  viewer visual boundary の completion state を docs に固定する。
+  `docs/operations/r6-f-completion-audit.md` を参照する。
 
 - Viewer receives payload v0 through the WebSocket client skeleton.
 - Viewer keeps the latest received payload in runtime state.
