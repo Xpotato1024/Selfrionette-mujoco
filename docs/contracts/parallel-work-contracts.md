@@ -91,18 +91,15 @@ InputSource
 - Motion and IK stop at `MotionCommand`.
 - `InputIntent.values` still carries raw replay/input payload data and does
   not yet define motion semantics.
-- R6-E-P2 では、`InputIntent` / simple target command -> `MotionCommand`
-  の pure boundary を motion 層に固定し、`target_position_m` を
-  command-side desired endpoint ではなく payload feedback として分離する。
 - `InputIntent.target_delta_m` may become `TargetCommand(delta_m=...)`.
 - `TargetToJointMotionGenerator` may inspect a temporary `target_position_m`
   compatibility attribute, but that is not a formal schema field and is not
   the canonical path.
-- `InputIntent.joint_delta_rad` is not threaded into a joint command in this
-  issue because Step 5-D already fixed joint commands as direct qpos
-  reflection at the backend boundary.
-- This issue connects `MotionCommand` objects to `mujoco_backend` only
-  through runtime composition.
+- `InputIntent.joint_delta_rad` は R6-E-P2 では `MotionCommand.joint` に
+  変換しない。delta / absolute の曖昧さは後続 issue で明示的に扱う。
+- R6-E-P3 では、`MotionCommand.joint` を qpos command boundary として
+  MuJoCo backend に渡す最小 path を固定する。
+- runtime composition への接続拡張は後続 issue で扱う。
 - Input layers do not import `mujoco_backend`, `transport`, or `viewer`.
 - Transport publisher wiring is now handled by R6-A-P2 at the runtime
   composition root.

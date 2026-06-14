@@ -12,10 +12,10 @@ related:
 
 # MotionCommand Contract
 
-`MotionCommand` is a command object. It is not a state snapshot.
-Motion generation happens in the `motion` / IK layers. Runtime may later
-connect the command to `mujoco_backend`, but Step 5-F only adds the motion
-skeleton and does not perform that wiring yet.
+`MotionCommand` は command object であり、state snapshot ではない。
+motion generation は `motion` / IK layer で行い、R6-E-P3 では
+`MotionCommand.joint` から qpos command boundary を切り出して
+MuJoCo backend の最小 qpos update path に接続する。
 
 ## Current Shape
 
@@ -38,12 +38,12 @@ destructively.
 - `target` and `joint` are the currently modeled command buckets.
 - `target` may carry `TargetCommand(delta_m=...)` when the motion layer is
   driven by `InputIntent.target_delta_m`.
-- `R6-E-P2` では、`InputIntent` か simple `TargetCommand` を pure boundary
-  として `MotionCommand` にまとめ、viewer 側の `target_position_m` とは
-  別の command-side intent として扱う。
-- `joint` is reserved for explicit joint commands. Step 5-F does not map
-  `InputIntent.joint_delta_rad` into `MotionCommand.joint`; that delta/absolute
-  ambiguity is left explicit for a later issue.
+- `R6-E-P2` では `InputIntent` と simple `TargetCommand` の pure boundary
+  を `MotionCommand` にまとめ、viewer 側の `target_position_m` とは別の
+  command-side intent として扱う。
+- `joint` is reserved for explicit joint commands. `InputIntent.joint_delta_rad`
+  is still not normalized into `MotionCommand.joint` here; that
+  delta/absolute ambiguity is left explicit for a later issue.
 - `desired endpoint` is the command-side term for the target intent boundary.
 - `target_position_m` is the payload feedback field for the viewer-visible
   target marker, not a formal command schema field.
@@ -52,14 +52,14 @@ destructively.
   formal schema field and does not redefine `desired endpoint`.
 - Actuator commands are not introduced in this issue. If they are needed later,
   add them in a separate issue with schema review.
-- Step 5-D adds the first backend path that reflects `MotionCommand.joint`
-  directly into MuJoCo `qpos` before `mj_step`.
-- The current fast-arm backend accepts only the existing joint tuple shape and
-  uses MuJoCo model joint order for the reflection.
-- Unsupported target commands, unknown joint contracts, and unsupported joint
-  shapes must fail explicitly in the real backend.
-- Step 5-F generates `MotionCommand` objects but does not send them to
-  `mujoco_backend`.
+- R6-E-P3 では、`MotionCommand.joint` を qpos command boundary として
+  MuJoCo backend に渡し、backend 側で MuJoCo `qpos` に反映する。
+- 現在の fast-arm backend は既存の joint tuple shape のみを受け付け、
+  MuJoCo model joint order に従って qpos に反映する。
+- `MotionCommand.target` は qpos command boundary ではないため、
+  backend 境界で明示的に拒否する。
+- unsupported target commands、unknown joint contracts、unsupported joint
+  shapes は real backend で明示的に失敗させる。
 
 ## Unsupported Commands
 
