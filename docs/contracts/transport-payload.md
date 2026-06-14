@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 canonical_for:
   - transport payload contract
 related:
