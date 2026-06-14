@@ -1,4 +1,4 @@
----
+﻿---
 status: canonical
 owner: architecture
 last_verified: 2026-06-14
@@ -97,57 +97,38 @@ skeleton + target + error vector.
 
 ## Expected Marker Position Behavior
 
-- The scene object registry keeps named body, site, target, and error vector
-  `Object3D` instances alive.
-- The scene object registry keeps the arm skeleton segment as a read-only
-  `Object3D` connection between canonical payload body/site positions.
-- The fast_arm mesh scene keeps canonical STL assets as the primary arm visual
-  and derives mesh poses from payload body transforms only.
-- canonical fast_arm asset source は `assets/mujoco/fast_arm/` とする。
-- asset contract は `docs/contracts/assets.md` と
-  `assets/mujoco/fast_arm/README.md` を参照する。
-- viewer は表示用 asset source として参照するだけで、
-  STL / XML の geometry / scale / axis / origin / units / joint semantics は
-  変更しない。
+- scene object registry は named body, site, target, error vector の `Object3D` instance を保持する。
+- scene object registry は arm skeleton segment を read-only の `Object3D` connection として canonical payload body/site positions 間に保持する。
+- fast_arm mesh scene は canonical STL assets を主 arm visual とし、mesh pose は payload body transforms からのみ作る。
+- canonical `fast_arm` asset source は `assets/mujoco/fast_arm/` とする。
+  asset contract は `docs/contracts/assets.md` と `assets/mujoco/fast_arm/README.md` を参照する。
+  viewer は表示用 asset source として参照するだけで、STL / XML の geometry / scale / axis / origin / units / joint semantics は変更しない。
 - Reused marker keys reuse the same object identity.
-- Each marker object position follows the payload marker coordinates stored in
-  the marker scene model.
-- The arm skeleton segment follows the payload body/site positions stored in
-  the arm skeleton scene model.
-- The fast_arm mesh pose follows the matching payload body `position_m` and
-  `quaternion_wxyz` values when a conservative body mapping exists.
-- The error vector object keeps the tip endpoint as its position and the
-  target endpoint in `userData`, so the viewer can display the tip -> target
-  direction without recomputing pose.
-- The browser smoke only proves direct payload coordinate reflection, not a
-  final coordinate mapping layer.
-- The Phase D completion audit is recorded in
-  `docs/operations/r6-d-completion-audit.md`.
-- The next handoff is IK / command integration skeleton work, not a rendered
-  arm mesh or a finished IK path.
+- 各 marker object の position は marker scene model に保存された payload marker coordinates に従う。
+- arm skeleton segment は arm skeleton scene model に保存された payload body/site positions に従う。
+- fast_arm mesh pose は、保守的な body mapping がある場合に限り、対応する payload body `position_m` と `quaternion_wxyz` に従う。
+- error vector object は tip endpoint を position に持ち、target endpoint を `userData` に保持するので、pose を再計算せずに tip -> target 方向を表示できる。
+- browser smoke が証明するのは payload coordinate の直接反映までであり、final coordinate mapping layer ではない。
+- Phase D completion audit は `docs/operations/r6-d-completion-audit.md` に記録される。
+- 次の handoff は IK / command integration skeleton work であり、rendered arm mesh でも完成済み IK path でもない。
 
 ## What Is Intentionally Not Visualized Yet
 
-- Camera, renderer, or animation loop behavior.
-- Labels and overlays as a finished visual design.
-- IK / FK.
-- `qpos` pose recompute.
-- Arm skeleton synthesis from anything other than payload body/site positions.
-- The `base_link_to_tip` line skeleton as the final arm visual.
-- MuJoCo model loading in the browser.
-- WebSocket reconnect / retry hardening.
+- camera, renderer, animation loop の挙動。
+- labels / overlays を完成した visual design として扱うこと。
+- IK / FK。
+- `qpos` pose recompute。
+- payload body/site positions 以外から arm skeleton を合成すること。
+- `base_link_to_tip` line skeleton を final arm visual とすること。
+- browser での MuJoCo model loading。
+- WebSocket reconnect / retry hardening。
 
 ## Troubleshooting
 
-- If the browser opens before the smoke server is ready, refresh after the
-  grace period or rerun the smoke command.
-- If the status never reaches `WebSocket: open`, verify the printed endpoint
-  matches the browser URL query string.
-- If the marker summary does not update, confirm the viewer was opened during
-  the grace period and that the CLI is still publishing frames.
-- If the object count is wrong, check whether `target_position_m` is present
-  in the payload frame being displayed and whether the canonical arm skeleton
-  body/site names are present.
+- smoke server が ready になる前に browser を開いた場合は、grace period の後で refresh するか smoke command を再実行する。
+- status が `WebSocket: open` に到達しない場合は、表示された endpoint と browser URL query string が一致しているか確認する。
+- marker summary が更新されない場合は、grace period 中に viewer を開いたか、CLI がまだ frame を publish しているか確認する。
+- object count が合わない場合は、表示中の payload frame に `target_position_m` があるか、canonical arm skeleton の body/site names があるかを確認する。
 
 ## Non-Goals
 
@@ -157,6 +138,5 @@ skeleton + target + error vector.
 - No hardware, serial, or OSC access.
 - No payload schema change.
 - No transport schema change.
-- No Three.js real scene mutation beyond the marker and fast_arm mesh
-  skeletons.
+- No Three.js real scene mutation beyond the marker and fast_arm mesh skeletons.
 - No `@types/three` or Rapier reintroduction.

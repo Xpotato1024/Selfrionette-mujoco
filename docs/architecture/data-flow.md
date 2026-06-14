@@ -1,4 +1,4 @@
----
+﻿---
 status: canonical
 owner: architecture
 last_verified: 2026-06-12
@@ -230,18 +230,16 @@ payload v0
   -> STL mesh objects
 ```
 
-This mesh path is the primary arm visual. The `base_link_to_tip` line skeleton
-remains fallback / debug / provisional only, and the browser viewer still does
-not load MuJoCo physics, compute FK / IK, or derive pose from `qpos`.
-canonical fast_arm asset source は `assets/mujoco/fast_arm/` とする。
+この mesh path が主 arm visual である。`base_link_to_tip` line skeleton は
+fallback / debug / provisional のみに留まり、browser viewer は MuJoCo
+physics を load せず、FK / IK を計算せず、`qpos` から pose を導出しない。
+canonical `fast_arm` asset source は `assets/mujoco/fast_arm/` とする。
 asset contract は `docs/contracts/assets.md` と
 `assets/mujoco/fast_arm/README.md` を参照する。
-viewer はそれらを表示用 asset source として参照するだけで、
-STL / XML の geometry / scale / axis / origin / units / joint semantics は
-変更しない。
+viewer は表示用 asset source として参照するだけで、STL / XML の geometry /
+scale / axis / origin / units / joint semantics は変更しない。
 
-R6-D-P3 freezes the browser-visible smoke state for the same direct payload
-marker path:
+R6-D-P3 は、payload v0 に対する browser-visible smoke state を固定する。
 
 ```text
 payload v0
@@ -252,24 +250,8 @@ payload v0
   -> browser smoke observable state
 ```
 
-The observable state is the DOM status, marker summary, root marker count
-attributes, and the retained Three.js scene object names and positions. The
-viewer remains rendering-only, the final coordinate mapping is not frozen,
-and this step still does not add the fast_arm mesh path, camera/renderer
-pipeline, IK, FK, or `qpos` pose recompute. The fast_arm mesh path is added
-later in R6-F-P3-fix.
+この observable state は DOM status, marker summary, root marker count attributes, そして保持された Three.js scene object 名と position である。viewer は引き続き rendering-only であり、final coordinate mapping layer は確定していない。この段階でも fast_arm mesh path、camera/renderer pipeline、IK、FK、`qpos` pose recompute は追加されない。fast_arm mesh path は後続の R6-F-P3-fix で追加される。
 
-R6-D-P4 freezes the Phase D completion audit and the next handoff boundary:
-
-- browser visual smoke is complete
-- the viewer remains rendering-only
-- the next handoff is IK / command integration skeleton work
-- the fast_arm mesh path is handled later in R6-F-P3-fix
-- the final coordinate mapping is not frozen yet
-
-The next phase candidate is the viewer/runtime IK handoff. Phase D does not
-expand into IK, FK, qpos pose recompute, or MuJoCo backend changes in the
-browser.
 
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 

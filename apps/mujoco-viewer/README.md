@@ -1,4 +1,4 @@
-# mujoco-viewer
+﻿# mujoco-viewer
 
 This app is the Three.js rendering layer.
 
@@ -66,14 +66,14 @@ This app is the Three.js rendering layer.
 - R6-F-P3-fix adds the canonical `assets/mujoco/fast_arm/` STL mesh path as
   the primary arm visual and keeps the `base_link_to_tip` line skeleton as a
   fallback / debug / provisional path.
-- この `fast_arm` の canonical asset source は `assets/mujoco/fast_arm/` とし、
-  参照 contract は `docs/contracts/assets.md` と
-  `assets/mujoco/fast_arm/README.md` を見る。
-- viewer は表示用 asset source として参照するだけで、
-  STL / XML の geometry / scale / axis / origin / units / joint semantics は変更しない。
-- R6-D-P3 freezes the browser visual smoke path that confirms DOM status,
-  marker summary, marker object count, and direct `Object3D.position`
-  mutation from payload coordinates.
+- canonical `fast_arm` asset source は `assets/mujoco/fast_arm/` とする。
+  asset contract は `docs/contracts/assets.md` と
+  `assets/mujoco/fast_arm/README.md` を参照する。
+  viewer は表示用 asset source として参照するだけで、STL / XML の
+  geometry / scale / axis / origin / units / joint semantics は変更しない。
+- R6-D-P3 は、DOM status, marker summary, marker object count, そして
+  payload coordinates による `Object3D.position` の直接反映を browser で
+  確認する smoke path を固定する。
 - R6-D-P4 closes the Phase D completion audit in
   `docs/operations/r6-d-completion-audit.md` and documents the next IK /
   command integration handoff without claiming the final IK implementation.
@@ -118,63 +118,27 @@ This app is the Three.js rendering layer.
 - R6-D-P2 keeps the runtime rendering-only while the registry applies direct
   payload marker positions to the live Three.js objects.
 - R6-F-P3 keeps the runtime rendering-only while the registry also reflects a
-  read-only arm skeleton derived from canonical payload body/site positions.
-- R6-F-P3-fix keeps the runtime rendering-only while the scene also reflects
-  the canonical fast_arm STL meshes derived from payload body transforms.
-
 ## Local Smoke
 
 ```bash
 uv run python scripts/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --steps 3 --grace-period-s 5
 ```
 
-Open the viewer manually with:
+viewer は手動で次の URL を開く。
 
 ```text
 apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 
-The smoke path stops at marker summary updates and direct marker position
-assignment. It does not mutate a real Three.js scene beyond those payload
-coordinates, recalculate FK/IK, or use hardware, serial, or OSC. R6-D-P1
-adds object registry skeleton management only, and R6-D-P2 applies the direct
-payload marker positions. The fast_arm mesh path is read-only and derives its
-poses from payload body transforms only.
+## Non-Goals
 
-## Browser Visual Smoke
-
-R6-D-P3 adds the operation smoke that a human can verify in the browser:
-
-- The viewer consumes payload v0 over WebSocket.
-- The marker object registry receives body, site, target, and error vector
-  marker positions, plus the read-only arm skeleton segment.
-- The fast_arm mesh scene receives the canonical STL assets as the primary
-  arm visual and keeps its pose read-only from payload body transforms.
-- The browser smoke verifies DOM status plus Three.js scene object state.
-- The root element exposes marker object count, arm skeleton status/count,
-  fast_arm mesh status/count, and payload/frame attributes.
-- The scene object positions follow the payload marker coordinates directly.
-- No camera, renderer, or animation loop exists yet.
-- No IK, FK, or `qpos` pose recompute exists yet.
-- No viewer-side arm pose recompute from `qpos` exists yet.
-- No hardware, serial, or OSC access is involved.
-- Browser direct open still requires `npm ci` because the import map resolves
-  `three` from local `node_modules`.
-- The Phase D completion audit and Phase E handoff live in
-  `docs/operations/r6-d-completion-audit.md`.
-
-## Prohibited
-
-- Do not reimplement FK in Three.js.
-- Do not implement IK.
-- Do not generate joint angles from input.
-- Do not perform MuJoCo step.
-- Do not import `mujoco_backend`.
-- Do not bring Rapier physics into the new viewer.
-- Do not import MuJoCo, `mujoco_backend`, IK, FK, or Rapier layers.
-- Do not reintroduce `@types/three`.
-- Do not connect received payloads to marker rendering in R6-B-P1.
-- Do not treat the `base_link_to_tip` line skeleton as the final arm visual.
-- Do not introduce a bundler or framework for the browser artifact path.
+- No production server.
+- No browser automation.
+- No auth, TLS, or reverse proxy.
+- No hardware, serial, or OSC access.
+- No payload schema change.
+- No transport schema change.
+- No Three.js real scene mutation beyond the marker and fast_arm mesh skeletons.
+- No `@types/three` or Rapier reintroduction.
 
 The viewer is not a physical source of truth.
