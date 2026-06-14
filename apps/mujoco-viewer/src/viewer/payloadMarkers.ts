@@ -1,5 +1,6 @@
 import type {
   CanonicalPayloadMarkers,
+  PayloadErrorVectorRenderSpec,
   PayloadMarkerRenderSpec,
   PayloadMarkerScene,
   TransportBodyPayload,
@@ -46,6 +47,20 @@ function buildTargetMarker(position_m: Vector3): PayloadMarkerRenderSpec {
   };
 }
 
+function buildErrorVectorMarker(
+  tipPosition_m: Vector3,
+  targetPosition_m: Vector3,
+): PayloadErrorVectorRenderSpec {
+  return {
+    kind: "error_vector",
+    name: "tip_to_target",
+    start_m: tipPosition_m,
+    end_m: targetPosition_m,
+    color: "#dc2626",
+    label: "tip -> target",
+  };
+}
+
 export function buildPayloadMarkerScene(payload: TransportPayloadV0): PayloadMarkerScene {
   const bodies = payload.bodies.map(buildBodyMarker);
   const sites = payload.sites.map(buildSiteMarker);
@@ -54,12 +69,7 @@ export function buildPayloadMarkerScene(payload: TransportPayloadV0): PayloadMar
   const errorVector =
     tipSite === null || payload.target_position_m === null
       ? null
-      : {
-          kind: "error_vector" as const,
-          start_m: tipSite.position_m,
-          end_m: payload.target_position_m,
-          color: "#dc2626",
-        };
+      : buildErrorVectorMarker(tipSite.position_m, payload.target_position_m);
 
   return {
     bodies,

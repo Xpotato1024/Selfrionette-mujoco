@@ -123,11 +123,15 @@ function testSyncCreatesPayloadMarkerSkeletonObjects(): void {
 
   const count = syncThreeSceneObjectRegistry(registry, markerScene);
 
-  assert(count === 3, "sync should create body, site, and target objects");
-  assert(scene.children.length === 3, "scene should contain three marker objects");
+  assert(count === 4, "sync should create body, site, target, and error vector objects");
+  assert(scene.children.length === 4, "scene should contain four marker objects");
   assert(scene.children.some((child) => child.name === "body:base_link"), "scene should contain the body object");
   assert(scene.children.some((child) => child.name === "site:tip"), "scene should contain the site object");
   assert(scene.children.some((child) => child.name === "target:target"), "scene should contain the target object");
+  assert(
+    scene.children.some((child) => child.name === "error_vector:tip_to_target"),
+    "scene should contain the error vector object",
+  );
 }
 
 function testBuildMarkerObjectDescriptorsIncludePayloadPositions(): void {
@@ -140,6 +144,7 @@ function testBuildMarkerObjectDescriptorsIncludePayloadPositions(): void {
   const bodyDescriptor = descriptors.find((descriptor) => descriptor.key === "body:base_link");
   const siteDescriptor = descriptors.find((descriptor) => descriptor.key === "site:tip");
   const targetDescriptor = descriptors.find((descriptor) => descriptor.key === "target:target");
+  const errorVectorDescriptor = descriptors.find((descriptor) => descriptor.key === "error_vector:tip_to_target");
 
   assert(bodyDescriptor !== undefined, "body descriptor should exist");
   assert(bodyDescriptor.position.x === markerScene.bodies[0].position_m[0], "body x should match marker scene");
@@ -155,6 +160,29 @@ function testBuildMarkerObjectDescriptorsIncludePayloadPositions(): void {
   assert(targetDescriptor.position.x === 0.5, "target x should match marker scene");
   assert(targetDescriptor.position.y === 0.5, "target y should match marker scene");
   assert(targetDescriptor.position.z === 0.5, "target z should match marker scene");
+
+  assert(errorVectorDescriptor !== undefined, "error vector descriptor should exist");
+  assert(errorVectorDescriptor.position.x === markerScene.sites[0].position_m[0], "error vector x should match tip");
+  assert(errorVectorDescriptor.position.y === markerScene.sites[0].position_m[1], "error vector y should match tip");
+  assert(errorVectorDescriptor.position.z === markerScene.sites[0].position_m[2], "error vector z should match tip");
+  assert(errorVectorDescriptor.endPosition?.x === 0.5, "error vector end x should match target");
+  assert(errorVectorDescriptor.endPosition?.y === 0.5, "error vector end y should match target");
+  assert(errorVectorDescriptor.endPosition?.z === 0.5, "error vector end z should match target");
+}
+
+function testBuildPayloadMarkerSceneSkipsErrorVectorWithoutTipOrTarget(): void {
+  const missingTipScene = buildPayloadMarkerScene({
+    ...payloadV0Fixture,
+    sites: [],
+    target_position_m: [0.5, 0.5, 0.5] as [number, number, number],
+  });
+  const missingTargetScene = buildPayloadMarkerScene({
+    ...payloadV0Fixture,
+    target_position_m: null,
+  });
+
+  assert(missingTipScene.errorVector === null, "missing tip should skip the error vector");
+  assert(missingTargetScene.errorVector === null, "missing target should skip the error vector");
 }
 
 testRegistryCreatesMarkerObject();
@@ -163,5 +191,6 @@ testRegistryRemovesMissingObjects();
 testRegistryClearRemovesAllObjects();
 testSyncCreatesPayloadMarkerSkeletonObjects();
 testBuildMarkerObjectDescriptorsIncludePayloadPositions();
+testBuildPayloadMarkerSceneSkipsErrorVectorWithoutTipOrTarget();
 
 console.log("three scene object registry tests passed");

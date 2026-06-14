@@ -38,16 +38,20 @@ export interface PayloadMarkerRenderSpec {
   label?: string;
 }
 
+export interface PayloadErrorVectorRenderSpec {
+  kind: "error_vector";
+  name: string;
+  start_m: Vector3;
+  end_m: Vector3;
+  color: string;
+  label?: string;
+}
+
 export interface PayloadMarkerScene {
   bodies: PayloadMarkerRenderSpec[];
   sites: PayloadMarkerRenderSpec[];
   target: PayloadMarkerRenderSpec | null;
-  errorVector: {
-    kind: "error_vector";
-    start_m: Vector3;
-    end_m: Vector3;
-    color: string;
-  } | null;
+  errorVector: PayloadErrorVectorRenderSpec | null;
 }
 
 export interface CanonicalPayloadMarkers {
