@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from selfrionette.mujoco_backend.command_adapter import motion_command_to_qpos_command
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
 from selfrionette.mujoco_backend.model_loader import default_fast_arm_scene_path, load_mujoco_model
 from selfrionette.mujoco_backend.snapshot import snapshot_mujoco_state
@@ -40,6 +41,11 @@ class HeadlessMuJoCoSimulator:
     def apply_command(self, command: MotionCommand) -> None:
         self._last_command = command
         self._pending_command = command
+
+    def apply_qpos_command(self, joint_command: JointCommand) -> None:
+        """qpos command を直接受け取り、backend state に反映する。"""
+
+        self._apply_joint_command(joint_command)
 
     @property
     def last_command(self) -> MotionCommand | None:
@@ -102,11 +108,9 @@ class HeadlessMuJoCoSimulator:
             raise ValueError("dt_s must be positive")
 
         if self._pending_command is not None:
-            command = self._pending_command
-            if command.target is not None:
-                raise ValueError("target commands are not supported in HeadlessMuJoCoSimulator")
-            if command.joint is not None:
-                self._apply_joint_command(command.joint)
+            joint_command = motion_command_to_qpos_command(self._pending_command)
+            if joint_command is not None:
+                self._apply_joint_command(joint_command)
 
         self.model.opt.timestep = dt_s
         mujoco.mj_step(self.model, self.data)

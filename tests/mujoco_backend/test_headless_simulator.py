@@ -59,7 +59,7 @@ def test_headless_simulator_rejects_target_commands_explicitly() -> None:
 
     simulator.apply_command(command)
 
-    with pytest.raises(ValueError, match="target commands are not supported"):
+    with pytest.raises(ValueError, match="target command は qpos command boundary では未対応です"):
         simulator.step(1.0 / 60.0)
 
 
