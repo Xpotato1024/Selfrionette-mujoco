@@ -104,5 +104,7 @@ R6-D-P3 documents the browser-visible DOM and scene-object smoke state in
 `docs/operations/browser-visual-smoke.md` without adding renderer, camera, or
 animation loop work.
 
-The next issue is R6-D-P4 / #67, the Phase D completion audit and IK phase
-handoff, which is documented in `docs/operations/r6-d-completion-audit.md`.
+R6-E-P0 handles the Phase E preparation cleanup by removing only stale
+placeholders and preserving empty-directory `.gitkeep` markers. The next
+handoff is the Phase E IK / target command integration skeleton, to be
+created as a separate parent issue.
