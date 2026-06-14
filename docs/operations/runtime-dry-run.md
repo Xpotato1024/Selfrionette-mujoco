@@ -12,8 +12,8 @@ related:
 
 # Runtime Dry-Run
 
-R6-A-P3 adds a deterministic runtime dry-run entry for replay-driven payload
-inspection.
+R6-A-P3 は、replay 駆動の payload inspection のための deterministic runtime
+dry-run entry を追加する。
 
 ## Commands
 
@@ -25,11 +25,11 @@ uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --output /tmp/selfr
 
 ## Output Format
 
-- stdout prints one payload v0 JSON object per line.
-- `--output` writes the same NDJSON stream to a file.
-- The file is newline-delimited JSON, not a wrapped array.
-- `version` stays `0`.
-- `frame_index` increments once per replay step.
+- stdout は payload v0 JSON object を 1 行ずつ出力する。
+- `--output` は同じ NDJSON stream を file に書き出す。
+- file は wrapped array ではなく newline-delimited JSON である。
+- `version` は `0` のまま維持する。
+- `frame_index` は replay step ごとに 1 ずつ増える。
 
 ## Examples
 
@@ -53,54 +53,63 @@ uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --output /tmp/selfr
 
 ## Scope
 
-- The entry uses the runtime replay pipeline and the transport publisher
-  skeleton.
-- The entry does not open a WebSocket server.
-- The entry does not launch the viewer.
-- The entry does not open serial or OSC connections.
-- The entry does not import or execute legacy runtime paths.
+- この entry は runtime replay pipeline と transport publisher skeleton を使う。
+- この entry は WebSocket server を開かない。
+- この entry は viewer を起動しない。
+- この entry は serial や OSC 接続を開かない。
+- この entry は legacy runtime path を import / execute しない。
 
 ## Phase A Audit
 
-- Phase A completion is the replay -> motion -> backend -> payload v0 -> dry-run
-  path.
-- The expected output from this entry is the same payload v0 contract used by
-  the transport publisher skeleton.
-- `base_link` appears in `bodies`.
-- `tip` appears in `sites`.
-- `qpos` and `qvel` are included in every payload line.
+- Phase A の completion は replay -> motion -> backend -> payload v0 -> dry-run
+  path である。
+- この entry の期待出力は transport publisher skeleton で使う payload v0 contract
+  と同じである。
+- `base_link` は `bodies` に現れる。
+- `tip` は `sites` に現れる。
+- `qpos` と `qvel` は各 payload line に含まれる。
 
 ## Phase Note
 
-Phase B consumes this payload v0 stream as input to the rendering-only viewer
-runtime.
+Phase B は、この payload v0 stream を rendering-only viewer runtime の入力として
+受け取る。
 
 Phase B handoff:
 
-- payload version is `0`
-- viewer is rendering-only
-- viewer must not import MuJoCo, `mujoco_backend`, IK, or FK
-- viewer receives payload v0 and forwards it to the existing marker rendering
-  skeleton
-- browser WebSocket client and viewer runtime are first introduced in R6-B
+- payload version は `0`
+- viewer は rendering-only
+- viewer は MuJoCo、`mujoco_backend`、IK、FK を import しない
+- viewer は payload v0 を受け取り、既存の marker rendering skeleton に渡す
+- browser WebSocket client と viewer runtime は R6-B で初めて導入される
 
-The R6-A dry-run path remains disconnected from WebSocket server, browser
-runtime, and viewer runtime wiring.
+R6-A dry-run path は、WebSocket server、browser runtime、viewer runtime wiring
+とは切り離されたままである。
 
-For a local/dev WebSocket delivery entry that reuses the same replay pipeline
-and publishes payload v0 JSON to connected clients, see
-`docs/operations/websocket-publisher-runner.md`.
+ローカル / 開発用の WebSocket delivery entry で同じ replay pipeline を再利用し、
+payload v0 JSON を connected client に送るものは、
+`docs/operations/websocket-publisher-runner.md` を参照する。
+
+## R6-E-P5 Completion Audit
+
+R6-E-P5 では、この dry-run / smoke の契約を変えずに Phase E の completion
+state を文書として固定する。詳細な handoff は
+`docs/operations/r6-e-completion-audit.md` に集約する。
+
+- 完了済み child issue は #75, #76, #77, #78 である
+- `target_position_m` は payload feedback のまま維持する
+- `MotionCommand.joint` は qpos command boundary の入力として扱う
+- viewer は rendering-only のまま維持する
+- この節は runtime implementation を追加しない
 
 ## R6-E-P4 Smoke
 
-R6-E-P4 では、replay / dry-run 系を Phase E の target marker と
-qpos command handoff の smoke boundary として使う。
+R6-E-P4 では、replay / dry-run 系を Phase E の target marker と qpos command
+handoff の smoke boundary として使う。
 
-- replay input は hardware 非依存のまま維持する。
-- motion / qpos smoke は backend boundary に留める。
+- replay input は hardware 非依存のまま維持する
+- motion / qpos smoke は backend boundary に留める
 - `target_position_m` は payload feedback として扱い、qpos command boundary
-  とはみなさない。
-- default dry-run entry は引き続き payload v0 を出力し、target feedback を
-  勝手に生成しない。
-- target marker feedback は qpos update path とは別に確認し、2つの contract
-  を混同しない。
+  とは分ける
+- default dry-run entry は payload v0 を出力し、target feedback を state に
+  反映しない
+- target marker feedback は qpos update path とは別の contract として扱う
