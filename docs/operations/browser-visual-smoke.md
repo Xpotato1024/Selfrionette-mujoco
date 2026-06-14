@@ -103,6 +103,12 @@ skeleton + target + error vector.
   `Object3D` connection between canonical payload body/site positions.
 - The fast_arm mesh scene keeps canonical STL assets as the primary arm visual
   and derives mesh poses from payload body transforms only.
+- canonical fast_arm asset source は `assets/mujoco/fast_arm/` とする。
+- asset contract は `docs/contracts/assets.md` と
+  `assets/mujoco/fast_arm/README.md` を参照する。
+- viewer は表示用 asset source として参照するだけで、
+  STL / XML の geometry / scale / axis / origin / units / joint semantics は
+  変更しない。
 - Reused marker keys reuse the same object identity.
 - Each marker object position follows the payload marker coordinates stored in
   the marker scene model.

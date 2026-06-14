@@ -233,6 +233,12 @@ payload v0
 This mesh path is the primary arm visual. The `base_link_to_tip` line skeleton
 remains fallback / debug / provisional only, and the browser viewer still does
 not load MuJoCo physics, compute FK / IK, or derive pose from `qpos`.
+canonical fast_arm asset source は `assets/mujoco/fast_arm/` とする。
+asset contract は `docs/contracts/assets.md` と
+`assets/mujoco/fast_arm/README.md` を参照する。
+viewer はそれらを表示用 asset source として参照するだけで、
+STL / XML の geometry / scale / axis / origin / units / joint semantics は
+変更しない。
 
 R6-D-P3 freezes the browser-visible smoke state for the same direct payload
 marker path:

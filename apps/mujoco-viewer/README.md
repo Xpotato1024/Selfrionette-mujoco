@@ -66,6 +66,11 @@ This app is the Three.js rendering layer.
 - R6-F-P3-fix adds the canonical `assets/mujoco/fast_arm/` STL mesh path as
   the primary arm visual and keeps the `base_link_to_tip` line skeleton as a
   fallback / debug / provisional path.
+- この `fast_arm` の canonical asset source は `assets/mujoco/fast_arm/` とし、
+  参照 contract は `docs/contracts/assets.md` と
+  `assets/mujoco/fast_arm/README.md` を見る。
+- viewer は表示用 asset source として参照するだけで、
+  STL / XML の geometry / scale / axis / origin / units / joint semantics は変更しない。
 - R6-D-P3 freezes the browser visual smoke path that confirms DOM status,
   marker summary, marker object count, and direct `Object3D.position`
   mutation from payload coordinates.
