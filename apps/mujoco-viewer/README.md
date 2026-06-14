@@ -78,6 +78,20 @@ This app is the Three.js rendering layer.
   `docs/operations/r6-d-completion-audit.md` に固定し、最終 IK 実装を
   主張しないまま次の handoff を記述する。
 
+## R6-F-P4
+
+- DoF ring display は payload body transforms に従う read-only overlay
+  として扱う。
+- `qpos`、FK、IK、target delta から ring pose を再計算しない。
+- body transform は `position_m` と `quaternion_wxyz` を表示用に反映し、
+  DoF label は `q1_provisional` などの provisional 表示名として扱う。
+- `base_link_to_tip` line skeleton とは別の presentation object として
+  registry に載せる。
+- browser smoke では `data-dof-ring-status` と
+  `data-dof-ring-descriptor-count` / `data-dof-ring-present-count` /
+  `data-dof-ring-absent-count` で状態を観測し、`data-dof-ring-count`
+  は descriptor count の互換 alias として残す。
+
 ## Phase B Handoff
 
 - Viewer receives payload v0 through the WebSocket client skeleton.

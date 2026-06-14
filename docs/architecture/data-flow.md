@@ -258,6 +258,22 @@ pipeline、IK、FK、`qpos` pose recompute は追加されない。fast_arm mesh
 path は後続の R6-F-P3-fix で追加される。
 
 
+R6-F-P4 adds the minimal DoF ring presentation overlay on top of the same
+payload body transforms:
+
+```text
+payload v0
+  -> buildDoFRingScene(payload)
+  -> DoF ring scene
+  -> Three.js scene object registry
+  -> DoF ring overlay objects
+```
+
+This DoF ring path is presentation-only. It does not recompute FK, IK, or
+qpos pose, and it does not become a source of truth for joint state or
+command intent. The browser viewer may observe it through DOM summary text and
+root attributes, but the scene objects remain read-only overlays.
+
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 
 - the emitted payload version is `0`
@@ -313,3 +329,7 @@ R6-B-P4 audits and freezes the viewer-side handoff:
 - Invalid payloads do not advance the rendered state.
 - WebSocket server, backend publisher server, and Three.js real scene mutation
   remain out of scope.
+- R6-F-P4 では DoF ring display を payload body transform の
+  `position_m` / `quaternion_wxyz` に従う read-only overlay として追加する。
+  `logicalJointLabel` と `label` は provisional であり、
+  `qpos` / FK / IK / `target_delta_m` から ring pose を再計算しない。

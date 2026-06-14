@@ -97,6 +97,10 @@ R6-A-P4 freezes the handoff contract for R6-B:
   payload `bodies` positions and `quaternion_wxyz` values, but it must not
   infer mesh pose from `qpos`, IK, FK, `target_position_m`, or any hidden
   physics state.
+- Viewer code may render a read-only DoF ring display from existing payload
+  body transforms or viewer-side presentation state, but it must not infer
+  ring pose from `qpos`, IK, FK, `target_position_m`, or any hidden physics
+  state.
 - canonical `fast_arm` asset source は `assets/mujoco/fast_arm/` とする。
   asset contract は `docs/contracts/assets.md` と
   `assets/mujoco/fast_arm/README.md` を参照する。
@@ -132,3 +136,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
 - Field names are intentionally close to `MuJoCoState`.
 - A future payload version may add transport-specific envelope fields, but it
   must keep the versioned contract explicit.
+- R6-F-P4 adds a read-only DoF ring display that mirrors payload body
+  transforms for presentation only. The ring descriptor records
+  `position_m` and `quaternion_wxyz`, the logical label stays provisional,
+  and the viewer still must not infer ring pose from `qpos`, IK, FK, or
+  `target_position_m`.

@@ -11,6 +11,13 @@ import {
   type FastArmMeshGeometryLoaderLike,
   type FastArmMeshScene,
 } from "./viewer/fastArmMeshes.js";
+import {
+  buildDoFRingScene,
+  buildDoFRingSceneSummaryText,
+  createDoFRingObjectRegistry,
+  syncDoFRingObjectRegistry,
+  type DoFRingScene,
+} from "./viewer/dofRingDisplay.js";
 import { buildPayloadMarkerScene, getCanonicalPayloadMarkers } from "./viewer/payloadMarkers.js";
 import {
   createThreeSceneObjectRegistry,
@@ -71,6 +78,12 @@ export interface ViewerRuntimeSnapshot {
   canonicalMarkers: CanonicalPayloadMarkers;
   markerScene: PayloadMarkerScene;
   markerObjectCount: number;
+  dofRingScene: DoFRingScene;
+  dofRingDescriptorCount: number;
+  dofRingPresentCount: number;
+  dofRingAbsentCount: number;
+  dofRingCount: number;
+  dofRingStatus: DoFRingScene["status"];
   targetPosition_m: Vector3 | null;
   armSkeleton: PayloadArmSkeletonScene;
   armSkeletonSegmentCount: number;
@@ -136,6 +149,7 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
   const baseLinkName = snapshot.canonicalMarkers.baseLinkBody?.name ?? "base_link";
   const tipSiteName = snapshot.canonicalMarkers.tipSite?.name ?? "tip";
   const targetText = buildMarkerPresenceText("target marker", snapshot.targetPosition_m !== null, snapshot.targetPosition_m);
+  const dofRingText = buildDoFRingSceneSummaryText(snapshot.dofRingScene);
   const tipText = buildMarkerPresenceText(
     "tip marker",
     snapshot.canonicalMarkers.tipSite !== null,
@@ -165,6 +179,7 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
     `frame ${snapshot.frameIndex}`,
     `bodies ${snapshot.markerScene.bodies.length}`,
     `sites ${snapshot.markerScene.sites.length}`,
+    dofRingText,
     armSkeletonText,
     fastArmMeshText,
     baseLinkName,
@@ -178,6 +193,7 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
 function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
   const bodyNames = snapshot.markerScene.bodies.map((marker) => marker.name).join(", ") || "none";
   const siteNames = snapshot.markerScene.sites.map((marker) => marker.name).join(", ") || "none";
+  const dofRingText = buildDoFRingSceneSummaryText(snapshot.dofRingScene);
   const armSkeletonText =
     snapshot.armSkeletonStatus === "present"
       ? `arm skeleton: present (${snapshot.armSkeletonSegmentCount} segment(s)) (fallback)`
@@ -209,6 +225,7 @@ function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
     "Marker rendering placeholder.",
     `body markers: ${snapshot.markerScene.bodies.length} (${bodyNames})`,
     `site markers: ${snapshot.markerScene.sites.length} (${siteNames})`,
+    dofRingText,
     armSkeletonText,
     fastArmMeshText,
     targetText,
@@ -225,6 +242,7 @@ export function buildViewerRuntimeSnapshot(
 ): ViewerRuntimeSnapshot {
   const canonicalMarkers = getCanonicalPayloadMarkers(payload);
   const markerScene = buildPayloadMarkerScene(payload);
+  const dofRingScene = buildDoFRingScene(payload);
   const fastArmMeshScene = buildFastArmMeshScene(payload, assetBaseUrl);
   const markerObjectCount =
     markerScene.bodies.length +
@@ -244,6 +262,12 @@ export function buildViewerRuntimeSnapshot(
     canonicalMarkers,
     markerScene,
     markerObjectCount,
+    dofRingScene,
+    dofRingDescriptorCount: dofRingScene.descriptors.length,
+    dofRingPresentCount: dofRingScene.presentCount,
+    dofRingAbsentCount: dofRingScene.absentCount,
+    dofRingCount: dofRingScene.descriptors.length,
+    dofRingStatus: dofRingScene.status,
     targetPosition_m: payload.target_position_m,
     armSkeleton: markerScene.armSkeleton,
     armSkeletonSegmentCount: markerScene.armSkeleton.segments.length,
@@ -274,6 +298,11 @@ function buildRuntimeView(
   root.setAttribute("data-websocket-status", snapshot.connectionStatus);
   root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
   root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
+  root.setAttribute("data-dof-ring-status", snapshot.dofRingStatus);
+  root.setAttribute("data-dof-ring-descriptor-count", String(snapshot.dofRingDescriptorCount));
+  root.setAttribute("data-dof-ring-present-count", String(snapshot.dofRingPresentCount));
+  root.setAttribute("data-dof-ring-absent-count", String(snapshot.dofRingAbsentCount));
+  root.setAttribute("data-dof-ring-count", String(snapshot.dofRingCount));
   root.setAttribute("data-arm-skeleton-status", snapshot.armSkeletonStatus);
   root.setAttribute("data-arm-skeleton-segment-count", String(snapshot.armSkeletonSegmentCount));
   root.setAttribute("data-fast-arm-mesh-status", snapshot.fastArmMeshStatus);
@@ -313,6 +342,11 @@ function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnaps
   view.root.setAttribute("data-marker-body-count", String(snapshot.markerScene.bodies.length));
   view.root.setAttribute("data-marker-site-count", String(snapshot.markerScene.sites.length));
   view.root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
+  view.root.setAttribute("data-dof-ring-status", snapshot.dofRingStatus);
+  view.root.setAttribute("data-dof-ring-descriptor-count", String(snapshot.dofRingDescriptorCount));
+  view.root.setAttribute("data-dof-ring-present-count", String(snapshot.dofRingPresentCount));
+  view.root.setAttribute("data-dof-ring-absent-count", String(snapshot.dofRingAbsentCount));
+  view.root.setAttribute("data-dof-ring-count", String(snapshot.dofRingCount));
   view.root.setAttribute("data-arm-skeleton-status", snapshot.armSkeletonStatus);
   view.root.setAttribute("data-arm-skeleton-segment-count", String(snapshot.armSkeletonSegmentCount));
   view.root.setAttribute("data-fast-arm-mesh-status", snapshot.fastArmMeshStatus);
@@ -347,6 +381,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       : options.assetBaseUrl;
   const threeScene = new Scene();
   const markerObjectRegistry = createThreeSceneObjectRegistry(threeScene);
+  const dofRingObjectRegistry = createDoFRingObjectRegistry(threeScene);
   let mountedView: ViewerRuntimeView | null = null;
   let websocketClient: ViewerWebSocketClient | null = null;
   let receivedPayload: TransportPayloadV0 | null = null;
@@ -361,6 +396,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
 
     const snapshot = buildViewerRuntimeSnapshot(getActivePayload(), connectionStatus, websocketUrl, assetBaseUrl);
     syncThreeSceneObjectRegistry(markerObjectRegistry, snapshot.markerScene);
+    syncDoFRingObjectRegistry(dofRingObjectRegistry, snapshot.dofRingScene);
     syncFastArmMeshSceneObjects(threeScene, snapshot.fastArmMeshScene, {
       geometryLoader: options.fastArmMeshGeometryLoader,
     });
@@ -443,6 +479,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       websocketClient = null;
       receivedPayload = null;
       markerObjectRegistry.clear();
+      dofRingObjectRegistry.clear();
       mountedView.root.remove();
       mountedView = null;
     },

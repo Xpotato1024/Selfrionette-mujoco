@@ -76,6 +76,9 @@ root viewer element は smoke state を attributes で公開する。
 - `data-arm-skeleton-segment-count`
 - `data-fast-arm-mesh-status`
 - `data-fast-arm-mesh-count`
+- `data-dof-ring-status`
+- `data-dof-ring-count`
+DoF ring display は marker object count とは別の presentation overlay として観測する。
 
 status section は最新 frame summary text も反映する。
 
@@ -158,3 +161,10 @@ connection がある場合は body + site + arm skeleton になる。target と 
 - marker と fast_arm mesh skeletons を超える Three.js real scene mutation
   はない。
 - `@types/three` や Rapier の再導入はない。
+- DoF ring display は body transform の `position_m` と
+  `quaternion_wxyz` を表示用に反映する。
+- DoF ring の `logicalJointLabel` と `label` は provisional な表示名であり、
+  joint convention / IK semantics の source of truth ではない。
+- `data-dof-ring-count` は descriptor count の互換 alias として扱い、
+  present / absent の内訳は `data-dof-ring-present-count` と
+  `data-dof-ring-absent-count` で読む。

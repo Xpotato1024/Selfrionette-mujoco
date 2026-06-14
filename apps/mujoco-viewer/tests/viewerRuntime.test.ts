@@ -226,6 +226,12 @@ function testBuildViewerRuntimeSnapshot(): void {
   assert(snapshot.summaryText.includes("tip"), "snapshot should include tip");
   assert(snapshot.markerScene.bodies.length === 1, "fixture should produce one body marker");
   assert(snapshot.markerScene.sites.length === 1, "fixture should produce one site marker");
+  assert(snapshot.dofRingScene.status === "partial", "fixture should produce a partial DoF ring scene");
+  assert(snapshot.dofRingScene.descriptors.length === 4, "fixture should produce four DoF ring descriptors");
+  assert(snapshot.dofRingDescriptorCount === 4, "fixture should expose four DoF ring descriptors");
+  assert(snapshot.dofRingPresentCount === 1, "fixture should expose one present DoF ring");
+  assert(snapshot.dofRingAbsentCount === 3, "fixture should expose three absent DoF rings");
+  assert(snapshot.dofRingCount === 4, "fixture should produce four DoF ring objects");
   assert(snapshot.markerScene.armSkeleton.status === "present", "fixture should produce a present arm skeleton");
   assert(snapshot.markerScene.armSkeleton.segments.length === 1, "fixture should produce one arm skeleton segment");
   assert(snapshot.markerObjectCount === 3, "fixture should produce three marker objects");
@@ -233,6 +239,7 @@ function testBuildViewerRuntimeSnapshot(): void {
   assert(snapshot.summaryText.includes("target marker: absent"), "summary should mark the target marker absent");
   assert(snapshot.summaryText.includes("tip marker: present"), "summary should mark the tip marker present");
   assert(snapshot.summaryText.includes("error vector: absent"), "summary should mark the error vector absent");
+  assert(snapshot.summaryText.includes("DoF ring display: partial 1/4 ring(s)"), "summary should surface the DoF ring overlay");
   assert(snapshot.summaryText.includes("arm skeleton: present 1 segment(s)"), "summary should mark the arm skeleton present");
 }
 
@@ -320,6 +327,10 @@ function testBuildViewerRuntimeSnapshotIgnoresQposForArmSkeleton(): void {
     firstSnapshot.markerScene.armSkeleton.segments[0].end_m[2] === secondSnapshot.markerScene.armSkeleton.segments[0].end_m[2],
     "arm skeleton end z should ignore qpos changes",
   );
+  assert(
+    JSON.stringify(firstSnapshot.dofRingScene.descriptors) === JSON.stringify(secondSnapshot.dofRingScene.descriptors),
+    "DoF ring descriptors should ignore qpos changes",
+  );
 }
 
 function testReadViewerEndpointConfig(): void {
@@ -371,6 +382,23 @@ function testCreateViewerRuntimeMountsAndStops(): void {
     root.attributes.get("data-marker-object-count") === "3",
     "viewer runtime should publish the initial marker object count on the root",
   );
+  assert(root.attributes.get("data-dof-ring-status") === "partial", "DoF ring should be partial in the fixture");
+  assert(
+    root.attributes.get("data-dof-ring-descriptor-count") === "4",
+    "viewer runtime should publish the DoF ring descriptor count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-present-count") === "1",
+    "viewer runtime should publish the DoF ring present count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-absent-count") === "3",
+    "viewer runtime should publish the DoF ring absent count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-count") === "4",
+    "viewer runtime should keep the descriptor-count alias on the root",
+  );
   assert(root.attributes.get("data-arm-skeleton-status") === "present", "arm skeleton should be present in the fixture");
   assert(
     root.attributes.get("data-arm-skeleton-segment-count") === "1",
@@ -402,6 +430,10 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   assert(
     statusSection?.textContent?.includes("error vector: absent") ?? false,
     "viewer runtime should show the absent error vector in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("DoF ring display: partial 1/4 ring(s)") ?? false,
+    "viewer runtime should show the DoF ring overlay in the summary",
   );
   assert(
     statusSection?.textContent?.includes("arm skeleton: present 1 segment(s)") ?? false,
@@ -500,6 +532,10 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     "runtime should connect received payloads to marker rendering",
   );
   assert(
+    root.attributes.get("data-dof-ring-status") === "partial",
+    "runtime should keep the DoF ring overlay state separate from payload updates",
+  );
+  assert(
     statusSection?.textContent !== initialStatusText,
     "runtime should refresh the summary when payload changes",
   );
@@ -530,6 +566,22 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(
     root.attributes.get("data-marker-object-count") === "7",
     "runtime should publish the received marker object count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-count") === "4",
+    "runtime should keep the DoF ring descriptor-count alias on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-descriptor-count") === "4",
+    "runtime should keep the DoF ring descriptor count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-present-count") === "1",
+    "runtime should keep the DoF ring present count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-absent-count") === "3",
+    "runtime should keep the DoF ring absent count on the root",
   );
   assert(root.attributes.get("data-arm-skeleton-status") === "present", "runtime should keep the arm skeleton present");
   assert(
@@ -615,6 +667,10 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     statusSection?.textContent?.includes("arm skeleton: present 1 segment(s)") ?? false,
     "runtime should surface the arm skeleton in the summary",
   );
+  assert(
+    statusSection?.textContent?.includes("DoF ring display: partial 1/4 ring(s)") ?? false,
+    "runtime should surface the DoF ring overlay in the summary",
+  );
 
   activeSocket.dispatchClose();
   assert(
@@ -677,6 +733,22 @@ function testCreateViewerRuntimeIgnoresInvalidPayloads(): void {
   assert(
     root.attributes.get("data-marker-object-count") === "3",
     "invalid payload should not update the object count",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-count") === "4",
+    "invalid payload should not update the DoF ring descriptor-count alias",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-descriptor-count") === "4",
+    "invalid payload should not update the DoF ring descriptor count",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-present-count") === "1",
+    "invalid payload should not update the DoF ring present count",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-absent-count") === "3",
+    "invalid payload should not update the DoF ring absent count",
   );
   assert(
     root.attributes.get("data-arm-skeleton-status") === "present",
