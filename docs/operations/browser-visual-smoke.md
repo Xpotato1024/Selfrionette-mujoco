@@ -76,6 +76,9 @@ root viewer element は smoke state を attributes で公開する。
 - `data-arm-skeleton-segment-count`
 - `data-fast-arm-mesh-status`
 - `data-fast-arm-mesh-count`
+- `data-dof-ring-status`
+- `data-dof-ring-count`
+DoF ring display は marker object count とは別の presentation overlay として観測する。
 
 status section は最新 frame summary text も反映する。
 

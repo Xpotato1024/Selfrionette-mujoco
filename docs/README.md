@@ -44,6 +44,7 @@ Do not create or use `doc/`.
 | Hardware safety | `docs/operations/hardware-safety.md` | serial / OSC / hardware rules |
 | Legacy map | `docs/migration/legacy-to-new-layer-map.md` | legacy reference only |
 | ADRs | `docs/design/adr/` | design decision history |
+| R6-F-P4 DoF ring reference audit | `docs/operations/r6-f-p4-dof-ring-reference-audit.md` | DoF ring の reference audit と viewer presentation skeleton |
 
 ## Directory Roles
 
