@@ -136,3 +136,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
 - Field names are intentionally close to `MuJoCoState`.
 - A future payload version may add transport-specific envelope fields, but it
   must keep the versioned contract explicit.
+- R6-F-P4 adds a read-only DoF ring display that mirrors payload body
+  transforms for presentation only. The ring descriptor records
+  `position_m` and `quaternion_wxyz`, the logical label stays provisional,
+  and the viewer still must not infer ring pose from `qpos`, IK, FK, or
+  `target_position_m`.

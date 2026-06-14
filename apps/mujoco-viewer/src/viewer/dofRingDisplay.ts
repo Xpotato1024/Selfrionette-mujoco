@@ -1,6 +1,11 @@
 import { Object3D, Scene } from "three";
 
-import type { TransportBodyPayload, TransportPayloadV0, Vector3 } from "../types/transportPayload.js";
+import type {
+  QuaternionWXYZ,
+  TransportBodyPayload,
+  TransportPayloadV0,
+  Vector3,
+} from "../types/transportPayload.js";
 
 export type DoFRingAvailabilityStatus = "present" | "partial" | "absent";
 
@@ -14,7 +19,8 @@ export interface DoFRingDescriptor {
   availabilityStatus: DoFRingAvailabilityStatus;
   label: string;
   anchorBodyName: string;
-  position: Vector3;
+  position_m: Vector3;
+  quaternion_wxyz: QuaternionWXYZ;
 }
 
 export interface DoFRingScene {
@@ -49,32 +55,33 @@ interface DoFRingObjectUserData {
   availabilityStatus: DoFRingAvailabilityStatus;
   ringLabel: string;
   anchorBodyName: string;
-  position: Vector3;
+  position_m: Vector3;
+  quaternion_wxyz: QuaternionWXYZ;
 }
 
 const DOF_RING_SPECS: readonly DoFRingSpec[] = [
   {
-    id: "dof_ring:base_yaw",
-    logicalJointLabel: "base_yaw",
-    label: "Q1 base yaw",
+    id: "dof_ring:q1",
+    logicalJointLabel: "q1_provisional",
+    label: "Q1 provisional DoF ring",
     anchorBodyName: "base_link",
   },
   {
-    id: "dof_ring:shoulder_pitch",
-    logicalJointLabel: "shoulder_pitch",
-    label: "Q2 shoulder pitch",
+    id: "dof_ring:q2",
+    logicalJointLabel: "q2_provisional",
+    label: "Q2 provisional DoF ring",
     anchorBodyName: "sholder_link_1",
   },
   {
-    id: "dof_ring:shoulder_roll",
-    logicalJointLabel: "shoulder_roll",
-    label: "Q3 shoulder roll",
+    id: "dof_ring:q3",
+    logicalJointLabel: "q3_provisional",
+    label: "Q3 provisional DoF ring",
     anchorBodyName: "sholder_link_2",
   },
   {
-    id: "dof_ring:elbow_pitch",
-    logicalJointLabel: "elbow_pitch",
-    label: "Q4 elbow pitch",
+    id: "dof_ring:q4",
+    logicalJointLabel: "q4_provisional",
+    label: "Q4 provisional DoF ring",
     anchorBodyName: "upper_arm_link",
   },
 ];
@@ -85,6 +92,8 @@ function findBodyByName(payload: TransportPayloadV0, bodyName: string): Transpor
 
 function buildDoFRingDescriptor(spec: DoFRingSpec, body: TransportBodyPayload | null): DoFRingDescriptor {
   const availabilityStatus: DoFRingAvailabilityStatus = body === null ? "absent" : "present";
+  const position_m: Vector3 = body === null ? [0, 0, 0] : body.position_m;
+  const quaternion_wxyz: QuaternionWXYZ = body === null ? [1, 0, 0, 0] : body.quaternion_wxyz;
 
   return {
     id: spec.id,
@@ -96,7 +105,8 @@ function buildDoFRingDescriptor(spec: DoFRingSpec, body: TransportBodyPayload | 
     availabilityStatus,
     label: spec.label,
     anchorBodyName: spec.anchorBodyName,
-    position: body === null ? ([0, 0, 0] as Vector3) : body.position_m,
+    position_m,
+    quaternion_wxyz,
   };
 }
 
@@ -104,7 +114,9 @@ function createDoFRingObject(descriptor: DoFRingDescriptor): Object3D {
   const object = new Object3D();
   object.name = descriptor.id;
   object.visible = descriptor.visibilityStatus === "present";
-  object.position.set(descriptor.position[0], descriptor.position[1], descriptor.position[2]);
+  object.position.set(descriptor.position_m[0], descriptor.position_m[1], descriptor.position_m[2]);
+  const [w, x, y, z] = descriptor.quaternion_wxyz;
+  object.quaternion.set(x, y, z, w);
   object.userData = {
     ringId: descriptor.id,
     ringKind: descriptor.kind,
@@ -115,7 +127,8 @@ function createDoFRingObject(descriptor: DoFRingDescriptor): Object3D {
     availabilityStatus: descriptor.availabilityStatus,
     ringLabel: descriptor.label,
     anchorBodyName: descriptor.anchorBodyName,
-    position: descriptor.position,
+    position_m: descriptor.position_m,
+    quaternion_wxyz: descriptor.quaternion_wxyz,
   } satisfies DoFRingObjectUserData;
   return object;
 }
@@ -159,7 +172,9 @@ export function createDoFRingObjectRegistry(scene: Scene): DoFRingObjectRegistry
       if (existingObject !== undefined) {
         existingObject.name = descriptor.id;
         existingObject.visible = descriptor.visibilityStatus === "present";
-        existingObject.position.set(descriptor.position[0], descriptor.position[1], descriptor.position[2]);
+        existingObject.position.set(descriptor.position_m[0], descriptor.position_m[1], descriptor.position_m[2]);
+        const [w, x, y, z] = descriptor.quaternion_wxyz;
+        existingObject.quaternion.set(x, y, z, w);
         existingObject.userData = {
           ringId: descriptor.id,
           ringKind: descriptor.kind,
@@ -170,7 +185,8 @@ export function createDoFRingObjectRegistry(scene: Scene): DoFRingObjectRegistry
           availabilityStatus: descriptor.availabilityStatus,
           ringLabel: descriptor.label,
           anchorBodyName: descriptor.anchorBodyName,
-          position: descriptor.position,
+          position_m: descriptor.position_m,
+          quaternion_wxyz: descriptor.quaternion_wxyz,
         } satisfies DoFRingObjectUserData;
         if (existingObject.parent !== scene) {
           scene.add(existingObject);

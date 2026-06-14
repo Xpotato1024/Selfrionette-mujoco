@@ -75,3 +75,11 @@ checked-in legacy tree では browser-side の DoF ring renderer そのものは
 - viewer-side FK / IK / qpos pose recompute はしない
 - legacy import / execute / direct migration はしない
 - browser-visible smoke では ring の存在だけを確認する
+- 追補:
+
+- DoF ring descriptor は payload body transform の
+  `position_m` / `quaternion_wxyz` をそのまま表示用に持つ。
+- `logicalJointLabel` と `label` は provisional な presentation label であり、
+  joint convention / IK semantics の source of truth ではない。
+- `data-dof-ring-count` は descriptor count の互換 alias であり、
+  present / absent は別属性で観測する。

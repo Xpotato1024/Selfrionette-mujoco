@@ -79,6 +79,9 @@ export interface ViewerRuntimeSnapshot {
   markerScene: PayloadMarkerScene;
   markerObjectCount: number;
   dofRingScene: DoFRingScene;
+  dofRingDescriptorCount: number;
+  dofRingPresentCount: number;
+  dofRingAbsentCount: number;
   dofRingCount: number;
   dofRingStatus: DoFRingScene["status"];
   targetPosition_m: Vector3 | null;
@@ -260,6 +263,9 @@ export function buildViewerRuntimeSnapshot(
     markerScene,
     markerObjectCount,
     dofRingScene,
+    dofRingDescriptorCount: dofRingScene.descriptors.length,
+    dofRingPresentCount: dofRingScene.presentCount,
+    dofRingAbsentCount: dofRingScene.absentCount,
     dofRingCount: dofRingScene.descriptors.length,
     dofRingStatus: dofRingScene.status,
     targetPosition_m: payload.target_position_m,
@@ -293,6 +299,9 @@ function buildRuntimeView(
   root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
   root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
   root.setAttribute("data-dof-ring-status", snapshot.dofRingStatus);
+  root.setAttribute("data-dof-ring-descriptor-count", String(snapshot.dofRingDescriptorCount));
+  root.setAttribute("data-dof-ring-present-count", String(snapshot.dofRingPresentCount));
+  root.setAttribute("data-dof-ring-absent-count", String(snapshot.dofRingAbsentCount));
   root.setAttribute("data-dof-ring-count", String(snapshot.dofRingCount));
   root.setAttribute("data-arm-skeleton-status", snapshot.armSkeletonStatus);
   root.setAttribute("data-arm-skeleton-segment-count", String(snapshot.armSkeletonSegmentCount));
@@ -334,6 +343,9 @@ function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnaps
   view.root.setAttribute("data-marker-site-count", String(snapshot.markerScene.sites.length));
   view.root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
   view.root.setAttribute("data-dof-ring-status", snapshot.dofRingStatus);
+  view.root.setAttribute("data-dof-ring-descriptor-count", String(snapshot.dofRingDescriptorCount));
+  view.root.setAttribute("data-dof-ring-present-count", String(snapshot.dofRingPresentCount));
+  view.root.setAttribute("data-dof-ring-absent-count", String(snapshot.dofRingAbsentCount));
   view.root.setAttribute("data-dof-ring-count", String(snapshot.dofRingCount));
   view.root.setAttribute("data-arm-skeleton-status", snapshot.armSkeletonStatus);
   view.root.setAttribute("data-arm-skeleton-segment-count", String(snapshot.armSkeletonSegmentCount));

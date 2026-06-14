@@ -228,6 +228,9 @@ function testBuildViewerRuntimeSnapshot(): void {
   assert(snapshot.markerScene.sites.length === 1, "fixture should produce one site marker");
   assert(snapshot.dofRingScene.status === "partial", "fixture should produce a partial DoF ring scene");
   assert(snapshot.dofRingScene.descriptors.length === 4, "fixture should produce four DoF ring descriptors");
+  assert(snapshot.dofRingDescriptorCount === 4, "fixture should expose four DoF ring descriptors");
+  assert(snapshot.dofRingPresentCount === 1, "fixture should expose one present DoF ring");
+  assert(snapshot.dofRingAbsentCount === 3, "fixture should expose three absent DoF rings");
   assert(snapshot.dofRingCount === 4, "fixture should produce four DoF ring objects");
   assert(snapshot.markerScene.armSkeleton.status === "present", "fixture should produce a present arm skeleton");
   assert(snapshot.markerScene.armSkeleton.segments.length === 1, "fixture should produce one arm skeleton segment");
@@ -381,8 +384,20 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   );
   assert(root.attributes.get("data-dof-ring-status") === "partial", "DoF ring should be partial in the fixture");
   assert(
+    root.attributes.get("data-dof-ring-descriptor-count") === "4",
+    "viewer runtime should publish the DoF ring descriptor count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-present-count") === "1",
+    "viewer runtime should publish the DoF ring present count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-absent-count") === "3",
+    "viewer runtime should publish the DoF ring absent count on the root",
+  );
+  assert(
     root.attributes.get("data-dof-ring-count") === "4",
-    "viewer runtime should publish the DoF ring count on the root",
+    "viewer runtime should keep the descriptor-count alias on the root",
   );
   assert(root.attributes.get("data-arm-skeleton-status") === "present", "arm skeleton should be present in the fixture");
   assert(
@@ -554,7 +569,19 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   );
   assert(
     root.attributes.get("data-dof-ring-count") === "4",
-    "runtime should keep the DoF ring count on the root",
+    "runtime should keep the DoF ring descriptor-count alias on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-descriptor-count") === "4",
+    "runtime should keep the DoF ring descriptor count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-present-count") === "1",
+    "runtime should keep the DoF ring present count on the root",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-absent-count") === "3",
+    "runtime should keep the DoF ring absent count on the root",
   );
   assert(root.attributes.get("data-arm-skeleton-status") === "present", "runtime should keep the arm skeleton present");
   assert(
@@ -709,7 +736,19 @@ function testCreateViewerRuntimeIgnoresInvalidPayloads(): void {
   );
   assert(
     root.attributes.get("data-dof-ring-count") === "4",
-    "invalid payload should not update the DoF ring count",
+    "invalid payload should not update the DoF ring descriptor-count alias",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-descriptor-count") === "4",
+    "invalid payload should not update the DoF ring descriptor count",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-present-count") === "1",
+    "invalid payload should not update the DoF ring present count",
+  );
+  assert(
+    root.attributes.get("data-dof-ring-absent-count") === "3",
+    "invalid payload should not update the DoF ring absent count",
   );
   assert(
     root.attributes.get("data-arm-skeleton-status") === "present",

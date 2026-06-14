@@ -161,3 +161,10 @@ connection がある場合は body + site + arm skeleton になる。target と 
 - marker と fast_arm mesh skeletons を超える Three.js real scene mutation
   はない。
 - `@types/three` や Rapier の再導入はない。
+- DoF ring display は body transform の `position_m` と
+  `quaternion_wxyz` を表示用に反映する。
+- DoF ring の `logicalJointLabel` と `label` は provisional な表示名であり、
+  joint convention / IK semantics の source of truth ではない。
+- `data-dof-ring-count` は descriptor count の互換 alias として扱い、
+  present / absent の内訳は `data-dof-ring-present-count` と
+  `data-dof-ring-absent-count` で読む。
