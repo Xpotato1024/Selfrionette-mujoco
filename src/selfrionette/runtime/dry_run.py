@@ -85,6 +85,11 @@ def _validate_preset(preset: str | None) -> None:
         raise ValueError("unsupported dry-run preset")
 
 
+def _validate_preset_frames(preset: str | None, frames: Sequence[RawInputFrame] | None) -> None:
+    if preset is not None and frames is not None:
+        raise ValueError("preset and custom frames are mutually exclusive")
+
+
 async def _run_replay_mujoco_dry_run_async(
     *,
     steps: int,
@@ -164,6 +169,7 @@ def run_replay_mujoco_dry_run(
     _validate_steps(steps)
     _validate_dt_s(dt_s)
     _validate_preset(preset)
+    _validate_preset_frames(preset, frames)
 
     lines = asyncio.run(
         _run_replay_mujoco_dry_run_async(

@@ -5,6 +5,7 @@ import json
 import pytest
 
 from selfrionette.runtime import run_replay_mujoco_dry_run
+from selfrionette.schemas import RawInputFrame
 
 
 def test_run_replay_mujoco_dry_run_returns_single_payload_line() -> None:
@@ -81,3 +82,10 @@ def test_run_replay_mujoco_dry_run_sweep_x_preset_keeps_delta_and_feedback_separ
 def test_run_replay_mujoco_dry_run_rejects_unknown_preset() -> None:
     with pytest.raises(ValueError, match="unsupported dry-run preset"):
         run_replay_mujoco_dry_run(steps=1, preset="unknown")
+
+
+def test_run_replay_mujoco_dry_run_rejects_preset_with_custom_frames() -> None:
+    frame = RawInputFrame(source="replay", timestamp_s=0.0)
+
+    with pytest.raises(ValueError, match="preset and custom frames are mutually exclusive"):
+        run_replay_mujoco_dry_run(steps=1, preset="sweep_x", frames=(frame,))
