@@ -60,6 +60,7 @@ export interface PayloadArmSkeletonSegmentRenderSpec {
 
 export interface PayloadArmSkeletonScene {
   status: PayloadArmSkeletonStatus;
+  presentationRole: "fallback";
   segments: PayloadArmSkeletonSegmentRenderSpec[];
 }
 

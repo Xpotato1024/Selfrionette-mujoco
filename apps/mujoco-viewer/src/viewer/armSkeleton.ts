@@ -71,6 +71,7 @@ export function buildPayloadArmSkeletonScene(payload: TransportPayloadV0): Paylo
 
   return {
     status,
+    presentationRole: "fallback",
     segments,
   };
 }
