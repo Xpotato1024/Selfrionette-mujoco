@@ -17,15 +17,15 @@ R6-D-P3 freezes the browser-visible smoke path for the viewer runtime and the
 Three.js scene object mutation skeleton.
 
 Visual smoke here means browser-visible runtime state plus Three.js scene
-object mutation skeleton behavior. It does not mean a rendered arm mesh, a
-camera/renderer pipeline, or a completed animation loop.
+object mutation skeleton behavior. It does not mean a finalized
+camera/renderer pipeline or a completed animation loop.
 
 ## Purpose
 
 Confirm that payload v0 reaches the browser viewer, updates DOM status, keeps
 the marker object registry alive, and mutates Three.js `Object3D.position`
 from payload marker coordinates for the target marker, tip marker, arm
-skeleton, and error vector skeleton.
+skeleton, fast_arm mesh scene, and error vector skeleton.
 
 ## Preconditions
 
@@ -75,6 +75,8 @@ The root viewer element exposes the smoke state through attributes:
 - `data-marker-object-count`
 - `data-arm-skeleton-status`
 - `data-arm-skeleton-segment-count`
+- `data-fast-arm-mesh-status`
+- `data-fast-arm-mesh-count`
 
 The status section also mirrors the latest frame summary text.
 
@@ -99,11 +101,15 @@ skeleton + target + error vector.
   `Object3D` instances alive.
 - The scene object registry keeps the arm skeleton segment as a read-only
   `Object3D` connection between canonical payload body/site positions.
+- The fast_arm mesh scene keeps canonical STL assets as the primary arm visual
+  and derives mesh poses from payload body transforms only.
 - Reused marker keys reuse the same object identity.
 - Each marker object position follows the payload marker coordinates stored in
   the marker scene model.
 - The arm skeleton segment follows the payload body/site positions stored in
   the arm skeleton scene model.
+- The fast_arm mesh pose follows the matching payload body `position_m` and
+  `quaternion_wxyz` values when a conservative body mapping exists.
 - The error vector object keeps the tip endpoint as its position and the
   target endpoint in `userData`, so the viewer can display the tip -> target
   direction without recomputing pose.
@@ -116,12 +122,12 @@ skeleton + target + error vector.
 
 ## What Is Intentionally Not Visualized Yet
 
-- Arm mesh rendering.
 - Camera, renderer, or animation loop behavior.
 - Labels and overlays as a finished visual design.
 - IK / FK.
 - `qpos` pose recompute.
 - Arm skeleton synthesis from anything other than payload body/site positions.
+- The `base_link_to_tip` line skeleton as the final arm visual.
 - MuJoCo model loading in the browser.
 - WebSocket reconnect / retry hardening.
 
@@ -145,5 +151,6 @@ skeleton + target + error vector.
 - No hardware, serial, or OSC access.
 - No payload schema change.
 - No transport schema change.
-- No Three.js real scene mutation beyond the marker skeleton.
+- No Three.js real scene mutation beyond the marker and fast_arm mesh
+  skeletons.
 - No `@types/three` or Rapier reintroduction.

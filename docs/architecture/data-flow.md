@@ -219,6 +219,21 @@ This arm skeleton is a presentation-only connection between canonical payload
 `bodies` / `sites` positions. It does not recompute FK, IK, or qpos-derived
 pose, and it does not create a new physical state source.
 
+R6-F-P3-fix adds the canonical `fast_arm` STL mesh path on top of the same
+payload body transforms:
+
+```text
+payload v0
+  -> buildFastArmMeshScene(payload, assetBaseUrl)
+  -> fast_arm mesh scene
+  -> Three.js scene object registry
+  -> STL mesh objects
+```
+
+This mesh path is the primary arm visual. The `base_link_to_tip` line skeleton
+remains fallback / debug / provisional only, and the browser viewer still does
+not load MuJoCo physics, compute FK / IK, or derive pose from `qpos`.
+
 R6-D-P3 freezes the browser-visible smoke state for the same direct payload
 marker path:
 
@@ -234,15 +249,16 @@ payload v0
 The observable state is the DOM status, marker summary, root marker count
 attributes, and the retained Three.js scene object names and positions. The
 viewer remains rendering-only, the final coordinate mapping is not frozen,
-and this step still does not add a rendered arm mesh, camera/renderer
-pipeline, IK, FK, or `qpos` pose recompute.
+and this step still does not add the fast_arm mesh path, camera/renderer
+pipeline, IK, FK, or `qpos` pose recompute. The fast_arm mesh path is added
+later in R6-F-P3-fix.
 
 R6-D-P4 freezes the Phase D completion audit and the next handoff boundary:
 
 - browser visual smoke is complete
 - the viewer remains rendering-only
 - the next handoff is IK / command integration skeleton work
-- the rendered arm mesh is not implemented yet
+- the fast_arm mesh path is handled later in R6-F-P3-fix
 - the final coordinate mapping is not frozen yet
 
 The next phase candidate is the viewer/runtime IK handoff. Phase D does not

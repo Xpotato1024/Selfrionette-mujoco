@@ -28,6 +28,7 @@ export function bootstrapViewerRuntime(): ViewerRuntime {
   const runtime = createViewerRuntime({
     payload: payloadV0Fixture,
     websocketUrl: endpointConfig.websocketUrl,
+    assetBaseUrl: window.location.href,
   });
   runtime.start();
   registerLifecycle(runtime);

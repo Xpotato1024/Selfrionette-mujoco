@@ -4,6 +4,13 @@ import {
   type ViewerWebSocketClient,
   type ViewerWebSocketConstructorLike,
 } from "./transport/websocketClient.js";
+import {
+  buildFastArmMeshScene,
+  buildFastArmMeshSceneSummaryText,
+  syncFastArmMeshSceneObjects,
+  type FastArmMeshGeometryLoaderLike,
+  type FastArmMeshScene,
+} from "./viewer/fastArmMeshes.js";
 import { buildPayloadMarkerScene, getCanonicalPayloadMarkers } from "./viewer/payloadMarkers.js";
 import {
   createThreeSceneObjectRegistry,
@@ -40,6 +47,8 @@ export interface ViewerRuntimeOptions {
   mountId?: string;
   payload?: TransportPayloadV0;
   websocketUrl?: string | null;
+  assetBaseUrl?: string | null;
+  fastArmMeshGeometryLoader?: FastArmMeshGeometryLoaderLike;
   WebSocketCtor?: ViewerWebSocketConstructorLike;
   onPayload?: (payload: TransportPayloadV0) => void;
   onError?: (error: Error) => void;
@@ -66,6 +75,9 @@ export interface ViewerRuntimeSnapshot {
   armSkeleton: PayloadArmSkeletonScene;
   armSkeletonSegmentCount: number;
   armSkeletonStatus: PayloadArmSkeletonScene["status"];
+  fastArmMeshScene: FastArmMeshScene;
+  fastArmMeshCount: number;
+  fastArmMeshStatus: FastArmMeshScene["status"];
 }
 
 interface ViewerRuntimeView {
@@ -139,10 +151,14 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
         ])}`;
   const armSkeletonText =
     snapshot.armSkeletonStatus === "present"
-      ? `arm skeleton: present ${snapshot.armSkeletonSegmentCount} segment(s)`
+      ? `arm skeleton: present ${snapshot.armSkeletonSegmentCount} segment(s) (fallback)`
       : snapshot.armSkeletonStatus === "partial"
-        ? "arm skeleton: partial 0 segment(s)"
-        : "arm skeleton: absent";
+        ? "arm skeleton: partial 0 segment(s) (fallback)"
+        : "arm skeleton: absent (fallback)";
+  const fastArmMeshText =
+    snapshot.fastArmMeshScene.status === "disabled"
+      ? ""
+      : buildFastArmMeshSceneSummaryText(snapshot.fastArmMeshScene);
 
   return [
     `payload v${snapshot.payloadVersion}`,
@@ -150,12 +166,13 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
     `bodies ${snapshot.markerScene.bodies.length}`,
     `sites ${snapshot.markerScene.sites.length}`,
     armSkeletonText,
+    fastArmMeshText,
     baseLinkName,
     tipSiteName,
     targetText,
     tipText,
     errorVectorText,
-  ].join(" | ");
+  ].filter((part) => part !== "").join(" | ");
 }
 
 function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
@@ -163,10 +180,14 @@ function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
   const siteNames = snapshot.markerScene.sites.map((marker) => marker.name).join(", ") || "none";
   const armSkeletonText =
     snapshot.armSkeletonStatus === "present"
-      ? `arm skeleton: present (${snapshot.armSkeletonSegmentCount} segment(s))`
+      ? `arm skeleton: present (${snapshot.armSkeletonSegmentCount} segment(s)) (fallback)`
       : snapshot.armSkeletonStatus === "partial"
-        ? "arm skeleton: partial (0 segment(s))"
-        : "arm skeleton: absent";
+        ? "arm skeleton: partial (0 segment(s)) (fallback)"
+        : "arm skeleton: absent (fallback)";
+  const fastArmMeshText =
+    snapshot.fastArmMeshScene.status === "disabled"
+      ? "fast arm mesh display: disabled"
+      : buildFastArmMeshSceneSummaryText(snapshot.fastArmMeshScene);
   const targetText =
     snapshot.targetPosition_m === null
       ? "target marker: absent"
@@ -189,6 +210,7 @@ function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
     `body markers: ${snapshot.markerScene.bodies.length} (${bodyNames})`,
     `site markers: ${snapshot.markerScene.sites.length} (${siteNames})`,
     armSkeletonText,
+    fastArmMeshText,
     targetText,
     tipText,
     errorVectorText,
@@ -199,9 +221,11 @@ export function buildViewerRuntimeSnapshot(
   payload: TransportPayloadV0 = payloadV0Fixture,
   connectionStatus: ViewerConnectionStatus = "disabled",
   websocketUrl: string | null = null,
+  assetBaseUrl: string | null = null,
 ): ViewerRuntimeSnapshot {
   const canonicalMarkers = getCanonicalPayloadMarkers(payload);
   const markerScene = buildPayloadMarkerScene(payload);
+  const fastArmMeshScene = buildFastArmMeshScene(payload, assetBaseUrl);
   const markerObjectCount =
     markerScene.bodies.length +
     markerScene.sites.length +
@@ -224,6 +248,9 @@ export function buildViewerRuntimeSnapshot(
     armSkeleton: markerScene.armSkeleton,
     armSkeletonSegmentCount: markerScene.armSkeleton.segments.length,
     armSkeletonStatus: markerScene.armSkeleton.status,
+    fastArmMeshScene,
+    fastArmMeshCount: fastArmMeshScene.descriptors.length,
+    fastArmMeshStatus: fastArmMeshScene.status,
   };
 
   snapshot.summaryText = buildSummaryText(snapshot);
@@ -249,6 +276,8 @@ function buildRuntimeView(
   root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
   root.setAttribute("data-arm-skeleton-status", snapshot.armSkeletonStatus);
   root.setAttribute("data-arm-skeleton-segment-count", String(snapshot.armSkeletonSegmentCount));
+  root.setAttribute("data-fast-arm-mesh-status", snapshot.fastArmMeshStatus);
+  root.setAttribute("data-fast-arm-mesh-count", String(snapshot.fastArmMeshCount));
   root.setAttribute("data-target-marker-present", String(snapshot.targetPosition_m !== null));
   root.setAttribute("data-tip-marker-present", String(snapshot.canonicalMarkers.tipSite !== null));
   root.setAttribute("data-error-vector-present", String(snapshot.markerScene.errorVector !== null));
@@ -286,6 +315,8 @@ function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnaps
   view.root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
   view.root.setAttribute("data-arm-skeleton-status", snapshot.armSkeletonStatus);
   view.root.setAttribute("data-arm-skeleton-segment-count", String(snapshot.armSkeletonSegmentCount));
+  view.root.setAttribute("data-fast-arm-mesh-status", snapshot.fastArmMeshStatus);
+  view.root.setAttribute("data-fast-arm-mesh-count", String(snapshot.fastArmMeshCount));
   view.root.setAttribute("data-websocket-status", snapshot.connectionStatus);
   view.root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
   view.root.setAttribute("data-target-marker-present", String(snapshot.targetPosition_m !== null));
@@ -310,6 +341,10 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
     options.websocketUrl === undefined || options.websocketUrl === null || options.websocketUrl.trim() === ""
       ? null
       : options.websocketUrl;
+  const assetBaseUrl =
+    options.assetBaseUrl === undefined || options.assetBaseUrl === null || options.assetBaseUrl.trim() === ""
+      ? null
+      : options.assetBaseUrl;
   const threeScene = new Scene();
   const markerObjectRegistry = createThreeSceneObjectRegistry(threeScene);
   let mountedView: ViewerRuntimeView | null = null;
@@ -324,8 +359,11 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       return;
     }
 
-    const snapshot = buildViewerRuntimeSnapshot(getActivePayload(), connectionStatus, websocketUrl);
+    const snapshot = buildViewerRuntimeSnapshot(getActivePayload(), connectionStatus, websocketUrl, assetBaseUrl);
     syncThreeSceneObjectRegistry(markerObjectRegistry, snapshot.markerScene);
+    syncFastArmMeshSceneObjects(threeScene, snapshot.fastArmMeshScene, {
+      geometryLoader: options.fastArmMeshGeometryLoader,
+    });
     options.onSceneSynced?.(threeScene);
     updateRuntimeView(mountedView, snapshot);
   }
@@ -381,7 +419,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       }
 
       const mountPoint = requireMountPoint(documentLike, mountId);
-      const snapshot = buildViewerRuntimeSnapshot(payload, connectionStatus, websocketUrl);
+      const snapshot = buildViewerRuntimeSnapshot(payload, connectionStatus, websocketUrl, assetBaseUrl);
       mountedView = buildRuntimeView(documentLike, snapshot);
       mountPoint.replaceChildren(mountedView.root);
 

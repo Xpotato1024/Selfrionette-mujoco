@@ -1,4 +1,4 @@
-import { Scene } from "three";
+import { BufferGeometry, Scene } from "three";
 
 import { payloadV0Fixture } from "../src/fixtures/payloadV0.js";
 import { readViewerEndpointConfig } from "../src/config/websocketEndpoint.js";
@@ -8,6 +8,7 @@ import {
   type ViewerDocumentLike,
   type ViewerElementLike,
 } from "../src/viewerRuntime.js";
+import type { FastArmMeshGeometryLoaderLike } from "../src/viewer/fastArmMeshes.js";
 import type { TransportPayloadV0 } from "../src/types/transportPayload.js";
 import type {
   ViewerWebSocketLike,
@@ -734,12 +735,95 @@ function testCreateViewerRuntimeReportsConnectionErrors(): void {
   runtime.stop();
 }
 
+function testCreateViewerRuntimeSyncsFastArmMeshesWhenAssetBaseUrlProvided(): void {
+  const { document, app } = createAppShell();
+  const syncedSceneChildren: string[][] = [];
+  const loadedUrls: string[] = [];
+
+  const fastArmMeshGeometryLoader: FastArmMeshGeometryLoaderLike = {
+    load(assetUrl: string) {
+      loadedUrls.push(assetUrl);
+      return new BufferGeometry();
+    },
+  };
+
+  const fullFastArmPayload = JSON.parse(JSON.stringify(payloadV0Fixture)) as TransportPayloadV0;
+  fullFastArmPayload.bodies = [
+    {
+      name: "base_link",
+      position_m: [0.0, 0.0, 0.0],
+      quaternion_wxyz: [1.0, 0.0, 0.0, 0.0],
+    },
+    {
+      name: "sholder_link_1",
+      position_m: [0.1, 0.2, 0.3],
+      quaternion_wxyz: [0.9, 0.1, 0.2, 0.3],
+    },
+    {
+      name: "sholder_link_2",
+      position_m: [0.4, 0.5, 0.6],
+      quaternion_wxyz: [0.8, 0.2, 0.3, 0.4],
+    },
+    {
+      name: "upper_arm_link",
+      position_m: [0.7, 0.8, 0.9],
+      quaternion_wxyz: [0.7, 0.3, 0.4, 0.5],
+    },
+    {
+      name: "fore_arm_link",
+      position_m: [1.0, 1.1, 1.2],
+      quaternion_wxyz: [0.6, 0.4, 0.5, 0.6],
+    },
+  ];
+
+  const runtime = createViewerRuntime({
+    document,
+    payload: fullFastArmPayload,
+    assetBaseUrl: "http://example.test/apps/mujoco-viewer/index.html",
+    fastArmMeshGeometryLoader,
+    onSceneSynced(scene) {
+      syncedSceneChildren.push(scene.children.map((child) => child.name));
+    },
+  });
+
+  runtime.start();
+
+  assert(app.children.length === 1, "viewer runtime should still mount a single root");
+  assert(loadedUrls.length === 5, "viewer runtime should request all canonical fast_arm meshes");
+  assert(
+    syncedSceneChildren.some((children) => children.includes("fast_arm_mesh:BaseLink")),
+    "scene sync should expose the fast_arm mesh root",
+  );
+  assert(
+    syncedSceneChildren.some((children) => children.includes("fast_arm_mesh:ForeArmLink")),
+    "scene sync should expose the forearm mesh root",
+  );
+
+  const root = app.children[0];
+  assert(
+    root.attributes.get("data-fast-arm-mesh-count") === "5",
+    "viewer runtime should publish the fast_arm mesh count on the root",
+  );
+  assert(
+    root.attributes.get("data-fast-arm-mesh-status") === "present",
+    "viewer runtime should mark the fast_arm mesh scene as present",
+  );
+  const statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
+  assert(
+    statusSection?.textContent?.includes("fast arm mesh display: present 5/5 asset(s)") ?? false,
+    "viewer runtime should surface the fast_arm mesh summary",
+  );
+
+  runtime.stop();
+}
+
 testReadViewerEndpointConfig();
 testBuildViewerRuntimeSnapshot();
 testBuildViewerRuntimeSnapshotIncludesTargetTipAndErrorVector();
 testBuildViewerRuntimeSnapshotIgnoresQposForArmSkeleton();
 testCreateViewerRuntimeMountsAndStops();
 testCreateViewerRuntimeStartsOptionalWebSocketClient();
+testCreateViewerRuntimeSyncsFastArmMeshesWhenAssetBaseUrlProvided();
 testCreateViewerRuntimeIgnoresInvalidPayloads();
 testCreateViewerRuntimeReportsConnectionErrors();
 

@@ -63,13 +63,15 @@ This app is the Three.js rendering layer.
 - R6-F-P3 adds a read-only arm skeleton presentation path from payload
   `bodies` / `sites` positions and keeps it separate from FK / IK / qpos
   pose recompute.
+- R6-F-P3-fix adds the canonical `assets/mujoco/fast_arm/` STL mesh path as
+  the primary arm visual and keeps the `base_link_to_tip` line skeleton as a
+  fallback / debug / provisional path.
 - R6-D-P3 freezes the browser visual smoke path that confirms DOM status,
   marker summary, marker object count, and direct `Object3D.position`
   mutation from payload coordinates.
 - R6-D-P4 closes the Phase D completion audit in
   `docs/operations/r6-d-completion-audit.md` and documents the next IK /
-  command integration handoff without claiming a rendered arm mesh or IK
-  implementation.
+  command integration handoff without claiming the final IK implementation.
 
 ## Phase B Handoff
 
@@ -112,6 +114,8 @@ This app is the Three.js rendering layer.
   payload marker positions to the live Three.js objects.
 - R6-F-P3 keeps the runtime rendering-only while the registry also reflects a
   read-only arm skeleton derived from canonical payload body/site positions.
+- R6-F-P3-fix keeps the runtime rendering-only while the scene also reflects
+  the canonical fast_arm STL meshes derived from payload body transforms.
 
 ## Local Smoke
 
@@ -129,7 +133,8 @@ The smoke path stops at marker summary updates and direct marker position
 assignment. It does not mutate a real Three.js scene beyond those payload
 coordinates, recalculate FK/IK, or use hardware, serial, or OSC. R6-D-P1
 adds object registry skeleton management only, and R6-D-P2 applies the direct
-payload marker positions.
+payload marker positions. The fast_arm mesh path is read-only and derives its
+poses from payload body transforms only.
 
 ## Browser Visual Smoke
 
@@ -138,9 +143,11 @@ R6-D-P3 adds the operation smoke that a human can verify in the browser:
 - The viewer consumes payload v0 over WebSocket.
 - The marker object registry receives body, site, target, and error vector
   marker positions, plus the read-only arm skeleton segment.
+- The fast_arm mesh scene receives the canonical STL assets as the primary
+  arm visual and keeps its pose read-only from payload body transforms.
 - The browser smoke verifies DOM status plus Three.js scene object state.
 - The root element exposes marker object count, arm skeleton status/count,
-  and payload/frame attributes.
+  fast_arm mesh status/count, and payload/frame attributes.
 - The scene object positions follow the payload marker coordinates directly.
 - No camera, renderer, or animation loop exists yet.
 - No IK, FK, or `qpos` pose recompute exists yet.
@@ -162,6 +169,7 @@ R6-D-P3 adds the operation smoke that a human can verify in the browser:
 - Do not import MuJoCo, `mujoco_backend`, IK, FK, or Rapier layers.
 - Do not reintroduce `@types/three`.
 - Do not connect received payloads to marker rendering in R6-B-P1.
+- Do not treat the `base_link_to_tip` line skeleton as the final arm visual.
 - Do not introduce a bundler or framework for the browser artifact path.
 
 The viewer is not a physical source of truth.
