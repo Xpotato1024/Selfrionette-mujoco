@@ -55,3 +55,29 @@ def test_run_replay_mujoco_dry_run_writes_ndjson_output_file(tmp_path) -> None:
     payloads = [json.loads(line) for line in file_lines]
     assert [payload["version"] for payload in payloads] == [0, 0]
     assert [payload["frame_index"] for payload in payloads] == [1, 2]
+
+
+def test_run_replay_mujoco_dry_run_sweep_x_preset_keeps_delta_and_feedback_separate() -> None:
+    lines = run_replay_mujoco_dry_run(steps=3, preset="sweep_x")
+
+    assert len(lines) == 3
+
+    payloads = [json.loads(line) for line in lines]
+    assert [payload["metadata"]["preset"] for payload in payloads] == ["sweep_x", "sweep_x", "sweep_x"]
+
+    for index, payload in enumerate(payloads, start=1):
+        target_delta_m = payload["metadata"]["target_delta_m"]
+        current_tip_position_m = payload["metadata"]["current_tip_position_m"]
+        desired_endpoint_m = payload["metadata"]["desired_endpoint_m"]
+
+        assert target_delta_m[0] == pytest.approx(0.001 * index)
+        assert target_delta_m[1:] == [0.0, 0.0]
+        assert desired_endpoint_m == payload["target_position_m"]
+        assert desired_endpoint_m[0] == pytest.approx(current_tip_position_m[0] + target_delta_m[0])
+        assert desired_endpoint_m[1] == pytest.approx(current_tip_position_m[1] + target_delta_m[1])
+        assert desired_endpoint_m[2] == pytest.approx(current_tip_position_m[2] + target_delta_m[2])
+
+
+def test_run_replay_mujoco_dry_run_rejects_unknown_preset() -> None:
+    with pytest.raises(ValueError, match="unsupported dry-run preset"):
+        run_replay_mujoco_dry_run(steps=1, preset="unknown")

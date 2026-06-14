@@ -75,3 +75,23 @@ def test_mujoco_state_to_payload_converts_target_position_tuple_to_list() -> Non
 
     assert payload["target_position_m"] == [0.4, 0.5, 0.6]
     assert isinstance(payload["target_position_m"], list)
+
+
+def test_mujoco_state_to_payload_keeps_target_feedback_separate_from_metadata() -> None:
+    state = MuJoCoState(
+        frame_index=3,
+        time_s=2.0,
+        target_position_m=(1.0, 2.0, 3.0),
+        metadata={
+            "preset": "sweep_x",
+            "target_delta_m": [0.1, 0.0, 0.0],
+            "desired_endpoint_m": [1.1, 2.0, 3.0],
+        },
+    )
+
+    payload = mujoco_state_to_payload(state)
+
+    assert payload["target_position_m"] == [1.0, 2.0, 3.0]
+    assert payload["metadata"]["preset"] == "sweep_x"
+    assert payload["metadata"]["target_delta_m"] == [0.1, 0.0, 0.0]
+    assert payload["metadata"]["desired_endpoint_m"] == [1.1, 2.0, 3.0]

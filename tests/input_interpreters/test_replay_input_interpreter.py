@@ -31,3 +31,21 @@ def test_replay_input_interpreter_does_not_create_motion_command_shape() -> None
 
     assert not hasattr(intent, "target_position_m")
     assert not hasattr(intent, "joint_angles_rad")
+
+
+def test_replay_input_interpreter_keeps_target_fixture_metadata_raw() -> None:
+    frame = RawInputFrame(
+        source="replay",
+        timestamp_s=2.0,
+        metadata={
+            "preset": "sweep_x",
+            "target_delta_m": (0.001, 0.0, 0.0),
+            "target_position_m": (1.2, 3.4, 5.6),
+        },
+    )
+
+    intent = ReplayInputInterpreter().interpret(frame)
+
+    assert intent.metadata["preset"] == "sweep_x"
+    assert intent.metadata["target_delta_m"] == (0.001, 0.0, 0.0)
+    assert intent.metadata["target_position_m"] == (1.2, 3.4, 5.6)
