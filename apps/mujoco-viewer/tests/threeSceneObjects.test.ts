@@ -2,6 +2,7 @@ import { Scene } from "three";
 
 import { payloadV0Fixture } from "../src/fixtures/payloadV0.js";
 import { buildPayloadMarkerScene } from "../src/viewer/payloadMarkers.js";
+import { buildPayloadArmSkeletonScene } from "../src/viewer/armSkeleton.js";
 import {
   buildMarkerObjectDescriptors,
   createThreeSceneObjectRegistry,
@@ -123,10 +124,14 @@ function testSyncCreatesPayloadMarkerSkeletonObjects(): void {
 
   const count = syncThreeSceneObjectRegistry(registry, markerScene);
 
-  assert(count === 4, "sync should create body, site, target, and error vector objects");
-  assert(scene.children.length === 4, "scene should contain four marker objects");
+  assert(count === 5, "sync should create body, site, arm skeleton, target, and error vector objects");
+  assert(scene.children.length === 5, "scene should contain five marker objects");
   assert(scene.children.some((child) => child.name === "body:base_link"), "scene should contain the body object");
   assert(scene.children.some((child) => child.name === "site:tip"), "scene should contain the site object");
+  assert(
+    scene.children.some((child) => child.name === "arm_skeleton_segment:base_link_to_tip"),
+    "scene should contain the arm skeleton segment object",
+  );
   assert(scene.children.some((child) => child.name === "target:target"), "scene should contain the target object");
   assert(
     scene.children.some((child) => child.name === "error_vector:tip_to_target"),
@@ -168,6 +173,33 @@ function testBuildMarkerObjectDescriptorsIncludePayloadPositions(): void {
   assert(errorVectorDescriptor.endPosition?.x === 0.5, "error vector end x should match target");
   assert(errorVectorDescriptor.endPosition?.y === 0.5, "error vector end y should match target");
   assert(errorVectorDescriptor.endPosition?.z === 0.5, "error vector end z should match target");
+
+  const armSkeletonDescriptor = descriptors.find((descriptor) => descriptor.key === "arm_skeleton_segment:base_link_to_tip");
+  assert(armSkeletonDescriptor !== undefined, "arm skeleton descriptor should exist");
+  assert(
+    armSkeletonDescriptor.position.x === markerScene.bodies[0].position_m[0],
+    "arm skeleton start x should match base_link",
+  );
+  assert(
+    armSkeletonDescriptor.position.y === markerScene.bodies[0].position_m[1],
+    "arm skeleton start y should match base_link",
+  );
+  assert(
+    armSkeletonDescriptor.position.z === markerScene.bodies[0].position_m[2],
+    "arm skeleton start z should match base_link",
+  );
+  assert(
+    armSkeletonDescriptor.endPosition?.x === markerScene.sites[0].position_m[0],
+    "arm skeleton end x should match tip",
+  );
+  assert(
+    armSkeletonDescriptor.endPosition?.y === markerScene.sites[0].position_m[1],
+    "arm skeleton end y should match tip",
+  );
+  assert(
+    armSkeletonDescriptor.endPosition?.z === markerScene.sites[0].position_m[2],
+    "arm skeleton end z should match tip",
+  );
 }
 
 function testBuildPayloadMarkerSceneSkipsErrorVectorWithoutTipOrTarget(): void {
@@ -185,6 +217,72 @@ function testBuildPayloadMarkerSceneSkipsErrorVectorWithoutTipOrTarget(): void {
   assert(missingTargetScene.errorVector === null, "missing target should skip the error vector");
 }
 
+function testBuildPayloadArmSkeletonSceneUsesCanonicalBodyAndSitePositionsOnly(): void {
+  const payload = {
+    ...payloadV0Fixture,
+    qpos: [9, 8, 7],
+    bodies: [
+      {
+        name: "base_link",
+        position_m: [1, 2, 3] as [number, number, number],
+        quaternion_wxyz: [1, 0, 0, 0] as [number, number, number, number],
+      },
+    ],
+    sites: [
+      {
+        name: "tip",
+        position_m: [4, 5, 6] as [number, number, number],
+        quaternion_wxyz: [1, 0, 0, 0] as [number, number, number, number],
+      },
+    ],
+  };
+
+  const armSkeleton = buildPayloadArmSkeletonScene(payload);
+
+  assert(armSkeleton.status === "present", "canonical body and site should produce a present skeleton");
+  assert(armSkeleton.segments.length === 1, "canonical body and site should produce one segment");
+  assert(armSkeleton.segments[0].start_m[0] === 1, "segment start x should follow the body position");
+  assert(armSkeleton.segments[0].start_m[1] === 2, "segment start y should follow the body position");
+  assert(armSkeleton.segments[0].start_m[2] === 3, "segment start z should follow the body position");
+  assert(armSkeleton.segments[0].end_m[0] === 4, "segment end x should follow the site position");
+  assert(armSkeleton.segments[0].end_m[1] === 5, "segment end y should follow the site position");
+  assert(armSkeleton.segments[0].end_m[2] === 6, "segment end z should follow the site position");
+}
+
+function testBuildPayloadArmSkeletonSceneReportsPartialWhenCanonicalEndpointIsMissing(): void {
+  const missingTip = buildPayloadArmSkeletonScene({
+    ...payloadV0Fixture,
+    sites: [],
+  });
+  const missingBase = buildPayloadArmSkeletonScene({
+    ...payloadV0Fixture,
+    bodies: [],
+  });
+  const unrelatedNames = buildPayloadArmSkeletonScene({
+    ...payloadV0Fixture,
+    bodies: [
+      {
+        name: "shoulder_link",
+        position_m: [1, 2, 3] as [number, number, number],
+        quaternion_wxyz: [1, 0, 0, 0] as [number, number, number, number],
+      },
+    ],
+    sites: [
+      {
+        name: "wrist_site",
+        position_m: [4, 5, 6] as [number, number, number],
+        quaternion_wxyz: [1, 0, 0, 0] as [number, number, number, number],
+      },
+    ],
+  });
+
+  assert(missingTip.status === "partial", "missing tip should report a partial skeleton");
+  assert(missingBase.status === "partial", "missing base should report a partial skeleton");
+  assert(unrelatedNames.status === "absent", "unrelated names should report an absent skeleton");
+  assert(missingTip.segments.length === 0, "missing tip should not create segments");
+  assert(missingBase.segments.length === 0, "missing base should not create segments");
+}
+
 testRegistryCreatesMarkerObject();
 testRegistryReusesObjectIdentityForSameKey();
 testRegistryRemovesMissingObjects();
@@ -192,5 +290,7 @@ testRegistryClearRemovesAllObjects();
 testSyncCreatesPayloadMarkerSkeletonObjects();
 testBuildMarkerObjectDescriptorsIncludePayloadPositions();
 testBuildPayloadMarkerSceneSkipsErrorVectorWithoutTipOrTarget();
+testBuildPayloadArmSkeletonSceneUsesCanonicalBodyAndSitePositionsOnly();
+testBuildPayloadArmSkeletonSceneReportsPartialWhenCanonicalEndpointIsMissing();
 
 console.log("three scene object registry tests passed");

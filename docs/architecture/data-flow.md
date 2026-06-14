@@ -203,6 +203,22 @@ marker scene `x` / `y` / `z` values straight into the marker objects. Final
 scene coordinate mapping can still be adjusted in a later issue if needed, but
 R6-D-P2 does not introduce a broader conversion layer.
 
+R6-F-P3 adds the read-only arm skeleton presentation path on top of the same
+payload marker scene:
+
+```text
+payload v0
+  -> buildPayloadMarkerScene(payload)
+  -> marker scene model
+  -> arm skeleton scene
+  -> Three.js object registry
+  -> arm skeleton segment skeleton
+```
+
+This arm skeleton is a presentation-only connection between canonical payload
+`bodies` / `sites` positions. It does not recompute FK, IK, or qpos-derived
+pose, and it does not create a new physical state source.
+
 R6-D-P3 freezes the browser-visible smoke state for the same direct payload
 marker path:
 

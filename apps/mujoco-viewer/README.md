@@ -60,6 +60,9 @@ This app is the Three.js rendering layer.
   site, target, and error vector position mapping for a later issue.
 - R6-D-P2 applies payload marker coordinates directly to the Three.js
   objects through the marker scene model and registry.
+- R6-F-P3 adds a read-only arm skeleton presentation path from payload
+  `bodies` / `sites` positions and keeps it separate from FK / IK / qpos
+  pose recompute.
 - R6-D-P3 freezes the browser visual smoke path that confirms DOM status,
   marker summary, marker object count, and direct `Object3D.position`
   mutation from payload coordinates.
@@ -107,6 +110,8 @@ This app is the Three.js rendering layer.
   skeleton manages named Three.js objects without final position mapping yet.
 - R6-D-P2 keeps the runtime rendering-only while the registry applies direct
   payload marker positions to the live Three.js objects.
+- R6-F-P3 keeps the runtime rendering-only while the registry also reflects a
+  read-only arm skeleton derived from canonical payload body/site positions.
 
 ## Local Smoke
 
@@ -132,12 +137,14 @@ R6-D-P3 adds the operation smoke that a human can verify in the browser:
 
 - The viewer consumes payload v0 over WebSocket.
 - The marker object registry receives body, site, target, and error vector
-  marker positions.
+  marker positions, plus the read-only arm skeleton segment.
 - The browser smoke verifies DOM status plus Three.js scene object state.
-- The root element exposes marker object count and payload/frame attributes.
+- The root element exposes marker object count, arm skeleton status/count,
+  and payload/frame attributes.
 - The scene object positions follow the payload marker coordinates directly.
 - No camera, renderer, or animation loop exists yet.
 - No IK, FK, or `qpos` pose recompute exists yet.
+- No viewer-side arm pose recompute from `qpos` exists yet.
 - No hardware, serial, or OSC access is involved.
 - Browser direct open still requires `npm ci` because the import map resolves
   `three` from local `node_modules`.

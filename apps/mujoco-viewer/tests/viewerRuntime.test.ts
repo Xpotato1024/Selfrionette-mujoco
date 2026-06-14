@@ -225,17 +225,21 @@ function testBuildViewerRuntimeSnapshot(): void {
   assert(snapshot.summaryText.includes("tip"), "snapshot should include tip");
   assert(snapshot.markerScene.bodies.length === 1, "fixture should produce one body marker");
   assert(snapshot.markerScene.sites.length === 1, "fixture should produce one site marker");
-  assert(snapshot.markerObjectCount === 2, "fixture should produce two marker objects");
+  assert(snapshot.markerScene.armSkeleton.status === "present", "fixture should produce a present arm skeleton");
+  assert(snapshot.markerScene.armSkeleton.segments.length === 1, "fixture should produce one arm skeleton segment");
+  assert(snapshot.markerObjectCount === 3, "fixture should produce three marker objects");
   assert(snapshot.markerScene.errorVector === null, "fixture should not produce an error vector without a target");
   assert(snapshot.summaryText.includes("target marker: absent"), "summary should mark the target marker absent");
   assert(snapshot.summaryText.includes("tip marker: present"), "summary should mark the tip marker present");
   assert(snapshot.summaryText.includes("error vector: absent"), "summary should mark the error vector absent");
+  assert(snapshot.summaryText.includes("arm skeleton: present 1 segment(s)"), "summary should mark the arm skeleton present");
 }
 
 function testBuildViewerRuntimeSnapshotIncludesTargetTipAndErrorVector(): void {
   const payload = JSON.parse(JSON.stringify(payloadV0Fixture)) as TransportPayloadV0;
   payload.target_position_m = [0.4, 0.5, 0.6];
   payload.sites[0].position_m = [0.1, 0.2, 0.3];
+  payload.qpos = [7, 8, 9];
 
   const snapshot = buildViewerRuntimeSnapshot(payload);
 
@@ -266,7 +270,55 @@ function testBuildViewerRuntimeSnapshotIncludesTargetTipAndErrorVector(): void {
     snapshot.summaryText.includes("error vector: present [0.3, 0.3, 0.3]"),
     "summary should surface the error vector delta",
   );
-  assert(snapshot.markerObjectCount === 4, "snapshot should count body, site, target, and error vector objects");
+  assert(snapshot.markerObjectCount === 5, "snapshot should count body, site, arm skeleton, target, and error vector objects");
+  assert(snapshot.markerScene.armSkeleton.status === "present", "snapshot should preserve the arm skeleton");
+  assert(
+    snapshot.markerScene.armSkeleton.segments[0].start_m[0] === 0.0,
+    "arm skeleton should keep the base_link start position",
+  );
+  assert(
+    snapshot.markerScene.armSkeleton.segments[0].end_m[0] === 0.1,
+    "arm skeleton should keep the tip end position",
+  );
+}
+
+function testBuildViewerRuntimeSnapshotIgnoresQposForArmSkeleton(): void {
+  const firstPayload = JSON.parse(JSON.stringify(payloadV0Fixture)) as TransportPayloadV0;
+  firstPayload.qpos = [0.1, 0.2, 0.3];
+  const secondPayload = JSON.parse(JSON.stringify(payloadV0Fixture)) as TransportPayloadV0;
+  secondPayload.qpos = [9, 8, 7];
+  firstPayload.bodies[0].position_m = [0.7, 0.8, 0.9];
+  secondPayload.bodies[0].position_m = [0.7, 0.8, 0.9];
+  firstPayload.sites[0].position_m = [0.11, 0.22, 0.33];
+  secondPayload.sites[0].position_m = [0.11, 0.22, 0.33];
+
+  const firstSnapshot = buildViewerRuntimeSnapshot(firstPayload);
+  const secondSnapshot = buildViewerRuntimeSnapshot(secondPayload);
+
+  assert(
+    firstSnapshot.markerScene.armSkeleton.segments[0].start_m[0] === secondSnapshot.markerScene.armSkeleton.segments[0].start_m[0],
+    "arm skeleton start x should ignore qpos changes",
+  );
+  assert(
+    firstSnapshot.markerScene.armSkeleton.segments[0].start_m[1] === secondSnapshot.markerScene.armSkeleton.segments[0].start_m[1],
+    "arm skeleton start y should ignore qpos changes",
+  );
+  assert(
+    firstSnapshot.markerScene.armSkeleton.segments[0].start_m[2] === secondSnapshot.markerScene.armSkeleton.segments[0].start_m[2],
+    "arm skeleton start z should ignore qpos changes",
+  );
+  assert(
+    firstSnapshot.markerScene.armSkeleton.segments[0].end_m[0] === secondSnapshot.markerScene.armSkeleton.segments[0].end_m[0],
+    "arm skeleton end x should ignore qpos changes",
+  );
+  assert(
+    firstSnapshot.markerScene.armSkeleton.segments[0].end_m[1] === secondSnapshot.markerScene.armSkeleton.segments[0].end_m[1],
+    "arm skeleton end y should ignore qpos changes",
+  );
+  assert(
+    firstSnapshot.markerScene.armSkeleton.segments[0].end_m[2] === secondSnapshot.markerScene.armSkeleton.segments[0].end_m[2],
+    "arm skeleton end z should ignore qpos changes",
+  );
 }
 
 function testReadViewerEndpointConfig(): void {
@@ -315,8 +367,13 @@ function testCreateViewerRuntimeMountsAndStops(): void {
     "viewer runtime should publish the initial site count on the root",
   );
   assert(
-    root.attributes.get("data-marker-object-count") === "2",
+    root.attributes.get("data-marker-object-count") === "3",
     "viewer runtime should publish the initial marker object count on the root",
+  );
+  assert(root.attributes.get("data-arm-skeleton-status") === "present", "arm skeleton should be present in the fixture");
+  assert(
+    root.attributes.get("data-arm-skeleton-segment-count") === "1",
+    "viewer runtime should publish the arm skeleton segment count on the root",
   );
   assert(root.attributes.get("data-target-marker-present") === "false", "initial target marker should be absent");
   assert(root.attributes.get("data-tip-marker-present") === "true", "tip marker should be present in the fixture");
@@ -344,6 +401,10 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   assert(
     statusSection?.textContent?.includes("error vector: absent") ?? false,
     "viewer runtime should show the absent error vector in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("arm skeleton: present 1 segment(s)") ?? false,
+    "viewer runtime should show the arm skeleton in the summary",
   );
 
   runtime.stop();
@@ -422,6 +483,7 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     quaternion_wxyz: [1, 0, 0, 0],
   });
   updatedPayload.target_position_m = [0.31, 0.32, 0.33];
+  updatedPayload.qpos = [11, 12, 13];
   (updatedPayload as TransportPayloadV0 & { target_delta_m?: [number, number, number] }).target_delta_m = [
     9,
     9,
@@ -465,8 +527,13 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     "runtime should publish the received site count on the root",
   );
   assert(
-    root.attributes.get("data-marker-object-count") === "6",
+    root.attributes.get("data-marker-object-count") === "7",
     "runtime should publish the received marker object count on the root",
+  );
+  assert(root.attributes.get("data-arm-skeleton-status") === "present", "runtime should keep the arm skeleton present");
+  assert(
+    root.attributes.get("data-arm-skeleton-segment-count") === "1",
+    "runtime should keep the arm skeleton segment count",
   );
   assert(root.attributes.get("data-target-marker-present") === "true", "runtime should mark the target as present");
   assert(root.attributes.get("data-tip-marker-present") === "true", "runtime should keep the tip marker present");
@@ -478,6 +545,7 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   const activeScene = syncedScene as Scene;
   const baseLinkObject = activeScene.children.find((child) => child.name === "body:base_link");
   const tipObject = activeScene.children.find((child) => child.name === "site:tip");
+  const armSkeletonObject = activeScene.children.find((child) => child.name === "arm_skeleton_segment:base_link_to_tip");
   const targetObject = activeScene.children.find((child) => child.name === "target:target");
   const errorVectorObject = activeScene.children.find((child) => child.name === "error_vector:tip_to_target");
   assert(baseLinkObject !== undefined, "scene should keep the base_link object");
@@ -488,6 +556,19 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(tipObject.position.x === 0.11, "tip x position should follow the payload marker scene");
   assert(tipObject.position.y === 0.22, "tip y position should follow the payload marker scene");
   assert(tipObject.position.z === 0.33, "tip z position should follow the payload marker scene");
+  assert(armSkeletonObject !== undefined, "scene should keep the arm skeleton object");
+  assert(
+    armSkeletonObject?.position.x === 0.7,
+    "arm skeleton x position should follow the base_link payload marker scene",
+  );
+  assert(
+    armSkeletonObject?.position.y === 0.8,
+    "arm skeleton y position should follow the base_link payload marker scene",
+  );
+  assert(
+    armSkeletonObject?.position.z === 0.9,
+    "arm skeleton z position should follow the base_link payload marker scene",
+  );
   assert(targetObject !== undefined, "scene should create a target object when target is present");
   assert(targetObject.position.x === 0.31, "target x position should follow the payload marker scene");
   assert(targetObject.position.y === 0.32, "target y position should follow the payload marker scene");
@@ -528,6 +609,10 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(
     statusSection?.textContent?.includes("error vector: present [0.2, 0.1, 0]") ?? false,
     "runtime should surface the error vector delta in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("arm skeleton: present 1 segment(s)") ?? false,
+    "runtime should surface the arm skeleton in the summary",
   );
 
   activeSocket.dispatchClose();
@@ -589,8 +674,12 @@ function testCreateViewerRuntimeIgnoresInvalidPayloads(): void {
     "invalid payload should not update the site count",
   );
   assert(
-    root.attributes.get("data-marker-object-count") === "2",
+    root.attributes.get("data-marker-object-count") === "3",
     "invalid payload should not update the object count",
+  );
+  assert(
+    root.attributes.get("data-arm-skeleton-status") === "present",
+    "invalid payload should not update the arm skeleton status",
   );
   assert(
     root.children.find((child) => child.attributes.get("data-role") === "viewer-status")?.textContent === initialSummary,
@@ -648,6 +737,7 @@ function testCreateViewerRuntimeReportsConnectionErrors(): void {
 testReadViewerEndpointConfig();
 testBuildViewerRuntimeSnapshot();
 testBuildViewerRuntimeSnapshotIncludesTargetTipAndErrorVector();
+testBuildViewerRuntimeSnapshotIgnoresQposForArmSkeleton();
 testCreateViewerRuntimeMountsAndStops();
 testCreateViewerRuntimeStartsOptionalWebSocketClient();
 testCreateViewerRuntimeIgnoresInvalidPayloads();

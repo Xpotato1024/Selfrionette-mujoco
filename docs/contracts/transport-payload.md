@@ -90,6 +90,9 @@ R6-A-P4 freezes the handoff contract for R6-B:
 - Viewer code may render an error vector from `target_position_m` and the
   canonical `sites["tip"]` marker, but it must not infer the vector from
   `qpos`, IK, FK, or any hidden physics state.
+- Viewer code may render a read-only arm skeleton from existing payload
+  `bodies` / `sites` positions, but it must not infer the skeleton from
+  `qpos`, IK, FK, `target_position_m`, or any hidden physics state.
 - Viewer client parsing may reject malformed payload v0 JSON, but it does not
   change the transport schema.
 - The local/dev WebSocket publisher runner does not add envelope fields or a

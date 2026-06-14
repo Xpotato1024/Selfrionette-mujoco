@@ -8,6 +8,7 @@ import type {
   TransportSitePayload,
   Vector3,
 } from "../types/transportPayload.js";
+import { buildPayloadArmSkeletonScene } from "./armSkeleton.js";
 
 const BASE_LINK_NAME = "base_link";
 const TIP_SITE_NAME = "tip";
@@ -76,6 +77,7 @@ export function buildPayloadMarkerScene(payload: TransportPayloadV0): PayloadMar
     sites,
     target,
     errorVector,
+    armSkeleton: buildPayloadArmSkeletonScene(payload),
   };
 }
 
