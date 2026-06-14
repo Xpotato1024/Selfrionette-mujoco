@@ -93,14 +93,14 @@ and publishes payload v0 JSON to connected clients, see
 
 ## R6-E-P4 Smoke
 
-R6-E-P4 uses the replay / dry-run family as a smoke boundary for the Phase E
-target marker and qpos command handoff.
+R6-E-P4 では、replay / dry-run 系を Phase E の target marker と
+qpos command handoff の smoke boundary として使う。
 
-- replay input stays hardware-independent
-- motion / qpos smoke stays at the backend boundary
-- `target_position_m` stays payload feedback and is not treated as the qpos
-  command boundary
-- the default dry-run entry still emits payload v0 and does not invent target
-  feedback on its own
-- target marker feedback is verified separately from the qpos update path so
-  the two contracts do not collapse into one another
+- replay input は hardware 非依存のまま維持する。
+- motion / qpos smoke は backend boundary に留める。
+- `target_position_m` は payload feedback として扱い、qpos command boundary
+  とはみなさない。
+- default dry-run entry は引き続き payload v0 を出力し、target feedback を
+  勝手に生成しない。
+- target marker feedback は qpos update path とは別に確認し、2つの contract
+  を混同しない。
