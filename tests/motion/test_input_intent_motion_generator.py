@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.motion import InputIntentMotionGenerator, NoOpMotionGenerator
+from selfrionette.motion import (
+    InputIntentMotionGenerator,
+    NoOpMotionGenerator,
+    build_motion_command_from_input_intent,
+    build_motion_command_from_target_command,
+)
 from selfrionette.schemas import InputIntent, MotionCommand, TargetCommand
 
 
@@ -38,6 +43,42 @@ def test_target_delta_m_becomes_target_command() -> None:
     assert command.target == TargetCommand(delta_m=(0.1, 0.0, 0.0))
     assert command.target.position_m is None
     assert command.joint is None
+
+
+def test_target_command_is_preserved_as_command_side_boundary() -> None:
+    """desired endpoint を payload feedback と分離したまま保持する。"""
+
+    target_command = TargetCommand(position_m=(0.3, 0.2, 0.1), delta_m=(0.0, 0.0, 0.0))
+    metadata = {"origin": "target"}
+
+    command = build_motion_command_from_target_command(
+        timestamp_s=2.0,
+        target_command=target_command,
+        metadata=metadata,
+    )
+
+    assert command.timestamp_s == 2.0
+    assert command.target == target_command
+    assert command.joint is None
+    assert command.metadata == metadata
+    assert command.metadata is not metadata
+
+
+def test_input_intent_is_normalized_before_motion_command_boundary() -> None:
+    intent = InputIntent(
+        source="replay",
+        timestamp_s=1.5,
+        target_delta_m=(0.0, 0.4, 0.0),
+        metadata={"origin": "intent"},
+    )
+
+    command = build_motion_command_from_input_intent(intent)
+
+    assert command.timestamp_s == 1.5
+    assert command.target == TargetCommand(delta_m=(0.0, 0.4, 0.0))
+    assert command.target.position_m is None
+    assert command.joint is None
+    assert command.metadata == {"origin": "intent"}
 
 
 def test_values_are_not_interpreted_as_motion_semantics() -> None:

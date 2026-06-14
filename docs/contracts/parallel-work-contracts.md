@@ -91,6 +91,9 @@ InputSource
 - Motion and IK stop at `MotionCommand`.
 - `InputIntent.values` still carries raw replay/input payload data and does
   not yet define motion semantics.
+- R6-E-P2 では、`InputIntent` / simple target command -> `MotionCommand`
+  の pure boundary を motion 層に固定し、`target_position_m` を
+  command-side desired endpoint ではなく payload feedback として分離する。
 - `InputIntent.target_delta_m` may become `TargetCommand(delta_m=...)`.
 - `TargetToJointMotionGenerator` may inspect a temporary `target_position_m`
   compatibility attribute, but that is not a formal schema field and is not

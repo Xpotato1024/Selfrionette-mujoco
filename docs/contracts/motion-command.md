@@ -38,6 +38,9 @@ destructively.
 - `target` and `joint` are the currently modeled command buckets.
 - `target` may carry `TargetCommand(delta_m=...)` when the motion layer is
   driven by `InputIntent.target_delta_m`.
+- `R6-E-P2` では、`InputIntent` か simple `TargetCommand` を pure boundary
+  として `MotionCommand` にまとめ、viewer 側の `target_position_m` とは
+  別の command-side intent として扱う。
 - `joint` is reserved for explicit joint commands. Step 5-F does not map
   `InputIntent.joint_delta_rad` into `MotionCommand.joint`; that delta/absolute
   ambiguity is left explicit for a later issue.
