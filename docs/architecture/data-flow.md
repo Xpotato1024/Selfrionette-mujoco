@@ -1,4 +1,4 @@
-﻿---
+---
 status: canonical
 owner: architecture
 last_verified: 2026-06-12
@@ -250,7 +250,12 @@ payload v0
   -> browser smoke observable state
 ```
 
-この observable state は DOM status, marker summary, root marker count attributes, そして保持された Three.js scene object 名と position である。viewer は引き続き rendering-only であり、final coordinate mapping layer は確定していない。この段階でも fast_arm mesh path、camera/renderer pipeline、IK、FK、`qpos` pose recompute は追加されない。fast_arm mesh path は後続の R6-F-P3-fix で追加される。
+この observable state は DOM status, marker summary, root marker count
+attributes、そして保持された Three.js scene object 名と position である。
+viewer は引き続き rendering-only であり、final coordinate mapping layer は
+確定していない。この段階でも fast_arm mesh path、camera/renderer
+pipeline、IK、FK、`qpos` pose recompute は追加されない。fast_arm mesh
+path は後続の R6-F-P3-fix で追加される。
 
 
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
