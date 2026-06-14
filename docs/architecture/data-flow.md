@@ -280,6 +280,12 @@ R6-F-P5 では data flow を広げない。旧 Web View を reference audit と�
 に留まり、audit 結果は
 `docs/operations/r6-f-p5-old-web-view-reference-audit.md` に記録する。
 
+R6-F-P6 では completion audit を追加し、R6-F で成立した visual demo と
+viewer 可視化 boundary を完了状態として固定する。新しい描画仕様は増やさず、
+`docs/operations/r6-f-completion-audit.md` に Sweep_x visual demo、target / tip /
+error vector、arm skeleton、fast_arm mesh、DoF ring display、rendering-only
+boundary、parent #86 への handoff を集約する。
+
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 
 - the emitted payload version is `0`

@@ -47,6 +47,7 @@ Do not create or use `doc/`.
 | ADRs | `docs/design/adr/` | design decision history |
 | R6-F-P4 DoF ring reference audit | `docs/operations/r6-f-p4-dof-ring-reference-audit.md` | DoF ring の reference audit と viewer presentation skeleton |
 | R6-F-P5 old Web View reference audit | `docs/operations/r6-f-p5-old-web-view-reference-audit.md` | old Web View の表示要素 audit と boundary 固定 |
+| R6-F completion audit | `docs/operations/r6-f-completion-audit.md` | Sweep_x visual demo の completion state と Phase F handoff |
 
 ## Directory Roles
 
