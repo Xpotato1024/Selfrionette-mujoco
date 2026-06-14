@@ -77,6 +77,12 @@ InputSource
 - R6-A-P3 exposes that same replay path through
   `run_replay_mujoco_dry_run()` / `scripts/run_replay_mujoco_dry_run.py` as a
   deterministic NDJSON entrypoint for stdout or file output.
+- R6-E-P4 keeps the replay / dry-run smoke path hardware-independent while
+  separating the backend qpos update from payload target marker feedback:
+  `ReplayInputSource -> RawInputFrame -> ReplayInputInterpreter -> InputIntent
+  -> MotionCommand -> HeadlessMuJoCoSimulator -> MuJoCoState -> transport
+  payload`, with `target_position_m` remaining payload feedback rather than a
+  qpos command boundary.
 - R6-C-P1 adds `run_replay_mujoco_websocket_publisher()` /
   `scripts/run_replay_mujoco_websocket_publisher.py` as a local/dev delivery
   entry that reuses the replay pipeline and publishes payload v0 JSON to
