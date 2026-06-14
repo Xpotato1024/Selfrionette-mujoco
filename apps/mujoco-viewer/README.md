@@ -94,6 +94,9 @@ This app is the Three.js rendering layer.
 
 ## Phase B Handoff
 
+- R6-F-P5 では、旧 Web View を viewer の reference audit として固定し、
+  full parity、legacy UI replay、browser-side kinematics は scope 外に置く。
+
 - Viewer receives payload v0 through the WebSocket client skeleton.
 - Viewer keeps the latest received payload in runtime state.
 - Viewer re-renders the existing marker skeleton from that runtime state.

@@ -274,6 +274,12 @@ qpos pose, and it does not become a source of truth for joint state or
 command intent. The browser viewer may observe it through DOM summary text and
 root attributes, but the scene objects remain read-only overlays.
 
+R6-F-P5 では data flow を広げない。旧 Web View を reference audit として
+固定し、有用な表示要素だけを残し、旧 UI、未完成挙動、full parity への
+圧力を今後の viewer 作業から切り離す。viewer は引き続き rendering-only
+に留まり、audit 結果は
+`docs/operations/r6-f-p5-old-web-view-reference-audit.md` に記録する。
+
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 
 - the emitted payload version is `0`
