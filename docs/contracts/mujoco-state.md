@@ -1,10 +1,11 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 canonical_for:
   - MuJoCoState contract
 related:
+  - docs/contracts/target-marker-desired-endpoint.md
   - docs/architecture/data-flow.md
   - docs/contracts/parallel-work-contracts.md
 ---
@@ -24,8 +25,9 @@ a controller state, transport state, or viewer state.
 - `qvel`: MuJoCo `qvel` in model order.
 - `bodies`: body transforms derived from MuJoCo model/data.
 - `sites`: site transforms derived from MuJoCo model/data.
-- `target_position_m`: optional target marker. This is diagnostic context, not
-  physics state.
+- `target_position_m`: optional target marker feedback. This is diagnostic
+  context and viewer-facing presentation input, not physics state or
+  command-side desired endpoint state.
 - `metadata`: diagnostic or transport helper data only. It is not source of
   truth.
 
@@ -35,6 +37,8 @@ a controller state, transport state, or viewer state.
 - Quaternions are stored in `wxyz` order.
 - Body and site names come from the MuJoCo model contract.
 - Viewer code must treat these transforms as read-only inputs.
+- Viewer code may surface `target_position_m` as a target marker, but it must
+  not reinterpret it as FK, IK, qpos pose recompute, or physics state.
 
 ## Notes
 

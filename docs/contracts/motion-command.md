@@ -1,10 +1,11 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 canonical_for:
   - MotionCommand contract
 related:
+  - docs/contracts/target-marker-desired-endpoint.md
   - docs/contracts/schemas.md
   - docs/contracts/parallel-work-contracts.md
 ---
@@ -40,9 +41,12 @@ destructively.
 - `joint` is reserved for explicit joint commands. Step 5-F does not map
   `InputIntent.joint_delta_rad` into `MotionCommand.joint`; that delta/absolute
   ambiguity is left explicit for a later issue.
+- `desired endpoint` is the command-side term for the target intent boundary.
+- `target_position_m` is the payload feedback field for the viewer-visible
+  target marker, not a formal command schema field.
 - `TargetToJointMotionGenerator` may look for a temporary `target_position_m`
   compatibility attribute while IK remains skeletal, but that hook is not a
-  formal schema field.
+  formal schema field and does not redefine `desired endpoint`.
 - Actuator commands are not introduced in this issue. If they are needed later,
   add them in a separate issue with schema review.
 - Step 5-D adds the first backend path that reflects `MotionCommand.joint`

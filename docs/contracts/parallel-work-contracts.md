@@ -1,10 +1,11 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 canonical_for:
   - parallel work contracts
 related:
+  - docs/contracts/target-marker-desired-endpoint.md
   - docs/contracts/motion-command.md
   - docs/contracts/mujoco-state.md
   - docs/contracts/transport-payload.md
@@ -147,6 +148,10 @@ InputSource
   mapping layer.
 - The next handoff is IK / command integration skeleton work in a later
   phase.
+- R6-E-P1 freezes the target marker / desired endpoint contract that the next
+  Phase E issues consume. `desired endpoint` stays on the runtime / command
+  side, while `target_position_m` remains the viewer-facing payload feedback
+  field for target marker positioning.
 
 R6-B-P4 audits that the viewer-side contract is closed:
 

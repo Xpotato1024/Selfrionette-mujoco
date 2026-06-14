@@ -1,10 +1,11 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 canonical_for:
   - transport payload contract
 related:
+  - docs/contracts/target-marker-desired-endpoint.md
   - docs/contracts/mujoco-state.md
   - docs/contracts/parallel-work-contracts.md
 ---
@@ -48,6 +49,19 @@ R6-C-P4 freezes that completion state without changing the payload schema:
 - production server, auth, TLS, and public network exposure remain out of
   scope
 
+R6-E-P1 freezes the vocabulary around the target marker and desired endpoint
+without changing the payload schema:
+
+- `target_position_m` remains the payload v0 feedback field for the viewer
+  target marker
+- `target_position_m` is not a new transport envelope field and does not
+  break the schema
+- the viewer may use `target_position_m` for marker positioning only
+- the viewer must not treat `target_position_m` as FK, IK, qpos pose
+  recompute, or physical state
+- the command-side `desired endpoint` term is defined in
+  `docs/contracts/target-marker-desired-endpoint.md`
+
 R6-A-P4 freezes the handoff contract for R6-B:
 
 - payload version remains `0`
@@ -71,6 +85,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
   `target_position_m`, and `metadata` into a delivery payload.
 - Viewer code reads the payload contract; it does not infer new physics from
   the transport layer.
+- Viewer code may render a target marker from `target_position_m`, but it must
+  not recompute kinematics or physical state from that field.
 - Viewer client parsing may reject malformed payload v0 JSON, but it does not
   change the transport schema.
 - The local/dev WebSocket publisher runner does not add envelope fields or a
