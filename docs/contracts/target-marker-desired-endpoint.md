@@ -23,6 +23,7 @@ MotionCommand execution, or MuJoCo backend state updates.
 
 `desired endpoint` is the runtime / command-side target intent.
 
+- It is defined by `current_tip_position_m + target_delta_m`.
 - It represents the intended end-effector or target point in world/model
   coordinates that later command and IK boundaries may consume.
 - It is owned by runtime or the command-side pipeline, not by the viewer.
@@ -57,6 +58,7 @@ target marker position to viewer/runtime consumers.
 - It is not the `desired endpoint` itself.
 - It is the payload-provided position that the viewer may use to place the
   target marker.
+- It is feedback, not a qpos command boundary.
 
 If later phases need command-side intent, they must define that intent
 separately and then relate it to `target_position_m` through the boundary

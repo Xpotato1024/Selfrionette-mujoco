@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-14
+last_verified: 2026-06-15
 canonical_for:
   - runtime dry-run entry
 related:
@@ -21,6 +21,7 @@ dry-run entry を追加する。
 uv run python scripts/run_replay_mujoco_dry_run.py --steps 1
 uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --dt-s 0.0166666667
 uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --output /tmp/selfrionette_payload.ndjson
+uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x
 ```
 
 ## Output Format
@@ -113,3 +114,36 @@ handoff の smoke boundary として使う。
 - default dry-run entry は payload v0 を出力し、target feedback を state に
   反映しない
 - target marker feedback は qpos update path とは別の contract として扱う
+
+## sweep_x preset
+
+`--preset sweep_x` は R6-F-P1 の visual demo 用 deterministic replay fixture である。
+既存の dry-run contract を置換せず、命名済み preset として追加する。
+
+```text
+current_tip_position_m + target_delta_m = desired_endpoint_m
+```
+
+- `target_delta_m` は command-side の相対変位指令であり、絶対座標ではない
+- `current_tip_position_m` は backend snapshot の canonical tip site から得る
+- `desired_endpoint_m` は runtime / command-side の target intent である
+- `target_position_m` は viewer-facing feedback field である
+- `target_position_m` は command input ではない
+- `target_position_m` は qpos command boundary ではない
+- viewer は target を再計算しない
+
+`sweep_x` preset の payload では次の見方をする。
+
+- `metadata.current_tip_position_m`
+- `metadata.target_delta_m`
+- `metadata.desired_endpoint_m`
+- `target_position_m`
+
+この fixture では `target_delta_m.x` だけが step ごとに増える。
+`target_delta_m.y` と `target_delta_m.z` は固定である。
+`target_position_m` は viewer-facing feedback として残し、command-side target には
+使わない。
+
+- `run_replay_mujoco_dry_run(steps=..., preset="sweep_x")` が fixture 実行口である
+- `preset` と `frames` の同時指定は許可しない
+- `preset` を使うときは custom frames ではなく定義済み fixture を使う

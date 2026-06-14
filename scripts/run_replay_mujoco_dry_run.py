@@ -31,6 +31,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the deterministic MuJoCo replay dry-run entry.")
     parser.add_argument("--steps", type=_positive_int, default=1, help="number of replay steps to run")
     parser.add_argument("--dt-s", type=_positive_float, default=None, help="optional step duration in seconds")
+    parser.add_argument(
+        "--preset",
+        choices=("sweep_x",),
+        default=None,
+        help="optional dry-run fixture preset to replay",
+    )
     parser.add_argument("--output", type=Path, default=None, help="optional NDJSON output path")
     return parser
 
@@ -40,7 +46,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     output = args.output if args.output is not None else sys.stdout
-    run_replay_mujoco_dry_run(steps=args.steps, dt_s=args.dt_s, output=output)
+    run_replay_mujoco_dry_run(steps=args.steps, dt_s=args.dt_s, output=output, preset=args.preset)
     return 0
 
 
