@@ -16,17 +16,19 @@ related:
 
 # R6-E Completion Audit
 
-R6-E-P5 freezes the Phase E completion state for the IK / target command
-integration skeleton and records the handoff into the next old Selfrionette
-Webview parity / rendered arm mesh / UI parity work. This document is an audit
-and boundary freeze only. It does not add runtime implementation, full IK
-parity, rendered arm mesh, or viewer-side recomputation.
+R6-E-P5 では、IK / target command integration skeleton として成立した
+Phase E の completion state を固定し、次の old Selfrionette Webview parity /
+rendered arm mesh / UI parity へ進むための handoff を記録する。
 
-## Summary
+この document は audit と boundary freeze のみを目的とする。
+runtime implementation、full IK parity、rendered arm mesh、viewer-side
+recomputation は追加しない。
 
-Phase E completed the command-to-backend skeleton that connects a target-side
-intent into the MuJoCo qpos boundary and keeps the viewer on the rendering-only
-side of the boundary. The established path is:
+## 概要
+
+Phase E では、target-side の intent を MuJoCo qpos boundary に接続し、
+viewer を rendering-only 側に保つ command-to-backend skeleton が成立した。
+成立した path は次のとおりである。
 
 ```text
 InputIntent / simple target command
@@ -38,18 +40,18 @@ InputIntent / simple target command
   -> viewer target marker feedback
 ```
 
-The replay / dry-run smoke path from R6-E-P4 remains the validation boundary
-for this skeleton. Phase E does not claim full Webview parity, rendered arm mesh,
-or final UI parity.
+R6-E-P4 の replay / dry-run smoke path は、この skeleton の validation boundary
+として維持される。Phase E は full Webview parity、rendered arm mesh、
+final UI parity を主張しない。
 
-## Completed Child Issues
+## 完了済み child issues
 
 - #75 R6-E-P1: target marker / desired endpoint contract を viewer/runtime に固定する
 - #76 R6-E-P2: InputIntent or simple target command -> MotionCommand の接続を整理する
 - #77 R6-E-P3: IK output / qpos command boundary を MuJoCo backend に接続する
 - #78 R6-E-P4: replay / dry-run input で marker target と MuJoCo qpos update の smoke を作る
 
-## Completion State
+## 完了状態
 
 ```text
 InputIntent / simple target command
@@ -61,16 +63,16 @@ InputIntent / simple target command
   -> viewer target marker feedback
 ```
 
-Completed in Phase E:
+Phase E で成立したもの:
 
-- `desired endpoint` stayed on the runtime / command side
-- `MotionCommand.joint` was treated as the qpos command boundary input
-- `target_position_m` stayed in payload feedback and viewer marker positioning
-- the backend qpos update remained inside `HeadlessMuJoCoSimulator`
-- replay / dry-run smoke confirmed the boundary without hardware access
-- the viewer boundary stayed rendering-only
+- `desired endpoint` は runtime / command-side の target intent として維持した
+- `MotionCommand.joint` は qpos command boundary の入力として扱った
+- `target_position_m` は payload feedback と viewer marker positioning に留めた
+- backend の qpos update は `HeadlessMuJoCoSimulator` の内側に留めた
+- replay / dry-run smoke は hardware access なしで boundary を確認した
+- viewer boundary は rendering-only のまま維持した
 
-Not completed in Phase E:
+Phase E で未完了のもの:
 
 - full IK solver parity
 - old Selfrionette full Webview parity
@@ -84,41 +86,42 @@ Not completed in Phase E:
 - hardware / serial / OSC
 - legacy import / execute
 
-## Boundary Freeze
+## 境界の固定
 
 ### Target Marker / Desired Endpoint
 
-- `desired endpoint` is the runtime / command-side target intent.
-- `target_position_m` is the viewer-facing payload feedback field.
-- `target_position_m` is not the desired endpoint itself.
-- `target_position_m` is not the qpos command boundary.
+- `desired endpoint` は runtime / command-side の target intent である。
+- `target_position_m` は viewer-facing payload feedback field である。
+- `target_position_m` は desired endpoint そのものではない。
+- `target_position_m` は qpos command boundary ではない。
 
 ### MotionCommand / qpos Boundary
 
-- `MotionCommand.joint` is the joint command passed to the qpos boundary.
-- The viewer does not interpret `MotionCommand.joint`.
-- `MotionCommand.target` remains separate from the qpos command boundary.
-- `InputIntent.joint_delta_rad` is not normalized into `MotionCommand.joint`
-  in this audit.
+- `MotionCommand.joint` は qpos boundary に渡す joint command である。
+- viewer は `MotionCommand.joint` を解釈しない。
+- `MotionCommand.target` は qpos command boundary とは別である。
+- `InputIntent.joint_delta_rad` はこの audit では `MotionCommand.joint` に
+  正規化しない。
 
 ### Viewer Boundary
 
-- viewer remains rendering-only
-- viewer does not import MuJoCo backend
-- viewer does not load a MuJoCo model
-- viewer does not perform FK, IK, or qpos pose recompute
-- viewer does not own the physical state source of truth
+- viewer は rendering-only のままである
+- viewer は MuJoCo backend を import しない
+- viewer は MuJoCo model を load しない
+- viewer は FK / IK / qpos pose recompute を行わない
+- viewer は physical state source of truth を持たない
 
 ### Backend Boundary
 
-- MuJoCo backend remains the physical / state source of truth
-- backend owns qpos update and `MuJoCoState` generation
-- backend feedback may expose `target_position_m`, but that stays diagnostic
-  and presentation-oriented
+- MuJoCo backend は physical / state source of truth のままである
+- backend は qpos update と `MuJoCoState` generation を担う
+- backend feedback は `target_position_m` を公開してよいが、これは
+  diagnostic と presentation-oriented の範囲に留める
 
-## Replay / Dry-Run Smoke
+## Replay / dry-run smoke
 
-R6-E-P4 established the smoke boundary that was used to validate Phase E:
+R6-E-P4 で成立した smoke boundary は、Phase E の validation にそのまま
+使われる。
 
 ```text
 replay / dry-run input
@@ -130,40 +133,37 @@ replay / dry-run input
   -> viewer marker feedback
 ```
 
-This smoke path is hardware-independent and remains a contract check only. It
-does not claim final UI parity or a rendered arm mesh.
+この smoke path は hardware-independent であり、contract check のみを
+目的とする。final UI parity や rendered arm mesh は主張しない。
 
-## Validation Summary
+## 検証まとめ
 
-- #75, #76, #77, and #78 are closed and their titles match the Phase E slice.
-- Existing docs were checked against the target marker, MotionCommand, and
-  MuJoCoState contract boundaries.
-- The Phase E completion state is documented without changing implementation
-  behavior.
-- The next phase should be split into separate issues before any parity work
-  begins.
+- #75, #76, #77, #78 は closed であり、タイトルも Phase E の slice と一致する。
+- 既存 docs は target marker、MotionCommand、MuJoCoState の contract boundary
+  と照合した。
+- Phase E の completion state は、implementation behavior を変えずに文書化した。
+- 次 phase の parity work は、開始前に issue 分割しておく必要がある。
 
-## Remaining Risks
+## 残るリスク
 
-- old Selfrionette Webview parity still needs issue slicing before work starts.
-- rendered arm mesh remains a later-phase concern.
-- final UI parity remains open and should not be implied by this audit.
-- any broader coordinate mapping or viewer presentation changes should stay in
-  a separate issue.
+- old Selfrionette Webview parity は、作業前に issue slicing が必要である。
+- rendered arm mesh は後続 phase の課題として残る。
+- final UI parity は未解決であり、この audit から完了済みとは読めない。
+- より広い coordinate mapping や viewer presentation の変更は、別 issue に分ける。
 
-## Next Phase Handoff
+## 次 phase handoff
 
-Phase E is complete as a skeleton / boundary / smoke stage only.
+Phase E は skeleton / boundary / smoke stage としてのみ完了している。
 
-Recommended next issue families:
+推奨する次 issue family:
 
 - old Selfrionette Webview parity
 - rendered arm mesh
 - UI parity
 
-These should be split so each issue owns one narrow surface. The viewer should
-stay rendering-only, and the command / backend boundary established here should
-remain intact.
+これらは、それぞれが狭い surface を持つように分割すべきである。
+viewer は rendering-only のままで維持し、ここで成立した command / backend
+boundary は崩さない。
 
 ## Scope Check
 
