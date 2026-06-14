@@ -274,11 +274,11 @@ qpos pose, and it does not become a source of truth for joint state or
 command intent. The browser viewer may observe it through DOM summary text and
 root attributes, but the scene objects remain read-only overlays.
 
-R6-F-P5 does not widen the data flow. It freezes the old Web View reference
-audit so the team can keep the useful display elements and exclude the old UI,
-unfinished behavior, and parity pressure from future viewer work. The viewer
-still stays rendering-only, and the audit result is recorded in
-`docs/operations/r6-f-p5-old-web-view-reference-audit.md`.
+R6-F-P5 では data flow を広げない。旧 Web View を reference audit として
+固定し、有用な表示要素だけを残し、旧 UI、未完成挙動、full parity への
+圧力を今後の viewer 作業から切り離す。viewer は引き続き rendering-only
+に留まり、audit 結果は
+`docs/operations/r6-f-p5-old-web-view-reference-audit.md` に記録する。
 
 R6-A-P4 audits and freezes the dry-run contract for Phase B handoff:
 

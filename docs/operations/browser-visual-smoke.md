@@ -170,7 +170,6 @@ connection がある場合は body + site + arm skeleton になる。target と 
   present / absent の内訳は `data-dof-ring-present-count` と
   `data-dof-ring-absent-count` で読む。
 
-R6-F-P5 uses this smoke path only as an observable reference point for the
-already accepted viewer elements. It does not turn the smoke into a full old
-Web View parity contract, and it keeps the useful display elements separated
-from the excluded legacy UI.
+R6-F-P5 では、この smoke path を採用済み viewer 表示要素の観測点としてのみ
+扱う。これは旧 Web View の full parity contract ではなく、有用な表示要素と
+除外する legacy UI を分離するための基準である。

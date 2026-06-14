@@ -94,8 +94,8 @@ This app is the Three.js rendering layer.
 
 ## Phase B Handoff
 
-- R6-F-P5 freezes the old Web View reference audit for this viewer and keeps
-  full parity, legacy UI replay, and browser-side kinematics out of scope.
+- R6-F-P5 では、旧 Web View を viewer の reference audit として固定し、
+  full parity、legacy UI replay、browser-side kinematics は scope 外に置く。
 
 - Viewer receives payload v0 through the WebSocket client skeleton.
 - Viewer keeps the latest received payload in runtime state.
