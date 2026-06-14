@@ -47,11 +47,28 @@ export interface PayloadErrorVectorRenderSpec {
   label?: string;
 }
 
+export type PayloadArmSkeletonStatus = "absent" | "partial" | "present";
+
+export interface PayloadArmSkeletonSegmentRenderSpec {
+  kind: "arm_skeleton_segment";
+  name: string;
+  start_m: Vector3;
+  end_m: Vector3;
+  color: string;
+  label?: string;
+}
+
+export interface PayloadArmSkeletonScene {
+  status: PayloadArmSkeletonStatus;
+  segments: PayloadArmSkeletonSegmentRenderSpec[];
+}
+
 export interface PayloadMarkerScene {
   bodies: PayloadMarkerRenderSpec[];
   sites: PayloadMarkerRenderSpec[];
   target: PayloadMarkerRenderSpec | null;
   errorVector: PayloadErrorVectorRenderSpec | null;
+  armSkeleton: PayloadArmSkeletonScene;
 }
 
 export interface CanonicalPayloadMarkers {

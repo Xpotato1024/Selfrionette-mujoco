@@ -1,11 +1,12 @@
 import { Object3D, Scene } from "three";
 
 import type {
+  PayloadArmSkeletonSegmentRenderSpec,
   PayloadMarkerRenderSpec,
   PayloadMarkerScene,
 } from "../types/transportPayload.js";
 
-export type MarkerObjectKind = "body" | "site" | "target" | "error_vector" | "unknown";
+export type MarkerObjectKind = "body" | "site" | "target" | "error_vector" | "arm_skeleton_segment" | "unknown";
 
 export interface MarkerObjectPosition {
   x: number;
@@ -30,6 +31,14 @@ export interface ThreeSceneObjectRegistry {
 
 function normalizeMarkerObjectKind(kind: PayloadMarkerRenderSpec["kind"]): MarkerObjectKind {
   if (kind === "body" || kind === "site" || kind === "target" || kind === "error_vector") {
+    return kind;
+  }
+
+  return "unknown";
+}
+
+function normalizeArmSkeletonObjectKind(kind: PayloadArmSkeletonSegmentRenderSpec["kind"]): MarkerObjectKind {
+  if (kind === "arm_skeleton_segment") {
     return kind;
   }
 
@@ -72,6 +81,24 @@ function buildErrorVectorObjectDescriptor(markerScene: PayloadMarkerScene): Mark
   };
 }
 
+function buildArmSkeletonObjectDescriptors(markerScene: PayloadMarkerScene): MarkerObjectDescriptor[] {
+  return markerScene.armSkeleton.segments.map((segment) => ({
+    key: `${normalizeArmSkeletonObjectKind(segment.kind)}:${segment.name}`,
+    kind: normalizeArmSkeletonObjectKind(segment.kind),
+    label: segment.label ?? segment.name,
+    position: {
+      x: segment.start_m[0],
+      y: segment.start_m[1],
+      z: segment.start_m[2],
+    },
+    endPosition: {
+      x: segment.end_m[0],
+      y: segment.end_m[1],
+      z: segment.end_m[2],
+    },
+  }));
+}
+
 function createMarkerObject(descriptor: MarkerObjectDescriptor): Object3D {
   const object = new Object3D();
   object.name = descriptor.key;
@@ -92,6 +119,7 @@ export function buildMarkerObjectDescriptors(
   const descriptors = [
     ...markerScene.bodies.map(buildMarkerObjectDescriptor),
     ...markerScene.sites.map(buildMarkerObjectDescriptor),
+    ...buildArmSkeletonObjectDescriptors(markerScene),
   ];
 
   if (markerScene.target !== null) {

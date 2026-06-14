@@ -24,8 +24,8 @@ camera/renderer pipeline, or a completed animation loop.
 
 Confirm that payload v0 reaches the browser viewer, updates DOM status, keeps
 the marker object registry alive, and mutates Three.js `Object3D.position`
-from payload marker coordinates for the target marker, tip marker, and error
-vector skeleton.
+from payload marker coordinates for the target marker, tip marker, arm
+skeleton, and error vector skeleton.
 
 ## Preconditions
 
@@ -43,7 +43,7 @@ vector skeleton.
 4. Confirm the viewer status becomes `WebSocket: open`.
 5. Confirm the marker summary shows `payload v0`, the current frame, and the
    body / site counts.
-6. Confirm the marker object count equals `bodies + sites + target + error vector` when both endpoints are present.
+6. Confirm the marker object count equals `bodies + sites + arm skeleton + target + error vector` when both endpoints are present.
 7. Confirm later payload frames update marker object positions in the scene.
 
 ## Browser URL
@@ -73,6 +73,8 @@ The root viewer element exposes the smoke state through attributes:
 - `data-marker-body-count`
 - `data-marker-site-count`
 - `data-marker-object-count`
+- `data-arm-skeleton-status`
+- `data-arm-skeleton-segment-count`
 
 The status section also mirrors the latest frame summary text.
 
@@ -82,20 +84,26 @@ The root `data-marker-object-count` must equal the sum of:
 
 - marker bodies
 - marker sites
+- arm skeleton segments
 - optional target marker
 - optional error vector
 
-For the current payload v0 fixture, that means body + site if the target is
-absent, or body + site + target + error vector when both target and tip are
-present.
+For the current payload v0 fixture, that means body + site + arm skeleton
+when the target is absent and the canonical arm skeleton connection exists.
+When both target and tip are present, the count becomes body + site + arm
+skeleton + target + error vector.
 
 ## Expected Marker Position Behavior
 
 - The scene object registry keeps named body, site, target, and error vector
   `Object3D` instances alive.
+- The scene object registry keeps the arm skeleton segment as a read-only
+  `Object3D` connection between canonical payload body/site positions.
 - Reused marker keys reuse the same object identity.
 - Each marker object position follows the payload marker coordinates stored in
   the marker scene model.
+- The arm skeleton segment follows the payload body/site positions stored in
+  the arm skeleton scene model.
 - The error vector object keeps the tip endpoint as its position and the
   target endpoint in `userData`, so the viewer can display the tip -> target
   direction without recomputing pose.
@@ -113,6 +121,7 @@ present.
 - Labels and overlays as a finished visual design.
 - IK / FK.
 - `qpos` pose recompute.
+- Arm skeleton synthesis from anything other than payload body/site positions.
 - MuJoCo model loading in the browser.
 - WebSocket reconnect / retry hardening.
 
@@ -125,7 +134,8 @@ present.
 - If the marker summary does not update, confirm the viewer was opened during
   the grace period and that the CLI is still publishing frames.
 - If the object count is wrong, check whether `target_position_m` is present
-  in the payload frame being displayed.
+  in the payload frame being displayed and whether the canonical arm skeleton
+  body/site names are present.
 
 ## Non-Goals
 

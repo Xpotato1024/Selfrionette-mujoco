@@ -12,6 +12,7 @@ import {
 import { Scene } from "three";
 import type {
   CanonicalPayloadMarkers,
+  PayloadArmSkeletonScene,
   PayloadMarkerScene,
   TransportPayloadV0,
   Vector3,
@@ -62,6 +63,9 @@ export interface ViewerRuntimeSnapshot {
   markerScene: PayloadMarkerScene;
   markerObjectCount: number;
   targetPosition_m: Vector3 | null;
+  armSkeleton: PayloadArmSkeletonScene;
+  armSkeletonSegmentCount: number;
+  armSkeletonStatus: PayloadArmSkeletonScene["status"];
 }
 
 interface ViewerRuntimeView {
@@ -133,12 +137,19 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
           snapshot.markerScene.errorVector.end_m[1] - snapshot.markerScene.errorVector.start_m[1],
           snapshot.markerScene.errorVector.end_m[2] - snapshot.markerScene.errorVector.start_m[2],
         ])}`;
+  const armSkeletonText =
+    snapshot.armSkeletonStatus === "present"
+      ? `arm skeleton: present ${snapshot.armSkeletonSegmentCount} segment(s)`
+      : snapshot.armSkeletonStatus === "partial"
+        ? "arm skeleton: partial 0 segment(s)"
+        : "arm skeleton: absent";
 
   return [
     `payload v${snapshot.payloadVersion}`,
     `frame ${snapshot.frameIndex}`,
     `bodies ${snapshot.markerScene.bodies.length}`,
     `sites ${snapshot.markerScene.sites.length}`,
+    armSkeletonText,
     baseLinkName,
     tipSiteName,
     targetText,
@@ -150,6 +161,12 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
 function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
   const bodyNames = snapshot.markerScene.bodies.map((marker) => marker.name).join(", ") || "none";
   const siteNames = snapshot.markerScene.sites.map((marker) => marker.name).join(", ") || "none";
+  const armSkeletonText =
+    snapshot.armSkeletonStatus === "present"
+      ? `arm skeleton: present (${snapshot.armSkeletonSegmentCount} segment(s))`
+      : snapshot.armSkeletonStatus === "partial"
+        ? "arm skeleton: partial (0 segment(s))"
+        : "arm skeleton: absent";
   const targetText =
     snapshot.targetPosition_m === null
       ? "target marker: absent"
@@ -171,6 +188,7 @@ function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
     "Marker rendering placeholder.",
     `body markers: ${snapshot.markerScene.bodies.length} (${bodyNames})`,
     `site markers: ${snapshot.markerScene.sites.length} (${siteNames})`,
+    armSkeletonText,
     targetText,
     tipText,
     errorVectorText,
@@ -187,6 +205,7 @@ export function buildViewerRuntimeSnapshot(
   const markerObjectCount =
     markerScene.bodies.length +
     markerScene.sites.length +
+    markerScene.armSkeleton.segments.length +
     (markerScene.target === null ? 0 : 1) +
     (markerScene.errorVector === null ? 0 : 1);
 
@@ -202,6 +221,9 @@ export function buildViewerRuntimeSnapshot(
     markerScene,
     markerObjectCount,
     targetPosition_m: payload.target_position_m,
+    armSkeleton: markerScene.armSkeleton,
+    armSkeletonSegmentCount: markerScene.armSkeleton.segments.length,
+    armSkeletonStatus: markerScene.armSkeleton.status,
   };
 
   snapshot.summaryText = buildSummaryText(snapshot);
@@ -225,6 +247,8 @@ function buildRuntimeView(
   root.setAttribute("data-websocket-status", snapshot.connectionStatus);
   root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
   root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
+  root.setAttribute("data-arm-skeleton-status", snapshot.armSkeletonStatus);
+  root.setAttribute("data-arm-skeleton-segment-count", String(snapshot.armSkeletonSegmentCount));
   root.setAttribute("data-target-marker-present", String(snapshot.targetPosition_m !== null));
   root.setAttribute("data-tip-marker-present", String(snapshot.canonicalMarkers.tipSite !== null));
   root.setAttribute("data-error-vector-present", String(snapshot.markerScene.errorVector !== null));
@@ -260,6 +284,8 @@ function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnaps
   view.root.setAttribute("data-marker-body-count", String(snapshot.markerScene.bodies.length));
   view.root.setAttribute("data-marker-site-count", String(snapshot.markerScene.sites.length));
   view.root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
+  view.root.setAttribute("data-arm-skeleton-status", snapshot.armSkeletonStatus);
+  view.root.setAttribute("data-arm-skeleton-segment-count", String(snapshot.armSkeletonSegmentCount));
   view.root.setAttribute("data-websocket-status", snapshot.connectionStatus);
   view.root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
   view.root.setAttribute("data-target-marker-present", String(snapshot.targetPosition_m !== null));
