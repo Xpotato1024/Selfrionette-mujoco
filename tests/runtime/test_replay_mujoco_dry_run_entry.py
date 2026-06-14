@@ -16,6 +16,7 @@ def test_run_replay_mujoco_dry_run_returns_single_payload_line() -> None:
     assert payload["version"] == 0
     assert payload["frame_index"] == 1
     assert payload["time_s"] > 0.0
+    assert payload["target_position_m"] is None
 
 
 def test_run_replay_mujoco_dry_run_emits_ndjson_for_multiple_steps() -> None:

@@ -90,3 +90,17 @@ runtime, and viewer runtime wiring.
 For a local/dev WebSocket delivery entry that reuses the same replay pipeline
 and publishes payload v0 JSON to connected clients, see
 `docs/operations/websocket-publisher-runner.md`.
+
+## R6-E-P4 Smoke
+
+R6-E-P4 では、replay / dry-run 系を Phase E の target marker と
+qpos command handoff の smoke boundary として使う。
+
+- replay input は hardware 非依存のまま維持する。
+- motion / qpos smoke は backend boundary に留める。
+- `target_position_m` は payload feedback として扱い、qpos command boundary
+  とはみなさない。
+- default dry-run entry は引き続き payload v0 を出力し、target feedback を
+  勝手に生成しない。
+- target marker feedback は qpos update path とは別に確認し、2つの contract
+  を混同しない。
