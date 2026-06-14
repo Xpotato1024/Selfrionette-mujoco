@@ -32,7 +32,7 @@ def build_motion_command_from_target_command(
     metadata: Mapping[str, object] | None = None,
     joint_command: JointCommand | None = None,
 ) -> MotionCommand:
-    """Build a MotionCommand from a command-side target boundary."""
+    """command-side target boundary から MotionCommand を構築する。"""
 
     return _build_motion_command(
         timestamp_s=timestamp_s,
@@ -44,7 +44,7 @@ def build_motion_command_from_target_command(
 
 def build_motion_command_from_input_intent(intent: InputIntent) -> MotionCommand:
     if intent.joint_delta_rad:
-        raise ValueError("joint_delta_rad is not supported in Step 5-F")
+        raise ValueError("R6-E-P2 では joint_delta_rad から MotionCommand.joint への変換は未対応です")
 
     target = TargetCommand(delta_m=intent.target_delta_m) if _has_non_zero_delta(intent.target_delta_m) else None
     return build_motion_command_from_target_command(
@@ -82,7 +82,7 @@ class TargetToJointMotionGenerator:
         _ = dt_s  # Protocol compatibility; this skeleton does not use delta time yet.
 
         if intent.joint_delta_rad:
-            raise ValueError("joint_delta_rad is not supported in Step 5-F")
+            raise ValueError("R6-E-P2 では joint_delta_rad から MotionCommand.joint への変換は未対応です")
 
         target = TargetCommand(delta_m=intent.target_delta_m) if _has_non_zero_delta(intent.target_delta_m) else None
         joint: JointCommand | None = None
