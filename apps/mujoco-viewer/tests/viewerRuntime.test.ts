@@ -226,6 +226,47 @@ function testBuildViewerRuntimeSnapshot(): void {
   assert(snapshot.markerScene.bodies.length === 1, "fixture should produce one body marker");
   assert(snapshot.markerScene.sites.length === 1, "fixture should produce one site marker");
   assert(snapshot.markerObjectCount === 2, "fixture should produce two marker objects");
+  assert(snapshot.markerScene.errorVector === null, "fixture should not produce an error vector without a target");
+  assert(snapshot.summaryText.includes("target marker: absent"), "summary should mark the target marker absent");
+  assert(snapshot.summaryText.includes("tip marker: present"), "summary should mark the tip marker present");
+  assert(snapshot.summaryText.includes("error vector: absent"), "summary should mark the error vector absent");
+}
+
+function testBuildViewerRuntimeSnapshotIncludesTargetTipAndErrorVector(): void {
+  const payload = JSON.parse(JSON.stringify(payloadV0Fixture)) as TransportPayloadV0;
+  payload.target_position_m = [0.4, 0.5, 0.6];
+  payload.sites[0].position_m = [0.1, 0.2, 0.3];
+
+  const snapshot = buildViewerRuntimeSnapshot(payload);
+
+  assert(snapshot.targetPosition_m !== null, "snapshot should preserve the target marker");
+  assert(snapshot.markerScene.target !== null, "marker scene should include the target marker");
+  assert(snapshot.markerScene.errorVector !== null, "marker scene should include an error vector when both endpoints exist");
+  assert(
+    snapshot.markerScene.errorVector?.start_m[0] === 0.1 &&
+      snapshot.markerScene.errorVector?.start_m[1] === 0.2 &&
+      snapshot.markerScene.errorVector?.start_m[2] === 0.3,
+    "error vector should start at the tip marker",
+  );
+  assert(
+    snapshot.markerScene.errorVector?.end_m[0] === 0.4 &&
+      snapshot.markerScene.errorVector?.end_m[1] === 0.5 &&
+      snapshot.markerScene.errorVector?.end_m[2] === 0.6,
+    "error vector should end at the target marker",
+  );
+  assert(
+    snapshot.summaryText.includes("target marker: present [0.4, 0.5, 0.6]"),
+    "summary should surface the target marker coordinates",
+  );
+  assert(
+    snapshot.summaryText.includes("tip marker: present [0.1, 0.2, 0.3]"),
+    "summary should surface the tip marker coordinates",
+  );
+  assert(
+    snapshot.summaryText.includes("error vector: present [0.3, 0.3, 0.3]"),
+    "summary should surface the error vector delta",
+  );
+  assert(snapshot.markerObjectCount === 4, "snapshot should count body, site, target, and error vector objects");
 }
 
 function testReadViewerEndpointConfig(): void {
@@ -277,6 +318,9 @@ function testCreateViewerRuntimeMountsAndStops(): void {
     root.attributes.get("data-marker-object-count") === "2",
     "viewer runtime should publish the initial marker object count on the root",
   );
+  assert(root.attributes.get("data-target-marker-present") === "false", "initial target marker should be absent");
+  assert(root.attributes.get("data-tip-marker-present") === "true", "tip marker should be present in the fixture");
+  assert(root.attributes.get("data-error-vector-present") === "false", "initial error vector should be absent");
   assert(
     sceneSection?.textContent?.includes("Marker rendering placeholder") ?? false,
     "viewer runtime should advertise the placeholder scene",
@@ -296,6 +340,10 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   assert(
     statusSection?.textContent?.includes("tip") ?? false,
     "viewer runtime should show the tip site in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("error vector: absent") ?? false,
+    "viewer runtime should show the absent error vector in the summary",
   );
 
   runtime.stop();
@@ -373,6 +421,12 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     position_m: [0.4, 0.5, 0.6],
     quaternion_wxyz: [1, 0, 0, 0],
   });
+  updatedPayload.target_position_m = [0.31, 0.32, 0.33];
+  (updatedPayload as TransportPayloadV0 & { target_delta_m?: [number, number, number] }).target_delta_m = [
+    9,
+    9,
+    9,
+  ];
 
   activeSocket.dispatchMessage(JSON.stringify(updatedPayload));
 
@@ -411,14 +465,21 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     "runtime should publish the received site count on the root",
   );
   assert(
-    root.attributes.get("data-marker-object-count") === "4",
+    root.attributes.get("data-marker-object-count") === "6",
     "runtime should publish the received marker object count on the root",
+  );
+  assert(root.attributes.get("data-target-marker-present") === "true", "runtime should mark the target as present");
+  assert(root.attributes.get("data-tip-marker-present") === "true", "runtime should keep the tip marker present");
+  assert(
+    root.attributes.get("data-error-vector-present") === "true",
+    "runtime should mark the error vector as present when both endpoints exist",
   );
   assert(syncedScene !== null, "runtime should expose the synced Three.js scene through the test hook");
   const activeScene = syncedScene as Scene;
   const baseLinkObject = activeScene.children.find((child) => child.name === "body:base_link");
   const tipObject = activeScene.children.find((child) => child.name === "site:tip");
   const targetObject = activeScene.children.find((child) => child.name === "target:target");
+  const errorVectorObject = activeScene.children.find((child) => child.name === "error_vector:tip_to_target");
   assert(baseLinkObject !== undefined, "scene should keep the base_link object");
   assert(baseLinkObject.position.x === 0.7, "base_link x position should follow the payload marker scene");
   assert(baseLinkObject.position.y === 0.8, "base_link y position should follow the payload marker scene");
@@ -427,7 +488,47 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(tipObject.position.x === 0.11, "tip x position should follow the payload marker scene");
   assert(tipObject.position.y === 0.22, "tip y position should follow the payload marker scene");
   assert(tipObject.position.z === 0.33, "tip z position should follow the payload marker scene");
-  assert(targetObject === undefined, "scene should not create a target object when target is absent");
+  assert(targetObject !== undefined, "scene should create a target object when target is present");
+  assert(targetObject.position.x === 0.31, "target x position should follow the payload marker scene");
+  assert(targetObject.position.y === 0.32, "target y position should follow the payload marker scene");
+  assert(targetObject.position.z === 0.33, "target z position should follow the payload marker scene");
+  assert(errorVectorObject !== undefined, "scene should create an error vector object when both endpoints exist");
+  assert(errorVectorObject?.position.x === 0.11, "error vector should start at the tip x position");
+  assert(errorVectorObject?.position.y === 0.22, "error vector should start at the tip y position");
+  assert(errorVectorObject?.position.z === 0.33, "error vector should start at the tip z position");
+  const errorVectorUserData = errorVectorObject?.userData as
+    | {
+        endPosition?: {
+          x: number;
+          y: number;
+          z: number;
+        } | null;
+      }
+    | undefined;
+  assert(
+    errorVectorUserData?.endPosition?.x === 0.31,
+    "error vector should keep the target x endpoint in userData",
+  );
+  assert(
+    errorVectorUserData?.endPosition?.y === 0.32,
+    "error vector should keep the target y endpoint in userData",
+  );
+  assert(
+    errorVectorUserData?.endPosition?.z === 0.33,
+    "error vector should keep the target z endpoint in userData",
+  );
+  assert(
+    statusSection?.textContent?.includes("target marker: present [0.31, 0.32, 0.33]") ?? false,
+    "runtime should surface the target marker in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("tip marker: present [0.11, 0.22, 0.33]") ?? false,
+    "runtime should surface the tip marker in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("error vector: present [0.2, 0.1, 0]") ?? false,
+    "runtime should surface the error vector delta in the summary",
+  );
 
   activeSocket.dispatchClose();
   assert(
@@ -546,6 +647,7 @@ function testCreateViewerRuntimeReportsConnectionErrors(): void {
 
 testReadViewerEndpointConfig();
 testBuildViewerRuntimeSnapshot();
+testBuildViewerRuntimeSnapshotIncludesTargetTipAndErrorVector();
 testCreateViewerRuntimeMountsAndStops();
 testCreateViewerRuntimeStartsOptionalWebSocketClient();
 testCreateViewerRuntimeIgnoresInvalidPayloads();

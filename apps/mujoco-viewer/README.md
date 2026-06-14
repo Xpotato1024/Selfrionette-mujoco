@@ -57,7 +57,7 @@ This app is the Three.js rendering layer.
   production server, real scene mutation, or any browser-side physics or
   kinematics logic.
 - R6-D-P1 adds the Three.js scene object registry skeleton and keeps body,
-  site, and target position mapping for a later issue.
+  site, target, and error vector position mapping for a later issue.
 - R6-D-P2 applies payload marker coordinates directly to the Three.js
   objects through the marker scene model and registry.
 - R6-D-P3 freezes the browser visual smoke path that confirms DOM status,
@@ -131,7 +131,8 @@ payload marker positions.
 R6-D-P3 adds the operation smoke that a human can verify in the browser:
 
 - The viewer consumes payload v0 over WebSocket.
-- The marker object registry receives body, site, and target marker positions.
+- The marker object registry receives body, site, target, and error vector
+  marker positions.
 - The browser smoke verifies DOM status plus Three.js scene object state.
 - The root element exposes marker object count and payload/frame attributes.
 - The scene object positions follow the payload marker coordinates directly.

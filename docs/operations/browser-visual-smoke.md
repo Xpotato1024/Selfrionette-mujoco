@@ -24,7 +24,8 @@ camera/renderer pipeline, or a completed animation loop.
 
 Confirm that payload v0 reaches the browser viewer, updates DOM status, keeps
 the marker object registry alive, and mutates Three.js `Object3D.position`
-from payload marker coordinates.
+from payload marker coordinates for the target marker, tip marker, and error
+vector skeleton.
 
 ## Preconditions
 
@@ -42,7 +43,7 @@ from payload marker coordinates.
 4. Confirm the viewer status becomes `WebSocket: open`.
 5. Confirm the marker summary shows `payload v0`, the current frame, and the
    body / site counts.
-6. Confirm the marker object count equals `bodies + sites + target`.
+6. Confirm the marker object count equals `bodies + sites + target + error vector` when both endpoints are present.
 7. Confirm later payload frames update marker object positions in the scene.
 
 ## Browser URL
@@ -82,17 +83,22 @@ The root `data-marker-object-count` must equal the sum of:
 - marker bodies
 - marker sites
 - optional target marker
+- optional error vector
 
-For the current payload v0 fixture, that means body + site + target if the
-target is present, otherwise body + site.
+For the current payload v0 fixture, that means body + site if the target is
+absent, or body + site + target + error vector when both target and tip are
+present.
 
 ## Expected Marker Position Behavior
 
-- The scene object registry keeps named body, site, and target `Object3D`
-  instances alive.
+- The scene object registry keeps named body, site, target, and error vector
+  `Object3D` instances alive.
 - Reused marker keys reuse the same object identity.
 - Each marker object position follows the payload marker coordinates stored in
   the marker scene model.
+- The error vector object keeps the tip endpoint as its position and the
+  target endpoint in `userData`, so the viewer can display the tip -> target
+  direction without recomputing pose.
 - The browser smoke only proves direct payload coordinate reflection, not a
   final coordinate mapping layer.
 - The Phase D completion audit is recorded in

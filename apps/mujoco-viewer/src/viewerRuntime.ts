@@ -95,10 +95,44 @@ function buildConnectionStatusText(
     : `WebSocket: ${connectionStatus} ${websocketUrl}`;
 }
 
+function formatVector3(vector: Vector3): string {
+  const formatComponent = (value: number): string => {
+    const rounded = Math.round(value * 1_000_000) / 1_000_000;
+    return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/0+$/, "").replace(/\.$/, "");
+  };
+
+  return `[${formatComponent(vector[0])}, ${formatComponent(vector[1])}, ${formatComponent(vector[2])}]`;
+}
+
+function buildMarkerPresenceText(
+  label: string,
+  present: boolean,
+  vector: Vector3 | null = null,
+): string {
+  if (!present) {
+    return `${label}: absent`;
+  }
+
+  return vector === null ? `${label}: present` : `${label}: present ${formatVector3(vector)}`;
+}
+
 function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
   const baseLinkName = snapshot.canonicalMarkers.baseLinkBody?.name ?? "base_link";
   const tipSiteName = snapshot.canonicalMarkers.tipSite?.name ?? "tip";
-  const targetText = snapshot.targetPosition_m === null ? "target: none" : "target: fixture";
+  const targetText = buildMarkerPresenceText("target marker", snapshot.targetPosition_m !== null, snapshot.targetPosition_m);
+  const tipText = buildMarkerPresenceText(
+    "tip marker",
+    snapshot.canonicalMarkers.tipSite !== null,
+    snapshot.canonicalMarkers.tipSite?.position_m ?? null,
+  );
+  const errorVectorText =
+    snapshot.markerScene.errorVector === null
+      ? "error vector: absent"
+      : `error vector: present ${formatVector3([
+          snapshot.markerScene.errorVector.end_m[0] - snapshot.markerScene.errorVector.start_m[0],
+          snapshot.markerScene.errorVector.end_m[1] - snapshot.markerScene.errorVector.start_m[1],
+          snapshot.markerScene.errorVector.end_m[2] - snapshot.markerScene.errorVector.start_m[2],
+        ])}`;
 
   return [
     `payload v${snapshot.payloadVersion}`,
@@ -108,19 +142,38 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
     baseLinkName,
     tipSiteName,
     targetText,
+    tipText,
+    errorVectorText,
   ].join(" | ");
 }
 
 function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
   const bodyNames = snapshot.markerScene.bodies.map((marker) => marker.name).join(", ") || "none";
   const siteNames = snapshot.markerScene.sites.map((marker) => marker.name).join(", ") || "none";
-  const targetText = snapshot.targetPosition_m === null ? "target: none" : "target: fixture";
+  const targetText =
+    snapshot.targetPosition_m === null
+      ? "target marker: absent"
+      : `target marker: present ${formatVector3(snapshot.targetPosition_m)}`;
+  const tipText =
+    snapshot.canonicalMarkers.tipSite === null
+      ? "tip marker: absent"
+      : `tip marker: present ${formatVector3(snapshot.canonicalMarkers.tipSite.position_m)}`;
+  const errorVectorText =
+    snapshot.markerScene.errorVector === null
+      ? "error vector: absent"
+      : `error vector: present ${formatVector3([
+          snapshot.markerScene.errorVector.end_m[0] - snapshot.markerScene.errorVector.start_m[0],
+          snapshot.markerScene.errorVector.end_m[1] - snapshot.markerScene.errorVector.start_m[1],
+          snapshot.markerScene.errorVector.end_m[2] - snapshot.markerScene.errorVector.start_m[2],
+        ])}`;
 
   return [
     "Marker rendering placeholder.",
     `body markers: ${snapshot.markerScene.bodies.length} (${bodyNames})`,
     `site markers: ${snapshot.markerScene.sites.length} (${siteNames})`,
     targetText,
+    tipText,
+    errorVectorText,
   ].join(" ");
 }
 
@@ -132,7 +185,10 @@ export function buildViewerRuntimeSnapshot(
   const canonicalMarkers = getCanonicalPayloadMarkers(payload);
   const markerScene = buildPayloadMarkerScene(payload);
   const markerObjectCount =
-    markerScene.bodies.length + markerScene.sites.length + (markerScene.target === null ? 0 : 1);
+    markerScene.bodies.length +
+    markerScene.sites.length +
+    (markerScene.target === null ? 0 : 1) +
+    (markerScene.errorVector === null ? 0 : 1);
 
   const snapshot: ViewerRuntimeSnapshot = {
     payloadVersion: payload.version,
@@ -169,6 +225,9 @@ function buildRuntimeView(
   root.setAttribute("data-websocket-status", snapshot.connectionStatus);
   root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
   root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
+  root.setAttribute("data-target-marker-present", String(snapshot.targetPosition_m !== null));
+  root.setAttribute("data-tip-marker-present", String(snapshot.canonicalMarkers.tipSite !== null));
+  root.setAttribute("data-error-vector-present", String(snapshot.markerScene.errorVector !== null));
 
   const header = documentLike.createElement("header");
   header.className = "viewer-runtime__header";
@@ -203,6 +262,9 @@ function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnaps
   view.root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
   view.root.setAttribute("data-websocket-status", snapshot.connectionStatus);
   view.root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
+  view.root.setAttribute("data-target-marker-present", String(snapshot.targetPosition_m !== null));
+  view.root.setAttribute("data-tip-marker-present", String(snapshot.canonicalMarkers.tipSite !== null));
+  view.root.setAttribute("data-error-vector-present", String(snapshot.markerScene.errorVector !== null));
   view.statusSection.textContent = [snapshot.statusText, snapshot.summaryText].join(" | ");
   view.sceneSection.textContent = buildSceneText(snapshot);
 }

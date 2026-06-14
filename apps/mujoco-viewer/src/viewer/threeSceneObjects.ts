@@ -5,7 +5,7 @@ import type {
   PayloadMarkerScene,
 } from "../types/transportPayload.js";
 
-export type MarkerObjectKind = "body" | "site" | "target" | "unknown";
+export type MarkerObjectKind = "body" | "site" | "target" | "error_vector" | "unknown";
 
 export interface MarkerObjectPosition {
   x: number;
@@ -18,6 +18,7 @@ export interface MarkerObjectDescriptor {
   kind: MarkerObjectKind;
   label: string;
   position: MarkerObjectPosition;
+  endPosition?: MarkerObjectPosition;
 }
 
 export interface ThreeSceneObjectRegistry {
@@ -28,7 +29,7 @@ export interface ThreeSceneObjectRegistry {
 }
 
 function normalizeMarkerObjectKind(kind: PayloadMarkerRenderSpec["kind"]): MarkerObjectKind {
-  if (kind === "body" || kind === "site" || kind === "target") {
+  if (kind === "body" || kind === "site" || kind === "target" || kind === "error_vector") {
     return kind;
   }
 
@@ -49,6 +50,28 @@ function buildMarkerObjectDescriptor(marker: PayloadMarkerRenderSpec): MarkerObj
   };
 }
 
+function buildErrorVectorObjectDescriptor(markerScene: PayloadMarkerScene): MarkerObjectDescriptor | null {
+  if (markerScene.errorVector === null) {
+    return null;
+  }
+
+  return {
+    key: `error_vector:${markerScene.errorVector.name}`,
+    kind: "error_vector",
+    label: markerScene.errorVector.label ?? markerScene.errorVector.name,
+    position: {
+      x: markerScene.errorVector.start_m[0],
+      y: markerScene.errorVector.start_m[1],
+      z: markerScene.errorVector.start_m[2],
+    },
+    endPosition: {
+      x: markerScene.errorVector.end_m[0],
+      y: markerScene.errorVector.end_m[1],
+      z: markerScene.errorVector.end_m[2],
+    },
+  };
+}
+
 function createMarkerObject(descriptor: MarkerObjectDescriptor): Object3D {
   const object = new Object3D();
   object.name = descriptor.key;
@@ -58,6 +81,7 @@ function createMarkerObject(descriptor: MarkerObjectDescriptor): Object3D {
     markerKind: descriptor.kind,
     markerLabel: descriptor.label,
     position: descriptor.position,
+    endPosition: descriptor.endPosition ?? null,
   };
   return object;
 }
@@ -72,6 +96,11 @@ export function buildMarkerObjectDescriptors(
 
   if (markerScene.target !== null) {
     descriptors.push(buildMarkerObjectDescriptor(markerScene.target));
+  }
+
+  const errorVectorDescriptor = buildErrorVectorObjectDescriptor(markerScene);
+  if (errorVectorDescriptor !== null) {
+    descriptors.push(errorVectorDescriptor);
   }
 
   return descriptors;
@@ -91,6 +120,7 @@ export function createThreeSceneObjectRegistry(scene: Scene): ThreeSceneObjectRe
           markerKind: descriptor.kind,
           markerLabel: descriptor.label,
           position: descriptor.position,
+          endPosition: descriptor.endPosition ?? null,
         };
         if (existingObject.parent !== scene) {
           scene.add(existingObject);
