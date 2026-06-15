@@ -21,6 +21,9 @@ npm run browser:build
 - `npm run typecheck` と `npm run build` は `tsc --noEmit` の静的検証。
 - `npm test` は viewer runtime / WebSocket skeleton のテストを実行する。
 
+AutoPort / one-command / Tailscale WebView dev launcher は
+[docs/operations/mujoco-viewer-dev-launcher.md](../../docs/operations/mujoco-viewer-dev-launcher.md) を参照する。
+
 ## WebSocket 接続
 
 browser で開く URL 例:

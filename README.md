@@ -9,6 +9,7 @@
 - [docs/operations/backend-viewer-startup.md](docs/operations/backend-viewer-startup.md)
 - [docs/operations/websocket-host-port-contract.md](docs/operations/websocket-host-port-contract.md)
 - [docs/operations/runtime-to-viewer-e2e-smoke.md](docs/operations/runtime-to-viewer-e2e-smoke.md)
+- [docs/operations/mujoco-viewer-dev-launcher.md](docs/operations/mujoco-viewer-dev-launcher.md)
 - [docs/operations/r6-g-p1-startup-path-audit.md](docs/operations/r6-g-p1-startup-path-audit.md)
 - [docs/operations/r6-g-p3-startup-script-gap-audit.md](docs/operations/r6-g-p3-startup-script-gap-audit.md)
 - [apps/mujoco-viewer/README.md](apps/mujoco-viewer/README.md)
@@ -69,6 +70,16 @@ uv run python scripts/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --st
 ```
 
 browser / viewer smoke の補助導線です。CLI は browser URL と WebSocket endpoint を区別して出力します。R6-F visual elements の観測入口として使います。
+
+### MuJoCo viewer dev launcher
+
+```bash
+uv run python scripts/run_mujoco_viewer_dev.py --host 127.0.0.1 --port 8766 --steps 3 --preset sweep_x
+```
+
+AutoPort / one-command / Tailscale WebView URL 案内は
+[docs/operations/mujoco-viewer-dev-launcher.md](docs/operations/mujoco-viewer-dev-launcher.md) に集約しています。
+browser は強制 open しません。
 
 ## URL と host の注意
 

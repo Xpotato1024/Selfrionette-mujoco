@@ -202,6 +202,18 @@ WebSocket endpoint URL:
 - browser は開くが payload が来ない場合の切り分けを追加する。
 - LAN / Tailscale から見たときに WebSocket URL が loopback のままになっているケースを troubleshooting に追加する。
 
+## R6-G-P6 への handoff
+
+- R6-G-P6 issue #113 では、runtime-to-viewer E2E smoke を実用的に再現しやすくするための dev launcher を扱う。
+- AutoPort / one-command / Tailscale WebView dev launcher の正本は
+  `docs/operations/mujoco-viewer-dev-launcher.md` に置く。
+- 旧 Selfrionette にあった AutoPort 相当の port 自動選択を、MuJoCo viewer の
+  bind host / browser-visible host contract に合わせて最小再設計する。
+- backend publisher / viewer build / browser URL 表示までを一括で案内できる one-command dev launcher を
+  整理する。
+- Tailscale / LAN / public host から browser で開くための viewer page URL と
+  WebSocket endpoint URL を出力できるようにする。
+
 ## Non-Goals
 
 - production deployment
