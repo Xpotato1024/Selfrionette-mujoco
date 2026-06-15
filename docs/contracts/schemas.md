@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-06-15
 canonical_for:
   - schema contracts
 related:
@@ -15,6 +15,9 @@ related:
 This is the canonical contract for shared schemas. Other documents should link
 here instead of restating field lists.
 
+`JointCommand` / `MotionCommand.joint` / `target_position_m` / MuJoCo `qpos`
+の command boundary は `docs/contracts/kinematics-command-contract.md` を参照する。
+
 ## Schemas
 
 - `Vector3`, `QuaternionWXYZ`, `JointVector`, `ScalarVector`: shared tuple
@@ -23,9 +26,11 @@ here instead of restating field lists.
 - `InputIntent`: interpreted replay/input-layer contract sent from
   `input_interpreters` to the next layer; it is not a `MotionCommand`.
 - `TargetCommand`: target-space command used by motion generation.
-- `JointCommand`: joint-space command used by motion and kinematics stubs.
+- `JointCommand`: solver output / joint command boundary input; see
+  `docs/contracts/kinematics-command-contract.md`.
 - `MotionCommand`: motion-layer command consumed by `mujoco_backend`; see
-  `docs/contracts/motion-command.md`.
+  `docs/contracts/motion-command.md` and
+  `docs/contracts/kinematics-command-contract.md`.
 - `BodyTransform`, `SiteTransform`: rigid transforms extracted by the backend.
 - `MuJoCoState`: backend snapshot passed to transport and viewer layers; see
   `docs/contracts/mujoco-state.md`.
@@ -47,6 +52,10 @@ here instead of restating field lists.
 - `InputIntent.joint_delta_rad` is intentionally not normalized into a joint
   command in Step 5-F because Step 5-D already fixed joint commands as direct
   qpos reflection at the backend boundary.
+- `MotionCommand.joint` is the qpos command boundary input, not viewer
+  feedback.
+- `MuJoCoState.target_position_m` is viewer-visible feedback, not a command
+  source.
 - `MuJoCoState` snapshot generation lives in `mujoco_backend` and is fed by
   `mj_forward`; `mj_step` remains part of backend stepping and is not part of
   the snapshot contract.

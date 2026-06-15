@@ -15,6 +15,7 @@ CANONICAL_DOCS = [
     "docs/architecture/data-flow.md",
     "docs/architecture/runtime-composition.md",
     "docs/contracts/parallel-work-contracts.md",
+    "docs/contracts/kinematics-command-contract.md",
     "docs/contracts/motion-command.md",
     "docs/contracts/schemas.md",
     "docs/contracts/mujoco-state.md",
@@ -74,3 +75,4 @@ def test_docs_readme_has_source_of_truth_map() -> None:
     text = read("docs/README.md")
     assert "Source of Truth Map" in text
     assert "| Topic | Canonical document | Notes |" in text
+    assert "docs/contracts/kinematics-command-contract.md" in text
