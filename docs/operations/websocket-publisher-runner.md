@@ -9,6 +9,7 @@ related:
   - docs/architecture/data-flow.md
   - docs/contracts/transport-payload.md
   - docs/operations/runtime-dry-run.md
+  - docs/operations/backend-viewer-startup.md
 ---
 
 # WebSocket Publisher Runner
@@ -79,6 +80,9 @@ browser viewer endpoint configuration:
 
 - `docs/operations/live-viewer-smoke.md`
 - `scripts/run_live_viewer_smoke.py`
+
+The top-level startup guide that ties dry-run, publisher, viewer, and browser
+connection together is `docs/operations/backend-viewer-startup.md`.
 
 The smoke path remains rendering-only on the browser side and stops at marker
 summary updates. It does not add Three.js real scene mutation, production
