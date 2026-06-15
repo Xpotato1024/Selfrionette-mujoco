@@ -136,8 +136,9 @@ LAN / Tailscale / public host:
 
 - R6-G-P2 では起動スクリプトや npm script は追加しない。
 - R6-G-P3 では、この README / docs 導線を実行するうえで script / wrapper / npm script の不足が残るかを確認する。
-- 不足が説明だけで解消できる場合は、script を追加せず docs に「不足なし」と固定する。
-- Windows / PowerShell 向けの短い wrapper、`0.0.0.0` bind と browser URL を同時に案内する補助、public host / LAN / Tailscale 向け URL 案内補助が必要な場合のみ、R6-G-P3 で最小補完する。
+- 既存 script と説明だけで loopback 導線は成立するため、今回の結論は「不足なし」。
+- 補完判断の正本は [docs/operations/r6-g-p3-startup-script-gap-audit.md](r6-g-p3-startup-script-gap-audit.md) に固定する。
+- Windows / PowerShell 向けの短い wrapper、`0.0.0.0` bind と browser URL を同時に案内する補助、public host / LAN / Tailscale 向け URL 案内補助は、R6-G-P4 以降で必要性が出た場合のみ扱う。
 - package dependency は追加しない。
 - viewer visual feature は追加しない。
 

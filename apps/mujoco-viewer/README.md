@@ -46,6 +46,9 @@ apps/mujoco-viewer/index.html?ws=ws://127.0.0.1:8766
 - backend の dry-run 手順は [docs/operations/backend-viewer-startup.md](../../docs/operations/backend-viewer-startup.md) を参照する。
 - WebSocket publisher は loopback の `127.0.0.1:8766` を標準例にする。
 - browser smoke は `../../docs/operations/live-viewer-smoke.md` と `../../docs/operations/browser-visual-smoke.md` を参照する。
+- 起動 script の追加は不要で、R6-G-P3 の判断は
+  [docs/operations/r6-g-p3-startup-script-gap-audit.md](../../docs/operations/r6-g-p3-startup-script-gap-audit.md)
+  に固定する。
 
 ## Scope
 
