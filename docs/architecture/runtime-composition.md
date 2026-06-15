@@ -129,3 +129,5 @@ no-op.
 `build_mujoco_pipeline()` remains a compatibility helper for the older no-op
 runtime wiring tests. It is not the production-like default path, and it does
 not supersede `build_concrete_mujoco_pipeline()` as the concrete baseline.
+
+R6-H completion audit is recorded in `docs/operations/r6-h-completion-audit.md`.
