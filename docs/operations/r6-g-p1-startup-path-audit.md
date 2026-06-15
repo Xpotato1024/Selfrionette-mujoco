@@ -157,30 +157,40 @@ loopback 前提の現行導線そのものは不足していない。
 
 ## R6-G-P2 への handoff
 
-- README の最初のページで、backend / dry-run / publisher / viewer / browser URL を短く並べる
+- README / docs に起動手順を追加する
+- backend / dry-run / publisher / viewer / browser URL の基本導線を短く並べる
 - `websocketUrl` と `ws` の違いを明示する
 - `browser URL` と `WebSocket URL` を別概念として説明する
 - `npm ci` / `browser:build` / `typecheck` / `build` / `test` の役割を分ける
-- ループバックの例と、それ以外の host の例を分けて書く
 
 ## R6-G-P3 への handoff
 
-- `0.0.0.0` bind と browser URL host の違いを README / docs で補完する
+- 起動 script / wrapper / npm script の不足を確認し、必要な場合だけ最小補完する
+- `0.0.0.0` bind と browser URL host の違いを補う補助導線が必要か判断する
 - Windows / PowerShell 向けの導線が必要か判断する
 - port 衝突時の具体的な運用を書けるなら、wrapper か README のどちらかで固定する
-- browser から payload が来ない場合の切り分けを手順化する
 
 ## R6-G-P4 への handoff
 
-- LAN / Tailscale / public host での接続可否を確認できる形にする
-- browser URL の host が bind host と一致しないケースを説明する
-- root attributes と status text の観測で smoke 成否を判定する
+- WebSocket / host / port / public host 設定を整理する
+- WebSocket URL の決定方法を明文化する
+- backend host / port と viewer host / port を分けて説明する
+- browser で開く URL と WebSocket endpoint を分けて説明する
+- `localhost` / `127.0.0.1` / `0.0.0.0` の役割差を明文化する
+- LAN / Tailscale / public host で見る場合の接続先指定を整理する
 
 ## R6-G-P5 への handoff
 
-- ここまでの README / docs / wrapper の整備結果を再 audit して freeze する
-- 起動導線の説明と実際のスクリプトの差分が残っていないかを確認する
-- `docs/operations/browser-visual-smoke.md` と `docs/operations/r6-f-completion-audit.md` への参照が、現行導線と矛盾していないかを確認する
+- backend / dry-run 起動から Web viewer / browser 接続までの E2E smoke 手順を整理する
+- root attributes と status text による観測手順を固定する
+- target / tip / error / skeleton / mesh / DoF ring の観測手順を起動導線込みで説明する
+- payload が来ない、WebSocket が open にならない、browser から開けない場合の troubleshooting を整理する
+
+## R6-G-P6 への handoff
+
+- R6-G-P1〜P5 の completion state を確認する
+- README / startup / WebSocket / E2E smoke / troubleshooting の整備状態を audit する
+- parent #101 を close できる completion audit を追加する
 
 ## Non-Goals
 
