@@ -153,7 +153,9 @@ dead stub candidate (E): 0
 ## P3 への handoff
 
 - zero-valued FK stub を退場させるための concrete FK strategy か MuJoCo-backed FK contract を扱う。
+- `src/selfrionette/kinematics/fk.py` の concrete baseline を runtime / test で使える状態にする。
 - FK contract と backend snapshot の責務を分離する。
+- `ZeroForwardKinematicsSolver` は runtime FK ではないことを維持する。
 
 ## P4 への handoff
 

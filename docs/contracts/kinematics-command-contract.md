@@ -7,6 +7,7 @@ canonical_for:
   - JointCommand / MotionCommand boundary
   - target_position_m / qpos command boundary
 related:
+  - docs/contracts/forward-kinematics.md
   - docs/operations/r6-h-p1-stub-inventory.md
   - docs/contracts/motion-command.md
   - docs/contracts/schemas.md
@@ -127,12 +128,21 @@ viewer は backend / runtime payload を受け取り、描画と観測に使う�
 
 これらは R6-H-P3〜P6 で runtime path から退場させる。
 
+## Forward kinematics baseline
+
+`PlanarChainForwardKinematicsSolver` は `ForwardKinematicsSolver` の concrete
+baseline である。
+
+- `src/selfrionette/kinematics/fk.py` に置く
+- `base.py` には実装を書かない
+- `ZeroForwardKinematicsSolver` は runtime FK として使わない
+- viewer-side FK / qpos recompute は追加しない
+
 ## P3 FK handoff
 
 P3 では、`ForwardKinematicsSolver` contract に従って concrete FK strategy を
-追加する。
-`base.py` に実装を書かず、別 module に concrete implementation を置く。
-`ZeroForwardKinematicsSolver` を runtime FK として扱わない。
+追加する。`base.py` に実装を書かず、別 module に concrete implementation
+を置く。`ZeroForwardKinematicsSolver` を runtime FK として扱わない。
 
 ## P4 IK handoff
 
@@ -171,6 +181,7 @@ JointCommand / MotionCommand boundary documented: yes
 target / qpos boundary documented: yes
 viewer rendering-only boundary confirmed: yes
 stub boundary documented: yes
+forward kinematics baseline documented: yes
 P3 handoff added: yes
 P4 handoff added: yes
 P5 handoff added: yes
