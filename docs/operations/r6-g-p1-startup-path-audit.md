@@ -9,6 +9,7 @@ canonical_for:
 related:
   - README.md
   - apps/mujoco-viewer/README.md
+  - docs/operations/backend-viewer-startup.md
   - docs/operations/browser-visual-smoke.md
   - docs/operations/r6-f-completion-audit.md
   - docs/architecture/data-flow.md

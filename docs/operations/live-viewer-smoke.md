@@ -6,6 +6,7 @@ canonical_for:
   - live viewer smoke path
 related:
   - docs/operations/websocket-publisher-runner.md
+  - docs/operations/backend-viewer-startup.md
   - docs/architecture/data-flow.md
   - apps/mujoco-viewer/README.md
 ---
@@ -58,6 +59,9 @@ R6-D-P4 closes the Phase D completion audit in
 `docs/operations/r6-d-completion-audit.md` and keeps the next handoff focused
 on IK / command integration skeleton work, not on a rendered arm mesh or an
 already-completed IK path.
+
+The canonical backend / viewer startup guide is
+`docs/operations/backend-viewer-startup.md`.
 
 ## What the Smoke Path Proves
 

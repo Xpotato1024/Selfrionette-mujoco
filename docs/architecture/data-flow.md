@@ -154,6 +154,9 @@ This smoke path confirms that the received payload still updates summary text,
 scene placeholder text, and root attributes without introducing Three.js real
 scene mutation, FK, IK, or MuJoCo imports into the browser viewer.
 
+The startup guide that stitches these steps together for README handoff is
+`docs/operations/backend-viewer-startup.md`.
+
 R6-C-P4 audits and freezes the completed Phase C live skeleton:
 
 ```text

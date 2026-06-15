@@ -7,6 +7,7 @@ canonical_for:
 related:
   - docs/architecture/data-flow.md
   - docs/contracts/parallel-work-contracts.md
+  - docs/operations/backend-viewer-startup.md
   - docs/operations/live-viewer-smoke.md
   - docs/operations/r6-f-p5-old-web-view-reference-audit.md
   - docs/operations/r6-f-completion-audit.md

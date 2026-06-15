@@ -28,13 +28,15 @@ Do not create or use `doc/`.
 | WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0 |
 | Live viewer smoke path | `docs/operations/live-viewer-smoke.md` | deterministic dry-run payload -> browser viewer smoke path for R6-C-P3 |
 | Browser visual smoke | `docs/operations/browser-visual-smoke.md` | R6-D-P3 viewer runtime / marker object operation smoke |
+| Backend / viewer startup guide | `docs/operations/backend-viewer-startup.md` | README handoff for backend / dry-run / browser connection startup |
 | R6-D completion audit | `docs/operations/r6-d-completion-audit.md` | viewer real scene mutation skeleton completion audit and IK phase handoff |
 | R6-G-P1 startup path audit | `docs/operations/r6-g-p1-startup-path-audit.md` | backend / viewer startup path inventory and README handoff |
 | R6-E completion audit | `docs/operations/r6-e-completion-audit.md` | Phase E completion audit と old Selfrionette Webview parity handoff |
 | Target marker / desired endpoint contract | `docs/contracts/target-marker-desired-endpoint.md` | runtime target intent and viewer-visible target marker boundary for Phase E |
 | Phase C completion audit | `docs/operations/r6-c-completion-audit.md` | Python publisher / browser viewer live skeleton completion audit |
-| R6-F-P5 old Web View reference audit | `docs/operations/r6-f-p5-old-web-view-reference-audit.md` | old Web View の有用表示要素 audit と除外 boundary 固定 |
+| R6-F-P5 old Web View reference audit | `docs/operations/r6-f-p5-old-web-view-reference-audit.md` | old Web View の visual reference audit と boundary freeze |
 | Viewer browser runtime entry | `docs/architecture/data-flow.md` | browser mount entry for payload v0 handoff; R6-B-P2 adds the WebSocket client skeleton; R6-B-P3 connects received payloads to marker rendering; R6-C-P2 adds endpoint configuration and connection status visibility; R6-D-P1 adds the Three.js scene object registry skeleton; R6-D-P2 applies payload marker positions to Three.js objects; R6-B-P4 audits and freezes the completed Phase B handoff |
+| Startup guide handoff | `docs/operations/backend-viewer-startup.md` | canonical backend / viewer startup guide for R6-G-P2 |
 | Schema contracts | `docs/contracts/schemas.md` | shared contract types |
 | MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
 | Parallel work contracts | `docs/contracts/parallel-work-contracts.md` | Step 5-0 contract lock |
@@ -47,7 +49,7 @@ Do not create or use `doc/`.
 | Legacy map | `docs/migration/legacy-to-new-layer-map.md` | legacy reference only |
 | ADRs | `docs/design/adr/` | design decision history |
 | R6-F-P4 DoF ring reference audit | `docs/operations/r6-f-p4-dof-ring-reference-audit.md` | DoF ring の reference audit と viewer presentation skeleton |
-| R6-F-P5 old Web View reference audit | `docs/operations/r6-f-p5-old-web-view-reference-audit.md` | old Web View の表示要素 audit と boundary 固定 |
+| R6-F-P5 old Web View reference audit | `docs/operations/r6-f-p5-old-web-view-reference-audit.md` | old Web View の presentation audit と boundary freeze |
 | R6-F completion audit | `docs/operations/r6-f-completion-audit.md` | Sweep_x visual demo の completion state と Phase F handoff |
 
 ## Directory Roles
