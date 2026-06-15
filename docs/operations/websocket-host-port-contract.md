@@ -102,8 +102,9 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 
 apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 
-- backend publisher は `127.0.0.1:8766` で listen する。
-- browser URL も同じ machine から見える `127.0.0.1` を使う。
+- browser URL に入れる host は、browser から見える host を使う。
+- same machine の browser から見る場合は `127.0.0.1` / `localhost` を使う。
+- 別 machine の browser から見る場合は LAN IP / Tailscale IP / public host を使う。
 - `localhost` は `127.0.0.1` と同じ loopback の別名として扱う。
 
 ## 0.0.0.0 bind
@@ -114,14 +115,15 @@ apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
 uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 0.0.0.0 --port 8766 --steps 3
 ```
 
-同じ machine の browser から見る場合:
+same machine の browser から見る場合:
 
 ```text
 apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 
 - server は `0.0.0.0` で listen している。
-- browser からは `127.0.0.1` ではなく、その browser から見える host を使う。
+- same machine の browser からは `127.0.0.1` / `localhost` を使える。
+- 別 machine の browser からは `127.0.0.1` ではなく、その browser から見える LAN IP / Tailscale IP / public host を使う。
 - `0.0.0.0` を browser URL に入れない。
 
 ## LAN 接続

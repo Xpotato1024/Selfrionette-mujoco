@@ -104,7 +104,7 @@ LAN / Tailscale / public host:
   browser 側の URL / WebSocket URL には、browser から見える host を使う
 ```
 
-- `0.0.0.0` で bind しても、browser からは `127.0.0.1` / LAN IP / Tailscale IP などで接続する。
+- `0.0.0.0` で bind しても、same machine の browser からは `127.0.0.1` / `localhost` を使い、別 machine の browser からは LAN IP / Tailscale IP / public host など、その browser から見える host を使う。
 - bind host と browser から見える host は別。
 
 ## port / URL の混同回避
