@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import ast
 import json
 from pathlib import Path
@@ -16,7 +17,7 @@ from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend import NoOpMuJoCoSimulator
 from selfrionette.runtime import build_concrete_mujoco_pipeline, run_replay_mujoco_dry_run, run_replay_mujoco_websocket_publisher
-from selfrionette.schemas import MotionCommand, MuJoCoState
+from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState
 from selfrionette.transport import NoOpStatePublisher, WebSocketStatePublisher
 
 
@@ -136,6 +137,24 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_components() -> None:
     assert not isinstance(pipeline.simulator, NoOpMuJoCoSimulator)
     assert pipeline.publisher is publisher
     assert not isinstance(pipeline.publisher, NoOpStatePublisher)
+
+
+def test_build_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_padded_qpos() -> None:
+    publisher = RecordingPublisher()
+    command_pipeline = build_concrete_mujoco_pipeline(publisher=publisher)
+    frame = command_pipeline.input_source.read_frame()
+    intent = command_pipeline.input_interpreter.interpret(frame)
+    command = command_pipeline.motion_generator.update(intent, dt_s=1.0 / 60.0)
+
+    state_pipeline = build_concrete_mujoco_pipeline(publisher=publisher)
+    state = asyncio.run(state_pipeline.run_once())
+
+    assert command.joint is not None
+    assert command.joint != JointCommand()
+    assert command.joint.joint_angles_rad != ()
+    assert len(command.joint.joint_angles_rad) == 4
+    assert command.joint.joint_angles_rad[:2] != (0.0, 0.0)
+    assert state.qpos[:4] == command.joint.joint_angles_rad
 
 
 def test_run_replay_mujoco_dry_run_default_path_does_not_construct_noop_motion_generator(monkeypatch) -> None:
