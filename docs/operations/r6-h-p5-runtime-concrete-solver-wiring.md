@@ -40,6 +40,13 @@ ReplayInputSource
   -> NoOpStatePublisher
 ```
 
+## P6 handoff note
+
+- concrete default path は `build_concrete_mujoco_pipeline()` に固定する。
+- `build_noop_pipeline()` は explicit placeholder / test path として残す。
+- `sweep_x` dry-run preset は visual-smoke compatibility path として例外扱いを維持する。
+- 追加した guardrail と handoff は `docs/operations/r6-h-p6-runtime-zero-stub-guardrail.md` にまとめる。
+
 この段階では target / joint / qpos の concrete path が runtime default に入っていなかった。
 
 ## Runtime composition after P5
