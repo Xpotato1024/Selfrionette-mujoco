@@ -7,10 +7,12 @@ from pathlib import Path
 import selfrionette.runtime.dry_run as dry_run_module
 import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
 from selfrionette.input_interpreters import ReplayInputInterpreter
-from selfrionette.input_sources import ReplayInputSource
-from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.input_interpreters import NoOpInputInterpreter
+from selfrionette.input_sources import ReplayInputSource
 from selfrionette.input_sources import StaticInputSource
+from selfrionette.kinematics import PlanarTwoLinkInverseKinematicsSolver
+from selfrionette.kinematics import ZeroInverseKinematicsSolver
+from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend import NoOpMuJoCoSimulator
 from selfrionette.runtime import build_concrete_mujoco_pipeline, run_replay_mujoco_dry_run, run_replay_mujoco_websocket_publisher
@@ -31,8 +33,17 @@ FORBIDDEN_RUNTIME_SYMBOLS = (
     "NoOpStatePublisher",
     "ZeroForwardKinematicsSolver",
     "ZeroInverseKinematicsSolver",
+    "build_noop_pipeline",
     "build_noop_pipeline()",
 )
+FORBIDDEN_RUNTIME_MODULES = {
+    "selfrionette.input_sources.stubs",
+    "selfrionette.input_interpreters.stubs",
+    "selfrionette.kinematics.stubs",
+    "selfrionette.motion.stubs",
+    "selfrionette.mujoco_backend.stubs",
+    "selfrionette.transport.stubs",
+}
 
 
 class RecordingPublisher:
@@ -94,12 +105,16 @@ class _DummyPipeline:
 def test_production_like_runtime_modules_do_not_reference_stub_symbols() -> None:
     for path in PRODUCTION_LIKE_RUNTIME_MODULES:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        imported_modules = {
-            node.module
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom) and node.module is not None
-        }
-        assert not any(module.endswith(".stubs") for module in imported_modules)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module is not None:
+                assert node.module not in FORBIDDEN_RUNTIME_MODULES
+                assert not node.module.endswith(".stubs")
+                imported_names = {alias.name for alias in node.names}
+                assert imported_names.isdisjoint(FORBIDDEN_RUNTIME_SYMBOLS)
+            elif isinstance(node, ast.Import):
+                imported_names = {alias.name for alias in node.names}
+                assert imported_names.isdisjoint(FORBIDDEN_RUNTIME_MODULES)
+                assert not any(name.endswith(".stubs") for name in imported_names)
 
         source = path.read_text(encoding="utf-8")
         offending = [symbol for symbol in FORBIDDEN_RUNTIME_SYMBOLS if symbol in source]
@@ -115,6 +130,8 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_components() -> None:
     assert isinstance(pipeline.input_interpreter, ReplayInputInterpreter)
     assert not isinstance(pipeline.input_interpreter, NoOpInputInterpreter)
     assert isinstance(pipeline.motion_generator, TargetToJointMotionGenerator)
+    assert isinstance(pipeline.motion_generator._ik_solver, PlanarTwoLinkInverseKinematicsSolver)
+    assert not isinstance(pipeline.motion_generator._ik_solver, ZeroInverseKinematicsSolver)
     assert isinstance(pipeline.simulator, HeadlessMuJoCoSimulator)
     assert not isinstance(pipeline.simulator, NoOpMuJoCoSimulator)
     assert pipeline.publisher is publisher
@@ -127,6 +144,7 @@ def test_run_replay_mujoco_dry_run_default_path_does_not_construct_noop_motion_g
     payload = json.loads(run_replay_mujoco_dry_run(steps=1)[0])
 
     assert payload["qpos"][:4] != [0.0, 0.0, 0.0, 0.0]
+    assert payload["version"] == 0
 
 
 def test_run_replay_mujoco_dry_run_sweep_x_path_remains_explicit_compatibility_path(monkeypatch) -> None:

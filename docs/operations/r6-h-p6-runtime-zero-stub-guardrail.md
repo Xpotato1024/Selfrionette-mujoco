@@ -50,6 +50,8 @@ sweep_x dry-run visual-smoke compatibility path
 
 - `tests/runtime/test_runtime_stub_guardrails.py`
   - concrete pipeline が no-op stub に戻っていないことを確認する。
+  - `build_noop_pipeline` / `build_noop_pipeline()` の両方を forbidden symbol として監査する。
+  - production-like runtime modules の AST import を走査し、`.stubs` module 参照と forbidden symbol import を検出する。
   - dry-run default path が `NoOpMotionGenerator` を構築しないことを確認する。
   - `sweep_x` が explicit compatibility path としてだけ no-op motion generator を使うことを確認する。
   - WebSocket publisher runner が `WebSocketStatePublisher` を使うことを確認する。
