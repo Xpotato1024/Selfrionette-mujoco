@@ -180,10 +180,12 @@ present / absent の内訳は `data-dof-ring-present-count` と `data-dof-ring-a
 
 ## R6-G-P6 への handoff
 
-- R6-G-P6 では、P1〜P5 の docs / smoke / troubleshooting completion state を audit する。
-- `runtime-to-viewer-e2e-smoke.md` が README / viewer README / operations docs から辿れることを確認する。
-- host / port / URL contract、E2E smoke、troubleshooting の整備状態を確認する。
-- parent #101 を close できる completion audit を追加する。
+- R6-G-P6 issue #113 では、runtime-to-viewer E2E smoke を実用的に再現しやすくするための dev launcher を扱う。
+- 旧 Selfrionette にあった AutoPort 相当の port 自動選択を、新 MuJoCo viewer 導線に合わせて最小設計する。
+- backend publisher / viewer build / browser URL 表示までを一括で案内できる one-command dev launcher を検討する。
+- Tailscale / LAN / public host から browser で開くための viewer page URL と WebSocket endpoint URL を出力できるようにする。
+- R6-G-P6 では production deployment、auth / TLS / reverse proxy は扱わない。
+- R6-G-P7 で Phase G completion audit を行う。
 
 ## Non-Goals
 
