@@ -79,6 +79,12 @@ FK baseline は IK の seed / validation の前提を固定するだけで、IK 
 P5 では runtime composition に concrete FK strategy を接続する。
 runtime default が zero / no-op stub に戻らないことを test で固定する。
 
+## P5 runtime notes
+
+- `build_concrete_mujoco_pipeline()` is the explicit concrete runtime path
+- `ZeroForwardKinematicsSolver` remains a retirement candidate
+- runtime path does not route through zero-valued FK
+
 ## Non-Goals
 
 - final robotics-grade FK

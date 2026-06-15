@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketPublisherServer, WebSocketStatePublisher
 
@@ -19,7 +19,10 @@ def _default_replay_frame() -> RawInputFrame:
     return RawInputFrame(
         source="replay",
         timestamp_s=0.0,
-        metadata={"preset": "r6-c-p1-default"},
+        metadata={
+            "preset": "r6-c-p1-default",
+            "target_position_m": DEFAULT_CONCRETE_TARGET_POSITION_M,
+        },
     )
 
 
@@ -65,7 +68,7 @@ async def _run_replay_mujoco_websocket_publisher_async(
     runtime_config = RuntimeConfig(dt_s=dt_s)
 
     async with WebSocketPublisherServer(host=host, port=port) as server:
-        pipeline = build_replay_mujoco_pipeline(
+        pipeline = build_concrete_mujoco_pipeline(
             frames=(_default_replay_frame(),),
             config=runtime_config,
             loop=True,

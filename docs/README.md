@@ -25,6 +25,7 @@ Do not create or use `doc/`.
 | Data flow | `docs/architecture/data-flow.md` | input -> motion -> MuJoCo -> transport -> viewer |
 | Runtime composition | `docs/architecture/runtime-composition.md` | composition root |
 | Runtime dry-run entry | `docs/operations/runtime-dry-run.md` | deterministic replay to payload v0 NDJSON |
+| R6-H-P5 runtime concrete solver wiring | `docs/operations/r6-h-p5-runtime-concrete-solver-wiring.md` | concrete FK / IK runtime baseline and qpos boundary wiring |
 | R6-H-P1 stub inventory | `docs/operations/r6-h-p1-stub-inventory.md` | kinematics / motion / backend / runtime stub classification and retirement planning |
 | WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0 |
 | WebSocket / host / port contract | `docs/operations/websocket-host-port-contract.md` | bind host, browser-visible host, viewer page URL, and WebSocket endpoint URL contract |

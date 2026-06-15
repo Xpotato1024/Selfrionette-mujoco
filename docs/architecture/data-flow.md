@@ -351,6 +351,27 @@ R6-B-P4 audits and freezes the viewer-side handoff:
 - Invalid payloads do not advance the rendered state.
 - WebSocket server, backend publisher server, and Three.js real scene mutation
   remain out of scope.
+
+R6-H-P5 adds the concrete runtime wiring path that turns target metadata into
+joint qpos input:
+
+```text
+ReplayInputSource
+  -> RawInputFrame
+  -> ReplayInputInterpreter
+  -> InputIntent
+  -> InputIntent.metadata["target_position_m"]
+  -> TargetToJointMotionGenerator
+  -> PlanarTwoLinkInverseKinematicsSolver
+  -> MotionCommand.joint
+  -> HeadlessMuJoCoSimulator
+  -> MuJoCoState
+  -> transport payload
+```
+
+The concrete path keeps `target_position_m` as runtime / command-side input
+metadata, keeps `MotionCommand.target` separate from the qpos boundary, and
+does not move FK / IK / qpos recompute into the viewer.
 - R6-F-P4 では DoF ring display を payload body transform の
   `position_m` / `quaternion_wxyz` に従う read-only overlay として追加する。
   `logicalJointLabel` と `label` は provisional であり、

@@ -199,6 +199,12 @@ dead stub candidate (E): 0
 - schema breaking change
 - package dependency change
 
+## P5 handoff note
+
+P5 の concrete runtime baseline は `build_concrete_mujoco_pipeline()` を使う。
+`build_noop_pipeline()` と `NoOp*` / `Zero*` stub は inventory 上の retirement
+candidate のまま残し、runtime default へ戻さない。
+
 ## Scope Check
 
 ```text
