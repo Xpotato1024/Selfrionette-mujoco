@@ -29,6 +29,7 @@ Do not create or use `doc/`.
 | Live viewer smoke path | `docs/operations/live-viewer-smoke.md` | deterministic dry-run payload -> browser viewer smoke path for R6-C-P3 |
 | Browser visual smoke | `docs/operations/browser-visual-smoke.md` | R6-D-P3 viewer runtime / marker object operation smoke |
 | Backend / viewer startup guide | `docs/operations/backend-viewer-startup.md` | README handoff for backend / dry-run / browser connection startup |
+| Japanese docs writing guardrails | `docs/operations/japanese-doc-writing-guardrails.md` | UTF-8 / BOM / mojibake prevention and PR body formatting checks |
 | R6-D completion audit | `docs/operations/r6-d-completion-audit.md` | viewer real scene mutation skeleton completion audit and IK phase handoff |
 | R6-G-P1 startup path audit | `docs/operations/r6-g-p1-startup-path-audit.md` | backend / viewer startup path inventory and README handoff |
 | R6-E completion audit | `docs/operations/r6-e-completion-audit.md` | Phase E completion audit と old Selfrionette Webview parity handoff |
@@ -37,6 +38,7 @@ Do not create or use `doc/`.
 | R6-F-P5 old Web View reference audit | `docs/operations/r6-f-p5-old-web-view-reference-audit.md` | old Web View の visual reference audit と boundary freeze |
 | Viewer browser runtime entry | `docs/architecture/data-flow.md` | browser mount entry for payload v0 handoff; R6-B-P2 adds the WebSocket client skeleton; R6-B-P3 connects received payloads to marker rendering; R6-C-P2 adds endpoint configuration and connection status visibility; R6-D-P1 adds the Three.js scene object registry skeleton; R6-D-P2 applies payload marker positions to Three.js objects; R6-B-P4 audits and freezes the completed Phase B handoff |
 | Startup guide handoff | `docs/operations/backend-viewer-startup.md` | canonical backend / viewer startup guide for R6-G-P2 |
+| Japanese docs guardrails | `docs/operations/japanese-doc-writing-guardrails.md` | repo-level encoding and PR body safety checks for Japanese docs |
 | Schema contracts | `docs/contracts/schemas.md` | shared contract types |
 | MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
 | Parallel work contracts | `docs/contracts/parallel-work-contracts.md` | Step 5-0 contract lock |

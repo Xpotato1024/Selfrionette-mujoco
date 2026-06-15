@@ -200,3 +200,10 @@ docs / SoT impact checked:
 - 文字化け対策として、Markdown とテキストファイルは UTF-8 を基本とし、必要に応じて UTF-8 no BOM で保存する。
 - 文字化けが疑われる場合は、表示結果だけで判断せず、バイト列や明示的なエンコーディング指定で確認する。
 - PR 作成前に、本文と関連文書が化けていないことを確認し、PowerShell のエンコーディング差で壊れやすい inline 生成は避ける。
+
+## 15. Japanese Docs Guardrails
+
+- Follow `docs/operations/japanese-doc-writing-guardrails.md` for Japanese Markdown encoding, BOM, mojibake, and PR body checks.
+- Keep Japanese docs in UTF-8 without BOM.
+- Do not rely on `git diff --check` alone for text encoding safety.
+- If a Japanese doc or PR body is edited, run the validation commands in the guardrail doc before merging.
