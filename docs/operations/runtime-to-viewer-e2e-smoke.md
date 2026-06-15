@@ -28,6 +28,8 @@ R6-F visual elements を起動導線込みで観測できることだけを確�
 
 - `docs/operations/websocket-host-port-contract.md` にある bind host / browser-visible host /
   viewer page URL / WebSocket endpoint URL の contract を前提にする。
+- AutoPort / one-command / Tailscale WebView dev launcher の正本は
+  `docs/operations/mujoco-viewer-dev-launcher.md` にある。
 - viewer は rendering-only のままにする。
 - browser-side MuJoCo model loading、viewer-side FK / IK、viewer-side qpos pose recompute は追加しない。
 - production deployment、auth / TLS / reverse proxy、hardware / serial / OSC は扱わない。
@@ -146,6 +148,7 @@ present / absent の内訳は `data-dof-ring-present-count` と `data-dof-ring-a
 - `npm run browser:build` が済んでいるか確認する。
 - `index.html` の path が正しいか確認する。
 - browser console に module / script error がないか確認する。
+- launcher を使う場合は `--public-host` を明示して browser-visible host を固定する。
 
 ### `localhost` と `0.0.0.0` を混同している
 
@@ -184,6 +187,7 @@ present / absent の内訳は `data-dof-ring-present-count` と `data-dof-ring-a
 - 旧 Selfrionette にあった AutoPort 相当の port 自動選択を、新 MuJoCo viewer 導線に合わせて最小設計する。
 - backend publisher / viewer build / browser URL 表示までを一括で案内できる one-command dev launcher を検討する。
 - Tailscale / LAN / public host から browser で開くための viewer page URL と WebSocket endpoint URL を出力できるようにする。
+- launcher の正本は `docs/operations/mujoco-viewer-dev-launcher.md` に置く。
 - R6-G-P6 では production deployment、auth / TLS / reverse proxy は扱わない。
 - R6-G-P7 で Phase G completion audit を行う。
 
