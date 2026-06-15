@@ -8,6 +8,7 @@ canonical_for:
   - target_position_m / qpos command boundary
 related:
   - docs/contracts/forward-kinematics.md
+  - docs/contracts/inverse-kinematics.md
   - docs/operations/r6-h-p1-stub-inventory.md
   - docs/contracts/motion-command.md
   - docs/contracts/schemas.md
@@ -42,6 +43,8 @@ stub を concrete solver に置換する前に、`JointCommand` / `MotionCommand
 - `target_position_m` は viewer-visible feedback field と command target の境界を区別するための語である。
 
 ## Solver interfaces
+
+Concrete IK baseline は `docs/contracts/inverse-kinematics.md` に固定する。
 
 `base.py` の solver contract は interface only である。
 
@@ -145,6 +148,8 @@ P3 では、`ForwardKinematicsSolver` contract に従って concrete FK strategy
 を置く。`ZeroForwardKinematicsSolver` を runtime FK として扱わない。
 
 ## P4 IK handoff
+
+Concrete IK baseline は `src/selfrionette/kinematics/ik.py` の `PlanarTwoLinkInverseKinematicsSolver` に固定される。
 
 P4 では、`InverseKinematicsSolver` contract に従って concrete IK strategy を
 追加する。

@@ -67,6 +67,9 @@ viewer は backend / runtime payload を描画するだけである。
 
 ## P4 IK handoff
 
+P4 では `PlanarChainForwardKinematicsSolver` を seed / validation 用の FK baseline として使い、
+`src/selfrionette/kinematics/ik.py` の `PlanarTwoLinkInverseKinematicsSolver` の検証に使う。
+
 P4 では `InverseKinematicsSolver` の concrete strategy を追加する。
 FK baseline は IK の seed / validation の前提を固定するだけで、IK 実装その
 ものは追加しない。

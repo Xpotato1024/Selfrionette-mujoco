@@ -178,6 +178,12 @@ dead stub candidate (E): 0
 - R6-H completion audit を追加し、parent `#116` close handoff をまとめる。
 - runtime retirement candidates の除去状態と contract 固定状態を最終確認する。
 
+## P4 Concrete IK Handoff
+
+- `src/selfrionette/kinematics/ik.py` に `PlanarTwoLinkInverseKinematicsSolver` を追加する。
+- `ZeroInverseKinematicsSolver` は runtime IK として使わず、P6 以降の retirement candidate として残す。
+- empty `JointCommand()` を通常成功として扱わない concrete path を test で固定する。
+
 ## Non-Goals
 
 - concrete FK / IK 実装
@@ -207,7 +213,7 @@ P4 handoff added: yes
 P5 handoff added: yes
 P6 handoff added: yes
 P7 handoff added: yes
-concrete solver added: no
+concrete solver added: yes
 runtime implementation changed: no
 stub deleted: no
 schema breaking change: no

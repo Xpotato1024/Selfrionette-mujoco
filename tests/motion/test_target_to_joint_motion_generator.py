@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import pytest
+
+from selfrionette.kinematics import PlanarChainForwardKinematicsSolver, PlanarTwoLinkInverseKinematicsSolver
+from selfrionette.motion import TargetToJointMotionGenerator
+from selfrionette.schemas import JointCommand
+
+
+@dataclass(slots=True)
+class FutureTargetPositionCompatibleIntent:
+    source: str
+    timestamp_s: float
+    target_delta_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    joint_delta_rad: tuple[float, ...] = ()
+    metadata: dict[str, object] | None = None
+    target_position_m: tuple[float, float, float] | None = None
+
+
+def test_target_to_joint_motion_generator_uses_concrete_inverse_kinematics_solver() -> None:
+    fk = PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25))
+    solver = PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=(0.5, 0.25))
+    target_joint_angles_rad = (0.3, -0.2)
+    target_position_m = fk.forward(target_joint_angles_rad)
+    intent = FutureTargetPositionCompatibleIntent(
+        source="replay",
+        timestamp_s=2.0,
+        metadata={"origin": "concrete-ik"},
+        target_position_m=target_position_m,
+    )
+
+    command = TargetToJointMotionGenerator(
+        solver,
+        seed_joint_angles_rad=(0.0, -0.2),
+    ).update(intent, dt_s=0.016)
+
+    assert command.timestamp_s == 2.0
+    assert command.target is None
+    assert command.metadata == {"origin": "concrete-ik"}
+    assert command.joint is not None
+    assert command.joint.joint_angles_rad == pytest.approx(target_joint_angles_rad, abs=1e-9)
+    assert command.joint != JointCommand()
+    assert command.joint.joint_angles_rad != ()
