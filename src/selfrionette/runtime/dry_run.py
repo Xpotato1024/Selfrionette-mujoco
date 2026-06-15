@@ -8,8 +8,8 @@ from typing import TextIO
 
 from selfrionette.motion import NoOpMotionGenerator
 from selfrionette.mujoco_backend import snapshot_mujoco_state
+from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketStatePublisher
 
@@ -26,7 +26,10 @@ def _default_replay_frame() -> RawInputFrame:
     return RawInputFrame(
         source="replay",
         timestamp_s=0.0,
-        metadata={"preset": "r6-a-p3-default"},
+        metadata={
+            "preset": "r6-a-p3-default",
+            "target_position_m": DEFAULT_CONCRETE_TARGET_POSITION_M,
+        },
     )
 
 
@@ -102,7 +105,10 @@ async def _run_replay_mujoco_dry_run_async(
     dt = runtime_config.dt_s
 
     if preset == "sweep_x" and frames is None:
-        pipeline = build_replay_mujoco_pipeline(
+        # Visual-smoke compatibility path for legacy target-marker sweep behavior.
+        # This branch intentionally overrides the concrete motion generator with
+        # NoOpMotionGenerator so the target marker sweep stays deterministic.
+        pipeline = build_concrete_mujoco_pipeline(
             frames=_sweep_x_replay_frames(steps),
             config=runtime_config,
             loop=False,
@@ -143,7 +149,7 @@ async def _run_replay_mujoco_dry_run_async(
         return lines
 
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)
-    pipeline = build_replay_mujoco_pipeline(
+    pipeline = build_concrete_mujoco_pipeline(
         frames=replay_frames,
         config=runtime_config,
         loop=True,

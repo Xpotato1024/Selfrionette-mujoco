@@ -98,3 +98,30 @@ The runtime composition root keeps `MotionCommand.joint` on the backend qpos
 command path and forwards `MuJoCoState.target_position_m` as feedback to the
 transport / viewer side. Browser rendering stays rendering-only and does not
 become a command or state source of truth.
+
+R6-H-P5 adds the concrete runtime baseline for target / command / qpos
+wiring:
+
+```text
+ReplayInputSource
+  -> ReplayInputInterpreter
+  -> TargetToJointMotionGenerator
+  -> PlanarTwoLinkInverseKinematicsSolver
+  -> MotionCommand.joint
+  -> HeadlessMuJoCoSimulator
+  -> MuJoCoState
+  -> StatePublisher
+```
+
+`build_concrete_mujoco_pipeline()` is the explicit concrete path. It keeps
+`build_noop_pipeline()` as a test / placeholder helper and does not route the
+runtime default through `ZeroForwardKinematicsSolver`,
+`ZeroInverseKinematicsSolver`, `NoOpMotionGenerator`, `NoOpMuJoCoSimulator`,
+`NoOpInputInterpreter`, or `NoOpStatePublisher`.
+
+The `sweep_x` dry-run preset remains a visual-smoke compatibility path.
+It may use `NoOpMotionGenerator` to preserve target-marker sweep behavior.
+This exception is not the production-like concrete runtime default.
+The concrete default path and WebSocket publisher path use
+`build_concrete_mujoco_pipeline()` without replacing the motion generator with
+no-op.

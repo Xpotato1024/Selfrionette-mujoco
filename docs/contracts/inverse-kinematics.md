@@ -85,6 +85,12 @@ viewer は backend / runtime payload を描画するだけである。
 P5 では concrete FK / IK strategy を runtime composition に接続する。
 runtime default が zero / no-op stub に戻らないことを test で固定する。
 
+## P5 runtime notes
+
+- `build_concrete_mujoco_pipeline()` wires concrete IK into runtime
+- `ZeroInverseKinematicsSolver` remains a retirement candidate
+- missing or unreachable target positions fail explicitly
+
 ## Non-Goals
 
 - final robotics-grade IK

@@ -50,9 +50,9 @@ destructively.
 - `desired endpoint` is the command-side term for the target intent boundary.
 - `target_position_m` is the payload feedback field for the viewer-visible
   target marker, not a formal command schema field.
-- `TargetToJointMotionGenerator` may look for a temporary `target_position_m`
-  compatibility attribute while IK remains skeletal, but that hook is not a
-  formal schema field and does not redefine `desired endpoint`.
+- `TargetToJointMotionGenerator` reads `target_position_m` from runtime
+  metadata or a temporary compatibility attribute, and the runtime path pads
+  the solver output to the backend qpos contract when needed.
 - Actuator commands are not introduced in this issue. If they are needed later,
   add them in a separate issue with schema review.
 - R6-E-P3 では、`MotionCommand.joint` を qpos command boundary として
@@ -65,6 +65,12 @@ destructively.
   扱い、viewer が FK / IK / qpos を再計算しないことを前提にする。
 - unsupported target commands、unknown joint contracts、unsupported joint
   shapes は real backend で明示的に失敗させる。
+
+## P5 runtime notes
+
+- concrete runtime path reads `InputIntent.metadata["target_position_m"]`
+- `TargetToJointMotionGenerator` may pad solver output to the backend qpos contract
+- `NoOpMotionGenerator` remains an explicit placeholder, not the runtime default
 
 ## Unsupported Commands
 

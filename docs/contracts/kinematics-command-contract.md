@@ -161,6 +161,15 @@ workspace / seed / failure semantics を明示する。
 P5 では、P3 / P4 の concrete strategy を runtime composition に接続する。
 runtime default が zero / no-op stub にならないことを test する。
 
+## P5 runtime notes
+
+- `build_concrete_mujoco_pipeline()` is the explicit concrete path
+- `TargetToJointMotionGenerator` resolves `target_position_m` through
+  `PlanarTwoLinkInverseKinematicsSolver`
+- `MotionCommand.joint` is padded to the backend qpos contract in runtime
+- `build_noop_pipeline()` stays as an explicit placeholder helper
+- runtime default does not return to zero / no-op stub
+
 ## Non-Goals
 
 - concrete FK / IK 実装
@@ -191,7 +200,7 @@ P3 handoff added: yes
 P4 handoff added: yes
 P5 handoff added: yes
 concrete solver added: no
-runtime wiring changed: no
+runtime wiring changed: yes
 stub deleted: no
 schema breaking change: no
 viewer-side FK/IK added: no
