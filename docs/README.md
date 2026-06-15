@@ -33,6 +33,7 @@ Do not create or use `doc/`.
 | Browser visual smoke | `docs/operations/browser-visual-smoke.md` | R6-D-P3 viewer runtime / marker object operation smoke |
 | Backend / viewer startup guide | `docs/operations/backend-viewer-startup.md` | README handoff for backend / dry-run / browser connection startup |
 | R6-G-P3 startup script gap audit | `docs/operations/r6-g-p3-startup-script-gap-audit.md` | startup script / wrapper / npm script minimal completion decision |
+| R6-G completion audit | `docs/operations/r6-g-completion-audit.md` | Phase G completion audit and parent close handoff |
 | Japanese docs writing guardrails | `docs/operations/japanese-doc-writing-guardrails.md` | UTF-8 / BOM / mojibake prevention and PR body formatting checks |
 | R6-D completion audit | `docs/operations/r6-d-completion-audit.md` | viewer real scene mutation skeleton completion audit and IK phase handoff |
 | R6-G-P1 startup path audit | `docs/operations/r6-g-p1-startup-path-audit.md` | backend / viewer startup path inventory and README handoff |
@@ -43,6 +44,7 @@ Do not create or use `doc/`.
 | Viewer browser runtime entry | `docs/architecture/data-flow.md` | browser mount entry for payload v0 handoff; R6-B-P2 adds the WebSocket client skeleton; R6-B-P3 connects received payloads to marker rendering; R6-C-P2 adds endpoint configuration and connection status visibility; R6-D-P1 adds the Three.js scene object registry skeleton; R6-D-P2 applies payload marker positions to Three.js objects; R6-B-P4 audits and freezes the completed Phase B handoff |
 | Startup guide handoff | `docs/operations/backend-viewer-startup.md` | canonical backend / viewer startup guide for R6-G-P2 |
 | R6-G-P3 startup gap audit | `docs/operations/r6-g-p3-startup-script-gap-audit.md` | canonical startup script gap decision for R6-G-P3 |
+| R6-G completion audit | `docs/operations/r6-g-completion-audit.md` | canonical Phase G completion audit and parent close handoff |
 | Japanese docs guardrails | `docs/operations/japanese-doc-writing-guardrails.md` | repo-level encoding and PR body safety checks for Japanese docs |
 | Schema contracts | `docs/contracts/schemas.md` | shared contract types |
 | MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
