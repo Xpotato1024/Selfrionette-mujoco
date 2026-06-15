@@ -118,3 +118,10 @@ ReplayInputSource
 runtime default through `ZeroForwardKinematicsSolver`,
 `ZeroInverseKinematicsSolver`, `NoOpMotionGenerator`, `NoOpMuJoCoSimulator`,
 `NoOpInputInterpreter`, or `NoOpStatePublisher`.
+
+The `sweep_x` dry-run preset remains a visual-smoke compatibility path.
+It may use `NoOpMotionGenerator` to preserve target-marker sweep behavior.
+This exception is not the production-like concrete runtime default.
+The concrete default path and WebSocket publisher path use
+`build_concrete_mujoco_pipeline()` without replacing the motion generator with
+no-op.

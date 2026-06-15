@@ -65,6 +65,15 @@ ReplayInputSource
 - 2-link IK 出力は backend qpos contract に合わせて runtime 側で pad する
 - zero / empty stub は concrete path の default にしない
 
+## Compatibility exception
+
+The `sweep_x` dry-run preset remains a visual-smoke compatibility path.
+It may use `NoOpMotionGenerator` to preserve target-marker sweep behavior.
+This exception is not the production-like concrete runtime default.
+The concrete default path and WebSocket publisher path use
+`build_concrete_mujoco_pipeline()` without replacing the motion generator with
+no-op.
+
 ## MotionCommand.joint / qpos boundary
 
 `MotionCommand.joint` は backend の qpos command boundary 入力として扱う。

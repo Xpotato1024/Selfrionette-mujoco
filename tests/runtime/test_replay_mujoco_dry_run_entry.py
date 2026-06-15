@@ -17,6 +17,7 @@ def test_run_replay_mujoco_dry_run_returns_single_payload_line() -> None:
     assert payload["version"] == 0
     assert payload["frame_index"] == 1
     assert payload["time_s"] > 0.0
+    assert payload["qpos"][:4] != [0.0, 0.0, 0.0, 0.0]
     assert payload["target_position_m"] is None
 
 
@@ -77,6 +78,17 @@ def test_run_replay_mujoco_dry_run_sweep_x_preset_keeps_delta_and_feedback_separ
         assert desired_endpoint_m[0] == pytest.approx(current_tip_position_m[0] + target_delta_m[0])
         assert desired_endpoint_m[1] == pytest.approx(current_tip_position_m[1] + target_delta_m[1])
         assert desired_endpoint_m[2] == pytest.approx(current_tip_position_m[2] + target_delta_m[2])
+
+
+def test_run_replay_mujoco_dry_run_sweep_x_preset_remains_visual_smoke_compatibility_path() -> None:
+    lines = run_replay_mujoco_dry_run(steps=1, preset="sweep_x")
+
+    assert len(lines) == 1
+
+    payload = json.loads(lines[0])
+    assert payload["metadata"]["preset"] == "sweep_x"
+    assert payload["metadata"]["desired_endpoint_m"] == payload["target_position_m"]
+    assert len(payload["qpos"]) >= 4
 
 
 def test_run_replay_mujoco_dry_run_rejects_unknown_preset() -> None:

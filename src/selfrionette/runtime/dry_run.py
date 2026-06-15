@@ -105,6 +105,9 @@ async def _run_replay_mujoco_dry_run_async(
     dt = runtime_config.dt_s
 
     if preset == "sweep_x" and frames is None:
+        # Visual-smoke compatibility path for legacy target-marker sweep behavior.
+        # This branch intentionally overrides the concrete motion generator with
+        # NoOpMotionGenerator so the target marker sweep stays deterministic.
         pipeline = build_concrete_mujoco_pipeline(
             frames=_sweep_x_replay_frames(steps),
             config=runtime_config,
