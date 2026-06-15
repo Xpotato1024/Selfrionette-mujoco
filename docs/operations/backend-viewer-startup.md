@@ -133,6 +133,7 @@ LAN / Tailscale / public host:
 
 詳細な切り分けは `docs/operations/browser-visual-smoke.md` と `docs/operations/live-viewer-smoke.md` を参照する。
 必要なら #106 / R6-G-P5 で troubleshooting を拡充する。
+詳細は `docs/operations/runtime-to-viewer-e2e-smoke.md` を参照する。
 
 ## R6-G-P3 への handoff
 

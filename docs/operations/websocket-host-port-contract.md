@@ -195,7 +195,9 @@ WebSocket endpoint URL:
 
 ## R6-G-P5 への handoff
 
-- R6-G-P5 では、この host / port / URL contract を前提に runtime-to-viewer E2E smoke を整理する。
+- R6-G-P5 では、この host / port / URL contract を前提に
+  `docs/operations/runtime-to-viewer-e2e-smoke.md` へ runtime-to-viewer E2E smoke と
+  troubleshooting を整理する。
 - WebSocket status が `open` にならない場合の troubleshooting を追加する。
 - browser は開くが payload が来ない場合の切り分けを追加する。
 - LAN / Tailscale から見たときに WebSocket URL が loopback のままになっているケースを troubleshooting に追加する。

@@ -28,6 +28,7 @@ Do not create or use `doc/`.
 | WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0 |
 | WebSocket / host / port contract | `docs/operations/websocket-host-port-contract.md` | bind host, browser-visible host, viewer page URL, and WebSocket endpoint URL contract |
 | Live viewer smoke path | `docs/operations/live-viewer-smoke.md` | deterministic dry-run payload -> browser viewer smoke path for R6-C-P3 |
+| Runtime-to-viewer E2E smoke | `docs/operations/runtime-to-viewer-e2e-smoke.md` | backend / dry-run -> publisher -> viewer -> browser troubleshooting handoff for R6-G-P5 |
 | Browser visual smoke | `docs/operations/browser-visual-smoke.md` | R6-D-P3 viewer runtime / marker object operation smoke |
 | Backend / viewer startup guide | `docs/operations/backend-viewer-startup.md` | README handoff for backend / dry-run / browser connection startup |
 | R6-G-P3 startup script gap audit | `docs/operations/r6-g-p3-startup-script-gap-audit.md` | startup script / wrapper / npm script minimal completion decision |
