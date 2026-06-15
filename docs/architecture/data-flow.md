@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-06-15
 canonical_for:
   - runtime data flow
 related:
@@ -25,6 +25,11 @@ InputSource
   -> transport payload
   -> viewer rendering
 ```
+
+`MotionCommand.joint` is the qpos command boundary input that crosses from
+motion into the backend. `MuJoCoState.target_position_m` stays on the
+viewer-visible feedback side of the boundary. The viewer receives payloads for
+rendering and observation only; it does not recompute FK, IK, or qpos.
 
 Data flow and import dependency are different things. Runtime is the only
 composition root allowed to connect multiple layers.

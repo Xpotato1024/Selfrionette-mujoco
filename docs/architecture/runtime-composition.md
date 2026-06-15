@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-06-15
 canonical_for:
   - runtime composition root
 related:
@@ -93,3 +93,8 @@ creating reverse dependencies.
 
 Step 5-0 freezes the parallel work contracts for input, motion, IK, transport,
 and viewer work. The contract details live in `docs/contracts/`.
+
+The runtime composition root keeps `MotionCommand.joint` on the backend qpos
+command path and forwards `MuJoCoState.target_position_m` as feedback to the
+transport / viewer side. Browser rendering stays rendering-only and does not
+become a command or state source of truth.
