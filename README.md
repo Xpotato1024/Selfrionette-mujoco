@@ -8,6 +8,7 @@
 - [docs/README.md](docs/README.md)
 - [docs/operations/backend-viewer-startup.md](docs/operations/backend-viewer-startup.md)
 - [docs/operations/r6-g-p1-startup-path-audit.md](docs/operations/r6-g-p1-startup-path-audit.md)
+- [docs/operations/r6-g-p3-startup-script-gap-audit.md](docs/operations/r6-g-p3-startup-script-gap-audit.md)
 - [apps/mujoco-viewer/README.md](apps/mujoco-viewer/README.md)
 
 ## セットアップ
@@ -81,4 +82,5 @@ browser / viewer smoke の補助導線です。CLI は browser URL と WebSocket
 - [docs/operations/websocket-publisher-runner.md](docs/operations/websocket-publisher-runner.md)
 - [docs/operations/live-viewer-smoke.md](docs/operations/live-viewer-smoke.md)
 - [docs/operations/browser-visual-smoke.md](docs/operations/browser-visual-smoke.md)
+- [docs/operations/r6-g-p3-startup-script-gap-audit.md](docs/operations/r6-g-p3-startup-script-gap-audit.md)
 - [docs/operations/r6-f-completion-audit.md](docs/operations/r6-f-completion-audit.md)
