@@ -12,6 +12,7 @@
 - [docs/operations/mujoco-viewer-dev-launcher.md](docs/operations/mujoco-viewer-dev-launcher.md)
 - [docs/operations/r6-g-p1-startup-path-audit.md](docs/operations/r6-g-p1-startup-path-audit.md)
 - [docs/operations/r6-g-p3-startup-script-gap-audit.md](docs/operations/r6-g-p3-startup-script-gap-audit.md)
+- [docs/operations/r6-g-completion-audit.md](docs/operations/r6-g-completion-audit.md)
 - [apps/mujoco-viewer/README.md](apps/mujoco-viewer/README.md)
 
 ## セットアップ
