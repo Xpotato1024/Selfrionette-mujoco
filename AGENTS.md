@@ -201,9 +201,10 @@ docs / SoT impact checked:
 - 文字化けが疑われる場合は、表示結果だけで判断せず、バイト列や明示的なエンコーディング指定で確認する。
 - PR 作成前に、本文と関連文書が化けていないことを確認し、PowerShell のエンコーディング差で壊れやすい inline 生成は避ける。
 
-## 15. Japanese Docs Guardrails
+## 15. 日本語 docs 作成ガードレール
 
-- Follow `docs/operations/japanese-doc-writing-guardrails.md` for Japanese Markdown encoding, BOM, mojibake, and PR body checks.
-- Keep Japanese docs in UTF-8 without BOM.
-- Do not rely on `git diff --check` alone for text encoding safety.
-- If a Japanese doc or PR body is edited, run the validation commands in the guardrail doc before merging.
+- 日本語 Markdown / PR body の encoding、BOM、mojibake、handoff ずれは `docs/operations/japanese-doc-writing-guardrails.md` に従って確認する。
+- 日本語 docs は UTF-8 without BOM で保存する。
+- `git diff --check` だけを文字化け検出として扱わない。
+- 日本語 docs または PR body を編集した場合は、merge 前に guardrail doc の検証コマンドを実行する。
+- PR body は GitHub metadata のため file check では検出できない。`gh pr view <PR_NUMBER> --json body` で別途確認する。

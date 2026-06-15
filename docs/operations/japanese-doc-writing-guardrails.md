@@ -83,7 +83,18 @@ paths = [
 
 paths.extend(str(p) for p in Path("docs").rglob("*.md"))
 
-bad_tokens = ["MOJIBAKE_TOKEN_1", "MOJIBAKE_TOKEN_2", "MOJIBAKE_TOKEN_3"]
+bad_tokens = [
+    "\u7e3a",  # common mojibake token 1
+    "\u7e67",  # common mojibake token 2
+    "\u8700",  # common mojibake token 3
+    "\u9aea",  # common mojibake token 4
+    "\u8b17",  # common mojibake token 5
+    "\u9036",  # common mojibake token 6
+    "\u8b5b",  # common mojibake token 7
+    "\u83a0",  # common mojibake token 8
+    "\u7e32",  # common mojibake token 9
+    "\u0080",
+]
 
 for p in paths:
     path = Path(p)
@@ -110,14 +121,10 @@ PY
 
 ## mojibake token check
 
-以下のような token が Markdown 本文に出た場合、文字化けとして扱う。
-実際の raw 文字は文書に埋め込まず、検証コマンド側で管理する。
+mojibake token は raw 文字で Markdown 本文に直書きしない。
+ただし、検証コマンドでは unicode escape で検出対象を定義し、実行時に実際の mojibake を検出できるようにする。
 
-```text
-MOJIBAKE_TOKEN_1
-MOJIBAKE_TOKEN_2
-MOJIBAKE_TOKEN_3
-```
+placeholder だけの検証は禁止する。
 
 ## BOM check
 
