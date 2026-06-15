@@ -50,6 +50,7 @@ Do not create or use `doc/`.
 | Schema contracts | `docs/contracts/schemas.md` | shared contract types |
 | Kinematics / command contract | `docs/contracts/kinematics-command-contract.md` | solver / command / qpos boundary |
 | Forward kinematics contract | `docs/contracts/forward-kinematics.md` | concrete FK baseline and zero-stub retirement |
+| Inverse kinematics contract | `docs/contracts/inverse-kinematics.md` | concrete two-link IK baseline and zero-stub retirement |
 | MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
 | Parallel work contracts | `docs/contracts/parallel-work-contracts.md` | Step 5-0 contract lock |
 | MotionCommand contract | `docs/contracts/motion-command.md` | command not state |
