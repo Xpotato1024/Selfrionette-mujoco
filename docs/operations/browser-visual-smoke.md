@@ -82,6 +82,9 @@ root viewer element は smoke state を attributes で公開する。
 - `data-fast-arm-mesh-status`
 - `data-fast-arm-mesh-count`
 - `data-dof-ring-status`
+- `data-dof-ring-descriptor-count`
+- `data-dof-ring-present-count`
+- `data-dof-ring-absent-count`
 - `data-dof-ring-count`
 DoF ring display は marker object count とは別の presentation overlay として観測する。
 
@@ -158,6 +161,8 @@ connection がある場合は body + site + arm skeleton になる。target と 
 R6-G-P5 の troubleshooting では
 `docs/operations/websocket-host-port-contract.md` を参照して host / port / URL
 の混同を切り分ける。
+R6-G-P5 の runtime-to-viewer E2E smoke 本体は
+`docs/operations/runtime-to-viewer-e2e-smoke.md` に置く。
 
 ## Non-Goals
 

@@ -65,3 +65,4 @@ apps/mujoco-viewer/index.html?ws=ws://127.0.0.1:8766
 - [docs/operations/backend-viewer-startup.md](../../docs/operations/backend-viewer-startup.md)
 - [docs/operations/browser-visual-smoke.md](../../docs/operations/browser-visual-smoke.md)
 - [docs/operations/live-viewer-smoke.md](../../docs/operations/live-viewer-smoke.md)
+- [docs/operations/runtime-to-viewer-e2e-smoke.md](../../docs/operations/runtime-to-viewer-e2e-smoke.md)

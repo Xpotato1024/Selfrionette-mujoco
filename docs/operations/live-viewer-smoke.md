@@ -64,6 +64,8 @@ The canonical backend / viewer startup guide is
 `docs/operations/backend-viewer-startup.md`.
 The host / port / URL contract is fixed in
 `docs/operations/websocket-host-port-contract.md`.
+R6-G-P5 の E2E smoke / troubleshooting の本体は
+`docs/operations/runtime-to-viewer-e2e-smoke.md` に置く。
 
 ## What the Smoke Path Proves
 
