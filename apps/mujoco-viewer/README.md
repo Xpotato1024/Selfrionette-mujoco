@@ -40,6 +40,7 @@ apps/mujoco-viewer/index.html?ws=ws://127.0.0.1:8766
 - query がない場合は自動接続しない。
 - browser page URL と WebSocket endpoint URL は別。
 - status は viewer 上の DOM / root attributes で観測する。
+- `0.0.0.0` bind、LAN / Tailscale / public host、browser-visible host の整理は [docs/operations/websocket-host-port-contract.md](../../docs/operations/websocket-host-port-contract.md) を参照する。
 
 ## 起動導線
 
