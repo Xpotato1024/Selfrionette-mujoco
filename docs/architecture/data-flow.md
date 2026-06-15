@@ -131,6 +131,8 @@ The browser viewer reads an explicit `websocketUrl` query parameter, accepts
 `ws` as a compatible alias, and does not auto-connect when no endpoint is
 provided. The status text stays separate from payload marker rendering and the
 Python publisher runner remains unchanged.
+The host / port / public host contract for that endpoint selection is fixed in
+`docs/operations/websocket-host-port-contract.md`.
 
 R6-C-P3 adds the deterministic smoke path that uses the Python publisher
 runner plus the configured browser endpoint:

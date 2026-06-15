@@ -163,6 +163,7 @@ loopback 前提の現行導線そのものは不足していない。
 - `websocketUrl` と `ws` の違いを明示する
 - `browser URL` と `WebSocket URL` を別概念として説明する
 - `npm ci` / `browser:build` / `typecheck` / `build` / `test` の役割を分ける
+- 正本となる contract 文書は `docs/operations/websocket-host-port-contract.md` とする
 
 ## R6-G-P3 への handoff
 

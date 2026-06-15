@@ -74,6 +74,8 @@ default:
 present, the viewer stays disconnected and shows `WebSocket: disabled`. R6-C-P2
 adds that endpoint configuration and connection status display on the viewer
 side; the Python publisher runner remains unchanged.
+The host / port / public host contract is fixed in
+`docs/operations/websocket-host-port-contract.md`.
 
 R6-C-P3 adds the smoke handoff doc and command that pair this runner with the
 browser viewer endpoint configuration:

@@ -87,6 +87,8 @@ apps/mujoco-viewer/index.html?ws=ws://127.0.0.1:8766
 - query がない場合は自動接続しない。
 - WebSocket status は viewer 上の status / root attributes で観測する。
 - `npm run browser:build` は `index.html` が読む `dist/browser/main.js` を作る。
+- host / port / public host contract の正本は
+  `docs/operations/websocket-host-port-contract.md` に固定する。
 
 ## localhost / 127.0.0.1 / 0.0.0.0
 
@@ -102,7 +104,7 @@ LAN / Tailscale / public host:
   browser 側の URL / WebSocket URL には、browser から見える host を使う
 ```
 
-- `0.0.0.0` で bind しても、browser からは `127.0.0.1` / LAN IP / Tailscale IP などで接続する。
+- `0.0.0.0` で bind しても、same machine の browser からは `127.0.0.1` / `localhost` を使い、別 machine の browser からは LAN IP / Tailscale IP / public host など、その browser から見える host を使う。
 - bind host と browser から見える host は別。
 
 ## port / URL の混同回避
@@ -139,6 +141,8 @@ LAN / Tailscale / public host:
 - 既存 script と説明だけで loopback 導線は成立するため、今回の結論は「不足なし」。
 - 補完判断の正本は [docs/operations/r6-g-p3-startup-script-gap-audit.md](r6-g-p3-startup-script-gap-audit.md) に固定する。
 - Windows / PowerShell 向けの短い wrapper、`0.0.0.0` bind と browser URL を同時に案内する補助、public host / LAN / Tailscale 向け URL 案内補助は、R6-G-P4 以降で必要性が出た場合のみ扱う。
+- host / port / public host contract の詳細は
+  `docs/operations/websocket-host-port-contract.md` を参照する。
 - package dependency は追加しない。
 - viewer visual feature は追加しない。
 

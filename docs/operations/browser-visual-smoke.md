@@ -55,6 +55,8 @@ apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 
 `?ws=ws://127.0.0.1:8766` は互換 alias として受け付ける。
+host / port / public host contract は
+`docs/operations/websocket-host-port-contract.md` に固定する。
 
 ## Expected Viewer Status
 
@@ -152,6 +154,10 @@ connection がある場合は body + site + arm skeleton になる。target と 
 - object count が合わない場合は、表示中の payload frame に
   `target_position_m` があるか、canonical arm skeleton の body/site names
   があるかを確認する。
+
+R6-G-P5 の troubleshooting では
+`docs/operations/websocket-host-port-contract.md` を参照して host / port / URL
+の混同を切り分ける。
 
 ## Non-Goals
 

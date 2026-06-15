@@ -76,6 +76,7 @@ R6-G-P3 では新規 script は追加しない。
 
 - public host / LAN / Tailscale の URL contract は R6-G-P4 で扱う
 - `0.0.0.0` と browser から見える host の整理は R6-G-P4 に渡す
+- 正本となる contract 文書は `docs/operations/websocket-host-port-contract.md` とする
 
 ## R6-G-P5 への handoff
 

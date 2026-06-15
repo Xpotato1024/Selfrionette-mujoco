@@ -7,6 +7,7 @@
 
 - [docs/README.md](docs/README.md)
 - [docs/operations/backend-viewer-startup.md](docs/operations/backend-viewer-startup.md)
+- [docs/operations/websocket-host-port-contract.md](docs/operations/websocket-host-port-contract.md)
 - [docs/operations/r6-g-p1-startup-path-audit.md](docs/operations/r6-g-p1-startup-path-audit.md)
 - [docs/operations/r6-g-p3-startup-script-gap-audit.md](docs/operations/r6-g-p3-startup-script-gap-audit.md)
 - [apps/mujoco-viewer/README.md](apps/mujoco-viewer/README.md)
@@ -75,6 +76,7 @@ browser / viewer smoke の補助導線です。CLI は browser URL と WebSocket
 - LAN / Tailscale / public host から開くときは、browser から見える host を URL に使います。
 - bind host と browser から見える host は別です。
 - viewer page URL と WebSocket endpoint URL は別です。
+- 詳細な host / port / URL contract は [docs/operations/websocket-host-port-contract.md](docs/operations/websocket-host-port-contract.md) を参照してください。
 
 ## 参照
 

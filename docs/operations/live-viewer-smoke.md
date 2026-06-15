@@ -62,6 +62,8 @@ already-completed IK path.
 
 The canonical backend / viewer startup guide is
 `docs/operations/backend-viewer-startup.md`.
+The host / port / URL contract is fixed in
+`docs/operations/websocket-host-port-contract.md`.
 
 ## What the Smoke Path Proves
 
