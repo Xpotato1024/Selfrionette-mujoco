@@ -40,7 +40,12 @@ intent bridge を固定した。
 
 ## Validation
 
-- pending
+- `git diff --check` passed.
+- `uv run python -m compileall src tests scripts` passed.
+- `uv run pytest tests/input_sources tests/input_interpreters tests/runtime -q` passed, 65 passed.
+- `uv run pytest tests/architecture tests/stubs -q` passed, 20 passed.
+- Japanese docs encoding check passed.
+- `scripts/check_import_boundaries.py` was not present in this checkout, so import boundary checking was handled by architecture / stubs tests and manual review.
 
 ## Compatibility
 
