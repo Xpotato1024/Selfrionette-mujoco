@@ -163,7 +163,7 @@ def test_replay_mujoco_websocket_publisher_sweep_x_keeps_metadata_and_finishes_c
     assert payloads[0]["metadata"]["desired_endpoint_m"] == payloads[0]["target_position_m"]
 
 
-def test_replay_mujoco_websocket_publisher_smoke_stays_finite_for_about_120_frames() -> None:
+def test_replay_mujoco_websocket_publisher_sweep_x_payload_stays_finite_for_about_120_frames() -> None:
     payloads = _collect_payloads(steps=120, preset="sweep_x", client_connected=True, grace_period_s=0.0)
 
     assert len(payloads) == 120

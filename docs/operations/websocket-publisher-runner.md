@@ -27,17 +27,21 @@ payload v0 JSON.
 - Does not open the browser viewer.
 - Does not implement a production WebSocket server.
 
-## Command
+## Manual Web View Smoke Command
+
+Manual browser smoke uses the short `sweep_x` programmed input path. This is
+the recommended command for checking that the HTTP-served viewer receives a
+payload without using the longer dynamics path that can print a MuJoCo QACC
+instability warning.
 
 ```bash
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 120 --interval-s 0.033 --grace-period-s 60
+uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 6 --interval-s 0.033 --grace-period-s 60 --preset sweep_x
 ```
 
-`sweep_x` programmed input path を publish する場合:
-
-```bash
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 120 --interval-s 0.033 --grace-period-s 60 --preset sweep_x
-```
+The default path remains a payload compatibility path covered by unit tests.
+Do not use the previous default `--steps 120` command as the manual browser
+smoke recommendation. Longer MuJoCo dynamics stability is deferred to a
+separate issue.
 
 ## Options
 
@@ -46,8 +50,8 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 
 - `--steps`: number of replay steps, default `1`.
 - `--dt-s`: replay step duration in seconds, default `1.0 / 60.0`.
 - `--interval-s`: delay between published frames in seconds, default `0.0`.
-- `--grace-period-s`: delay after server start before the first payload is
-  published, default `0.05`.
+- `--grace-period-s`: seconds to wait for a viewer WebSocket connection before
+  publishing, default `0.05`.
 - `--preset`: optional programmed input preset. `sweep_x` is supported.
 
 ## Behavior
@@ -63,9 +67,9 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 
 - `interval_s` inserts a pause between steps.
 - `grace_period_s` gives local clients time to connect before the first
   payload is sent.
-- Manual Web view smoke should use a short run such as `--steps 120`.
-  Long-run MuJoCo stability is a separate validation topic and is not covered
-  by this smoke command.
+- Manual Web view smoke should use the short `--preset sweep_x --steps 6`
+  command above. QACC warnings from longer dynamics runs are not part of the
+  browser smoke acceptance path.
 
 ## Scope Limits
 

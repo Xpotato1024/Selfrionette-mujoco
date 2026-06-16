@@ -23,6 +23,14 @@ def test_cli_help_includes_preset() -> None:
     assert "sweep_x" in help_text
 
 
+def test_cli_help_describes_grace_period_as_viewer_connection_wait() -> None:
+    help_text = MODULE.build_parser().format_help()
+    normalized_help = " ".join(help_text.split())
+
+    assert "seconds to wait for a viewer WebSocket connection before publishing" in normalized_help
+    assert "delay after server start before the first payload is published" not in help_text
+
+
 def test_cli_accepts_sweep_x_and_passes_it_to_runtime() -> None:
     stdout = io.StringIO()
     with patch.object(MODULE, "run_replay_mujoco_websocket_publisher") as run_publisher:

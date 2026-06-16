@@ -40,29 +40,21 @@ programmed target input source 由来の intent を runtime path に通す。
 - viewer は payload を描画するだけで、FK / IK / qpos recompute はしない。
 - CLI では `--preset sweep_x` を受け付け、dry-run と同じ programmed input
   metadata を payload に残す。
-- manual Web view smoke では `--steps 120 --interval-s 0.033 --grace-period-s 60`
-  を標準とし、`--steps 10000` のような long-run stability 確認は別 issue に送る。
+- manual Web view smoke では短い `sweep_x` path を標準とする。default path は
+  payload compatibility / unit test path とし、manual browser smoke の推奨
+  command から外す。
+- `--steps 120` 程度の finite payload regression は tests で固定するが、QACC
+  warning が出る長めの dynamics path は manual smoke acceptance に含めない。
 - 起動時は `serving on ws://...`、viewer 接続待ち、publish 開始、publish 完了
   または接続なし終了理由をログで確認する。
 
-default path:
+manual Web view smoke command:
 
 ```powershell
 uv run python scripts/run_replay_mujoco_websocket_publisher.py `
   --host 127.0.0.1 `
   --port 8766 `
-  --steps 120 `
-  --interval-s 0.033 `
-  --grace-period-s 60
-```
-
-`sweep_x` path:
-
-```powershell
-uv run python scripts/run_replay_mujoco_websocket_publisher.py `
-  --host 127.0.0.1 `
-  --port 8766 `
-  --steps 120 `
+  --steps 6 `
   --interval-s 0.033 `
   --grace-period-s 60 `
   --preset sweep_x

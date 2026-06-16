@@ -59,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--grace-period-s",
         type=_non_negative_float,
         default=0.05,
-        help="delay after server start before the first payload is published",
+        help="seconds to wait for a viewer WebSocket connection before publishing",
     )
     parser.add_argument(
         "--preset",

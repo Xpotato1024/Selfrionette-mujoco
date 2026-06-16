@@ -51,24 +51,15 @@ uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x
 
 ## WebSocket publisher
 
-default path:
+manual Web view smoke は `sweep_x` programmed input path を使う。default path は
+payload compatibility / unit test path として扱い、manual browser smoke の推奨
+command にはしない。
 
 ```powershell
 uv run python scripts/run_replay_mujoco_websocket_publisher.py `
   --host 127.0.0.1 `
   --port 8766 `
-  --steps 120 `
-  --interval-s 0.033 `
-  --grace-period-s 60
-```
-
-`sweep_x` programmed input path:
-
-```powershell
-uv run python scripts/run_replay_mujoco_websocket_publisher.py `
-  --host 127.0.0.1 `
-  --port 8766 `
-  --steps 120 `
+  --steps 6 `
   --interval-s 0.033 `
   --grace-period-s 60 `
   --preset sweep_x
@@ -83,8 +74,9 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py `
 - 起動時に `serving on ws://127.0.0.1:8766` 相当の待受ログが出る。
 - `--grace-period-s` の間は viewer 接続待ちになり、接続なしで終了する場合も理由を出す。
 - publisher は browser page を開かない。
-- manual smoke では `--steps 10000` のような長時間 run を推奨しない。
-  long-run MuJoCo stability は別 issue で扱う。
+- manual smoke では default `--steps 120` や `--steps 10000` のような長時間
+  dynamics run を推奨しない。QACC warning が出る path は manual browser smoke
+  から外し、long-run MuJoCo stability は別 issue で扱う。
 
 ## Web viewer
 
