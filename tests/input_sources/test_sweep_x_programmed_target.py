@@ -17,6 +17,8 @@ PROGRAMMED_TARGET_MODULE = ROOT / "src" / "selfrionette" / "input_sources" / "pr
 def test_sweep_x_input_source_is_exported_from_package_root() -> None:
     assert build_sweep_x_input_source is input_sources.build_sweep_x_input_source
     assert "build_sweep_x_input_source" in input_sources.__all__
+    assert "build_sweep_x_trajectory" not in input_sources.__all__
+    assert not hasattr(input_sources, "build_sweep_x_trajectory")
     assert isinstance(build_sweep_x_input_source(), ProgrammedTargetInputSource)
 
 
@@ -114,3 +116,10 @@ def test_sweep_x_programmed_target_module_does_not_import_noop_motion_generator(
             assert "selfrionette.motion.stubs" not in imported_names
 
     assert "NoOpMotionGenerator" not in source_text
+
+
+def test_sweep_x_trajectory_is_module_level_public_api() -> None:
+    import selfrionette.input_sources.programmed_target as programmed_target_module
+
+    assert "build_sweep_x_trajectory" in programmed_target_module.__all__
+    assert "build_sweep_x_input_source" in programmed_target_module.__all__

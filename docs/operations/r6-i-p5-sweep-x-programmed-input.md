@@ -16,8 +16,8 @@ related:
 
 ## 1. 目的
 
-`sweep_x` を `NoOpMotionGenerator` の例外や viewer marker animation ではなく、
-`ProgrammedTargetInputSource` に由来する deterministic programmed target trajectory として固定する。
+`sweep_x` を `NoOpMotionGenerator` の例外や viewer marker animation として扱わず、
+`ProgrammedTargetInputSource` 由来の deterministic programmed target trajectory として固定する。
 
 この issue で固定するのは trajectory と metadata contract までであり、dry-run preset や
 WebSocket publisher runner の wiring は行わない。
@@ -26,11 +26,11 @@ WebSocket publisher runner の wiring は行わない。
 
 `#138` / PR `#156` で追加された `ProgrammedTargetInputSource` contract を前提にする。
 
-- `RawInputFrame.metadata` が programmed target intent の bridge である
+- `RawInputFrame.metadata` は programmed target intent の bridge である
 - `source_kind = "programmed_target"` を使う
 - `trajectory_name` を必ず入れる
 - `target_position_m`, `desired_endpoint_m`, `t_s`, `frame_index` を入れる
-- trajectory-specific metadata として `phase` を許容する
+- `phase` は trajectory-specific metadata として追加してよい
 
 ## 3. sweep_x の新しい定義
 
@@ -58,7 +58,7 @@ WebSocket publisher runner の wiring は行わない。
 
 - `initial_hold`: 初期 target を hold する
 - `move_positive_x`: x 正方向へ移動する
-- `slow_or_hold_at_positive_x`: 正の端点付近で hold する、または減速相当の扱いにする
+- `slow_or_hold_at_positive_x`: 正の端点付近で hold または減速する
 - `return_to_initial`: 初期位置へ戻る
 - `final_hold`: 初期位置付近で最終 hold する
 
@@ -77,15 +77,13 @@ WebSocket publisher runner の wiring は行わない。
 - `frame_index`
 - `phase`
 
-`target_velocity_mps` は deterministic に設定する。
-
-`phase` は trajectory-specific metadata であり、sweep_x のような concrete programmed target trajectory では
-追加してよい。
+`target_velocity_mps` と `phase` は `sweep_x` では必須 metadata として扱う。
+一方で base `ProgrammedTargetInputSource` contract では optional / trajectory-specific metadata である。
 
 ## 6. deterministic sequence behavior
 
 - 同じ trajectory builder からは同じ frame sequence が再現される
-- `loop=False` では終端フレームを保持する
+- `loop=False` では終端 frame を保持する
 - `loop=True` では sequence が循環する
 - `target_position_m` は x 方向の sweep を示し、y / z は不要に変化させない
 - `desired_endpoint_m` は phase に応じた endpoint を示す
@@ -100,12 +98,12 @@ programmed target input source から target intent を供給する。
 
 ## 8. dry-run / WebSocket wiring を後続に送る理由
 
-dry-run preset と WebSocket publisher runner の接続変更は、`#140` でまとめて行う。
+dry-run preset と WebSocket publisher runner の接続変更は `#140` でまとめて行う。
 
 理由:
 
 - #139 では trajectory と metadata contract の固定が目的
-- runtime wiring を混ぜると scope が膨らむ
+- runtime wiring を混ぜると scope が広がる
 - `runtime/dry_run.py` や publisher runner の既存挙動を壊さずに前進できる
 
 ## 9. tests / validation
@@ -144,7 +142,7 @@ dry-run preset と WebSocket publisher runner の接続変更は、`#140` でま
 - runtime entrypoint の変更
 - target command schema 正式化
 - MuJoCo site / body contract 変更
-- viewer overlay
+- viewer 変更
 - hardware validation
 - serial port open
 - OSC send

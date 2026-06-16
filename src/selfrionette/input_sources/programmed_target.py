@@ -268,6 +268,7 @@ def build_sweep_x_input_source(
 
 __all__ = [
     "build_sweep_x_input_source",
+    "build_sweep_x_trajectory",
     "ProgrammedTargetFrame",
     "ProgrammedTargetInputSource",
     "ProgrammedTargetTrajectory",

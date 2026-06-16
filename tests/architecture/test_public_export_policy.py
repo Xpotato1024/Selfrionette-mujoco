@@ -43,8 +43,10 @@ def test_input_sources_package_root_exports_programmed_target_input_source() -> 
     module = importlib.import_module("selfrionette.input_sources")
     assert "ProgrammedTargetInputSource" in module.__all__
     assert "build_sweep_x_input_source" in module.__all__
+    assert "build_sweep_x_trajectory" not in module.__all__
     assert hasattr(module, "ProgrammedTargetInputSource")
     assert hasattr(module, "build_sweep_x_input_source")
+    assert not hasattr(module, "build_sweep_x_trajectory")
     assert "StaticInputSource" not in module.__all__
     assert not hasattr(module, "StaticInputSource")
 
