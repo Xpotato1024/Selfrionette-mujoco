@@ -71,6 +71,11 @@ python -m http.server 5173
 http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 
+Current limitation: the browser runtime can parse payload v0 and show
+diagnostic text such as body/site counts and target/tip/error-vector values,
+but it is still not a proper 3D GUI visual smoke. Proper 3D scene rendering
+should be handled by a separate viewer follow-up.
+
 ## 5. runtime path / SoT
 
 - SoT は runtime/backend 側に置く。

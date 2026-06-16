@@ -77,6 +77,10 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py `
 - manual smoke では default `--steps 120` や `--steps 10000` のような長時間
   dynamics run を推奨しない。QACC warning が出る path は manual browser smoke
   から外し、long-run MuJoCo stability は別 issue で扱う。
+- Publisher / transport smoke は publisher の起動、接続待ち、payload v0
+  publish、no-client reason log を確認する範囲までとする。
+- Browser payload parse smoke は viewer が payload v0 を受信して diagnostic
+  text を出せるかまでを確認し、proper 3D GUI render は別 follow-up に分ける。
 
 ## Web viewer
 

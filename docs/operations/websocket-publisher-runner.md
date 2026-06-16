@@ -43,6 +43,9 @@ Do not use the previous default `--steps 120` command as the manual browser
 smoke recommendation. Longer MuJoCo dynamics stability is deferred to a
 separate issue.
 
+Publisher / transport smoke and browser payload parse smoke are the current
+acceptance target here. Proper 3D GUI rendering is not claimed in this PR.
+
 ## Options
 
 - `--host`: bind host, default `127.0.0.1`.
@@ -70,6 +73,8 @@ separate issue.
 - Manual Web view smoke should use the short `--preset sweep_x --steps 6`
   command above. QACC warnings from longer dynamics runs are not part of the
   browser smoke acceptance path.
+- The browser runtime can show diagnostic payload text and parse payload v0,
+  but this is still not a proper 3D GUI visual smoke.
 
 ## Scope Limits
 
