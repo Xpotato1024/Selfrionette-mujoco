@@ -1,4 +1,4 @@
-"""Compatibility runtime module for noop pipeline wiring."""
+"""Runtime composition module with a compatibility noop builder."""
 
 from __future__ import annotations
 
