@@ -30,7 +30,13 @@ payload v0 JSON.
 ## Command
 
 ```bash
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 3
+uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 120 --interval-s 0.033 --grace-period-s 60
+```
+
+`sweep_x` programmed input path を publish する場合:
+
+```bash
+uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 120 --interval-s 0.033 --grace-period-s 60 --preset sweep_x
 ```
 
 ## Options
@@ -42,15 +48,24 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 
 - `--interval-s`: delay between published frames in seconds, default `0.0`.
 - `--grace-period-s`: delay after server start before the first payload is
   published, default `0.05`.
+- `--preset`: optional programmed input preset. `sweep_x` is supported.
 
 ## Behavior
 
-- If no client is connected, the runner still starts and stops cleanly.
+- On startup, the runner prints the `serving on ws://...` endpoint and waits
+  for a viewer during `--grace-period-s`.
+- If no client is connected before the grace period expires, the runner exits
+  with an explicit reason instead of returning silently.
+- After a client connects, the runner logs that payload publishing has started.
+- When publishing finishes, the runner logs the completion reason.
 - Connected clients receive each payload as a JSON string.
 - `frame_index` increments once per published step.
 - `interval_s` inserts a pause between steps.
 - `grace_period_s` gives local clients time to connect before the first
   payload is sent.
+- Manual Web view smoke should use a short run such as `--steps 120`.
+  Long-run MuJoCo stability is a separate validation topic and is not covered
+  by this smoke command.
 
 ## Scope Limits
 
@@ -74,6 +89,19 @@ default:
 present, the viewer stays disconnected and shows `WebSocket: disabled`. R6-C-P2
 adds that endpoint configuration and connection status display on the viewer
 side; the Python publisher runner remains unchanged.
+
+Open the viewer through an HTTP server. Do not open `file:///.../index.html`
+directly; browser module loading treats `file:` URLs as unique origins and can
+block `dist/browser/main.js` with CORS.
+
+```powershell
+cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+python -m http.server 5173
+```
+
+```text
+http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
+```
 The host / port / public host contract is fixed in
 `docs/operations/websocket-host-port-contract.md`.
 

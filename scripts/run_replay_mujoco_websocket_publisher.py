@@ -11,6 +11,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
+from selfrionette.runtime.websocket_publisher_runner import SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS
 
 
 def _host(value: str) -> str:
@@ -60,6 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.05,
         help="delay after server start before the first payload is published",
     )
+    parser.add_argument(
+        "--preset",
+        choices=SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS,
+        default=None,
+        help="optional replay preset to publish",
+    )
     return parser
 
 
@@ -74,6 +81,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dt_s=args.dt_s,
         interval_s=args.interval_s,
         grace_period_s=args.grace_period_s,
+        preset=args.preset,
     )
     return 0
 

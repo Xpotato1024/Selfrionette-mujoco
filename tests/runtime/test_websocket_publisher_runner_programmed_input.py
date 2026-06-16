@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import ast
-import asyncio
 import json
-import socket
 from pathlib import Path
 
-from websockets.asyncio.client import connect
-
+import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
 
 
@@ -15,48 +12,54 @@ ROOT = Path(__file__).resolve().parents[2]
 WEBSOCKET_RUNNER_MODULE = ROOT / "src" / "selfrionette" / "runtime" / "websocket_publisher_runner.py"
 
 
-def _find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
+class _FakeWebSocketPublisherServer:
+    instances: list["_FakeWebSocketPublisherServer"] = []
+
+    def __init__(self, *, host: str, port: int) -> None:
+        self.host = host
+        self.port = port
+        self.bound_port = port
+        self.wait_for_client_calls: list[float | None] = []
+        self.messages: list[str] = []
+        self.__class__.instances.append(self)
+
+    async def __aenter__(self) -> "_FakeWebSocketPublisherServer":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def wait_for_client(self, timeout_s: float | None = None) -> bool:
+        self.wait_for_client_calls.append(timeout_s)
+        return True
+
+    async def send(self, message: str) -> None:
+        self.messages.append(message)
 
 
-async def _collect_payloads(steps: int, *, preset: str | None = None) -> list[dict[str, object]]:
-    port = _find_free_port()
-    received: list[dict[str, object]] = []
-
-    async def run_runner() -> None:
-        await asyncio.to_thread(
-            run_replay_mujoco_websocket_publisher,
+def _collect_payloads(steps: int, *, preset: str | None = None) -> list[dict[str, object]]:
+    _FakeWebSocketPublisherServer.instances.clear()
+    original_server = websocket_runner_module.WebSocketPublisherServer
+    websocket_runner_module.WebSocketPublisherServer = _FakeWebSocketPublisherServer
+    try:
+        run_replay_mujoco_websocket_publisher(
             host="127.0.0.1",
-            port=port,
+            port=8766,
             steps=steps,
             dt_s=1.0 / 60.0,
             interval_s=0.0,
-            grace_period_s=0.5,
+            grace_period_s=0.0,
             preset=preset,
         )
+    finally:
+        websocket_runner_module.WebSocketPublisherServer = original_server
 
-    async def run_client() -> None:
-        uri = f"ws://127.0.0.1:{port}"
-        for _ in range(100):
-            try:
-                async with connect(uri) as websocket:
-                    for _ in range(steps):
-                        message = await asyncio.wait_for(websocket.recv(), timeout=5.0)
-                        received.append(json.loads(message))
-                    return
-            except OSError:
-                await asyncio.sleep(0.01)
-
-        raise AssertionError("client did not connect to the local WebSocket server")
-
-    await asyncio.gather(run_runner(), run_client())
-    return received
+    assert _FakeWebSocketPublisherServer.instances, "fake server was not constructed"
+    return [json.loads(message) for message in _FakeWebSocketPublisherServer.instances[-1].messages]
 
 
 def test_websocket_publisher_runner_sweep_x_uses_programmed_input_source_metadata() -> None:
-    payloads = asyncio.run(_collect_payloads(2, preset="sweep_x"))
+    payloads = _collect_payloads(2, preset="sweep_x")
 
     assert len(payloads) == 2
     assert [payload["metadata"]["source_kind"] for payload in payloads] == ["programmed_target", "programmed_target"]
@@ -72,6 +75,7 @@ def test_websocket_runner_module_uses_programmed_input_source_and_not_noop_motio
 
     assert "build_sweep_x_input_source" in source_text
     assert "NoOpMotionGenerator" not in source_text
+    assert "SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS" in source_text
 
     imported_names: set[str] = set()
     for node in ast.walk(tree):

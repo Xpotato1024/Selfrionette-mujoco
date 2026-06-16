@@ -38,6 +38,46 @@ programmed target input source 由来の intent を runtime path に通す。
 - `run_replay_mujoco_websocket_publisher()` に programmed input preset を追加する。
 - `preset="sweep_x"` のときは programmed input source 由来の frame を使う。
 - viewer は payload を描画するだけで、FK / IK / qpos recompute はしない。
+- CLI では `--preset sweep_x` を受け付け、dry-run と同じ programmed input
+  metadata を payload に残す。
+- manual Web view smoke では `--steps 120 --interval-s 0.033 --grace-period-s 60`
+  を標準とし、`--steps 10000` のような long-run stability 確認は別 issue に送る。
+- 起動時は `serving on ws://...`、viewer 接続待ち、publish 開始、publish 完了
+  または接続なし終了理由をログで確認する。
+
+default path:
+
+```powershell
+uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+  --host 127.0.0.1 `
+  --port 8766 `
+  --steps 120 `
+  --interval-s 0.033 `
+  --grace-period-s 60
+```
+
+`sweep_x` path:
+
+```powershell
+uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+  --host 127.0.0.1 `
+  --port 8766 `
+  --steps 120 `
+  --interval-s 0.033 `
+  --grace-period-s 60 `
+  --preset sweep_x
+```
+
+viewer は `file:///.../index.html` で直接開かない。HTTP server 経由で開く:
+
+```powershell
+cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+python -m http.server 5173
+```
+
+```text
+http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
+```
 
 ## 5. runtime path / SoT
 

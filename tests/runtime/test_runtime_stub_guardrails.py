@@ -79,6 +79,7 @@ class _DummyWebSocketPublisherServer:
     def __init__(self, *, host: str, port: int) -> None:
         self.host = host
         self.port = port
+        self.bound_port = port
         self.wait_for_client_calls: list[float | None] = []
 
     async def __aenter__(self) -> "_DummyWebSocketPublisherServer":

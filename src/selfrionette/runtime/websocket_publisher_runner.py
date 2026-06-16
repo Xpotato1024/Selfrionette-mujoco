@@ -15,6 +15,7 @@ DEFAULT_WEBSOCKET_PUBLISHER_STEPS = 1
 DEFAULT_WEBSOCKET_PUBLISHER_DT_S = 1.0 / 60.0
 DEFAULT_WEBSOCKET_PUBLISHER_INTERVAL_S = 0.0
 DEFAULT_WEBSOCKET_PUBLISHER_GRACE_PERIOD_S = 0.05
+SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS = ("sweep_x",)
 
 
 def _default_replay_frame() -> RawInputFrame:
@@ -63,6 +64,24 @@ def _validate_grace_period_s(grace_period_s: float) -> None:
         raise ValueError("grace_period_s must be non-negative")
 
 
+def _log(message: str) -> None:
+    print(message, flush=True)
+
+
+def _annotate_sweep_x_state(pipeline, state, intent):
+    return snapshot_mujoco_state(
+        pipeline.simulator.model,
+        pipeline.simulator.data,
+        frame_index=state.frame_index,
+        target_position_m=tuple(intent.metadata["desired_endpoint_m"]),
+        metadata={
+            **state.metadata,
+            **intent.metadata,
+            "preset": "sweep_x",
+        },
+    )
+
+
 async def _run_replay_mujoco_websocket_publisher_async(
     *,
     host: str,
@@ -76,15 +95,23 @@ async def _run_replay_mujoco_websocket_publisher_async(
     runtime_config = RuntimeConfig(dt_s=dt_s)
 
     async with WebSocketPublisherServer(host=host, port=port) as server:
+        _log(f"serving on ws://{server.host}:{server.bound_port}")
+        _log(f"Waiting for viewer during grace period ({grace_period_s:.2f}s)")
+
+        has_client = await server.wait_for_client(timeout_s=grace_period_s)
+        if not has_client:
+            _log("No viewer connected during grace period; no payloads published.")
+            _log("Completed without publishing because no viewer connected.")
+            return
+
+        _log("Viewer connected; publishing started.")
+
         pipeline = build_concrete_mujoco_pipeline(
             frames=_sweep_x_replay_frames(steps) if preset == "sweep_x" else (_default_replay_frame(),),
             config=runtime_config,
             loop=False if preset == "sweep_x" else True,
             publisher=WebSocketStatePublisher(server),
         )
-
-        if grace_period_s > 0.0:
-            await server.wait_for_client(timeout_s=grace_period_s)
 
         if preset == "sweep_x":
             for index in range(steps):
@@ -95,27 +122,20 @@ async def _run_replay_mujoco_websocket_publisher_async(
                 pipeline.simulator.step(dt_s)
 
                 state = pipeline.simulator.snapshot()
-                annotated_state = snapshot_mujoco_state(
-                    pipeline.simulator.model,
-                    pipeline.simulator.data,
-                    frame_index=state.frame_index,
-                    target_position_m=tuple(intent.metadata["desired_endpoint_m"]),
-                    metadata={
-                        **state.metadata,
-                        **intent.metadata,
-                        "preset": "sweep_x",
-                    },
-                )
+                annotated_state = _annotate_sweep_x_state(pipeline, state, intent)
                 await pipeline.publisher.publish(annotated_state)
 
                 if interval_s > 0.0 and index + 1 < steps:
                     await asyncio.sleep(interval_s)
+            _log(f"Completed after publishing {steps} frame(s).")
             return
 
         for index in range(steps):
             await pipeline.run_once(dt_s=dt_s)
             if interval_s > 0.0 and index + 1 < steps:
                 await asyncio.sleep(interval_s)
+
+        _log(f"Completed after publishing {steps} frame(s).")
 
 
 def run_replay_mujoco_websocket_publisher(
@@ -134,7 +154,7 @@ def run_replay_mujoco_websocket_publisher(
     _validate_dt_s(dt_s)
     _validate_interval_s(interval_s)
     _validate_grace_period_s(grace_period_s)
-    if preset is not None and preset != "sweep_x":
+    if preset is not None and preset not in SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS:
         raise ValueError("unsupported websocket publisher preset")
 
     asyncio.run(
@@ -150,4 +170,7 @@ def run_replay_mujoco_websocket_publisher(
     )
 
 
-__all__ = ["run_replay_mujoco_websocket_publisher"]
+__all__ = [
+    "SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS",
+    "run_replay_mujoco_websocket_publisher",
+]
