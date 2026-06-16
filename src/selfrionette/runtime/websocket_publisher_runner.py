@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+from selfrionette.input_sources import build_sweep_x_input_source
+from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.schemas import RawInputFrame
@@ -24,6 +26,11 @@ def _default_replay_frame() -> RawInputFrame:
             "target_position_m": DEFAULT_CONCRETE_TARGET_POSITION_M,
         },
     )
+
+
+def _sweep_x_replay_frames(steps: int) -> tuple[RawInputFrame, ...]:
+    source = build_sweep_x_input_source(initial_position_m=DEFAULT_CONCRETE_TARGET_POSITION_M, loop=False)
+    return tuple(source.read_frame() for _ in range(steps))
 
 
 def _validate_host(host: str) -> None:
@@ -64,19 +71,46 @@ async def _run_replay_mujoco_websocket_publisher_async(
     dt_s: float,
     interval_s: float,
     grace_period_s: float,
+    preset: str | None,
 ) -> None:
     runtime_config = RuntimeConfig(dt_s=dt_s)
 
     async with WebSocketPublisherServer(host=host, port=port) as server:
         pipeline = build_concrete_mujoco_pipeline(
-            frames=(_default_replay_frame(),),
+            frames=_sweep_x_replay_frames(steps) if preset == "sweep_x" else (_default_replay_frame(),),
             config=runtime_config,
-            loop=True,
+            loop=False if preset == "sweep_x" else True,
             publisher=WebSocketStatePublisher(server),
         )
 
         if grace_period_s > 0.0:
             await server.wait_for_client(timeout_s=grace_period_s)
+
+        if preset == "sweep_x":
+            for index in range(steps):
+                frame = pipeline.input_source.read_frame()
+                intent = pipeline.input_interpreter.interpret(frame)
+                command = pipeline.motion_generator.update(intent, dt_s)
+                pipeline.simulator.apply_command(command)
+                pipeline.simulator.step(dt_s)
+
+                state = pipeline.simulator.snapshot()
+                annotated_state = snapshot_mujoco_state(
+                    pipeline.simulator.model,
+                    pipeline.simulator.data,
+                    frame_index=state.frame_index,
+                    target_position_m=tuple(intent.metadata["desired_endpoint_m"]),
+                    metadata={
+                        **state.metadata,
+                        **intent.metadata,
+                        "preset": "sweep_x",
+                    },
+                )
+                await pipeline.publisher.publish(annotated_state)
+
+                if interval_s > 0.0 and index + 1 < steps:
+                    await asyncio.sleep(interval_s)
+            return
 
         for index in range(steps):
             await pipeline.run_once(dt_s=dt_s)
@@ -92,6 +126,7 @@ def run_replay_mujoco_websocket_publisher(
     dt_s: float = DEFAULT_WEBSOCKET_PUBLISHER_DT_S,
     interval_s: float = DEFAULT_WEBSOCKET_PUBLISHER_INTERVAL_S,
     grace_period_s: float = DEFAULT_WEBSOCKET_PUBLISHER_GRACE_PERIOD_S,
+    preset: str | None = None,
 ) -> None:
     _validate_host(host)
     _validate_port(port)
@@ -99,6 +134,8 @@ def run_replay_mujoco_websocket_publisher(
     _validate_dt_s(dt_s)
     _validate_interval_s(interval_s)
     _validate_grace_period_s(grace_period_s)
+    if preset is not None and preset != "sweep_x":
+        raise ValueError("unsupported websocket publisher preset")
 
     asyncio.run(
         _run_replay_mujoco_websocket_publisher_async(
@@ -108,6 +145,7 @@ def run_replay_mujoco_websocket_publisher(
             dt_s=dt_s,
             interval_s=interval_s,
             grace_period_s=grace_period_s,
+            preset=preset,
         )
     )
 

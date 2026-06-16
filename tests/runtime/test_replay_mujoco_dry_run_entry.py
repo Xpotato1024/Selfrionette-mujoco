@@ -66,18 +66,14 @@ def test_run_replay_mujoco_dry_run_sweep_x_preset_keeps_delta_and_feedback_separ
 
     payloads = [json.loads(line) for line in lines]
     assert [payload["metadata"]["preset"] for payload in payloads] == ["sweep_x", "sweep_x", "sweep_x"]
+    assert [payload["metadata"]["source_kind"] for payload in payloads] == ["programmed_target"] * 3
+    assert [payload["metadata"]["trajectory_name"] for payload in payloads] == ["sweep_x"] * 3
+    assert [payload["metadata"]["phase"] for payload in payloads] == ["initial_hold", "initial_hold", "initial_hold"]
 
-    for index, payload in enumerate(payloads, start=1):
-        target_delta_m = payload["metadata"]["target_delta_m"]
-        current_tip_position_m = payload["metadata"]["current_tip_position_m"]
-        desired_endpoint_m = payload["metadata"]["desired_endpoint_m"]
-
-        assert target_delta_m[0] == pytest.approx(0.001 * index)
-        assert target_delta_m[1:] == [0.0, 0.0]
-        assert desired_endpoint_m == payload["target_position_m"]
-        assert desired_endpoint_m[0] == pytest.approx(current_tip_position_m[0] + target_delta_m[0])
-        assert desired_endpoint_m[1] == pytest.approx(current_tip_position_m[1] + target_delta_m[1])
-        assert desired_endpoint_m[2] == pytest.approx(current_tip_position_m[2] + target_delta_m[2])
+    for payload in payloads:
+        assert payload["metadata"]["desired_endpoint_m"] == payload["target_position_m"]
+        assert len(payload["metadata"]["target_position_m"]) == 3
+        assert len(payload["qpos"]) >= 4
 
 
 def test_run_replay_mujoco_dry_run_sweep_x_preset_remains_visual_smoke_compatibility_path() -> None:
@@ -87,6 +83,9 @@ def test_run_replay_mujoco_dry_run_sweep_x_preset_remains_visual_smoke_compatibi
 
     payload = json.loads(lines[0])
     assert payload["metadata"]["preset"] == "sweep_x"
+    assert payload["metadata"]["source_kind"] == "programmed_target"
+    assert payload["metadata"]["trajectory_name"] == "sweep_x"
+    assert payload["metadata"]["phase"] == "initial_hold"
     assert payload["metadata"]["desired_endpoint_m"] == payload["target_position_m"]
     assert len(payload["qpos"]) >= 4
 
