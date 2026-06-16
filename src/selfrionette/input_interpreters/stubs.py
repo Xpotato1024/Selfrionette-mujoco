@@ -1,3 +1,5 @@
+"""Test-double namespace for input interpreter stubs."""
+
 from __future__ import annotations
 
 from selfrionette.input_interpreters.base import InputInterpreter

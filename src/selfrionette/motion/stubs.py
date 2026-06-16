@@ -1,3 +1,5 @@
+"""Test-double namespace for motion stubs."""
+
 from __future__ import annotations
 
 from selfrionette.motion.base import MotionGenerator

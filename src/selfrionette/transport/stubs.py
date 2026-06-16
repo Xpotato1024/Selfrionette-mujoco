@@ -1,3 +1,5 @@
+"""Test-double namespace for transport stubs."""
+
 from __future__ import annotations
 
 from selfrionette.schemas import MuJoCoState

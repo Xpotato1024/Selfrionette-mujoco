@@ -1,3 +1,5 @@
+"""Compatibility runtime module for legacy MuJoCo pipeline wiring."""
+
 from __future__ import annotations
 
 from pathlib import Path

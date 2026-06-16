@@ -1,3 +1,5 @@
+"""Runtime composition module with a compatibility noop builder."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

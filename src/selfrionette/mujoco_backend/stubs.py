@@ -1,3 +1,5 @@
+"""Test-double namespace for MuJoCo backend stubs."""
+
 from __future__ import annotations
 
 from selfrionette.mujoco_backend.base import MuJoCoSimulator
