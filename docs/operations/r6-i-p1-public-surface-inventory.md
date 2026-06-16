@@ -43,6 +43,7 @@ R6-I-P1 では両方を inventory するが、P2 の top-level export policy で
 |---|---|---|---|---|---|---|---|
 | `selfrionette.input_sources` | `InputSource` | `src/selfrionette/input_sources/base.py` | contract | yes | yes | yes | interface boundary として維持 |
 | `selfrionette.input_sources` | `ReplayInputSource` | `src/selfrionette/input_sources/replay.py` | concrete | yes | yes | yes | replay input の public 実装として維持 |
+| `selfrionette.input_sources` | `ProgrammedTargetInputSource` | `src/selfrionette/input_sources/programmed_target.py` | concrete | yes | yes | yes | programmed target input の public 実装として維持 |
 | `selfrionette.input_sources` | `StaticInputSource` | `src/selfrionette/input_sources/stubs.py` | test-double | yes | yes | no | P2 で package-root export から退場候補 |
 | `selfrionette.input_sources.stubs` | `InputSource` | `src/selfrionette/input_sources/stubs.py` | contract-reexport | no | yes | no | `.stubs` namespace の contract re-export として維持し、P2 で package-root export 退場と分離して扱う |
 | `selfrionette.input_sources.stubs` | `StaticInputSource` | `src/selfrionette/input_sources/stubs.py` | test-double | no | yes | no | `.stubs` namespace の test-double として維持し、P2 で package-root export 退場と分離して扱う |

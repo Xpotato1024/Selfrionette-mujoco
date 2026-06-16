@@ -39,6 +39,14 @@ def test_package_root_all_excludes_stub_exports() -> None:
         assert not forbidden, f"{module_name} exports stub names from package root: {forbidden}"
 
 
+def test_input_sources_package_root_exports_programmed_target_input_source() -> None:
+    module = importlib.import_module("selfrionette.input_sources")
+    assert "ProgrammedTargetInputSource" in module.__all__
+    assert hasattr(module, "ProgrammedTargetInputSource")
+    assert "StaticInputSource" not in module.__all__
+    assert not hasattr(module, "StaticInputSource")
+
+
 def test_stub_modules_export_only_stub_classes_in_all() -> None:
     for module_name, expected_exports in STUB_EXPORTS.items():
         module = importlib.import_module(module_name)

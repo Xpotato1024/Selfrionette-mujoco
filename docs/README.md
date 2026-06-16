@@ -31,6 +31,7 @@ Do not create or use `doc/`.
 | R6-I-P1 public surface inventory | `docs/operations/r6-i-p1-public-surface-inventory.md` | `__all__` / `__init__` / `base.py` / `stubs.py` public surface inventory |
 | R6-I-P2 public export policy | `docs/operations/r6-i-p2-public-export-policy.md` | package-root / module-level public API policy and explicit stub import guardrail |
 | R6-I-P3 remaining stubs reclassification | `docs/operations/r6-i-p3-stub-reclassification.md` | remaining stub classification, compatibility helper retirement order, and P4 handoff |
+| R6-I-P4 programmed target input contract | `docs/contracts/programmed-target-input-source.md` | programmed target input source contract and metadata bridge |
 | R6-H-P1 stub inventory | `docs/operations/r6-h-p1-stub-inventory.md` | kinematics / motion / backend / runtime stub classification and retirement planning |
 | WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0 |
 | WebSocket / host / port contract | `docs/operations/websocket-host-port-contract.md` | bind host, browser-visible host, viewer page URL, and WebSocket endpoint URL contract |
