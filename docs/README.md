@@ -34,15 +34,15 @@ Do not create or use `doc/`.
 | R6-I-P4 programmed target input contract | `docs/contracts/programmed-target-input-source.md` | programmed target input source contract and metadata bridge |
 | R6-I-P5 sweep_x programmed target input | `docs/operations/r6-i-p5-sweep-x-programmed-input.md` | sweep_x deterministic programmed target trajectory and metadata contract |
 | R6-H-P1 stub inventory | `docs/operations/r6-h-p1-stub-inventory.md` | kinematics / motion / backend / runtime stub classification and retirement planning |
-| R6-I-P6 programmed input runtime wiring | `docs/operations/r6-i-p6-programmed-input-runtime-wiring.md` | dry-run / WebSocket publisher wiring for programmed target input source |
+| R6-I-P6 programmed input runtime wiring | `docs/operations/r6-i-p6-programmed-input-runtime-wiring.md` | dry-run / WebSocket publisher wiring for programmed target input source; publisher / transport smoke and browser payload parse smoke only |
 | R6-I completion audit | `docs/operations/r6-i-completion-audit.md` | R6-I completion audit and parent #133 close readiness |
-| WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0 |
+| WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0; browser diagnostic parse smoke is separate from proper 3D GUI smoke |
 | WebSocket / host / port contract | `docs/operations/websocket-host-port-contract.md` | bind host, browser-visible host, viewer page URL, and WebSocket endpoint URL contract |
 | Live viewer smoke path | `docs/operations/live-viewer-smoke.md` | deterministic dry-run payload -> browser viewer smoke path for R6-C-P3 |
 | Runtime-to-viewer E2E smoke | `docs/operations/runtime-to-viewer-e2e-smoke.md` | backend / dry-run -> publisher -> viewer -> browser troubleshooting handoff for R6-G-P5 |
 | MuJoCo viewer dev launcher | `docs/operations/mujoco-viewer-dev-launcher.md` | AutoPort / one-command / Tailscale WebView dev launcher |
 | Browser visual smoke | `docs/operations/browser-visual-smoke.md` | R6-D-P3 viewer runtime / marker object operation smoke |
-| Backend / viewer startup guide | `docs/operations/backend-viewer-startup.md` | README handoff for backend / dry-run / browser connection startup |
+| Backend / viewer startup guide | `docs/operations/backend-viewer-startup.md` | README handoff for backend / dry-run / HTTP-served viewer / browser payload parse smoke startup; proper 3D GUI smoke is separate |
 | R6-G-P3 startup script gap audit | `docs/operations/r6-g-p3-startup-script-gap-audit.md` | startup script / wrapper / npm script minimal completion decision |
 | R6-G completion audit | `docs/operations/r6-g-completion-audit.md` | Phase G completion audit and parent close handoff |
 | Japanese docs writing guardrails | `docs/operations/japanese-doc-writing-guardrails.md` | UTF-8 / BOM / mojibake prevention and PR body formatting checks |
