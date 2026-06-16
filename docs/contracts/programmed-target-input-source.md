@@ -15,27 +15,27 @@ related:
 
 ## 1. 目的
 
-`ProgrammedTargetInputSource` は、決定的な target trajectory を `RawInputFrame`
-として供給する concrete input source である。
-
-この contract は、programmed target の intent を `RawInputFrame.metadata`
-経由で runtime path に載せることを固定する。
+`ProgrammedTargetInputSource` は、決め打ちの target trajectory を `RawInputFrame`
+として順番に出力する concrete input source である。
+この契約は、programmed target の intent を `RawInputFrame.metadata` 経由で runtime path
+へ渡す方法を固定する。
 
 ## 2. ProgrammedTargetInputSource の責務
 
-- finite な trajectory を順番に読み出す
-- `RawInputFrame` を返す
+- finite な trajectory を frame 単位で出力する
+- `RawInputFrame` を生成する
 - `source_kind = "programmed_target"` を metadata に入れる
-- trajectory 名と時刻情報を metadata に入れる
-- target position と desired endpoint を metadata に入れる
-- `target_velocity_mps` がある場合だけ metadata に入れる
+- `trajectory_name` を metadata に入れる
+- `target_position_m` と `desired_endpoint_m` を metadata に入れる
+- 利用できる場合は `target_velocity_mps` を metadata に入れる
+- trajectory-specific metadata を許可する
 
-`ProgrammedTargetInputSource` は test-double ではない。`sweep_x` を含む
-programmed target input の concrete source として扱う。
+`ProgrammedTargetInputSource` は test-double ではなく、programmed target input の concrete source
+である。`sweep_x` もこの concrete source から供給する。
 
 ## 3. RawInputFrame.metadata contract
 
-`RawInputFrame.metadata` には少なくとも次の key を載せる。
+`RawInputFrame.metadata` の base contract 必須 key は次の 6 つにする。
 
 - `source_kind`
 - `trajectory_name`
@@ -44,10 +44,10 @@ programmed target input の concrete source として扱う。
 - `t_s`
 - `frame_index`
 
-`target_velocity_mps` は利用できる場合のみ入れる。
+`target_velocity_mps` は利用できる場合に入れる optional metadata である。
+`phase` も optional で、trajectory-specific metadata として扱う。
 
-`RawInputFrame` 自体の schema は変更しない。target intent は metadata bridge
-としてのみ扱う。
+`RawInputFrame` 自体の schema は変えない。target intent は metadata bridge として扱う。
 
 ## 4. metadata key semantics
 
@@ -58,22 +58,18 @@ programmed target input であることを示す識別子。値は `"programmed_
 ### trajectory_name
 
 trajectory の名前。例: `"static_target"`, `"linear_target"`, `"sweep_x"`。
-この issue では `sweep_x` 実装には進まず、名前の扱いだけを contract として固定する。
 
 ### target_position_m
 
-input source が提示する target position。単位は meter。
-runtime / motion layer が解釈するための metadata bridge。
+input source が出力する target position。単位は meter。
 
 ### desired_endpoint_m
 
-desired endpoint position。単位は meter。
-`target_position_m` と同値でもよいが、意味は endpoint target として固定する。
+最終的に到達したい endpoint position。単位は meter。
 
 ### target_velocity_mps
 
-target velocity。単位は meter per second。
-利用できない場合は省略する。
+target velocity。単位は meter per second。利用できる場合のみ入れる。
 
 ### t_s
 
@@ -81,50 +77,55 @@ trajectory 内の時刻。単位は second。
 
 ### frame_index
 
-deterministic frame sequence 上の 0-based index。
+deterministic frame sequence の 0-based index。
 
-## 5. deterministic sequence behavior
+## 5. trajectory-specific metadata
 
-`ProgrammedTargetInputSource` は、与えられた frame 列を deterministic に読む。
+`phase` は trajectory-specific metadata である。
+base `ProgrammedTargetInputSource` contract の必須 key には含めず、必要な concrete trajectory
+だけが追加してよい。
 
-- 同じ trajectory からは同じ順序で同じ metadata が出る
-- 返す `RawInputFrame` は、trajectory と frame index によって一意に決まる
+`sweep_x` では `phase` と `target_velocity_mps` を必須 metadata として扱う。
+したがって `sweep_x` の frame は、base contract の 6 key に加えて `phase` と
+`target_velocity_mps` を含む。
+
+## 6. deterministic sequence behavior
+
+`ProgrammedTargetInputSource` は同じ trajectory から同じ frame sequence を返す。
+
+- 同じ trajectory なら同じ順序で同じ metadata を返す
+- 返す `RawInputFrame` は trajectory と frame index により決まる
 - `frame_index` は 0 から始まる
 
-## 6. loop / finite sequence behavior
+## 7. loop / finite sequence behavior
 
-`loop=False` の場合、最後の frame に到達した後は最後の frame を返し続ける。
+- `loop=False` の場合、EOF 後は最後の frame を返し続ける
+- `loop=True` の場合、先頭 frame に戻る
 
-この behavior を採用する理由は、dry-run / visual smoke で frame exhaustion による
-例外を避け、deterministic な final target を保つためである。
+この挙動は dry-run や visual smoke の既存の期待と整合する。
 
-`loop=True` の場合、最後の frame の次は先頭 frame に戻る。
+## 8. InputInterpreter / InputIntent との関係
 
-## 7. InputInterpreter / InputIntent との関係
+`ReplayInputInterpreter` のような interpreter は、`RawInputFrame.metadata` を
+`InputIntent.metadata` にそのまま保持する。
+programmed target の契約は interpreter 側で再定義しない。
 
-`ReplayInputInterpreter` のような interpreter は、`RawInputFrame.metadata`
-を `InputIntent.metadata` にそのまま保持できる。
+## 9. sweep_x との関係
 
-この issue では `target_command` schema の formalization も motion behavior の変更も行わない。
-programmed target の intent は metadata bridge として保持する。
+`sweep_x` は concrete programmed target trajectory の 1 つである。
 
-## 8. sweep_x との関係
+- phase は `initial_hold`, `move_positive_x`, `slow_or_hold_at_positive_x`,
+  `return_to_initial`, `final_hold` を取る
+- `target_velocity_mps` と `phase` は `sweep_x` では必須 metadata として扱う
+- `sweep_x` の runtime wiring はこの issue では行わない
+- `dry-run` / WebSocket publisher runner への接続は `#140` に送る
 
-`sweep_x` は、この issue では実装しない。
+## 10. Non-goals
 
-`sweep_x` は trajectory 名として contract に含めるが、実装移行は #139 で行う。
-`dry-run` / visual smoke の `sweep_x` placeholder は #139 以降で差し替える。
-
-`NoOpMotionGenerator` を前提にした sweep_x ではなく、programmed input source から target intent
-を供給する構成に移行する。
-
-## 9. Non-goals
-
-- `sweep_x` trajectory 実装
-- dry-run preset の差し替え
-- runtime wiring 変更
-- WebSocket publisher runner wiring 変更
-- target command schema の formalization
+- dry-run preset wiring
+- runtime wiring
+- WebSocket publisher runner wiring
+- target command schema formalization
 - MuJoCo site / body contract 変更
 - viewer 変更
 - hardware validation
@@ -133,12 +134,8 @@ programmed target の intent は metadata bridge として保持する。
 - legacy import / execute
 - dependency change
 
-## 10. P5 handoff
+## 11. P6 handoff
 
-P5 handoff は次の通りである。
-
-- #139 で `sweep_x` を `ProgrammedTargetInputSource` の trajectory として実装する
-- dry-run / visual smoke の `sweep_x` placeholder は #139 以降で差し替える
-- `NoOpMotionGenerator` 例外ではなく、programmed input source から target intent を供給する
-
-この issue で固定するのは contract までであり、trajectory 実装は含めない。
+- `#139` では `sweep_x` の trajectory と metadata contract を固定する
+- `#140` で dry-run preset と WebSocket publisher runner を programmed input path に接続する
+- この文書は contract の正本であり、runtime wiring は追加しない

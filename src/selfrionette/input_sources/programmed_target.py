@@ -18,12 +18,26 @@ def _coerce_vector3(name: str, value: object) -> Vector3:
     return components
 
 
+def _add_vector3(lhs: Vector3, rhs: Vector3) -> Vector3:
+    return tuple(left + right for left, right in zip(lhs, rhs, strict=True))
+
+
+def _scale_vector3(vector: Vector3, scalar: float) -> Vector3:
+    return tuple(component * scalar for component in vector)
+
+
+def _interpolate_vector3(start: Vector3, end: Vector3, fraction: float) -> Vector3:
+    delta = tuple(end_component - start_component for start_component, end_component in zip(start, end, strict=True))
+    return _add_vector3(start, _scale_vector3(delta, fraction))
+
+
 @dataclass(frozen=True, slots=True)
 class ProgrammedTargetFrame:
     t_s: float
     target_position_m: Vector3
     desired_endpoint_m: Vector3
     target_velocity_mps: Vector3 | None = None
+    phase: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "target_position_m", _coerce_vector3("target_position_m", self.target_position_m))
@@ -46,6 +60,8 @@ class ProgrammedTargetFrame:
         }
         if self.target_velocity_mps is not None:
             metadata["target_velocity_mps"] = self.target_velocity_mps
+        if self.phase is not None:
+            metadata["phase"] = self.phase
 
         return RawInputFrame(
             source="programmed_target",
@@ -94,7 +110,165 @@ class ProgrammedTargetInputSource:
         return frame.to_raw_input_frame(trajectory_name=self._trajectory.name, frame_index=frame_index)
 
 
+DEFAULT_SWEEP_X_INITIAL_POSITION_M: Vector3 = (0.0, 0.0, 0.0)
+DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M = 0.1
+DEFAULT_SWEEP_X_DT_S = 1.0 / 30.0
+DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES = 3
+DEFAULT_SWEEP_X_MOVE_FRAMES = 6
+DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES = 3
+DEFAULT_SWEEP_X_RETURN_FRAMES = 6
+DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES = 3
+
+
+def _append_phase_frames(
+    *,
+    frames: list[ProgrammedTargetFrame],
+    phase: str,
+    position_m: Vector3,
+    endpoint_m: Vector3,
+    velocity_mps: Vector3,
+    dt_s: float,
+    frame_count: int,
+    frame_index_start: int,
+) -> int:
+    for offset in range(frame_count):
+        frames.append(
+            ProgrammedTargetFrame(
+                t_s=float(frame_index_start + offset) * dt_s,
+                target_position_m=position_m,
+                desired_endpoint_m=endpoint_m,
+                target_velocity_mps=velocity_mps,
+                phase=phase,
+            )
+        )
+
+    return frame_index_start + frame_count
+
+
+def build_sweep_x_trajectory(
+    *,
+    initial_position_m: Vector3 = DEFAULT_SWEEP_X_INITIAL_POSITION_M,
+    positive_x_offset_m: float = DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M,
+    dt_s: float = DEFAULT_SWEEP_X_DT_S,
+    initial_hold_frames: int = DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES,
+    move_frames: int = DEFAULT_SWEEP_X_MOVE_FRAMES,
+    slow_or_hold_frames: int = DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES,
+    return_frames: int = DEFAULT_SWEEP_X_RETURN_FRAMES,
+    final_hold_frames: int = DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES,
+) -> ProgrammedTargetTrajectory:
+    initial_position_m = _coerce_vector3("initial_position_m", initial_position_m)
+    if dt_s <= 0.0:
+        raise ValueError("dt_s must be positive")
+
+    for name, frame_count in (
+        ("initial_hold_frames", initial_hold_frames),
+        ("move_frames", move_frames),
+        ("slow_or_hold_frames", slow_or_hold_frames),
+        ("return_frames", return_frames),
+        ("final_hold_frames", final_hold_frames),
+    ):
+        if frame_count < 1:
+            raise ValueError(f"{name} must be at least 1")
+
+    positive_x_target_m = _add_vector3(initial_position_m, (positive_x_offset_m, 0.0, 0.0))
+    move_velocity_mps = (positive_x_offset_m / (move_frames * dt_s), 0.0, 0.0)
+    return_velocity_mps = (-positive_x_offset_m / (return_frames * dt_s), 0.0, 0.0)
+
+    frames: list[ProgrammedTargetFrame] = []
+    frame_index = 0
+
+    frame_index = _append_phase_frames(
+        frames=frames,
+        phase="initial_hold",
+        position_m=initial_position_m,
+        endpoint_m=initial_position_m,
+        velocity_mps=(0.0, 0.0, 0.0),
+        dt_s=dt_s,
+        frame_count=initial_hold_frames,
+        frame_index_start=frame_index,
+    )
+
+    for offset in range(move_frames):
+        fraction = float(offset + 1) / float(move_frames)
+        frames.append(
+            ProgrammedTargetFrame(
+                t_s=float(frame_index) * dt_s,
+                target_position_m=_interpolate_vector3(initial_position_m, positive_x_target_m, fraction),
+                desired_endpoint_m=positive_x_target_m,
+                target_velocity_mps=move_velocity_mps,
+                phase="move_positive_x",
+            )
+        )
+        frame_index += 1
+
+    frame_index = _append_phase_frames(
+        frames=frames,
+        phase="slow_or_hold_at_positive_x",
+        position_m=positive_x_target_m,
+        endpoint_m=positive_x_target_m,
+        velocity_mps=(0.0, 0.0, 0.0),
+        dt_s=dt_s,
+        frame_count=slow_or_hold_frames,
+        frame_index_start=frame_index,
+    )
+
+    for offset in range(return_frames):
+        fraction = float(offset + 1) / float(return_frames)
+        frames.append(
+            ProgrammedTargetFrame(
+                t_s=float(frame_index) * dt_s,
+                target_position_m=_interpolate_vector3(positive_x_target_m, initial_position_m, fraction),
+                desired_endpoint_m=initial_position_m,
+                target_velocity_mps=return_velocity_mps,
+                phase="return_to_initial",
+            )
+        )
+        frame_index += 1
+
+    _append_phase_frames(
+        frames=frames,
+        phase="final_hold",
+        position_m=initial_position_m,
+        endpoint_m=initial_position_m,
+        velocity_mps=(0.0, 0.0, 0.0),
+        dt_s=dt_s,
+        frame_count=final_hold_frames,
+        frame_index_start=frame_index,
+    )
+
+    return ProgrammedTargetTrajectory(name="sweep_x", frames=tuple(frames))
+
+
+def build_sweep_x_input_source(
+    *,
+    loop: bool = False,
+    initial_position_m: Vector3 = DEFAULT_SWEEP_X_INITIAL_POSITION_M,
+    positive_x_offset_m: float = DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M,
+    dt_s: float = DEFAULT_SWEEP_X_DT_S,
+    initial_hold_frames: int = DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES,
+    move_frames: int = DEFAULT_SWEEP_X_MOVE_FRAMES,
+    slow_or_hold_frames: int = DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES,
+    return_frames: int = DEFAULT_SWEEP_X_RETURN_FRAMES,
+    final_hold_frames: int = DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES,
+) -> ProgrammedTargetInputSource:
+    return ProgrammedTargetInputSource(
+        build_sweep_x_trajectory(
+            initial_position_m=initial_position_m,
+            positive_x_offset_m=positive_x_offset_m,
+            dt_s=dt_s,
+            initial_hold_frames=initial_hold_frames,
+            move_frames=move_frames,
+            slow_or_hold_frames=slow_or_hold_frames,
+            return_frames=return_frames,
+            final_hold_frames=final_hold_frames,
+        ),
+        loop=loop,
+    )
+
+
 __all__ = [
+    "build_sweep_x_input_source",
+    "build_sweep_x_trajectory",
     "ProgrammedTargetFrame",
     "ProgrammedTargetInputSource",
     "ProgrammedTargetTrajectory",
