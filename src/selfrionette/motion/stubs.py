@@ -16,4 +16,5 @@ class NoOpMotionGenerator:
         )
 
 
-__all__ = ["MotionGenerator", "NoOpMotionGenerator"]
+# Keep the contract import available for explicit, module-local imports.
+__all__ = ["NoOpMotionGenerator"]

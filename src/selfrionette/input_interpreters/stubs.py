@@ -19,4 +19,5 @@ class NoOpInputInterpreter:
         )
 
 
-__all__ = ["InputInterpreter", "NoOpInputInterpreter"]
+# Keep the contract import available for explicit, module-local imports.
+__all__ = ["NoOpInputInterpreter"]

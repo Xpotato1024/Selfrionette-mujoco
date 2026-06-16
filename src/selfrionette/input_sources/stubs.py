@@ -14,4 +14,5 @@ class StaticInputSource:
         return self._frame
 
 
-__all__ = ["StaticInputSource", "InputSource"]
+# Keep the contract import available for explicit, module-local imports.
+__all__ = ["StaticInputSource"]

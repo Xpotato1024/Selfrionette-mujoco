@@ -4,10 +4,10 @@ import pytest
 
 from selfrionette.motion import (
     InputIntentMotionGenerator,
-    NoOpMotionGenerator,
     build_motion_command_from_input_intent,
     build_motion_command_from_target_command,
 )
+from selfrionette.motion.stubs import NoOpMotionGenerator
 from selfrionette.schemas import InputIntent, MotionCommand, TargetCommand
 
 

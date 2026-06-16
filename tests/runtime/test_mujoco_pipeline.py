@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from selfrionette.input_sources import StaticInputSource
-from selfrionette.motion import NoOpMotionGenerator
+from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
+from selfrionette.input_sources.stubs import StaticInputSource
+from selfrionette.motion.stubs import NoOpMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
-from selfrionette.transport import NoOpStatePublisher
-from selfrionette.input_interpreters import NoOpInputInterpreter
+from selfrionette.transport.stubs import NoOpStatePublisher
 from selfrionette.runtime import RuntimePipeline, build_mujoco_pipeline, build_noop_pipeline
 from selfrionette.schemas import MuJoCoState
 

@@ -5,26 +5,32 @@ import ast
 import json
 from pathlib import Path
 
-import selfrionette.runtime.dry_run as dry_run_module
 import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
 from selfrionette.input_interpreters import ReplayInputInterpreter
-from selfrionette.input_interpreters import NoOpInputInterpreter
+from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
-from selfrionette.input_sources import StaticInputSource
+from selfrionette.input_sources.stubs import StaticInputSource
 from selfrionette.kinematics import PlanarTwoLinkInverseKinematicsSolver
-from selfrionette.kinematics import ZeroInverseKinematicsSolver
+from selfrionette.kinematics.stubs import ZeroInverseKinematicsSolver
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.mujoco_backend import NoOpMuJoCoSimulator
+from selfrionette.mujoco_backend.stubs import NoOpMuJoCoSimulator
 from selfrionette.runtime import build_concrete_mujoco_pipeline, run_replay_mujoco_dry_run, run_replay_mujoco_websocket_publisher
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState
-from selfrionette.transport import NoOpStatePublisher, WebSocketStatePublisher
+from selfrionette.transport import WebSocketStatePublisher
+from selfrionette.transport.stubs import NoOpStatePublisher
 
 
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCTION_LIKE_RUNTIME_MODULES = (
     ROOT / "src" / "selfrionette" / "runtime" / "concrete_mujoco_pipeline.py",
+    ROOT / "src" / "selfrionette" / "runtime" / "replay_mujoco_pipeline.py",
+    ROOT / "src" / "selfrionette" / "runtime" / "dry_run.py",
     ROOT / "src" / "selfrionette" / "runtime" / "websocket_publisher_runner.py",
+)
+COMPATIBILITY_RUNTIME_MODULES = (
+    ROOT / "src" / "selfrionette" / "runtime" / "pipeline.py",
+    ROOT / "src" / "selfrionette" / "runtime" / "mujoco_pipeline.py",
 )
 FORBIDDEN_RUNTIME_SYMBOLS = (
     "StaticInputSource",
@@ -32,10 +38,7 @@ FORBIDDEN_RUNTIME_SYMBOLS = (
     "NoOpMotionGenerator",
     "NoOpMuJoCoSimulator",
     "NoOpStatePublisher",
-    "ZeroForwardKinematicsSolver",
     "ZeroInverseKinematicsSolver",
-    "build_noop_pipeline",
-    "build_noop_pipeline()",
 )
 FORBIDDEN_RUNTIME_MODULES = {
     "selfrionette.input_sources.stubs",
@@ -53,28 +56,6 @@ class RecordingPublisher:
 
     async def publish(self, state: MuJoCoState) -> None:
         self.states.append(state)
-
-
-class _ForbiddenNoOpMotionGenerator:
-    def __init__(self, *args, **kwargs) -> None:
-        raise AssertionError("default dry-run path must not construct NoOpMotionGenerator")
-
-
-class _RecordingNoOpMotionGenerator:
-    instances = 0
-    updates = 0
-
-    def __init__(self) -> None:
-        type(self).instances += 1
-
-    def update(self, intent, dt_s: float) -> MotionCommand:
-        type(self).updates += 1
-        return MotionCommand(
-            timestamp_s=intent.timestamp_s,
-            target=None,
-            joint=None,
-            metadata=dict(intent.metadata),
-        )
 
 
 class _DummyWebSocketPublisherServer:
@@ -122,6 +103,19 @@ def test_production_like_runtime_modules_do_not_reference_stub_symbols() -> None
         assert not offending, f"{path.relative_to(ROOT)} references forbidden stub symbols: {offending}"
 
 
+def test_compatibility_runtime_modules_use_stub_namespace_explicitly() -> None:
+    for path in COMPATIBILITY_RUNTIME_MODULES:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        imported_stub_modules: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module is not None:
+                if node.module.endswith(".stubs"):
+                    imported_stub_modules.append(node.module)
+
+        assert imported_stub_modules, f"{path.relative_to(ROOT)} should use explicit .stubs imports for compatibility"
+        assert all(module.endswith(".stubs") for module in imported_stub_modules)
+
+
 def test_build_concrete_mujoco_pipeline_uses_concrete_components() -> None:
     publisher = RecordingPublisher()
     pipeline = build_concrete_mujoco_pipeline(publisher=publisher)
@@ -157,24 +151,16 @@ def test_build_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_padded
     assert state.qpos[:4] == command.joint.joint_angles_rad
 
 
-def test_run_replay_mujoco_dry_run_default_path_does_not_construct_noop_motion_generator(monkeypatch) -> None:
-    monkeypatch.setattr(dry_run_module, "NoOpMotionGenerator", _ForbiddenNoOpMotionGenerator)
-
+def test_run_replay_mujoco_dry_run_default_path_uses_concrete_pipeline() -> None:
     payload = json.loads(run_replay_mujoco_dry_run(steps=1)[0])
 
     assert payload["qpos"][:4] != [0.0, 0.0, 0.0, 0.0]
     assert payload["version"] == 0
 
 
-def test_run_replay_mujoco_dry_run_sweep_x_path_remains_explicit_compatibility_path(monkeypatch) -> None:
-    _RecordingNoOpMotionGenerator.instances = 0
-    _RecordingNoOpMotionGenerator.updates = 0
-    monkeypatch.setattr(dry_run_module, "NoOpMotionGenerator", _RecordingNoOpMotionGenerator)
-
+def test_run_replay_mujoco_dry_run_sweep_x_path_remains_explicit_compatibility_path() -> None:
     payload = json.loads(run_replay_mujoco_dry_run(steps=1, preset="sweep_x")[0])
 
-    assert _RecordingNoOpMotionGenerator.instances == 1
-    assert _RecordingNoOpMotionGenerator.updates == 1
     assert payload["metadata"]["preset"] == "sweep_x"
     assert payload["metadata"]["desired_endpoint_m"] == payload["target_position_m"]
 

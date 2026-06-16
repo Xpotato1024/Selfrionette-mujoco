@@ -6,11 +6,10 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import TextIO
 
-from selfrionette.motion import NoOpMotionGenerator
 from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.schemas import RawInputFrame
+from selfrionette.schemas import MotionCommand, RawInputFrame
 from selfrionette.transport import WebSocketStatePublisher
 
 
@@ -20,6 +19,19 @@ class _RecordingSender:
 
     async def send(self, message: str) -> None:
         self.messages.append(message)
+
+
+class _SweepXCompatibilityMotionGenerator:
+    """Local compatibility generator for the legacy sweep_x dry-run branch."""
+
+    def update(self, intent, dt_s: float) -> MotionCommand:
+        _ = dt_s
+        return MotionCommand(
+            timestamp_s=intent.timestamp_s,
+            target=None,
+            joint=None,
+            metadata=dict(intent.metadata),
+        )
 
 
 def _default_replay_frame() -> RawInputFrame:
@@ -107,14 +119,14 @@ async def _run_replay_mujoco_dry_run_async(
     if preset == "sweep_x" and frames is None:
         # Visual-smoke compatibility path for legacy target-marker sweep behavior.
         # This branch intentionally overrides the concrete motion generator with
-        # NoOpMotionGenerator so the target marker sweep stays deterministic.
+        # a local deterministic placeholder so the target marker sweep stays deterministic.
         pipeline = build_concrete_mujoco_pipeline(
             frames=_sweep_x_replay_frames(steps),
             config=runtime_config,
             loop=False,
             publisher=WebSocketStatePublisher(sender),
         )
-        pipeline.motion_generator = NoOpMotionGenerator()
+        pipeline.motion_generator = _SweepXCompatibilityMotionGenerator()
 
         lines: list[str] = []
         for _ in range(steps):

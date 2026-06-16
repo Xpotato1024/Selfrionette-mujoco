@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from selfrionette.input_interpreters import InputInterpreter, NoOpInputInterpreter
-from selfrionette.input_sources import InputSource, StaticInputSource
-from selfrionette.motion import MotionGenerator, NoOpMotionGenerator
-from selfrionette.mujoco_backend import MuJoCoSimulator, NoOpMuJoCoSimulator
+from selfrionette.input_interpreters import InputInterpreter
+from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
+from selfrionette.input_sources import InputSource
+from selfrionette.input_sources.stubs import StaticInputSource
+from selfrionette.motion import MotionGenerator
+from selfrionette.motion.stubs import NoOpMotionGenerator
+from selfrionette.mujoco_backend import MuJoCoSimulator
+from selfrionette.mujoco_backend.stubs import NoOpMuJoCoSimulator
 from selfrionette.schemas import MuJoCoState, RawInputFrame
-from selfrionette.transport import NoOpStatePublisher, StatePublisher
+from selfrionette.transport import StatePublisher
+from selfrionette.transport.stubs import NoOpStatePublisher
 
 from selfrionette.runtime.config import RuntimeConfig
 
@@ -48,4 +53,3 @@ def build_noop_pipeline(
         simulator=NoOpMuJoCoSimulator(),
         publisher=NoOpStatePublisher(),
     )
-

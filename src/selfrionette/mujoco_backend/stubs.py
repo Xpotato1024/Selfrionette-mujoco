@@ -27,4 +27,5 @@ class NoOpMuJoCoSimulator:
         return MuJoCoState(frame_index=self._frame_index, time_s=self._time_s)
 
 
-__all__ = ["MuJoCoSimulator", "NoOpMuJoCoSimulator"]
+# Keep the contract import available for explicit, module-local imports.
+__all__ = ["NoOpMuJoCoSimulator"]
