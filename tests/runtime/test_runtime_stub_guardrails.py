@@ -178,6 +178,9 @@ def test_run_replay_mujoco_dry_run_sweep_x_path_remains_explicit_compatibility_p
     payload = json.loads(run_replay_mujoco_dry_run(steps=1, preset="sweep_x")[0])
 
     assert payload["metadata"]["preset"] == "sweep_x"
+    assert payload["metadata"]["source_kind"] == "programmed_target"
+    assert payload["metadata"]["trajectory_name"] == "sweep_x"
+    assert payload["metadata"]["phase"] == "initial_hold"
     assert payload["metadata"]["desired_endpoint_m"] == payload["target_position_m"]
 
 

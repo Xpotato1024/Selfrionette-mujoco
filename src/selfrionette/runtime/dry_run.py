@@ -6,10 +6,11 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import TextIO
 
+from selfrionette.input_sources import build_sweep_x_input_source
 from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.schemas import MotionCommand, RawInputFrame
+from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketStatePublisher
 
 
@@ -19,19 +20,6 @@ class _RecordingSender:
 
     async def send(self, message: str) -> None:
         self.messages.append(message)
-
-
-class _SweepXCompatibilityMotionGenerator:
-    """Local compatibility generator for the legacy sweep_x dry-run branch."""
-
-    def update(self, intent, dt_s: float) -> MotionCommand:
-        _ = dt_s
-        return MotionCommand(
-            timestamp_s=intent.timestamp_s,
-            target=None,
-            joint=None,
-            metadata=dict(intent.metadata),
-        )
 
 
 def _default_replay_frame() -> RawInputFrame:
@@ -46,41 +34,8 @@ def _default_replay_frame() -> RawInputFrame:
 
 
 def _sweep_x_replay_frames(steps: int) -> tuple[RawInputFrame, ...]:
-    frames: list[RawInputFrame] = []
-    for index in range(steps):
-        target_delta_m = (0.001 * float(index + 1), 0.0, 0.0)
-        frames.append(
-            RawInputFrame(
-                source="replay",
-                timestamp_s=float(index),
-                metadata={
-                    "preset": "sweep_x",
-                    "frame_index": index + 1,
-                    "target_delta_m": target_delta_m,
-                },
-            )
-        )
-
-    return tuple(frames)
-
-
-def _metadata_vector3(value: object) -> tuple[float, float, float]:
-    if not isinstance(value, Sequence):
-        raise ValueError("sweep_x replay fixture requires a 3-vector metadata value")
-
-    components = tuple(float(component) for component in value)
-    if len(components) != 3:
-        raise ValueError("sweep_x replay fixture requires a 3-vector metadata value")
-
-    return components
-
-
-def _find_tip_position_m(state) -> tuple[float, float, float]:
-    for site in state.sites:
-        if site.name == "tip":
-            return site.position_m
-
-    raise ValueError("tip site is required for the sweep_x dry-run fixture")
+    source = build_sweep_x_input_source(initial_position_m=DEFAULT_CONCRETE_TARGET_POSITION_M, loop=False)
+    return tuple(source.read_frame() for _ in range(steps))
 
 
 def _validate_steps(steps: int) -> None:
@@ -117,16 +72,12 @@ async def _run_replay_mujoco_dry_run_async(
     dt = runtime_config.dt_s
 
     if preset == "sweep_x" and frames is None:
-        # Visual-smoke compatibility path for legacy target-marker sweep behavior.
-        # This branch intentionally overrides the concrete motion generator with
-        # a local deterministic placeholder so the target marker sweep stays deterministic.
         pipeline = build_concrete_mujoco_pipeline(
             frames=_sweep_x_replay_frames(steps),
             config=runtime_config,
             loop=False,
             publisher=WebSocketStatePublisher(sender),
         )
-        pipeline.motion_generator = _SweepXCompatibilityMotionGenerator()
 
         lines: list[str] = []
         for _ in range(steps):
@@ -137,22 +88,15 @@ async def _run_replay_mujoco_dry_run_async(
             pipeline.simulator.step(dt)
 
             state = pipeline.simulator.snapshot()
-            current_tip_position_m = _find_tip_position_m(state)
-            target_delta_m = _metadata_vector3(intent.metadata.get("target_delta_m", (0.0, 0.0, 0.0)))
-            desired_endpoint_m = tuple(
-                current + delta for current, delta in zip(current_tip_position_m, target_delta_m, strict=True)
-            )
             annotated_state = snapshot_mujoco_state(
                 pipeline.simulator.model,
                 pipeline.simulator.data,
                 frame_index=state.frame_index,
-                target_position_m=desired_endpoint_m,
+                target_position_m=tuple(intent.metadata["desired_endpoint_m"]),
                 metadata={
                     **state.metadata,
+                    **intent.metadata,
                     "preset": "sweep_x",
-                    "current_tip_position_m": current_tip_position_m,
-                    "target_delta_m": target_delta_m,
-                    "desired_endpoint_m": desired_endpoint_m,
                 },
             )
             await pipeline.publisher.publish(annotated_state)
