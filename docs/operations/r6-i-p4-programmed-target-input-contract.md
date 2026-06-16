@@ -56,7 +56,8 @@ intent bridge を固定した。
 
 ## Import Boundary Check
 
-- architecture tests による manual review を予定
+- `scripts/check_import_boundaries.py` was not present in this checkout.
+- Import boundary checking was handled by architecture / stubs tests and manual review.
 
 ## Hardware Validation / Not Run Reason
 
