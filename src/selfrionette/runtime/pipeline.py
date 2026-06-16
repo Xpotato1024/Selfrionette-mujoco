@@ -1,3 +1,5 @@
+"""Compatibility runtime module for noop pipeline wiring."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

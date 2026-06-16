@@ -1,3 +1,5 @@
+"""Test-double namespace for kinematics stubs."""
+
 from __future__ import annotations
 
 from selfrionette.kinematics.base import ForwardKinematicsSolver, InverseKinematicsSolver

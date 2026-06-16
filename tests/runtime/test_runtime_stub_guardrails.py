@@ -38,6 +38,7 @@ FORBIDDEN_RUNTIME_SYMBOLS = (
     "NoOpMotionGenerator",
     "NoOpMuJoCoSimulator",
     "NoOpStatePublisher",
+    "ZeroForwardKinematicsSolver",
     "ZeroInverseKinematicsSolver",
 )
 FORBIDDEN_RUNTIME_MODULES = {
@@ -47,6 +48,22 @@ FORBIDDEN_RUNTIME_MODULES = {
     "selfrionette.motion.stubs",
     "selfrionette.mujoco_backend.stubs",
     "selfrionette.transport.stubs",
+}
+
+COMPATIBILITY_RUNTIME_STUB_IMPORTS = {
+    ROOT / "src" / "selfrionette" / "runtime" / "pipeline.py": {
+        "selfrionette.input_interpreters.stubs": {"NoOpInputInterpreter"},
+        "selfrionette.input_sources.stubs": {"StaticInputSource"},
+        "selfrionette.motion.stubs": {"NoOpMotionGenerator"},
+        "selfrionette.mujoco_backend.stubs": {"NoOpMuJoCoSimulator"},
+        "selfrionette.transport.stubs": {"NoOpStatePublisher"},
+    },
+    ROOT / "src" / "selfrionette" / "runtime" / "mujoco_pipeline.py": {
+        "selfrionette.input_interpreters.stubs": {"NoOpInputInterpreter"},
+        "selfrionette.input_sources.stubs": {"StaticInputSource"},
+        "selfrionette.motion.stubs": {"NoOpMotionGenerator"},
+        "selfrionette.transport.stubs": {"NoOpStatePublisher"},
+    },
 }
 
 
@@ -106,14 +123,13 @@ def test_production_like_runtime_modules_do_not_reference_stub_symbols() -> None
 def test_compatibility_runtime_modules_use_stub_namespace_explicitly() -> None:
     for path in COMPATIBILITY_RUNTIME_MODULES:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        imported_stub_modules: list[str] = []
+        imported_stub_modules: dict[str, set[str]] = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module is not None:
                 if node.module.endswith(".stubs"):
-                    imported_stub_modules.append(node.module)
+                    imported_stub_modules[node.module] = {alias.name for alias in node.names}
 
-        assert imported_stub_modules, f"{path.relative_to(ROOT)} should use explicit .stubs imports for compatibility"
-        assert all(module.endswith(".stubs") for module in imported_stub_modules)
+        assert imported_stub_modules == COMPATIBILITY_RUNTIME_STUB_IMPORTS[path]
 
 
 def test_build_concrete_mujoco_pipeline_uses_concrete_components() -> None:
