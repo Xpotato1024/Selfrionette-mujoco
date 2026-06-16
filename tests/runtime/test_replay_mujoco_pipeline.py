@@ -6,7 +6,6 @@ from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime import RuntimePipeline, build_replay_mujoco_pipeline
 from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
-from selfrionette.transport import NoOpStatePublisher
 
 
 def test_build_replay_mujoco_pipeline_returns_runtime_pipeline() -> None:
@@ -15,7 +14,7 @@ def test_build_replay_mujoco_pipeline_returns_runtime_pipeline() -> None:
     assert isinstance(pipeline, RuntimePipeline)
     assert isinstance(pipeline.motion_generator, InputIntentMotionGenerator)
     assert isinstance(pipeline.simulator, HeadlessMuJoCoSimulator)
-    assert isinstance(pipeline.publisher, NoOpStatePublisher)
+    assert hasattr(pipeline.publisher, "last_state")
 
 
 def test_run_once_replays_frame_into_mujoco_state() -> None:
@@ -33,6 +32,7 @@ def test_run_once_replays_frame_into_mujoco_state() -> None:
     assert state.time_s > 0.0
     assert any(site.name == "tip" for site in state.sites)
     assert any(body.name == "base_link" for body in state.bodies)
+    assert pipeline.publisher.last_state == state
 
 
 def test_motion_command_reaches_simulator() -> None:

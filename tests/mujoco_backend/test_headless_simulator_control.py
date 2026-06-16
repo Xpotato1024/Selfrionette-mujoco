@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 
 import selfrionette.mujoco_backend.simulator as simulator_module
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, NoOpMuJoCoSimulator
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.mujoco_backend.stubs import NoOpMuJoCoSimulator
 from selfrionette.schemas import JointCommand, MotionCommand
 
 

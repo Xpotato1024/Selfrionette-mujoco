@@ -29,6 +29,7 @@ Do not create or use `doc/`.
 | R6-H-P6 runtime zero stub guardrail | `docs/operations/r6-h-p6-runtime-zero-stub-guardrail.md` | runtime default stub retirement guardrail and compatibility exception split |
 | R6-H completion audit | `docs/operations/r6-h-completion-audit.md` | concrete FK / IK / runtime wiring / stub guardrail completion evidence |
 | R6-I-P1 public surface inventory | `docs/operations/r6-i-p1-public-surface-inventory.md` | `__all__` / `__init__` / `base.py` / `stubs.py` public surface inventory |
+| R6-I-P2 public export policy | `docs/operations/r6-i-p2-public-export-policy.md` | package-root / module-level public API policy and explicit stub import guardrail |
 | R6-H-P1 stub inventory | `docs/operations/r6-h-p1-stub-inventory.md` | kinematics / motion / backend / runtime stub classification and retirement planning |
 | WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0 |
 | WebSocket / host / port contract | `docs/operations/websocket-host-port-contract.md` | bind host, browser-visible host, viewer page URL, and WebSocket endpoint URL contract |

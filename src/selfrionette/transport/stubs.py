@@ -14,4 +14,5 @@ class NoOpStatePublisher:
         self.last_state = state
 
 
-__all__ = ["NoOpStatePublisher", "StatePublisher"]
+# Keep the contract import available for explicit, module-local imports.
+__all__ = ["NoOpStatePublisher"]

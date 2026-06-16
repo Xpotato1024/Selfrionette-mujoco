@@ -10,7 +10,17 @@ from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_ar
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.schemas import RawInputFrame
-from selfrionette.transport import NoOpStatePublisher, StatePublisher
+from selfrionette.transport import StatePublisher
+
+
+class _ReplayCompatibilityStatePublisher:
+    """Local compatibility publisher for replay defaults."""
+
+    def __init__(self) -> None:
+        self.last_state = None
+
+    async def publish(self, state) -> None:
+        self.last_state = state
 
 
 def _resolve_model_path(*, model_path: str | Path | None, config: RuntimeConfig) -> Path:
@@ -40,7 +50,7 @@ def build_replay_mujoco_pipeline(
     runtime_config = RuntimeConfig() if config is None else config
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
-    state_publisher = NoOpStatePublisher() if publisher is None else publisher
+    state_publisher = _ReplayCompatibilityStatePublisher() if publisher is None else publisher
 
     return RuntimePipeline(
         config=runtime_config,

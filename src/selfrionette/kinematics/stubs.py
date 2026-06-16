@@ -22,9 +22,8 @@ class ZeroInverseKinematicsSolver:
         return JointCommand()
 
 
+# Keep the contract imports available for explicit, module-local imports.
 __all__ = [
-    "ForwardKinematicsSolver",
-    "InverseKinematicsSolver",
     "ZeroForwardKinematicsSolver",
     "ZeroInverseKinematicsSolver",
 ]

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from selfrionette.input_interpreters import NoOpInputInterpreter
-from selfrionette.input_sources import StaticInputSource
-from selfrionette.motion import NoOpMotionGenerator
+from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
+from selfrionette.input_sources.stubs import StaticInputSource
+from selfrionette.motion.stubs import NoOpMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.schemas import RawInputFrame
-from selfrionette.transport import NoOpStatePublisher
+from selfrionette.transport.stubs import NoOpStatePublisher
 
 
 def _resolve_model_path(
