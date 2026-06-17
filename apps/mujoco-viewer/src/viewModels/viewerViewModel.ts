@@ -28,6 +28,8 @@ export interface ViewerViewModel {
   };
   scene: {
     hasCanvas: boolean;
+    sceneAidAxesEnabled: boolean;
+    sceneAidGridEnabled: boolean;
     bodyMarkerCount: number;
     siteMarkerCount: number;
     dofRingCount: number;
@@ -135,6 +137,8 @@ export function buildViewerViewModel(snapshot: ViewerRuntimeSnapshot): ViewerVie
     },
     scene: {
       hasCanvas: true,
+      sceneAidAxesEnabled: true,
+      sceneAidGridEnabled: true,
       bodyMarkerCount: snapshot.markerScene.bodies.length,
       siteMarkerCount: snapshot.markerScene.sites.length,
       dofRingCount: snapshot.dofRingCount,

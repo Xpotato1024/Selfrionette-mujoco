@@ -213,6 +213,10 @@ function renderFallbackViewerApp(
       "Canvas and overlay coverage",
       renderKeyValueList(documentLike, [
         ["Canvas", viewModel.scene.hasCanvas ? "ready" : "missing"],
+        [
+          "Scene aids",
+          `axes ${viewModel.scene.sceneAidAxesEnabled ? "enabled" : "disabled"}, grid ${viewModel.scene.sceneAidGridEnabled ? "enabled" : "disabled"}`,
+        ],
         ["Body markers", String(viewModel.scene.bodyMarkerCount)],
         ["Site markers", String(viewModel.scene.siteMarkerCount)],
         ["DoF rings", `${viewModel.scene.dofRingCount} / ${viewModel.scene.expectedDofRingCount}`],

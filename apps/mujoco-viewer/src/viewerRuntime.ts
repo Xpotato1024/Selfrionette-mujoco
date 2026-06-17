@@ -16,6 +16,7 @@ import {
   createBrowserSceneRenderer,
   type BrowserSceneRenderer,
 } from "./viewer/browserSceneRenderer.js";
+import { ensureSceneAids } from "./viewer/sceneAids.js";
 import {
   buildDoFRingScene,
   buildDoFRingSceneSummaryText,
@@ -417,6 +418,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       ? null
       : options.assetBaseUrl;
   const threeScene = new Scene();
+  ensureSceneAids(threeScene);
   const markerObjectRegistry = createThreeSceneObjectRegistry(threeScene);
   const dofRingObjectRegistry = createDoFRingObjectRegistry(threeScene);
   let appRenderer: ViewerAppRenderer | null = null;
