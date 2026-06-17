@@ -199,3 +199,47 @@ OSC sent: no
 Rapier reintroduced: no
 @types/three reintroduced: no
 ```
+
+## 3D Visual Smoke
+
+Web viewer の正本は `file://` ではなく HTTP server 経由にする。
+`index.html` は canvas を含む 3D scene を表示し、payload v0 の受信後も last payload scene を保持する。
+
+Viewer:
+
+```powershell
+cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+npm ci
+npm run browser:build
+python -m http.server 5173
+```
+
+Publisher:
+
+```powershell
+cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco
+uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+  --host 127.0.0.1 `
+  --port 8766 `
+  --steps 6 `
+  --interval-s 0.033 `
+  --grace-period-s 60 `
+  --preset sweep_x
+```
+
+Browser:
+
+```text
+http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
+```
+
+確認項目:
+
+- target marker が scene に出る
+- tip marker が scene に出る
+- error vector が scene に出る
+- body markers が scene に出る
+- site markers が scene に出る
+- arm skeleton fallback が line として出る
+- DoF ring display は presentation-only として残る
+- WebSocket close 後も last payload frame と scene を保持する

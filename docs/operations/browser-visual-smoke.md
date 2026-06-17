@@ -191,3 +191,8 @@ R6-F-P6 の completion audit は、この smoke path が成立済みであるこ
 文書化し、Sweep_x visual demo と viewer 可視化 boundary の完了状態を
 `docs/operations/r6-f-completion-audit.md` に固定する。browser visual smoke は
 引き続き rendering-only の観測手順であり、新しい feature 追加の場ではない。
+
+
+R6-Viewer-161 以降では、viewer runtime は placeholder text だけでは完了扱いにしない。
+`viewer-scene` は canvas と scene text を持ち、payload v0 を受けると target / tip / error vector / body / site / arm skeleton / DoF ring を 3D scene に反映する。
+WebSocket close 後も last payload frame と scene は保持する。
