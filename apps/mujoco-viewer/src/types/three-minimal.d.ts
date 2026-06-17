@@ -89,6 +89,7 @@ declare module "three" {
       w: number;
       set(x: number, y: number, z: number, w: number): void;
     };
+    lookAt(x: number, y: number, z: number): void;
     add(...objects: Object3D[]): this;
     clear(): void;
   }

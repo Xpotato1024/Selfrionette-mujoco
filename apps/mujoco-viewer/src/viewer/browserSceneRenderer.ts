@@ -10,6 +10,20 @@ export interface BrowserSceneRenderer {
 }
 
 const DEFAULT_RENDER_SIZE = { width: 960, height: 540 };
+const BROWSER_SCENE_CAMERA_POSITION = { x: 1.8, y: 1.4, z: 1.8 };
+const BROWSER_SCENE_CAMERA_TARGET = { x: 0.1, y: 0.0, z: 0.2 };
+
+export interface BrowserSceneCameraConfig {
+  position: { x: number; y: number; z: number };
+  target: { x: number; y: number; z: number };
+}
+
+export function buildBrowserSceneCameraConfig(): BrowserSceneCameraConfig {
+  return {
+    position: { ...BROWSER_SCENE_CAMERA_POSITION },
+    target: { ...BROWSER_SCENE_CAMERA_TARGET },
+  };
+}
 
 export function createBrowserSceneRenderer(
   sceneCanvas: ViewerElementLike,
@@ -22,7 +36,9 @@ export function createBrowserSceneRenderer(
   renderer.setClearColor(0x08111f, 1);
 
   const camera = new PerspectiveCamera(45, DEFAULT_RENDER_SIZE.width / DEFAULT_RENDER_SIZE.height, 0.01, 100);
-  camera.position.set(2.2, 1.8, 2.6);
+  const cameraConfig = buildBrowserSceneCameraConfig();
+  camera.position.set(cameraConfig.position.x, cameraConfig.position.y, cameraConfig.position.z);
+  camera.lookAt(cameraConfig.target.x, cameraConfig.target.y, cameraConfig.target.z);
   scene.add(camera);
 
   return {

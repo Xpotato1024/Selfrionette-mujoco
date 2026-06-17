@@ -8,6 +8,7 @@ import {
   type ViewerDocumentLike,
   type ViewerElementLike,
 } from "../src/viewerRuntime.js";
+import { buildBrowserSceneCameraConfig } from "../src/viewer/browserSceneRenderer.js";
 import type { FastArmMeshGeometryLoaderLike } from "../src/viewer/fastArmMeshes.js";
 import type { TransportPayloadV0 } from "../src/types/transportPayload.js";
 import type {
@@ -341,6 +342,17 @@ function testReadViewerEndpointConfig(): void {
 
   assert(config.websocketUrl === "ws://127.0.0.1:8766", "endpoint helper should read websocketUrl");
   assert(config.source === "query", "endpoint helper should mark query sources");
+}
+
+function testBuildBrowserSceneCameraConfigPointsAtPayloadWorkspace(): void {
+  const cameraConfig = buildBrowserSceneCameraConfig();
+
+  assert(cameraConfig.position.x === 1.8, "camera x position should be centered for the payload workspace");
+  assert(cameraConfig.position.y === 1.4, "camera y position should be centered for the payload workspace");
+  assert(cameraConfig.position.z === 1.8, "camera z position should be centered for the payload workspace");
+  assert(cameraConfig.target.x === 0.1, "camera target x should face the payload workspace");
+  assert(cameraConfig.target.y === 0.0, "camera target y should face the payload workspace");
+  assert(cameraConfig.target.z === 0.2, "camera target z should face the payload workspace");
 }
 
 function testCreateViewerRuntimeMountsAndStops(): void {
@@ -906,6 +918,7 @@ function testCreateViewerRuntimeSyncsFastArmMeshesWhenAssetBaseUrlProvided(): vo
 }
 
 testReadViewerEndpointConfig();
+testBuildBrowserSceneCameraConfigPointsAtPayloadWorkspace();
 testBuildViewerRuntimeSnapshot();
 testBuildViewerRuntimeSnapshotIncludesTargetTipAndErrorVector();
 testBuildViewerRuntimeSnapshotIgnoresQposForArmSkeleton();
