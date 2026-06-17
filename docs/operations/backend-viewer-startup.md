@@ -51,8 +51,18 @@ uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x
 
 ## WebSocket publisher
 
-```bash
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 3
+manual Web view smoke は `sweep_x` programmed input path を使う。default path は
+payload compatibility / unit test path として扱い、manual browser smoke の推奨
+command にはしない。
+
+```powershell
+uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+  --host 127.0.0.1 `
+  --port 8766 `
+  --steps 6 `
+  --interval-s 0.033 `
+  --grace-period-s 60 `
+  --preset sweep_x
 ```
 
 - browser viewer に payload v0 を流す local/dev publisher。
@@ -60,7 +70,17 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 
 - `--host` は bind host。
 - `--port` は WebSocket endpoint port。
 - `--steps` は replay step 数。
+- `--preset sweep_x` は programmed input の `sweep_x` path を publish する。
+- 起動時に `serving on ws://127.0.0.1:8766` 相当の待受ログが出る。
+- `--grace-period-s` の間は viewer 接続待ちになり、接続なしで終了する場合も理由を出す。
 - publisher は browser page を開かない。
+- manual smoke では default `--steps 120` や `--steps 10000` のような長時間
+  dynamics run を推奨しない。QACC warning が出る path は manual browser smoke
+  から外し、long-run MuJoCo stability は別 issue で扱う。
+- Publisher / transport smoke は publisher の起動、接続待ち、payload v0
+  publish、no-client reason log を確認する範囲までとする。
+- Browser payload parse smoke は viewer が payload v0 を受信して diagnostic
+  text を出せるかまでを確認し、proper 3D GUI render は別 follow-up に分ける。
 
 ## Web viewer
 
@@ -70,16 +90,24 @@ npm ci
 npm run browser:build
 ```
 
-browser で開く URL 例:
+viewer は HTTP server 経由で開く。`file:///.../index.html` の直開きは
+browser の module / CORS 制約で `dist/browser/main.js` が block されるため使わない。
+
+```powershell
+cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+python -m http.server 5173
+```
+
+browser で開く URL:
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 
 互換 alias:
 
 ```text
-apps/mujoco-viewer/index.html?ws=ws://127.0.0.1:8766
+http://127.0.0.1:5173/index.html?ws=ws://127.0.0.1:8766
 ```
 
 - browser page URL と WebSocket URL は別概念。

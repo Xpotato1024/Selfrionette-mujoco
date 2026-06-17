@@ -38,6 +38,43 @@ programmed target input source 由来の intent を runtime path に通す。
 - `run_replay_mujoco_websocket_publisher()` に programmed input preset を追加する。
 - `preset="sweep_x"` のときは programmed input source 由来の frame を使う。
 - viewer は payload を描画するだけで、FK / IK / qpos recompute はしない。
+- CLI では `--preset sweep_x` を受け付け、dry-run と同じ programmed input
+  metadata を payload に残す。
+- manual Web view smoke では短い `sweep_x` path を標準とする。default path は
+  payload compatibility / unit test path とし、manual browser smoke の推奨
+  command から外す。
+- `--steps 120` 程度の finite payload regression は tests で固定するが、QACC
+  warning が出る長めの dynamics path は manual smoke acceptance に含めない。
+- 起動時は `serving on ws://...`、viewer 接続待ち、publish 開始、publish 完了
+  または接続なし終了理由をログで確認する。
+
+manual Web view smoke command:
+
+```powershell
+uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+  --host 127.0.0.1 `
+  --port 8766 `
+  --steps 6 `
+  --interval-s 0.033 `
+  --grace-period-s 60 `
+  --preset sweep_x
+```
+
+viewer は `file:///.../index.html` で直接開かない。HTTP server 経由で開く:
+
+```powershell
+cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+python -m http.server 5173
+```
+
+```text
+http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
+```
+
+Current limitation: the browser runtime can parse payload v0 and show
+diagnostic text such as body/site counts and target/tip/error-vector values,
+but it is still not a proper 3D GUI visual smoke. Proper 3D scene rendering
+should be handled by a separate viewer follow-up.
 
 ## 5. runtime path / SoT
 
