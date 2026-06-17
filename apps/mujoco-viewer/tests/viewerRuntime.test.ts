@@ -217,6 +217,25 @@ function createAppShell(): { document: FakeDocument; app: FakeElement } {
   return { document, app };
 }
 
+function findDescendantByTag(element: FakeElement | undefined, tagName: string): FakeElement | undefined {
+  if (element === undefined) {
+    return undefined;
+  }
+
+  for (const child of element.children) {
+    if (child.tagName === tagName) {
+      return child;
+    }
+
+    const descendant = findDescendantByTag(child, tagName);
+    if (descendant !== undefined) {
+      return descendant;
+    }
+  }
+
+  return undefined;
+}
+
 function testBuildViewerRuntimeSnapshot(): void {
   const snapshot = buildViewerRuntimeSnapshot(payloadV0Fixture);
 
@@ -363,8 +382,8 @@ function testCreateViewerRuntimeMountsAndStops(): void {
 
   assert(app.children.length === 1, "viewer runtime should mount a single root");
 
-  const root = app.children[0];
-  assert(root.className === "viewer-runtime", "viewer runtime root class should be set");
+  let root = app.children[0] as FakeElement;
+  assert(root.className === "viewer-shell", "viewer runtime root class should be set");
   assert(
     root.attributes.get("data-runtime") === "mujoco-viewer",
     "viewer runtime root should identify the app",
@@ -374,10 +393,10 @@ function testCreateViewerRuntimeMountsAndStops(): void {
     "viewer runtime root should record the browser entry phase",
   );
 
-  const statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
-  const sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
-  const sceneCanvas = sceneSection?.children.find((child) => child.tagName === "canvas");
-  const sceneText = sceneSection?.children.find((child) => child.attributes.get("data-role") === "viewer-scene-text");
+  let statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
+  let sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
+  let sceneCanvas = findDescendantByTag(sceneSection, "canvas");
+  let sceneText = sceneSection?.children.find((child) => child.attributes.get("data-role") === "viewer-scene-text");
 
   assert(statusSection !== undefined, "viewer runtime should render a status section");
   assert(sceneSection !== undefined, "viewer runtime should render a scene section");
@@ -501,10 +520,10 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(app.children.length === 1, "viewer runtime should still mount a single root");
   assert(socket !== null, "viewer runtime should start the optional websocket client");
   const activeSocket = socket as FakeWebSocket;
-  const root = app.children[0];
-  const sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
-  const sceneText = sceneSection?.children.find((child) => child.attributes.get("data-role") === "viewer-scene-text");
-  const statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
+  let root = app.children[0] as FakeElement;
+  let sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
+  let sceneText = sceneSection?.children.find((child) => child.attributes.get("data-role") === "viewer-scene-text");
+  let statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
   assert(
     root.attributes.get("data-websocket-status") === "connecting",
     "viewer runtime should expose the connecting status before open",
@@ -515,6 +534,11 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   );
 
   activeSocket.dispatchOpen();
+
+  root = app.children[0] as FakeElement;
+  sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
+  sceneText = sceneSection?.children.find((child) => child.attributes.get("data-role") === "viewer-scene-text");
+  statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
 
   assert(
     root.attributes.get("data-websocket-status") === "open",
@@ -550,6 +574,11 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   ];
 
   activeSocket.dispatchMessage(JSON.stringify(updatedPayload));
+
+  root = app.children[0] as FakeElement;
+  sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
+  sceneText = sceneSection?.children.find((child) => child.attributes.get("data-role") === "viewer-scene-text");
+  statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
 
   assert(receivedPayloads.length === 1, "runtime should forward received payloads to the callback");
   assert(receivedPayloads[0].version === 0, "runtime callback should receive payload v0");
@@ -697,6 +726,8 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   );
 
   activeSocket.dispatchClose();
+  root = app.children[0] as FakeElement;
+  statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
   assert(
     root.attributes.get("data-websocket-status") === "closed",
     "runtime should expose the closed status after websocket close",

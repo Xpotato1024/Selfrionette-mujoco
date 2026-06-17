@@ -30,42 +30,20 @@ function readFastArmMeshSource(): string {
   return readFileSync(sourcePath, "utf-8");
 }
 
-function extractImportMap(html: string): Record<string, string> {
-  const match = html.match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/i);
-  assert(match !== null, "index.html should contain an import map");
-
-  const jsonText = match[1].trim();
-  const parsed = JSON.parse(jsonText) as {
-    imports?: Record<string, string>;
-  };
-
-  return parsed.imports ?? {};
-}
-
-function testImportMapIncludesThreeAndStlLoader(): void {
+function testViteEntrypointIncludesMainTsxAndStlLoader(): void {
   const html = readIndexHtml();
-  const imports = extractImportMap(html);
   const fastArmMeshSource = readFastArmMeshSource();
 
-  assert(imports.three === "./node_modules/three/build/three.module.js", "index.html should map three");
   assert(
-    imports["three/examples/jsm/"] === "./node_modules/three/examples/jsm/",
-    "index.html should map the three examples jsm prefix",
-  );
-  assert(
-    "three/examples/jsm/loaders/STLLoader.js" in imports || "three/examples/jsm/" in imports,
-    "index.html should make STLLoader resolvable in the browser entry",
+    html.includes('<script type="module" src="/src/main.tsx"></script>'),
+    "index.html should load the Vite entrypoint",
   );
   assert(
     fastArmMeshSource.includes('from "three/examples/jsm/loaders/STLLoader.js"'),
     "fastArmMeshes.ts should import STLLoader from three examples jsm",
   );
-  assert(
-    "three/examples/jsm/" in imports,
-    "index.html should provide the prefix mapping required by STLLoader",
-  );
 }
 
-testImportMapIncludesThreeAndStlLoader();
+testViteEntrypointIncludesMainTsxAndStlLoader();
 
-console.log("import map tests passed");
+console.log("vite entrypoint tests passed");
