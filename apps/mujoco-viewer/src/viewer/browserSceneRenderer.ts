@@ -3,6 +3,7 @@ import { PerspectiveCamera, WebGLRenderer } from "three";
 import type { Scene } from "three";
 
 import type { ViewerElementLike } from "../viewerRuntime.js";
+import { ensureSceneAids } from "./sceneAids.js";
 
 export interface BrowserSceneRenderer {
   render(): void;
@@ -39,6 +40,7 @@ export function createBrowserSceneRenderer(
   const cameraConfig = buildBrowserSceneCameraConfig();
   camera.position.set(cameraConfig.position.x, cameraConfig.position.y, cameraConfig.position.z);
   camera.lookAt(cameraConfig.target.x, cameraConfig.target.y, cameraConfig.target.z);
+  ensureSceneAids(scene);
   scene.add(camera);
 
   return {

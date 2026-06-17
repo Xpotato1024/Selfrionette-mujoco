@@ -25,6 +25,7 @@ function testViewerAppStaticMarkup(): void {
   assert(markup.includes("Payload"), "payload card should render");
   assert(markup.includes("Markers"), "marker card should render");
   assert(markup.includes("Scene status"), "scene status card should render");
+  assert(markup.includes("Scene aids"), "scene aids row should render");
   assert(markup.includes("Warnings"), "warning card should render");
   assert(markup.includes("data-role=\"viewer-status\""), "status summary role should render");
   assert(markup.includes("data-role=\"viewer-scene\""), "scene viewport role should render");

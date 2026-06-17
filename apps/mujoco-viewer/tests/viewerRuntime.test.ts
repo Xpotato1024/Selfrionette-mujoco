@@ -376,7 +376,15 @@ function testBuildBrowserSceneCameraConfigPointsAtPayloadWorkspace(): void {
 
 function testCreateViewerRuntimeMountsAndStops(): void {
   const { document, app } = createAppShell();
-  const runtime = createViewerRuntime({ document, payload: payloadV0Fixture, websocketUrl: null });
+  let syncedScene: Scene | null = null;
+  const runtime = createViewerRuntime({
+    document,
+    payload: payloadV0Fixture,
+    websocketUrl: null,
+    onSceneSynced(scene) {
+      syncedScene = scene;
+    },
+  });
 
   runtime.start();
 
@@ -391,6 +399,17 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   assert(
     root.attributes.get("data-runtime-phase") === "browser-entry",
     "viewer runtime root should record the browser entry phase",
+  );
+  assert(syncedScene !== null, "viewer runtime should expose the synced scene");
+  const sceneAidsObject = (syncedScene as Scene).children.find((child) => child.name === "scene-aids");
+  assert(sceneAidsObject !== undefined, "viewer runtime should keep the persistent scene aids root");
+  assert(
+    sceneAidsObject?.children.some((child) => child.name === "scene-aids:axes") ?? false,
+    "viewer runtime should keep the axes helper attached",
+  );
+  assert(
+    sceneAidsObject?.children.some((child) => child.name === "scene-aids:grid") ?? false,
+    "viewer runtime should keep the grid helper attached",
   );
 
   let statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
@@ -724,6 +743,11 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     statusSection?.textContent?.includes("DoF ring display: partial 1/4 ring(s)") ?? false,
     "runtime should surface the DoF ring overlay in the summary",
   );
+  assert(syncedScene !== null, "runtime should expose the synced scene while connected");
+  assert(
+    (syncedScene as Scene).children.some((child) => child.name === "scene-aids"),
+    "runtime should keep the persistent scene aids root in the scene",
+  );
 
   activeSocket.dispatchClose();
   root = app.children[0] as FakeElement;
@@ -735,6 +759,10 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(
     statusSection?.textContent?.includes("WebSocket: closed after frame 3") ?? false,
     "runtime should show the last payload frame after websocket close",
+  );
+  assert(
+    (syncedScene as Scene).children.some((child) => child.name === "scene-aids"),
+    "scene aids should remain after websocket close",
   );
 
   runtime.stop();

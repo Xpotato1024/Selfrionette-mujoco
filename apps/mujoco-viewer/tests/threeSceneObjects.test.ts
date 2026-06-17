@@ -3,6 +3,7 @@ import { Scene } from "three";
 import { payloadV0Fixture } from "../src/fixtures/payloadV0.js";
 import { buildPayloadMarkerScene } from "../src/viewer/payloadMarkers.js";
 import { buildPayloadArmSkeletonScene } from "../src/viewer/armSkeleton.js";
+import { createSceneAids, ensureSceneAids } from "../src/viewer/sceneAids.js";
 import {
   buildMarkerObjectDescriptors,
   createThreeSceneObjectRegistry,
@@ -283,6 +284,34 @@ function testBuildPayloadArmSkeletonSceneReportsPartialWhenCanonicalEndpointIsMi
   assert(missingBase.segments.length === 0, "missing base should not create segments");
 }
 
+function testCreateSceneAidsBuildsPersistentHelpers(): void {
+  const sceneAids = createSceneAids();
+
+  assert(sceneAids.root.name === "scene-aids", "scene aids root should have a stable name");
+  assert(sceneAids.root.children.length === 2, "scene aids root should contain axes and grid helpers");
+  assert(sceneAids.axes !== null, "axes helper should be created by default");
+  assert(sceneAids.grid !== null, "grid helper should be created by default");
+  assert(sceneAids.axes?.name === "scene-aids:axes", "axes helper should have a stable name");
+  assert(sceneAids.grid?.name === "scene-aids:grid", "grid helper should have a stable name");
+}
+
+function testCreateSceneAidsHonorsVisibilityOptions(): void {
+  const sceneAids = createSceneAids({ showAxes: false, showGrid: true });
+
+  assert(sceneAids.axes === null, "axes helper should be omitted when disabled");
+  assert(sceneAids.grid !== null, "grid helper should still be created when enabled");
+  assert(sceneAids.root.children.length === 1, "root should only contain the enabled helper");
+}
+
+function testEnsureSceneAidsReusesExistingRoot(): void {
+  const scene = new Scene();
+  const first = ensureSceneAids(scene);
+  const second = ensureSceneAids(scene);
+
+  assert(first.root === second.root, "ensureSceneAids should reuse the same root group");
+  assert(scene.children.some((child) => child.name === "scene-aids"), "scene should keep the persistent aids root");
+}
+
 testRegistryCreatesMarkerObject();
 testRegistryReusesObjectIdentityForSameKey();
 testRegistryRemovesMissingObjects();
@@ -292,5 +321,8 @@ testBuildMarkerObjectDescriptorsIncludePayloadPositions();
 testBuildPayloadMarkerSceneSkipsErrorVectorWithoutTipOrTarget();
 testBuildPayloadArmSkeletonSceneUsesCanonicalBodyAndSitePositionsOnly();
 testBuildPayloadArmSkeletonSceneReportsPartialWhenCanonicalEndpointIsMissing();
+testCreateSceneAidsBuildsPersistentHelpers();
+testCreateSceneAidsHonorsVisibilityOptions();
+testEnsureSceneAidsReusesExistingRoot();
 
 console.log("three scene object registry tests passed");

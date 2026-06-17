@@ -20,6 +20,8 @@ function testBuildViewerViewModel(): void {
   assert(viewModel.markers.target === null, "target should be absent in the base fixture");
   assert(viewModel.markers.tip?.[0] === 0.1, "tip marker x should be preserved");
   assert(viewModel.scene.hasCanvas, "scene should report a canvas slot");
+  assert(viewModel.scene.sceneAidAxesEnabled, "scene should report axes helpers as enabled");
+  assert(viewModel.scene.sceneAidGridEnabled, "scene should report grid helpers as enabled");
   assert(viewModel.scene.bodyMarkerCount === 1, "scene should report one body marker");
   assert(viewModel.scene.siteMarkerCount === 1, "scene should report one site marker");
   assert(viewModel.scene.dofRingCount === 4, "scene should report four DoF rings");

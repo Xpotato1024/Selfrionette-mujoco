@@ -99,6 +99,9 @@ root `data-marker-object-count` は次の合計と一致する。
 - arm skeleton segments
 - optional target marker
 - optional error vector
+- scene aids は含めない。
+
+scene aids の axis / grid は persistent helper として payload marker と別に残る。
 
 現在の payload v0 fixture では、target がなく canonical arm skeleton
 connection がある場合は body + site + arm skeleton になる。target と tip の

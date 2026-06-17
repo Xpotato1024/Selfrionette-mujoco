@@ -14,6 +14,10 @@ export function SceneStatusCard({ scene }: SceneStatusCardProps) {
           <dd>{scene.hasCanvas ? "ready" : "missing"}</dd>
         </div>
         <div>
+          <dt>Scene aids</dt>
+          <dd>axes {scene.sceneAidAxesEnabled ? "enabled" : "disabled"}, grid {scene.sceneAidGridEnabled ? "enabled" : "disabled"}</dd>
+        </div>
+        <div>
           <dt>Body markers</dt>
           <dd>{scene.bodyMarkerCount}</dd>
         </div>
