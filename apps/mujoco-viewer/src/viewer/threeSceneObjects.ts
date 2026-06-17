@@ -1,4 +1,16 @@
-import { Object3D, Scene } from "three";
+import {
+  BoxGeometry,
+  BufferGeometry,
+  Float32BufferAttribute,
+  Line,
+  LineBasicMaterial,
+  Mesh,
+  MeshBasicMaterial,
+  Object3D,
+  Scene,
+  SphereGeometry,
+  TorusGeometry,
+} from "three";
 
 import type {
   PayloadArmSkeletonSegmentRenderSpec,
@@ -81,6 +93,74 @@ function buildErrorVectorObjectDescriptor(markerScene: PayloadMarkerScene): Mark
   };
 }
 
+function createColoredMesh(
+  geometry: BoxGeometry | SphereGeometry | TorusGeometry,
+  color: string,
+): Mesh {
+  return new Mesh(geometry, new MeshBasicMaterial({ color }));
+}
+
+function createMarkerMesh(descriptor: MarkerObjectDescriptor): Mesh {
+  if (descriptor.kind === "body") {
+    const isBaseLink = descriptor.key === "body:base_link";
+    return createColoredMesh(new BoxGeometry(0.06, 0.06, 0.06), isBaseLink ? "#4f46e5" : "#64748b");
+  }
+
+  if (descriptor.kind === "site") {
+    const isTip = descriptor.key === "site:tip";
+    return createColoredMesh(new SphereGeometry(0.04, 16, 12), isTip ? "#f97316" : "#0f766e");
+  }
+
+  if (descriptor.kind === "target") {
+    return createColoredMesh(new SphereGeometry(0.05, 16, 12), "#ef4444");
+  }
+
+  if (descriptor.kind === "unknown") {
+    return createColoredMesh(new SphereGeometry(0.03, 12, 8), "#94a3b8");
+  }
+
+  return createColoredMesh(new SphereGeometry(0.04, 16, 12), "#94a3b8");
+}
+
+function createLineGeometry(start: MarkerObjectPosition, end: MarkerObjectPosition): BufferGeometry {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new Float32BufferAttribute([0, 0, 0, end.x - start.x, end.y - start.y, end.z - start.z], 3),
+  );
+  return geometry;
+}
+
+function updateLineObject(object: Line, descriptor: MarkerObjectDescriptor): void {
+  const geometry = object.geometry;
+  if (descriptor.endPosition === undefined) {
+    return;
+  }
+
+  geometry.setAttribute(
+    "position",
+    new Float32BufferAttribute(
+      [
+        0,
+        0,
+        0,
+        descriptor.endPosition.x - descriptor.position.x,
+        descriptor.endPosition.y - descriptor.position.y,
+        descriptor.endPosition.z - descriptor.position.z,
+      ],
+      3,
+    ),
+  );
+  object.position.set(descriptor.position.x, descriptor.position.y, descriptor.position.z);
+}
+
+function createLineObject(descriptor: MarkerObjectDescriptor): Line {
+  const color = descriptor.kind === "error_vector" ? "#dc2626" : "#22c55e";
+  const line = new Line(createLineGeometry(descriptor.position, descriptor.endPosition ?? descriptor.position), new LineBasicMaterial({ color }));
+  line.position.set(descriptor.position.x, descriptor.position.y, descriptor.position.z);
+  return line;
+}
+
 function buildArmSkeletonObjectDescriptors(markerScene: PayloadMarkerScene): MarkerObjectDescriptor[] {
   return markerScene.armSkeleton.segments.map((segment) => ({
     key: `${normalizeArmSkeletonObjectKind(segment.kind)}:${segment.name}`,
@@ -100,7 +180,20 @@ function buildArmSkeletonObjectDescriptors(markerScene: PayloadMarkerScene): Mar
 }
 
 function createMarkerObject(descriptor: MarkerObjectDescriptor): Object3D {
-  const object = new Object3D();
+  if (descriptor.kind === "arm_skeleton_segment" || descriptor.kind === "error_vector") {
+    const object = createLineObject(descriptor);
+    object.name = descriptor.key;
+    object.userData = {
+      markerKey: descriptor.key,
+      markerKind: descriptor.kind,
+      markerLabel: descriptor.label,
+      position: descriptor.position,
+      endPosition: descriptor.endPosition ?? null,
+    };
+    return object;
+  }
+
+  const object = createMarkerMesh(descriptor);
   object.name = descriptor.key;
   object.position.set(descriptor.position.x, descriptor.position.y, descriptor.position.z);
   object.userData = {
@@ -142,7 +235,11 @@ export function createThreeSceneObjectRegistry(scene: Scene): ThreeSceneObjectRe
       const existingObject = objectsByKey.get(descriptor.key);
       if (existingObject !== undefined) {
         existingObject.name = descriptor.key;
-        existingObject.position.set(descriptor.position.x, descriptor.position.y, descriptor.position.z);
+        if (existingObject instanceof Line) {
+          updateLineObject(existingObject, descriptor);
+        } else {
+          existingObject.position.set(descriptor.position.x, descriptor.position.y, descriptor.position.z);
+        }
         existingObject.userData = {
           markerKey: descriptor.key,
           markerKind: descriptor.kind,

@@ -8,6 +8,7 @@ import {
   type ViewerDocumentLike,
   type ViewerElementLike,
 } from "../src/viewerRuntime.js";
+import { buildBrowserSceneCameraConfig } from "../src/viewer/browserSceneRenderer.js";
 import type { FastArmMeshGeometryLoaderLike } from "../src/viewer/fastArmMeshes.js";
 import type { TransportPayloadV0 } from "../src/types/transportPayload.js";
 import type {
@@ -221,6 +222,7 @@ function testBuildViewerRuntimeSnapshot(): void {
 
   assert(snapshot.payloadVersion === 0, "snapshot should keep payload version 0");
   assert(snapshot.frameIndex === 1, "snapshot should reflect the fixture frame");
+  assert(snapshot.lastPayloadFrameIndex === 1, "snapshot should keep the last payload frame");
   assert(snapshot.statusText.includes("disabled"), "snapshot should advertise disabled websocket state");
   assert(snapshot.summaryText.includes("base_link"), "snapshot should include base_link");
   assert(snapshot.summaryText.includes("tip"), "snapshot should include tip");
@@ -342,6 +344,17 @@ function testReadViewerEndpointConfig(): void {
   assert(config.source === "query", "endpoint helper should mark query sources");
 }
 
+function testBuildBrowserSceneCameraConfigPointsAtPayloadWorkspace(): void {
+  const cameraConfig = buildBrowserSceneCameraConfig();
+
+  assert(cameraConfig.position.x === 1.8, "camera x position should be centered for the payload workspace");
+  assert(cameraConfig.position.y === 1.4, "camera y position should be centered for the payload workspace");
+  assert(cameraConfig.position.z === 1.8, "camera z position should be centered for the payload workspace");
+  assert(cameraConfig.target.x === 0.1, "camera target x should face the payload workspace");
+  assert(cameraConfig.target.y === 0.0, "camera target y should face the payload workspace");
+  assert(cameraConfig.target.z === 0.2, "camera target z should face the payload workspace");
+}
+
 function testCreateViewerRuntimeMountsAndStops(): void {
   const { document, app } = createAppShell();
   const runtime = createViewerRuntime({ document, payload: payloadV0Fixture, websocketUrl: null });
@@ -363,12 +376,19 @@ function testCreateViewerRuntimeMountsAndStops(): void {
 
   const statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
   const sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
+  const sceneCanvas = sceneSection?.children.find((child) => child.tagName === "canvas");
+  const sceneText = sceneSection?.children.find((child) => child.attributes.get("data-role") === "viewer-scene-text");
 
   assert(statusSection !== undefined, "viewer runtime should render a status section");
-  assert(sceneSection !== undefined, "viewer runtime should render a scene placeholder");
+  assert(sceneSection !== undefined, "viewer runtime should render a scene section");
+  assert(sceneCanvas !== undefined, "viewer runtime should render a canvas");
   assert(
     root.attributes.get("data-frame-index") === "1",
     "viewer runtime should publish the initial frame index on the root",
+  );
+  assert(
+    root.attributes.get("data-last-payload-frame-index") === "1",
+    "viewer runtime should publish the initial last payload frame index on the root",
   );
   assert(
     root.attributes.get("data-marker-body-count") === "1",
@@ -408,12 +428,16 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   assert(root.attributes.get("data-tip-marker-present") === "true", "tip marker should be present in the fixture");
   assert(root.attributes.get("data-error-vector-present") === "false", "initial error vector should be absent");
   assert(
-    sceneSection?.textContent?.includes("Marker rendering placeholder") ?? false,
-    "viewer runtime should advertise the placeholder scene",
+    sceneText?.textContent?.includes("3D payload scene") ?? false,
+    "viewer runtime should advertise the 3D scene",
   );
   assert(
     statusSection?.textContent?.includes("frame 1") ?? false,
     "viewer runtime should show the fixture frame in the summary",
+  );
+  assert(
+    statusSection?.textContent?.includes("last payload frame 1") ?? false,
+    "viewer runtime should show the last payload frame in the summary",
   );
   assert(
     statusSection?.textContent?.includes("WebSocket: disabled") ?? false,
@@ -479,6 +503,7 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   const activeSocket = socket as FakeWebSocket;
   const root = app.children[0];
   const sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
+  const sceneText = sceneSection?.children.find((child) => child.attributes.get("data-role") === "viewer-scene-text");
   const statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
   assert(
     root.attributes.get("data-websocket-status") === "connecting",
@@ -500,6 +525,7 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     "viewer runtime should display the open websocket status",
   );
   const initialSceneText = sceneSection?.textContent ?? "";
+  const initialSceneLabel = sceneText?.textContent ?? "";
   const initialStatusText = statusSection?.textContent ?? "";
   const updatedPayload = JSON.parse(JSON.stringify(payloadV0Fixture)) as TransportPayloadV0;
   updatedPayload.frame_index = 3;
@@ -528,7 +554,7 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(receivedPayloads.length === 1, "runtime should forward received payloads to the callback");
   assert(receivedPayloads[0].version === 0, "runtime callback should receive payload v0");
   assert(
-    sceneSection?.textContent !== initialSceneText,
+    sceneText?.textContent !== initialSceneLabel,
     "runtime should connect received payloads to marker rendering",
   );
   assert(
@@ -543,17 +569,15 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     statusSection?.textContent?.includes("frame 3") ?? false,
     "runtime should reflect the received frame index in the summary",
   );
-  assert(
-    sceneSection?.textContent?.includes("elbow_link") ?? false,
-    "runtime should reflect the received body marker names in the scene placeholder",
-  );
-  assert(
-    sceneSection?.textContent?.includes("wrist_site") ?? false,
-    "runtime should reflect the received site marker names in the scene placeholder",
-  );
+  assert(sceneText?.textContent?.includes("elbow_link") ?? false, "runtime should reflect the received body marker names in the scene text");
+  assert(sceneText?.textContent?.includes("wrist_site") ?? false, "runtime should reflect the received site marker names in the scene text");
   assert(
     root.attributes.get("data-frame-index") === "3",
     "runtime should publish the received frame index on the root",
+  );
+  assert(
+    root.attributes.get("data-last-payload-frame-index") === "3",
+    "runtime should publish the received last payload frame index on the root",
   );
   assert(
     root.attributes.get("data-marker-body-count") === "2",
@@ -676,6 +700,10 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   assert(
     root.attributes.get("data-websocket-status") === "closed",
     "runtime should expose the closed status after websocket close",
+  );
+  assert(
+    statusSection?.textContent?.includes("WebSocket: closed after frame 3") ?? false,
+    "runtime should show the last payload frame after websocket close",
   );
 
   runtime.stop();
@@ -890,6 +918,7 @@ function testCreateViewerRuntimeSyncsFastArmMeshesWhenAssetBaseUrlProvided(): vo
 }
 
 testReadViewerEndpointConfig();
+testBuildBrowserSceneCameraConfigPointsAtPayloadWorkspace();
 testBuildViewerRuntimeSnapshot();
 testBuildViewerRuntimeSnapshotIncludesTargetTipAndErrorVector();
 testBuildViewerRuntimeSnapshotIgnoresQposForArmSkeleton();

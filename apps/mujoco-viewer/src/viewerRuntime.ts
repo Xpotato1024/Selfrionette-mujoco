@@ -12,6 +12,10 @@ import {
   type FastArmMeshScene,
 } from "./viewer/fastArmMeshes.js";
 import {
+  createBrowserSceneRenderer,
+  type BrowserSceneRenderer,
+} from "./viewer/browserSceneRenderer.js";
+import {
   buildDoFRingScene,
   buildDoFRingSceneSummaryText,
   createDoFRingObjectRegistry,
@@ -70,6 +74,7 @@ export interface ViewerRuntime {
 export interface ViewerRuntimeSnapshot {
   payloadVersion: 0;
   frameIndex: number;
+  lastPayloadFrameIndex: number;
   title: string;
   statusText: string;
   summaryText: string;
@@ -97,6 +102,8 @@ interface ViewerRuntimeView {
   root: ViewerElementLike;
   statusSection: ViewerElementLike;
   sceneSection: ViewerElementLike;
+  sceneCanvas: ViewerElementLike;
+  sceneText: ViewerElementLike;
 }
 
 function requireMountPoint(
@@ -114,9 +121,16 @@ function requireMountPoint(
 function buildConnectionStatusText(
   connectionStatus: ViewerConnectionStatus,
   websocketUrl: string | null,
+  lastPayloadFrameIndex: number,
 ): string {
   if (connectionStatus === "disabled") {
     return "WebSocket: disabled";
+  }
+
+  if (connectionStatus === "closed") {
+    return lastPayloadFrameIndex > 0
+      ? `WebSocket: closed after frame ${lastPayloadFrameIndex}`
+      : "WebSocket: closed";
   }
 
   return websocketUrl === null
@@ -177,6 +191,7 @@ function buildSummaryText(snapshot: ViewerRuntimeSnapshot): string {
   return [
     `payload v${snapshot.payloadVersion}`,
     `frame ${snapshot.frameIndex}`,
+    `last payload frame ${snapshot.lastPayloadFrameIndex}`,
     `bodies ${snapshot.markerScene.bodies.length}`,
     `sites ${snapshot.markerScene.sites.length}`,
     dofRingText,
@@ -219,10 +234,10 @@ function buildSceneText(snapshot: ViewerRuntimeSnapshot): string {
           snapshot.markerScene.errorVector.end_m[0] - snapshot.markerScene.errorVector.start_m[0],
           snapshot.markerScene.errorVector.end_m[1] - snapshot.markerScene.errorVector.start_m[1],
           snapshot.markerScene.errorVector.end_m[2] - snapshot.markerScene.errorVector.start_m[2],
-        ])}`;
+      ])}`;
 
   return [
-    "Marker rendering placeholder.",
+    "3D payload scene.",
     `body markers: ${snapshot.markerScene.bodies.length} (${bodyNames})`,
     `site markers: ${snapshot.markerScene.sites.length} (${siteNames})`,
     dofRingText,
@@ -254,8 +269,9 @@ export function buildViewerRuntimeSnapshot(
   const snapshot: ViewerRuntimeSnapshot = {
     payloadVersion: payload.version,
     frameIndex: payload.frame_index,
+    lastPayloadFrameIndex: payload.frame_index,
     title: "mujoco-viewer browser runtime",
-    statusText: buildConnectionStatusText(connectionStatus, websocketUrl),
+    statusText: buildConnectionStatusText(connectionStatus, websocketUrl, payload.frame_index),
     summaryText: "",
     connectionStatus,
     websocketUrl,
@@ -297,6 +313,7 @@ function buildRuntimeView(
   root.setAttribute("data-runtime-phase", "browser-entry");
   root.setAttribute("data-websocket-status", snapshot.connectionStatus);
   root.setAttribute("data-websocket-url", snapshot.websocketUrl ?? "");
+  root.setAttribute("data-last-payload-frame-index", String(snapshot.lastPayloadFrameIndex));
   root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
   root.setAttribute("data-dof-ring-status", snapshot.dofRingStatus);
   root.setAttribute("data-dof-ring-descriptor-count", String(snapshot.dofRingDescriptorCount));
@@ -324,7 +341,20 @@ function buildRuntimeView(
   const sceneSection = documentLike.createElement("section");
   sceneSection.className = "viewer-runtime__scene";
   sceneSection.setAttribute("data-role", "viewer-scene");
-  sceneSection.textContent = buildSceneText(snapshot);
+
+  const sceneCanvas = documentLike.createElement("canvas");
+  sceneCanvas.className = "viewer-runtime__canvas";
+  sceneCanvas.setAttribute("data-role", "viewer-scene-canvas");
+  sceneCanvas.setAttribute("width", "960");
+  sceneCanvas.setAttribute("height", "540");
+
+  const sceneText = documentLike.createElement("p");
+  sceneText.className = "viewer-runtime__scene-text";
+  sceneText.setAttribute("data-role", "viewer-scene-text");
+  sceneText.textContent = buildSceneText(snapshot);
+
+  sceneSection.appendChild(sceneCanvas);
+  sceneSection.appendChild(sceneText);
 
   root.appendChild(header);
   root.appendChild(statusSection);
@@ -333,12 +363,15 @@ function buildRuntimeView(
     root,
     statusSection,
     sceneSection,
+    sceneCanvas,
+    sceneText,
   };
 }
 
 function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnapshot): void {
   view.root.setAttribute("data-frame-index", String(snapshot.frameIndex));
   view.root.setAttribute("data-payload-version", String(snapshot.payloadVersion));
+  view.root.setAttribute("data-last-payload-frame-index", String(snapshot.lastPayloadFrameIndex));
   view.root.setAttribute("data-marker-body-count", String(snapshot.markerScene.bodies.length));
   view.root.setAttribute("data-marker-site-count", String(snapshot.markerScene.sites.length));
   view.root.setAttribute("data-marker-object-count", String(snapshot.markerObjectCount));
@@ -357,7 +390,7 @@ function updateRuntimeView(view: ViewerRuntimeView, snapshot: ViewerRuntimeSnaps
   view.root.setAttribute("data-tip-marker-present", String(snapshot.canonicalMarkers.tipSite !== null));
   view.root.setAttribute("data-error-vector-present", String(snapshot.markerScene.errorVector !== null));
   view.statusSection.textContent = [snapshot.statusText, snapshot.summaryText].join(" | ");
-  view.sceneSection.textContent = buildSceneText(snapshot);
+  view.sceneText.textContent = buildSceneText(snapshot);
 }
 
 export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerRuntime {
@@ -383,6 +416,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
   const markerObjectRegistry = createThreeSceneObjectRegistry(threeScene);
   const dofRingObjectRegistry = createDoFRingObjectRegistry(threeScene);
   let mountedView: ViewerRuntimeView | null = null;
+  let browserSceneRenderer: BrowserSceneRenderer | null = null;
   let websocketClient: ViewerWebSocketClient | null = null;
   let receivedPayload: TransportPayloadV0 | null = null;
   let connectionStatus: ViewerConnectionStatus = websocketUrl === null ? "disabled" : "connecting";
@@ -400,6 +434,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
     syncFastArmMeshSceneObjects(threeScene, snapshot.fastArmMeshScene, {
       geometryLoader: options.fastArmMeshGeometryLoader,
     });
+    browserSceneRenderer?.render();
     options.onSceneSynced?.(threeScene);
     updateRuntimeView(mountedView, snapshot);
   }
@@ -459,6 +494,14 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       mountedView = buildRuntimeView(documentLike, snapshot);
       mountPoint.replaceChildren(mountedView.root);
 
+      if (typeof window !== "undefined" && browserSceneRenderer === null) {
+        try {
+          browserSceneRenderer = createBrowserSceneRenderer(mountedView.sceneCanvas, threeScene);
+        } catch (error) {
+          options.onError?.(error instanceof Error ? error : new Error("Viewer scene renderer failed to initialize"));
+        }
+      }
+
       const activeWebSocketClient = ensureWebSocketClient();
       if (activeWebSocketClient !== null) {
         setConnectionStatus("connecting");
@@ -478,6 +521,8 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       websocketClient?.stop();
       websocketClient = null;
       receivedPayload = null;
+      browserSceneRenderer?.dispose();
+      browserSceneRenderer = null;
       markerObjectRegistry.clear();
       dofRingObjectRegistry.clear();
       mountedView.root.remove();

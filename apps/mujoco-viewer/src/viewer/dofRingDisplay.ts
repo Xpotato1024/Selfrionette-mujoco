@@ -1,4 +1,4 @@
-import { Object3D, Scene } from "three";
+import { Mesh, MeshBasicMaterial, Object3D, Scene, TorusGeometry } from "three";
 
 import type {
   QuaternionWXYZ,
@@ -111,7 +111,15 @@ function buildDoFRingDescriptor(spec: DoFRingSpec, body: TransportBodyPayload | 
 }
 
 function createDoFRingObject(descriptor: DoFRingDescriptor): Object3D {
-  const object = new Object3D();
+  const object = new Mesh(
+    new TorusGeometry(0.08, 0.012, 12, 24),
+    new MeshBasicMaterial({
+      color: "#eab308",
+      wireframe: true,
+      transparent: true,
+      opacity: 0.9,
+    }),
+  );
   object.name = descriptor.id;
   object.visible = descriptor.visibilityStatus === "present";
   object.position.set(descriptor.position_m[0], descriptor.position_m[1], descriptor.position_m[2]);
