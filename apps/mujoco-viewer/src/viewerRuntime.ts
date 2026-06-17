@@ -1,4 +1,5 @@
 import { payloadV0Fixture } from "./fixtures/payloadV0.js";
+import { createViewerAppRenderer, type ViewerAppRenderer } from "./app/viewerAppRenderer.js";
 import {
   createViewerWebSocketClient,
   type ViewerWebSocketClient,
@@ -77,6 +78,7 @@ export interface ViewerRuntimeSnapshot {
   lastPayloadFrameIndex: number;
   title: string;
   statusText: string;
+  sceneText: string;
   summaryText: string;
   connectionStatus: ViewerConnectionStatus;
   websocketUrl: string | null;
@@ -272,6 +274,7 @@ export function buildViewerRuntimeSnapshot(
     lastPayloadFrameIndex: payload.frame_index,
     title: "mujoco-viewer browser runtime",
     statusText: buildConnectionStatusText(connectionStatus, websocketUrl, payload.frame_index),
+    sceneText: "",
     summaryText: "",
     connectionStatus,
     websocketUrl,
@@ -294,6 +297,7 @@ export function buildViewerRuntimeSnapshot(
   };
 
   snapshot.summaryText = buildSummaryText(snapshot);
+  snapshot.sceneText = buildSceneText(snapshot);
   return snapshot;
 }
 
@@ -415,20 +419,38 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
   const threeScene = new Scene();
   const markerObjectRegistry = createThreeSceneObjectRegistry(threeScene);
   const dofRingObjectRegistry = createDoFRingObjectRegistry(threeScene);
-  let mountedView: ViewerRuntimeView | null = null;
+  let appRenderer: ViewerAppRenderer | null = null;
   let browserSceneRenderer: BrowserSceneRenderer | null = null;
   let websocketClient: ViewerWebSocketClient | null = null;
   let receivedPayload: TransportPayloadV0 | null = null;
   let connectionStatus: ViewerConnectionStatus = websocketUrl === null ? "disabled" : "connecting";
+  let latestSnapshot: ViewerRuntimeSnapshot | null = null;
 
   const getActivePayload = (): TransportPayloadV0 => receivedPayload ?? payload;
-
-  function renderCurrentState(): void {
-    if (mountedView === null) {
+  const onSceneCanvasReady = (sceneCanvas: HTMLCanvasElement | null): void => {
+    if (sceneCanvas === null) {
+      browserSceneRenderer?.dispose();
+      browserSceneRenderer = null;
       return;
     }
 
-    const snapshot = buildViewerRuntimeSnapshot(getActivePayload(), connectionStatus, websocketUrl, assetBaseUrl);
+    if (typeof window === "undefined" || browserSceneRenderer !== null) {
+      return;
+    }
+
+    try {
+      browserSceneRenderer = createBrowserSceneRenderer(sceneCanvas as unknown as ViewerElementLike, threeScene);
+    } catch (error) {
+      options.onError?.(error instanceof Error ? error : new Error("Viewer scene renderer failed to initialize"));
+      return;
+    }
+
+    if (latestSnapshot !== null) {
+      syncScene(latestSnapshot);
+    }
+  };
+
+  function syncScene(snapshot: ViewerRuntimeSnapshot): void {
     syncThreeSceneObjectRegistry(markerObjectRegistry, snapshot.markerScene);
     syncDoFRingObjectRegistry(dofRingObjectRegistry, snapshot.dofRingScene);
     syncFastArmMeshSceneObjects(threeScene, snapshot.fastArmMeshScene, {
@@ -436,7 +458,17 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
     });
     browserSceneRenderer?.render();
     options.onSceneSynced?.(threeScene);
-    updateRuntimeView(mountedView, snapshot);
+  }
+
+  function renderCurrentState(): void {
+    if (appRenderer === null) {
+      return;
+    }
+
+    const snapshot = buildViewerRuntimeSnapshot(getActivePayload(), connectionStatus, websocketUrl, assetBaseUrl);
+    latestSnapshot = snapshot;
+    appRenderer.render(snapshot);
+    syncScene(snapshot);
   }
 
   function setConnectionStatus(nextStatus: ViewerConnectionStatus): void {
@@ -485,22 +517,16 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
 
   return {
     start() {
-      if (mountedView !== null) {
+      if (appRenderer !== null) {
         return;
       }
 
       const mountPoint = requireMountPoint(documentLike, mountId);
-      const snapshot = buildViewerRuntimeSnapshot(payload, connectionStatus, websocketUrl, assetBaseUrl);
-      mountedView = buildRuntimeView(documentLike, snapshot);
-      mountPoint.replaceChildren(mountedView.root);
-
-      if (typeof window !== "undefined" && browserSceneRenderer === null) {
-        try {
-          browserSceneRenderer = createBrowserSceneRenderer(mountedView.sceneCanvas, threeScene);
-        } catch (error) {
-          options.onError?.(error instanceof Error ? error : new Error("Viewer scene renderer failed to initialize"));
-        }
-      }
+      appRenderer = createViewerAppRenderer({
+        documentLike,
+        mountPoint,
+        onSceneCanvasReady,
+      });
 
       const activeWebSocketClient = ensureWebSocketClient();
       if (activeWebSocketClient !== null) {
@@ -511,7 +537,7 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       renderCurrentState();
     },
     stop() {
-      if (mountedView === null) {
+      if (appRenderer === null) {
         websocketClient?.stop();
         websocketClient = null;
         receivedPayload = null;
@@ -521,12 +547,13 @@ export function createViewerRuntime(options: ViewerRuntimeOptions = {}): ViewerR
       websocketClient?.stop();
       websocketClient = null;
       receivedPayload = null;
-      browserSceneRenderer?.dispose();
-      browserSceneRenderer = null;
+      appRenderer.dispose();
+      appRenderer = null;
       markerObjectRegistry.clear();
       dofRingObjectRegistry.clear();
-      mountedView.root.remove();
-      mountedView = null;
+      browserSceneRenderer?.dispose();
+      browserSceneRenderer = null;
+      latestSnapshot = null;
     },
   };
 }
