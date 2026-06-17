@@ -15,6 +15,8 @@ import type {
   ViewerWebSocketLike,
   ViewerWebSocketMessageEventLike,
 } from "../src/transport/websocketClient.js";
+import "./viewerRuntimeText.test.js";
+import "./viewerSceneController.test.js";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
