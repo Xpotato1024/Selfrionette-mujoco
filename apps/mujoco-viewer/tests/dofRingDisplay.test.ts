@@ -28,7 +28,7 @@ function createDoFRingPayload(): TransportPayloadV0 {
       {
         name: "sholder_link_1",
         position_m: [0.1, 0.2, 0.3],
-        quaternion_wxyz: [1.0, 0.0, 0.0, 0.0],
+        quaternion_wxyz: [0.7, 0.3, 0.4, 0.5],
       },
       {
         name: "sholder_link_2",
@@ -127,6 +127,10 @@ function testDoFRingRegistryStoresPresentationMetadata(): void {
   assert(secondRingObject?.position.x === 0.1, "q2 DoF ring x position should follow the payload body position");
   assert(secondRingObject?.position.y === 0.3, "q2 DoF ring y position should use payload z-up height");
   assert(secondRingObject?.position.z === 0.2, "q2 DoF ring z position should use payload y as viewer depth");
+  assert(secondRingObject?.quaternion.x === -0.3, "q2 DoF ring quaternion x should use the viewer basis");
+  assert(secondRingObject?.quaternion.y === -0.5, "q2 DoF ring quaternion y should use the viewer basis");
+  assert(secondRingObject?.quaternion.z === -0.4, "q2 DoF ring quaternion z should use the viewer basis");
+  assert(secondRingObject?.quaternion.w === 0.7, "q2 DoF ring quaternion w should preserve the payload quaternion w");
   assert(ringObject?.userData.ringKind === "dof_ring", "ring object userData should identify the ring kind");
   assert(
     ringObject?.userData.presentationRole === "overlay",

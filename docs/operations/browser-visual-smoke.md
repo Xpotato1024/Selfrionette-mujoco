@@ -201,9 +201,19 @@ asset-local transform だけから作る。
   payload position / vector を `[x, y, z] -> [x, z, y]` に変換する。追加の
   viewer-only visual offset は入れていない。target / tip / body / site /
   error vector / arm skeleton / DoF ring / fast_arm mesh は同じ変換を使う。
-- `quaternion_wxyz` は従来通り Three.js の `xyzw` order に並べ替える。
-  座標基底変換としての quaternion parity は未固定であり、今後
-  MuJoCo renderer parity を扱う issue の残リスクとする。
+- `quaternion_wxyz` は Three.js の `xyzw` order にするだけでなく、#174
+  follow-up では position と同じ `[x, y, z] -> [x, z, y]` viewer coordinate
+  adapter に合わせて、quaternion basis も `R_viewer = S R_payload S` として
+  変換する。`S` は y/z swap であり、payload `wxyz` は viewer `xyzw` として
+  `[-x, -z, -y, w]` になる。
+- `sweep_x` frame 1 / frame 6 の payload body skeleton は、upper arm と forearm
+  がそれぞれ約 0.25m / 0.284m の link distance を持ち、payload 自体は
+  collapse していない。viewer はこの body transform を source of truth とし、
+  qpos から姿勢を再計算しない。
+- STL bounds は各 mesh が body-local frame で、長手方向は MuJoCo body local
+  Y 軸に沿う。`arm.xml` の mesh `geom` は `pos="0 0 0"` なので、追加の
+  assembly/global-frame offset ではなく、payload-to-viewer quaternion basis
+  conversion で mesh orientation を合わせる。
 - Vite dev smoke では `/assets/mujoco/fast_arm/...` が repo root の canonical
   `assets/` を返す必要がある。HTML fallback や 404 を STL として扱った場合は
   mesh fidelity の検証にならない。

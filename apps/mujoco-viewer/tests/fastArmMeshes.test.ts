@@ -18,6 +18,14 @@ function assert(condition: unknown, message: string): asserts condition {
   }
 }
 
+function distance_m(first: readonly number[], second: readonly number[]): number {
+  return Math.sqrt(
+    (first[0] - second[0]) ** 2 +
+      (first[1] - second[1]) ** 2 +
+      (first[2] - second[2]) ** 2,
+  );
+}
+
 function createFastArmPayload(): TransportPayloadV0 {
   return {
     ...payloadV0Fixture,
@@ -206,6 +214,63 @@ function testFastArmSceneSyncLoadsInjectedGeometry(): void {
   assert(baseLink?.children[1].name === "fast_arm_mesh:BaseLink:wireframe", "wireframe child should be named after the canonical asset");
 }
 
+function testFastArmSweepXBodyDistanceSanityKeepsMeshRootsReadable(): void {
+  const payload = {
+    ...payloadV0Fixture,
+    frame_index: 6,
+    bodies: [
+      {
+        name: "base_link",
+        position_m: [-0.069, 0, 0.7] as [number, number, number],
+        quaternion_wxyz: [0.707107, 0, 0, 0.707107] as [number, number, number, number],
+      },
+      {
+        name: "sholder_link_1",
+        position_m: [-0.055, 0, 0.7] as [number, number, number],
+        quaternion_wxyz: [0.704007, -0.066142, 0.066142, 0.704007] as [number, number, number, number],
+      },
+      {
+        name: "sholder_link_2",
+        position_m: [-0.066672, -0.006795, 0.664158] as [number, number, number],
+        quaternion_wxyz: [0.238478, 0.665679, 0.698448, 0.110317] as [number, number, number, number],
+      },
+      {
+        name: "upper_arm_link",
+        position_m: [-0.076761, -0.007823, 0.658735] as [number, number, number],
+        quaternion_wxyz: [0.238478, 0.665679, 0.698448, 0.110317] as [number, number, number, number],
+      },
+      {
+        name: "fore_arm_link",
+        position_m: [-0.296517, -0.030218, 0.540599] as [number, number, number],
+        quaternion_wxyz: [0.238478, 0.665679, 0.698448, 0.110317] as [number, number, number, number],
+      },
+    ],
+    sites: [
+      {
+        name: "tip",
+        position_m: [-0.545661, -0.055609, 0.406664] as [number, number, number],
+        quaternion_wxyz: [0.238478, 0.665679, 0.698448, 0.110317] as [number, number, number, number],
+      },
+    ],
+  };
+
+  const scene = buildFastArmMeshScene(payload, "http://example.test/apps/mujoco-viewer/index.html");
+  const byName = new Map(scene.descriptors.map((descriptor) => [descriptor.bodyName, descriptor]));
+  const upperArm = byName.get("upper_arm_link");
+  const foreArm = byName.get("fore_arm_link");
+
+  assert(upperArm?.position !== null && upperArm?.position !== undefined, "upper arm payload position should be present");
+  assert(foreArm?.position !== null && foreArm?.position !== undefined, "forearm payload position should be present");
+  assert(
+    distance_m(upperArm.position, foreArm.position) > 0.24,
+    "sweep_x upper_arm_link -> fore_arm_link body distance should not be collapsed",
+  );
+  assert(
+    distance_m(foreArm.position, payload.sites[0].position_m) > 0.27,
+    "sweep_x fore_arm_link -> tip distance should not be collapsed",
+  );
+}
+
 function testFastArmSceneSyncAppliesDescriptorLocalTransformToMeshChildrenOnly(): void {
   const payload = createFastArmPayload();
   const sceneModel = buildFastArmMeshScene(payload, "http://example.test/apps/mujoco-viewer/index.html", [
@@ -235,15 +300,19 @@ function testFastArmSceneSyncAppliesDescriptorLocalTransformToMeshChildrenOnly()
   assert(upperArm.position.x === 0.7, "mesh root x should still follow the payload body transform");
   assert(upperArm.position.y === 0.9, "mesh root y should use payload z as viewer height");
   assert(upperArm.position.z === 0.8, "mesh root z should use payload y as viewer depth");
+  assert(upperArm.quaternion.x === -0.3, "mesh root quaternion x should use the viewer basis");
+  assert(upperArm.quaternion.y === -0.5, "mesh root quaternion y should use the viewer z-up to y-up basis");
+  assert(upperArm.quaternion.z === -0.4, "mesh root quaternion z should use the viewer z-up to y-up basis");
+  assert(upperArm.quaternion.w === 0.7, "mesh root quaternion w should preserve the payload quaternion w");
   const meshChild = upperArm.children.find((child) => child.name === "fast_arm_mesh:UpperArmLink:mesh");
   assert(meshChild !== undefined, "scene should include the transformed mesh child");
   assert(meshChild.position.x === 0.01, "local x offset should apply to the mesh child");
   assert(meshChild.position.y === 0.03, "local y offset should use payload local z as viewer height");
   assert(meshChild.position.z === 0.02, "local z offset should use payload local y as viewer depth");
-  assert(meshChild.quaternion.x === 0.5, "local quaternion x should use Three.js xyzw order");
-  assert(meshChild.quaternion.y === 0.5, "local quaternion y should use Three.js xyzw order");
-  assert(meshChild.quaternion.z === 0.5, "local quaternion z should use Three.js xyzw order");
-  assert(meshChild.quaternion.w === 0.5, "local quaternion w should use Three.js xyzw order");
+  assert(meshChild.quaternion.x === -0.5, "local quaternion x should use the viewer basis");
+  assert(meshChild.quaternion.y === -0.5, "local quaternion y should use the viewer basis");
+  assert(meshChild.quaternion.z === -0.5, "local quaternion z should use the viewer basis");
+  assert(meshChild.quaternion.w === 0.5, "local quaternion w should preserve the payload quaternion w");
   assert(meshChild.scale.x === 1, "local x scale should apply to the mesh child");
   assert(meshChild.scale.y === 2, "local y scale should apply to the mesh child");
   assert(meshChild.scale.z === 3, "local z scale should apply to the mesh child");
@@ -252,6 +321,7 @@ function testFastArmSceneSyncAppliesDescriptorLocalTransformToMeshChildrenOnly()
 testFastArmManifestCoversCanonicalMeshes();
 testFastArmSceneUsesPayloadBodyTransformsOnly();
 testFastArmSceneIgnoresQposWhenBodiesAreStable();
+testFastArmSweepXBodyDistanceSanityKeepsMeshRootsReadable();
 testFastArmSceneMarksMissingAndUnmappedMeshesExplicitly();
 testFastArmSceneSyncLoadsInjectedGeometry();
 testFastArmSceneSyncAppliesDescriptorLocalTransformToMeshChildrenOnly();

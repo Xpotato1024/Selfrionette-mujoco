@@ -6,7 +6,10 @@ import type {
   TransportPayloadV0,
   Vector3,
 } from "../types/transportPayload.js";
-import { payloadPositionToViewerPosition } from "./viewerCoordinateFrame.js";
+import {
+  payloadPositionToViewerPosition,
+  payloadQuaternionWxyzToViewerQuaternionXyzw,
+} from "./viewerCoordinateFrame.js";
 
 export type DoFRingAvailabilityStatus = "present" | "partial" | "absent";
 
@@ -125,8 +128,8 @@ function createDoFRingObject(descriptor: DoFRingDescriptor): Object3D {
   object.visible = descriptor.visibilityStatus === "present";
   const viewerPosition = payloadPositionToViewerPosition(descriptor.position_m);
   object.position.set(viewerPosition[0], viewerPosition[1], viewerPosition[2]);
-  const [w, x, y, z] = descriptor.quaternion_wxyz;
-  object.quaternion.set(x, y, z, w);
+  const viewerQuaternion = payloadQuaternionWxyzToViewerQuaternionXyzw(descriptor.quaternion_wxyz);
+  object.quaternion.set(viewerQuaternion.x, viewerQuaternion.y, viewerQuaternion.z, viewerQuaternion.w);
   object.userData = {
     ringId: descriptor.id,
     ringKind: descriptor.kind,
@@ -184,8 +187,8 @@ export function createDoFRingObjectRegistry(scene: Scene): DoFRingObjectRegistry
         existingObject.visible = descriptor.visibilityStatus === "present";
         const viewerPosition = payloadPositionToViewerPosition(descriptor.position_m);
         existingObject.position.set(viewerPosition[0], viewerPosition[1], viewerPosition[2]);
-        const [w, x, y, z] = descriptor.quaternion_wxyz;
-        existingObject.quaternion.set(x, y, z, w);
+        const viewerQuaternion = payloadQuaternionWxyzToViewerQuaternionXyzw(descriptor.quaternion_wxyz);
+        existingObject.quaternion.set(viewerQuaternion.x, viewerQuaternion.y, viewerQuaternion.z, viewerQuaternion.w);
         existingObject.userData = {
           ringId: descriptor.id,
           ringKind: descriptor.kind,

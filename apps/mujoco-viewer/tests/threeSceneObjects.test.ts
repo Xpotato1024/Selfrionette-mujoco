@@ -11,6 +11,7 @@ import {
 } from "../src/viewer/threeSceneObjects.js";
 import {
   payloadPositionToViewerPosition,
+  payloadQuaternionWxyzToViewerQuaternionXyzw,
   payloadVectorToViewerVector,
 } from "../src/viewer/viewerCoordinateFrame.js";
 
@@ -210,6 +211,8 @@ function testBuildMarkerObjectDescriptorsIncludePayloadPositions(): void {
 function testPayloadCoordinateFrameMapsMuJoCoZUpToViewerYUp(): void {
   const position = payloadPositionToViewerPosition([1, 2, 3]);
   const vector = payloadVectorToViewerVector([4, 5, 6]);
+  const identityQuaternion = payloadQuaternionWxyzToViewerQuaternionXyzw([1, 0, 0, 0]);
+  const arbitraryQuaternion = payloadQuaternionWxyzToViewerQuaternionXyzw([0.7, 0.3, 0.4, 0.5]);
 
   assert(position[0] === 1, "viewer x should preserve payload x");
   assert(position[1] === 3, "viewer y should use payload z as height");
@@ -217,6 +220,14 @@ function testPayloadCoordinateFrameMapsMuJoCoZUpToViewerYUp(): void {
   assert(vector[0] === 4, "viewer vector x should preserve payload x");
   assert(vector[1] === 6, "viewer vector y should use payload z as height");
   assert(vector[2] === 5, "viewer vector z should use payload y as depth");
+  assert(identityQuaternion.x === 0, "identity quaternion x should stay identity");
+  assert(identityQuaternion.y === 0, "identity quaternion y should stay identity");
+  assert(identityQuaternion.z === 0, "identity quaternion z should stay identity");
+  assert(identityQuaternion.w === 1, "identity quaternion w should stay identity");
+  assert(arbitraryQuaternion.x === -0.3, "viewer quaternion x should reflect the payload x basis");
+  assert(arbitraryQuaternion.y === -0.5, "viewer quaternion y should use the reflected payload z basis");
+  assert(arbitraryQuaternion.z === -0.4, "viewer quaternion z should use the reflected payload y basis");
+  assert(arbitraryQuaternion.w === 0.7, "viewer quaternion w should preserve payload w");
 }
 
 function testBuildPayloadMarkerSceneSkipsErrorVectorWithoutTipOrTarget(): void {

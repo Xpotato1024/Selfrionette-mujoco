@@ -2,7 +2,10 @@ import { Mesh, MeshBasicMaterial, Object3D, Scene } from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 
 import type { TransportPayloadV0, TransportBodyPayload, QuaternionWXYZ, Vector3 } from "../types/transportPayload.js";
-import { payloadPositionToViewerPosition } from "./viewerCoordinateFrame.js";
+import {
+  payloadPositionToViewerPosition,
+  payloadQuaternionWxyzToViewerQuaternionXyzw,
+} from "./viewerCoordinateFrame.js";
 
 export type FastArmMeshStatus = "present" | "absent" | "unmapped";
 export type FastArmMeshSceneStatus = "disabled" | "present" | "partial" | "absent" | "unmapped";
@@ -280,12 +283,8 @@ function createFastArmMeshObject(descriptor: FastArmMeshDescriptor): Object3D {
     object.position.set(viewerPosition[0], viewerPosition[1], viewerPosition[2]);
   }
   if (descriptor.quaternion !== null) {
-    object.quaternion.set(
-      descriptor.quaternion[1],
-      descriptor.quaternion[2],
-      descriptor.quaternion[3],
-      descriptor.quaternion[0],
-    );
+    const viewerQuaternion = payloadQuaternionWxyzToViewerQuaternionXyzw(descriptor.quaternion);
+    object.quaternion.set(viewerQuaternion.x, viewerQuaternion.y, viewerQuaternion.z, viewerQuaternion.w);
   }
   object.userData = {
     meshKey: object.name,
@@ -367,11 +366,12 @@ function applyLocalTransform(object: Object3D, descriptor: FastArmMeshDescriptor
     viewerLocalPosition[1],
     viewerLocalPosition[2],
   );
+  const viewerLocalQuaternion = payloadQuaternionWxyzToViewerQuaternionXyzw(descriptor.localQuaternion_wxyz);
   object.quaternion.set(
-    descriptor.localQuaternion_wxyz[1],
-    descriptor.localQuaternion_wxyz[2],
-    descriptor.localQuaternion_wxyz[3],
-    descriptor.localQuaternion_wxyz[0],
+    viewerLocalQuaternion.x,
+    viewerLocalQuaternion.y,
+    viewerLocalQuaternion.z,
+    viewerLocalQuaternion.w,
   );
   if (typeof descriptor.scale === "number") {
     object.scale.set(descriptor.scale, descriptor.scale, descriptor.scale);
@@ -416,12 +416,8 @@ export function syncFastArmMeshSceneObjects(
         object.position.set(viewerPosition[0], viewerPosition[1], viewerPosition[2]);
       }
       if (descriptor.quaternion !== null) {
-        object.quaternion.set(
-          descriptor.quaternion[1],
-          descriptor.quaternion[2],
-          descriptor.quaternion[3],
-          descriptor.quaternion[0],
-        );
+        const viewerQuaternion = payloadQuaternionWxyzToViewerQuaternionXyzw(descriptor.quaternion);
+        object.quaternion.set(viewerQuaternion.x, viewerQuaternion.y, viewerQuaternion.z, viewerQuaternion.w);
       }
       object.userData = {
         ...(object.userData as Record<string, unknown>),

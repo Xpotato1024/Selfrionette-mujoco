@@ -191,6 +191,10 @@ LAN / Tailscale / public host:
   Three.js y-up placement `[x, z, y]` に変換して表示する。target / tip /
   body / site / error vector / arm skeleton / DoF ring / fast_arm mesh は同じ
   coordinate convention を使い、追加の viewer-only visual offset は入れていない。
+- fast_arm mesh orientation も同じ coordinate adapter に合わせ、payload
+  `quaternion_wxyz` を basis conversion して viewer `xyzw` に渡す。これは
+  body marker skeleton と mesh root / mesh child の向きを合わせるための
+  rendering-only 変換であり、FK / IK / qpos recompute ではない。
 - header は compact status のみを表示し、body count / marker / scene status /
   fast_arm mesh status などの詳細は card UI と scene summary で確認する。
 - Vite dev smoke で mesh が崩れる、または STL load error が出る場合は、
