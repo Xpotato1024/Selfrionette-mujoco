@@ -17,6 +17,7 @@ import type {
   PayloadMarkerRenderSpec,
   PayloadMarkerScene,
 } from "../types/transportPayload.js";
+import { payloadPositionToViewerObjectPosition } from "./viewerCoordinateFrame.js";
 
 export type MarkerObjectKind = "body" | "site" | "target" | "error_vector" | "arm_skeleton_segment" | "unknown";
 
@@ -63,11 +64,7 @@ function buildMarkerObjectDescriptor(marker: PayloadMarkerRenderSpec): MarkerObj
     key: `${kind}:${marker.name}`,
     kind,
     label: marker.label ?? marker.name,
-    position: {
-      x: marker.position_m[0],
-      y: marker.position_m[1],
-      z: marker.position_m[2],
-    },
+    position: payloadPositionToViewerObjectPosition(marker.position_m),
   };
 }
 
@@ -80,16 +77,8 @@ function buildErrorVectorObjectDescriptor(markerScene: PayloadMarkerScene): Mark
     key: `error_vector:${markerScene.errorVector.name}`,
     kind: "error_vector",
     label: markerScene.errorVector.label ?? markerScene.errorVector.name,
-    position: {
-      x: markerScene.errorVector.start_m[0],
-      y: markerScene.errorVector.start_m[1],
-      z: markerScene.errorVector.start_m[2],
-    },
-    endPosition: {
-      x: markerScene.errorVector.end_m[0],
-      y: markerScene.errorVector.end_m[1],
-      z: markerScene.errorVector.end_m[2],
-    },
+    position: payloadPositionToViewerObjectPosition(markerScene.errorVector.start_m),
+    endPosition: payloadPositionToViewerObjectPosition(markerScene.errorVector.end_m),
   };
 }
 
@@ -166,16 +155,8 @@ function buildArmSkeletonObjectDescriptors(markerScene: PayloadMarkerScene): Mar
     key: `${normalizeArmSkeletonObjectKind(segment.kind)}:${segment.name}`,
     kind: normalizeArmSkeletonObjectKind(segment.kind),
     label: segment.label ?? segment.name,
-    position: {
-      x: segment.start_m[0],
-      y: segment.start_m[1],
-      z: segment.start_m[2],
-    },
-    endPosition: {
-      x: segment.end_m[0],
-      y: segment.end_m[1],
-      z: segment.end_m[2],
-    },
+    position: payloadPositionToViewerObjectPosition(segment.start_m),
+    endPosition: payloadPositionToViewerObjectPosition(segment.end_m),
   }));
 }
 

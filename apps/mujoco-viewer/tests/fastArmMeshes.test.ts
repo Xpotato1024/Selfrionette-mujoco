@@ -233,13 +233,13 @@ function testFastArmSceneSyncAppliesDescriptorLocalTransformToMeshChildrenOnly()
   const upperArm = scene.children.find((child) => child.name === "fast_arm_mesh:UpperArmLink");
   assert(upperArm !== undefined, "scene should include the upper arm mesh root");
   assert(upperArm.position.x === 0.7, "mesh root x should still follow the payload body transform");
-  assert(upperArm.position.y === 0.8, "mesh root y should still follow the payload body transform");
-  assert(upperArm.position.z === 0.9, "mesh root z should still follow the payload body transform");
+  assert(upperArm.position.y === 0.9, "mesh root y should use payload z as viewer height");
+  assert(upperArm.position.z === 0.8, "mesh root z should use payload y as viewer depth");
   const meshChild = upperArm.children.find((child) => child.name === "fast_arm_mesh:UpperArmLink:mesh");
   assert(meshChild !== undefined, "scene should include the transformed mesh child");
   assert(meshChild.position.x === 0.01, "local x offset should apply to the mesh child");
-  assert(meshChild.position.y === 0.02, "local y offset should apply to the mesh child");
-  assert(meshChild.position.z === 0.03, "local z offset should apply to the mesh child");
+  assert(meshChild.position.y === 0.03, "local y offset should use payload local z as viewer height");
+  assert(meshChild.position.z === 0.02, "local z offset should use payload local y as viewer depth");
   assert(meshChild.quaternion.x === 0.5, "local quaternion x should use Three.js xyzw order");
   assert(meshChild.quaternion.y === 0.5, "local quaternion y should use Three.js xyzw order");
   assert(meshChild.quaternion.z === 0.5, "local quaternion z should use Three.js xyzw order");

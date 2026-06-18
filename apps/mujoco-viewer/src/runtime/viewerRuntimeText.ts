@@ -23,6 +23,14 @@ export function buildConnectionStatusText(
     : `WebSocket: ${connectionStatus} ${websocketUrl}`;
 }
 
+export function buildCompactHeaderStatusText(snapshot: ViewerRuntimeSnapshot): string {
+  return [
+    `WebSocket: ${snapshot.connectionStatus}`,
+    `frame ${snapshot.frameIndex}`,
+    `payload v${snapshot.payloadVersion}`,
+  ].join(" | ");
+}
+
 export function formatVector3(vector: Vector3): string {
   const formatComponent = (value: number): string => {
     const rounded = Math.round(value * 1_000_000) / 1_000_000;

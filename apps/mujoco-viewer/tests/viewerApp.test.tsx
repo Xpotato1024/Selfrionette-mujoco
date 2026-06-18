@@ -28,6 +28,10 @@ function testViewerAppStaticMarkup(): void {
   assert(markup.includes("Scene aids"), "scene aids row should render");
   assert(markup.includes("Warnings"), "warning card should render");
   assert(markup.includes("data-role=\"viewer-status\""), "status summary role should render");
+  assert(
+    !markup.includes("last payload frame"),
+    "compact header status should not render the raw pipe-separated payload summary",
+  );
   assert(markup.includes("data-role=\"viewer-scene\""), "scene viewport role should render");
   assert(markup.includes("data-role=\"viewer-scene-canvas\""), "scene canvas should render");
 }

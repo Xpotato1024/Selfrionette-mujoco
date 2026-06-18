@@ -120,8 +120,13 @@ function testDoFRingRegistryStoresPresentationMetadata(): void {
   assert(count === 4, "registry should store four DoF ring objects");
   assert(scene.children.length === 4, "scene should receive four DoF ring objects");
   const ringObject = scene.children.find((child) => child.name === "dof_ring:q1");
+  const secondRingObject = scene.children.find((child) => child.name === "dof_ring:q2");
   assert(ringObject !== undefined, "scene should contain the provisional q1 DoF ring object");
+  assert(secondRingObject !== undefined, "scene should contain the provisional q2 DoF ring object");
   assert(ringObject?.visible === true, "present DoF ring objects should be visible");
+  assert(secondRingObject?.position.x === 0.1, "q2 DoF ring x position should follow the payload body position");
+  assert(secondRingObject?.position.y === 0.3, "q2 DoF ring y position should use payload z-up height");
+  assert(secondRingObject?.position.z === 0.2, "q2 DoF ring z position should use payload y as viewer depth");
   assert(ringObject?.userData.ringKind === "dof_ring", "ring object userData should identify the ring kind");
   assert(
     ringObject?.userData.presentationRole === "overlay",

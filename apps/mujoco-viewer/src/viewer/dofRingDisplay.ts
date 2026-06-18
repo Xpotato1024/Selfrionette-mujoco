@@ -6,6 +6,7 @@ import type {
   TransportPayloadV0,
   Vector3,
 } from "../types/transportPayload.js";
+import { payloadPositionToViewerPosition } from "./viewerCoordinateFrame.js";
 
 export type DoFRingAvailabilityStatus = "present" | "partial" | "absent";
 
@@ -122,7 +123,8 @@ function createDoFRingObject(descriptor: DoFRingDescriptor): Object3D {
   );
   object.name = descriptor.id;
   object.visible = descriptor.visibilityStatus === "present";
-  object.position.set(descriptor.position_m[0], descriptor.position_m[1], descriptor.position_m[2]);
+  const viewerPosition = payloadPositionToViewerPosition(descriptor.position_m);
+  object.position.set(viewerPosition[0], viewerPosition[1], viewerPosition[2]);
   const [w, x, y, z] = descriptor.quaternion_wxyz;
   object.quaternion.set(x, y, z, w);
   object.userData = {
@@ -180,7 +182,8 @@ export function createDoFRingObjectRegistry(scene: Scene): DoFRingObjectRegistry
       if (existingObject !== undefined) {
         existingObject.name = descriptor.id;
         existingObject.visible = descriptor.visibilityStatus === "present";
-        existingObject.position.set(descriptor.position_m[0], descriptor.position_m[1], descriptor.position_m[2]);
+        const viewerPosition = payloadPositionToViewerPosition(descriptor.position_m);
+        existingObject.position.set(viewerPosition[0], viewerPosition[1], viewerPosition[2]);
         const [w, x, y, z] = descriptor.quaternion_wxyz;
         existingObject.quaternion.set(x, y, z, w);
         existingObject.userData = {

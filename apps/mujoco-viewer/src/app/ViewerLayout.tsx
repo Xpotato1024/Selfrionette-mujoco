@@ -2,6 +2,7 @@ import { DebugPanel } from "./DebugPanel.js";
 import { SceneViewport } from "./SceneViewport.js";
 import type { ViewerRuntimeSnapshot } from "../viewerRuntime.js";
 import type { ViewerViewModel } from "../viewModels/viewerViewModel.js";
+import { buildCompactHeaderStatusText } from "../runtime/viewerRuntimeText.js";
 
 interface ViewerLayoutProps {
   snapshot: ViewerRuntimeSnapshot;
@@ -42,7 +43,7 @@ export function ViewerLayout({ snapshot, viewModel, onSceneCanvasReady }: Viewer
           <h1 className="viewer-shell__title">{snapshot.title}</h1>
         </div>
         <p className="viewer-shell__summary" data-role="viewer-status">
-          {`${snapshot.statusText} | ${snapshot.summaryText}`}
+          {buildCompactHeaderStatusText(snapshot)}
         </p>
       </header>
       <div className="viewer-shell__body">

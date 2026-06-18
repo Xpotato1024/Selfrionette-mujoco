@@ -3,6 +3,7 @@ import { createElement as reactCreateElement } from "react";
 import { ViewerApp } from "./ViewerApp.js";
 import type { ViewerRuntimeSnapshot } from "../viewerRuntime.js";
 import type { ViewerDocumentLike, ViewerElementLike } from "../viewerRuntime.js";
+import { buildCompactHeaderStatusText } from "../runtime/viewerRuntimeText.js";
 import { buildViewerViewModel } from "../viewModels/viewerViewModel.js";
 import { formatVector3 } from "./viewerFormatting.js";
 
@@ -134,11 +135,11 @@ function renderFallbackViewerApp(
   titleBlock.appendChild(createElement(documentLike, "p", "viewer-shell__eyebrow", "Viewer UI shell"));
   titleBlock.appendChild(createElement(documentLike, "h1", "viewer-shell__title", snapshot.title));
   header.appendChild(titleBlock);
-  header.appendChild(createElement(documentLike, "p", "viewer-shell__summary", snapshot.summaryText));
+  header.appendChild(createElement(documentLike, "p", "viewer-shell__summary", buildCompactHeaderStatusText(snapshot)));
 
   const statusSection = createElement(documentLike, "section", "viewer-shell__status");
   statusSection.setAttribute("data-role", "viewer-status");
-  statusSection.textContent = `${snapshot.statusText} | ${snapshot.summaryText}`;
+  statusSection.textContent = buildCompactHeaderStatusText(snapshot);
 
   const scenePanel = createElement(documentLike, "section", "viewer-scene-panel");
   scenePanel.setAttribute("data-component", "scene-viewport");

@@ -187,6 +187,12 @@ LAN / Tailscale / public host:
 - #173 以降、`sweep_x` smoke では fast_arm mesh がアームとして読めることも確認する。
   viewer は payload body transform と明示的な asset-local transform だけを使い、
   browser-side FK / IK / qpos recompute / MuJoCo model loading は行わない。
+- #174 follow-up 以降、viewer scene は MuJoCo z-up payload `[x, y, z]` を
+  Three.js y-up placement `[x, z, y]` に変換して表示する。target / tip /
+  body / site / error vector / arm skeleton / DoF ring / fast_arm mesh は同じ
+  coordinate convention を使い、追加の viewer-only visual offset は入れていない。
+- header は compact status のみを表示し、body count / marker / scene status /
+  fast_arm mesh status などの詳細は card UI と scene summary で確認する。
 - Vite dev smoke で mesh が崩れる、または STL load error が出る場合は、
   `/assets/mujoco/fast_arm/...` が canonical `assets/` の STL を返しているか確認する。
 

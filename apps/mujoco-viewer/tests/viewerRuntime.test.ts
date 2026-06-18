@@ -471,35 +471,39 @@ function testCreateViewerRuntimeMountsAndStops(): void {
   );
   assert(
     statusSection?.textContent?.includes("frame 1") ?? false,
-    "viewer runtime should show the fixture frame in the summary",
+    "viewer runtime should show the fixture frame in the compact header status",
   );
   assert(
-    statusSection?.textContent?.includes("last payload frame 1") ?? false,
-    "viewer runtime should show the last payload frame in the summary",
+    !(statusSection?.textContent?.includes("last payload frame") ?? true),
+    "viewer runtime should not show the raw payload summary in the compact header status",
   );
   assert(
     statusSection?.textContent?.includes("WebSocket: disabled") ?? false,
-    "viewer runtime should show the disabled websocket status",
+    "viewer runtime should show the disabled websocket status in the compact header status",
   );
   assert(
-    statusSection?.textContent?.includes("base_link") ?? false,
-    "viewer runtime should show the base link in the summary",
+    statusSection?.textContent?.includes("payload v0") ?? false,
+    "viewer runtime should show the payload version in the compact header status",
   );
   assert(
-    statusSection?.textContent?.includes("tip") ?? false,
-    "viewer runtime should show the tip site in the summary",
+    !(statusSection?.textContent?.includes("base_link") ?? true),
+    "viewer runtime should keep detailed body marker names out of the compact header status",
   );
   assert(
-    statusSection?.textContent?.includes("error vector: absent") ?? false,
-    "viewer runtime should show the absent error vector in the summary",
+    sceneText?.textContent?.includes("tip") ?? false,
+    "viewer runtime should keep detailed site marker names in the scene summary",
   );
   assert(
-    statusSection?.textContent?.includes("DoF ring display: partial 1/4 ring(s)") ?? false,
-    "viewer runtime should show the DoF ring overlay in the summary",
+    sceneText?.textContent?.includes("error vector: absent") ?? false,
+    "viewer runtime should keep the absent error vector detail in the scene summary",
   );
   assert(
-    statusSection?.textContent?.includes("arm skeleton: present 1 segment(s)") ?? false,
-    "viewer runtime should show the arm skeleton in the summary",
+    sceneText?.textContent?.includes("DoF ring display: partial 1/4 ring(s)") ?? false,
+    "viewer runtime should keep the DoF ring overlay detail in the scene summary",
+  );
+  assert(
+    sceneText?.textContent?.includes("arm skeleton: present (1 segment(s))") ?? false,
+    "viewer runtime should keep the arm skeleton detail in the scene summary",
   );
 
   runtime.stop();
@@ -548,8 +552,12 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     "viewer runtime should expose the connecting status before open",
   );
   assert(
-    statusSection?.textContent?.includes("WebSocket: connecting ws://example.test/payload") ?? false,
-    "viewer runtime should display the configured endpoint while connecting",
+    statusSection?.textContent?.includes("WebSocket: connecting") ?? false,
+    "viewer runtime should display the compact connecting websocket status",
+  );
+  assert(
+    !(statusSection?.textContent?.includes("ws://example.test/payload") ?? true),
+    "viewer runtime should keep the endpoint out of the compact header status",
   );
 
   activeSocket.dispatchOpen();
@@ -564,8 +572,8 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     "viewer runtime should expose the open status after websocket open",
   );
   assert(
-    statusSection?.textContent?.includes("WebSocket: open ws://example.test/payload") ?? false,
-    "viewer runtime should display the open websocket status",
+    statusSection?.textContent?.includes("WebSocket: open") ?? false,
+    "viewer runtime should display the compact open websocket status",
   );
   const initialSceneText = sceneSection?.textContent ?? "";
   const initialSceneLabel = sceneText?.textContent ?? "";
@@ -675,33 +683,33 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
   const errorVectorObject = activeScene.children.find((child) => child.name === "error_vector:tip_to_target");
   assert(baseLinkObject !== undefined, "scene should keep the base_link object");
   assert(baseLinkObject.position.x === 0.7, "base_link x position should follow the payload marker scene");
-  assert(baseLinkObject.position.y === 0.8, "base_link y position should follow the payload marker scene");
-  assert(baseLinkObject.position.z === 0.9, "base_link z position should follow the payload marker scene");
+  assert(baseLinkObject.position.y === 0.9, "base_link y position should use the payload z-up height");
+  assert(baseLinkObject.position.z === 0.8, "base_link z position should use the payload y axis as viewer depth");
   assert(tipObject !== undefined, "scene should keep the tip object");
   assert(tipObject.position.x === 0.11, "tip x position should follow the payload marker scene");
-  assert(tipObject.position.y === 0.22, "tip y position should follow the payload marker scene");
-  assert(tipObject.position.z === 0.33, "tip z position should follow the payload marker scene");
+  assert(tipObject.position.y === 0.33, "tip y position should use the payload z-up height");
+  assert(tipObject.position.z === 0.22, "tip z position should use the payload y axis as viewer depth");
   assert(armSkeletonObject !== undefined, "scene should keep the arm skeleton object");
   assert(
     armSkeletonObject?.position.x === 0.7,
     "arm skeleton x position should follow the base_link payload marker scene",
   );
   assert(
-    armSkeletonObject?.position.y === 0.8,
-    "arm skeleton y position should follow the base_link payload marker scene",
+    armSkeletonObject?.position.y === 0.9,
+    "arm skeleton y position should use the base_link payload z-up height",
   );
   assert(
-    armSkeletonObject?.position.z === 0.9,
-    "arm skeleton z position should follow the base_link payload marker scene",
+    armSkeletonObject?.position.z === 0.8,
+    "arm skeleton z position should use the base_link payload y axis as viewer depth",
   );
   assert(targetObject !== undefined, "scene should create a target object when target is present");
   assert(targetObject.position.x === 0.31, "target x position should follow the payload marker scene");
-  assert(targetObject.position.y === 0.32, "target y position should follow the payload marker scene");
-  assert(targetObject.position.z === 0.33, "target z position should follow the payload marker scene");
+  assert(targetObject.position.y === 0.33, "target y position should use the payload z-up height");
+  assert(targetObject.position.z === 0.32, "target z position should use the payload y axis as viewer depth");
   assert(errorVectorObject !== undefined, "scene should create an error vector object when both endpoints exist");
   assert(errorVectorObject?.position.x === 0.11, "error vector should start at the tip x position");
-  assert(errorVectorObject?.position.y === 0.22, "error vector should start at the tip y position");
-  assert(errorVectorObject?.position.z === 0.33, "error vector should start at the tip z position");
+  assert(errorVectorObject?.position.y === 0.33, "error vector should start at the tip payload z-up height");
+  assert(errorVectorObject?.position.z === 0.22, "error vector should start at the tip payload y axis as viewer depth");
   const errorVectorUserData = errorVectorObject?.userData as
     | {
         endPosition?: {
@@ -716,32 +724,32 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     "error vector should keep the target x endpoint in userData",
   );
   assert(
-    errorVectorUserData?.endPosition?.y === 0.32,
-    "error vector should keep the target y endpoint in userData",
+    errorVectorUserData?.endPosition?.y === 0.33,
+    "error vector should keep the target payload z-up height in userData",
   );
   assert(
-    errorVectorUserData?.endPosition?.z === 0.33,
-    "error vector should keep the target z endpoint in userData",
+    errorVectorUserData?.endPosition?.z === 0.32,
+    "error vector should keep the target payload y axis as viewer depth in userData",
   );
   assert(
-    statusSection?.textContent?.includes("target marker: present [0.31, 0.32, 0.33]") ?? false,
-    "runtime should surface the target marker in the summary",
+    sceneText?.textContent?.includes("target marker: present [0.31, 0.32, 0.33]") ?? false,
+    "runtime should surface the target marker in the scene summary",
   );
   assert(
-    statusSection?.textContent?.includes("tip marker: present [0.11, 0.22, 0.33]") ?? false,
-    "runtime should surface the tip marker in the summary",
+    sceneText?.textContent?.includes("tip marker: present [0.11, 0.22, 0.33]") ?? false,
+    "runtime should surface the tip marker in the scene summary",
   );
   assert(
-    statusSection?.textContent?.includes("error vector: present [0.2, 0.1, 0]") ?? false,
-    "runtime should surface the error vector delta in the summary",
+    sceneText?.textContent?.includes("error vector: present [0.2, 0.1, 0]") ?? false,
+    "runtime should surface the error vector delta in the scene summary",
   );
   assert(
-    statusSection?.textContent?.includes("arm skeleton: present 1 segment(s)") ?? false,
-    "runtime should surface the arm skeleton in the summary",
+    sceneText?.textContent?.includes("arm skeleton: present (1 segment(s))") ?? false,
+    "runtime should surface the arm skeleton in the scene summary",
   );
   assert(
-    statusSection?.textContent?.includes("DoF ring display: partial 1/4 ring(s)") ?? false,
-    "runtime should surface the DoF ring overlay in the summary",
+    sceneText?.textContent?.includes("DoF ring display: partial 1/4 ring(s)") ?? false,
+    "runtime should surface the DoF ring overlay in the scene summary",
   );
   assert(syncedScene !== null, "runtime should expose the synced scene while connected");
   assert(
@@ -757,8 +765,9 @@ function testCreateViewerRuntimeStartsOptionalWebSocketClient(): void {
     "runtime should expose the closed status after websocket close",
   );
   assert(
-    statusSection?.textContent?.includes("WebSocket: closed after frame 3") ?? false,
-    "runtime should show the last payload frame after websocket close",
+    (statusSection?.textContent?.includes("WebSocket: closed") ?? false) &&
+      (statusSection?.textContent?.includes("frame 3") ?? false),
+    "runtime should show the compact closed websocket status and current frame after websocket close",
   );
   assert(
     (syncedScene as Scene).children.some((child) => child.name === "scene-aids"),
@@ -887,8 +896,12 @@ function testCreateViewerRuntimeReportsConnectionErrors(): void {
     "connection errors should mark the websocket status as error",
   );
   assert(
-    statusSection?.textContent?.includes("WebSocket: error ws://example.test/payload") ?? false,
-    "connection errors should be visible in the status text",
+    statusSection?.textContent?.includes("WebSocket: error") ?? false,
+    "connection errors should be visible in the compact header status",
+  );
+  assert(
+    !(statusSection?.textContent?.includes("ws://example.test/payload") ?? true),
+    "connection endpoints should stay out of the compact header status",
   );
 
   runtime.stop();
@@ -968,9 +981,15 @@ function testCreateViewerRuntimeSyncsFastArmMeshesWhenAssetBaseUrlProvided(): vo
     "viewer runtime should mark the fast_arm mesh scene as present",
   );
   const statusSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-status");
+  const sceneSection = root.children.find((child) => child.attributes.get("data-role") === "viewer-scene");
+  const sceneText = sceneSection?.children.find((child) => child.attributes.get("data-role") === "viewer-scene-text");
   assert(
-    statusSection?.textContent?.includes("fast arm mesh display: present 5/5 asset(s)") ?? false,
-    "viewer runtime should surface the fast_arm mesh summary",
+    !(statusSection?.textContent?.includes("fast arm mesh display") ?? true),
+    "viewer runtime should keep the fast_arm mesh detail out of the compact header status",
+  );
+  assert(
+    sceneText?.textContent?.includes("fast arm mesh display: present 5/5 asset(s)") ?? false,
+    "viewer runtime should surface the fast_arm mesh summary in the scene summary",
   );
 
   runtime.stop();

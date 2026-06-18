@@ -156,16 +156,19 @@ connection がある場合は body + site + arm skeleton になる。target と 
   geometry / scale / axis / origin / units / joint semantics は変更しない。
 - Reused marker keys reuse the same object identity.
 - 各 marker object の position は marker scene model に保存された payload
-  marker coordinates に従う。
+  marker coordinates を viewer coordinate に変換して使う。payload は MuJoCo
+  z-up `[x, y, z]`、Three.js scene は y-up なので、表示位置と方向 vector は
+  `[x, z, y]` として扱う。
 - arm skeleton segment は arm skeleton scene model に保存された payload
-  body/site positions に従う。
+  body/site positions を同じ viewer coordinate に変換して使う。
 - fast_arm mesh pose は、保守的な body mapping がある場合に限り、対応する
   payload body `position_m` と `quaternion_wxyz` に従う。
 - error vector object は tip endpoint を position に持ち、target endpoint を
   `userData` に保持するので、pose を再計算せずに tip -> target 方向を
   表示できる。
-- browser smoke が証明するのは payload coordinate の直接反映までであり、
-  final coordinate mapping layer ではない。
+- browser smoke は payload coordinate が viewer coordinate adapter を通り、
+  target / tip / error vector / body marker / site marker / arm skeleton /
+  DoF ring / fast_arm mesh が同じ y-up scene に配置されることを確認する。
 - Phase D completion audit は `docs/operations/r6-d-completion-audit.md` に
   記録される。
 - 次の handoff は IK / command integration skeleton work であり、rendered
@@ -194,6 +197,13 @@ asset-local transform だけから作る。
 - browser-side FK / IK / qpos recompute / MuJoCo model loading は行わない。
 - STL の scale / local offset / local orientation は descriptor 上の静的な
   asset-local transform として扱う。
+- #174 follow-up では MuJoCo z-up payload を Three.js y-up scene に配置するため、
+  payload position / vector を `[x, y, z] -> [x, z, y]` に変換する。追加の
+  viewer-only visual offset は入れていない。target / tip / body / site /
+  error vector / arm skeleton / DoF ring / fast_arm mesh は同じ変換を使う。
+- `quaternion_wxyz` は従来通り Three.js の `xyzw` order に並べ替える。
+  座標基底変換としての quaternion parity は未固定であり、今後
+  MuJoCo renderer parity を扱う issue の残リスクとする。
 - Vite dev smoke では `/assets/mujoco/fast_arm/...` が repo root の canonical
   `assets/` を返す必要がある。HTML fallback や 404 を STL として扱った場合は
   mesh fidelity の検証にならない。

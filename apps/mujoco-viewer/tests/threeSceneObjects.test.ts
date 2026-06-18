@@ -9,6 +9,10 @@ import {
   createThreeSceneObjectRegistry,
   syncThreeSceneObjectRegistry,
 } from "../src/viewer/threeSceneObjects.js";
+import {
+  payloadPositionToViewerPosition,
+  payloadVectorToViewerVector,
+} from "../src/viewer/viewerCoordinateFrame.js";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -159,8 +163,8 @@ function testBuildMarkerObjectDescriptorsIncludePayloadPositions(): void {
 
   assert(siteDescriptor !== undefined, "site descriptor should exist");
   assert(siteDescriptor.position.x === markerScene.sites[0].position_m[0], "site x should match marker scene");
-  assert(siteDescriptor.position.y === markerScene.sites[0].position_m[1], "site y should match marker scene");
-  assert(siteDescriptor.position.z === markerScene.sites[0].position_m[2], "site z should match marker scene");
+  assert(siteDescriptor.position.y === markerScene.sites[0].position_m[2], "site y should use payload z as viewer height");
+  assert(siteDescriptor.position.z === markerScene.sites[0].position_m[1], "site z should use payload y as viewer depth");
 
   assert(targetDescriptor !== undefined, "target descriptor should exist");
   assert(targetDescriptor.position.x === 0.5, "target x should match marker scene");
@@ -169,8 +173,8 @@ function testBuildMarkerObjectDescriptorsIncludePayloadPositions(): void {
 
   assert(errorVectorDescriptor !== undefined, "error vector descriptor should exist");
   assert(errorVectorDescriptor.position.x === markerScene.sites[0].position_m[0], "error vector x should match tip");
-  assert(errorVectorDescriptor.position.y === markerScene.sites[0].position_m[1], "error vector y should match tip");
-  assert(errorVectorDescriptor.position.z === markerScene.sites[0].position_m[2], "error vector z should match tip");
+  assert(errorVectorDescriptor.position.y === markerScene.sites[0].position_m[2], "error vector y should use tip payload z as viewer height");
+  assert(errorVectorDescriptor.position.z === markerScene.sites[0].position_m[1], "error vector z should use tip payload y as viewer depth");
   assert(errorVectorDescriptor.endPosition?.x === 0.5, "error vector end x should match target");
   assert(errorVectorDescriptor.endPosition?.y === 0.5, "error vector end y should match target");
   assert(errorVectorDescriptor.endPosition?.z === 0.5, "error vector end z should match target");
@@ -182,25 +186,37 @@ function testBuildMarkerObjectDescriptorsIncludePayloadPositions(): void {
     "arm skeleton start x should match base_link",
   );
   assert(
-    armSkeletonDescriptor.position.y === markerScene.bodies[0].position_m[1],
-    "arm skeleton start y should match base_link",
+    armSkeletonDescriptor.position.y === markerScene.bodies[0].position_m[2],
+    "arm skeleton start y should use payload z as viewer height",
   );
   assert(
-    armSkeletonDescriptor.position.z === markerScene.bodies[0].position_m[2],
-    "arm skeleton start z should match base_link",
+    armSkeletonDescriptor.position.z === markerScene.bodies[0].position_m[1],
+    "arm skeleton start z should use payload y as viewer depth",
   );
   assert(
     armSkeletonDescriptor.endPosition?.x === markerScene.sites[0].position_m[0],
     "arm skeleton end x should match tip",
   );
   assert(
-    armSkeletonDescriptor.endPosition?.y === markerScene.sites[0].position_m[1],
-    "arm skeleton end y should match tip",
+    armSkeletonDescriptor.endPosition?.y === markerScene.sites[0].position_m[2],
+    "arm skeleton end y should use payload z as viewer height",
   );
   assert(
-    armSkeletonDescriptor.endPosition?.z === markerScene.sites[0].position_m[2],
-    "arm skeleton end z should match tip",
+    armSkeletonDescriptor.endPosition?.z === markerScene.sites[0].position_m[1],
+    "arm skeleton end z should use payload y as viewer depth",
   );
+}
+
+function testPayloadCoordinateFrameMapsMuJoCoZUpToViewerYUp(): void {
+  const position = payloadPositionToViewerPosition([1, 2, 3]);
+  const vector = payloadVectorToViewerVector([4, 5, 6]);
+
+  assert(position[0] === 1, "viewer x should preserve payload x");
+  assert(position[1] === 3, "viewer y should use payload z as height");
+  assert(position[2] === 2, "viewer z should use payload y as depth");
+  assert(vector[0] === 4, "viewer vector x should preserve payload x");
+  assert(vector[1] === 6, "viewer vector y should use payload z as height");
+  assert(vector[2] === 5, "viewer vector z should use payload y as depth");
 }
 
 function testBuildPayloadMarkerSceneSkipsErrorVectorWithoutTipOrTarget(): void {
@@ -318,6 +334,7 @@ testRegistryRemovesMissingObjects();
 testRegistryClearRemovesAllObjects();
 testSyncCreatesPayloadMarkerSkeletonObjects();
 testBuildMarkerObjectDescriptorsIncludePayloadPositions();
+testPayloadCoordinateFrameMapsMuJoCoZUpToViewerYUp();
 testBuildPayloadMarkerSceneSkipsErrorVectorWithoutTipOrTarget();
 testBuildPayloadArmSkeletonSceneUsesCanonicalBodyAndSitePositionsOnly();
 testBuildPayloadArmSkeletonSceneReportsPartialWhenCanonicalEndpointIsMissing();

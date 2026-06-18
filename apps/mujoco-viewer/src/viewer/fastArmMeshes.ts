@@ -2,6 +2,7 @@ import { Mesh, MeshBasicMaterial, Object3D, Scene } from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 
 import type { TransportPayloadV0, TransportBodyPayload, QuaternionWXYZ, Vector3 } from "../types/transportPayload.js";
+import { payloadPositionToViewerPosition } from "./viewerCoordinateFrame.js";
 
 export type FastArmMeshStatus = "present" | "absent" | "unmapped";
 export type FastArmMeshSceneStatus = "disabled" | "present" | "partial" | "absent" | "unmapped";
@@ -275,7 +276,8 @@ function createFastArmMeshObject(descriptor: FastArmMeshDescriptor): Object3D {
   object.name = buildFastArmMeshKey(descriptor.name);
   object.visible = descriptor.status === "present";
   if (descriptor.position !== null) {
-    object.position.set(descriptor.position[0], descriptor.position[1], descriptor.position[2]);
+    const viewerPosition = payloadPositionToViewerPosition(descriptor.position);
+    object.position.set(viewerPosition[0], viewerPosition[1], viewerPosition[2]);
   }
   if (descriptor.quaternion !== null) {
     object.quaternion.set(
@@ -359,10 +361,11 @@ function attachFastArmMeshGeometry(
 }
 
 function applyLocalTransform(object: Object3D, descriptor: FastArmMeshDescriptor): void {
+  const viewerLocalPosition = payloadPositionToViewerPosition(descriptor.localPosition_m);
   object.position.set(
-    descriptor.localPosition_m[0],
-    descriptor.localPosition_m[1],
-    descriptor.localPosition_m[2],
+    viewerLocalPosition[0],
+    viewerLocalPosition[1],
+    viewerLocalPosition[2],
   );
   object.quaternion.set(
     descriptor.localQuaternion_wxyz[1],
@@ -409,7 +412,8 @@ export function syncFastArmMeshSceneObjects(
     } else {
       object.visible = descriptor.status === "present";
       if (descriptor.position !== null) {
-        object.position.set(descriptor.position[0], descriptor.position[1], descriptor.position[2]);
+        const viewerPosition = payloadPositionToViewerPosition(descriptor.position);
+        object.position.set(viewerPosition[0], viewerPosition[1], viewerPosition[2]);
       }
       if (descriptor.quaternion !== null) {
         object.quaternion.set(
