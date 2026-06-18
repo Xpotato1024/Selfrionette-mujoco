@@ -8,6 +8,7 @@ const repoRoot = resolve(appRoot, "../..");
 export default defineConfig({
   root: repoRoot,
   appType: "mpa",
+  publicDir: resolve(appRoot, "public"),
   server: {
     fs: {
       allow: [repoRoot, appRoot],
