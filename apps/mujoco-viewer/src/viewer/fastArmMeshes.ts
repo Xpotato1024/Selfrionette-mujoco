@@ -1,4 +1,4 @@
-import { Mesh, MeshNormalMaterial, Object3D, Scene } from "three";
+import { Mesh, MeshBasicMaterial, Object3D, Scene } from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 
 import type { TransportPayloadV0, TransportBodyPayload, QuaternionWXYZ, Vector3 } from "../types/transportPayload.js";
@@ -12,6 +12,9 @@ export interface FastArmMeshManifestEntry {
   sourceStl: string;
   assetPath: string;
   bodyName: string | null;
+  localPosition_m: Vector3;
+  localQuaternion_wxyz: QuaternionWXYZ;
+  scale: number | readonly [number, number, number];
   displayLabel: string;
   fallbackStatus: "fallback" | "debug" | "provisional";
 }
@@ -24,6 +27,9 @@ export interface FastArmMeshDescriptor {
   bodyName: string | null;
   position: Vector3 | null;
   quaternion: QuaternionWXYZ | null;
+  localPosition_m: Vector3;
+  localQuaternion_wxyz: QuaternionWXYZ;
+  scale: number | readonly [number, number, number];
   status: FastArmMeshStatus;
   label: string;
 }
@@ -54,6 +60,9 @@ interface FastArmMeshObjectUserData {
   status: FastArmMeshStatus;
   position: Vector3 | null;
   quaternion: QuaternionWXYZ | null;
+  localPosition_m: Vector3;
+  localQuaternion_wxyz: QuaternionWXYZ;
+  scale: number | readonly [number, number, number];
 }
 
 interface FastArmMeshSceneSyncState {
@@ -63,6 +72,19 @@ interface FastArmMeshSceneSyncState {
 }
 
 const FAST_ARM_BROWSER_ASSET_ROOT = "../../assets/mujoco/fast_arm/";
+const FAST_ARM_IDENTITY_LOCAL_POSITION_M: Vector3 = [0, 0, 0];
+const FAST_ARM_IDENTITY_LOCAL_QUATERNION_WXYZ: QuaternionWXYZ = [1, 0, 0, 0];
+const FAST_ARM_MESH_MATERIAL = new MeshBasicMaterial({
+  color: "#facc15",
+  transparent: true,
+  opacity: 0.78,
+});
+const FAST_ARM_MESH_WIREFRAME_MATERIAL = new MeshBasicMaterial({
+  color: "#713f12",
+  wireframe: true,
+  transparent: true,
+  opacity: 0.55,
+});
 
 export const FAST_ARM_MESH_MANIFEST_SPEC: readonly Omit<FastArmMeshManifestEntry, "assetPath">[] = [
   {
@@ -70,6 +92,9 @@ export const FAST_ARM_MESH_MANIFEST_SPEC: readonly Omit<FastArmMeshManifestEntry
     name: "BaseLink",
     sourceStl: "assets/mujoco/fast_arm/meshes/BaseLink.stl",
     bodyName: "base_link",
+    localPosition_m: FAST_ARM_IDENTITY_LOCAL_POSITION_M,
+    localQuaternion_wxyz: FAST_ARM_IDENTITY_LOCAL_QUATERNION_WXYZ,
+    scale: 1,
     displayLabel: "BaseLink",
     fallbackStatus: "fallback",
   },
@@ -78,6 +103,9 @@ export const FAST_ARM_MESH_MANIFEST_SPEC: readonly Omit<FastArmMeshManifestEntry
     name: "SholderLink1",
     sourceStl: "assets/mujoco/fast_arm/meshes/SholderLink1.stl",
     bodyName: "sholder_link_1",
+    localPosition_m: FAST_ARM_IDENTITY_LOCAL_POSITION_M,
+    localQuaternion_wxyz: FAST_ARM_IDENTITY_LOCAL_QUATERNION_WXYZ,
+    scale: 1,
     displayLabel: "SholderLink1",
     fallbackStatus: "fallback",
   },
@@ -86,6 +114,9 @@ export const FAST_ARM_MESH_MANIFEST_SPEC: readonly Omit<FastArmMeshManifestEntry
     name: "SholderLink2",
     sourceStl: "assets/mujoco/fast_arm/meshes/SholderLink2.stl",
     bodyName: "sholder_link_2",
+    localPosition_m: FAST_ARM_IDENTITY_LOCAL_POSITION_M,
+    localQuaternion_wxyz: FAST_ARM_IDENTITY_LOCAL_QUATERNION_WXYZ,
+    scale: 1,
     displayLabel: "SholderLink2",
     fallbackStatus: "fallback",
   },
@@ -94,6 +125,9 @@ export const FAST_ARM_MESH_MANIFEST_SPEC: readonly Omit<FastArmMeshManifestEntry
     name: "UpperArmLink",
     sourceStl: "assets/mujoco/fast_arm/meshes/UpperArmLink.stl",
     bodyName: "upper_arm_link",
+    localPosition_m: FAST_ARM_IDENTITY_LOCAL_POSITION_M,
+    localQuaternion_wxyz: FAST_ARM_IDENTITY_LOCAL_QUATERNION_WXYZ,
+    scale: 1,
     displayLabel: "UpperArmLink",
     fallbackStatus: "fallback",
   },
@@ -102,6 +136,9 @@ export const FAST_ARM_MESH_MANIFEST_SPEC: readonly Omit<FastArmMeshManifestEntry
     name: "ForeArmLink",
     sourceStl: "assets/mujoco/fast_arm/meshes/ForeArmLink.stl",
     bodyName: "fore_arm_link",
+    localPosition_m: FAST_ARM_IDENTITY_LOCAL_POSITION_M,
+    localQuaternion_wxyz: FAST_ARM_IDENTITY_LOCAL_QUATERNION_WXYZ,
+    scale: 1,
     displayLabel: "ForeArmLink",
     fallbackStatus: "fallback",
   },
@@ -150,6 +187,9 @@ function buildFastArmMeshDescriptor(
       bodyName: null,
       position: null,
       quaternion: null,
+      localPosition_m: manifestEntry.localPosition_m,
+      localQuaternion_wxyz: manifestEntry.localQuaternion_wxyz,
+      scale: manifestEntry.scale,
       status: "unmapped",
       label: manifestEntry.displayLabel,
     };
@@ -164,6 +204,9 @@ function buildFastArmMeshDescriptor(
       bodyName: manifestEntry.bodyName,
       position: null,
       quaternion: null,
+      localPosition_m: manifestEntry.localPosition_m,
+      localQuaternion_wxyz: manifestEntry.localQuaternion_wxyz,
+      scale: manifestEntry.scale,
       status: "absent",
       label: manifestEntry.displayLabel,
     };
@@ -177,6 +220,9 @@ function buildFastArmMeshDescriptor(
     bodyName: manifestEntry.bodyName,
     position: body.position_m,
     quaternion: body.quaternion_wxyz,
+    localPosition_m: manifestEntry.localPosition_m,
+    localQuaternion_wxyz: manifestEntry.localQuaternion_wxyz,
+    scale: manifestEntry.scale,
     status: "present",
     label: manifestEntry.displayLabel,
   };
@@ -249,6 +295,9 @@ function createFastArmMeshObject(descriptor: FastArmMeshDescriptor): Object3D {
     status: descriptor.status,
     position: descriptor.position,
     quaternion: descriptor.quaternion,
+    localPosition_m: descriptor.localPosition_m,
+    localQuaternion_wxyz: descriptor.localQuaternion_wxyz,
+    scale: descriptor.scale,
   } satisfies FastArmMeshObjectUserData;
   return object;
 }
@@ -287,7 +336,7 @@ function attachFastArmMeshGeometry(
   descriptor: FastArmMeshDescriptor,
 ): void {
   object.clear();
-  const mesh = new Mesh(geometry as never, new MeshNormalMaterial());
+  const mesh = createFastArmMeshChild(geometry, FAST_ARM_MESH_MATERIAL, descriptor);
   mesh.name = `${object.name}:mesh`;
   mesh.userData = {
     meshKey: object.name,
@@ -299,7 +348,43 @@ function attachFastArmMeshGeometry(
     status: descriptor.status,
   };
   object.add(mesh);
+  const wireframeMesh = createFastArmMeshChild(geometry, FAST_ARM_MESH_WIREFRAME_MATERIAL, descriptor);
+  wireframeMesh.name = `${object.name}:wireframe`;
+  wireframeMesh.userData = {
+    ...mesh.userData,
+    meshPresentation: "wireframe",
+  };
+  object.add(wireframeMesh);
   object.visible = descriptor.status === "present";
+}
+
+function applyLocalTransform(object: Object3D, descriptor: FastArmMeshDescriptor): void {
+  object.position.set(
+    descriptor.localPosition_m[0],
+    descriptor.localPosition_m[1],
+    descriptor.localPosition_m[2],
+  );
+  object.quaternion.set(
+    descriptor.localQuaternion_wxyz[1],
+    descriptor.localQuaternion_wxyz[2],
+    descriptor.localQuaternion_wxyz[3],
+    descriptor.localQuaternion_wxyz[0],
+  );
+  if (typeof descriptor.scale === "number") {
+    object.scale.set(descriptor.scale, descriptor.scale, descriptor.scale);
+  } else {
+    object.scale.set(descriptor.scale[0], descriptor.scale[1], descriptor.scale[2]);
+  }
+}
+
+function createFastArmMeshChild(
+  geometry: unknown,
+  material: MeshBasicMaterial,
+  descriptor: FastArmMeshDescriptor,
+): Mesh {
+  const mesh = new Mesh(geometry as never, material);
+  applyLocalTransform(mesh, descriptor);
+  return mesh;
 }
 
 export function syncFastArmMeshSceneObjects(
@@ -345,6 +430,9 @@ export function syncFastArmMeshSceneObjects(
         status: descriptor.status,
         position: descriptor.position,
         quaternion: descriptor.quaternion,
+        localPosition_m: descriptor.localPosition_m,
+        localQuaternion_wxyz: descriptor.localQuaternion_wxyz,
+        scale: descriptor.scale,
       } satisfies FastArmMeshObjectUserData;
     }
 
@@ -355,6 +443,9 @@ export function syncFastArmMeshSceneObjects(
 
     const childMeshName = `${key}:mesh`;
     if (object.children.some((child) => child.name === childMeshName)) {
+      for (const child of object.children) {
+        applyLocalTransform(child, descriptor);
+      }
       continue;
     }
     const cachedGeometry = sceneSyncState.geometryByAssetUrl.get(descriptor.assetUrl);

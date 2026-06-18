@@ -184,6 +184,11 @@ LAN / Tailscale / public host:
 - まず status text と root attributes を確認する。
 - その後、marker summary と counts が payload v0 に追随するかを見る。
 - payload が来ない場合は、publisher と browser URL の host / port / endpoint を見直す。
+- #173 以降、`sweep_x` smoke では fast_arm mesh がアームとして読めることも確認する。
+  viewer は payload body transform と明示的な asset-local transform だけを使い、
+  browser-side FK / IK / qpos recompute / MuJoCo model loading は行わない。
+- Vite dev smoke で mesh が崩れる、または STL load error が出る場合は、
+  `/assets/mujoco/fast_arm/...` が canonical `assets/` の STL を返しているか確認する。
 
 ## Troubleshooting 入口
 

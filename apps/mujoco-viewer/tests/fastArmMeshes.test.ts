@@ -7,6 +7,7 @@ import {
   buildFastArmMeshSceneSummaryText,
   createFastArmMeshManifest,
   syncFastArmMeshSceneObjects,
+  type FastArmMeshManifestEntry,
   type FastArmMeshGeometryLoaderLike,
 } from "../src/viewer/fastArmMeshes.js";
 import type { TransportPayloadV0 } from "../src/types/transportPayload.js";
@@ -76,6 +77,18 @@ function testFastArmManifestCoversCanonicalMeshes(): void {
     manifest.map((entry) => entry.bodyName).join(",") === "base_link,sholder_link_1,sholder_link_2,upper_arm_link,fore_arm_link",
     "manifest should map each STL to the conservative canonical body name",
   );
+  assert(
+    manifest.every((entry) => entry.scale === 1),
+    "manifest should keep canonical STL scale explicit",
+  );
+  assert(
+    manifest.every((entry) => JSON.stringify(entry.localPosition_m) === "[0,0,0]"),
+    "manifest should keep canonical STL local position explicit",
+  );
+  assert(
+    manifest.every((entry) => JSON.stringify(entry.localQuaternion_wxyz) === "[1,0,0,0]"),
+    "manifest should keep canonical STL local orientation explicit",
+  );
 }
 
 function testFastArmSceneUsesPayloadBodyTransformsOnly(): void {
@@ -97,6 +110,11 @@ function testFastArmSceneUsesPayloadBodyTransformsOnly(): void {
   assert(upperArm.quaternion?.[1] === 0.3, "upper arm mesh quaternion x should follow the payload body transform");
   assert(upperArm.quaternion?.[2] === 0.4, "upper arm mesh quaternion y should follow the payload body transform");
   assert(upperArm.quaternion?.[3] === 0.5, "upper arm mesh quaternion z should follow the payload body transform");
+  assert(upperArm.localPosition_m[0] === 0, "upper arm local transform should keep an explicit x offset");
+  assert(upperArm.localPosition_m[1] === 0, "upper arm local transform should keep an explicit y offset");
+  assert(upperArm.localPosition_m[2] === 0, "upper arm local transform should keep an explicit z offset");
+  assert(upperArm.localQuaternion_wxyz[0] === 1, "upper arm local transform should keep an explicit quaternion w");
+  assert(upperArm.scale === 1, "upper arm local transform should keep an explicit scale");
   assert(upperArm.status === "present", "upper arm mesh should be marked present");
   assert(
     buildFastArmMeshSceneSummaryText(scene) === "fast arm mesh display: present 5/5 asset(s)",
@@ -120,13 +138,16 @@ function testFastArmSceneIgnoresQposWhenBodiesAreStable(): void {
 }
 
 function testFastArmSceneMarksMissingAndUnmappedMeshesExplicitly(): void {
-  const customManifest = [
+  const customManifest: readonly Omit<FastArmMeshManifestEntry, "assetPath">[] = [
     ...FAST_ARM_MESH_MANIFEST_SPEC,
     {
       kind: "fast_arm_mesh" as const,
       name: "UnmappedDebugMesh",
       sourceStl: "assets/mujoco/fast_arm/meshes/UnmappedDebugMesh.stl",
       bodyName: null,
+      localPosition_m: [0, 0, 0],
+      localQuaternion_wxyz: [1, 0, 0, 0],
+      scale: 1,
       displayLabel: "UnmappedDebugMesh",
       fallbackStatus: "debug" as const,
     },
@@ -180,8 +201,52 @@ function testFastArmSceneSyncLoadsInjectedGeometry(): void {
   assert(baseLink?.position.y === 0.0, "mesh root y should follow the payload body transform");
   assert(baseLink?.position.z === 0.0, "mesh root z should follow the payload body transform");
   assert(baseLink?.quaternion.w === 1.0, "mesh root quaternion w should follow the payload body transform");
-  assert(baseLink?.children.length === 1, "loaded geometry should attach a mesh child");
+  assert(baseLink?.children.length === 2, "loaded geometry should attach solid and wireframe mesh children");
   assert(baseLink?.children[0].name === "fast_arm_mesh:BaseLink:mesh", "mesh child should be named after the canonical asset");
+  assert(baseLink?.children[1].name === "fast_arm_mesh:BaseLink:wireframe", "wireframe child should be named after the canonical asset");
+}
+
+function testFastArmSceneSyncAppliesDescriptorLocalTransformToMeshChildrenOnly(): void {
+  const payload = createFastArmPayload();
+  const sceneModel = buildFastArmMeshScene(payload, "http://example.test/apps/mujoco-viewer/index.html", [
+    {
+      kind: "fast_arm_mesh",
+      name: "UpperArmLink",
+      sourceStl: "assets/mujoco/fast_arm/meshes/UpperArmLink.stl",
+      bodyName: "upper_arm_link",
+      localPosition_m: [0.01, 0.02, 0.03],
+      localQuaternion_wxyz: [0.5, 0.5, 0.5, 0.5],
+      scale: [1, 2, 3],
+      displayLabel: "UpperArmLink",
+      fallbackStatus: "fallback",
+    },
+  ]);
+  const scene = new Scene();
+  const loader: FastArmMeshGeometryLoaderLike = {
+    load() {
+      return new BufferGeometry();
+    },
+  };
+
+  syncFastArmMeshSceneObjects(scene, sceneModel, { geometryLoader: loader });
+
+  const upperArm = scene.children.find((child) => child.name === "fast_arm_mesh:UpperArmLink");
+  assert(upperArm !== undefined, "scene should include the upper arm mesh root");
+  assert(upperArm.position.x === 0.7, "mesh root x should still follow the payload body transform");
+  assert(upperArm.position.y === 0.8, "mesh root y should still follow the payload body transform");
+  assert(upperArm.position.z === 0.9, "mesh root z should still follow the payload body transform");
+  const meshChild = upperArm.children.find((child) => child.name === "fast_arm_mesh:UpperArmLink:mesh");
+  assert(meshChild !== undefined, "scene should include the transformed mesh child");
+  assert(meshChild.position.x === 0.01, "local x offset should apply to the mesh child");
+  assert(meshChild.position.y === 0.02, "local y offset should apply to the mesh child");
+  assert(meshChild.position.z === 0.03, "local z offset should apply to the mesh child");
+  assert(meshChild.quaternion.x === 0.5, "local quaternion x should use Three.js xyzw order");
+  assert(meshChild.quaternion.y === 0.5, "local quaternion y should use Three.js xyzw order");
+  assert(meshChild.quaternion.z === 0.5, "local quaternion z should use Three.js xyzw order");
+  assert(meshChild.quaternion.w === 0.5, "local quaternion w should use Three.js xyzw order");
+  assert(meshChild.scale.x === 1, "local x scale should apply to the mesh child");
+  assert(meshChild.scale.y === 2, "local y scale should apply to the mesh child");
+  assert(meshChild.scale.z === 3, "local z scale should apply to the mesh child");
 }
 
 testFastArmManifestCoversCanonicalMeshes();
@@ -189,5 +254,6 @@ testFastArmSceneUsesPayloadBodyTransformsOnly();
 testFastArmSceneIgnoresQposWhenBodiesAreStable();
 testFastArmSceneMarksMissingAndUnmappedMeshesExplicitly();
 testFastArmSceneSyncLoadsInjectedGeometry();
+testFastArmSceneSyncAppliesDescriptorLocalTransformToMeshChildrenOnly();
 
 console.log("fast arm mesh tests passed");

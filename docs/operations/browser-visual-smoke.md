@@ -182,6 +182,24 @@ connection がある場合は body + site + arm skeleton になる。target と 
 - browser での MuJoCo model loading。
 - WebSocket reconnect / retry hardening。
 
+## fast_arm mesh pose fidelity note
+
+#173 では `sweep_x` one-command smoke で fast_arm mesh が demo smoke として
+読めることを確認対象に追加する。viewer は rendering-only を維持し、mesh pose は
+payload `bodies[].position_m` / `bodies[].quaternion_wxyz` と viewer 側で明示した
+asset-local transform だけから作る。
+
+- body-to-mesh mapping は `base_link`, `sholder_link_1`, `sholder_link_2`,
+  `upper_arm_link`, `fore_arm_link` を使う。
+- browser-side FK / IK / qpos recompute / MuJoCo model loading は行わない。
+- STL の scale / local offset / local orientation は descriptor 上の静的な
+  asset-local transform として扱う。
+- Vite dev smoke では `/assets/mujoco/fast_arm/...` が repo root の canonical
+  `assets/` を返す必要がある。HTML fallback や 404 を STL として扱った場合は
+  mesh fidelity の検証にならない。
+- 現状の補正は demo smoke 可読性のための viewer-side 最小補正であり、
+  robotics-grade IK/FK や MuJoCo visual renderer parity は別 issue とする。
+
 ## Troubleshooting
 
 - smoke server が ready になる前に browser を開いた場合は、grace period の
