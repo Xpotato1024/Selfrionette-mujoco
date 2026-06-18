@@ -58,6 +58,39 @@ apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
 host / port / public host contract は
 `docs/operations/websocket-host-port-contract.md` に固定する。
 
+## One-command launcher
+
+Windows / PowerShell 向けの one-command smoke は
+`scripts/run-browser-viewer-smoke.ps1` を使う。Windows PowerShell 5.1 で動く
+構文を優先している。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-browser-viewer-smoke.ps1 `
+  -PublisherPort 8768 `
+  -ViewerPort 5176 `
+  -Preset sweep_x `
+  -Steps 6 `
+  -OpenBrowser
+```
+
+default URL:
+
+```text
+http://127.0.0.1:5176/?websocketUrl=ws://127.0.0.1:8768
+```
+
+- default host は `127.0.0.1`、default publisher port は `8768`、default viewer port は `5176`。
+- `-OpenBrowser` を付けたときだけ既定ブラウザーを開く。
+- `-NoBrowser` は browser open を抑止する明示オプション。
+- launcher は publisher と viewer の child process を保持し、起動直後に数秒だけ
+  生存確認をしてから URL を表示する。
+- `Ctrl+C` で child process を cleanup する。
+- 失敗時は port conflict、`apps/mujoco-viewer` の `npm ci` 未実施、または locked
+  native binary を確認する。
+
+manual 2 terminal 手順は fallback として残す。
+- `-NoBrowser` は browser を開かない startup / cleanup smoke 用で、browser connection / frame completion は確認しない。
+- `-OpenBrowser` か通常実行では browser 接続を前提にし、publisher exit code を launcher exit code に反映する。
 ## Expected Viewer Status
 
 - status text は marker summary と分けて `WebSocket` state を表示する。

@@ -82,6 +82,39 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py `
 - Browser payload parse smoke は viewer が payload v0 を受信して diagnostic
   text を出せるかまでを確認し、proper 3D GUI render は別 follow-up に分ける。
 
+## One-command smoke launcher
+
+Windows / PowerShell 向けには `scripts/run-browser-viewer-smoke.ps1` を使う。
+Windows PowerShell 5.1 で動く構文を優先しており、PowerShell 7 でも同じ
+コマンドで動かせる。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-browser-viewer-smoke.ps1 `
+  -PublisherPort 8768 `
+  -ViewerPort 5176 `
+  -Preset sweep_x `
+  -Steps 6 `
+  -OpenBrowser
+```
+
+default URL:
+
+```text
+http://127.0.0.1:5176/?websocketUrl=ws://127.0.0.1:8768
+```
+
+- default host は `127.0.0.1`、default publisher port は `8768`、default viewer port は `5176`。
+- `-OpenBrowser` を付けたときだけ既定ブラウザーを開く。
+- `-NoBrowser` を付けると browser open を明示的に抑止する。
+- script は publisher と viewer の child process を保持し、起動直後に数秒だけ
+  生存確認をしてから URL を表示する。
+- `Ctrl+C` で child process を cleanup する。
+- 失敗時は port conflict、`apps/mujoco-viewer` の `npm ci` 未実施、または locked
+  native binary を確認する。
+
+`browser-visual-smoke.md` の手動 2 terminal 手順は fallback として残す。
+- `-NoBrowser` は browser を開かない startup / cleanup smoke 用で、browser connection / frame completion は確認しない。
+- `-OpenBrowser` か通常実行では browser 接続を前提にし、publisher exit code を launcher exit code に反映する。
 ## Web viewer
 
 ```bash
