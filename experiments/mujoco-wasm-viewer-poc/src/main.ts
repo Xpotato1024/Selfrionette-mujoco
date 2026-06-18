@@ -7,6 +7,7 @@ if (app === null) {
 
 const viewer = createMujocoFastArmViewer({
   modelPath: "/assets/mujoco/fast_arm/scene.xml",
+  fixturePath: "/fixtures/fast_arm_sweep_x_qpos.json",
   mount: app,
 });
 

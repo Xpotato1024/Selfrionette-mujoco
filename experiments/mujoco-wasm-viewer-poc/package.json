@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite --config vite.config.ts",
     "build": "vite build --config vite.config.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test src/qposSync.test.ts"
   },
   "dependencies": {
     "@mujoco/mujoco": "^3.9.0",
@@ -15,6 +16,7 @@
     "@types/three": "^0.184.0",
     "@types/node": "^24.10.1",
     "typescript": "^5.9.0",
+    "tsx": "^4.20.5",
     "vite": "^7.1.6"
   }
 }
