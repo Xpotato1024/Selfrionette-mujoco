@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "tsc -p tsconfig.test.json && node ./dist/test/tests/importMap.test.js && node ./dist/test/tests/websocketEndpoint.test.js && node ./dist/test/tests/websocketClient.test.js && node ./dist/test/tests/threeSceneObjects.test.js && node ./dist/test/tests/dofRingDisplay.test.js && node ./dist/test/tests/fastArmMeshes.test.js && node ./dist/test/tests/viewerViewModel.test.js && node ./dist/test/tests/viewerRuntime.test.js && node ./dist/test/tests/viewerApp.test.js",
+    "test": "tsc -p tsconfig.test.json && node ./dist/test/tests/importMap.test.js && node ./dist/test/tests/websocketEndpoint.test.js && node ./dist/test/tests/websocketClient.test.js && node ./dist/test/tests/threeSceneObjects.test.js && node ./dist/test/tests/dofRingDisplay.test.js && node ./dist/test/tests/fastArmMeshes.test.js && node ./dist/test/tests/viewerViewModel.test.js && node ./dist/test/tests/viewerRuntimeText.test.js && node ./dist/test/tests/viewerSceneController.test.js && node ./dist/test/tests/viewerRuntime.test.js && node ./dist/test/tests/viewerApp.test.js",
     "test:build": "tsc -p tsconfig.test.json",
     "browser:build": "vite build --outDir dist/browser",
     "typecheck": "tsc --noEmit",
