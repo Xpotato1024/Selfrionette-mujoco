@@ -89,6 +89,8 @@ http://127.0.0.1:5176/?websocketUrl=ws://127.0.0.1:8768
   native binary を確認する。
 
 manual 2 terminal 手順は fallback として残す。
+- `-NoBrowser` は browser を開かない startup / cleanup smoke 用で、browser connection / frame completion は確認しない。
+- `-OpenBrowser` か通常実行では browser 接続を前提にし、publisher exit code を launcher exit code に反映する。
 ## Expected Viewer Status
 
 - status text は marker summary と分けて `WebSocket` state を表示する。
