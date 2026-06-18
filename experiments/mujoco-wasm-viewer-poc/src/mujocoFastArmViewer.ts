@@ -7,6 +7,8 @@ import {
   Color,
   CylinderGeometry,
   DoubleSide,
+  DirectionalLight,
+  HemisphereLight,
   Mesh,
   MeshPhongMaterial,
   PerspectiveCamera,
@@ -18,6 +20,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { matrixFromMujocoGeom } from "./mujocoSceneTransforms";
 
 interface ViewerConfig {
   modelPath: string;
@@ -161,15 +164,6 @@ function buildPrimitiveGeometry(type: number, size: ArrayLike<number>): BufferGe
   return new BufferGeometry();
 }
 
-function matrixFromGeom(geom: any): [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number] {
-  return [
-    geom.mat[0], geom.mat[1], geom.mat[2], geom.pos[0],
-    geom.mat[3], geom.mat[4], geom.mat[5], geom.pos[1],
-    geom.mat[6], geom.mat[7], geom.mat[8], geom.pos[2],
-    0, 0, 0, 1,
-  ];
-}
-
 export function createMujocoFastArmViewer(config: ViewerConfig) {
   const shell = renderShell(config.mount);
   const scene = new Scene();
@@ -189,6 +183,15 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
   controls.update();
 
   scene.add(new AmbientLight(0xffffff, 1.0));
+  scene.add(new HemisphereLight(0xbfd7ff, 0x1e293b, 0.8));
+
+  const keyLight = new DirectionalLight(0xffffff, 1.8);
+  keyLight.position.set(2.5, -2.5, 4.0);
+  scene.add(keyLight);
+
+  const fillLight = new DirectionalLight(0xdbeafe, 0.6);
+  fillLight.position.set(-2.0, 1.5, 2.0);
+  scene.add(fillLight);
 
   const meshGeometryCache = new Map<string, BufferGeometry>();
   const objectByGeomIndex = new Map<number, Mesh>();
@@ -220,6 +223,16 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
 
         const model = mujoco.MjModel.from_xml_string(xml, vfs);
         const data = new mujoco.MjData(model);
+        const modelStat = model.stat as any;
+        const modelCenter = Array.from(modelStat.center as ArrayLike<number>);
+        const modelExtent = Number(modelStat.extent);
+        controls.target.set(modelCenter[0], modelCenter[1], modelCenter[2]);
+        camera.position.set(
+          modelCenter[0] + modelExtent * 1.8,
+          modelCenter[1] - modelExtent * 1.9,
+          modelCenter[2] + modelExtent * 1.3,
+        );
+        controls.update();
 
         const keyNames: string[] = [];
         let homeKeyIndex: number | null = null;
@@ -332,7 +345,7 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
           }
 
           mesh.matrixAutoUpdate = false;
-          mesh.matrix.fromArray(matrixFromGeom(geom));
+          mesh.matrix.copy(matrixFromMujocoGeom(geom));
           mesh.matrixWorldNeedsUpdate = true;
           geom.delete();
         }
