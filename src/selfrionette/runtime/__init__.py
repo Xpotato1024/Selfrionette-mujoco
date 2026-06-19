@@ -11,6 +11,12 @@ from selfrionette.runtime.evaluation import (
     evaluate_fk_endpoint_from_joint_command,
     evaluate_fk_endpoint_from_qpos,
 )
+from selfrionette.runtime.endpoint_metrics import (
+    RuntimeEndpointEvaluationMetrics,
+    build_runtime_endpoint_evaluation_metrics,
+    compute_error_norm_m,
+    compute_vector_error_m,
+)
 from selfrionette.mujoco_backend.endpoint_extraction import (
     RuntimeMuJoCoSiteEndpointEvaluation,
     extract_fast_arm_end_effector_site_endpoint,
@@ -29,10 +35,14 @@ __all__ = [
     "RuntimeConfig",
     "RuntimePipeline",
     "RuntimeForwardKinematicsEvaluation",
+    "RuntimeEndpointEvaluationMetrics",
     "RuntimeMuJoCoSiteEndpointEvaluation",
     "build_concrete_mujoco_pipeline",
+    "build_runtime_endpoint_evaluation_metrics",
     "build_noop_pipeline",
     "build_mujoco_pipeline",
+    "compute_error_norm_m",
+    "compute_vector_error_m",
     "extract_fast_arm_end_effector_site_endpoint",
     "extract_fast_arm_end_effector_site_endpoint_from_state",
     "extract_fast_arm_tip_site_endpoint",
