@@ -96,8 +96,11 @@ and viewer work. The contract details live in `docs/contracts/`.
 
 The runtime composition root keeps `MotionCommand.joint` on the backend qpos
 command path and forwards `MuJoCoState.target_position_m` as feedback to the
-transport / viewer side. Browser rendering stays rendering-only and does not
-become a command or state source of truth.
+transport / viewer side. For programmed target paths, runtime may also carry
+`desired_endpoint_m` in metadata as the command-side endpoint term while
+leaving `target_position_m` as compatibility / viewer feedback. Browser
+rendering stays rendering-only and does not become a command or state source
+of truth.
 
 R6-H-P5 adds the concrete runtime baseline for target / command / qpos
 wiring:

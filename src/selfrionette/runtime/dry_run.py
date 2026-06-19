@@ -29,6 +29,7 @@ def _default_replay_frame() -> RawInputFrame:
         metadata={
             "preset": "r6-a-p3-default",
             "target_position_m": DEFAULT_CONCRETE_TARGET_POSITION_M,
+            "desired_endpoint_m": DEFAULT_CONCRETE_TARGET_POSITION_M,
         },
     )
 

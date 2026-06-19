@@ -59,6 +59,10 @@ target marker position to viewer/runtime consumers.
 - It is the payload-provided position that the viewer may use to place the
   target marker.
 - It is feedback, not a qpos command boundary.
+- Programmed target input may also keep a separate `target_position_m` sample
+  in runtime metadata. In that path, `desired_endpoint_m` is the command-side
+  endpoint term and `target_position_m` is only a compatibility / feedback
+  field.
 
 If later phases need command-side intent, they must define that intent
 separately and then relate it to `target_position_m` through the boundary
