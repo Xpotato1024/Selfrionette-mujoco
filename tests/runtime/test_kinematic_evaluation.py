@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+import pytest
+
+from selfrionette.kinematics import PlanarChainForwardKinematicsSolver
+from selfrionette.runtime import (
+    RuntimeForwardKinematicsEvaluation,
+    evaluate_fk_endpoint_from_joint_command,
+    evaluate_fk_endpoint_from_qpos,
+)
+from selfrionette.schemas import JointCommand
+
+
+def test_evaluate_fk_endpoint_from_joint_command_returns_runtime_evaluation_in_solver_defined_frame() -> None:
+    solver = PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25))
+    joint_command = JointCommand(joint_angles_rad=(0.3, -0.2))
+
+    evaluation = evaluate_fk_endpoint_from_joint_command(solver, joint_command)
+
+    assert isinstance(evaluation, RuntimeForwardKinematicsEvaluation)
+    assert evaluation.input_joint_angles_rad == (0.3, -0.2)
+    assert evaluation.solver_joint_angles_rad == (0.3, -0.2)
+    assert evaluation.endpoint_m == pytest.approx(solver.forward((0.3, -0.2)), abs=1e-9)
+    assert evaluation.unit == "meter"
+    assert evaluation.coordinate_frame == "solver-defined frame"
+    assert evaluation.solver_joint_count is None
+    assert not hasattr(evaluation, "desired_endpoint_m")
+    assert not hasattr(evaluation, "target_position_m")
+    assert not hasattr(evaluation, "site_position_m")
+
+
+def test_evaluate_fk_endpoint_from_qpos_trims_backend_padding_with_explicit_solver_joint_count() -> None:
+    solver = PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25))
+    padded_qpos_joint_angles_rad = (0.3, -0.2, 0.0, 0.0)
+
+    evaluation = evaluate_fk_endpoint_from_qpos(
+        solver,
+        padded_qpos_joint_angles_rad,
+        solver_joint_count=2,
+    )
+
+    assert evaluation.input_joint_angles_rad == padded_qpos_joint_angles_rad
+    assert evaluation.solver_joint_angles_rad == (0.3, -0.2)
+    assert evaluation.endpoint_m == pytest.approx(solver.forward((0.3, -0.2)), abs=1e-9)
+    assert evaluation.solver_joint_count == 2
+
+
+def test_evaluate_fk_endpoint_from_qpos_rejects_empty_and_too_short_inputs() -> None:
+    solver = PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25))
+
+    with pytest.raises(ValueError, match="must contain at least one joint angle"):
+        evaluate_fk_endpoint_from_qpos(solver, ())
+
+    with pytest.raises(ValueError, match="expected at least 2, got 1"):
+        evaluate_fk_endpoint_from_qpos(solver, (0.3,), solver_joint_count=2)
+
+
+def test_evaluate_fk_endpoint_from_qpos_rejects_non_positive_solver_joint_count() -> None:
+    solver = PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25))
+
+    with pytest.raises(ValueError, match="solver_joint_count must be positive"):
+        evaluate_fk_endpoint_from_qpos(solver, (0.3, -0.2), solver_joint_count=0)

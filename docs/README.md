@@ -65,6 +65,7 @@ Do not create or use `doc/`.
 | Forward kinematics contract | `docs/contracts/forward-kinematics.md` | concrete FK baseline and zero-stub retirement |
 | Inverse kinematics contract | `docs/contracts/inverse-kinematics.md` | concrete two-link IK baseline and zero-stub retirement |
 | MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
+| Runtime forward kinematics evaluation contract | `docs/contracts/runtime-forward-kinematics-evaluation.md` | runtime/backend FK endpoint evaluation contract; not viewer SoT, transport payload, site extraction, or metrics integration |
 | Parallel work contracts | `docs/contracts/parallel-work-contracts.md` | Step 5-0 contract lock |
 | MotionCommand contract | `docs/contracts/motion-command.md` | command not state |
 | Transport payload contract | `docs/contracts/transport-payload.md` | versioned JSON-compatible payload |
