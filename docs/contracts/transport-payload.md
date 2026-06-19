@@ -90,6 +90,11 @@ R6-A-P4 freezes the handoff contract for R6-B:
   `target_position_m`, and `metadata` into a delivery payload.
 - Transport may also lift an optional `endpoint_evaluation` diagnostic object
   out of runtime metadata into the top-level payload.
+- `endpoint_evaluation` is diagnostic-only runtime/backend data. The viewer
+  may display it read-only, but it must not recompute FK, IK, qpos-derived
+  endpoint values, or error vectors from payload fields.
+- If `endpoint_evaluation` is malformed, the viewer treats it as unavailable
+  and continues rendering the rest of the payload.
 - Viewer code reads the payload contract; it does not infer new physics from
   the transport layer.
 - Viewer code may render a target marker from `target_position_m`, but it must
