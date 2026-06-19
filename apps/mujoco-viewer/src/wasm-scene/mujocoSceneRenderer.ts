@@ -10,7 +10,6 @@ import {
   Float32BufferAttribute,
   HemisphereLight,
   Mesh,
-  MeshBasicMaterial,
   MeshPhongMaterial,
   PerspectiveCamera,
   PlaneGeometry,
@@ -148,7 +147,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
   const meshGeometryCache = new Map<number, BufferGeometry>();
   const objectByGeomIndex = new Map<number, Mesh>();
-  const materialByKey = new Map<string, MeshPhongMaterial | MeshBasicMaterial>();
+  const materialByKey = new Map<string, MeshPhongMaterial>();
   const modelMeshNameById = new Map<number, string>();
 
   let mujocoApi: any;
@@ -216,7 +215,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     return geometry;
   };
 
-  const getMaterialForGeom = (geom: any): MeshPhongMaterial | MeshBasicMaterial => {
+  const getMaterialForGeom = (geom: any): MeshPhongMaterial => {
     const bodyId = Number(geom.bodyid);
     const bodyName =
       Number.isFinite(bodyId) && bodyId >= 0
@@ -244,24 +243,14 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       return geom.rgba[3] < 1 ? "#93c5fd" : "#e2e8f0";
     })();
 
-    const useUnlitMaterial = styleKey === "upper_arm_link" || styleKey === "fore_arm_link";
-    const material = useUnlitMaterial
-      ? new MeshBasicMaterial({
-          color: new Color(materialColor),
-          transparent: geom.rgba[3] < 1,
-          opacity: geom.rgba[3],
-          side: DoubleSide,
-        })
-      : new MeshPhongMaterial({
-          color: new Color(materialColor),
-          transparent: geom.rgba[3] < 1,
-          opacity: geom.rgba[3],
-          side: DoubleSide,
-          shininess: 18,
-          specular: new Color("#111827"),
-          emissive: style?.emissive === undefined ? new Color("#000000") : new Color(style.emissive),
-          emissiveIntensity: style?.emissiveIntensity ?? 0,
-        });
+    const material = new MeshPhongMaterial({
+      color: new Color(materialColor),
+      transparent: geom.rgba[3] < 1,
+      opacity: geom.rgba[3],
+      side: DoubleSide,
+      shininess: 18,
+      specular: new Color("#111827"),
+    });
     materialByKey.set(cacheKey, material);
     return material;
   };

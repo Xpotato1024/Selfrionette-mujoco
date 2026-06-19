@@ -2,8 +2,6 @@ export interface BodyVisualStyle {
   color: string;
   label: string;
   detail: string;
-  emissive?: string;
-  emissiveIntensity?: number;
 }
 
 export const BODY_VISUAL_STYLES = {
@@ -12,20 +10,8 @@ export const BODY_VISUAL_STYLES = {
   base_link: { color: "#c2410c", label: "base_link", detail: "base housing" },
   sholder_link_1: { color: "#b91c1c", label: "sholder_link_1", detail: "first shoulder link" },
   sholder_link_2: { color: "#ea580c", label: "sholder_link_2", detail: "second shoulder link" },
-  upper_arm_link: {
-    color: "#22c55e",
-    label: "upper_arm_link",
-    detail: "upper arm",
-    emissive: "#22c55e",
-    emissiveIntensity: 0.16,
-  },
-  fore_arm_link: {
-    color: "#06b6d4",
-    label: "fore_arm_link",
-    detail: "forearm",
-    emissive: "#06b6d4",
-    emissiveIntensity: 0.16,
-  },
+  upper_arm_link: { color: "#15803d", label: "upper_arm_link", detail: "upper arm" },
+  fore_arm_link: { color: "#0284c7", label: "fore_arm_link", detail: "forearm" },
 } as const satisfies Record<string, BodyVisualStyle>;
 
 export const AXIS_VISUAL_STYLES = [
