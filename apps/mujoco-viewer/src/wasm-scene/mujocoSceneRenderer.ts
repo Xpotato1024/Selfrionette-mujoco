@@ -1,6 +1,5 @@
 import {
   AmbientLight,
-  AxesHelper,
   BoxGeometry,
   BufferGeometry,
   Color,
@@ -10,7 +9,9 @@ import {
   Float32BufferAttribute,
   HemisphereLight,
   CanvasTexture,
+  Group,
   Mesh,
+  MeshBasicMaterial,
   MeshPhongMaterial,
   PerspectiveCamera,
   PlaneGeometry,
@@ -92,7 +93,7 @@ function createCheckerFloorTexture(): CanvasTexture {
   const texture = new CanvasTexture(canvas);
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
-  texture.repeat.set(2.5, 2.5);
+  texture.repeat.set(3.333, 3.333);
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.generateMipmaps = false;
@@ -171,9 +172,24 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
   scene.add(new AmbientLight(0xffffff, 1.0));
   scene.add(new HemisphereLight(0xbfd7ff, 0x1e293b, 0.8));
-  const axesHelper = new AxesHelper(0.5);
-  axesHelper.position.set(0, 0, 0);
-  scene.add(axesHelper);
+  const axesGroup = new Group();
+  const axisLength = 0.6;
+  const axisRadius = 0.015;
+  const axisMaterials = [
+    new MeshBasicMaterial({ color: new Color("#ef4444") }),
+    new MeshBasicMaterial({ color: new Color("#22c55e") }),
+    new MeshBasicMaterial({ color: new Color("#3b82f6") }),
+  ];
+  const axisX = new Mesh(new CylinderGeometry(axisRadius, axisRadius, axisLength, 16), axisMaterials[0]);
+  axisX.rotation.z = Math.PI / 2;
+  axisX.position.set(axisLength / 2, 0, 0);
+  const axisY = new Mesh(new CylinderGeometry(axisRadius, axisRadius, axisLength, 16), axisMaterials[1]);
+  axisY.rotation.x = Math.PI / 2;
+  axisY.position.set(0, axisLength / 2, 0);
+  const axisZ = new Mesh(new CylinderGeometry(axisRadius, axisRadius, axisLength, 16), axisMaterials[2]);
+  axisZ.position.set(0, 0, axisLength / 2);
+  axesGroup.add(axisX, axisY, axisZ);
+  scene.add(axesGroup);
 
   const keyLight = new DirectionalLight(0xffffff, 1.8);
   keyLight.position.set(2.5, -2.5, 4.0);
@@ -582,6 +598,10 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       objectByGeomIndex.clear();
       materialByKey.clear();
       modelMeshNameById.clear();
+      axesGroup.clear();
+      for (const material of axisMaterials) {
+        material.dispose();
+      }
       floorTexture.dispose();
       floorMaterial.dispose();
       renderer.dispose();

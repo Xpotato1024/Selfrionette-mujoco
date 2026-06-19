@@ -153,6 +153,11 @@ declare module "three" {
     matrixWorldNeedsUpdate: boolean;
     castShadow: boolean;
     receiveShadow: boolean;
+    rotation: {
+      x: number;
+      y: number;
+      z: number;
+    };
     up: {
       x: number;
       y: number;
