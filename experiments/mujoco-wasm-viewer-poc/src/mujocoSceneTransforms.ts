@@ -1,4 +1,4 @@
-import { Matrix4 } from "three";
+import { Matrix4, Quaternion, Vector3 } from "three";
 
 export interface MujocoGeomLike {
   mat: ArrayLike<number>;
@@ -25,5 +25,25 @@ export function matrixFromMujocoGeom(geom: MujocoGeomLike): Matrix4 {
     0,
     1,
   );
+  return matrix;
+}
+
+export interface MujocoMeshTransformLike {
+  pos: ArrayLike<number>;
+  quat: ArrayLike<number>;
+  scale: ArrayLike<number>;
+}
+
+export function matrixFromMujocoMeshTransform(mesh: MujocoMeshTransformLike): Matrix4 {
+  const matrix = new Matrix4();
+  const position = new Vector3(Number(mesh.pos[0] ?? 0), Number(mesh.pos[1] ?? 0), Number(mesh.pos[2] ?? 0));
+  const quaternion = new Quaternion(
+    Number(mesh.quat[1] ?? 0),
+    Number(mesh.quat[2] ?? 0),
+    Number(mesh.quat[3] ?? 0),
+    Number(mesh.quat[0] ?? 1),
+  );
+  const scale = new Vector3(Number(mesh.scale[0] ?? 1), Number(mesh.scale[1] ?? 1), Number(mesh.scale[2] ?? 1));
+  matrix.compose(position, quaternion, scale);
   return matrix;
 }

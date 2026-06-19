@@ -6,7 +6,7 @@
     "dev": "vite --config vite.config.ts",
     "build": "vite build --config vite.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --import tsx --test src/qposSync.test.ts"
+    "test": "node --import tsx --test src/qposSync.test.ts src/mujocoSceneTransforms.test.ts"
   },
   "dependencies": {
     "@mujoco/mujoco": "^3.9.0",

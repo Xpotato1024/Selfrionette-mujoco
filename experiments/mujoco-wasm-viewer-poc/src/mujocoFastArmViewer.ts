@@ -4,6 +4,8 @@ import {
   AmbientLight,
   BoxGeometry,
   BufferGeometry,
+  AxesHelper,
+  Float32BufferAttribute,
   Color,
   CylinderGeometry,
   DoubleSide,
@@ -16,10 +18,11 @@ import {
   Scene,
   SphereGeometry,
   SRGBColorSpace,
+  Uint32BufferAttribute,
+  type Material,
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { matrixFromMujocoGeom } from "./mujocoSceneTransforms.js";
 import { formatQpos, getCurrentFrame, loadQposFixtureFromUrl, stepNextFrameIndex, stepPreviousFrameIndex } from "./qposSync.js";
 import type { QposFixture } from "./qposFrameTypes.js";
@@ -35,6 +38,7 @@ interface ShellElements {
   status: HTMLPreElement;
   modelList: HTMLUListElement;
   playbackList: HTMLUListElement;
+  legendList: HTMLDivElement;
   statusBadge: HTMLDivElement;
   loadFixtureButton: HTMLButtonElement;
   playButton: HTMLButtonElement;
@@ -49,7 +53,6 @@ const DEFAULT_HEIGHT = 800;
 const MAX_GEOMS = 2 ** 15;
 const PLAYBACK_INTERVAL_MS = 180;
 const SOURCE_HOME = "home keyframe";
-
 const FAST_ARM_MESH_URLS = new Map<string, string>([
   ["BaseLink", "/assets/mujoco/fast_arm/meshes/BaseLink.stl"],
   ["SholderLink1", "/assets/mujoco/fast_arm/meshes/SholderLink1.stl"],
@@ -57,6 +60,21 @@ const FAST_ARM_MESH_URLS = new Map<string, string>([
   ["UpperArmLink", "/assets/mujoco/fast_arm/meshes/UpperArmLink.stl"],
   ["ForeArmLink", "/assets/mujoco/fast_arm/meshes/ForeArmLink.stl"],
 ]);
+const BODY_VISUAL_STYLES = {
+  floor: { color: "#c7d2fe", label: "floor", detail: "ground plane" },
+  origin: { color: "#f59e0b", label: "origin", detail: "reference marker" },
+  base_link: { color: "#f59e0b", label: "base_link", detail: "base housing" },
+  sholder_link_1: { color: "#ef4444", label: "sholder_link_1", detail: "first shoulder link" },
+  sholder_link_2: { color: "#f97316", label: "sholder_link_2", detail: "second shoulder link" },
+  upper_arm_link: { color: "#22c55e", label: "upper_arm_link", detail: "upper arm" },
+  fore_arm_link: { color: "#38bdf8", label: "fore_arm_link", detail: "forearm" },
+} as const;
+
+const AXIS_VISUAL_STYLES = [
+  { label: "axes X", color: "#ef4444", detail: "positive X" },
+  { label: "axes Y", color: "#22c55e", detail: "positive Y" },
+  { label: "axes Z", color: "#3b82f6", detail: "positive Z" },
+] as const;
 
 function renderShell(mount: HTMLElement): ShellElements {
   mount.innerHTML = `
@@ -73,6 +91,13 @@ function renderShell(mount: HTMLElement): ShellElements {
       .poc-panel h2 { margin: 0 0 12px; font-size: 16px; color: #f8fafc; }
       .poc-canvas-panel { min-height: 760px; }
       #viewer-canvas { width: 100%; height: 760px; display: block; border-radius: 12px; background: radial-gradient(circle at top, #10213f, #050816 70%); }
+      .poc-legend { display: grid; gap: 10px; margin-top: 14px; }
+      .poc-legend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+      .poc-legend-item { display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .poc-legend-swatch { width: 12px; height: 12px; border-radius: 999px; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.65), 0 0 0 2px rgba(148, 163, 184, 0.12); }
+      .poc-legend-label { display: grid; gap: 2px; min-width: 0; }
+      .poc-legend-label strong { color: #f8fafc; font-size: 13px; font-weight: 600; }
+      .poc-legend-label span { color: #94a3b8; font-size: 11px; line-height: 1.3; }
       .poc-log { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
       .poc-log li { display: flex; justify-content: space-between; gap: 12px; }
       .poc-log strong { color: #f8fafc; font-weight: 600; }
@@ -120,6 +145,10 @@ function renderShell(mount: HTMLElement): ShellElements {
         </section>
         <section class="poc-panel poc-canvas-panel">
           <canvas id="viewer-canvas"></canvas>
+          <div class="poc-legend">
+            <h2>Legend</h2>
+            <div id="legend-list" class="poc-legend-grid"></div>
+          </div>
         </section>
       </div>
       <section class="poc-panel">
@@ -133,6 +162,7 @@ function renderShell(mount: HTMLElement): ShellElements {
   const status = mount.querySelector<HTMLPreElement>("#status-text");
   const modelList = mount.querySelector<HTMLUListElement>("#model-list");
   const playbackList = mount.querySelector<HTMLUListElement>("#playback-list");
+  const legendList = mount.querySelector<HTMLDivElement>("#legend-list");
   const statusBadge = mount.querySelector<HTMLDivElement>("#status-badge");
   const loadFixtureButton = mount.querySelector<HTMLButtonElement>("#load-fixture-button");
   const playButton = mount.querySelector<HTMLButtonElement>("#play-button");
@@ -146,6 +176,7 @@ function renderShell(mount: HTMLElement): ShellElements {
     status === null ||
     modelList === null ||
     playbackList === null ||
+    legendList === null ||
     statusBadge === null ||
     loadFixtureButton === null ||
     playButton === null ||
@@ -162,6 +193,7 @@ function renderShell(mount: HTMLElement): ShellElements {
     status,
     modelList,
     playbackList,
+    legendList,
     statusBadge,
     loadFixtureButton,
     playButton,
@@ -195,6 +227,36 @@ function renderKeyValueList(log: HTMLUListElement, entries: Array<[string, strin
 
 function formatMetadata(metadata: Record<string, unknown>): string {
   return JSON.stringify(metadata, null, 2);
+}
+
+function renderLegend(log: HTMLElement): void {
+  log.replaceChildren();
+  const legendItems = [
+    BODY_VISUAL_STYLES.floor,
+    BODY_VISUAL_STYLES.origin,
+    BODY_VISUAL_STYLES.base_link,
+    BODY_VISUAL_STYLES.sholder_link_1,
+    BODY_VISUAL_STYLES.sholder_link_2,
+    BODY_VISUAL_STYLES.upper_arm_link,
+    BODY_VISUAL_STYLES.fore_arm_link,
+    ...AXIS_VISUAL_STYLES,
+  ] as const;
+  legendItems.forEach(({ label, color, detail }) => {
+    const item = document.createElement("div");
+    item.className = "poc-legend-item";
+    const swatch = document.createElement("span");
+    swatch.className = "poc-legend-swatch";
+    swatch.style.background = color;
+    const text = document.createElement("div");
+    text.className = "poc-legend-label";
+    const strong = document.createElement("strong");
+    strong.textContent = label;
+    const span = document.createElement("span");
+    span.textContent = detail;
+    text.append(strong, span);
+    item.append(swatch, text);
+    log.appendChild(item);
+  });
 }
 
 function buildPrimitiveGeometry(type: number, size: ArrayLike<number>): BufferGeometry {
@@ -250,6 +312,9 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
 
   scene.add(new AmbientLight(0xffffff, 1.0));
   scene.add(new HemisphereLight(0xbfd7ff, 0x1e293b, 0.8));
+  const axesHelper = new AxesHelper(0.5);
+  axesHelper.position.set(0, 0, 0.02);
+  scene.add(axesHelper);
 
   const keyLight = new DirectionalLight(0xffffff, 1.8);
   keyLight.position.set(2.5, -2.5, 4.0);
@@ -259,9 +324,9 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
   fillLight.position.set(-2.0, 1.5, 2.0);
   scene.add(fillLight);
 
-  const meshGeometryCache = new Map<string, BufferGeometry>();
+  const meshGeometryCache = new Map<number, BufferGeometry>();
   const objectByGeomIndex = new Map<number, Mesh>();
-  const stlLoader = new STLLoader();
+  const materialByKey = new Map<string, Material>();
 
   let mujocoApi: any;
   let model: any;
@@ -279,15 +344,94 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
   let playbackTimer: number | null = null;
   let hasInitializedModel = false;
 
-  async function loadStl(url: string): Promise<BufferGeometry> {
-    const cached = meshGeometryCache.get(url);
+  function buildCompiledMeshGeometry(meshId: number): BufferGeometry {
+    const cached = meshGeometryCache.get(meshId);
     if (cached !== undefined) {
       return cached;
     }
 
-    const geometry = await stlLoader.loadAsync(url);
-    meshGeometryCache.set(url, geometry);
+    const vertexStart = model.mesh_vertadr[meshId];
+    const vertexCount = model.mesh_vertnum[meshId];
+    const faceStart = model.mesh_faceadr[meshId];
+    const faceCount = model.mesh_facenum[meshId];
+    if (vertexStart === undefined || vertexCount === undefined || faceStart === undefined || faceCount === undefined) {
+      throw new Error(`missing compiled mesh data for mesh ${meshId}`);
+    }
+
+    const positionAttribute = new Float32Array(vertexCount * 3);
+    for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1) {
+      const sourceIndex = (vertexStart + vertexIndex) * 3;
+      const targetIndex = vertexIndex * 3;
+      positionAttribute[targetIndex] = Number(model.mesh_vert[sourceIndex] ?? 0);
+      positionAttribute[targetIndex + 1] = Number(model.mesh_vert[sourceIndex + 1] ?? 0);
+      positionAttribute[targetIndex + 2] = Number(model.mesh_vert[sourceIndex + 2] ?? 0);
+    }
+
+    const indexAttribute = new Uint32Array(faceCount * 3);
+    for (let faceIndex = 0; faceIndex < faceCount; faceIndex += 1) {
+      const sourceIndex = (faceStart + faceIndex) * 3;
+      const targetIndex = faceIndex * 3;
+      indexAttribute[targetIndex] = Number(model.mesh_face[sourceIndex] ?? 0);
+      indexAttribute[targetIndex + 1] = Number(model.mesh_face[sourceIndex + 1] ?? 0);
+      indexAttribute[targetIndex + 2] = Number(model.mesh_face[sourceIndex + 2] ?? 0);
+    }
+
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positionAttribute, 3));
+    geometry.setIndex(new Uint32BufferAttribute(indexAttribute, 1));
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    meshGeometryCache.set(meshId, geometry);
     return geometry;
+  }
+
+  function getMaterialForGeom(geom: any): MeshPhongMaterial {
+    const body = model.body(geom.bodyid);
+    const bodyName = body?.name === undefined ? "" : String(body.name);
+    const geomName = geom.name === undefined ? "" : String(geom.name);
+    const meshName = geom.dataid >= 0 && geom.dataid < model.nmesh ? String(model.mesh(geom.dataid).name ?? "") : "";
+    const cacheKey = `${bodyName}:${geomName}:${meshName}:${geom.type}`;
+    const cached = materialByKey.get(cacheKey);
+    if (cached !== undefined) {
+      return cached as MeshPhongMaterial;
+    }
+
+    const materialColor = (() => {
+      if (bodyName === "world" || geomName === "floor" || geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
+        return BODY_VISUAL_STYLES.floor.color;
+      }
+      if (bodyName === "origin") {
+        return BODY_VISUAL_STYLES.origin.color;
+      }
+      if (bodyName === "base_link") {
+        return BODY_VISUAL_STYLES.base_link.color;
+      }
+      if (bodyName === "sholder_link_1") {
+        return BODY_VISUAL_STYLES.sholder_link_1.color;
+      }
+      if (bodyName === "sholder_link_2") {
+        return BODY_VISUAL_STYLES.sholder_link_2.color;
+      }
+      if (bodyName === "upper_arm_link") {
+        return BODY_VISUAL_STYLES.upper_arm_link.color;
+      }
+      if (bodyName === "fore_arm_link") {
+        return BODY_VISUAL_STYLES.fore_arm_link.color;
+      }
+      return geom.rgba[3] < 1 ? "#93c5fd" : "#e2e8f0";
+    })();
+
+    const material = new MeshPhongMaterial({
+      color: new Color(materialColor),
+      transparent: geom.rgba[3] < 1,
+      opacity: geom.rgba[3],
+      side: DoubleSide,
+      shininess: 70,
+      specular: new Color("#94a3b8"),
+    });
+    materialByKey.set(cacheKey, material);
+    return material;
   }
 
   async function syncSceneFromCurrentData(): Promise<void> {
@@ -321,8 +465,7 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
           const sourceGeom = geom.objtype === mujocoApi.mjtObj.mjOBJ_GEOM.value ? model.geom(geom.objid) : null;
           const meshId = sourceGeom === null ? geom.dataid : sourceGeom.dataid;
           const meshName = meshNameById.get(meshId);
-          const meshUrl = meshName === undefined ? null : FAST_ARM_MESH_URLS.get(meshName);
-          if (meshUrl === undefined || meshUrl === null) {
+          if (meshName === undefined) {
             const sourceGeomName = sourceGeom === null ? null : sourceGeom.name;
             missingMeshReferences.push(
               `${geomIndex}:${geom.dataid}${meshName === undefined ? "" : `(${meshName})`}` +
@@ -330,18 +473,13 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
             );
             geometry = buildPrimitiveGeometry(6, geom.size);
           } else {
-            geometry = await loadStl(meshUrl);
+            geometry = buildCompiledMeshGeometry(meshId);
           }
         } else {
           geometry = buildPrimitiveGeometry(geom.type, geom.size);
         }
 
-        const material = new MeshPhongMaterial({
-          color: new Color(geom.rgba[0], geom.rgba[1], geom.rgba[2]),
-          transparent: geom.rgba[3] < 1,
-          opacity: geom.rgba[3],
-          side: DoubleSide,
-        });
+        const material = getMaterialForGeom(geom);
 
         mesh = new Mesh(geometry, material);
         mesh.castShadow = true;
@@ -635,6 +773,7 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
       mjvCamera = new mujocoApi.MjvCamera();
 
       updateStaticModelInfo();
+      renderLegend(shell.legendList);
       await syncSceneFromCurrentData();
       playbackStatus = "ready";
       hasInitializedModel = true;
