@@ -92,7 +92,7 @@ function createCheckerFloorTexture(): CanvasTexture {
   const texture = new CanvasTexture(canvas);
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
-  texture.repeat.set(15, 15);
+  texture.repeat.set(2.5, 2.5);
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.generateMipmaps = false;
