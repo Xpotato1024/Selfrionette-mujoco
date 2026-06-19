@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import ast
+import asyncio
 import json
 from pathlib import Path
 
@@ -15,7 +15,7 @@ from selfrionette.kinematics.stubs import ZeroInverseKinematicsSolver
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.stubs import NoOpMuJoCoSimulator
-from selfrionette.runtime import build_concrete_mujoco_pipeline, run_replay_mujoco_dry_run, run_replay_mujoco_websocket_publisher
+from selfrionette.runtime import EndpointEvaluationStatePublisher, build_concrete_mujoco_pipeline, run_replay_mujoco_dry_run, run_replay_mujoco_websocket_publisher
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState
 from selfrionette.transport import WebSocketStatePublisher
 from selfrionette.transport.stubs import NoOpStatePublisher
@@ -146,7 +146,8 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_components() -> None:
     assert not isinstance(pipeline.motion_generator._ik_solver, ZeroInverseKinematicsSolver)
     assert isinstance(pipeline.simulator, HeadlessMuJoCoSimulator)
     assert not isinstance(pipeline.simulator, NoOpMuJoCoSimulator)
-    assert pipeline.publisher is publisher
+    assert isinstance(pipeline.publisher, EndpointEvaluationStatePublisher)
+    assert pipeline.publisher.publisher is publisher
     assert not isinstance(pipeline.publisher, NoOpStatePublisher)
 
 
