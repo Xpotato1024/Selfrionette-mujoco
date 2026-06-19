@@ -1,11 +1,11 @@
 export const BODY_VISUAL_STYLES = {
   floor: { color: "#c7d2fe", label: "floor", detail: "ground plane" },
   origin: { color: "#f59e0b", label: "origin", detail: "reference marker" },
-  base_link: { color: "#f59e0b", label: "base_link", detail: "base housing" },
-  sholder_link_1: { color: "#ef4444", label: "sholder_link_1", detail: "first shoulder link" },
-  sholder_link_2: { color: "#f97316", label: "sholder_link_2", detail: "second shoulder link" },
-  upper_arm_link: { color: "#22c55e", label: "upper_arm_link", detail: "upper arm" },
-  fore_arm_link: { color: "#38bdf8", label: "fore_arm_link", detail: "forearm" },
+  base_link: { color: "#c2410c", label: "base_link", detail: "base housing" },
+  sholder_link_1: { color: "#b91c1c", label: "sholder_link_1", detail: "first shoulder link" },
+  sholder_link_2: { color: "#ea580c", label: "sholder_link_2", detail: "second shoulder link" },
+  upper_arm_link: { color: "#15803d", label: "upper_arm_link", detail: "upper arm" },
+  fore_arm_link: { color: "#0284c7", label: "fore_arm_link", detail: "forearm" },
 } as const;
 
 export const AXIS_VISUAL_STYLES = [

@@ -108,11 +108,11 @@ export function ProductViewerApp() {
               <dd>{state.modelPath}</dd>
             </div>
             <div>
-              <dt>Fixture path</dt>
+              <dt>Debug fixture path</dt>
               <dd>{state.fixturePath}</dd>
             </div>
             <div>
-              <dt>Source label</dt>
+              <dt>Pose source</dt>
               <dd>{state.sourceLabel}</dd>
             </div>
             <div>

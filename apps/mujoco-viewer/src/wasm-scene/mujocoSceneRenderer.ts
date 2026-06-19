@@ -25,12 +25,9 @@ import { createViewerWebSocketClient, type ViewerWebSocketClient } from "../tran
 import { loadMujocoWasm } from "./mujocoWasmLoader.js";
 import { matrixFromMujocoGeom } from "./mujocoSceneTransforms.js";
 import {
-  DEFAULT_QPOS_FIXTURE_URL,
   ensureQposLength,
   formatQpos,
-  loadQposFixtureFromUrl,
   resolveTransportQpos,
-  type QposFixture,
 } from "./mujocoQposSync.js";
 import { AXIS_VISUAL_STYLES, BODY_VISUAL_STYLES } from "./visualStyles.js";
 import {
@@ -161,13 +158,11 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   let mjvCamera: any;
   let websocketClient: ViewerWebSocketClient | null = null;
   let latestPayload: TransportPayloadV0 | null = null;
-  let loadedFixture: QposFixture | null = null;
-  let homeQpos: number[] = [];
+  let startupQpos: number[] = [];
   let hasLoaded = false;
   let disposed = false;
   let frameHandle: number | null = null;
 
-  const fixturePath = options.fixturePath ?? DEFAULT_QPOS_FIXTURE_URL;
   const websocketUrl =
     options.websocketUrl === undefined || options.websocketUrl === null || options.websocketUrl.trim() === ""
       ? null
@@ -263,8 +258,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       transparent: geom.rgba[3] < 1,
       opacity: geom.rgba[3],
       side: DoubleSide,
-      shininess: 70,
-      specular: new Color("#94a3b8"),
+      shininess: 18,
+      specular: new Color("#111827"),
     });
     materialByKey.set(cacheKey, material);
     return material;
@@ -329,23 +324,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     });
   };
 
-  const applyHomePose = (): void => {
-    applyModelPose(homeQpos, "home keyframe", null, null);
-  };
-
-  const applyFixtureFallback = (): void => {
-    if (loadedFixture === null) {
-      applyHomePose();
-      return;
-    }
-
-    const frame = loadedFixture.frames[0];
-    if (frame === undefined) {
-      applyHomePose();
-      return;
-    }
-
-    applyModelPose(frame.qpos, "fixture fallback", frame.frame_index, frame.t_s);
+  const applyStartupPose = (): void => {
+    applyModelPose(startupQpos, "compiled model default qpos", null, null);
   };
 
   const applyTransportPayload = (payload: TransportPayloadV0): void => {
@@ -378,7 +358,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       return;
     }
 
-    applyFixtureFallback();
+    applyStartupPose();
   };
 
   const setCanvasSize = (): void => {
@@ -469,6 +449,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
       model = mujocoApi.MjModel.from_xml_string(xml, vfs);
       data = new mujocoApi.MjData(model);
+      startupQpos = Array.from(data.qpos);
       const modelStat = model.stat as any;
       const modelCenter = Array.from(modelStat.center as ArrayLike<number>);
       const modelExtent = Number(modelStat.extent);
@@ -487,29 +468,16 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
         }
       }
 
-      homeQpos = Array.from(data.qpos);
-      const homeKey = model.key("home");
-      if (homeKey !== null) {
-        homeQpos = Array.from(homeKey.qpos);
-        data.qpos.set(homeQpos);
-      }
+      data.qpos.set(startupQpos);
       mujocoApi.mj_forward(model, data);
       mjvScene = new mujocoApi.MjvScene(model, MAX_GEOMS);
       mjvOption = new mujocoApi.MjvOption();
       mjvPerturb = new mujocoApi.MjvPerturb();
       mjvCamera = new mujocoApi.MjvCamera();
 
-      loadedFixture = await loadQposFixtureFromUrl(fixturePath, model.nq).catch((error) => {
-        updateStatus({
-          qposStatus: "unavailable",
-          qposError: error instanceof Error ? error.message : "failed to load qpos fixture",
-        });
-        return null;
-      });
-
       updateStatus({
         modelPath: options.modelPath,
-        fixturePath,
+        fixturePath: options.fixturePath ?? "/fixtures/fast_arm_sweep_x_qpos.json",
         modelNq: model.nq,
         modelNv: model.nv,
         modelNgeom: model.ngeom,
@@ -552,7 +520,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
           statusText: [
             `renderer mode: wasm-scene`,
             `model path: ${options.modelPath}`,
-            `fixture path: ${fixturePath}`,
+            `fixture path: ${options.fixturePath ?? "/fixtures/fast_arm_sweep_x_qpos.json"}`,
             `error: ${message}`,
           ].join("\n"),
         });
