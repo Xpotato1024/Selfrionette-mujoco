@@ -108,7 +108,7 @@ export function ProductViewerApp() {
               <dd>{state.modelPath}</dd>
             </div>
             <div>
-              <dt>Debug fixture path</dt>
+              <dt>Debug fixture path (reference only)</dt>
               <dd>{state.fixturePath}</dd>
             </div>
             <div>

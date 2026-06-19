@@ -49,7 +49,8 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Vite dev server は起動後にブラウザを自動で開き、`http://127.0.0.1:5175/apps/mujoco-viewer/` を表示する。
+Vite dev server は起動後にブラウザを自動で開き、`/apps/mujoco-viewer/` を表示する。
+実際の port は Vite の表示に従う。`5175` は手元環境での一例。
 ポートが使用中なら Vite が次の空きポートを選ぶ。
 
 ## Validation
@@ -78,6 +79,6 @@ git diff --check
 
 ## Known limitations
 
-- fixture qpos は debug 用の参照としてのみ扱う
+- fixture qpos は debug 用の参照としてのみ扱い、startup では自動適用しない
 - live WebSocket qpos availability depends on publisher payloads
 - browser-side payload correction is intentionally absent

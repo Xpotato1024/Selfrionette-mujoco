@@ -10,14 +10,15 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-起動すると Vite がブラウザを自動で開き、`http://127.0.0.1:5175/apps/mujoco-viewer/` を表示します。
-`5175` は一例で、使用中のポートがあれば Vite が次の空きポートを選びます。
+起動すると Vite がブラウザを自動で開き、`/apps/mujoco-viewer/` を表示します。
+実際の port は Vite の表示に従います。`5175` は手元環境での一例です。
 
 ## 表示の正本
 
 - renderer mode: `wasm-scene`
 - initial pose source: compiled MuJoCo model default qpos
 - qpos source: WebSocket payload の `qpos` を優先
+- debug fixture path: offline / debug reference only, startup では自動適用しない
 - browser-side IK / FK / qpos recompute: disabled
 - old renderer: deleted
 
