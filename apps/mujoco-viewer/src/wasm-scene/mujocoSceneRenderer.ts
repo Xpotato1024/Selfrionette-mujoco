@@ -9,6 +9,7 @@ import {
   DirectionalLight,
   Float32BufferAttribute,
   HemisphereLight,
+  CanvasTexture,
   Mesh,
   MeshPhongMaterial,
   PerspectiveCamera,
@@ -61,6 +62,33 @@ const FAST_ARM_MESH_URLS = new Map<string, string>([
   ["UpperArmLink", "/assets/mujoco/fast_arm/meshes/UpperArmLink.stl"],
   ["ForeArmLink", "/assets/mujoco/fast_arm/meshes/ForeArmLink.stl"],
 ]);
+
+function createCheckerFloorTexture(): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  if (context === null) {
+    return new CanvasTexture(canvas);
+  }
+
+  const tiles = 16;
+  const tileSize = canvas.width / tiles;
+  context.fillStyle = "#f8fafc";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  for (let y = 0; y < tiles; y += 1) {
+    for (let x = 0; x < tiles; x += 1) {
+      if ((x + y) % 2 === 0) {
+        context.fillStyle = "#0f172a";
+      } else {
+        context.fillStyle = "#f8fafc";
+      }
+      context.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+    }
+  }
+
+  return new CanvasTexture(canvas);
+}
 
 function buildPrimitiveGeometry(type: number, size: ArrayLike<number>): BufferGeometry {
   if (type === 0) {
@@ -148,6 +176,16 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   const meshGeometryCache = new Map<number, BufferGeometry>();
   const objectByGeomIndex = new Map<number, Mesh>();
   const materialByKey = new Map<string, MeshPhongMaterial>();
+  const floorTexture = createCheckerFloorTexture();
+  const floorMaterial = new MeshPhongMaterial({
+    color: new Color("#d4d4d8"),
+    map: floorTexture,
+    transparent: false,
+    opacity: 1,
+    side: DoubleSide,
+    shininess: 0,
+    specular: new Color("#111827"),
+  });
   const modelMeshNameById = new Map<number, string>();
 
   let mujocoApi: any;
@@ -232,13 +270,13 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       return cached as MeshPhongMaterial;
     }
 
+    if (geomName === "floor" || geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
+      return floorMaterial;
+    }
+
     const styleKey = resolveBodyVisualStyleKey(bodyName, meshName, geomName);
     const style: BodyVisualStyle | null = styleKey === null ? null : (BODY_VISUAL_STYLES[styleKey] as BodyVisualStyle);
     const materialColor = (() => {
-      if (geomName === "floor" || geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
-        return BODY_VISUAL_STYLES.floor.color;
-      }
-
       if (style !== null) {
         return style.color;
       }
@@ -534,6 +572,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       objectByGeomIndex.clear();
       materialByKey.clear();
       modelMeshNameById.clear();
+      floorTexture.dispose();
+      floorMaterial.dispose();
       renderer.dispose();
     },
   };

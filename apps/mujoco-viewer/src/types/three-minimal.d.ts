@@ -35,6 +35,11 @@ declare module "three" {
     constructor(color?: unknown);
   }
 
+  export class CanvasTexture {
+    constructor(image: HTMLCanvasElement);
+    dispose(): void;
+  }
+
   export const DoubleSide: number;
   export const SRGBColorSpace: string;
 
