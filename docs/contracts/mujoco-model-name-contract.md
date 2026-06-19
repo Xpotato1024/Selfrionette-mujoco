@@ -96,3 +96,15 @@ P3 では backend snapshot 上の `tip` site と arm body chain を参照して 
 P4 では `tip` site を優先し、必要な場合のみ explicit opt-in で body fallback を使う。
 site / body 名の推定はこの issue で固定した helper を通す。
 
+## P4 site endpoint helper contract
+
+- MuJoCo site endpoint は backend / runtime の evaluation field であり、viewer SoT ではない
+- primary endpoint は model contract の `tip` site である
+- 入力は MuJoCo model / data、または backend snapshot 相当である
+- 出力の unit は meter である
+- 出力の coordinate frame は MuJoCo world / scene frame である
+- FK endpoint の solver-defined frame とは自動的に同一視しない
+- `desired_endpoint_m` / `target_position_m` とも自動的に同一視しない
+- missing site / body は `ValueError` にする
+- body fallback は `allow_body_fallback=True` のような explicit opt-in のみ許可する
+- P5 では desired / qpos / FK / site / error metrics の統合に handoff する
