@@ -72,7 +72,7 @@ function createCheckerFloorTexture(): CanvasTexture {
     return new CanvasTexture(canvas);
   }
 
-  const tiles = 16;
+  const tiles = 32;
   const tileSize = canvas.width / tiles;
   context.fillStyle = "#f8fafc";
   context.fillRect(0, 0, canvas.width, canvas.height);
