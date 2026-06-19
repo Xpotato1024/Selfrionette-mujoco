@@ -37,11 +37,22 @@ declare module "three" {
 
   export class CanvasTexture {
     constructor(image: HTMLCanvasElement);
+    magFilter: number;
+    minFilter: number;
+    generateMipmaps: boolean;
+    wrapS: number;
+    wrapT: number;
+    repeat: {
+      set(x: number, y: number): void;
+    };
+    needsUpdate: boolean;
     dispose(): void;
   }
 
   export const DoubleSide: number;
   export const SRGBColorSpace: string;
+  export const NearestFilter: number;
+  export const RepeatWrapping: number;
 
   export class BufferGeometry {
     setAttribute(name: string, attribute: BufferAttribute): this;

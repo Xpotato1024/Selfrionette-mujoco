@@ -17,6 +17,8 @@ import {
   Scene,
   SphereGeometry,
   SRGBColorSpace,
+  NearestFilter,
+  RepeatWrapping,
   Uint32BufferAttribute,
   WebGLRenderer,
 } from "three";
@@ -87,7 +89,15 @@ function createCheckerFloorTexture(): CanvasTexture {
     }
   }
 
-  return new CanvasTexture(canvas);
+  const texture = new CanvasTexture(canvas);
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+  texture.repeat.set(20, 20);
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function buildPrimitiveGeometry(type: number, size: ArrayLike<number>): BufferGeometry {
