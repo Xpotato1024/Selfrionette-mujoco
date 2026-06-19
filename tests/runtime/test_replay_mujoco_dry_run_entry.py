@@ -8,6 +8,23 @@ from selfrionette.runtime import run_replay_mujoco_dry_run
 from selfrionette.schemas import RawInputFrame
 
 
+def _assert_endpoint_evaluation(payload: dict[str, object]) -> None:
+    endpoint_evaluation = payload["endpoint_evaluation"]
+    assert isinstance(endpoint_evaluation, dict)
+    assert endpoint_evaluation["unit"] == "meter"
+    assert endpoint_evaluation["desired_endpoint_coordinate_frame"] == "command-side endpoint frame"
+    assert endpoint_evaluation["fk_endpoint_coordinate_frame"] == "solver-defined frame"
+    assert endpoint_evaluation["site_endpoint_coordinate_frame"] == "MuJoCo world / scene frame"
+    assert "diagnostic only" in endpoint_evaluation["frame_mismatch_note"]
+    assert len(endpoint_evaluation["desired_endpoint_m"]) == 3
+    assert len(endpoint_evaluation["qpos_like_joint_angles_rad"]) >= 2
+    assert len(endpoint_evaluation["fk_endpoint_m"]) == 3
+    assert len(endpoint_evaluation["site_endpoint_m"]) == 3
+    assert len(endpoint_evaluation["desired_to_fk_error_vector_m"]) == 3
+    assert len(endpoint_evaluation["desired_to_site_error_vector_m"]) == 3
+    assert len(endpoint_evaluation["fk_to_site_error_vector_m"]) == 3
+
+
 def test_run_replay_mujoco_dry_run_returns_single_payload_line() -> None:
     lines = run_replay_mujoco_dry_run(steps=1)
 
@@ -19,6 +36,7 @@ def test_run_replay_mujoco_dry_run_returns_single_payload_line() -> None:
     assert payload["time_s"] > 0.0
     assert payload["qpos"][:4] != [0.0, 0.0, 0.0, 0.0]
     assert payload["target_position_m"] is None
+    _assert_endpoint_evaluation(payload)
 
 
 def test_run_replay_mujoco_dry_run_emits_ndjson_for_multiple_steps() -> None:
@@ -74,6 +92,7 @@ def test_run_replay_mujoco_dry_run_sweep_x_preset_keeps_delta_and_feedback_separ
         assert payload["metadata"]["desired_endpoint_m"] == payload["target_position_m"]
         assert len(payload["metadata"]["target_position_m"]) == 3
         assert len(payload["qpos"]) >= 4
+        _assert_endpoint_evaluation(payload)
 
 
 def test_run_replay_mujoco_dry_run_sweep_x_preset_remains_visual_smoke_compatibility_path() -> None:
@@ -88,6 +107,7 @@ def test_run_replay_mujoco_dry_run_sweep_x_preset_remains_visual_smoke_compatibi
     assert payload["metadata"]["phase"] == "initial_hold"
     assert payload["metadata"]["desired_endpoint_m"] == payload["target_position_m"]
     assert len(payload["qpos"]) >= 4
+    _assert_endpoint_evaluation(payload)
 
 
 def test_run_replay_mujoco_dry_run_rejects_unknown_preset() -> None:
