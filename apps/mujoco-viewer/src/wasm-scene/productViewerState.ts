@@ -1,3 +1,5 @@
+import type { TransportEndpointEvaluationPayload } from "../types/transportPayload.js";
+
 export type ProductViewerConnectionStatus = "disabled" | "connecting" | "open" | "closed" | "error";
 export type ProductViewerRendererMode = "wasm-scene";
 export type ProductViewerStatus = "booting" | "loading" | "ready" | "warning" | "error";
@@ -16,6 +18,7 @@ export interface ProductViewerState {
   currentTimestampS: number | null;
   currentQpos: number[] | null;
   currentQposText: string;
+  endpointEvaluation: TransportEndpointEvaluationPayload | null;
   modelNq: number | null;
   modelNv: number | null;
   modelNgeom: number | null;
@@ -38,6 +41,7 @@ export function createInitialProductViewerState(): ProductViewerState {
     currentTimestampS: null,
     currentQpos: null,
     currentQposText: "[]",
+    endpointEvaluation: null,
     modelNq: null,
     modelNv: null,
     modelNgeom: null,
@@ -52,6 +56,7 @@ export function formatViewerStatusText(state: ProductViewerState): string {
   const currentTimestamp = state.currentTimestampS === null ? "n/a" : state.currentTimestampS.toFixed(6);
   const modelNq = state.modelNq === null ? "n/a" : String(state.modelNq);
   const qposError = state.qposError === null ? "none" : state.qposError;
+  const endpointEvaluation = state.endpointEvaluation === null ? "unavailable" : "available";
 
   return [
     `renderer mode: ${state.rendererMode}`,
@@ -64,6 +69,7 @@ export function formatViewerStatusText(state: ProductViewerState): string {
     `current timestamp_s: ${currentTimestamp}`,
     `model.nq: ${modelNq}`,
     `current qpos: ${state.currentQposText}`,
+    `endpoint evaluation: ${endpointEvaluation}`,
     `qpos error: ${qposError}`,
     "browser-side IK/FK/qpos recompute: disabled",
   ].join("\n");

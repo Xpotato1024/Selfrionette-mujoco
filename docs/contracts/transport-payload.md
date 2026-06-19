@@ -67,6 +67,15 @@ R6-J-P6 adds an optional `endpoint_evaluation` diagnostic field to payload
 v0. The field is additive, produced by the Python runtime/backend side, and
 safe for older consumers to ignore.
 
+R6-J-P7 adds a viewer-side read-only overlay for `endpoint_evaluation`:
+
+- the viewer displays the payload field as diagnostic-only presentation
+- the viewer does not recompute FK, IK, qpos-derived endpoints, or error
+  vectors
+- missing `endpoint_evaluation` remains a valid payload state
+- malformed `endpoint_evaluation` is treated as unavailable in the viewer
+- `endpoint_evaluation` is not a control truth source
+
 R6-A-P4 freezes the handoff contract for R6-B:
 
 - payload version remains `0`
@@ -90,6 +99,11 @@ R6-A-P4 freezes the handoff contract for R6-B:
   `target_position_m`, and `metadata` into a delivery payload.
 - Transport may also lift an optional `endpoint_evaluation` diagnostic object
   out of runtime metadata into the top-level payload.
+- `endpoint_evaluation` is diagnostic-only runtime/backend data. The viewer
+  may display it read-only, but it must not recompute FK, IK, qpos-derived
+  endpoint values, or error vectors from payload fields.
+- If `endpoint_evaluation` is malformed, the viewer treats it as unavailable
+  and continues rendering the rest of the payload.
 - Viewer code reads the payload contract; it does not infer new physics from
   the transport layer.
 - Viewer code may render a target marker from `target_position_m`, but it must
@@ -123,6 +137,9 @@ R6-A-P4 freezes the handoff contract for R6-B:
   or browser scene mutation path.
 - `endpoint_evaluation` is optional and additive. Missing or invalid
   evaluation data leaves the payload valid and omits the field.
+- viewer P7 treats `endpoint_evaluation` as a read-only diagnostic overlay and
+  does not rebuild FK, IK, qpos-derived endpoints, or error vectors from the
+  browser side.
 
 ## v0 Shape
 
