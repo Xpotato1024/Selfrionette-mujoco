@@ -6,6 +6,7 @@ canonical_for:
   - MuJoCoState contract
 related:
   - docs/contracts/target-marker-desired-endpoint.md
+  - docs/contracts/mujoco-model-name-contract.md
   - docs/architecture/data-flow.md
   - docs/contracts/parallel-work-contracts.md
 ---
@@ -35,14 +36,15 @@ a controller state, transport state, or viewer state.
 
 - Position units are meters.
 - Quaternions are stored in `wxyz` order.
-- Body and site names come from the MuJoCo model contract.
+- Body and site names come from `docs/contracts/mujoco-model-name-contract.md`.
 - Viewer code must treat these transforms as read-only inputs.
 - Viewer code may surface `target_position_m` as a target marker, but it must
   not reinterpret it as FK, IK, qpos pose recompute, or physics state.
 
 ## Notes
 
-- `base_link` and `tip` are canonical model names for the fast arm assets.
+- `base_link`, `fore_arm_link`, and `tip` are canonical model names for the
+  fast arm assets.
 - `frame_index` increments once per backend step.
 - Step 5-D uses `mj_step` in the backend before building the next snapshot.
 - The backend keeps the pending command until a later `apply_command()`

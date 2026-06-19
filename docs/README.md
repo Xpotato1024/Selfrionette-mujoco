@@ -52,6 +52,7 @@ Do not create or use `doc/`.
 | R6-G-P1 startup path audit | `docs/operations/r6-g-p1-startup-path-audit.md` | backend / viewer startup path inventory and README handoff |
 | R6-E completion audit | `docs/operations/r6-e-completion-audit.md` | Phase E completion audit と old Selfrionette Webview parity handoff |
 | Target marker / desired endpoint contract | `docs/contracts/target-marker-desired-endpoint.md` | runtime target intent and viewer-visible target marker boundary for Phase E |
+| MuJoCo model name contract | `docs/contracts/mujoco-model-name-contract.md` | fast_arm body / site name contract, units, frame, and missing-name semantics |
 | Phase C completion audit | `docs/operations/r6-c-completion-audit.md` | Python publisher / browser viewer live skeleton completion audit |
 | R6-F-P5 old Web View reference audit | `docs/operations/r6-f-p5-old-web-view-reference-audit.md` | old Web View の visual reference audit と boundary freeze |
 | Viewer browser runtime entry | `docs/architecture/data-flow.md` | browser mount entry for payload v0 handoff; R6-B-P2 adds the WebSocket client skeleton; R6-B-P3 connects received payloads to marker rendering; R6-C-P2 adds endpoint configuration and connection status visibility; R6-D-P1 adds the Three.js scene object registry skeleton; R6-D-P2 applies payload marker positions to Three.js objects; R6-B-P4 audits and freezes the completed Phase B handoff |

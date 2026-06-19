@@ -47,7 +47,10 @@ stub を concrete solver に置換する前に、`JointCommand` / `MotionCommand
 - viewer は transport / backend の payload を受け取って描画するだけである。
 - `target_position_m` は viewer-visible feedback field と command target の
   境界を区別するための語である。
-- MuJoCo site / body name contract は P2 へ handoff する。
+- MuJoCo site / body name contract は
+  `docs/contracts/mujoco-model-name-contract.md` に固定済みである。
+- P3 FK runtime evaluation と P4 MuJoCo site endpoint extraction は、この
+  contract を参照する。
 
 ## Solver interfaces
 

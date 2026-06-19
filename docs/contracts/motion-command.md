@@ -43,8 +43,9 @@ destructively.
   and falls back to `target_position_m` only for backward compatibility.
 - `ProgrammedTargetInputSource` may carry both `target_position_m` and
   `desired_endpoint_m`; they can differ on the same frame.
-- The MuJoCo site / body name contract stays for the next handoff and is not
-  implemented in this issue.
+- The MuJoCo site / body name contract is fixed in
+  `docs/contracts/mujoco-model-name-contract.md` and handed off to P3 / P4
+  runtime evaluation and endpoint extraction.
 
 ## Rules
 

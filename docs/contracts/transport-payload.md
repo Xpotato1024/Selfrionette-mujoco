@@ -7,6 +7,7 @@ canonical_for:
 related:
   - docs/contracts/target-marker-desired-endpoint.md
   - docs/contracts/mujoco-state.md
+  - docs/contracts/mujoco-model-name-contract.md
   - docs/contracts/parallel-work-contracts.md
 ---
 

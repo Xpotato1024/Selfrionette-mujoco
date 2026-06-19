@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from selfrionette.mujoco_backend.command_adapter import motion_command_to_qpos_command
+from selfrionette.mujoco_backend.model_contract import validate_fast_arm_model_name_contract
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
 from selfrionette.mujoco_backend.model_loader import default_fast_arm_scene_path, load_mujoco_model
 from selfrionette.mujoco_backend.snapshot import snapshot_mujoco_state
@@ -32,6 +33,8 @@ class HeadlessMuJoCoSimulator:
     @classmethod
     def from_model_path(cls, model_path: str | Path) -> "HeadlessMuJoCoSimulator":
         bundle = load_mujoco_model(model_path)
+        if bundle.model_path == default_fast_arm_scene_path().resolve():
+            validate_fast_arm_model_name_contract(bundle.model)
         return cls(model=bundle.model, data=bundle.data, model_path=bundle.model_path)
 
     @classmethod
