@@ -95,6 +95,16 @@ def _assert_json_values_are_finite(value: object) -> None:
     raise AssertionError(f"unexpected payload value type: {type(value)!r}")
 
 
+def _assert_endpoint_evaluation(payload: dict[str, object]) -> None:
+    endpoint_evaluation = payload["endpoint_evaluation"]
+    assert isinstance(endpoint_evaluation, dict)
+    assert endpoint_evaluation["unit"] == "meter"
+    assert len(endpoint_evaluation["desired_endpoint_m"]) == 3
+    assert len(endpoint_evaluation["qpos_like_joint_angles_rad"]) >= 2
+    assert len(endpoint_evaluation["fk_endpoint_m"]) == 3
+    assert len(endpoint_evaluation["site_endpoint_m"]) == 3
+
+
 def test_replay_mujoco_websocket_publisher_sends_payload_v0_frames() -> None:
     payloads = _collect_payloads(steps=1)
 
@@ -111,8 +121,10 @@ def test_replay_mujoco_websocket_publisher_sends_payload_v0_frames() -> None:
         "bodies",
         "sites",
         "target_position_m",
+        "endpoint_evaluation",
         "metadata",
     }
+    _assert_endpoint_evaluation(payload)
 
 
 def test_replay_mujoco_websocket_publisher_increments_frame_index_for_multiple_steps() -> None:
@@ -161,6 +173,7 @@ def test_replay_mujoco_websocket_publisher_sweep_x_keeps_metadata_and_finishes_c
     assert [payload["metadata"]["phase"] for payload in payloads] == ["initial_hold", "initial_hold"]
     assert [payload["metadata"]["preset"] for payload in payloads] == ["sweep_x", "sweep_x"]
     assert payloads[0]["metadata"]["desired_endpoint_m"] == payloads[0]["target_position_m"]
+    _assert_endpoint_evaluation(payloads[0])
 
 
 def test_replay_mujoco_websocket_publisher_sweep_x_payload_stays_finite_for_about_120_frames() -> None:
@@ -172,6 +185,7 @@ def test_replay_mujoco_websocket_publisher_sweep_x_payload_stays_finite_for_abou
         _assert_json_values_are_finite(payload["qvel"])
         _assert_json_values_are_finite(payload["target_position_m"])
         _assert_json_values_are_finite(payload["metadata"])
+        _assert_endpoint_evaluation(payload)
 
 
 @pytest.mark.parametrize(
