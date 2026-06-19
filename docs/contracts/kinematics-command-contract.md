@@ -42,6 +42,21 @@ stub を concrete solver に置換する前に、`JointCommand` / `MotionCommand
 - viewer は transport / backend の payload を受け取って描画するだけである。
 - `target_position_m` は viewer-visible feedback field と command target の境界を区別するための語である。
 
+## R6-J-P1 vocabulary lock
+
+- `desired endpoint` is the command-side endpoint term.
+- `MotionCommand.target` is the target-side command bucket. It is not the
+  qpos boundary.
+- `MotionCommand.joint` is the qpos command boundary.
+- `target_position_m` is viewer-visible feedback or compatibility metadata.
+  It is not automatically the command-side desired endpoint.
+- Programmed target input paths may carry both `target_position_m` and
+  `desired_endpoint_m`; the two fields can differ on the same frame.
+- `TargetToJointMotionGenerator` prefers `desired_endpoint_m` and falls back
+  to `target_position_m` only for backward compatibility.
+- The MuJoCo site / body name contract is a later handoff and stays out of
+  scope here.
+
 ## Solver interfaces
 
 Concrete IK baseline は `docs/contracts/inverse-kinematics.md` に固定する。
@@ -74,7 +89,7 @@ Concrete IK baseline は `docs/contracts/inverse-kinematics.md` に固定する�
 - `MotionCommand.target` は target-side command / feedback boundary である。
 - `MotionCommand.target` と `MotionCommand.joint` は混同しない。
 
-## target_position_m
+## target_position_m (legacy baseline)
 
 `target_position_m` は command target と viewer-visible feedback field の
 境界を区別する。
@@ -82,6 +97,17 @@ Concrete IK baseline は `docs/contracts/inverse-kinematics.md` に固定する�
 - viewer が `target_position_m` を解釈して FK / IK / qpos を再計算しない。
 - `target_position_m` は command source of truth ではない。
 - `target_position_m` は viewer-visible feedback として扱う。
+
+## target_position_m
+
+`target_position_m` 縺ｯ command target 縺ｨ viewer-visible feedback field 縺ｮ
+蠅・阜繧貞玄蛻･縺吶ｋ縲・
+- viewer 縺・`target_position_m` 繧定ｧ｣驥医＠縺ｦ FK / IK / qpos 繧貞・險育ｮ励＠縺ｪ縺・・
+- `target_position_m` 縺ｯ command source of truth 縺ｧ縺ｯ縺ｪ縺・・
+- `target_position_m` 縺ｯ viewer-visible feedback 縺ｨ縺励※謇ｱ縺・・
+- programmed target input では `desired_endpoint_m` が command-side の
+  endpoint で、`target_position_m` は trajectory sample / compatibility
+  field として残る場合がある。
 
 ## target_delta_m
 
@@ -164,8 +190,8 @@ runtime default が zero / no-op stub にならないことを test する。
 ## P5 runtime notes
 
 - `build_concrete_mujoco_pipeline()` is the explicit concrete path
-- `TargetToJointMotionGenerator` resolves `target_position_m` through
-  `PlanarTwoLinkInverseKinematicsSolver`
+- `TargetToJointMotionGenerator` resolves `desired_endpoint_m` first and falls
+  back to `target_position_m` through `PlanarTwoLinkInverseKinematicsSolver`
 - `MotionCommand.joint` is padded to the backend qpos contract in runtime
 - `build_noop_pipeline()` stays as an explicit placeholder helper
 - runtime default does not return to zero / no-op stub

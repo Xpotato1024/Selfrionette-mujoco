@@ -52,6 +52,11 @@ here instead of restating field lists.
 - `InputIntent.joint_delta_rad` is intentionally not normalized into a joint
   command in Step 5-F because Step 5-D already fixed joint commands as direct
   qpos reflection at the backend boundary.
+- `desired_endpoint_m` is the command-side endpoint term used by the
+  concrete programmed-target path; `target_position_m` remains compatibility /
+  viewer feedback metadata.
+- `MotionCommand.target` is the target-side command bucket and is not the qpos
+  boundary.
 - `MotionCommand.joint` is the qpos command boundary input, not viewer
   feedback.
 - `MuJoCoState.target_position_m` is viewer-visible feedback, not a command

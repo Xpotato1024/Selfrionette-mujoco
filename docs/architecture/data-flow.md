@@ -28,8 +28,11 @@ InputSource
 
 `MotionCommand.joint` is the qpos command boundary input that crosses from
 motion into the backend. `MuJoCoState.target_position_m` stays on the
-viewer-visible feedback side of the boundary. The viewer receives payloads for
-rendering and observation only; it does not recompute FK, IK, or qpos.
+viewer-visible feedback side of the boundary. For programmed target input
+paths, `desired_endpoint_m` is the command-side endpoint term, while
+`target_position_m` may remain as compatibility metadata or viewer feedback.
+The viewer receives payloads for rendering and observation only; it does not
+recompute FK, IK, or qpos.
 
 Data flow and import dependency are different things. Runtime is the only
 composition root allowed to connect multiple layers.
@@ -59,7 +62,9 @@ InputIntent
 have motion semantics yet. In this issue, `target_delta_m` may become
 `TargetCommand(delta_m=...)`, but `joint_delta_rad` is not threaded into a
 joint command because Step 5-D already treats joint commands as direct qpos
-reflection at the backend boundary.
+reflection at the backend boundary. When a target endpoint is available, the
+motion layer prefers `desired_endpoint_m` and treats `target_position_m` as a
+compatibility / feedback field.
 
 R6-A-P1 connects the replay slice through motion to the real headless MuJoCo
 backend:
@@ -369,9 +374,10 @@ ReplayInputSource
   -> transport payload
 ```
 
-The concrete path keeps `target_position_m` as runtime / command-side input
-metadata, keeps `MotionCommand.target` separate from the qpos boundary, and
-does not move FK / IK / qpos recompute into the viewer.
+The concrete path keeps `desired_endpoint_m` as the command-side target
+metadata, keeps `target_position_m` as compatibility / feedback metadata,
+keeps `MotionCommand.target` separate from the qpos boundary, and does not
+move FK / IK / qpos recompute into the viewer.
 - R6-F-P4 では DoF ring display を payload body transform の
   `position_m` / `quaternion_wxyz` に従う read-only overlay として追加する。
   `logicalJointLabel` と `label` は provisional であり、

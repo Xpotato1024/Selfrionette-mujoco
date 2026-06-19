@@ -31,6 +31,21 @@ The current schema carries:
 This issue does not add a new command family or expand the schema
 destructively.
 
+## R6-J-P1 vocabulary lock
+
+- `desired endpoint` is the command-side endpoint term.
+- `MotionCommand.target` is the target-side command bucket. It is not the
+  qpos boundary.
+- `MotionCommand.joint` is the qpos command boundary.
+- `target_position_m` is viewer-visible feedback or compatibility metadata.
+  Do not assume it is the command-side endpoint.
+- `TargetToJointMotionGenerator` prefers `desired_endpoint_m` when available
+  and falls back to `target_position_m` only for backward compatibility.
+- `ProgrammedTargetInputSource` may carry both `target_position_m` and
+  `desired_endpoint_m`; they can differ on the same frame.
+- The MuJoCo site / body name contract stays for the next handoff and is not
+  implemented in this issue.
+
 ## Rules
 
 - `MotionCommand` must not directly modify `MuJoCoState`.
@@ -50,9 +65,10 @@ destructively.
 - `desired endpoint` is the command-side term for the target intent boundary.
 - `target_position_m` is the payload feedback field for the viewer-visible
   target marker, not a formal command schema field.
-- `TargetToJointMotionGenerator` reads `target_position_m` from runtime
-  metadata or a temporary compatibility attribute, and the runtime path pads
-  the solver output to the backend qpos contract when needed.
+- `TargetToJointMotionGenerator` reads `desired_endpoint_m` first and falls
+  back to `target_position_m` compatibility metadata or attribute, and the
+  runtime path pads the solver output to the backend qpos contract when
+  needed.
 - Actuator commands are not introduced in this issue. If they are needed later,
   add them in a separate issue with schema review.
 - R6-E-P3 では、`MotionCommand.joint` を qpos command boundary として
@@ -68,7 +84,8 @@ destructively.
 
 ## P5 runtime notes
 
-- concrete runtime path reads `InputIntent.metadata["target_position_m"]`
+- concrete runtime path reads `desired_endpoint_m` first and falls back to
+  `InputIntent.metadata["target_position_m"]` for compatibility
 - `TargetToJointMotionGenerator` may pad solver output to the backend qpos contract
 - `NoOpMotionGenerator` remains an explicit placeholder, not the runtime default
 

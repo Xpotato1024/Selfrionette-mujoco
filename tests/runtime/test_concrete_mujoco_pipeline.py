@@ -39,6 +39,7 @@ def test_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_updates_qpos
     assert pipeline.simulator.last_command.joint is not None
     assert pipeline.simulator.last_command.joint != JointCommand()
     assert pipeline.simulator.last_command.metadata["target_position_m"] == (0.6, 0.0, 0.1)
+    assert pipeline.simulator.last_command.metadata["desired_endpoint_m"] == (0.6, 0.0, 0.1)
     assert pipeline.simulator.last_command.joint.joint_angles_rad[:2] != (0.0, 0.0)
     assert pipeline.simulator.last_command.joint.joint_angles_rad[2:] == (0.0, 0.0)
     assert len(pipeline.simulator.last_command.joint.joint_angles_rad) == 4

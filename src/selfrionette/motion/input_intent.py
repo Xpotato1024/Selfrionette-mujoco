@@ -21,15 +21,20 @@ def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
     return components
 
 
-def _resolve_target_position_m(intent: InputIntent) -> tuple[float, float, float] | None:
-    target_position_m = getattr(intent, "target_position_m", None)
-    if target_position_m is None:
-        target_position_m = intent.metadata.get("target_position_m")
+def _resolve_target_endpoint_m(intent: InputIntent) -> tuple[float, float, float] | None:
+    desired_endpoint_m = getattr(intent, "desired_endpoint_m", None)
+    if desired_endpoint_m is None:
+        desired_endpoint_m = intent.metadata.get("desired_endpoint_m")
 
-    if target_position_m is None:
+    if desired_endpoint_m is None:
+        desired_endpoint_m = getattr(intent, "target_position_m", None)
+    if desired_endpoint_m is None:
+        desired_endpoint_m = intent.metadata.get("target_position_m")
+
+    if desired_endpoint_m is None:
         return None
 
-    return _coerce_vector3("target_position_m", target_position_m)
+    return _coerce_vector3("desired_endpoint_m", desired_endpoint_m)
 
 
 def _build_motion_command(
@@ -104,8 +109,8 @@ class TargetToJointMotionGenerator:
         if intent.joint_delta_rad:
             raise ValueError("joint_delta_rad to MotionCommand.joint conversion is not supported")
 
-        target_position_m = _resolve_target_position_m(intent)
-        if target_position_m is None:
+        desired_endpoint_m = _resolve_target_endpoint_m(intent)
+        if desired_endpoint_m is None:
             if _has_non_zero_delta(intent.target_delta_m):
                 target = TargetCommand(delta_m=intent.target_delta_m)
                 return build_motion_command_from_target_command(
@@ -114,11 +119,11 @@ class TargetToJointMotionGenerator:
                     metadata=intent.metadata,
                 )
 
-            raise ValueError("target_position_m is required for TargetToJointMotionGenerator")
+            raise ValueError("desired_endpoint_m or target_position_m is required for TargetToJointMotionGenerator")
 
         target = TargetCommand(delta_m=intent.target_delta_m) if _has_non_zero_delta(intent.target_delta_m) else None
         joint = self._ik_solver.solve(
-            target_position_m,
+            desired_endpoint_m,
             seed_joint_angles_rad=self._seed_joint_angles_rad,
         )
 
