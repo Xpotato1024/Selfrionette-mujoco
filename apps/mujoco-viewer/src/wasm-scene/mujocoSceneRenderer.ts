@@ -172,7 +172,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   scene.add(new AmbientLight(0xffffff, 1.0));
   scene.add(new HemisphereLight(0xbfd7ff, 0x1e293b, 0.8));
   const axesHelper = new AxesHelper(0.5);
-  axesHelper.position.set(0, 0, 0.02);
+  axesHelper.position.set(0, 0, 0);
   scene.add(axesHelper);
 
   const keyLight = new DirectionalLight(0xffffff, 1.8);
