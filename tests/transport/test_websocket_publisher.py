@@ -63,7 +63,26 @@ def test_websocket_state_publisher_sends_json_payload_contract() -> None:
             ),
         ),
         target_position_m=(0.4, 0.5, 0.6),
-        metadata={"origin": "test"},
+        metadata={
+            "origin": "test",
+            "endpoint_evaluation": {
+                "desired_endpoint_m": [0.4, 0.5, 0.6],
+                "qpos_like_joint_angles_rad": [1.0],
+                "fk_endpoint_m": [0.3, 0.2, 0.1],
+                "site_endpoint_m": [0.4, 0.5, 0.6],
+                "desired_to_fk_error_vector_m": [-0.1, -0.3, -0.5],
+                "desired_to_site_error_vector_m": [0.0, 0.0, 0.0],
+                "fk_to_site_error_vector_m": [0.1, 0.3, 0.5],
+                "desired_to_fk_error_norm_m": 0.5916079783099616,
+                "desired_to_site_error_norm_m": 0.0,
+                "fk_to_site_error_norm_m": 0.5916079783099616,
+                "unit": "meter",
+                "desired_endpoint_coordinate_frame": "command-side endpoint frame",
+                "fk_endpoint_coordinate_frame": "solver-defined frame",
+                "site_endpoint_coordinate_frame": "MuJoCo world / scene frame",
+                "frame_mismatch_note": "diagnostic only; FK and site endpoints are not transformed or auto-aligned",
+            },
+        },
     )
 
     asyncio.run(publisher.publish(state))
@@ -94,6 +113,7 @@ def test_websocket_state_publisher_sends_json_payload_contract() -> None:
     ]
     assert payload["target_position_m"] == [0.4, 0.5, 0.6]
     assert payload["metadata"] == {"origin": "test"}
+    assert payload["endpoint_evaluation"]["desired_endpoint_m"] == [0.4, 0.5, 0.6]
 
 
 def test_transport_websocket_module_does_not_import_forbidden_layers() -> None:
