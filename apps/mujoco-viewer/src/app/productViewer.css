@@ -1,0 +1,248 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.18), transparent 30%),
+    linear-gradient(180deg, #040814 0%, #07111f 45%, #040814 100%);
+  color: #e2e8f0;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+  min-height: 100vh;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.viewer-shell {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.viewer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.viewer-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  color: #38bdf8;
+}
+
+.viewer-header h1 {
+  margin: 6px 0 6px;
+  font-size: 34px;
+  line-height: 1.05;
+}
+
+.viewer-header p {
+  margin: 0;
+  color: #94a3b8;
+  max-width: 72ch;
+}
+
+.viewer-badge {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.9);
+  color: #f8fafc;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+}
+
+.viewer-badge--warning {
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+}
+
+.viewer-badge--error {
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fda4af;
+}
+
+.viewer-badge--ready {
+  border-color: rgba(34, 197, 94, 0.45);
+  color: #86efac;
+}
+
+.viewer-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.viewer-panel {
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 24px 70px rgba(2, 6, 23, 0.35);
+  backdrop-filter: blur(14px);
+  padding: 16px;
+}
+
+.viewer-panel h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #f8fafc;
+}
+
+.viewer-kv {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.viewer-kv div {
+  display: grid;
+  gap: 4px;
+}
+
+.viewer-kv dt {
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.viewer-kv dd {
+  margin: 0;
+  color: #e2e8f0;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.viewer-canvas__header,
+.viewer-status__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.viewer-canvas__header p {
+  margin: 4px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.viewer-subtle {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.viewer-canvas {
+  width: 100%;
+  height: 760px;
+  display: block;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.18), transparent 35%),
+    radial-gradient(circle at center, rgba(15, 118, 110, 0.1), transparent 60%),
+    linear-gradient(180deg, #091423, #050916 82%);
+}
+
+.viewer-canvas__footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.viewer-note {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.viewer-canvas__footer code {
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  padding: 8px 10px;
+  border-radius: 10px;
+  max-width: 100%;
+  overflow: auto;
+}
+
+.viewer-status {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.55;
+  color: #cbd5e1;
+}
+
+.viewer-error {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+}
+
+.viewer-legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.viewer-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.viewer-legend__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.7), 0 0 0 2px rgba(148, 163, 184, 0.15);
+}
+
+.viewer-legend__text {
+  display: grid;
+  gap: 2px;
+}
+
+.viewer-legend__text strong {
+  font-size: 13px;
+  color: #f8fafc;
+}
+
+.viewer-legend__text span {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #94a3b8;
+}
+
+@media (max-width: 1100px) {
+  .viewer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .viewer-canvas {
+    height: 60vh;
+    min-height: 520px;
+  }
+
+  .viewer-legend {
+    grid-template-columns: 1fr;
+  }
+}

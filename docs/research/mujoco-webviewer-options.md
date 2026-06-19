@@ -121,3 +121,6 @@ primitive geom の axis は現時点では既存変換を維持している。
 - WASM 配信は `locateFile` 依存で、dev/build 経路の差分に注意が必要
 - browser 側で MuJoCo scene を直接描画しても、native viewer と同じ camera / lighting / mesh fidelity が自動で得られるわけではない
 - current viewer の不自然さが、mesh transform 由来か camera / lighting 由来かはまだ分離が必要
+## 2026-06-19 update
+
+`#185` で option B 相当の WASM scene viewer が product viewer に昇格した。`apps/mujoco-viewer` は `@mujoco/mujoco` を production dependency として使い、browser WASM は `qpos` を受けて描画するだけに限定している。

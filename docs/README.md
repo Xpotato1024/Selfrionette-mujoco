@@ -26,6 +26,7 @@ Do not create or use `doc/`.
 | Runtime composition | `docs/architecture/runtime-composition.md` | composition root |
 | Runtime dry-run entry | `docs/operations/runtime-dry-run.md` | deterministic replay to payload v0 NDJSON |
 | WASM qpos sync PoC | `docs/operations/wasm-qpos-sync-poc.md` | qpos fixture generation and browser WASM scene viewer sync PoC |
+| Product viewer WASM scene renderer | `docs/operations/product-viewer-wasm-scene-renderer.md` | product viewer promotion of the WASM scene renderer |
 | R6-H-P5 runtime concrete solver wiring | `docs/operations/r6-h-p5-runtime-concrete-solver-wiring.md` | concrete FK / IK runtime baseline and qpos boundary wiring |
 | R6-H-P6 runtime zero stub guardrail | `docs/operations/r6-h-p6-runtime-zero-stub-guardrail.md` | runtime default stub retirement guardrail and compatibility exception split |
 | R6-H completion audit | `docs/operations/r6-h-completion-audit.md` | concrete FK / IK / runtime wiring / stub guardrail completion evidence |
