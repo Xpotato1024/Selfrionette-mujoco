@@ -1,6 +1,51 @@
 declare module "three" {
+  export class Matrix4 {
+    elements: number[];
+    set(
+      n11: number,
+      n12: number,
+      n13: number,
+      n14: number,
+      n21: number,
+      n22: number,
+      n23: number,
+      n24: number,
+      n31: number,
+      n32: number,
+      n33: number,
+      n34: number,
+      n41: number,
+      n42: number,
+      n43: number,
+      n44: number,
+    ): this;
+    compose(position: Vector3, quaternion: Quaternion, scale: Vector3): this;
+    copy(matrix: Matrix4): this;
+  }
+
+  export class Quaternion {
+    constructor(x?: number, y?: number, z?: number, w?: number);
+  }
+
+  export class Vector3 {
+    constructor(x?: number, y?: number, z?: number);
+  }
+
+  export class Color {
+    constructor(color?: unknown);
+  }
+
+  export const DoubleSide: number;
+  export const SRGBColorSpace: string;
+
   export class BufferGeometry {
     setAttribute(name: string, attribute: BufferAttribute): this;
+    setIndex(attribute: BufferAttribute): this;
+    computeVertexNormals(): this;
+    computeBoundingBox(): this;
+    computeBoundingSphere(): this;
+    rotateX(angle: number): this;
+    scale(x: number, y: number, z: number): this;
     setFromPoints(points: Array<{ x: number; y: number; z: number }>): this;
     dispose(): void;
   }
@@ -39,7 +84,24 @@ declare module "three" {
     );
   }
 
+  export class PlaneGeometry extends BufferGeometry {
+    constructor(width?: number, height?: number);
+  }
+
+  export class AxesHelper extends Object3D {
+    constructor(size?: number);
+  }
+
+  export class HemisphereLight extends Object3D {
+    constructor(skyColor?: unknown, groundColor?: unknown, intensity?: number);
+  }
+
   export class MeshBasicMaterial {
+    constructor(parameters?: Record<string, unknown>);
+    dispose(): void;
+  }
+
+  export class MeshPhongMaterial {
     constructor(parameters?: Record<string, unknown>);
     dispose(): void;
   }
@@ -70,6 +132,17 @@ declare module "three" {
     children: Object3D[];
     userData: Record<string, unknown>;
     visible: boolean;
+    matrix: Matrix4;
+    matrixAutoUpdate: boolean;
+    matrixWorldNeedsUpdate: boolean;
+    castShadow: boolean;
+    receiveShadow: boolean;
+    up: {
+      x: number;
+      y: number;
+      z: number;
+      set(x: number, y: number, z: number): void;
+    };
     scale: {
       x: number;
       y: number;
@@ -96,6 +169,7 @@ declare module "three" {
 
   export class PerspectiveCamera extends Object3D {
     constructor(fov?: number, aspect?: number, near?: number, far?: number);
+    aspect: number;
     updateProjectionMatrix(): void;
   }
 
@@ -110,6 +184,7 @@ declare module "three" {
   export class Scene extends Object3D {
     add(...objects: Object3D[]): this;
     remove(...objects: Object3D[]): this;
+    background: unknown;
   }
 
   export class Mesh extends Object3D {
@@ -121,10 +196,46 @@ declare module "three" {
   export class WebGLRenderer {
     constructor(parameters?: { canvas?: HTMLCanvasElement; antialias?: boolean; alpha?: boolean });
     domElement: HTMLCanvasElement;
+    outputColorSpace: unknown;
     setPixelRatio(pixelRatio: number): void;
     setSize(width: number, height: number, updateStyle?: boolean): void;
     setClearColor(color: unknown, alpha?: number): void;
     render(scene: Scene, camera: PerspectiveCamera): void;
+    dispose(): void;
+  }
+
+  export class Uint32BufferAttribute extends BufferAttribute {
+    constructor(array: ArrayLike<number>, itemSize: number);
+  }
+}
+
+declare module "@mujoco/mujoco" {
+  const loadMujoco: (options: { locateFile: (file: string) => string }) => Promise<any>;
+  export default loadMujoco;
+}
+
+declare module "@mujoco/mujoco/mujoco.wasm?url" {
+  const url: string;
+  export default url;
+}
+
+declare module "*?url" {
+  const url: string;
+  export default url;
+}
+
+declare module "three/examples/jsm/controls/OrbitControls.js" {
+  import type { PerspectiveCamera } from "three";
+
+  export class OrbitControls {
+    constructor(camera: PerspectiveCamera, domElement: HTMLCanvasElement);
+    target: {
+      x: number;
+      y: number;
+      z: number;
+      set(x: number, y: number, z: number): void;
+    };
+    update(): void;
     dispose(): void;
   }
 }

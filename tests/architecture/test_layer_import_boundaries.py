@@ -45,6 +45,10 @@ VIEWER_FORBIDDEN_IMPORT_MARKERS = (
     "fk",
 )
 
+VIEWER_ALLOWED_IMPORT_MARKERS_BY_DIR = {
+    "wasm-scene": ("mujoco",),
+}
+
 
 def iter_python_imports(path: Path) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -95,10 +99,17 @@ def test_viewer_app_src_does_not_import_backend_or_physics_layers() -> None:
     violations: list[str] = []
 
     for path in VIEWER_SRC_ROOT.rglob("*.ts"):
+        allowed_markers: tuple[str, ...] = ()
+        path_parts = {part.lower() for part in path.parts}
+        for directory, markers in VIEWER_ALLOWED_IMPORT_MARKERS_BY_DIR.items():
+            if directory in path_parts:
+                allowed_markers = markers
+                break
+
         for imported in iter_ts_imports(path):
             lowered = imported.lower()
             for forbidden in VIEWER_FORBIDDEN_IMPORT_MARKERS:
-                if forbidden in lowered:
+                if forbidden in lowered and forbidden not in allowed_markers:
                     violations.append(
                         f"{path.relative_to(ROOT)} imports {imported}; forbidden marker: {forbidden}"
                     )

@@ -1,4 +1,3 @@
-import { payloadV0Fixture } from "../src/fixtures/payloadV0.js";
 import { parseTransportPayloadV0Message } from "../src/transport/parseTransportPayloadV0Message.js";
 import {
   createViewerWebSocketClient,
@@ -6,6 +5,30 @@ import {
   type ViewerWebSocketMessageEventLike,
 } from "../src/transport/websocketClient.js";
 import type { TransportPayloadV0 } from "../src/types/transportPayload.js";
+
+const TRANSPORT_PAYLOAD_FIXTURE: TransportPayloadV0 = {
+  version: 0,
+  frame_index: 1,
+  time_s: 0.0,
+  qpos: [],
+  qvel: [],
+  bodies: [
+    {
+      name: "base_link",
+      position_m: [0.0, 0.0, 0.0],
+      quaternion_wxyz: [1.0, 0.0, 0.0, 0.0],
+    },
+  ],
+  sites: [
+    {
+      name: "tip",
+      position_m: [0.1, 0.2, 0.3],
+      quaternion_wxyz: [1.0, 0.0, 0.0, 0.0],
+    },
+  ],
+  target_position_m: null,
+  metadata: {},
+};
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -29,14 +52,14 @@ function assertThrows(fn: () => void, expectedMessage: string): void {
 }
 
 function testParseTransportPayloadV0Message(): void {
-  const parsed = parseTransportPayloadV0Message(JSON.stringify(payloadV0Fixture));
+  const parsed = parseTransportPayloadV0Message(JSON.stringify(TRANSPORT_PAYLOAD_FIXTURE));
 
   assert(parsed.version === 0, "parsed payload should keep version 0");
-  assert(parsed.frame_index === payloadV0Fixture.frame_index, "frame_index should match fixture");
-  assert(parsed.time_s === payloadV0Fixture.time_s, "time_s should match fixture");
-  assert(parsed.qpos.length === payloadV0Fixture.qpos.length, "qpos should be preserved");
-  assert(parsed.bodies.length === payloadV0Fixture.bodies.length, "bodies should be preserved");
-  assert(parsed.sites.length === payloadV0Fixture.sites.length, "sites should be preserved");
+  assert(parsed.frame_index === TRANSPORT_PAYLOAD_FIXTURE.frame_index, "frame_index should match fixture");
+  assert(parsed.time_s === TRANSPORT_PAYLOAD_FIXTURE.time_s, "time_s should match fixture");
+  assert(parsed.qpos.length === TRANSPORT_PAYLOAD_FIXTURE.qpos.length, "qpos should be preserved");
+  assert(parsed.bodies.length === TRANSPORT_PAYLOAD_FIXTURE.bodies.length, "bodies should be preserved");
+  assert(parsed.sites.length === TRANSPORT_PAYLOAD_FIXTURE.sites.length, "sites should be preserved");
 }
 
 function testParseTransportPayloadV0MessageRejectsInvalidJson(): void {
@@ -44,7 +67,7 @@ function testParseTransportPayloadV0MessageRejectsInvalidJson(): void {
 }
 
 function testParseTransportPayloadV0MessageRejectsInvalidVersion(): void {
-  const message = JSON.stringify({ ...payloadV0Fixture, version: 1 });
+  const message = JSON.stringify({ ...TRANSPORT_PAYLOAD_FIXTURE, version: 1 });
   assertThrows(() => parseTransportPayloadV0Message(message), "version must be 0");
 }
 
@@ -59,7 +82,7 @@ function testParseTransportPayloadV0MessageRejectsMissingRequiredFields(): void 
   ];
 
   for (const field of missingFields) {
-    const payload = JSON.parse(JSON.stringify(payloadV0Fixture)) as Record<string, unknown>;
+    const payload = JSON.parse(JSON.stringify(TRANSPORT_PAYLOAD_FIXTURE)) as Record<string, unknown>;
     delete payload[field];
 
     assertThrows(
@@ -245,13 +268,16 @@ function testViewerWebSocketClientDeliversValidPayloadThroughInjectedSocket(): v
   client.start();
   assert(socket !== null, "websocket should be created");
   const activeSocket = socket as FakeWebSocket;
-  activeSocket.dispatchMessage(JSON.stringify(payloadV0Fixture));
+  activeSocket.dispatchMessage(JSON.stringify(TRANSPORT_PAYLOAD_FIXTURE));
 
   assert(payloads.length === 1, "valid payload should be delivered once");
   assert(payloads[0].version === 0, "delivered payload should keep version 0");
-  assert(payloads[0].frame_index === payloadV0Fixture.frame_index, "delivered payload should preserve frame_index");
   assert(
-    client.getLatestPayload()?.frame_index === payloadV0Fixture.frame_index,
+    payloads[0].frame_index === TRANSPORT_PAYLOAD_FIXTURE.frame_index,
+    "delivered payload should preserve frame_index",
+  );
+  assert(
+    client.getLatestPayload()?.frame_index === TRANSPORT_PAYLOAD_FIXTURE.frame_index,
     "client should keep the latest payload in state",
   );
   assert(errors.length === 0, "valid payload should not produce errors");

@@ -401,3 +401,7 @@ WASM scene viewer を production に使う場合の最大リスクは `qpos` syn
 4. middle presentation visual path
 
 qpos を曖昧にしたまま mode 設計に進むと、表示系の責務境界が再び崩れるため、まず同期方針を固めるのがよい。
+## 2026-06-19 update
+
+`#185` で `experiments/mujoco-wasm-viewer-poc` の WASM scene renderer を `apps/mujoco-viewer` の product viewer に昇格した。以後の default route は `wasm-scene` であり、旧 Three.js 手実装 renderer は default production path から外れている。
+`#186` の follow-up で旧 viewer 専用の renderer / runtime / view model / tests は削除済みで、default product viewer からは参照されない。

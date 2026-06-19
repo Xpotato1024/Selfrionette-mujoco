@@ -26,21 +26,21 @@ function readIndexHtml(): string {
 }
 
 function readFastArmMeshSource(): string {
-  const sourcePath = resolve(process.cwd(), "src", "viewer", "fastArmMeshes.ts");
+  const sourcePath = resolve(process.cwd(), "src", "wasm-scene", "mujocoWasmLoader.ts");
   return readFileSync(sourcePath, "utf-8");
 }
 
 function testViteEntrypointIncludesMainTsxAndStlLoader(): void {
   const html = readIndexHtml();
-  const fastArmMeshSource = readFastArmMeshSource();
+  const sceneRendererSource = readFastArmMeshSource();
 
   assert(
-    html.includes('<script type="module" src="/src/main.tsx"></script>'),
+    html.includes('<script type="module" src="/apps/mujoco-viewer/src/main.tsx"></script>'),
     "index.html should load the Vite entrypoint",
   );
   assert(
-    fastArmMeshSource.includes('from "three/examples/jsm/loaders/STLLoader.js"'),
-    "fastArmMeshes.ts should import STLLoader from three examples jsm",
+    sceneRendererSource.includes("@mujoco/mujoco"),
+    "mujocoWasmLoader.ts should import the official MuJoCo WASM bindings",
   );
 }
 
