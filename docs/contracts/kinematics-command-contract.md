@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-06-15
+last_verified: 2026-06-19
 canonical_for:
   - kinematics solver contract
   - JointCommand / MotionCommand boundary
@@ -18,35 +18,32 @@ related:
 
 # Kinematics / Command Contract
 
-## 目的
+This document freezes the solver, motion, and qpos boundary vocabulary.
+It is contract-only and does not add concrete FK, IK, runtime wiring, or
+viewer-side pose recompute.
 
-stub を concrete solver に置換する前に、`JointCommand` / `MotionCommand`
-/ `target_position_m` / MuJoCo `qpos` / solver 入出力の contract を固定する。
+## Boundary Notes
 
-この文書は docs-first / contract-only の固定点であり、concrete FK / IK
-実装や runtime wiring を追加しない。
-
-## 前提
-
-- `base.py` は Protocol / interface contract である。
-- `base.py` に concrete implementation を直接書かない。
-- `stubs.py` は runtime fallback ではなく retirement candidate である。
-- `viewer` は rendering-only であり、FK / IK / qpos recompute を行わない。
-- MuJoCo backend / runtime が physical / command SoT を持つ。
+- `base.py` is protocol / interface contract only.
+- `stubs.py` remains a runtime fallback and a retirement candidate.
+- `viewer` is rendering-only and must not do FK, IK, or qpos recompute.
+- MuJoCo backend / runtime remain the physical and command source of truth.
 
 ## Source of Truth
 
-- MuJoCo は physical source of truth である。
-- runtime は composition root であり、複数層の結線だけを担う。
-- schemas は layer contract である。
-- viewer は transport / backend の payload を受け取って描画するだけである。
-- `target_position_m` は viewer-visible feedback field と command target の境界を区別するための語である。
+- MuJoCo is the physical source of truth.
+- `runtime/` is the composition root.
+- `schemas/` define layer contracts.
+- `viewer` consumes payloads from transport / backend and does not become a
+  source of truth.
+- `target_position_m` is viewer-visible feedback and command-target boundary
+  vocabulary, not a hidden physics source.
 
-## R6-J-P1 vocabulary lock
+## R6-J-P1 Vocabulary Lock
 
 - `desired endpoint` is the command-side endpoint term.
-- `MotionCommand.target` is the target-side command bucket. It is not the
-  qpos boundary.
+- `MotionCommand.target` is the target-side command bucket. It is not the qpos
+  boundary.
 - `MotionCommand.joint` is the qpos command boundary.
 - `target_position_m` is viewer-visible feedback or compatibility metadata.
   It is not automatically the command-side desired endpoint.
@@ -57,150 +54,133 @@ stub を concrete solver に置換する前に、`JointCommand` / `MotionCommand
 - The MuJoCo site / body name contract is a later handoff and stays out of
   scope here.
 
-## Solver interfaces
+## Solver Interfaces
 
-Concrete IK baseline は `docs/contracts/inverse-kinematics.md` に固定する。
+Concrete IK baseline lives in `docs/contracts/inverse-kinematics.md`.
 
-`base.py` の solver contract は interface only である。
-
-- `ForwardKinematicsSolver.forward(joint_angles_rad)` は joint-space / qpos-like
-  input から `Vector3` を返す。
-- `ForwardKinematicsSolver.forward()` は viewer-side FK の入口ではない。
-- `InverseKinematicsSolver.solve(target_position_m, seed_joint_angles_rad)` は
-  `target_position_m` と seed から `JointCommand` を返す。
-- empty `JointCommand()` を通常成功として扱わない。
-- `seed_joint_angles_rad` は solver 初期値であり、必要に応じて `None`
-  を許容するが、失敗 semantics は別途明示する。
+- `ForwardKinematicsSolver.forward(joint_angles_rad)` maps joint-space input
+  to `Vector3`.
+- `ForwardKinematicsSolver.forward()` is not viewer-side FK.
+- `InverseKinematicsSolver.solve(target_position_m, seed_joint_angles_rad)`
+  returns `JointCommand`.
+- Empty `JointCommand()` is a valid empty solver result placeholder.
+- `seed_joint_angles_rad` remains solver input, and `None` preserves explicit
+  semantics.
 
 ## JointCommand
 
-`JointCommand` は solver output / joint command representation である。
+`JointCommand` is solver output / joint command representation.
 
-- `JointCommand` は `MotionCommand.joint` へ接続されうる。
-- `JointCommand` は viewer feedback field ではない。
-- `JointCommand` は state snapshot ではない。
+- `JointCommand` may flow into `MotionCommand.joint`.
+- `JointCommand` is not viewer feedback.
+- `JointCommand` is not a state snapshot.
 
 ## MotionCommand
 
-`MotionCommand` は command object であり、state snapshot ではない。
+`MotionCommand` is a command object, not a state snapshot.
 
-- `MotionCommand.joint` は qpos command boundary への入力である。
-- `MotionCommand.joint` は viewer feedback field ではない。
-- `MotionCommand.target` は target-side command / feedback boundary である。
-- `MotionCommand.target` と `MotionCommand.joint` は混同しない。
+- `MotionCommand.joint` is the qpos command boundary input.
+- `MotionCommand.joint` is not viewer feedback.
+- `MotionCommand.target` is the target-side command / feedback boundary.
+- `MotionCommand.target` and `MotionCommand.joint` are separate.
+- `target_position_m` is the payload feedback field for the viewer-visible
+  target marker, not a formal command schema field.
+- `TargetToJointMotionGenerator` reads `desired_endpoint_m` first and falls
+  back to `target_position_m` compatibility metadata or attribute, and the
+  runtime path pads the solver output to the backend qpos contract when
+  needed.
 
 ## target_position_m (legacy baseline)
 
-`target_position_m` は command target と viewer-visible feedback field の
-境界を区別する。
+`target_position_m` is a viewer-visible feedback / compatibility field.
 
-- viewer が `target_position_m` を解釈して FK / IK / qpos を再計算しない。
-- `target_position_m` は command source of truth ではない。
-- `target_position_m` は viewer-visible feedback として扱う。
-
-## target_position_m
-
-`target_position_m` 縺ｯ command target 縺ｨ viewer-visible feedback field 縺ｮ
-蠅・阜繧貞玄蛻･縺吶ｋ縲・
-- viewer 縺・`target_position_m` 繧定ｧ｣驥医＠縺ｦ FK / IK / qpos 繧貞・險育ｮ励＠縺ｪ縺・・
-- `target_position_m` 縺ｯ command source of truth 縺ｧ縺ｯ縺ｪ縺・・
-- `target_position_m` 縺ｯ viewer-visible feedback 縺ｨ縺励※謇ｱ縺・・
-- programmed target input では `desired_endpoint_m` が command-side の
-  endpoint で、`target_position_m` は trajectory sample / compatibility
-  field として残る場合がある。
+- The viewer must not use `target_position_m` to recompute FK, IK, or qpos.
+- `target_position_m` is not the command-side source of truth.
+- Programmed target input prefers `desired_endpoint_m` as the command-side
+  endpoint term.
+- `target_position_m` may remain as a trajectory sample or compatibility field
+  on the same frame.
 
 ## target_delta_m
 
-`target_delta_m` は command-side delta intent であり、`InputIntent` から
-`TargetCommand(delta_m=...)` へ流れることがある。
+`target_delta_m` is command-side delta intent and may translate from
+`InputIntent` into `TargetCommand(delta_m=...)`.
 
-- `target_delta_m` は `MotionCommand.joint` ではない。
-- `target_delta_m` は qpos command boundary そのものではない。
-- `target_delta_m` は viewer-side pose recompute の根拠ではない。
+- `target_delta_m` is not `MotionCommand.joint`.
+- `target_delta_m` is not the qpos command boundary.
+- `target_delta_m` is not a viewer-side pose recompute input.
 
-## qpos command boundary
+## qpos Command Boundary
 
-MuJoCo `qpos` は backend / runtime SoT 側の joint state / command boundary
-である。
+MuJoCo `qpos` is the backend / runtime joint state and command boundary.
 
-- `MotionCommand.joint` は qpos command boundary への入力である。
-- backend は `MotionCommand.joint` を受け取って MuJoCo `qpos` に反映する。
-- backend が unsupported target commands や unknown joint shapes を受けた場合は
-  明示的に失敗させる。
-- browser viewer は qpos SoT ではない。
+- `MotionCommand.joint` is the input to the qpos command boundary.
+- The backend reflects `MotionCommand.joint` into MuJoCo `qpos`.
+- Unsupported target commands and unsupported joint shapes should fail
+  explicitly in the real backend.
+- The browser viewer is not a qpos source of truth.
 
-## Viewer boundary
+## Viewer Boundary
 
-viewer は rendering-only layer である。
+The viewer is rendering-only.
 
-viewer が行わないこと:
+The viewer must not:
 
-- FK
-- IK
-- qpos pose recompute
-- MuJoCo model loading
-- command source 化
-- state source of truth 化
+- do FK
+- do IK
+- recompute qpos pose
+- load MuJoCo models
+- become a command source of truth
+- become a state source of truth
 
-viewer は backend / runtime payload を受け取り、描画と観測に使う。
+The viewer may display payload / runtime feedback, including
+`target_position_m`, but that does not change the boundary above.
 
-## Stub boundary
+## Stub Boundary
 
-`stubs.py` は runtime fallback ではない。
+`stubs.py` remains a runtime fallback.
 
-- `ZeroForwardKinematicsSolver` は concrete FK ではない。
-- `ZeroInverseKinematicsSolver` は concrete IK ではない。
-- `NoOpMotionGenerator` は command generation の本線ではない。
-- `NoOpMuJoCoSimulator` は MuJoCo backend integration の本線ではない。
-- `NoOpInputInterpreter` は input-to-intent 本線ではない。
-- `NoOpStatePublisher` は production transport ではない。
+- `ZeroForwardKinematicsSolver` is not concrete FK.
+- `ZeroInverseKinematicsSolver` is not concrete IK.
+- `NoOpMotionGenerator` is not production command generation.
+- `NoOpMuJoCoSimulator` is not MuJoCo backend integration.
+- `NoOpInputInterpreter` is not input-to-intent production semantics.
+- `NoOpStatePublisher` is not production transport.
 
-これらは R6-H-P3〜P6 で runtime path から退場させる。
+## Forward Kinematics Baseline
 
-## Forward kinematics baseline
+`PlanarChainForwardKinematicsSolver` is the concrete FK baseline.
 
-`PlanarChainForwardKinematicsSolver` は `ForwardKinematicsSolver` の concrete
-baseline である。
+- It lives in `src/selfrionette/kinematics/fk.py`.
+- `ZeroForwardKinematicsSolver` is not runtime FK.
+- viewer-side FK / qpos recompute remains out of scope.
 
-- `src/selfrionette/kinematics/fk.py` に置く
-- `base.py` には実装を書かない
-- `ZeroForwardKinematicsSolver` は runtime FK として使わない
-- viewer-side FK / qpos recompute は追加しない
+## P3 FK Handoff
 
-## P3 FK handoff
+P3 keeps the FK contract on the solver side and does not move runtime or
+viewer responsibilities.
 
-P3 では、`ForwardKinematicsSolver` contract に従って concrete FK strategy を
-追加する。`base.py` に実装を書かず、別 module に concrete implementation
-を置く。`ZeroForwardKinematicsSolver` を runtime FK として扱わない。
+## P4 IK Handoff
 
-## P4 IK handoff
+Concrete IK baseline lives in `src/selfrionette/kinematics/ik.py`.
 
-Concrete IK baseline は `src/selfrionette/kinematics/ik.py` の `PlanarTwoLinkInverseKinematicsSolver` に固定される。
+- `PlanarTwoLinkInverseKinematicsSolver` is the concrete baseline.
+- Empty `JointCommand()` remains a valid explicit empty result.
+- Workspace / seed / failure semantics stay visible in the solver contract.
 
-P4 では、`InverseKinematicsSolver` contract に従って concrete IK strategy を
-追加する。
-empty `JointCommand()` を通常成功として扱わない。
-workspace / seed / failure semantics を明示する。
+## P5 Runtime Wiring Handoff
 
-## P5 runtime wiring handoff
-
-P5 では、P3 / P4 の concrete strategy を runtime composition に接続する。
-runtime default が zero / no-op stub にならないことを test する。
-
-## P5 runtime notes
-
-- `build_concrete_mujoco_pipeline()` is the explicit concrete path
+- `build_concrete_mujoco_pipeline()` is the explicit concrete path.
 - `TargetToJointMotionGenerator` resolves `desired_endpoint_m` first and falls
-  back to `target_position_m` through `PlanarTwoLinkInverseKinematicsSolver`
-- `MotionCommand.joint` is padded to the backend qpos contract in runtime
-- `build_noop_pipeline()` stays as an explicit placeholder helper
-- runtime default does not return to zero / no-op stub
+  back to `target_position_m` through `PlanarTwoLinkInverseKinematicsSolver`.
+- `MotionCommand.joint` is padded to the backend qpos contract in runtime.
+- `build_noop_pipeline()` stays as an explicit placeholder helper.
 
 ## Non-Goals
 
-- concrete FK / IK 実装
-- runtime composition への接続
-- stub 削除
+- concrete FK / IK implementation
+- runtime composition changes
+- stub deletion
 - schema breaking change
 - viewer-side FK / IK
 - viewer-side qpos recompute
@@ -208,29 +188,3 @@ runtime default が zero / no-op stub にならないことを test する。
 - hardware / serial / OSC
 - legacy import / execute
 - package dependency change
-
-## Scope Check
-
-```text
-parent issue: #116
-depends on: #117
-phase slice: R6-H-P2
-kinematics command contract documented: yes
-base.py remains protocol: yes
-JointCommand / MotionCommand boundary documented: yes
-target / qpos boundary documented: yes
-viewer rendering-only boundary confirmed: yes
-stub boundary documented: yes
-forward kinematics baseline documented: yes
-P3 handoff added: yes
-P4 handoff added: yes
-P5 handoff added: yes
-concrete solver added: no
-runtime wiring changed: yes
-stub deleted: no
-schema breaking change: no
-viewer-side FK/IK added: no
-browser-side MuJoCo model loading: no
-hardware / serial / OSC: no
-legacy imported/executed: no
-```

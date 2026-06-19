@@ -23,18 +23,21 @@ def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
 
 def _resolve_target_endpoint_m(intent: InputIntent) -> tuple[float, float, float] | None:
     desired_endpoint_m = getattr(intent, "desired_endpoint_m", None)
+    source_name = "desired_endpoint_m"
     if desired_endpoint_m is None:
         desired_endpoint_m = intent.metadata.get("desired_endpoint_m")
 
     if desired_endpoint_m is None:
         desired_endpoint_m = getattr(intent, "target_position_m", None)
+        source_name = "target_position_m"
     if desired_endpoint_m is None:
         desired_endpoint_m = intent.metadata.get("target_position_m")
+        source_name = "target_position_m"
 
     if desired_endpoint_m is None:
         return None
 
-    return _coerce_vector3("desired_endpoint_m", desired_endpoint_m)
+    return _coerce_vector3(source_name, desired_endpoint_m)
 
 
 def _build_motion_command(

@@ -72,6 +72,18 @@ def test_target_to_joint_motion_generator_prefers_desired_endpoint_metadata_over
     assert command.joint.joint_angles_rad == pytest.approx(target_joint_angles_rad, abs=1e-9)
 
 
+def test_target_to_joint_motion_generator_reports_target_position_m_for_invalid_fallback_metadata() -> None:
+    solver = PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=(0.5, 0.25))
+    intent = FutureTargetPositionCompatibleIntent(
+        source="replay",
+        timestamp_s=2.0,
+        metadata={"origin": "concrete-ik", "target_position_m": (0.1, 0.2)},
+    )
+
+    with pytest.raises(ValueError, match="target_position_m must contain exactly three values"):
+        TargetToJointMotionGenerator(solver).update(intent, dt_s=0.016)
+
+
 def test_target_to_joint_motion_generator_uses_metadata_target_position_and_pads_qpos_for_backend() -> None:
     fk = PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25))
     solver = PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=(0.5, 0.25))
