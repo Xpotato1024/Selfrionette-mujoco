@@ -104,3 +104,25 @@ def test_fast_arm_model_name_contract_rejects_missing_wrist_body(
 
     with pytest.raises(ValueError, match="missing body name 'fore_arm_link'.*arm / wrist / tip"):
         validate_fast_arm_model_name_contract(object())
+
+
+def test_fast_arm_tip_reference_rejects_missing_body_when_explicit_fallback_is_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    info = MuJoCoModelInfo(
+        joint_names=("sholder_joint_1", "sholder_joint_2", "sholder_joint_3", "elbow_joint"),
+        body_names=(
+            "world",
+            "origin",
+            "base",
+            "base_link",
+            "sholder_link_1",
+            "sholder_link_2",
+            "upper_arm_link",
+        ),
+        site_names=(),
+    )
+    monkeypatch.setattr(model_contract_module, "inspect_mujoco_model", lambda model: info)
+
+    with pytest.raises(ValueError, match="missing body name 'fore_arm_link'.*tip fallback"):
+        resolve_fast_arm_tip_reference(object(), allow_body_fallback=True)
