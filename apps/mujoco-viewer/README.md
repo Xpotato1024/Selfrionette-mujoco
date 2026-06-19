@@ -20,9 +20,10 @@ http://127.0.0.1:5175/apps/mujoco-viewer/
 
 - `renderer mode`: `wasm-scene`
 - `model path`: `/assets/mujoco/fast_arm/scene.xml`
-- `qpos source`: WebSocket payload の `qpos` 優先
+- `qpos source`: WebSocket payload の `qpos` を優先
 - `fallback`: `public/fixtures/fast_arm_sweep_x_qpos.json`
 - `source-of-truth`: Python native MuJoCo backend / IK / FK / runtime
+- `old renderer`: deleted
 
 ## 検証
 

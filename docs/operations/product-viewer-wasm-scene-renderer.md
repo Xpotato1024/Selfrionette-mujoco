@@ -31,9 +31,9 @@ related:
 
 ## Old renderer handling
 
-- decision: legacy retained
+- decision: deleted
 - default production route: no longer imports the old Three.js hand-built renderer stack
-- old renderer code stays isolated from the default route for short-term comparison only
+- old viewer-specific renderer / runtime / view model / tests were removed to avoid code bloat
 
 ## Run
 

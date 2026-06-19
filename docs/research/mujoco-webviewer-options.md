@@ -124,3 +124,4 @@ primitive geom の axis は現時点では既存変換を維持している。
 ## 2026-06-19 update
 
 `#185` で option B 相当の WASM scene viewer が product viewer に昇格した。`apps/mujoco-viewer` は `@mujoco/mujoco` を production dependency として使い、browser WASM は `qpos` を受けて描画するだけに限定している。
+`#186` の follow-up で旧 Three.js 手実装 viewer は削除し、product viewer の code path を wasm-scene に一本化した。
