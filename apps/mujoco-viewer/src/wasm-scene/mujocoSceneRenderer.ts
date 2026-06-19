@@ -215,14 +215,17 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     return geometry;
   };
 
-  const getMaterialForGeom = (geom: any): MeshPhongMaterial => {
-    const bodyId = Number(geom.bodyid);
+  const getMaterialForGeom = (geom: any, sourceGeom: any | null = null): MeshPhongMaterial => {
+    const sourceBodyId = sourceGeom === null ? Number.NaN : Number(sourceGeom.bodyid);
+    const bodyId = Number.isFinite(sourceBodyId) && sourceBodyId >= 0 ? sourceBodyId : Number(geom.bodyid);
     const bodyName =
       Number.isFinite(bodyId) && bodyId >= 0
         ? String(mujocoApi.mj_id2name(model, mujocoApi.mjtObj.mjOBJ_BODY.value, bodyId) ?? "")
         : "";
     const geomName = geom.name === undefined ? "" : String(geom.name);
-    const meshName = geom.dataid >= 0 && geom.dataid < model.nmesh ? String(model.mesh(geom.dataid).name ?? "") : "";
+    const sourceMeshId = sourceGeom === null ? Number.NaN : Number(sourceGeom.dataid);
+    const meshId = Number.isFinite(sourceMeshId) && sourceMeshId >= 0 ? sourceMeshId : Number(geom.dataid);
+    const meshName = meshId >= 0 && meshId < model.nmesh ? String(model.mesh(meshId).name ?? "") : "";
     const cacheKey = `${bodyName}:${geomName}:${meshName}:${geom.type}`;
     const cached = materialByKey.get(cacheKey);
     if (cached !== undefined) {
@@ -271,16 +274,17 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       const geom = geoms.get(geomIndex);
       let mesh = objectByGeomIndex.get(geomIndex);
       if (mesh === undefined) {
+        let sourceGeom: any | null = null;
         let geometry: BufferGeometry;
         if (geom.type === mujocoApi.mjtGeom.mjGEOM_MESH.value) {
-          const sourceGeom = geom.objtype === mujocoApi.mjtObj.mjOBJ_GEOM.value ? model.geom(geom.objid) : null;
+          sourceGeom = geom.objtype === mujocoApi.mjtObj.mjOBJ_GEOM.value ? model.geom(geom.objid) : null;
           const meshId = sourceGeom === null ? geom.dataid : sourceGeom.dataid;
           geometry = buildCompiledMeshGeometry(meshId);
         } else {
           geometry = buildPrimitiveGeometry(geom.type, geom.size);
         }
 
-        mesh = new Mesh(geometry, getMaterialForGeom(geom));
+        mesh = new Mesh(geometry, getMaterialForGeom(geom, sourceGeom));
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         objectByGeomIndex.set(geomIndex, mesh);
