@@ -176,14 +176,17 @@ def _resolve_desired_endpoint_m(
         if desired_endpoint_m is not None:
             return desired_endpoint_m
 
-    if state.target_position_m is not None:
-        return state.target_position_m
-
+    # `target_position_m` is compatibility fallback only; prefer command-side
+    # desired endpoint metadata before falling back to viewer feedback.
     desired_endpoint_m = state.metadata.get("desired_endpoint_m")
     if desired_endpoint_m is not None:
         return desired_endpoint_m
 
-    return state.metadata.get("target_position_m")
+    desired_endpoint_m = state.metadata.get("target_position_m")
+    if desired_endpoint_m is not None:
+        return desired_endpoint_m
+
+    return state.target_position_m
 
 
 def build_runtime_endpoint_evaluation_payload(

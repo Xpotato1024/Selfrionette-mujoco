@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-15
+last_verified: 2026-06-19
 canonical_for:
   - runtime composition root
 related:

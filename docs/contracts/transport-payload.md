@@ -108,9 +108,11 @@ R6-A-P4 freezes the handoff contract for R6-B:
   body transforms or viewer-side presentation state, but it must not infer
   ring pose from `qpos`, IK, FK, `target_position_m`, or any hidden physics
   state.
-- canonical `fast_arm` asset source 縺ｯ `assets/mujoco/fast_arm/` 縺ｨ縺吶ｋ縲・  asset contract 縺ｯ `docs/contracts/assets.md` 縺ｨ
-  `assets/mujoco/fast_arm/README.md` 繧貞盾辣ｧ縺吶ｋ縲・  viewer 縺ｯ陦ｨ遉ｺ逕ｨ asset source 縺ｨ縺励※蜿ら・縺吶ｋ縺縺代〒縲ヾTL / XML 縺ｮ
-  geometry / scale / axis / origin / units / joint semantics 縺ｯ螟画峩縺励↑縺・
+- canonical `fast_arm` asset source is `assets/mujoco/fast_arm/`. The asset
+  contract is defined in `docs/contracts/assets.md` and
+  `assets/mujoco/fast_arm/README.md`. The viewer only references that source
+  for display and must not change STL / XML geometry, scale, axis, origin,
+  units, or joint semantics.
 - Viewer client parsing may reject malformed payload v0 JSON, but it does not
   change the transport schema.
 - The local/dev WebSocket publisher runner does not add envelope fields or a

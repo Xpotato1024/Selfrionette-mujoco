@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from selfrionette.schemas import BodyTransform, MuJoCoState, SiteTransform
 from selfrionette.transport import TRANSPORT_PAYLOAD_VERSION, mujoco_state_to_payload
@@ -131,3 +132,12 @@ def test_mujoco_state_to_payload_lifts_endpoint_evaluation_out_of_metadata() -> 
     assert payload["endpoint_evaluation"] == endpoint_evaluation
     assert "endpoint_evaluation" not in payload["metadata"]
     assert payload["metadata"] == {"preset": "sweep_x"}
+
+
+def test_transport_payload_contract_is_utf8_without_bom_or_mojibake_marker() -> None:
+    path = Path(__file__).resolve().parents[2] / "docs" / "contracts" / "transport-payload.md"
+    raw_bytes = path.read_bytes()
+    assert not raw_bytes.startswith(b"\xef\xbb\xbf")
+
+    text = raw_bytes.decode("utf-8")
+    assert "縺" not in text

@@ -10,13 +10,14 @@ from selfrionette.runtime import (
     RuntimeEndpointEvaluationMetrics,
     RuntimeForwardKinematicsEvaluation,
     build_runtime_endpoint_evaluation_metrics,
+    build_runtime_endpoint_evaluation_payload_from_state,
     build_runtime_endpoint_evaluation_payload,
     compute_error_norm_m,
     compute_vector_error_m,
     evaluate_fk_endpoint_from_joint_command,
     runtime_endpoint_evaluation_metrics_to_payload,
 )
-from selfrionette.schemas import JointCommand
+from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, SiteTransform
 
 
 def test_compute_vector_error_and_norm_use_end_minus_start_semantics() -> None:
@@ -205,3 +206,66 @@ def test_build_runtime_endpoint_evaluation_payload_returns_none_for_missing_inpu
         fk_evaluation=None,
         site_evaluation=None,
     ) is None
+
+
+def test_build_runtime_endpoint_evaluation_payload_from_state_prefers_state_metadata_desired_endpoint_over_state_target_position() -> None:
+    state = MuJoCoState(
+        frame_index=1,
+        time_s=0.0,
+        sites=(
+            SiteTransform(
+                name="tip",
+                position_m=(0.5, 0.2, 0.1),
+                quaternion_wxyz=(1.0, 0.0, 0.0, 0.0),
+            ),
+        ),
+        target_position_m=(9.0, 8.0, 7.0),
+        metadata={
+            "desired_endpoint_m": (0.1, 0.2, 0.3),
+            "target_position_m": (0.4, 0.5, 0.6),
+        },
+    )
+    motion_command = MotionCommand(
+        timestamp_s=0.0,
+        joint=JointCommand(joint_angles_rad=(0.0, 0.0)),
+    )
+
+    payload = build_runtime_endpoint_evaluation_payload_from_state(
+        state=state,
+        motion_command=motion_command,
+        fk_solver=PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25)),
+    )
+
+    assert payload is not None
+    assert payload["desired_endpoint_m"] == [0.1, 0.2, 0.3]
+
+
+def test_build_runtime_endpoint_evaluation_payload_from_state_uses_target_position_fallback_only_when_desired_endpoint_is_missing() -> None:
+    state = MuJoCoState(
+        frame_index=1,
+        time_s=0.0,
+        sites=(
+            SiteTransform(
+                name="tip",
+                position_m=(0.5, 0.2, 0.1),
+                quaternion_wxyz=(1.0, 0.0, 0.0, 0.0),
+            ),
+        ),
+        target_position_m=(9.0, 8.0, 7.0),
+        metadata={
+            "target_position_m": (0.4, 0.5, 0.6),
+        },
+    )
+    motion_command = MotionCommand(
+        timestamp_s=0.0,
+        joint=JointCommand(joint_angles_rad=(0.0, 0.0)),
+    )
+
+    payload = build_runtime_endpoint_evaluation_payload_from_state(
+        state=state,
+        motion_command=motion_command,
+        fk_solver=PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25)),
+    )
+
+    assert payload is not None
+    assert payload["desired_endpoint_m"] == [0.4, 0.5, 0.6]
