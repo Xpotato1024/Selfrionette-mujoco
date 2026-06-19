@@ -5,10 +5,12 @@ from pathlib import Path
 
 from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
+from selfrionette.kinematics import PlanarChainForwardKinematicsSolver
 from selfrionette.kinematics import PlanarTwoLinkInverseKinematicsSolver
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
 from selfrionette.runtime.config import RuntimeConfig
+from selfrionette.runtime.endpoint_metrics import build_endpoint_evaluation_state_publisher
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
@@ -49,18 +51,26 @@ def build_concrete_mujoco_pipeline(
     runtime_config = RuntimeConfig() if config is None else config
     replay_frames = tuple(frames) if frames is not None else (_default_concrete_frame(),)
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
+    ik_solver = PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_LINK_LENGTHS_M)
+    fk_solver = PlanarChainForwardKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_LINK_LENGTHS_M)
+    simulator = HeadlessMuJoCoSimulator.from_model_path(resolved_model_path)
 
     return RuntimePipeline(
         config=runtime_config,
         input_source=ReplayInputSource(replay_frames, loop=loop),
         input_interpreter=ReplayInputInterpreter(),
         motion_generator=TargetToJointMotionGenerator(
-            PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_LINK_LENGTHS_M),
+            ik_solver,
             seed_joint_angles_rad=seed_joint_angles_rad,
             qpos_joint_count=4,
         ),
-        simulator=HeadlessMuJoCoSimulator.from_model_path(resolved_model_path),
-        publisher=publisher,
+        simulator=simulator,
+        publisher=build_endpoint_evaluation_state_publisher(
+            publisher,
+            simulator=simulator,
+            fk_solver=fk_solver,
+            solver_joint_count=len(DEFAULT_CONCRETE_LINK_LENGTHS_M),
+        ),
     )
 
 
