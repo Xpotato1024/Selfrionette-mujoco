@@ -25,7 +25,8 @@ viewer-side pose recompute.
 ## Boundary Notes
 
 - `base.py` is protocol / interface contract only.
-- `stubs.py` remains a runtime fallback and a retirement candidate.
+- `stubs.py` is an explicit placeholder / test double / compatibility helper,
+  not the production-like runtime default.
 - `viewer` is rendering-only and must not do FK, IK, or qpos recompute.
 - MuJoCo backend / runtime remain the physical and command source of truth.
 
@@ -63,7 +64,8 @@ Concrete IK baseline lives in `docs/contracts/inverse-kinematics.md`.
 - `ForwardKinematicsSolver.forward()` is not viewer-side FK.
 - `InverseKinematicsSolver.solve(target_position_m, seed_joint_angles_rad)`
   returns `JointCommand`.
-- Empty `JointCommand()` is a valid empty solver result placeholder.
+- Empty `JointCommand()` is not a normal successful result; treat it only as
+  an explicit placeholder or exceptional empty result when needed.
 - `seed_joint_angles_rad` remains solver input, and `None` preserves explicit
   semantics.
 
@@ -129,16 +131,22 @@ The viewer must not:
 - do FK
 - do IK
 - recompute qpos pose
-- load MuJoCo models
 - become a command source of truth
 - become a state source of truth
+
+The current wasm-scene product viewer path may use MuJoCo models for
+rendering, but Python native backend / runtime / payload remain the source of
+truth. R6-J does not add a new browser-side MuJoCo ownership path or an
+independent model-loading source of truth. The viewer still must not do FK,
+IK, or qpos recompute.
 
 The viewer may display payload / runtime feedback, including
 `target_position_m`, but that does not change the boundary above.
 
 ## Stub Boundary
 
-`stubs.py` remains a runtime fallback.
+`stubs.py` is an explicit placeholder / test double / compatibility helper,
+not the production-like runtime default.
 
 - `ZeroForwardKinematicsSolver` is not concrete FK.
 - `ZeroInverseKinematicsSolver` is not concrete IK.
@@ -165,7 +173,8 @@ viewer responsibilities.
 Concrete IK baseline lives in `src/selfrionette/kinematics/ik.py`.
 
 - `PlanarTwoLinkInverseKinematicsSolver` is the concrete baseline.
-- Empty `JointCommand()` remains a valid explicit empty result.
+- Empty `JointCommand()` remains an explicit exceptional empty result when
+  used, not a normal success path.
 - Workspace / seed / failure semantics stay visible in the solver contract.
 
 ## P5 Runtime Wiring Handoff
