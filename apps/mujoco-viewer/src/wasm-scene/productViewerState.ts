@@ -56,8 +56,8 @@ export function formatViewerStatusText(state: ProductViewerState): string {
   return [
     `renderer mode: ${state.rendererMode}`,
     `model path: ${state.modelPath}`,
-    `fixture path: ${state.fixturePath}`,
-    `source label: ${state.sourceLabel}`,
+    `debug fixture path (reference only): ${state.fixturePath}`,
+    `pose source: ${state.sourceLabel}`,
     `connection: ${state.connectionStatus}`,
     `qpos status: ${state.qposStatus}`,
     `current frame index: ${currentFrame}`,

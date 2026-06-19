@@ -9,6 +9,7 @@ import {
   DirectionalLight,
   Float32BufferAttribute,
   HemisphereLight,
+  CanvasTexture,
   Mesh,
   MeshPhongMaterial,
   PerspectiveCamera,
@@ -16,6 +17,8 @@ import {
   Scene,
   SphereGeometry,
   SRGBColorSpace,
+  NearestFilter,
+  RepeatWrapping,
   Uint32BufferAttribute,
   WebGLRenderer,
 } from "three";
@@ -25,14 +28,12 @@ import { createViewerWebSocketClient, type ViewerWebSocketClient } from "../tran
 import { loadMujocoWasm } from "./mujocoWasmLoader.js";
 import { matrixFromMujocoGeom } from "./mujocoSceneTransforms.js";
 import {
-  DEFAULT_QPOS_FIXTURE_URL,
   ensureQposLength,
   formatQpos,
-  loadQposFixtureFromUrl,
   resolveTransportQpos,
-  type QposFixture,
 } from "./mujocoQposSync.js";
-import { AXIS_VISUAL_STYLES, BODY_VISUAL_STYLES } from "./visualStyles.js";
+import { AXIS_VISUAL_STYLES, BODY_VISUAL_STYLES, resolveBodyVisualStyleKey } from "./visualStyles.js";
+import type { BodyVisualStyle } from "./visualStyles.js";
 import {
   createInitialProductViewerState,
   formatViewerStatusText,
@@ -63,6 +64,41 @@ const FAST_ARM_MESH_URLS = new Map<string, string>([
   ["UpperArmLink", "/assets/mujoco/fast_arm/meshes/UpperArmLink.stl"],
   ["ForeArmLink", "/assets/mujoco/fast_arm/meshes/ForeArmLink.stl"],
 ]);
+
+function createCheckerFloorTexture(): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  if (context === null) {
+    return new CanvasTexture(canvas);
+  }
+
+  const tiles = 4;
+  const tileSize = canvas.width / tiles;
+  context.fillStyle = "#f8fafc";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  for (let y = 0; y < tiles; y += 1) {
+    for (let x = 0; x < tiles; x += 1) {
+      if ((x + y) % 2 === 0) {
+        context.fillStyle = "#0f172a";
+      } else {
+        context.fillStyle = "#f8fafc";
+      }
+      context.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+    }
+  }
+
+  const texture = new CanvasTexture(canvas);
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+  texture.repeat.set(4.0, 4.0);
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
 
 function buildPrimitiveGeometry(type: number, size: ArrayLike<number>): BufferGeometry {
   if (type === 0) {
@@ -136,7 +172,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   scene.add(new AmbientLight(0xffffff, 1.0));
   scene.add(new HemisphereLight(0xbfd7ff, 0x1e293b, 0.8));
   const axesHelper = new AxesHelper(0.5);
-  axesHelper.position.set(0, 0, 0.02);
+  axesHelper.position.set(0, 0, 0);
   scene.add(axesHelper);
 
   const keyLight = new DirectionalLight(0xffffff, 1.8);
@@ -150,6 +186,16 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   const meshGeometryCache = new Map<number, BufferGeometry>();
   const objectByGeomIndex = new Map<number, Mesh>();
   const materialByKey = new Map<string, MeshPhongMaterial>();
+  const floorTexture = createCheckerFloorTexture();
+  const floorMaterial = new MeshPhongMaterial({
+    color: new Color("#d4d4d8"),
+    map: floorTexture,
+    transparent: false,
+    opacity: 1,
+    side: DoubleSide,
+    shininess: 0,
+    specular: new Color("#111827"),
+  });
   const modelMeshNameById = new Map<number, string>();
 
   let mujocoApi: any;
@@ -161,13 +207,11 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   let mjvCamera: any;
   let websocketClient: ViewerWebSocketClient | null = null;
   let latestPayload: TransportPayloadV0 | null = null;
-  let loadedFixture: QposFixture | null = null;
-  let homeQpos: number[] = [];
+  let startupQpos: number[] = [];
   let hasLoaded = false;
   let disposed = false;
   let frameHandle: number | null = null;
 
-  const fixturePath = options.fixturePath ?? DEFAULT_QPOS_FIXTURE_URL;
   const websocketUrl =
     options.websocketUrl === undefined || options.websocketUrl === null || options.websocketUrl.trim() === ""
       ? null
@@ -219,42 +263,34 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     return geometry;
   };
 
-  const getMaterialForGeom = (geom: any): MeshPhongMaterial => {
-    const bodyId = Number(geom.bodyid);
+  const getMaterialForGeom = (geom: any, sourceGeom: any | null = null): MeshPhongMaterial => {
+    const sourceBodyId = sourceGeom === null ? Number.NaN : Number(sourceGeom.bodyid);
+    const bodyId = Number.isFinite(sourceBodyId) && sourceBodyId >= 0 ? sourceBodyId : Number(geom.bodyid);
     const bodyName =
       Number.isFinite(bodyId) && bodyId >= 0
         ? String(mujocoApi.mj_id2name(model, mujocoApi.mjtObj.mjOBJ_BODY.value, bodyId) ?? "")
         : "";
     const geomName = geom.name === undefined ? "" : String(geom.name);
-    const meshName = geom.dataid >= 0 && geom.dataid < model.nmesh ? String(model.mesh(geom.dataid).name ?? "") : "";
+    const sourceMeshId = sourceGeom === null ? Number.NaN : Number(sourceGeom.dataid);
+    const meshId = Number.isFinite(sourceMeshId) && sourceMeshId >= 0 ? sourceMeshId : Number(geom.dataid);
+    const meshName = meshId >= 0 && meshId < model.nmesh ? String(model.mesh(meshId).name ?? "") : "";
     const cacheKey = `${bodyName}:${geomName}:${meshName}:${geom.type}`;
     const cached = materialByKey.get(cacheKey);
     if (cached !== undefined) {
       return cached as MeshPhongMaterial;
     }
 
+    if (geomName === "floor" || geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
+      return floorMaterial;
+    }
+
+    const styleKey = resolveBodyVisualStyleKey(bodyName, meshName, geomName);
+    const style: BodyVisualStyle | null = styleKey === null ? null : (BODY_VISUAL_STYLES[styleKey] as BodyVisualStyle);
     const materialColor = (() => {
-      if (bodyName === "world" || geomName === "floor" || geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
-        return BODY_VISUAL_STYLES.floor.color;
+      if (style !== null) {
+        return style.color;
       }
-      if (bodyName === "origin") {
-        return BODY_VISUAL_STYLES.origin.color;
-      }
-      if (bodyName === "base_link") {
-        return BODY_VISUAL_STYLES.base_link.color;
-      }
-      if (bodyName === "sholder_link_1") {
-        return BODY_VISUAL_STYLES.sholder_link_1.color;
-      }
-      if (bodyName === "sholder_link_2") {
-        return BODY_VISUAL_STYLES.sholder_link_2.color;
-      }
-      if (bodyName === "upper_arm_link") {
-        return BODY_VISUAL_STYLES.upper_arm_link.color;
-      }
-      if (bodyName === "fore_arm_link") {
-        return BODY_VISUAL_STYLES.fore_arm_link.color;
-      }
+
       return geom.rgba[3] < 1 ? "#93c5fd" : "#e2e8f0";
     })();
 
@@ -263,8 +299,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       transparent: geom.rgba[3] < 1,
       opacity: geom.rgba[3],
       side: DoubleSide,
-      shininess: 70,
-      specular: new Color("#94a3b8"),
+      shininess: 18,
+      specular: new Color("#111827"),
     });
     materialByKey.set(cacheKey, material);
     return material;
@@ -286,16 +322,17 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       const geom = geoms.get(geomIndex);
       let mesh = objectByGeomIndex.get(geomIndex);
       if (mesh === undefined) {
+        let sourceGeom: any | null = null;
         let geometry: BufferGeometry;
         if (geom.type === mujocoApi.mjtGeom.mjGEOM_MESH.value) {
-          const sourceGeom = geom.objtype === mujocoApi.mjtObj.mjOBJ_GEOM.value ? model.geom(geom.objid) : null;
+          sourceGeom = geom.objtype === mujocoApi.mjtObj.mjOBJ_GEOM.value ? model.geom(geom.objid) : null;
           const meshId = sourceGeom === null ? geom.dataid : sourceGeom.dataid;
           geometry = buildCompiledMeshGeometry(meshId);
         } else {
           geometry = buildPrimitiveGeometry(geom.type, geom.size);
         }
 
-        mesh = new Mesh(geometry, getMaterialForGeom(geom));
+        mesh = new Mesh(geometry, getMaterialForGeom(geom, sourceGeom));
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         objectByGeomIndex.set(geomIndex, mesh);
@@ -329,23 +366,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     });
   };
 
-  const applyHomePose = (): void => {
-    applyModelPose(homeQpos, "home keyframe", null, null);
-  };
-
-  const applyFixtureFallback = (): void => {
-    if (loadedFixture === null) {
-      applyHomePose();
-      return;
-    }
-
-    const frame = loadedFixture.frames[0];
-    if (frame === undefined) {
-      applyHomePose();
-      return;
-    }
-
-    applyModelPose(frame.qpos, "fixture fallback", frame.frame_index, frame.t_s);
+  const applyStartupPose = (): void => {
+    applyModelPose(startupQpos, "compiled model default qpos", null, null);
   };
 
   const applyTransportPayload = (payload: TransportPayloadV0): void => {
@@ -378,7 +400,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       return;
     }
 
-    applyFixtureFallback();
+    applyStartupPose();
   };
 
   const setCanvasSize = (): void => {
@@ -469,6 +491,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
       model = mujocoApi.MjModel.from_xml_string(xml, vfs);
       data = new mujocoApi.MjData(model);
+      startupQpos = Array.from(data.qpos);
       const modelStat = model.stat as any;
       const modelCenter = Array.from(modelStat.center as ArrayLike<number>);
       const modelExtent = Number(modelStat.extent);
@@ -487,29 +510,16 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
         }
       }
 
-      homeQpos = Array.from(data.qpos);
-      const homeKey = model.key("home");
-      if (homeKey !== null) {
-        homeQpos = Array.from(homeKey.qpos);
-        data.qpos.set(homeQpos);
-      }
+      data.qpos.set(startupQpos);
       mujocoApi.mj_forward(model, data);
       mjvScene = new mujocoApi.MjvScene(model, MAX_GEOMS);
       mjvOption = new mujocoApi.MjvOption();
       mjvPerturb = new mujocoApi.MjvPerturb();
       mjvCamera = new mujocoApi.MjvCamera();
 
-      loadedFixture = await loadQposFixtureFromUrl(fixturePath, model.nq).catch((error) => {
-        updateStatus({
-          qposStatus: "unavailable",
-          qposError: error instanceof Error ? error.message : "failed to load qpos fixture",
-        });
-        return null;
-      });
-
       updateStatus({
         modelPath: options.modelPath,
-        fixturePath,
+        fixturePath: options.fixturePath ?? "/fixtures/fast_arm_sweep_x_qpos.json",
         modelNq: model.nq,
         modelNv: model.nv,
         modelNgeom: model.ngeom,
@@ -552,7 +562,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
           statusText: [
             `renderer mode: wasm-scene`,
             `model path: ${options.modelPath}`,
-            `fixture path: ${fixturePath}`,
+            `fixture path: ${options.fixturePath ?? "/fixtures/fast_arm_sweep_x_qpos.json"}`,
             `error: ${message}`,
           ].join("\n"),
         });
@@ -572,6 +582,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       objectByGeomIndex.clear();
       materialByKey.clear();
       modelMeshNameById.clear();
+      floorTexture.dispose();
+      floorMaterial.dispose();
       renderer.dispose();
     },
   };

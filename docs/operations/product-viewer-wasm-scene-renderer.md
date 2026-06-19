@@ -12,7 +12,7 @@ related:
 
 # Product Viewer WASM Scene Renderer
 
-`apps/mujoco-viewer` は `experiments/mujoco-wasm-viewer-poc` で成立した `@mujoco/mujoco` の WASM scene renderer を product viewer としてホストする。
+`apps/mujoco-viewer` は `experiments/mujoco-wasm-viewer-poc` で成立した `@mujoco/mujoco` の WASM scene renderer を product viewer としてホストします。
 
 ## Boundary
 
@@ -20,14 +20,20 @@ related:
 - Browser WASM MuJoCo は visual renderer only
 - browser 側で IK / FK / qpos recompute はしない
 - browser 側で qpos correction はしない
-- qpos は外部入力 payload か fixture から受け取り `data.qpos` に適用する
+- qpos は runtime payload を優先し、未接続時は compiled MuJoCo model default qpos を startup pose として使う
 
 ## Product viewer entrypoint
 
 - `apps/mujoco-viewer/src/main.tsx`
 - default renderer mode: `wasm-scene`
 - model path: `/assets/mujoco/fast_arm/scene.xml`
-- qpos fallback fixture: `/fixtures/fast_arm_sweep_x_qpos.json`
+
+## Startup pose source
+
+- `default qpos`: compiled MuJoCo model default qpos
+- `home` keyframe: startup では使わない
+- fixture qpos: default startup path では使わない
+- runtime qpos: WebSocket payload が来たら `data.qpos` に適用する
 
 ## Old renderer handling
 
@@ -43,13 +49,9 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-If port `5173` is already in use, Vite may fall back to `5174` or another free port.
-
-Viewer URL:
-
-```text
-http://127.0.0.1:5175/apps/mujoco-viewer/
-```
+Vite dev server は起動後にブラウザを自動で開き、`/apps/mujoco-viewer/` を表示する。
+実際の port は Vite の表示に従う。`5175` は手元環境での一例。
+ポートが使用中なら Vite が次の空きポートを選ぶ。
 
 ## Validation
 
@@ -59,8 +61,6 @@ npm run typecheck
 npm test
 npm run build
 ```
-
-Recommended repo-root checks:
 
 ```powershell
 cd D:\Xpotato-apps\Selfrionette-mujoco
@@ -72,13 +72,13 @@ git diff --check
 - viewer loads
 - WASM loads
 - fast_arm scene loads
-- home keyframe applies
+- initial pose source is explicit
 - qpos sync path works, or qpos unavailable is clearly shown
 - floor / axes / legend / colors appear
 - old renderer is not on the default production path
 
 ## Known limitations
 
-- fixture fallback is debug-oriented
+- fixture qpos は debug 用の参照としてのみ扱い、startup では自動適用しない
 - live WebSocket qpos availability depends on publisher payloads
 - browser-side payload correction is intentionally absent
