@@ -11,6 +11,15 @@ from selfrionette.runtime.evaluation import (
     evaluate_fk_endpoint_from_joint_command,
     evaluate_fk_endpoint_from_qpos,
 )
+from selfrionette.mujoco_backend.endpoint_extraction import (
+    RuntimeMuJoCoSiteEndpointEvaluation,
+    extract_fast_arm_end_effector_site_endpoint,
+    extract_fast_arm_end_effector_site_endpoint_from_state,
+    extract_fast_arm_tip_site_endpoint,
+    extract_fast_arm_tip_site_endpoint_from_state,
+    extract_mujoco_site_endpoint,
+    extract_mujoco_site_endpoint_from_state,
+)
 from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline
 from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.runtime.websocket_publisher_runner import run_replay_mujoco_websocket_publisher
@@ -20,11 +29,18 @@ __all__ = [
     "RuntimeConfig",
     "RuntimePipeline",
     "RuntimeForwardKinematicsEvaluation",
+    "RuntimeMuJoCoSiteEndpointEvaluation",
     "build_concrete_mujoco_pipeline",
     "build_noop_pipeline",
     "build_mujoco_pipeline",
+    "extract_fast_arm_end_effector_site_endpoint",
+    "extract_fast_arm_end_effector_site_endpoint_from_state",
+    "extract_fast_arm_tip_site_endpoint",
+    "extract_fast_arm_tip_site_endpoint_from_state",
     "evaluate_fk_endpoint_from_joint_command",
     "evaluate_fk_endpoint_from_qpos",
+    "extract_mujoco_site_endpoint",
+    "extract_mujoco_site_endpoint_from_state",
     "build_replay_mujoco_pipeline",
     "run_replay_mujoco_dry_run",
     "run_live_viewer_smoke",
