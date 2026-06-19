@@ -24,3 +24,37 @@ export const VISUAL_LEGEND_ITEMS = [
   BODY_VISUAL_STYLES.fore_arm_link,
   ...AXIS_VISUAL_STYLES,
 ] as const;
+
+const VISUAL_STYLE_KEY_BY_NAME = new Map<string, keyof typeof BODY_VISUAL_STYLES>([
+  ["world", "floor"],
+  ["floor", "floor"],
+  ["origin", "origin"],
+  ["base", "base_link"],
+  ["base_link", "base_link"],
+  ["baselink", "base_link"],
+  ["sholder_link_1", "sholder_link_1"],
+  ["sholderlink1", "sholder_link_1"],
+  ["sholder_link_2", "sholder_link_2"],
+  ["sholderlink2", "sholder_link_2"],
+  ["upper_arm_link", "upper_arm_link"],
+  ["upperarmlink", "upper_arm_link"],
+  ["fore_arm_link", "fore_arm_link"],
+  ["forearmlink", "fore_arm_link"],
+]);
+
+export function resolveBodyVisualStyleKey(bodyName: string, meshName: string, geomName: string): keyof typeof BODY_VISUAL_STYLES | null {
+  const candidates = [bodyName, meshName, geomName];
+  for (const candidate of candidates) {
+    const normalized = candidate.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    if (normalized === "") {
+      continue;
+    }
+
+    const styleKey = VISUAL_STYLE_KEY_BY_NAME.get(normalized);
+    if (styleKey !== undefined) {
+      return styleKey;
+    }
+  }
+
+  return null;
+}

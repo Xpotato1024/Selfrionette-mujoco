@@ -29,7 +29,7 @@ import {
   formatQpos,
   resolveTransportQpos,
 } from "./mujocoQposSync.js";
-import { AXIS_VISUAL_STYLES, BODY_VISUAL_STYLES } from "./visualStyles.js";
+import { AXIS_VISUAL_STYLES, BODY_VISUAL_STYLES, resolveBodyVisualStyleKey } from "./visualStyles.js";
 import {
   createInitialProductViewerState,
   formatViewerStatusText,
@@ -229,27 +229,15 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     }
 
     const materialColor = (() => {
-      if (bodyName === "world" || geomName === "floor" || geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
+      if (geomName === "floor" || geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
         return BODY_VISUAL_STYLES.floor.color;
       }
-      if (bodyName === "origin") {
-        return BODY_VISUAL_STYLES.origin.color;
+
+      const styleKey = resolveBodyVisualStyleKey(bodyName, meshName, geomName);
+      if (styleKey !== null) {
+        return BODY_VISUAL_STYLES[styleKey].color;
       }
-      if (bodyName === "base_link") {
-        return BODY_VISUAL_STYLES.base_link.color;
-      }
-      if (bodyName === "sholder_link_1") {
-        return BODY_VISUAL_STYLES.sholder_link_1.color;
-      }
-      if (bodyName === "sholder_link_2") {
-        return BODY_VISUAL_STYLES.sholder_link_2.color;
-      }
-      if (bodyName === "upper_arm_link") {
-        return BODY_VISUAL_STYLES.upper_arm_link.color;
-      }
-      if (bodyName === "fore_arm_link") {
-        return BODY_VISUAL_STYLES.fore_arm_link.color;
-      }
+
       return geom.rgba[3] < 1 ? "#93c5fd" : "#e2e8f0";
     })();
 
