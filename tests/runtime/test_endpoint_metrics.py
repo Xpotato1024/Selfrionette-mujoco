@@ -10,9 +10,11 @@ from selfrionette.runtime import (
     RuntimeEndpointEvaluationMetrics,
     RuntimeForwardKinematicsEvaluation,
     build_runtime_endpoint_evaluation_metrics,
+    build_runtime_endpoint_evaluation_payload,
     compute_error_norm_m,
     compute_vector_error_m,
     evaluate_fk_endpoint_from_joint_command,
+    runtime_endpoint_evaluation_metrics_to_payload,
 )
 from selfrionette.schemas import JointCommand
 
@@ -67,6 +69,11 @@ def test_build_runtime_endpoint_evaluation_metrics_keeps_desired_qpos_fk_and_sit
     assert metrics.site_endpoint_coordinate_frame == "MuJoCo world / scene frame"
     assert "diagnostic only" in metrics.frame_mismatch_note
     assert not hasattr(metrics, "target_position_m")
+
+    payload = runtime_endpoint_evaluation_metrics_to_payload(metrics)
+    assert payload["desired_endpoint_m"] == [0.5, 0.2, 0.1]
+    assert payload["qpos_like_joint_angles_rad"] == [0.3, -0.2, 0.0, 0.0]
+    assert payload["unit"] == "meter"
 
 
 @pytest.mark.parametrize(
@@ -190,3 +197,11 @@ def test_build_runtime_endpoint_evaluation_metrics_rejects_empty_qpos_like_input
             site_evaluation=site_evaluation,
             qpos_like_joint_angles_rad=(),
         )
+
+
+def test_build_runtime_endpoint_evaluation_payload_returns_none_for_missing_inputs() -> None:
+    assert build_runtime_endpoint_evaluation_payload(
+        desired_endpoint_m=None,
+        fk_evaluation=None,
+        site_evaluation=None,
+    ) is None
