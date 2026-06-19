@@ -157,4 +157,8 @@ R6-J-P6 handoff to P7:
 - `target_position_m` remains the viewer-facing feedback field
 - `desired_endpoint_m` remains the command-side endpoint term
 - FK stays solver-defined and site stays MuJoCo world / scene frame
-- the viewer overlay is still deferred to P7 and remains read-only
+- the viewer overlay is implemented in P7 as read-only presentation only
+- the viewer does not recompute FK, IK, qpos-derived endpoints, or error
+  vectors from browser-side state
+- missing `endpoint_evaluation` remains a valid payload state
+- `endpoint_evaluation` is diagnostic-only and is not a control truth source

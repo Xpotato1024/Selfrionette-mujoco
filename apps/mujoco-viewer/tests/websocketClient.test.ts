@@ -27,6 +27,23 @@ const TRANSPORT_PAYLOAD_FIXTURE: TransportPayloadV0 = {
     },
   ],
   target_position_m: null,
+  endpoint_evaluation: {
+    desired_endpoint_m: [0.6, 0.0, 0.1],
+    qpos_like_joint_angles_rad: [0.1, -0.2, 0.0, 0.0],
+    fk_endpoint_m: [0.55, 0.0, 0.08],
+    site_endpoint_m: [0.62, 0.0, 0.7],
+    desired_to_fk_error_vector_m: [-0.05, 0.0, -0.02],
+    desired_to_site_error_vector_m: [0.02, 0.0, 0.6],
+    fk_to_site_error_vector_m: [0.07, 0.0, 0.62],
+    desired_to_fk_error_norm_m: 0.05385164807134504,
+    desired_to_site_error_norm_m: 0.6003332407921454,
+    fk_to_site_error_norm_m: 0.6239447641967053,
+    unit: "meter",
+    desired_endpoint_coordinate_frame: "command-side endpoint frame",
+    fk_endpoint_coordinate_frame: "solver-defined frame",
+    site_endpoint_coordinate_frame: "MuJoCo world / scene frame",
+    frame_mismatch_note: "diagnostic only; FK and site endpoints are not transformed or auto-aligned",
+  },
   metadata: {},
 };
 
@@ -279,6 +296,11 @@ function testViewerWebSocketClientDeliversValidPayloadThroughInjectedSocket(): v
   assert(
     client.getLatestPayload()?.frame_index === TRANSPORT_PAYLOAD_FIXTURE.frame_index,
     "client should keep the latest payload in state",
+  );
+  assert(
+    client.getLatestPayload()?.endpoint_evaluation?.desired_endpoint_m?.[0] ===
+      TRANSPORT_PAYLOAD_FIXTURE.endpoint_evaluation?.desired_endpoint_m?.[0],
+    "client should preserve endpoint evaluation",
   );
   assert(errors.length === 0, "valid payload should not produce errors");
 

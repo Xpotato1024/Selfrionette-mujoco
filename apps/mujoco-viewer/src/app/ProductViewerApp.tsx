@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { readViewerEndpointConfig } from "../config/websocketEndpoint.js";
 import { formatQpos } from "../wasm-scene/mujocoQposSync.js";
 import {
+  formatEndpointEvaluationAngles,
+  formatEndpointEvaluationScalar,
+  formatEndpointEvaluationVector,
+} from "../wasm-scene/endpointEvaluationFormat.js";
+import {
   createInitialProductViewerState,
   type ProductViewerState,
 } from "../wasm-scene/productViewerState.js";
@@ -18,10 +23,7 @@ function formatNumber(value: number | null): string {
 }
 
 function Legend() {
-  const legendItems = useMemo(
-    () => VISUAL_LEGEND_ITEMS,
-    [],
-  );
+  const legendItems = useMemo(() => VISUAL_LEGEND_ITEMS, []);
 
   return (
     <div className="viewer-legend">
@@ -35,6 +37,64 @@ function Legend() {
         </div>
       ))}
     </div>
+  );
+}
+
+function EndpointEvaluationPanel({ state }: { state: ProductViewerState }) {
+  const endpointEvaluation = state.endpointEvaluation;
+  if (endpointEvaluation === null) {
+    return <div className="viewer-endpoint-evaluation__empty">Endpoint evaluation: unavailable</div>;
+  }
+
+  return (
+    <dl className="viewer-endpoint-evaluation__kv">
+      <div>
+        <dt>Desired</dt>
+        <dd>{`${formatEndpointEvaluationVector(endpointEvaluation.desired_endpoint_m ?? null)} ${endpointEvaluation.unit ?? "n/a"}`}</dd>
+      </div>
+      <div>
+        <dt>qpos-like joint angles</dt>
+        <dd>{`${formatEndpointEvaluationAngles(endpointEvaluation.qpos_like_joint_angles_rad ?? null)} rad`}</dd>
+      </div>
+      <div>
+        <dt>FK</dt>
+        <dd>{`${formatEndpointEvaluationVector(endpointEvaluation.fk_endpoint_m ?? null)} ${endpointEvaluation.unit ?? "n/a"}`}</dd>
+      </div>
+      <div>
+        <dt>Site</dt>
+        <dd>{`${formatEndpointEvaluationVector(endpointEvaluation.site_endpoint_m ?? null)} ${endpointEvaluation.unit ?? "n/a"}`}</dd>
+      </div>
+      <div>
+        <dt>Desired -&gt; FK error</dt>
+        <dd>
+          {`${formatEndpointEvaluationVector(endpointEvaluation.desired_to_fk_error_vector_m ?? null)} |norm| ${formatEndpointEvaluationScalar(endpointEvaluation.desired_to_fk_error_norm_m ?? null)} ${endpointEvaluation.unit ?? "n/a"}`}
+        </dd>
+      </div>
+      <div>
+        <dt>Desired -&gt; site error</dt>
+        <dd>
+          {`${formatEndpointEvaluationVector(endpointEvaluation.desired_to_site_error_vector_m ?? null)} |norm| ${formatEndpointEvaluationScalar(endpointEvaluation.desired_to_site_error_norm_m ?? null)} ${endpointEvaluation.unit ?? "n/a"}`}
+        </dd>
+      </div>
+      <div>
+        <dt>FK -&gt; site error</dt>
+        <dd>
+          {`${formatEndpointEvaluationVector(endpointEvaluation.fk_to_site_error_vector_m ?? null)} |norm| ${formatEndpointEvaluationScalar(endpointEvaluation.fk_to_site_error_norm_m ?? null)} ${endpointEvaluation.unit ?? "n/a"}`}
+        </dd>
+      </div>
+      <div>
+        <dt>Frames</dt>
+        <dd>
+          <div>desired: {endpointEvaluation.desired_endpoint_coordinate_frame ?? "n/a"}</div>
+          <div>FK: {endpointEvaluation.fk_endpoint_coordinate_frame ?? "n/a"}</div>
+          <div>site: {endpointEvaluation.site_endpoint_coordinate_frame ?? "n/a"}</div>
+        </dd>
+      </div>
+      <div>
+        <dt>Note</dt>
+        <dd>{endpointEvaluation.frame_mismatch_note ?? "n/a"}</dd>
+      </div>
+    </dl>
   );
 }
 
@@ -169,10 +229,17 @@ export function ProductViewerApp() {
       <section className="viewer-panel viewer-panel--status">
         <div className="viewer-status__header">
           <h2>Status</h2>
-          <div className="viewer-subtle">qpos path is render-only</div>
+          <div className="viewer-subtle">qpos path is render-only; diagnostics are read-only</div>
         </div>
         <pre className="viewer-status">{state.statusText}</pre>
         {state.qposError === null ? null : <div className="viewer-error">{state.qposError}</div>}
+        <div className="viewer-endpoint-evaluation">
+          <div className="viewer-endpoint-evaluation__header">
+            <h3>Endpoint evaluation</h3>
+            <div className="viewer-subtle">read-only diagnostic overlay</div>
+          </div>
+          <EndpointEvaluationPanel state={state} />
+        </div>
       </section>
 
       <section className="viewer-panel viewer-panel--legend">

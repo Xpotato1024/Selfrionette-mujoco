@@ -347,7 +347,13 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     geoms.delete();
   };
 
-  const applyModelPose = (qpos: readonly number[], sourceLabel: string, frameIndex: number | null, timeS: number | null): void => {
+  const applyModelPose = (
+    qpos: readonly number[],
+    sourceLabel: string,
+    frameIndex: number | null,
+    timeS: number | null,
+    endpointEvaluation: TransportPayloadV0["endpoint_evaluation"] | null,
+  ): void => {
     data.qpos.set(qpos);
     mujocoApi.mj_forward(model, data);
     syncSceneFromCurrentData();
@@ -359,6 +365,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       currentFrameIndex: frameIndex,
       currentTimestampS: timeS,
       currentQpos: Array.from(qpos),
+      endpointEvaluation,
       modelNq: model.nq,
       modelNv: model.nv,
       modelNgeom: model.ngeom,
@@ -367,10 +374,11 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   };
 
   const applyStartupPose = (): void => {
-    applyModelPose(startupQpos, "compiled model default qpos", null, null);
+    applyModelPose(startupQpos, "compiled model default qpos", null, null, null);
   };
 
   const applyTransportPayload = (payload: TransportPayloadV0): void => {
+    const endpointEvaluation = payload.endpoint_evaluation ?? null;
     const qposResolution = resolveTransportQpos(payload, model.nq);
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
       updateStatus({
@@ -382,6 +390,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
         currentTimestampS: qposResolution.currentTimestampS,
         currentQpos: null,
         currentQposText: "[]",
+        endpointEvaluation,
       });
       return;
     }
@@ -391,6 +400,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       qposResolution.sourceLabel,
       qposResolution.currentFrameIndex,
       qposResolution.currentTimestampS,
+      endpointEvaluation,
     );
   };
 

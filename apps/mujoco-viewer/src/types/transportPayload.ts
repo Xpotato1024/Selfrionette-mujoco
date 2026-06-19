@@ -1,6 +1,24 @@
 export type Vector3 = [number, number, number];
 export type QuaternionWXYZ = [number, number, number, number];
 
+export interface TransportEndpointEvaluationPayload {
+  desired_endpoint_m?: number[];
+  qpos_like_joint_angles_rad?: number[];
+  fk_endpoint_m?: number[];
+  site_endpoint_m?: number[];
+  desired_to_fk_error_vector_m?: number[];
+  desired_to_site_error_vector_m?: number[];
+  fk_to_site_error_vector_m?: number[];
+  desired_to_fk_error_norm_m?: number;
+  desired_to_site_error_norm_m?: number;
+  fk_to_site_error_norm_m?: number;
+  unit?: string;
+  desired_endpoint_coordinate_frame?: string;
+  fk_endpoint_coordinate_frame?: string;
+  site_endpoint_coordinate_frame?: string;
+  frame_mismatch_note?: string;
+}
+
 export interface TransportBodyPayload {
   name: string;
   position_m: Vector3;
@@ -22,6 +40,7 @@ export interface TransportPayloadV0 {
   bodies: TransportBodyPayload[];
   sites: TransportSitePayload[];
   target_position_m: Vector3 | null;
+  endpoint_evaluation?: TransportEndpointEvaluationPayload | null;
   metadata: Record<string, unknown>;
 }
 
