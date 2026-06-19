@@ -34,7 +34,10 @@ def mujoco_state_to_payload(state: MuJoCoState) -> TransportPayload:
     else:
         target_position_m = _vector_to_list(state.target_position_m)
 
-    return {
+    metadata = dict(state.metadata)
+    endpoint_evaluation = metadata.pop("endpoint_evaluation", None)
+
+    payload: TransportPayload = {
         "version": TRANSPORT_PAYLOAD_VERSION,
         "frame_index": state.frame_index,
         "time_s": state.time_s,
@@ -43,5 +46,10 @@ def mujoco_state_to_payload(state: MuJoCoState) -> TransportPayload:
         "bodies": [_transform_to_payload(body) for body in state.bodies],
         "sites": [_transform_to_payload(site) for site in state.sites],
         "target_position_m": target_position_m,
-        "metadata": dict(state.metadata),
+        "metadata": metadata,
     }
+
+    if endpoint_evaluation is not None:
+        payload["endpoint_evaluation"] = endpoint_evaluation
+
+    return payload

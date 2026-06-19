@@ -130,6 +130,12 @@ viewer behavior. FK uses the solver-defined frame, MuJoCo site uses the
 MuJoCo world / scene frame, and the resulting vectors remain diagnostic only
 instead of becoming transformed control truth.
 
+R6-J-P6 connects that diagnostic helper to runtime output. The concrete
+runtime path may lift the diagnostic object into the dry-run NDJSON stream and
+WebSocket payload as an optional `endpoint_evaluation` field. The runtime and
+backend remain the source of truth; the viewer still does not compute FK, IK,
+or qpos-derived endpoint metrics.
+
 The `sweep_x` dry-run preset remains a visual-smoke compatibility path.
 It may use `NoOpMotionGenerator` to preserve target-marker sweep behavior.
 This exception is not the production-like concrete runtime default.
@@ -144,3 +150,11 @@ not supersede `build_concrete_mujoco_pipeline()` as the concrete baseline.
 R6-H completion audit is recorded in `docs/operations/r6-h-completion-audit.md`.
 R6-J-P5 hands off to P6 for dry-run / programmed input / WebSocket payload
 integration and to P7 for the read-only viewer overlay.
+
+R6-J-P6 handoff to P7:
+
+- `endpoint_evaluation` is optional and backward-compatible
+- `target_position_m` remains the viewer-facing feedback field
+- `desired_endpoint_m` remains the command-side endpoint term
+- FK stays solver-defined and site stays MuJoCo world / scene frame
+- the viewer overlay is still deferred to P7 and remains read-only

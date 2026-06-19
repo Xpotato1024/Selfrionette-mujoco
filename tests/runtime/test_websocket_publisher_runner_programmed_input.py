@@ -58,6 +58,15 @@ def _collect_payloads(steps: int, *, preset: str | None = None) -> list[dict[str
     return [json.loads(message) for message in _FakeWebSocketPublisherServer.instances[-1].messages]
 
 
+def _assert_endpoint_evaluation(payload: dict[str, object]) -> None:
+    endpoint_evaluation = payload["endpoint_evaluation"]
+    assert isinstance(endpoint_evaluation, dict)
+    assert endpoint_evaluation["unit"] == "meter"
+    assert endpoint_evaluation["desired_endpoint_coordinate_frame"] == "command-side endpoint frame"
+    assert endpoint_evaluation["fk_endpoint_coordinate_frame"] == "solver-defined frame"
+    assert endpoint_evaluation["site_endpoint_coordinate_frame"] == "MuJoCo world / scene frame"
+
+
 def test_websocket_publisher_runner_sweep_x_uses_programmed_input_source_metadata() -> None:
     payloads = _collect_payloads(2, preset="sweep_x")
 
@@ -67,6 +76,7 @@ def test_websocket_publisher_runner_sweep_x_uses_programmed_input_source_metadat
     assert [payload["metadata"]["phase"] for payload in payloads] == ["initial_hold", "initial_hold"]
     assert [payload["metadata"]["preset"] for payload in payloads] == ["sweep_x", "sweep_x"]
     assert payloads[0]["metadata"]["desired_endpoint_m"] == payloads[0]["target_position_m"]
+    _assert_endpoint_evaluation(payloads[0])
 
 
 def test_websocket_runner_module_uses_programmed_input_source_and_not_noop_motion_generator() -> None:

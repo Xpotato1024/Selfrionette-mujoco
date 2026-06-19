@@ -63,6 +63,10 @@ without changing the payload schema:
 - the command-side `desired endpoint` term is defined in
   `docs/contracts/target-marker-desired-endpoint.md`
 
+R6-J-P6 adds an optional `endpoint_evaluation` diagnostic field to payload
+v0. The field is additive, produced by the Python runtime/backend side, and
+safe for older consumers to ignore.
+
 R6-A-P4 freezes the handoff contract for R6-B:
 
 - payload version remains `0`
@@ -84,6 +88,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
 - Transport must not create a separate physics state.
 - Transport only transforms `qpos`, `qvel`, `bodies`, `sites`,
   `target_position_m`, and `metadata` into a delivery payload.
+- Transport may also lift an optional `endpoint_evaluation` diagnostic object
+  out of runtime metadata into the top-level payload.
 - Viewer code reads the payload contract; it does not infer new physics from
   the transport layer.
 - Viewer code may render a target marker from `target_position_m`, but it must
@@ -102,11 +108,11 @@ R6-A-P4 freezes the handoff contract for R6-B:
   body transforms or viewer-side presentation state, but it must not infer
   ring pose from `qpos`, IK, FK, `target_position_m`, or any hidden physics
   state.
-- canonical `fast_arm` asset source は `assets/mujoco/fast_arm/` とする。
-  asset contract は `docs/contracts/assets.md` と
-  `assets/mujoco/fast_arm/README.md` を参照する。
-  viewer は表示用 asset source として参照するだけで、STL / XML の
-  geometry / scale / axis / origin / units / joint semantics は変更しない。
+- canonical `fast_arm` asset source is `assets/mujoco/fast_arm/`. The asset
+  contract is defined in `docs/contracts/assets.md` and
+  `assets/mujoco/fast_arm/README.md`. The viewer only references that source
+  for display and must not change STL / XML geometry, scale, axis, origin,
+  units, or joint semantics.
 - Viewer client parsing may reject malformed payload v0 JSON, but it does not
   change the transport schema.
 - The local/dev WebSocket publisher runner does not add envelope fields or a
@@ -115,6 +121,8 @@ R6-A-P4 freezes the handoff contract for R6-B:
   schema, or extra transport envelope fields.
 - The Phase C completion audit does not add a new payload version, new schema,
   or browser scene mutation path.
+- `endpoint_evaluation` is optional and additive. Missing or invalid
+  evaluation data leaves the payload valid and omits the field.
 
 ## v0 Shape
 
@@ -128,6 +136,7 @@ R6-A-P4 freezes the handoff contract for R6-B:
   "bodies": [],
   "sites": [],
   "target_position_m": null,
+  "endpoint_evaluation": null,
   "metadata": {}
 }
 ```
@@ -142,3 +151,5 @@ R6-A-P4 freezes the handoff contract for R6-B:
   `position_m` and `quaternion_wxyz`, the logical label stays provisional,
   and the viewer still must not infer ring pose from `qpos`, IK, FK, or
   `target_position_m`.
+- `endpoint_evaluation` is emitted only when runtime/backend evaluation data
+  is available. Existing payload consumers may ignore it.

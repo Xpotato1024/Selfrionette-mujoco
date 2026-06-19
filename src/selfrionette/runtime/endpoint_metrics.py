@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Protocol
 
+from selfrionette.kinematics import ForwardKinematicsSolver
 from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoSiteEndpointEvaluation
-from selfrionette.runtime.evaluation import RuntimeForwardKinematicsEvaluation
-from selfrionette.schemas import Vector3
+from selfrionette.mujoco_backend.endpoint_extraction import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.runtime.evaluation import RuntimeForwardKinematicsEvaluation, evaluate_fk_endpoint_from_qpos
+from selfrionette.schemas import MotionCommand, MuJoCoState, Vector3
+from selfrionette.transport.base import StatePublisher
 
 _METRICS_UNIT = "meter"
 _DESIRED_ENDPOINT_COORDINATE_FRAME = "command-side endpoint frame"
@@ -67,6 +71,26 @@ class RuntimeEndpointEvaluationMetrics:
     fk_endpoint_coordinate_frame: str = _FK_ENDPOINT_COORDINATE_FRAME
     site_endpoint_coordinate_frame: str = _SITE_ENDPOINT_COORDINATE_FRAME
     frame_mismatch_note: str = _FRAME_MISMATCH_NOTE
+
+
+def runtime_endpoint_evaluation_metrics_to_payload(metrics: RuntimeEndpointEvaluationMetrics) -> dict[str, object]:
+    return {
+        "desired_endpoint_m": list(metrics.desired_endpoint_m),
+        "qpos_like_joint_angles_rad": list(metrics.qpos_like_joint_angles_rad),
+        "fk_endpoint_m": list(metrics.fk_endpoint_m),
+        "site_endpoint_m": list(metrics.site_endpoint_m),
+        "desired_to_fk_error_vector_m": list(metrics.desired_to_fk_error_vector_m),
+        "desired_to_site_error_vector_m": list(metrics.desired_to_site_error_vector_m),
+        "fk_to_site_error_vector_m": list(metrics.fk_to_site_error_vector_m),
+        "desired_to_fk_error_norm_m": metrics.desired_to_fk_error_norm_m,
+        "desired_to_site_error_norm_m": metrics.desired_to_site_error_norm_m,
+        "fk_to_site_error_norm_m": metrics.fk_to_site_error_norm_m,
+        "unit": metrics.unit,
+        "desired_endpoint_coordinate_frame": metrics.desired_endpoint_coordinate_frame,
+        "fk_endpoint_coordinate_frame": metrics.fk_endpoint_coordinate_frame,
+        "site_endpoint_coordinate_frame": metrics.site_endpoint_coordinate_frame,
+        "frame_mismatch_note": metrics.frame_mismatch_note,
+    }
 
 
 def _require_meter_unit(name: str, unit: str) -> None:
@@ -132,9 +156,146 @@ def build_runtime_endpoint_evaluation_metrics(
     )
 
 
+def _resolve_desired_endpoint_m(
+    *,
+    motion_command: MotionCommand | None,
+    state: MuJoCoState,
+) -> Sequence[float] | None:
+    if motion_command is not None:
+        target = motion_command.target
+        if target is not None:
+            desired_endpoint_m = getattr(target, "desired_endpoint_m", None)
+            if desired_endpoint_m is not None:
+                return desired_endpoint_m
+
+        desired_endpoint_m = motion_command.metadata.get("desired_endpoint_m")
+        if desired_endpoint_m is not None:
+            return desired_endpoint_m
+
+        desired_endpoint_m = motion_command.metadata.get("target_position_m")
+        if desired_endpoint_m is not None:
+            return desired_endpoint_m
+
+    # `target_position_m` is compatibility fallback only; prefer command-side
+    # desired endpoint metadata before falling back to viewer feedback.
+    desired_endpoint_m = state.metadata.get("desired_endpoint_m")
+    if desired_endpoint_m is not None:
+        return desired_endpoint_m
+
+    desired_endpoint_m = state.metadata.get("target_position_m")
+    if desired_endpoint_m is not None:
+        return desired_endpoint_m
+
+    return state.target_position_m
+
+
+def build_runtime_endpoint_evaluation_payload(
+    *,
+    desired_endpoint_m: Sequence[float] | None,
+    fk_evaluation: RuntimeForwardKinematicsEvaluation | None,
+    site_evaluation: RuntimeMuJoCoSiteEndpointEvaluation | None,
+    qpos_like_joint_angles_rad: Sequence[float] | None = None,
+) -> dict[str, object] | None:
+    try:
+        metrics = build_runtime_endpoint_evaluation_metrics(
+            desired_endpoint_m=desired_endpoint_m,
+            fk_evaluation=fk_evaluation,
+            site_evaluation=site_evaluation,
+            qpos_like_joint_angles_rad=qpos_like_joint_angles_rad,
+        )
+    except ValueError:
+        return None
+
+    return runtime_endpoint_evaluation_metrics_to_payload(metrics)
+
+
+def build_runtime_endpoint_evaluation_payload_from_state(
+    *,
+    state: MuJoCoState,
+    motion_command: MotionCommand | None,
+    fk_solver: ForwardKinematicsSolver,
+    solver_joint_count: int | None = None,
+) -> dict[str, object] | None:
+    if motion_command is None or motion_command.joint is None:
+        return None
+
+    desired_endpoint_m = _resolve_desired_endpoint_m(motion_command=motion_command, state=state)
+    if desired_endpoint_m is None:
+        return None
+
+    try:
+        fk_evaluation = evaluate_fk_endpoint_from_qpos(
+            fk_solver,
+            motion_command.joint.joint_angles_rad,
+            solver_joint_count=solver_joint_count,
+        )
+        site_evaluation = extract_fast_arm_tip_site_endpoint_from_state(state)
+    except ValueError:
+        return None
+
+    return build_runtime_endpoint_evaluation_payload(
+        desired_endpoint_m=desired_endpoint_m,
+        fk_evaluation=fk_evaluation,
+        site_evaluation=site_evaluation,
+        qpos_like_joint_angles_rad=motion_command.joint.joint_angles_rad,
+    )
+
+
+class _CommandSource(Protocol):
+    last_command: MotionCommand | None
+
+
+@dataclass(slots=True)
+class EndpointEvaluationStatePublisher:
+    publisher: StatePublisher
+    simulator: _CommandSource
+    fk_solver: ForwardKinematicsSolver
+    solver_joint_count: int | None = None
+
+    def _annotate_state(self, state: MuJoCoState) -> MuJoCoState:
+        if "endpoint_evaluation" in state.metadata:
+            return state
+
+        endpoint_evaluation = build_runtime_endpoint_evaluation_payload_from_state(
+            state=state,
+            motion_command=self.simulator.last_command,
+            fk_solver=self.fk_solver,
+            solver_joint_count=self.solver_joint_count,
+        )
+        if endpoint_evaluation is None:
+            return state
+
+        metadata = dict(state.metadata)
+        metadata["endpoint_evaluation"] = endpoint_evaluation
+        return replace(state, metadata=metadata)
+
+    async def publish(self, state: MuJoCoState) -> None:
+        await self.publisher.publish(self._annotate_state(state))
+
+
+def build_endpoint_evaluation_state_publisher(
+    publisher: StatePublisher,
+    *,
+    simulator: _CommandSource,
+    fk_solver: ForwardKinematicsSolver,
+    solver_joint_count: int | None = None,
+) -> EndpointEvaluationStatePublisher:
+    return EndpointEvaluationStatePublisher(
+        publisher=publisher,
+        simulator=simulator,
+        fk_solver=fk_solver,
+        solver_joint_count=solver_joint_count,
+    )
+
+
 __all__ = [
+    "EndpointEvaluationStatePublisher",
     "RuntimeEndpointEvaluationMetrics",
+    "build_endpoint_evaluation_state_publisher",
+    "build_runtime_endpoint_evaluation_payload",
+    "build_runtime_endpoint_evaluation_payload_from_state",
     "build_runtime_endpoint_evaluation_metrics",
     "compute_error_norm_m",
     "compute_vector_error_m",
+    "runtime_endpoint_evaluation_metrics_to_payload",
 ]

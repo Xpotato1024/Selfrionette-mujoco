@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from selfrionette.motion import TargetToJointMotionGenerator
-from selfrionette.runtime import RuntimePipeline, build_concrete_mujoco_pipeline
+from selfrionette.runtime import EndpointEvaluationStatePublisher, RuntimePipeline, build_concrete_mujoco_pipeline
 from selfrionette.schemas import JointCommand, MuJoCoState, RawInputFrame
 
 
@@ -23,7 +23,8 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_solver_path() -> None:
 
     assert isinstance(pipeline, RuntimePipeline)
     assert isinstance(pipeline.motion_generator, TargetToJointMotionGenerator)
-    assert pipeline.publisher is publisher
+    assert isinstance(pipeline.publisher, EndpointEvaluationStatePublisher)
+    assert pipeline.publisher.publisher is publisher
     assert pipeline.simulator.last_command is None
 
 
@@ -44,6 +45,9 @@ def test_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_updates_qpos
     assert pipeline.simulator.last_command.joint.joint_angles_rad[2:] == (0.0, 0.0)
     assert len(pipeline.simulator.last_command.joint.joint_angles_rad) == 4
     assert state.qpos[:4] == pytest.approx(pipeline.simulator.last_command.joint.joint_angles_rad, abs=1e-9)
+    assert len(publisher.states) == 1
+    assert "endpoint_evaluation" in publisher.states[0].metadata
+    assert publisher.states[0].metadata["endpoint_evaluation"]["unit"] == "meter"
 
 
 def test_concrete_mujoco_pipeline_rejects_missing_target_position() -> None:
