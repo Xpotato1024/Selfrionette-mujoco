@@ -30,6 +30,7 @@ import {
   resolveTransportQpos,
 } from "./mujocoQposSync.js";
 import { AXIS_VISUAL_STYLES, BODY_VISUAL_STYLES, resolveBodyVisualStyleKey } from "./visualStyles.js";
+import type { BodyVisualStyle } from "./visualStyles.js";
 import {
   createInitialProductViewerState,
   formatViewerStatusText,
@@ -228,14 +229,15 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       return cached as MeshPhongMaterial;
     }
 
+    const styleKey = resolveBodyVisualStyleKey(bodyName, meshName, geomName);
+    const style: BodyVisualStyle | null = styleKey === null ? null : (BODY_VISUAL_STYLES[styleKey] as BodyVisualStyle);
     const materialColor = (() => {
       if (geomName === "floor" || geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
         return BODY_VISUAL_STYLES.floor.color;
       }
 
-      const styleKey = resolveBodyVisualStyleKey(bodyName, meshName, geomName);
-      if (styleKey !== null) {
-        return BODY_VISUAL_STYLES[styleKey].color;
+      if (style !== null) {
+        return style.color;
       }
 
       return geom.rgba[3] < 1 ? "#93c5fd" : "#e2e8f0";
@@ -248,6 +250,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       side: DoubleSide,
       shininess: 18,
       specular: new Color("#111827"),
+      emissive: style?.emissive === undefined ? new Color("#000000") : new Color(style.emissive),
+      emissiveIntensity: style?.emissiveIntensity ?? 0,
     });
     materialByKey.set(cacheKey, material);
     return material;
