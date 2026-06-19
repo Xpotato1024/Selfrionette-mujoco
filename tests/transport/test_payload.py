@@ -58,6 +58,7 @@ def test_mujoco_state_to_payload_returns_json_compatible_payload() -> None:
         }
     ]
     assert payload["target_position_m"] is None
+    assert "endpoint_evaluation" not in payload
     assert payload["metadata"] == metadata
     assert payload["metadata"] is not metadata
 
@@ -75,6 +76,7 @@ def test_mujoco_state_to_payload_converts_target_position_tuple_to_list() -> Non
 
     assert payload["target_position_m"] == [0.4, 0.5, 0.6]
     assert isinstance(payload["target_position_m"], list)
+    assert "endpoint_evaluation" not in payload
 
 
 def test_mujoco_state_to_payload_keeps_target_feedback_separate_from_metadata() -> None:
@@ -95,3 +97,37 @@ def test_mujoco_state_to_payload_keeps_target_feedback_separate_from_metadata() 
     assert payload["metadata"]["preset"] == "sweep_x"
     assert payload["metadata"]["target_delta_m"] == [0.1, 0.0, 0.0]
     assert payload["metadata"]["desired_endpoint_m"] == [1.1, 2.0, 3.0]
+
+
+def test_mujoco_state_to_payload_lifts_endpoint_evaluation_out_of_metadata() -> None:
+    endpoint_evaluation = {
+        "desired_endpoint_m": [0.6, 0.0, 0.1],
+        "qpos_like_joint_angles_rad": [0.1, -0.2, 0.0, 0.0],
+        "fk_endpoint_m": [0.55, 0.0, 0.08],
+        "site_endpoint_m": [0.62, 0.0, 0.7],
+        "desired_to_fk_error_vector_m": [-0.05, 0.0, -0.02],
+        "desired_to_site_error_vector_m": [0.02, 0.0, 0.6],
+        "fk_to_site_error_vector_m": [0.07, 0.0, 0.62],
+        "desired_to_fk_error_norm_m": 0.05385164807134504,
+        "desired_to_site_error_norm_m": 0.6003332407921454,
+        "fk_to_site_error_norm_m": 0.6239447641967053,
+        "unit": "meter",
+        "desired_endpoint_coordinate_frame": "command-side endpoint frame",
+        "fk_endpoint_coordinate_frame": "solver-defined frame",
+        "site_endpoint_coordinate_frame": "MuJoCo world / scene frame",
+        "frame_mismatch_note": "diagnostic only; FK and site endpoints are not transformed or auto-aligned",
+    }
+    state = MuJoCoState(
+        frame_index=4,
+        time_s=3.0,
+        metadata={
+            "preset": "sweep_x",
+            "endpoint_evaluation": endpoint_evaluation,
+        },
+    )
+
+    payload = mujoco_state_to_payload(state)
+
+    assert payload["endpoint_evaluation"] == endpoint_evaluation
+    assert "endpoint_evaluation" not in payload["metadata"]
+    assert payload["metadata"] == {"preset": "sweep_x"}
