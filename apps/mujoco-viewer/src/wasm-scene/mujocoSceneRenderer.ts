@@ -74,7 +74,7 @@ function createCheckerFloorTexture(): CanvasTexture {
     return new CanvasTexture(canvas);
   }
 
-  const tiles = 3;
+  const tiles = 4;
   const tileSize = canvas.width / tiles;
   context.fillStyle = "#f8fafc";
   context.fillRect(0, 0, canvas.width, canvas.height);
@@ -92,7 +92,7 @@ function createCheckerFloorTexture(): CanvasTexture {
   const texture = new CanvasTexture(canvas);
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
-  texture.repeat.set(20, 20);
+  texture.repeat.set(15, 15);
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.generateMipmaps = false;
