@@ -60,16 +60,20 @@ const FAST_ARM_MESH_URLS = new Map<string, string>([
   ["UpperArmLink", "/assets/mujoco/fast_arm/meshes/UpperArmLink.stl"],
   ["ForeArmLink", "/assets/mujoco/fast_arm/meshes/ForeArmLink.stl"],
 ]);
-const LEGEND_ITEMS = [
-  ["floor", "#c7d2fe", "ground plane"],
-  ["base_link", "#f59e0b", "base housing"],
-  ["sholder_link_1", "#ef4444", "first shoulder link"],
-  ["sholder_link_2", "#f97316", "second shoulder link"],
-  ["upper_arm_link", "#22c55e", "upper arm"],
-  ["fore_arm_link", "#38bdf8", "forearm"],
-  ["axes X", "#ef4444", "positive X"],
-  ["axes Y", "#22c55e", "positive Y"],
-  ["axes Z", "#3b82f6", "positive Z"],
+const BODY_VISUAL_STYLES = {
+  floor: { color: "#c7d2fe", label: "floor", detail: "ground plane" },
+  origin: { color: "#f59e0b", label: "origin", detail: "reference marker" },
+  base_link: { color: "#f59e0b", label: "base_link", detail: "base housing" },
+  sholder_link_1: { color: "#ef4444", label: "sholder_link_1", detail: "first shoulder link" },
+  sholder_link_2: { color: "#f97316", label: "sholder_link_2", detail: "second shoulder link" },
+  upper_arm_link: { color: "#22c55e", label: "upper_arm_link", detail: "upper arm" },
+  fore_arm_link: { color: "#38bdf8", label: "fore_arm_link", detail: "forearm" },
+} as const;
+
+const AXIS_VISUAL_STYLES = [
+  { label: "axes X", color: "#ef4444", detail: "positive X" },
+  { label: "axes Y", color: "#22c55e", detail: "positive Y" },
+  { label: "axes Z", color: "#3b82f6", detail: "positive Z" },
 ] as const;
 
 function renderShell(mount: HTMLElement): ShellElements {
@@ -227,7 +231,17 @@ function formatMetadata(metadata: Record<string, unknown>): string {
 
 function renderLegend(log: HTMLElement): void {
   log.replaceChildren();
-  LEGEND_ITEMS.forEach(([label, color, detail]) => {
+  const legendItems = [
+    BODY_VISUAL_STYLES.floor,
+    BODY_VISUAL_STYLES.origin,
+    BODY_VISUAL_STYLES.base_link,
+    BODY_VISUAL_STYLES.sholder_link_1,
+    BODY_VISUAL_STYLES.sholder_link_2,
+    BODY_VISUAL_STYLES.upper_arm_link,
+    BODY_VISUAL_STYLES.fore_arm_link,
+    ...AXIS_VISUAL_STYLES,
+  ] as const;
+  legendItems.forEach(({ label, color, detail }) => {
     const item = document.createElement("div");
     item.className = "poc-legend-item";
     const swatch = document.createElement("span");
@@ -384,29 +398,26 @@ export function createMujocoFastArmViewer(config: ViewerConfig) {
     }
 
     const materialColor = (() => {
-      if (bodyName === "world" || geomName === "floor") {
-        return "#c7d2fe";
+      if (bodyName === "world" || geomName === "floor" || geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
+        return BODY_VISUAL_STYLES.floor.color;
       }
       if (bodyName === "origin") {
-        return "#f59e0b";
+        return BODY_VISUAL_STYLES.origin.color;
       }
       if (bodyName === "base_link") {
-        return "#ef4444";
+        return BODY_VISUAL_STYLES.base_link.color;
       }
       if (bodyName === "sholder_link_1") {
-        return "#f97316";
+        return BODY_VISUAL_STYLES.sholder_link_1.color;
       }
       if (bodyName === "sholder_link_2") {
-        return "#22c55e";
+        return BODY_VISUAL_STYLES.sholder_link_2.color;
       }
       if (bodyName === "upper_arm_link") {
-        return "#38bdf8";
+        return BODY_VISUAL_STYLES.upper_arm_link.color;
       }
       if (bodyName === "fore_arm_link") {
-        return "#a78bfa";
-      }
-      if (geom.type === mujocoApi.mjtGeom.mjGEOM_PLANE.value) {
-        return "#c7d2fe";
+        return BODY_VISUAL_STYLES.fore_arm_link.color;
       }
       return geom.rgba[3] < 1 ? "#93c5fd" : "#e2e8f0";
     })();
