@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-15
+last_verified: 2026-06-19
 canonical_for:
   - runtime composition root
 related:
@@ -122,6 +122,14 @@ runtime default through `ZeroForwardKinematicsSolver`,
 `ZeroInverseKinematicsSolver`, `NoOpMotionGenerator`, `NoOpMuJoCoSimulator`,
 `NoOpInputInterpreter`, or `NoOpStatePublisher`.
 
+R6-J-P5 adds a runtime / backend internal endpoint metrics helper that keeps
+`desired_endpoint_m`, qpos-like joint input, FK endpoint, MuJoCo site endpoint,
+error vectors, norms, and frame notes together for diagnostics. The helper
+stays in Python runtime/backend code and does not change payload schema or
+viewer behavior. FK uses the solver-defined frame, MuJoCo site uses the
+MuJoCo world / scene frame, and the resulting vectors remain diagnostic only
+instead of becoming transformed control truth.
+
 The `sweep_x` dry-run preset remains a visual-smoke compatibility path.
 It may use `NoOpMotionGenerator` to preserve target-marker sweep behavior.
 This exception is not the production-like concrete runtime default.
@@ -134,3 +142,5 @@ runtime wiring tests. It is not the production-like default path, and it does
 not supersede `build_concrete_mujoco_pipeline()` as the concrete baseline.
 
 R6-H completion audit is recorded in `docs/operations/r6-h-completion-audit.md`.
+R6-J-P5 hands off to P6 for dry-run / programmed input / WebSocket payload
+integration and to P7 for the read-only viewer overlay.
