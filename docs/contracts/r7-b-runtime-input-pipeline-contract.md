@@ -251,3 +251,12 @@ R7-B の実装順序と後続 issue の責務は次のとおり。
 - resolver で `desired_endpoint_m` を解決できる。
 - `target_position_m` は primary command にしない。
 - next: `#220` offline `InputSource -> MuJoCo runtime stepping smoke`
+
+## #220 update
+
+- offline InputSource -> MuJoCo runtime stepping smoke を追加した。
+- keyboard command と replay/loadcell fixture command を runtime stepping path に通した。
+- `desired_endpoint_m` は command-side endpoint として resolver 経由で使う。
+- `target_position_m` は primary command にしない。
+- `endpoint_evaluation` は optional diagnostic として扱う。
+- WebSocket / viewer 本格結線は `#221`。

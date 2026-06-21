@@ -26,6 +26,10 @@ from selfrionette.runtime.endpoint_metrics import (
     compute_vector_error_m,
     runtime_endpoint_evaluation_metrics_to_payload,
 )
+from selfrionette.runtime.offline_input_runtime_smoke import (
+    OfflineInputRuntimeSmokeResult,
+    run_offline_input_runtime_stepping_smoke,
+)
 from selfrionette.mujoco_backend.endpoint_extraction import (
     RuntimeMuJoCoSiteEndpointEvaluation,
     extract_fast_arm_end_effector_site_endpoint,
@@ -47,6 +51,7 @@ __all__ = [
     "RuntimeEndpointEvaluationMetrics",
     "EndpointEvaluationStatePublisher",
     "ResolvedDesiredEndpoint",
+    "OfflineInputRuntimeSmokeResult",
     "RuntimeMuJoCoSiteEndpointEvaluation",
     "build_concrete_mujoco_pipeline",
     "build_endpoint_evaluation_state_publisher",
@@ -70,5 +75,6 @@ __all__ = [
     "build_replay_mujoco_pipeline",
     "run_replay_mujoco_dry_run",
     "run_live_viewer_smoke",
+    "run_offline_input_runtime_stepping_smoke",
     "run_replay_mujoco_websocket_publisher",
 ]
