@@ -43,10 +43,13 @@ status / warn line を出す場合は、`vector` prefix と混同しないよう
 
 ```text
 status,setup_start
+status,calibration_command_received
 status,calibration_start
 status,calibration_end
 warn,ready_timeout,<channel>
 ```
+
+`c` を serial で送ると、全 ch の calibration を再実行します。
 
 ## 実行例
 
