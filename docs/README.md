@@ -94,6 +94,7 @@ Do not create or use `doc/`.
 | R7-C axis sanity check | `docs/operations/r7-c-axis-sanity-check.md` | keyboard / replay / live loadcell axis sanity protocol; not final calibration |
 | R7-C axis sanity check template | `docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md` | operator-filled axis sanity check template |
 | R7-C presentation demo notes | `docs/operations/r7-c-presentation-demo-notes.md` | presentation-ready demo narrative, fallback plan, and proven/unproven boundary |
+| R7-C completion audit | `docs/operations/r7-c-completion-audit.md` | manual validation / demo operation completion audit and parent #231 close readiness |
 | Legacy map | `docs/migration/legacy-to-new-layer-map.md` | legacy reference only |
 | ADRs | `docs/design/adr/` | design decision history |
 | R6-F-P4 DoF ring reference audit | `docs/operations/r6-f-p4-dof-ring-reference-audit.md` | DoF ring の reference audit と viewer presentation skeleton |

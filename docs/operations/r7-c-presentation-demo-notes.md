@@ -135,7 +135,7 @@ R7-C presentation demo は実機制御ではない。
 ## handoff
 
 次は #238 で R7-C completion audit を追加する。
-この demo notes は #238 で parent #231 close-readiness を判断する材料にする。
+この demo notes は `docs/operations/r7-c-completion-audit.md` で parent #231 close-readiness を判断する材料にする。
 
 ## Scope Check
 
