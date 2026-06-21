@@ -21,6 +21,7 @@ CANONICAL_DOCS = [
     "docs/contracts/mujoco-state.md",
     "docs/contracts/transport-payload.md",
     "docs/contracts/assets.md",
+    "docs/contracts/r7-b-runtime-input-pipeline-contract.md",
     "docs/operations/git-pr-workflow.md",
     "docs/operations/validation.md",
     "docs/operations/hardware-safety.md",

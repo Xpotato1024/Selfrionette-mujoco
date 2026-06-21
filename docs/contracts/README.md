@@ -13,3 +13,4 @@ Canonical contract docs:
 - `docs/contracts/transport-payload.md`
 - `docs/contracts/schemas.md`
 - `docs/contracts/programmed-target-input-source.md`
+- `docs/contracts/r7-b-runtime-input-pipeline-contract.md`

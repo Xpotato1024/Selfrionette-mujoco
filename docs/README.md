@@ -83,6 +83,7 @@ Do not create or use `doc/`.
 | R7-A-lite serial dry-run smoke | `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | recorded fixture dry-run only; manual live serial is human-only |
 | R7-A-lite WebSocket / viewer smoke | `docs/operations/r7-a-lite-websocket-viewer-smoke.md` | offline dry-run -> payload v0 -> viewer parser smoke; read-only overlay only |
 | R7-A-lite completion audit | `docs/operations/r7-a-lite-completion-audit.md` | final R7-A-lite child completion audit and parent #152 close readiness |
+| R7-B runtime input pipeline contract | `docs/contracts/r7-b-runtime-input-pipeline-contract.md` | keyboard / loadcell / runtime target pipeline contract; R7-B-P0 inventory and handoff |
 | Legacy map | `docs/migration/legacy-to-new-layer-map.md` | legacy reference only |
 | ADRs | `docs/design/adr/` | design decision history |
 | R6-F-P4 DoF ring reference audit | `docs/operations/r6-f-p4-dof-ring-reference-audit.md` | DoF ring の reference audit と viewer presentation skeleton |
