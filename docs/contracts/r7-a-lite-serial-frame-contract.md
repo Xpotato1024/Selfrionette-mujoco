@@ -221,3 +221,13 @@ Recommended parser assertions:
 - malformed lines are rejected
 - diagnostics are separated from sensor records
 - the parser does not need hardware access or a serial port
+
+## Handoff to #200
+`#200` should add a `SerialInputSource` skeleton that reuses `parse_serial_frame_line()` and consumes injected lines only.
+
+Recommended source assertions:
+- `status` / `warn` lines are retained as diagnostics and not returned as vector records
+- injected line sources stop deterministically at exhaustion
+- malformed `vector` lines surface `SerialFrameParseError`
+- no live serial port, pyserial dependency, or hardware access is introduced
+- the next layer step after this PR is raw loadcell to normalized input intent conversion

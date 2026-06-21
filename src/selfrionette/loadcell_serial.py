@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from math import isfinite
 from typing import cast
+
+from selfrionette.schemas import RawInputFrame
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,3 +95,75 @@ def parse_serial_frame_line(line: str) -> RawLoadcellVectorRecord | SerialDiagno
         fields=tuple(parts[1:]),
         raw_line=stripped_line,
     )
+
+
+def _iterable_to_line_reader(lines: Iterable[str] | Iterator[str]) -> Callable[[], str]:
+    iterator = iter(lines)
+
+    def read_line() -> str:
+        return next(iterator)
+
+    return read_line
+
+
+class SerialInputSource:
+    """Injected-line serial source that yields parsed loadcell vector frames.
+
+    The source collects diagnostic frames locally and only surfaces vector
+    records as RawInputFrame objects. It does not open a serial port.
+    """
+
+    def __init__(self, line_reader: Iterable[str] | Iterator[str] | Callable[[], str]) -> None:
+        if callable(line_reader):
+            self._read_line = line_reader
+        else:
+            self._read_line = _iterable_to_line_reader(line_reader)
+
+        self._diagnostics: list[SerialDiagnosticEvent] = []
+
+    @classmethod
+    def from_lines(cls, lines: Iterable[str]) -> "SerialInputSource":
+        return cls(lines)
+
+    @property
+    def diagnostics(self) -> tuple[SerialDiagnosticEvent, ...]:
+        return tuple(self._diagnostics)
+
+    def _read_next_line(self) -> str:
+        try:
+            return self._read_line()
+        except StopIteration as exc:
+            raise StopIteration("SerialInputSource reached end of injected lines") from exc
+
+    def _read_next_vector_record(self) -> RawLoadcellVectorRecord:
+        while True:
+            line = self._read_next_line()
+            record_or_event = parse_serial_frame_line(line)
+
+            if isinstance(record_or_event, SerialDiagnosticEvent):
+                self._diagnostics.append(record_or_event)
+                continue
+
+            return record_or_event
+
+    def read_frame(self) -> RawInputFrame:
+        vector_record = self._read_next_vector_record()
+        return RawInputFrame(
+            source="loadcell_serial",
+            timestamp_s=float(vector_record.timestamp_ms) / 1000.0,
+            values=vector_record.channels,
+            metadata={
+                "source_kind": "loadcell_serial",
+                "timestamp_ms": vector_record.timestamp_ms,
+                "raw_line": vector_record.raw_line,
+            },
+        )
+
+
+__all__ = [
+    "RawLoadcellVectorRecord",
+    "SerialDiagnosticEvent",
+    "SerialFrameParseError",
+    "SerialInputSource",
+    "parse_serial_frame_line",
+]
