@@ -260,3 +260,11 @@ R7-B の実装順序と後続 issue の責務は次のとおり。
 - `target_position_m` は primary command にしない。
 - `endpoint_evaluation` は optional diagnostic として扱う。
 - WebSocket / viewer 本格結線は `#221`。
+## #222 update
+
+- manual-gated live loadcell serial runtime runner を追加した。
+- live serial path は explicit `--port` のみで入る。
+- generated payload は simulation-facing `payload v0` のまま維持する。
+- `desired_endpoint_m` は command-side metadata である。
+- `target_position_m` は primary command ではない。
+- next: `#223` completion audit
