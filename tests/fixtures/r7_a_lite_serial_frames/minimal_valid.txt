@@ -1,0 +1,6 @@
+status,setup_start
+status,calibration_command_received
+status,calibration_channel_end,0,818
+warn,ready_timeout,3
+warn,calibration_spread,4,2501.0
+vector,2152956,-37.67,99.06,137.60,242.13,277.34,25.87,-18.67
