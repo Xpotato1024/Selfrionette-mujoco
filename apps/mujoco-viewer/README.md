@@ -1,28 +1,21 @@
 # mujoco-viewer
 
-`apps/mujoco-viewer` は MuJoCo WASM scene renderer を product viewer としてホストします。
+`apps/mujoco-viewer` は MuJoCo WASM scene renderer を rendering-only でホストする。
 
-## 起動
+## 正本
 
-```powershell
-cd apps\mujoco-viewer
-npm ci
-npm run dev -- --host 127.0.0.1 --port 5173
-```
+- [docs/operations/backend-viewer-startup.md](../../docs/operations/backend-viewer-startup.md)
+- [docs/operations/r7-c-viewer-fixture-demo-procedure.md](../../docs/operations/r7-c-viewer-fixture-demo-procedure.md)
+- [docs/operations/websocket-host-port-contract.md](../../docs/operations/websocket-host-port-contract.md)
 
-起動すると Vite がブラウザを自動で開き、`/apps/mujoco-viewer/` を表示します。
-実際の port は Vite の表示に従います。`5175` は手元環境での一例です。
+## 役割
 
-## 表示の正本
+- browser-side FK / IK / qpos recompute: しない
+- MuJoCo model loading: browser-side source of truth ではない
+- `public/fixtures/fast_arm_sweep_x_qpos.json`: reference path only
+- endpoint evaluation overlay: read-only diagnostic
 
-- renderer mode: `wasm-scene`
-- initial pose source: compiled MuJoCo model default qpos
-- qpos source: WebSocket payload の `qpos` を優先
-- debug fixture path: offline / debug reference only, startup では自動適用しない
-- browser-side IK / FK / qpos recompute: disabled
-- old renderer: deleted
-
-## 検証
+## 参照用の検証コマンド
 
 ```powershell
 cd apps\mujoco-viewer
@@ -31,7 +24,7 @@ npm test
 npm run build
 ```
 
-リポジトリ root からは差分の確認も行います。
+リポジトリ root からの差分確認も行う。
 
 ```powershell
 cd D:\Xpotato-apps\Selfrionette-mujoco
