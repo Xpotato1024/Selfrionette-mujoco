@@ -28,6 +28,7 @@ CANONICAL_DOCS = [
     "docs/operations/codex-workflow.md",
     "docs/operations/r7-c-manual-validation-preflight.md",
     "docs/operations/r7-c-viewer-fixture-demo-procedure.md",
+    "docs/operations/r7-c-keyboard-replay-demo-package.md",
     "docs/migration/legacy-inventory.md",
     "docs/migration/legacy-to-new-layer-map.md",
     "docs/migration/rapier-to-mujoco-migration.md",
@@ -81,3 +82,4 @@ def test_docs_readme_has_source_of_truth_map() -> None:
     assert "docs/contracts/kinematics-command-contract.md" in text
     assert "docs/operations/r7-c-manual-validation-preflight.md" in text
     assert "docs/operations/r7-c-viewer-fixture-demo-procedure.md" in text
+    assert "docs/operations/r7-c-keyboard-replay-demo-package.md" in text
