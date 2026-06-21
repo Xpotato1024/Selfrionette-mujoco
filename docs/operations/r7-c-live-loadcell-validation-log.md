@@ -128,6 +128,7 @@ live serial の結果は人間が template に記録し、必要に応じて後�
 次は #236 で axis sanity check protocol を追加する。
 この log template の observed / expected 欄は
 `docs/operations/r7-c-axis-sanity-check.md` の keyboard / replay / live loadcell observation と接続する。
+presentation では `docs/operations/r7-c-presentation-demo-notes.md` から manual-gated log 境界を参照する。
 
 ## Scope Check
 

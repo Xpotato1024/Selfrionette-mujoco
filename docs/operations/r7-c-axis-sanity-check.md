@@ -134,7 +134,8 @@ Codex / CI は live serial を開かない。
 ## handoff
 
 次は #237 で presentation-ready demo notes を追加する。
-この protocol の pass / caution / fail は、発表時に何を proven / intentionally unproven と説明するかの材料にする。
+この protocol の pass / caution / fail は、
+`docs/operations/r7-c-presentation-demo-notes.md` で何を proven / intentionally unproven と説明するかの材料にする。
 
 ## Scope Check
 

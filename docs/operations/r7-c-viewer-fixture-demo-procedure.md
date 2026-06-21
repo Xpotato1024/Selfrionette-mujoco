@@ -170,6 +170,7 @@ CI / tests で行うのは docs-only validation と contract smoke までであ�
 次は #234 で keyboard / replay demo operation package を整備し、
 この viewer / fixture 手順から再利用できる no-hardware demo command と
 artifact / log 命名方針を固定する。
+presentation では `docs/operations/r7-c-presentation-demo-notes.md` から本手順を参照する。
 
 ## Scope Check
 
