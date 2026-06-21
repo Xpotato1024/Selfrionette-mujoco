@@ -32,9 +32,14 @@ def _raise_parse_error(line: str, reason: str) -> None:
 
 def _parse_timestamp_ms(text: str, *, line: str) -> int:
     try:
-        return int(text)
+        timestamp_ms = int(text)
     except ValueError as exc:
         raise SerialFrameParseError(line, "malformed timestamp") from exc
+
+    if timestamp_ms < 0:
+        raise SerialFrameParseError(line, "negative timestamp")
+
+    return timestamp_ms
 
 
 def _parse_channel_value(text: str, *, line: str, channel_index: int) -> float:

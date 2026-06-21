@@ -108,6 +108,10 @@ def test_unknown_prefix_is_surfaces_as_diagnostic_event() -> None:
             "vector,not-a-number,-37.67,99.06,137.60,242.13,277.34,25.87,-18.67",
             "malformed timestamp",
         ),
+        (
+            "vector,-1,-37.67,99.06,137.60,242.13,277.34,25.87,-18.67",
+            "negative timestamp",
+        ),
     ],
 )
 def test_malformed_vector_lines_are_rejected(line: str, reason_fragment: str) -> None:
@@ -122,6 +126,13 @@ def test_empty_line_is_rejected() -> None:
         parse_serial_frame_line("")
 
     assert exc_info.value.reason == "empty line"
+
+
+def test_negative_timestamp_is_rejected() -> None:
+    with pytest.raises(SerialFrameParseError) as exc_info:
+        parse_serial_frame_line("vector,-1,-37.67,99.06,137.60,242.13,277.34,25.87,-18.67")
+
+    assert "negative timestamp" in exc_info.value.reason
 
 
 def test_malformed_fixture_lines_are_rejected() -> None:
