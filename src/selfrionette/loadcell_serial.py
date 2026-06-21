@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass, field
 from math import isfinite
 from typing import cast
 
@@ -20,6 +20,33 @@ class SerialDiagnosticEvent:
     prefix: str
     fields: tuple[str, ...]
     raw_line: str
+
+
+@dataclass(frozen=True, slots=True)
+class LoadcellNormalizationConfig:
+    channel_count: int = 7
+    deadzone: float = 0.0
+    scale: float = 1.0
+    clamp_abs: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.channel_count != 7:
+            raise ValueError("channel_count must be exactly 7")
+        if self.scale <= 0.0:
+            raise ValueError("scale must be positive")
+        if self.deadzone < 0.0:
+            raise ValueError("deadzone must be non-negative")
+        if self.clamp_abs <= 0.0:
+            raise ValueError("clamp_abs must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedLoadcellInputIntent:
+    source: str
+    timestamp_s: float
+    values: tuple[float, float, float, float, float, float, float]
+    active_channels: tuple[int, ...] = ()
+    metadata: Mapping[str, object] = field(default_factory=dict)
 
 
 class SerialFrameParseError(ValueError):
@@ -160,7 +187,94 @@ class SerialInputSource:
         )
 
 
+def _coerce_loadcell_values(
+    values: tuple[float, ...],
+    *,
+    expected_channel_count: int,
+) -> tuple[float, float, float, float, float, float, float]:
+    if len(values) != expected_channel_count:
+        raise ValueError(f"loadcell vector must contain exactly {expected_channel_count} values")
+
+    coerced_values = []
+    for channel_index, raw_value in enumerate(values):
+        if not isfinite(raw_value):
+            raise ValueError(f"non-finite loadcell value at index {channel_index}")
+        coerced_values.append(float(raw_value))
+
+    return cast(
+        tuple[float, float, float, float, float, float, float],
+        tuple(coerced_values),
+    )
+
+
+def _normalize_channel_value(raw_value: float, config: LoadcellNormalizationConfig) -> float:
+    normalized_value = raw_value / config.scale
+    if abs(normalized_value) < config.deadzone:
+        return 0.0
+
+    if normalized_value > config.clamp_abs:
+        return config.clamp_abs
+    if normalized_value < -config.clamp_abs:
+        return -config.clamp_abs
+
+    return normalized_value
+
+
+class LoadcellNormalizedInputIntentConverter:
+    """Convert raw 7ch loadcell values into a normalized intent."""
+
+    def __init__(
+        self,
+        config: LoadcellNormalizationConfig | None = None,
+        *,
+        source: str = "loadcell_serial",
+    ) -> None:
+        self._config = LoadcellNormalizationConfig() if config is None else config
+        self._source = source
+
+    @property
+    def config(self) -> LoadcellNormalizationConfig:
+        return self._config
+
+    def convert(self, frame: RawInputFrame | RawLoadcellVectorRecord) -> NormalizedLoadcellInputIntent:
+        if isinstance(frame, RawInputFrame):
+            source = frame.source
+            timestamp_s = frame.timestamp_s
+            raw_values = frame.values
+            metadata = dict(frame.metadata)
+        else:
+            source = self._source
+            timestamp_s = float(frame.timestamp_ms) / 1000.0
+            raw_values = frame.channels
+            metadata = {}
+
+        values = _coerce_loadcell_values(raw_values, expected_channel_count=self._config.channel_count)
+        normalized_values = tuple(
+            _normalize_channel_value(raw_value, self._config)
+            for raw_value in values
+        )
+        active_channels = tuple(
+            channel_index
+            for channel_index, normalized_value in enumerate(normalized_values)
+            if normalized_value != 0.0
+        )
+
+        return NormalizedLoadcellInputIntent(
+            source=source,
+            timestamp_s=timestamp_s,
+            values=cast(
+                tuple[float, float, float, float, float, float, float],
+                normalized_values,
+            ),
+            active_channels=active_channels,
+            metadata=metadata,
+        )
+
+
 __all__ = [
+    "LoadcellNormalizationConfig",
+    "LoadcellNormalizedInputIntentConverter",
+    "NormalizedLoadcellInputIntent",
     "RawLoadcellVectorRecord",
     "SerialDiagnosticEvent",
     "SerialFrameParseError",

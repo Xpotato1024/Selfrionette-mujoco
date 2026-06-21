@@ -231,3 +231,19 @@ Recommended source assertions:
 - malformed `vector` lines surface `SerialFrameParseError`
 - no live serial port, pyserial dependency, or hardware access is introduced
 - the next layer step after this PR is raw loadcell to normalized input intent conversion
+
+## Handoff to #201
+`#201` should convert the raw 7ch loadcell values from `RawInputFrame` / `RawLoadcellVectorRecord` into a normalized input intent.
+
+Recommended converter assertions:
+- channel order stays `ch0` through `ch6`
+- deadzone / scale / clamp are deterministic and minimal
+- invalid channel count or non-finite values are rejected
+- no desired endpoint conversion is introduced yet
+
+## Handoff to #202
+`#202` should consume the normalized loadcell intent and turn it into `desired_endpoint_m`.
+
+Recommended next-step assertions:
+- keep the normalized intent boundary separate from endpoint resolution
+- physical axis mapping remains deferred until the later handoff
