@@ -47,6 +47,63 @@ const TRANSPORT_PAYLOAD_FIXTURE: TransportPayloadV0 = {
   metadata: {},
 };
 
+const VALID_ENDPOINT_EVALUATION = {
+  desired_endpoint_m: [0.6, 0.0, 0.1],
+  qpos_like_joint_angles_rad: [0.1, -0.2, 0.0, 0.0],
+  fk_endpoint_m: [0.55, 0.0, 0.08],
+  site_endpoint_m: [0.62, 0.0, 0.7],
+  desired_to_fk_error_vector_m: [-0.05, 0.0, -0.02],
+  desired_to_site_error_vector_m: [0.02, 0.0, 0.6],
+  fk_to_site_error_vector_m: [0.07, 0.0, 0.62],
+  desired_to_fk_error_norm_m: 0.05385164807134504,
+  desired_to_site_error_norm_m: 0.6003332407921454,
+  fk_to_site_error_norm_m: 0.6239447641967053,
+  unit: "meter",
+  desired_endpoint_coordinate_frame: "command-side endpoint frame",
+  fk_endpoint_coordinate_frame: "solver-defined frame",
+  site_endpoint_coordinate_frame: "MuJoCo world / scene frame",
+  frame_mismatch_note: "diagnostic only; FK and site endpoints are not transformed or auto-aligned",
+};
+
+const INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_NULL_TARGET: TransportPayloadV0 = {
+  version: 0,
+  frame_index: 1,
+  time_s: 0.0166666667,
+  qpos: [0.0, 0.0, 0.0, 0.0],
+  qvel: [0.0, 0.0, 0.0, 0.0],
+  bodies: [
+    {
+      name: "base_link",
+      position_m: [0.0, 0.0, 0.0],
+      quaternion_wxyz: [1.0, 0.0, 0.0, 0.0],
+    },
+  ],
+  sites: [
+    {
+      name: "tip",
+      position_m: [0.1, 0.0, 0.3],
+      quaternion_wxyz: [1.0, 0.0, 0.0, 0.0],
+    },
+  ],
+  target_position_m: null,
+  metadata: {
+    source_kind: "keyboard",
+    desired_endpoint_m: [0.11, 0.0, 0.3],
+    endpoint_delta_m: [0.01, 0.0, 0.0],
+    current_tip_position_m: [0.1, 0.0, 0.3],
+  },
+};
+
+const INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_FEEDBACK_TARGET: TransportPayloadV0 = {
+  ...INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_NULL_TARGET,
+  target_position_m: [0.24, 0.5, 0.75],
+  metadata: {
+    ...INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_NULL_TARGET.metadata,
+    target_position_m: [0.24, 0.5, 0.75],
+  },
+  endpoint_evaluation: VALID_ENDPOINT_EVALUATION,
+};
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
@@ -146,6 +203,47 @@ function testParseTransportPayloadV0MessageRejectsMissingRequiredFields(): void 
           : `${field} must be an array`,
     );
   }
+}
+
+function testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithNullTargetPositionAndMissingEndpointEvaluation(): void {
+  const parsed = parseTransportPayloadV0Message(JSON.stringify(INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_NULL_TARGET));
+
+  assert(
+    JSON.stringify(parsed.metadata.desired_endpoint_m) === JSON.stringify([0.11, 0.0, 0.3]),
+    "desired_endpoint_m should be preserved in metadata",
+  );
+  assert(
+    JSON.stringify(parsed.metadata.endpoint_delta_m) === JSON.stringify([0.01, 0.0, 0.0]),
+    "endpoint_delta_m should be preserved in metadata",
+  );
+  assert(
+    JSON.stringify(parsed.metadata.current_tip_position_m) === JSON.stringify([0.1, 0.0, 0.3]),
+    "current_tip_position_m should be preserved in metadata",
+  );
+  assert(parsed.target_position_m === null, "target_position_m should allow null feedback");
+  assert(parsed.endpoint_evaluation === undefined, "endpoint_evaluation should remain optional");
+}
+
+function testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithFeedbackTargetAndEndpointEvaluation(): void {
+  const parsed = parseTransportPayloadV0Message(JSON.stringify(INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_FEEDBACK_TARGET));
+
+  assert(
+    JSON.stringify(parsed.metadata.desired_endpoint_m) === JSON.stringify([0.11, 0.0, 0.3]),
+    "desired_endpoint_m should be preserved in metadata",
+  );
+  assert(
+    JSON.stringify(parsed.metadata.target_position_m) === JSON.stringify([0.24, 0.5, 0.75]),
+    "target_position_m should be preserved in metadata as feedback",
+  );
+  assert(
+    JSON.stringify(parsed.target_position_m) === JSON.stringify([0.24, 0.5, 0.75]),
+    "target_position_m should stay parseable as feedback",
+  );
+  assert(parsed.endpoint_evaluation !== null && parsed.endpoint_evaluation !== undefined, "endpoint_evaluation should parse");
+  assert(
+    JSON.stringify(parsed.endpoint_evaluation) === JSON.stringify(VALID_ENDPOINT_EVALUATION),
+    "endpoint_evaluation should preserve the diagnostic payload",
+  );
 }
 
 class FakeWebSocket implements ViewerWebSocketLike {
@@ -390,6 +488,8 @@ function testViewerWebSocketClientRoutesSocketErrorsToErrorCallback(): void {
 
 testParseTransportPayloadV0Message();
 testParseTransportPayloadV0MessageRetainsOfflineLoadcellMetadataWithoutEndpointEvaluation();
+testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithNullTargetPositionAndMissingEndpointEvaluation();
+testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithFeedbackTargetAndEndpointEvaluation();
 testParseTransportPayloadV0MessageRejectsInvalidJson();
 testParseTransportPayloadV0MessageRejectsInvalidVersion();
 testParseTransportPayloadV0MessageRejectsMissingRequiredFields();
