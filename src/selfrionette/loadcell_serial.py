@@ -90,6 +90,16 @@ class LoadcellEndpointMappingConfig:
             raise ValueError("max_delta_m must be positive")
 
 
+@dataclass(frozen=True, slots=True)
+class LoadcellSerialDryRunSmokeResult:
+    frames_read: int
+    vectors_read: int
+    diagnostics: tuple[SerialDiagnosticEvent, ...]
+    raw_frame: RawInputFrame | None
+    normalized_intent: NormalizedLoadcellInputIntent | None
+    motion_command: MotionCommand | None
+
+
 class SerialFrameParseError(ValueError):
     def __init__(self, line: str, reason: str) -> None:
         self.line = line
@@ -328,6 +338,26 @@ def _build_loadcell_motion_metadata(
     return metadata
 
 
+def build_r7_a_lite_smoke_endpoint_mapping_config(
+    *,
+    gain_m: float,
+    max_delta_m: float,
+) -> LoadcellEndpointMappingConfig:
+    return LoadcellEndpointMappingConfig(
+        channel_axis_weights=(
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+        ),
+        gain_m=gain_m,
+        max_delta_m=max_delta_m,
+    )
+
+
 def build_motion_command_from_normalized_loadcell_intent(
     intent: NormalizedLoadcellInputIntent,
     *,
@@ -372,6 +402,52 @@ class LoadcellEndpointMotionCommandConverter:
             current_tip_position_m=current_tip_position_m,
             config=self._config,
         )
+
+
+def run_loadcell_serial_dry_run_smoke(
+    lines: Iterable[str],
+    *,
+    max_vectors: int = 1,
+    normalization_config: LoadcellNormalizationConfig | None = None,
+    endpoint_config: LoadcellEndpointMappingConfig | None = None,
+    current_tip_position_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> LoadcellSerialDryRunSmokeResult:
+    if max_vectors < 1:
+        raise ValueError("max_vectors must be a positive integer")
+
+    source = SerialInputSource.from_lines(lines)
+    normalized_converter = LoadcellNormalizedInputIntentConverter(normalization_config)
+    endpoint_converter = LoadcellEndpointMotionCommandConverter(endpoint_config)
+
+    frames_read = 0
+    vectors_read = 0
+    last_raw_frame: RawInputFrame | None = None
+    last_normalized_intent: NormalizedLoadcellInputIntent | None = None
+    last_motion_command: MotionCommand | None = None
+
+    while vectors_read < max_vectors:
+        try:
+            raw_frame = source.read_frame()
+        except StopIteration:
+            break
+
+        frames_read += 1
+        vectors_read += 1
+        last_raw_frame = raw_frame
+        last_normalized_intent = normalized_converter.convert(raw_frame)
+        last_motion_command = endpoint_converter.convert(
+            last_normalized_intent,
+            current_tip_position_m=current_tip_position_m,
+        )
+
+    return LoadcellSerialDryRunSmokeResult(
+        frames_read=frames_read,
+        vectors_read=vectors_read,
+        diagnostics=source.diagnostics,
+        raw_frame=last_raw_frame,
+        normalized_intent=last_normalized_intent,
+        motion_command=last_motion_command,
+    )
 
 
 class LoadcellNormalizedInputIntentConverter:
@@ -430,11 +506,14 @@ __all__ = [
     "LoadcellEndpointMappingConfig",
     "LoadcellEndpointMotionCommandConverter",
     "build_motion_command_from_normalized_loadcell_intent",
+    "build_r7_a_lite_smoke_endpoint_mapping_config",
     "LoadcellNormalizedInputIntentConverter",
+    "LoadcellSerialDryRunSmokeResult",
     "NormalizedLoadcellInputIntent",
     "RawLoadcellVectorRecord",
     "SerialDiagnosticEvent",
     "SerialFrameParseError",
     "SerialInputSource",
     "parse_serial_frame_line",
+    "run_loadcell_serial_dry_run_smoke",
 ]
