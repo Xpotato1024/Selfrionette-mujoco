@@ -30,6 +30,14 @@ from selfrionette.runtime.offline_input_runtime_smoke import (
     OfflineInputRuntimeSmokeResult,
     run_offline_input_runtime_stepping_smoke,
 )
+from selfrionette.runtime.live_loadcell_runtime_runner import (
+    DEFAULT_LIVE_LOADCELL_BAUD_RATE,
+    DEFAULT_LIVE_LOADCELL_CURRENT_TIP_POSITION_M,
+    DEFAULT_LIVE_LOADCELL_MAX_FRAMES,
+    DEFAULT_LIVE_LOADCELL_STEPS_PER_FRAME,
+    LiveLoadcellRuntimeRunnerConfig,
+    run_live_loadcell_runtime_runner,
+)
 from selfrionette.mujoco_backend.endpoint_extraction import (
     RuntimeMuJoCoSiteEndpointEvaluation,
     extract_fast_arm_end_effector_site_endpoint,
@@ -50,6 +58,11 @@ __all__ = [
     "RuntimeForwardKinematicsEvaluation",
     "RuntimeEndpointEvaluationMetrics",
     "EndpointEvaluationStatePublisher",
+    "DEFAULT_LIVE_LOADCELL_BAUD_RATE",
+    "DEFAULT_LIVE_LOADCELL_CURRENT_TIP_POSITION_M",
+    "DEFAULT_LIVE_LOADCELL_MAX_FRAMES",
+    "DEFAULT_LIVE_LOADCELL_STEPS_PER_FRAME",
+    "LiveLoadcellRuntimeRunnerConfig",
     "ResolvedDesiredEndpoint",
     "OfflineInputRuntimeSmokeResult",
     "RuntimeMuJoCoSiteEndpointEvaluation",
@@ -75,6 +88,7 @@ __all__ = [
     "build_replay_mujoco_pipeline",
     "run_replay_mujoco_dry_run",
     "run_live_viewer_smoke",
+    "run_live_loadcell_runtime_runner",
     "run_offline_input_runtime_stepping_smoke",
     "run_replay_mujoco_websocket_publisher",
 ]
