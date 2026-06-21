@@ -76,6 +76,9 @@ Do not create or use `doc/`.
 | Hardware safety | `docs/operations/hardware-safety.md` | serial / OSC / hardware rules |
 | R7-A-lite-P0 device inventory | `docs/operations/r7-a-lite-p0-device-inventory.md` | legacy firmware reference import and confirmed hardware notes |
 | R7-A-lite hardware bring-up summary | `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-bringup-summary.md` | docs-only summary of the closed hardware bring-up evidence |
+| R7-A-lite CLI monitor note | `docs/experiment-notes/2026-06-21-r7-a-lite-cli-monitor.md` | Arduino IDE なしでの serial monitor 運用メモ |
+| R7-A-lite plotting note | `docs/experiment-notes/2026-06-21-r7-a-lite-plotting.md` | vector ログの PowerShell plotting メモ |
+| R7-A-lite hardware log | `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-log.md` | 実機確認の観測メモ |
 | Legacy map | `docs/migration/legacy-to-new-layer-map.md` | legacy reference only |
 | ADRs | `docs/design/adr/` | design decision history |
 | R6-F-P4 DoF ring reference audit | `docs/operations/r6-f-p4-dof-ring-reference-audit.md` | DoF ring の reference audit と viewer presentation skeleton |
