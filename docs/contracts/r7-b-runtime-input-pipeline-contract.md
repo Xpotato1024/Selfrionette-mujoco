@@ -228,6 +228,8 @@ serial frame lines
 R7-B の実装順序と後続 issue の責務は次のとおり。
 
 - `#218`: `MotionCommand.metadata["desired_endpoint_m"]` resolver
+- `#218` では runtime side の resolver を追加し、`desired_endpoint_m` を default required にする。
+- `target_position_m` fallback は explicit opt-in のみで許可する。
 - `#219`: keyboard / replay input source smoke
 - `#220`: offline `InputSource -> MuJoCo` runtime stepping smoke
 - `#221`: input-driven WebSocket / viewer smoke
