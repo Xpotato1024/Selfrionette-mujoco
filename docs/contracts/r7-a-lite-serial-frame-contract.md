@@ -32,8 +32,8 @@ Do not use closed PR #206 as source of truth. Its useful evidence is represented
 | Channel count | `7` |
 | DOUT pins | `4, 6, 8, 10, 19, 3, 14` |
 | SCK pins | `5, 7, 9, 18, 20, 2, 15` |
-| Sampling rate target | `200 Hz` |
-| Loop period target | `5000 us` |
+| Sampling rate target | `80 Hz` |
+| Loop period target | `12500 us` |
 
 ## Transport
 USB serial over Pro Micro to the PC. The contract is a line-based ASCII stream.
@@ -42,7 +42,7 @@ USB serial over Pro Micro to the PC. The contract is a line-based ASCII stream.
 `115200`
 
 ## Sampling rate
-The firmware loop targets `200 Hz` with a `5000 us` cycle period. Actual cadence can vary if `wait_ready_timeout()` or calibration work delays a cycle.
+The firmware loop targets `80 Hz` with a `12500 us` cycle period. Actual cadence can vary if `wait_ready_timeout()`, calibration, or serial command handling delays a cycle.
 
 ## Line model
 One frame per line, comma-delimited ASCII, emitted through `Serial.println(...)`.
@@ -68,6 +68,7 @@ status,setup_start
 status,sensor_init_start
 status,sensor_init_end
 status,calibration_start
+status,calibration_command_received
 status,calibration_channel_start,<channel>,0
 status,calibration_channel_end,<channel>,<mean>
 status,calibration_end
@@ -84,6 +85,7 @@ warn,warmup_timeout,<channel>
 warn,calibration_warmup_timeout,<channel>
 warn,calibration_timeout,<channel>
 warn,calibration_skipped,<channel>
+warn,calibration_spread,<channel>,<spread>
 warn,ready_timeout,<channel>
 warn,spike,<channel>,<value>
 ```
@@ -139,17 +141,27 @@ At startup, the firmware:
 Per channel, calibration behavior is:
 
 - warm up with `kCalibrationWarmupReads = 5`
-- collect `kCalibrationSampleCount = 50` readings
-- average the collected readings
-- store the negative mean as the channel offset
+- collect `kCalibrationBatchCount = 3` batches
+- each batch collects `kCalibrationBatchSampleCount = 17` readings
+- each batch is reduced by `trimmedMean()`, dropping min and max when possible
+- if batch spread exceeds `kCalibrationBatchSpreadThreshold = 2000.0`, emit `warn,calibration_spread,<channel>,<spread>`
+- offset is `medianOfThree(batch_means[0], batch_means[1], batch_means[2])`
 - reset the previous output value to `0`
+- emit the rounded offset with `status,calibration_channel_end,<channel>,<mean>`
 
-This firmware does not currently expose a runtime zero-reset command. Calibration happens at setup only.
+Calibration happens at setup and can also be triggered at runtime with the `c` command.
 
 ## Runtime serial commands
-None.
+Supported runtime command:
 
-The current `main.cpp` does not read command bytes from `Serial` for runtime control. Any future command vocabulary must be added in a separate contract update.
+- `c`: run calibration for all channels
+
+When `c` is received:
+
+- firmware emits `status,calibration_command_received`
+- firmware calls `calibrateAllChannels()`
+- calibration status / warn frames may be emitted
+- parser must not treat command response frames as vector records
 
 ## Timeout / ready failure behavior
 - During warmup or calibration, a ready timeout emits the relevant `warn,..._timeout,...` frame.
@@ -169,7 +181,9 @@ The P2 parser should obey these rules:
 - require exactly 7 numeric channel values for each `vector` frame
 - preserve `timestamp_ms`
 - ignore `status` lines or surface them separately as diagnostics
+- treat `status,calibration_command_received` as a diagnostic event
 - surface `warn` lines as non-vector diagnostic events
+- treat `warn,calibration_spread,<channel>,<spread>` as a diagnostic event
 - reject malformed `vector` lines
 - reject missing channel fields
 - reject extra `vector` channel fields unless a future contract explicitly allows them
