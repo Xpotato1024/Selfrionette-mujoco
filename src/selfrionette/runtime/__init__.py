@@ -11,6 +11,10 @@ from selfrionette.runtime.evaluation import (
     evaluate_fk_endpoint_from_joint_command,
     evaluate_fk_endpoint_from_qpos,
 )
+from selfrionette.runtime.desired_endpoint_resolver import (
+    ResolvedDesiredEndpoint,
+    resolve_desired_endpoint_from_motion_command,
+)
 from selfrionette.runtime.endpoint_metrics import (
     EndpointEvaluationStatePublisher,
     RuntimeEndpointEvaluationMetrics,
@@ -42,6 +46,7 @@ __all__ = [
     "RuntimeForwardKinematicsEvaluation",
     "RuntimeEndpointEvaluationMetrics",
     "EndpointEvaluationStatePublisher",
+    "ResolvedDesiredEndpoint",
     "RuntimeMuJoCoSiteEndpointEvaluation",
     "build_concrete_mujoco_pipeline",
     "build_endpoint_evaluation_state_publisher",
@@ -60,6 +65,7 @@ __all__ = [
     "evaluate_fk_endpoint_from_qpos",
     "extract_mujoco_site_endpoint",
     "extract_mujoco_site_endpoint_from_state",
+    "resolve_desired_endpoint_from_motion_command",
     "runtime_endpoint_evaluation_metrics_to_payload",
     "build_replay_mujoco_pipeline",
     "run_replay_mujoco_dry_run",
