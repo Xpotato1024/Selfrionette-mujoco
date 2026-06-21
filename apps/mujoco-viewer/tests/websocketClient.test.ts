@@ -79,6 +79,41 @@ function testParseTransportPayloadV0Message(): void {
   assert(parsed.sites.length === TRANSPORT_PAYLOAD_FIXTURE.sites.length, "sites should be preserved");
 }
 
+function testParseTransportPayloadV0MessageRetainsOfflineLoadcellMetadataWithoutEndpointEvaluation(): void {
+  const parsed = parseTransportPayloadV0Message(
+    JSON.stringify({
+      ...TRANSPORT_PAYLOAD_FIXTURE,
+      metadata: {
+        desired_endpoint_m: [0.2496233, 0.5009906, 0.751376],
+        endpoint_delta_m: [-0.0003767, 0.0009906, 0.001376],
+        active_channels: [0, 1, 2],
+        current_tip_position_m: [0.25, 0.5, 0.75],
+      },
+      target_position_m: null,
+      endpoint_evaluation: undefined,
+    }),
+  );
+
+  assert(
+    JSON.stringify(parsed.metadata.desired_endpoint_m) === JSON.stringify([0.2496233, 0.5009906, 0.751376]),
+    "desired_endpoint_m should be preserved in metadata",
+  );
+  assert(
+    JSON.stringify(parsed.metadata.endpoint_delta_m) === JSON.stringify([-0.0003767, 0.0009906, 0.001376]),
+    "endpoint_delta_m should be preserved in metadata",
+  );
+  assert(
+    JSON.stringify(parsed.metadata.active_channels) === JSON.stringify([0, 1, 2]),
+    "active_channels should be preserved in metadata",
+  );
+  assert(
+    JSON.stringify(parsed.metadata.current_tip_position_m) === JSON.stringify([0.25, 0.5, 0.75]),
+    "current_tip_position_m should be preserved in metadata",
+  );
+  assert(parsed.target_position_m === null, "target_position_m should stay optional feedback");
+  assert(parsed.endpoint_evaluation === undefined, "endpoint_evaluation should remain optional");
+}
+
 function testParseTransportPayloadV0MessageRejectsInvalidJson(): void {
   assertThrows(() => parseTransportPayloadV0Message("{not json"), "malformed JSON");
 }
@@ -354,6 +389,7 @@ function testViewerWebSocketClientRoutesSocketErrorsToErrorCallback(): void {
 }
 
 testParseTransportPayloadV0Message();
+testParseTransportPayloadV0MessageRetainsOfflineLoadcellMetadataWithoutEndpointEvaluation();
 testParseTransportPayloadV0MessageRejectsInvalidJson();
 testParseTransportPayloadV0MessageRejectsInvalidVersion();
 testParseTransportPayloadV0MessageRejectsMissingRequiredFields();
