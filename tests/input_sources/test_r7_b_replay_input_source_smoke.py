@@ -1,0 +1,51 @@
+from __future__ import annotations
+
+import pytest
+
+from selfrionette.input_interpreters import ReplayInputInterpreter
+from selfrionette.input_sources import ReplayInputSource, build_motion_command_from_replay_frame
+from selfrionette.runtime import resolve_desired_endpoint_from_motion_command
+from selfrionette.schemas import RawInputFrame
+
+
+def test_replay_fixture_motion_command_resolves_desired_endpoint() -> None:
+    frame = RawInputFrame(
+        source="replay",
+        timestamp_s=1.25,
+        metadata={
+            "source_kind": "replay",
+            "desired_endpoint_m": (0.4, 0.5, 0.6),
+            "target_position_m": (9.0, 9.0, 9.0),
+        },
+    )
+    source = ReplayInputSource((frame,))
+
+    replay_frame = source.read_frame()
+    intent = ReplayInputInterpreter().interpret(replay_frame)
+    command = build_motion_command_from_replay_frame(
+        RawInputFrame(
+            source=intent.source,
+            timestamp_s=intent.timestamp_s,
+            metadata=intent.metadata,
+        )
+    )
+
+    resolved = resolve_desired_endpoint_from_motion_command(command)
+
+    assert resolved.desired_endpoint_m == (0.4, 0.5, 0.6)
+    assert resolved.source == 'MotionCommand.metadata["desired_endpoint_m"]'
+    assert command.metadata["target_position_m"] == (9.0, 9.0, 9.0)
+    assert command.target is None
+
+
+def test_replay_fixture_target_position_is_not_primary_command() -> None:
+    command = build_motion_command_from_replay_frame(
+        RawInputFrame(
+            source="replay",
+            timestamp_s=0.0,
+            metadata={"target_position_m": (1.0, 2.0, 3.0)},
+        )
+    )
+
+    with pytest.raises(ValueError, match='MotionCommand.metadata\\["desired_endpoint_m"\\] is required'):
+        resolve_desired_endpoint_from_motion_command(command)
