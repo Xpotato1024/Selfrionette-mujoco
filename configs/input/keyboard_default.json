@@ -1,0 +1,15 @@
+{
+  "source_kind": "keyboard",
+  "bindings": {
+    "KeyW": { "axis": "y", "direction": 1 },
+    "KeyS": { "axis": "y", "direction": -1 },
+    "KeyA": { "axis": "x", "direction": -1 },
+    "KeyD": { "axis": "x", "direction": 1 },
+    "Space": { "axis": "z", "direction": 1 },
+    "ShiftLeft": { "axis": "z", "direction": -1 },
+    "ShiftRight": { "axis": "z", "direction": -1 }
+  },
+  "step_m": 0.01,
+  "deadzone": 0.0,
+  "max_delta_m": 0.03
+}

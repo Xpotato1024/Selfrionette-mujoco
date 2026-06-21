@@ -241,3 +241,13 @@ R7-B の実装順序と後続 issue の責務は次のとおり。
 - `#152` 側に残るものは OSC / robot output であり、R7-B では後回しにする。
 - keyboard, replay, and programmed input fixtures are the preferred validation sources before live serial.
 - `target_position_m` is retained for compatibility and viewer feedback, not as the primary command.
+
+## #219 update
+
+- keyboard / replay input source smoke を追加した。
+- default keyboard keybind は WASD + Space / Shift である。
+- keybind config reserved path は `configs/input/keyboard_default.json` である。
+- keyboard / replay 由来 `MotionCommand` は `metadata["desired_endpoint_m"]` を持つ。
+- resolver で `desired_endpoint_m` を解決できる。
+- `target_position_m` は primary command にしない。
+- next: `#220` offline `InputSource -> MuJoCo runtime stepping smoke`
