@@ -89,6 +89,8 @@ Do not create or use `doc/`.
 | R7-C manual validation preflight | `docs/operations/r7-c-manual-validation-preflight.md` | docs-only preflight for manual validation, with child #233 handoff |
 | R7-C viewer fixture demo procedure | `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | viewer launch / replay fixture / keyboard demo procedure; handoff to #234 |
 | R7-C keyboard / replay demo package | `docs/operations/r7-c-keyboard-replay-demo-package.md` | no-hardware keyboard / replay demo package; handoff to #235 |
+| R7-C live loadcell validation log | `docs/operations/r7-c-live-loadcell-validation-log.md` | manual-gated live loadcell validation log procedure; Codex / CI does not run live serial |
+| R7-C live loadcell validation template | `docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md` | operator-filled manual live loadcell validation template |
 | Legacy map | `docs/migration/legacy-to-new-layer-map.md` | legacy reference only |
 | ADRs | `docs/design/adr/` | design decision history |
 | R6-F-P4 DoF ring reference audit | `docs/operations/r6-f-p4-dof-ring-reference-audit.md` | DoF ring の reference audit と viewer presentation skeleton |

@@ -158,7 +158,8 @@ print("Japanese docs encoding check passed")
 
 この package は #234 で完了させる。
 次は #235 で manual live loadcell validation log を扱い、live serial の manual-gated boundary を
-別文書で固定する。
+`docs/operations/r7-c-live-loadcell-validation-log.md` と
+`docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md` で固定する。
 
 ## Scope Check
 
