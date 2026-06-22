@@ -31,6 +31,8 @@ CANONICAL_DOCS = [
     "docs/operations/r7-c-keyboard-replay-demo-package.md",
     "docs/operations/r7-c-live-loadcell-validation-log.md",
     "docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md",
+    "docs/operations/r7-c-axis-sanity-check.md",
+    "docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md",
     "docs/migration/legacy-inventory.md",
     "docs/migration/legacy-to-new-layer-map.md",
     "docs/migration/rapier-to-mujoco-migration.md",
@@ -87,3 +89,5 @@ def test_docs_readme_has_source_of_truth_map() -> None:
     assert "docs/operations/r7-c-keyboard-replay-demo-package.md" in text
     assert "docs/operations/r7-c-live-loadcell-validation-log.md" in text
     assert "docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md" in text
+    assert "docs/operations/r7-c-axis-sanity-check.md" in text
+    assert "docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md" in text

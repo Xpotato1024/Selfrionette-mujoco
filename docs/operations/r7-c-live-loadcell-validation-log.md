@@ -126,7 +126,8 @@ live serial の結果は人間が template に記録し、必要に応じて後�
 ## handoff
 
 次は #236 で axis sanity check protocol を追加する。
-この log template の observed / expected 欄は、#236 の keyboard / replay / live loadcell observation と接続する。
+この log template の observed / expected 欄は
+`docs/operations/r7-c-axis-sanity-check.md` の keyboard / replay / live loadcell observation と接続する。
 
 ## Scope Check
 
