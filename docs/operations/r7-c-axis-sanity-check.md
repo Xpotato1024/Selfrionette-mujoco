@@ -53,6 +53,7 @@ uv run pytest tests/input_sources/test_r7_b_keyboard_input_source_smoke.py
 replay / fixture path は deterministic `sweep_x` を使う。
 
 ```powershell
+New-Item -ItemType Directory -Force artifacts\r7-c | Out-Null
 uv run python scripts/run_replay_mujoco_dry_run.py --steps 6 --preset sweep_x --output artifacts/r7-c/r7-c-236-replay-axis-sanity.ndjson
 ```
 
