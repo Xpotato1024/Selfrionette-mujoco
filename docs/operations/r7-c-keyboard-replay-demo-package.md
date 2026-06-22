@@ -57,6 +57,7 @@ replay fixture demo は `scripts/run_replay_mujoco_dry_run.py` を使って作�
 推奨コマンド:
 
 ```powershell
+New-Item -ItemType Directory -Force artifacts\r7-c | Out-Null
 uv run python scripts/run_replay_mujoco_dry_run.py --steps 6 --preset sweep_x --output artifacts/r7-c/r7-c-234-replay-demo.ndjson
 ```
 
@@ -142,6 +143,7 @@ print("Japanese docs encoding check passed")
 
 ## artifact / log naming policy
 
+- `artifacts/r7-c/...` に出力する前に `artifacts/r7-c` directory を作成する
 - 生成物は round と issue 番号を先頭に含める
 - 生成物は用途を `keyboard`, `replay`, `payload`, `log` のように明示する
 - 実行ログは再利用せず、`MUJOCO_LOG.TXT` に流し込まない

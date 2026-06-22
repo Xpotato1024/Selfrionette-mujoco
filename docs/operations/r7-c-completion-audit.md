@@ -29,13 +29,13 @@ OSC send、robot output、actuator command は行わない。
 
 | Issue | PR | Status | Notes |
 |---|---|---|---|
-| #232 | #239 | draft / stacked | manual validation preflight |
-| #233 | #240 | draft / stacked | viewer launch and fixture demo procedure |
-| #234 | #241 | draft / stacked | keyboard / replay demo package |
-| #235 | #242 | draft / stacked | live loadcell validation log template |
-| #236 | #243 | draft / stacked | axis sanity check protocol |
-| #237 | #244 | draft / stacked | presentation-ready demo notes |
-| #238 | current PR | draft / stacked | this completion audit |
+| #232 | #239 | merged | manual validation preflight |
+| #233 | #240 | merged | viewer launch and fixture demo procedure |
+| #234 | #241 | merged | keyboard / replay demo package |
+| #235 | #242 | merged | live loadcell validation log template |
+| #236 | #243 | merged | axis sanity check protocol |
+| #237 | #244 | merged | presentation-ready demo notes |
+| #238 | #245 | merged | this completion audit |
 
 Merge order:
 
@@ -110,9 +110,16 @@ R7-C は中間発表に向けて close-ready と判定する。
 - presentation notes が proven / intentionally unproven を分離している
 - fallback demo plan がある
 
+## Post-merge Metadata Correction
+
+#244 / #245 の PR body は merge 操作時に簡略化されたが、repo docs を source of truth とする。
+presentation-ready demo notes には demo narrative / fallback / proven-unproven が残っており、
+この completion audit には R7-C close readiness、#152 open 維持、no serial / hardware / OSC /
+browser / WebSocket server boundary が残っている。追加の PR metadata correction は不要である。
+
 ## Parent #231 Close Readiness
 
-Parent #231 は、この #238 audit PR が merge された後に close-ready である。
+Parent #231 is close-ready once this post-merge correction PR is merged.
 
 Close-ready の理由:
 
