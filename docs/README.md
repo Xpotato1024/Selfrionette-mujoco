@@ -87,6 +87,7 @@ Do not create or use `doc/`.
 | R7-B completion audit | `docs/operations/r7-b-completion-audit.md` | simulation-facing input pipeline completion audit |
 | R7-B-P5 manual live loadcell runtime runner | `docs/operations/r7-b-manual-live-loadcell-runtime-runner.md` | manual-gated live loadcell serial runtime runner; explicit `--port` live path and simulation payload only |
 | R7-C manual validation preflight | `docs/operations/r7-c-manual-validation-preflight.md` | docs-only preflight for manual validation, with child #233 handoff |
+| R7-C viewer fixture demo procedure | `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | viewer launch / replay fixture / keyboard demo procedure; handoff to #234 |
 | Legacy map | `docs/migration/legacy-to-new-layer-map.md` | legacy reference only |
 | ADRs | `docs/design/adr/` | design decision history |
 | R6-F-P4 DoF ring reference audit | `docs/operations/r6-f-p4-dof-ring-reference-audit.md` | DoF ring の reference audit と viewer presentation skeleton |
