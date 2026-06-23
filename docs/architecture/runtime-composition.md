@@ -162,3 +162,12 @@ R6-J-P6 handoff to P7:
   vectors from browser-side state
 - missing `endpoint_evaluation` remains a valid payload state
 - `endpoint_evaluation` is diagnostic-only and is not a control truth source
+
+R6-K-P2 adds the selected input-source step loop to the local/dev runtime.
+`select_runtime_input_source()` で選ばれた source は runtime の main loop
+に入り、`RawInputFrame -> InputIntent -> MotionCommand -> MuJoCo step ->
+endpoint_evaluation` の順で処理される。`programmed_target` 系では
+`desired_endpoint_m` を command-side endpoint として保持しつつ、
+`target_position_m` を viewer / feedback 側へ更新する。source 未選択時
+は既存の replay fallback をそのまま使い、live serial / OSC / hardware
+/ browser input はここでは導入しない。

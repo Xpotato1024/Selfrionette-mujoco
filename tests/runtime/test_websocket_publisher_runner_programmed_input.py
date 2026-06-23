@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import ast
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
@@ -10,6 +12,25 @@ from selfrionette.runtime import run_replay_mujoco_websocket_publisher
 
 ROOT = Path(__file__).resolve().parents[2]
 WEBSOCKET_RUNNER_MODULE = ROOT / "src" / "selfrionette" / "runtime" / "websocket_publisher_runner.py"
+WEBSOCKET_SCRIPT_MODULE = ROOT / "scripts" / "run_replay_mujoco_websocket_publisher.py"
+
+
+def _load_script_module(path: Path, module_name: str):
+    import importlib.util
+    import sys
+
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+WEBSOCKET_SCRIPT_ENTRY = _load_script_module(
+    WEBSOCKET_SCRIPT_MODULE,
+    "run_replay_mujoco_websocket_publisher_entry_test",
+)
 
 
 class _FakeWebSocketPublisherServer:
@@ -93,3 +114,70 @@ def test_websocket_runner_module_uses_programmed_input_source_and_not_noop_motio
             imported_names.update(alias.name for alias in node.names)
 
     assert "build_sweep_x_input_source" in imported_names
+
+
+def test_websocket_script_programmed_target_uses_runtime_step_loop_helper() -> None:
+    created_servers: list[object] = []
+
+    class FakeWebSocketPublisherServer:
+        def __init__(self, *, host: str, port: int) -> None:
+            self.host = host
+            self.port = port
+            self.bound_port = port
+            self.wait_for_client_calls: list[float | None] = []
+            self.messages: list[str] = []
+            created_servers.append(self)
+
+        async def __aenter__(self) -> "FakeWebSocketPublisherServer":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def wait_for_client(self, timeout_s: float | None = None) -> bool:
+            self.wait_for_client_calls.append(timeout_s)
+            return True
+
+        async def send(self, message: str) -> None:
+            self.messages.append(message)
+
+    with patch.object(WEBSOCKET_SCRIPT_ENTRY, "WebSocketPublisherServer", FakeWebSocketPublisherServer):
+        asyncio.run(
+            WEBSOCKET_SCRIPT_ENTRY._run_input_source_websocket_publisher_async(
+                host="127.0.0.1",
+                port=8766,
+                steps=2,
+                dt_s=1.0 / 60.0,
+                interval_s=0.0,
+                grace_period_s=0.0,
+                preset="sweep_x",
+                input_source="programmed_target",
+            )
+        )
+
+    assert len(created_servers) == 1
+    payloads = [json.loads(message) for message in created_servers[0].messages]
+    assert len(payloads) == 2
+    assert [payload["frame_index"] for payload in payloads] == [1, 2]
+    assert [payload["metadata"]["source_kind"] for payload in payloads] == ["programmed_target", "programmed_target"]
+    assert payloads[0]["metadata"]["desired_endpoint_m"] == payloads[0]["target_position_m"]
+    assert payloads[0]["endpoint_evaluation"]["desired_endpoint_m"] == payloads[0]["target_position_m"]
+
+
+def test_websocket_script_uses_default_replay_fallback_when_input_source_is_unselected() -> None:
+    with patch.object(WEBSOCKET_SCRIPT_ENTRY, "run_replay_mujoco_websocket_publisher") as run_publisher:
+        exit_code = WEBSOCKET_SCRIPT_ENTRY.main(
+            [
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8766",
+                "--steps",
+                "1",
+            ]
+        )
+
+    assert exit_code == 0
+    run_publisher.assert_called_once()
+    _, kwargs = run_publisher.call_args
+    assert kwargs["preset"] is None
