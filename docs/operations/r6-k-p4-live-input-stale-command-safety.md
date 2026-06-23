@@ -22,6 +22,7 @@ live input の stale command を runtime 側で安全に止める。
 - `stale_reason`
 - step loop の stale 判定
 - hold-current-qpos の no-motion 置換
+- stale target marker の抑止
 
 ## policy
 
@@ -29,7 +30,10 @@ live input の stale command を runtime 側で安全に止める。
 - `command_age_ms` が `250 ms` を超えたら stale
 - `stale_reason` がある command は stale
 - stale command は backend へそのまま渡さず、hold command に置換する
+- stale command の `desired_endpoint_m` は target marker / endpoint evaluation に使わない
 - fresh command は rewrite しない
+- `command_age_ms` は source-provided metadata であり、runtime は wall clock から live age を計算しない
+- `runtime_input_safety_applied` は stale hold を適用したときだけ付ける
 
 ## non-goals
 
@@ -45,4 +49,5 @@ live input の stale command を runtime 側で安全に止める。
 - inactive source rewritten to hold command
 - stale_reason observable in metadata
 - command_age_ms deterministic
+- stale target marker does not advance on stale input
 - `git diff --check`

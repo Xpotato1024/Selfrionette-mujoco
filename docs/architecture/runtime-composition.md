@@ -179,3 +179,7 @@ command age が timeout を超えた場合は command を hold-current-qpos の
 no-motion command に置き換えてから MuJoCo step に進む。この safety
 boundary は runtime composition 内に留まり、FK / IK / viewer-side の
 control logic には広げない。
+stale input では `desired_endpoint_m` を target marker 更新に使わず、
+`MuJoCoState.target_position_m` は前の安全な値を維持するか未設定のまま
+残す。R6-K の `command_age_ms` は source-provided metadata として扱い、
+runtime は wall clock から live age を計算しない。

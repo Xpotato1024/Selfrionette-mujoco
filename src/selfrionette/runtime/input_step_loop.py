@@ -14,7 +14,7 @@ from selfrionette.runtime.input_source_state import (
     RuntimeInputSourceState,
     runtime_input_source_state_to_metadata,
 )
-from selfrionette.runtime.input_safety import build_runtime_input_safety_result
+from selfrionette.runtime.input_safety import RuntimeInputSafetyResult, build_runtime_input_safety_result
 from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
@@ -110,6 +110,7 @@ def _annotate_state(
     motion_command: MotionCommand,
     state: MuJoCoState,
     annotate_target_position_m: bool,
+    safety_result: RuntimeInputSafetyResult,
 ) -> MuJoCoState:
     metadata = {
         **state.metadata,
@@ -118,9 +119,15 @@ def _annotate_state(
         **motion_command.metadata,
     }
 
+    if not safety_result.should_update_target_position_m:
+        metadata.pop("desired_endpoint_m", None)
+        metadata.pop("target_position_m", None)
+        metadata["runtime_input_safety_applied"] = True
+        metadata["endpoint_evaluation"] = None
+
     target_position_m = state.target_position_m
     resolved_desired_endpoint = None
-    if annotate_target_position_m:
+    if annotate_target_position_m and safety_result.should_update_target_position_m:
         try:
             resolved_desired_endpoint = resolve_desired_endpoint_from_motion_command(motion_command)
         except ValueError:
@@ -129,6 +136,7 @@ def _annotate_state(
         if resolved_desired_endpoint is not None:
             target_position_m = resolved_desired_endpoint.desired_endpoint_m
             metadata["desired_endpoint_m"] = resolved_desired_endpoint.desired_endpoint_m
+            metadata["target_position_m"] = resolved_desired_endpoint.desired_endpoint_m
 
     metadata.update(runtime_input_source_state_to_metadata(source_state))
 
@@ -173,6 +181,7 @@ async def run_runtime_input_source_step_loop(
             motion_command=safety_result.motion_command,
             state=state,
             annotate_target_position_m=plan.annotate_target_position_m,
+            safety_result=safety_result,
         )
         await plan.pipeline.publisher.publish(annotated_state)
 

@@ -14,6 +14,7 @@ class RuntimeInputSafetyResult:
     motion_command: MotionCommand
     source_state: RuntimeInputSourceState
     is_stale: bool
+    should_update_target_position_m: bool
     stale_reason: str | None
     command_age_ms: int | None
 
@@ -65,6 +66,9 @@ def _build_hold_motion_command(
             )
         ),
     }
+    metadata.pop("desired_endpoint_m", None)
+    metadata.pop("target_position_m", None)
+    metadata["runtime_input_safety_applied"] = True
 
     return replace(
         command,
@@ -108,6 +112,7 @@ def build_runtime_input_safety_result(
         motion_command=safe_motion_command,
         source_state=safe_source_state,
         is_stale=is_stale,
+        should_update_target_position_m=not is_stale,
         stale_reason=stale_reason,
         command_age_ms=source_state.command_age_ms,
     )
