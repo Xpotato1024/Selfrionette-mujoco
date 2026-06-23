@@ -164,22 +164,9 @@ R6-J-P6 handoff to P7:
 - `endpoint_evaluation` is diagnostic-only and is not a control truth source
 
 R6-K-P2 adds the selected input-source step loop to the local/dev runtime.
-`select_runtime_input_source()` で選ばれた source は runtime の main loop
-に入り、`RawInputFrame -> InputIntent -> MotionCommand -> MuJoCo step ->
-endpoint_evaluation` の順で処理される。`programmed_target` 系では
-`desired_endpoint_m` を command-side endpoint として保持しつつ、
-`target_position_m` を viewer / feedback 側へ更新する。source 未選択時
-は既存の replay fallback をそのまま使い、live serial / OSC / hardware
-/ browser input はここでは導入しない。
+The runtime main loop now threads `RawInputFrame -> InputIntent -> MotionCommand -> MuJoCo step -> endpoint_evaluation`.
+Programmed targets keep `desired_endpoint_m` as the command-side endpoint and `target_position_m` as the viewer / feedback field. Unselected sources remain replay fallback; live serial / OSC / hardware / browser input stay out of scope here.
 
-R6-K-P4 では、この step loop に deterministic な stale-command safety
-を追加する。runtime は input metadata の `source_active`,
-`command_age_ms`, `stale_reason` を読み取り、source が inactive か
-command age が timeout を超えた場合は command を hold-current-qpos の
-no-motion command に置き換えてから MuJoCo step に進む。この safety
-boundary は runtime composition 内に留まり、FK / IK / viewer-side の
-control logic には広げない。
-stale input では `desired_endpoint_m` を target marker 更新に使わず、
-`MuJoCoState.target_position_m` は前の安全な値を維持するか未設定のまま
-残す。R6-K の `command_age_ms` は source-provided metadata として扱い、
-runtime は wall clock から live age を計算しない。
+R6-K-P4 adds deterministic stale-command safety to that loop. Runtime reads input metadata `source_active`, `command_age_ms`, and `stale_reason`. Inactive sources, timeouts, or stale ages yield a hold-current-qpos no-motion command before MuJoCo step. This safety boundary lives in runtime composition, not in R6-K / IK / viewer-side control logic. Stale input does not update `desired_endpoint_m` or `MuJoCoState.target_position_m` as the active target. `command_age_ms` is source-provided metadata in R6-K; runtime consumes it but does not compute wall-clock or browser age.
+
+R6-K completion audit is recorded in `docs/operations/r6-k-completion-audit.md`; it documents the stacked PR evidence for `#247`-`#250` and does not alter runtime composition.
