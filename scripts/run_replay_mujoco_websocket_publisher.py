@@ -11,15 +11,15 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from selfrionette.input_sources.programmed_target import build_sweep_x_input_source
 from selfrionette.input_sources.registry import SUPPORTED_INPUT_SOURCE_NAMES
-from selfrionette.mujoco_backend import snapshot_mujoco_state
-from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
+from selfrionette.runtime.input_step_loop import (
+    build_runtime_input_source_step_loop_plan,
+    run_runtime_input_source_step_loop,
+)
 from selfrionette.runtime.input_source_selection import select_runtime_input_source
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
 from selfrionette.runtime.websocket_publisher_runner import SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS
-from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketPublisherServer, WebSocketStatePublisher
 
 DEFAULT_WEBSOCKET_PUBLISHER_HOST = "127.0.0.1"
@@ -61,37 +61,6 @@ def _positive_float(value: str) -> float:
     return parsed
 
 
-def _default_replay_frame() -> RawInputFrame:
-    return RawInputFrame(
-        source="replay",
-        timestamp_s=0.0,
-        metadata={
-            "preset": "r6-c-p1-default",
-            "target_position_m": DEFAULT_CONCRETE_TARGET_POSITION_M,
-            "desired_endpoint_m": DEFAULT_CONCRETE_TARGET_POSITION_M,
-        },
-    )
-
-
-def _sweep_x_replay_frames(steps: int) -> tuple[RawInputFrame, ...]:
-    source = build_sweep_x_input_source(initial_position_m=DEFAULT_CONCRETE_TARGET_POSITION_M, loop=False)
-    return tuple(source.read_frame() for _ in range(steps))
-
-
-def _annotate_sweep_x_state(pipeline, state, intent):
-    return snapshot_mujoco_state(
-        pipeline.simulator.model,
-        pipeline.simulator.data,
-        frame_index=state.frame_index,
-        target_position_m=tuple(intent.metadata["desired_endpoint_m"]),
-        metadata={
-            **state.metadata,
-            **intent.metadata,
-            "preset": "sweep_x",
-        },
-    )
-
-
 async def _run_input_source_websocket_publisher_async(
     *,
     host: str,
@@ -117,41 +86,18 @@ async def _run_input_source_websocket_publisher_async(
 
         _log("Viewer connected; publishing started.")
 
-        selection = select_runtime_input_source(
-            input_source,
-            steps=steps,
-            preset=preset,
-            replay_initial_metadata=_default_replay_frame().metadata,
-        )
-        pipeline = build_concrete_mujoco_pipeline(
-            frames=selection.frames,
+        selection = select_runtime_input_source(input_source, steps=steps, preset=preset)
+        plan = build_runtime_input_source_step_loop_plan(
+            selection,
             config=runtime_config,
-            loop=selection.loop,
             publisher=WebSocketStatePublisher(server),
         )
-
-        if selection.source_name == "programmed_target":
-            for index in range(steps):
-                frame = pipeline.input_source.read_frame()
-                intent = pipeline.input_interpreter.interpret(frame)
-                command = pipeline.motion_generator.update(intent, dt_s)
-                pipeline.simulator.apply_command(command)
-                pipeline.simulator.step(dt_s)
-
-                state = pipeline.simulator.snapshot()
-                annotated_state = _annotate_sweep_x_state(pipeline, state, intent)
-                await pipeline.publisher.publish(annotated_state)
-
-                if interval_s > 0.0 and index + 1 < steps:
-                    await asyncio.sleep(interval_s)
-
-            _log(f"Completed after publishing {steps} frame(s).")
-            return
-
-        for index in range(steps):
-            await pipeline.run_once(dt_s=dt_s)
-            if interval_s > 0.0 and index + 1 < steps:
-                await asyncio.sleep(interval_s)
+        await run_runtime_input_source_step_loop(
+            plan,
+            steps=steps,
+            dt_s=dt_s,
+            interval_s=interval_s,
+        )
 
         _log(f"Completed after publishing {steps} frame(s).")
 

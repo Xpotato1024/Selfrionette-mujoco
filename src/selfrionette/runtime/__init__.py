@@ -10,6 +10,12 @@ from selfrionette.runtime.input_source_selection import (
     SUPPORTED_INPUT_SOURCE_NAMES as SUPPORTED_RUNTIME_INPUT_SOURCE_NAMES,
     select_runtime_input_source,
 )
+from selfrionette.runtime.input_step_loop import (
+    RuntimeInputSourceStepLoopPlan,
+    RuntimeInputSourceStepLoopRecord,
+    build_runtime_input_source_step_loop_plan,
+    run_runtime_input_source_step_loop,
+)
 from selfrionette.runtime.live_viewer_smoke import run_live_viewer_smoke
 from selfrionette.runtime.evaluation import (
     RuntimeForwardKinematicsEvaluation,
@@ -61,6 +67,8 @@ __all__ = [
     "RuntimeConfig",
     "RuntimePipeline",
     "RuntimeInputSourceSelection",
+    "RuntimeInputSourceStepLoopPlan",
+    "RuntimeInputSourceStepLoopRecord",
     "RuntimeForwardKinematicsEvaluation",
     "RuntimeEndpointEvaluationMetrics",
     "EndpointEvaluationStatePublisher",
@@ -93,6 +101,8 @@ __all__ = [
     "runtime_endpoint_evaluation_metrics_to_payload",
     "SUPPORTED_RUNTIME_INPUT_SOURCE_NAMES",
     "select_runtime_input_source",
+    "build_runtime_input_source_step_loop_plan",
+    "run_runtime_input_source_step_loop",
     "build_replay_mujoco_pipeline",
     "run_replay_mujoco_dry_run",
     "run_live_viewer_smoke",
