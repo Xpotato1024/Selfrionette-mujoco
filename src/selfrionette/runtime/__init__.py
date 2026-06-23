@@ -5,6 +5,11 @@ from __future__ import annotations
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.dry_run import run_replay_mujoco_dry_run
+from selfrionette.runtime.input_source_selection import (
+    RuntimeInputSourceSelection,
+    SUPPORTED_INPUT_SOURCE_NAMES as SUPPORTED_RUNTIME_INPUT_SOURCE_NAMES,
+    select_runtime_input_source,
+)
 from selfrionette.runtime.live_viewer_smoke import run_live_viewer_smoke
 from selfrionette.runtime.evaluation import (
     RuntimeForwardKinematicsEvaluation,
@@ -55,6 +60,7 @@ from selfrionette.runtime.pipeline import RuntimePipeline, build_noop_pipeline
 __all__ = [
     "RuntimeConfig",
     "RuntimePipeline",
+    "RuntimeInputSourceSelection",
     "RuntimeForwardKinematicsEvaluation",
     "RuntimeEndpointEvaluationMetrics",
     "EndpointEvaluationStatePublisher",
@@ -85,6 +91,8 @@ __all__ = [
     "extract_mujoco_site_endpoint_from_state",
     "resolve_desired_endpoint_from_motion_command",
     "runtime_endpoint_evaluation_metrics_to_payload",
+    "SUPPORTED_RUNTIME_INPUT_SOURCE_NAMES",
+    "select_runtime_input_source",
     "build_replay_mujoco_pipeline",
     "run_replay_mujoco_dry_run",
     "run_live_viewer_smoke",

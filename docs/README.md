@@ -39,6 +39,8 @@ Do not create or use `doc/`.
 | R6-I-P6 programmed input runtime wiring | `docs/operations/r6-i-p6-programmed-input-runtime-wiring.md` | dry-run / WebSocket publisher wiring for programmed target input source; publisher / transport smoke and browser payload parse smoke only |
 | R6-I completion audit | `docs/operations/r6-i-completion-audit.md` | R6-I completion audit and parent #133 close readiness |
 | R6-J completion audit | `docs/operations/r6-j-completion-audit.md` | R6-J completion audit and parent #134 close readiness |
+| Runtime input source registry | `docs/contracts/runtime-input-source-registry.md` | runtime input source selection contract |
+| R6-K-P1 runtime input source registry | `docs/operations/r6-k-p1-runtime-input-source-registry.md` | runtime input source registry operation note |
 | WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0; browser diagnostic parse smoke is separate from proper 3D GUI smoke |
 | WebSocket / host / port contract | `docs/operations/websocket-host-port-contract.md` | bind host, browser-visible host, viewer page URL, and WebSocket endpoint URL contract |
 | Live viewer smoke path | `docs/operations/live-viewer-smoke.md` | deterministic dry-run payload -> browser viewer smoke path for R6-C-P3 |
