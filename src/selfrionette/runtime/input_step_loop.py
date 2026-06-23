@@ -10,9 +10,11 @@ from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.runtime.input_source_selection import RuntimeInputSourceSelection
 from selfrionette.runtime.input_source_state import (
-    build_runtime_input_source_state,
+    build_runtime_input_source_state_from_metadata,
+    RuntimeInputSourceState,
     runtime_input_source_state_to_metadata,
 )
+from selfrionette.runtime.input_safety import RuntimeInputSafetyResult, build_runtime_input_safety_result
 from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
@@ -102,12 +104,13 @@ def build_runtime_input_source_step_loop_plan(
 
 def _annotate_state(
     *,
-    selection: RuntimeInputSourceSelection,
+    source_state: RuntimeInputSourceState,
     frame: RawInputFrame,
     intent: InputIntent,
     motion_command: MotionCommand,
     state: MuJoCoState,
     annotate_target_position_m: bool,
+    safety_result: RuntimeInputSafetyResult,
 ) -> MuJoCoState:
     metadata = {
         **state.metadata,
@@ -116,8 +119,15 @@ def _annotate_state(
         **motion_command.metadata,
     }
 
+    if not safety_result.should_update_target_position_m:
+        metadata.pop("desired_endpoint_m", None)
+        metadata.pop("target_position_m", None)
+        metadata["runtime_input_safety_applied"] = True
+        metadata["endpoint_evaluation"] = None
+
     target_position_m = state.target_position_m
-    if annotate_target_position_m:
+    resolved_desired_endpoint = None
+    if annotate_target_position_m and safety_result.should_update_target_position_m:
         try:
             resolved_desired_endpoint = resolve_desired_endpoint_from_motion_command(motion_command)
         except ValueError:
@@ -126,15 +136,8 @@ def _annotate_state(
         if resolved_desired_endpoint is not None:
             target_position_m = resolved_desired_endpoint.desired_endpoint_m
             metadata["desired_endpoint_m"] = resolved_desired_endpoint.desired_endpoint_m
+            metadata["target_position_m"] = resolved_desired_endpoint.desired_endpoint_m
 
-    if selection.source_name == "noop" and "source_kind" not in metadata:
-        metadata["source_kind"] = "noop"
-
-    source_state = build_runtime_input_source_state(
-        selection.source_name,
-        source_active=bool(selection.frames),
-        command_age_ms=0,
-    )
     metadata.update(runtime_input_source_state_to_metadata(source_state))
 
     return replace(state, target_position_m=target_position_m, metadata=metadata)
@@ -156,18 +159,29 @@ async def run_runtime_input_source_step_loop(
     for index in range(steps):
         frame = plan.pipeline.input_source.read_frame()
         intent = plan.pipeline.input_interpreter.interpret(frame)
+        source_state = build_runtime_input_source_state_from_metadata(
+            frame.metadata,
+            default_source_kind=plan.selection.source_name,
+        )
+        pre_step_state = plan.pipeline.simulator.snapshot()
         motion_command = plan.pipeline.motion_generator.update(intent, dt)
-        plan.pipeline.simulator.apply_command(motion_command)
+        safety_result = build_runtime_input_safety_result(
+            motion_command,
+            source_state=source_state,
+            current_state=pre_step_state,
+        )
+        plan.pipeline.simulator.apply_command(safety_result.motion_command)
         plan.pipeline.simulator.step(dt)
 
         state = plan.pipeline.simulator.snapshot()
         annotated_state = _annotate_state(
-            selection=plan.selection,
+            source_state=safety_result.source_state,
             frame=frame,
             intent=intent,
-            motion_command=motion_command,
+            motion_command=safety_result.motion_command,
             state=state,
             annotate_target_position_m=plan.annotate_target_position_m,
+            safety_result=safety_result,
         )
         await plan.pipeline.publisher.publish(annotated_state)
 
@@ -175,7 +189,7 @@ async def run_runtime_input_source_step_loop(
             RuntimeInputSourceStepLoopRecord(
                 frame=frame,
                 intent=intent,
-                motion_command=motion_command,
+                motion_command=safety_result.motion_command,
                 state=annotated_state,
             )
         )

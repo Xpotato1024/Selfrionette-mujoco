@@ -20,8 +20,15 @@ runtime payload の `metadata` に載せる input source の観測用 state を�
 
 - `source_kind`: 選択された runtime input source 名
 - `source_active`: 現在 command を出せるかどうかの観測値
-- `command_age_ms`: runtime が使った command の経過時間 ms。#249 では `0` を許容する
+- `command_age_ms`: source が emit した command age の観測値
 - `stale_reason`: stale 判定理由。正常経路では省略または `null`
+
+これらの値は observability 用の入力状態であり、#250 の stale-command
+safety はこの metadata を読み取って別途判定する。runtime は
+`command_age_ms` を wall clock から計算しない。R6-K では source-provided
+metadata として扱い、offline の programmed_target / replay / noop は
+deterministic な `0` を emit してよい。R6-L の browser / live sources は
+age と stale metadata を source 側で emit する。
 
 ## rules
 
@@ -29,3 +36,4 @@ runtime payload の `metadata` に載せる input source の観測用 state を�
 - required payload fields には含めない
 - endpoint evaluation semantics を変えない
 - normal path では `source_active=true`, `command_age_ms=0`, `stale_reason` omitted が許容
+- stale safety は `source_active`, `command_age_ms`, `stale_reason` を参照する

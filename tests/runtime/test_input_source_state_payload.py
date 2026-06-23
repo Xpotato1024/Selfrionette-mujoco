@@ -10,6 +10,7 @@ from selfrionette.runtime import (
 )
 from selfrionette.runtime.input_source_state import (
     build_runtime_input_source_state,
+    build_runtime_input_source_state_from_metadata,
     runtime_input_source_state_to_metadata,
 )
 from selfrionette.schemas import MuJoCoState
@@ -39,6 +40,22 @@ def test_runtime_input_source_state_metadata_keeps_optional_fields_optional() ->
         "source_kind": "replay",
         "source_active": True,
     }
+
+
+def test_runtime_input_source_state_metadata_parser_rehydrates_stale_fields_deterministically() -> None:
+    state = build_runtime_input_source_state_from_metadata(
+        {
+            "source_kind": "replay",
+            "source_active": False,
+            "command_age_ms": 480,
+            "stale_reason": "source_inactive",
+        }
+    )
+
+    assert state.source_kind == "replay"
+    assert state.source_active is False
+    assert state.command_age_ms == 480
+    assert state.stale_reason == "source_inactive"
 
 
 def test_runtime_input_source_selection_includes_source_state_metadata() -> None:
