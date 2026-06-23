@@ -5,6 +5,11 @@ from dataclasses import dataclass
 
 from selfrionette.input_sources.programmed_target import build_sweep_x_input_source
 from selfrionette.input_sources.registry import SUPPORTED_INPUT_SOURCE_NAMES, get_input_source_descriptor
+from selfrionette.runtime.input_source_state import (
+    annotate_raw_input_frame,
+    build_runtime_input_source_state,
+    runtime_input_source_state_to_metadata,
+)
 from selfrionette.schemas import RawInputFrame
 
 DEFAULT_RUNTIME_SELECTION_TARGET_POSITION_M: tuple[float, float, float] = (0.6, 0.0, 0.1)
@@ -65,6 +70,11 @@ def select_runtime_input_source(
     replay_initial_metadata: Mapping[str, object] | None = None,
 ) -> RuntimeInputSourceSelection:
     descriptor = get_input_source_descriptor(source_name)
+    source_state = build_runtime_input_source_state(
+        descriptor.name,
+        source_active=True,
+        command_age_ms=0,
+    )
 
     if source_name == "programmed_target":
         if preset not in (None, "sweep_x"):
@@ -94,11 +104,17 @@ def select_runtime_input_source(
     else:
         raise ValueError(f"unsupported input source: {source_name!r}")
 
+    selected_frames = tuple(annotate_raw_input_frame(frame, source_state) for frame in selected_frames)
+    initial_metadata = {
+        **descriptor.initial_metadata,
+        **runtime_input_source_state_to_metadata(source_state),
+    }
+
     return RuntimeInputSourceSelection(
         source_name=descriptor.name,
         frames=selected_frames,
         loop=loop,
-        initial_metadata=dict(descriptor.initial_metadata),
+        initial_metadata=initial_metadata,
     )
 
 

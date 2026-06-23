@@ -242,6 +242,13 @@ R7-B の実装順序と後続 issue の責務は次のとおり。
 - keyboard, replay, and programmed input fixtures are the preferred validation sources before live serial.
 - `target_position_m` is retained for compatibility and viewer feedback, not as the primary command.
 
+## input source state observability
+
+- `#249` では runtime payload の `metadata` に optional な input source state を追加する。
+- 追加対象は `source_kind`, `source_active`, `command_age_ms`, `stale_reason` であり、いずれも observability 用の補助情報として扱う。
+- これは command-side endpoint の contract 変更ではなく、`desired_endpoint_m` や required payload fields の意味を変えない。
+- normal path では `source_active=true`, `command_age_ms=0`, `stale_reason` は省略または `null` を許容する。
+
 ## #219 update
 
 - keyboard / replay input source smoke を追加した。
