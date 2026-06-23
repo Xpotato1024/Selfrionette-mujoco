@@ -275,3 +275,8 @@ R7-B の実装順序と後続 issue の責務は次のとおり。
 - `desired_endpoint_m` は command-side metadata である。
 - `target_position_m` は primary command ではない。
 - next: `#223` completion audit
+
+## #251 audit
+
+- `docs/operations/r6-k-completion-audit.md` に R6-K の stacked PR 証跡を記録した。
+- `#247` から `#250` までの validation と readiness はそこで固定し、この contract surface は変えない。

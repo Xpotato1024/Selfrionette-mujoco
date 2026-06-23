@@ -9,4 +9,5 @@
 - [R6-K-P3 Input Source State Payload](./operations/r6-k-p3-input-source-state-payload.md)
 - [Runtime Input Safety](./contracts/runtime-input-safety.md)
 - [R6-K-P4 Live Input Stale Command Safety](./operations/r6-k-p4-live-input-stale-command-safety.md)
+- [R6-K Completion Audit](./operations/r6-k-completion-audit.md)
 - [R7-B Runtime Input Pipeline Contract](./contracts/r7-b-runtime-input-pipeline-contract.md)
