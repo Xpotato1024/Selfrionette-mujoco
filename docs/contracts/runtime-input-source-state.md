@@ -23,6 +23,11 @@ runtime payload の `metadata` に載せる input source の観測用 state を�
 - `command_age_ms`: runtime が使った command の経過時間 ms。#249 では `0` を許容する
 - `stale_reason`: stale 判定理由。正常経路では省略または `null`
 
+これらの値は observability 用の入力状態であり、#250 の stale-command
+safety はこの metadata を読み取って別途判定する。state payload の contract
+自体は変えず、fresh path では従来どおり `source_active=true`,
+`command_age_ms=0`, `stale_reason` omitted を許容する。
+
 ## rules
 
 - これらは optional metadata であり、既存 payload の parse を壊さない

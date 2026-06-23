@@ -14,6 +14,39 @@ class RuntimeInputSourceState:
     stale_reason: str | None = None
 
 
+def _coerce_source_kind(value: object, *, default_source_kind: str | None) -> str:
+    if value is None:
+        if default_source_kind is None:
+            raise ValueError("source_kind is required")
+        return default_source_kind
+
+    return str(value)
+
+
+def _coerce_source_active(value: object | None) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value
+    raise ValueError("source_active must be a boolean when present")
+
+
+def _coerce_command_age_ms(value: object | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("command_age_ms must be a non-negative integer when present")
+    if value < 0:
+        raise ValueError("command_age_ms must be a non-negative integer when present")
+    return value
+
+
+def _coerce_stale_reason(value: object | None) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
 def build_runtime_input_source_state(
     source_kind: str,
     *,
@@ -23,6 +56,32 @@ def build_runtime_input_source_state(
 ) -> RuntimeInputSourceState:
     return RuntimeInputSourceState(
         source_kind=source_kind,
+        source_active=source_active,
+        command_age_ms=command_age_ms,
+        stale_reason=stale_reason,
+    )
+
+
+def build_runtime_input_source_state_from_metadata(
+    metadata: Mapping[str, object],
+    *,
+    default_source_kind: str | None = None,
+) -> RuntimeInputSourceState:
+    if not isinstance(metadata, Mapping):
+        raise ValueError("metadata must be a mapping")
+
+    source_kind = _coerce_source_kind(metadata.get("source_kind"), default_source_kind=default_source_kind)
+    source_active = _coerce_source_active(metadata.get("source_active"))
+
+    if "command_age_ms" in metadata:
+        command_age_ms = _coerce_command_age_ms(metadata.get("command_age_ms"))
+    else:
+        command_age_ms = 0
+
+    stale_reason = _coerce_stale_reason(metadata.get("stale_reason"))
+
+    return build_runtime_input_source_state(
+        source_kind,
         source_active=source_active,
         command_age_ms=command_age_ms,
         stale_reason=stale_reason,
@@ -59,5 +118,6 @@ __all__ = [
     "annotate_raw_input_frame",
     "annotate_runtime_input_source_metadata",
     "build_runtime_input_source_state",
+    "build_runtime_input_source_state_from_metadata",
     "runtime_input_source_state_to_metadata",
 ]

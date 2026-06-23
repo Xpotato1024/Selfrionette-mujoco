@@ -171,3 +171,11 @@ endpoint_evaluation` の順で処理される。`programmed_target` 系では
 `target_position_m` を viewer / feedback 側へ更新する。source 未選択時
 は既存の replay fallback をそのまま使い、live serial / OSC / hardware
 / browser input はここでは導入しない。
+
+R6-K-P4 では、この step loop に deterministic な stale-command safety
+を追加する。runtime は input metadata の `source_active`,
+`command_age_ms`, `stale_reason` を読み取り、source が inactive か
+command age が timeout を超えた場合は command を hold-current-qpos の
+no-motion command に置き換えてから MuJoCo step に進む。この safety
+boundary は runtime composition 内に留まり、FK / IK / viewer-side の
+control logic には広げない。
