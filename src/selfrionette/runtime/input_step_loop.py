@@ -9,6 +9,10 @@ from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.runtime.input_source_selection import RuntimeInputSourceSelection
+from selfrionette.runtime.input_source_state import (
+    build_runtime_input_source_state,
+    runtime_input_source_state_to_metadata,
+)
 from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
@@ -125,6 +129,13 @@ def _annotate_state(
 
     if selection.source_name == "noop" and "source_kind" not in metadata:
         metadata["source_kind"] = "noop"
+
+    source_state = build_runtime_input_source_state(
+        selection.source_name,
+        source_active=bool(selection.frames),
+        command_age_ms=0,
+    )
+    metadata.update(runtime_input_source_state_to_metadata(source_state))
 
     return replace(state, target_position_m=target_position_m, metadata=metadata)
 

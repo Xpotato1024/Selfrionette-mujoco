@@ -22,6 +22,13 @@ from selfrionette.runtime.evaluation import (
     evaluate_fk_endpoint_from_joint_command,
     evaluate_fk_endpoint_from_qpos,
 )
+from selfrionette.runtime.input_source_state import (
+    RuntimeInputSourceState,
+    annotate_raw_input_frame,
+    annotate_runtime_input_source_metadata,
+    build_runtime_input_source_state,
+    runtime_input_source_state_to_metadata,
+)
 from selfrionette.runtime.desired_endpoint_resolver import (
     ResolvedDesiredEndpoint,
     resolve_desired_endpoint_from_motion_command,
@@ -67,6 +74,7 @@ __all__ = [
     "RuntimeConfig",
     "RuntimePipeline",
     "RuntimeInputSourceSelection",
+    "RuntimeInputSourceState",
     "RuntimeInputSourceStepLoopPlan",
     "RuntimeInputSourceStepLoopRecord",
     "RuntimeForwardKinematicsEvaluation",
@@ -98,7 +106,11 @@ __all__ = [
     "extract_mujoco_site_endpoint",
     "extract_mujoco_site_endpoint_from_state",
     "resolve_desired_endpoint_from_motion_command",
+    "annotate_raw_input_frame",
+    "annotate_runtime_input_source_metadata",
+    "build_runtime_input_source_state",
     "runtime_endpoint_evaluation_metrics_to_payload",
+    "runtime_input_source_state_to_metadata",
     "SUPPORTED_RUNTIME_INPUT_SOURCE_NAMES",
     "select_runtime_input_source",
     "build_runtime_input_source_step_loop_plan",
