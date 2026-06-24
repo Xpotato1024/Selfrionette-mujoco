@@ -150,7 +150,7 @@ export function ProductViewerApp() {
   }, [endpointConfig.websocketUrl, state.fixturePath, state.modelPath]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") {
+    if (typeof window === "undefined" || typeof document === "undefined" || state.connectionStatus !== "open") {
       return;
     }
 
@@ -167,11 +167,11 @@ export function ProductViewerApp() {
       if (!keyboardCapture.isBoundKey(event.code)) {
         return;
       }
+      event.preventDefault();
       if (!keyboardCapture.handleKeyDown(event.code, event.repeat)) {
         return;
       }
 
-      event.preventDefault();
       publishKeyboardState();
     };
 

@@ -16,6 +16,9 @@ related:
 
 viewer で keyboard input を capture し、`viewer_control_message` schema に沿って backend へ送る。
 viewer JS は MuJoCo arm / target / qpos / simulation state を直接変更しない。
+current main の backend WebSocket runner は publisher-only なので、この note の smoke は
+viewer が control message を生成・送信し、render receiver を壊さないことを確認する。
+backend 側の実際の ingestion は `#255` で接続する。
 
 ## 前提
 
@@ -56,8 +59,9 @@ http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 
 1. viewer を開く。
 1. `KeyW`, `KeyA`, `KeyS`, `KeyD`, `Space`, `ShiftLeft`, `ShiftRight` を押して離す。
-1. `keydown` / `keyup` が backend control message に変換されることを確認する。
+1. `keydown` / `keyup` が viewer control message に変換されることを確認する。
 1. repeat key は状態変化がない限り再送しないことを確認する。
+1. render receiver が open になってから control sender が接続されることを確認する。
 
 ### default key mapping
 
@@ -82,6 +86,7 @@ http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 - backend 未接続でも viewer が落ちない。
 - control message 送信失敗は read-only viewer 表示を壊さない。
 - keyboard capture は simulation state を直接更新しない。
+- current backend runner は publisher-only なので、backend 消費確認は `#255` 待ち。
 
 ## Boundary
 
@@ -89,4 +94,3 @@ http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 - backend: control message validation と runtime 反映。
 - runtime: existing `InputSource -> InputIntent -> MotionCommand` を使う。
 - viewer overlay: read-only で扱う。
-

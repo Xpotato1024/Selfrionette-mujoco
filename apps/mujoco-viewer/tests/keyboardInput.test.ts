@@ -205,9 +205,87 @@ function testViewerKeyboardControlSenderQueuesUntilOpen(): void {
   });
 }
 
+function testViewerKeyboardControlSenderHandlesMissingBackendGracefully(): void {
+  const sender = createViewerKeyboardControlSender({
+    url: null,
+  });
+  const capture = createViewerKeyboardCapture();
+
+  capture.handleKeyDown("KeyW");
+  sender.publish(capture.snapshot(), 4.25);
+
+  assert.deepEqual(sender.getLatestMessage(), {
+    type: "viewer_control_message",
+    timestamp_s: 4.25,
+    source_kind: "keyboard",
+    sequence: 0,
+    keyboard: {
+      active_key_codes: ["KeyW"],
+      key_state: {
+        KeyW: true,
+      },
+      focus_state: "focused",
+      zero_state: false,
+    },
+  });
+}
+
+function testViewerKeyboardControlSenderSwallowsConstructorAndSendFailures(): void {
+  const constructorFailureSender = createViewerKeyboardControlSender({
+    url: "ws://127.0.0.1:8766",
+    WebSocketCtor: class {
+      constructor(_url: string) {
+        throw new Error("boom");
+      }
+
+      readonly readyState = 0;
+      addEventListener(): void {}
+      removeEventListener(): void {}
+      send(): void {}
+      close(): void {}
+    } as unknown as new (url: string) => ViewerKeyboardControlSocketLike,
+  });
+  const capture = createViewerKeyboardCapture();
+  capture.handleKeyDown("KeyA");
+
+  assert.doesNotThrow(() => {
+    constructorFailureSender.publish(capture.snapshot(), 5.5);
+  });
+  assert.deepEqual(constructorFailureSender.getLatestMessage()?.keyboard?.active_key_codes, ["KeyA"]);
+
+  let createdSocket: FakeWebSocket | null = null;
+  const sendFailureSender = createViewerKeyboardControlSender({
+    url: "ws://127.0.0.1:8766",
+    WebSocketCtor: class extends FakeWebSocket {
+      constructor(url: string) {
+        super(url);
+        createdSocket = this;
+      }
+
+      override send(_message: string): void {
+        throw new Error("send failed");
+      }
+    },
+  });
+
+  assert.doesNotThrow(() => {
+    sendFailureSender.publish(capture.snapshot(), 6.25);
+  });
+  if (createdSocket === null) {
+    throw new Error("expected a socket to be created");
+  }
+
+  const socket = createdSocket as FakeWebSocket;
+  assert.doesNotThrow(() => {
+    socket.emitOpen();
+  });
+}
+
 testViewerKeyboardCaptureMapsDefaultBindings();
 testViewerKeyboardCaptureClearsOnBlurAndVisibilityLoss();
 testViewerKeyboardControlMessageBuildsSchemaPayload();
 testViewerKeyboardControlSenderQueuesUntilOpen();
+testViewerKeyboardControlSenderHandlesMissingBackendGracefully();
+testViewerKeyboardControlSenderSwallowsConstructorAndSendFailures();
 
 console.log("keyboard input tests passed");
