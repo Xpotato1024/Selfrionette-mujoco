@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from selfrionette.input_sources.programmed_target import build_sweep_x_input_source
+from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.schemas import RawInputFrame
 from selfrionette.schemas.types import Vector3
 
@@ -53,6 +54,18 @@ def _build_noop_frames(*, metadata: Mapping[str, object]) -> tuple[RawInputFrame
     )
 
 
+def _build_viewer_frames(*, metadata: Mapping[str, object]) -> tuple[RawInputFrame, ...]:
+    return (
+        RawInputFrame(
+            source="viewer",
+            timestamp_s=0.0,
+            values=(),
+            buttons=(),
+            metadata=dict(metadata),
+        ),
+    )
+
+
 INPUT_SOURCE_REGISTRY: dict[str, InputSourceDescriptor] = {
     "programmed_target": InputSourceDescriptor(
         name="programmed_target",
@@ -75,6 +88,19 @@ INPUT_SOURCE_REGISTRY: dict[str, InputSourceDescriptor] = {
         initial_metadata={
             "preset": "noop",
             "source_kind": "noop",
+        },
+    ),
+    "viewer": InputSourceDescriptor(
+        name="viewer",
+        build_frames=_build_viewer_frames,
+        initial_metadata={
+            "preset": "viewer",
+            "source_kind": "viewer",
+            "source_active": False,
+            "command_age_ms": 0,
+            "stale_reason": "source_inactive",
+            "desired_endpoint_m": DEFAULT_VIEWER_SAFE_ENDPOINT_M,
+            "target_position_m": DEFAULT_VIEWER_SAFE_ENDPOINT_M,
         },
     ),
 }

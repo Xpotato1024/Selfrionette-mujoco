@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from selfrionette.input_sources.programmed_target import build_sweep_x_input_source
 from selfrionette.input_sources.registry import SUPPORTED_INPUT_SOURCE_NAMES, get_input_source_descriptor
+from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.runtime.input_source_state import (
     annotate_raw_input_frame,
     build_runtime_input_source_state,
@@ -25,6 +26,16 @@ _DEFAULT_NOOP_INITIAL_METADATA: dict[str, object] = {
     "source_kind": "noop",
     "target_position_m": DEFAULT_RUNTIME_SELECTION_TARGET_POSITION_M,
     "desired_endpoint_m": DEFAULT_RUNTIME_SELECTION_TARGET_POSITION_M,
+}
+
+_DEFAULT_VIEWER_INITIAL_METADATA: dict[str, object] = {
+    "preset": "viewer",
+    "source_kind": "viewer",
+    "target_position_m": DEFAULT_VIEWER_SAFE_ENDPOINT_M,
+    "desired_endpoint_m": DEFAULT_VIEWER_SAFE_ENDPOINT_M,
+    "source_active": False,
+    "command_age_ms": 0,
+    "stale_reason": "no_control_message_received",
 }
 
 
@@ -61,6 +72,11 @@ def _build_noop_frames() -> tuple[RawInputFrame, ...]:
     return descriptor.build_frames(metadata=_DEFAULT_NOOP_INITIAL_METADATA)
 
 
+def _build_viewer_frames() -> tuple[RawInputFrame, ...]:
+    descriptor = get_input_source_descriptor("viewer")
+    return descriptor.build_frames(metadata=_DEFAULT_VIEWER_INITIAL_METADATA)
+
+
 def select_runtime_input_source(
     source_name: str,
     *,
@@ -70,11 +86,6 @@ def select_runtime_input_source(
     replay_initial_metadata: Mapping[str, object] | None = None,
 ) -> RuntimeInputSourceSelection:
     descriptor = get_input_source_descriptor(source_name)
-    source_state = build_runtime_input_source_state(
-        descriptor.name,
-        source_active=True,
-        command_age_ms=0,
-    )
 
     if source_name == "programmed_target":
         if preset not in (None, "sweep_x"):
@@ -101,8 +112,30 @@ def select_runtime_input_source(
 
         selected_frames = _build_noop_frames()
         loop = True
+    elif source_name == "viewer":
+        if preset is not None:
+            raise ValueError("preset is not supported for viewer input source")
+        if frames is not None:
+            raise ValueError("viewer input source does not accept custom frames")
+
+        selected_frames = _build_viewer_frames()
+        loop = True
     else:
         raise ValueError(f"unsupported input source: {source_name!r}")
+
+    if source_name == "viewer":
+        source_state = build_runtime_input_source_state(
+            descriptor.name,
+            source_active=False,
+            command_age_ms=0,
+            stale_reason="no_control_message_received",
+        )
+    else:
+        source_state = build_runtime_input_source_state(
+            descriptor.name,
+            source_active=True,
+            command_age_ms=0,
+        )
 
     selected_frames = tuple(annotate_raw_input_frame(frame, source_state) for frame in selected_frames)
     initial_metadata = {

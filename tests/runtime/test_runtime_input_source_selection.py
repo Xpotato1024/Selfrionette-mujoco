@@ -33,6 +33,7 @@ def test_select_runtime_input_source_reports_initial_metadata_contract() -> None
     programmed_target = select_runtime_input_source("programmed_target", steps=2)
     replay = select_runtime_input_source("replay", steps=1)
     noop = select_runtime_input_source("noop", steps=1)
+    viewer = select_runtime_input_source("viewer", steps=1)
 
     assert programmed_target.source_name == "programmed_target"
     assert programmed_target.loop is False
@@ -46,6 +47,14 @@ def test_select_runtime_input_source_reports_initial_metadata_contract() -> None
     assert noop.source_name == "noop"
     assert noop.loop is True
     assert noop.initial_metadata["source_kind"] == "noop"
+
+    assert viewer.source_name == "viewer"
+    assert viewer.loop is True
+    assert viewer.frames[0].source == "viewer"
+    assert viewer.initial_metadata["source_kind"] == "viewer"
+    assert viewer.initial_metadata["source_active"] is False
+    assert viewer.initial_metadata["stale_reason"] == "no_control_message_received"
+    assert viewer.initial_metadata["desired_endpoint_m"] == (0.6, 0.0, 0.1)
 
 
 def test_select_runtime_input_source_rejects_unknown_source() -> None:
