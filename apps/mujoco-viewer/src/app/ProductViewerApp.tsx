@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { readViewerEndpointConfig } from "../config/websocketEndpoint.js";
+import {
+  createViewerKeyboardCapture,
+  createViewerKeyboardControlSender,
+  DEFAULT_VIEWER_KEYBOARD_BINDINGS,
+} from "../input/keyboardInput.js";
 import { formatQpos } from "../wasm-scene/mujocoQposSync.js";
 import {
   formatEndpointEvaluationAngles,
@@ -100,6 +105,12 @@ function EndpointEvaluationPanel({ state }: { state: ProductViewerState }) {
 
 export function ProductViewerApp() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const keyboardCaptureRef = useRef(
+    createViewerKeyboardCapture(
+      DEFAULT_VIEWER_KEYBOARD_BINDINGS,
+      typeof document !== "undefined" && document.hasFocus() ? "focused" : "blurred",
+    ),
+  );
   const [state, setState] = useState<ProductViewerState>(() => createInitialProductViewerState());
   const endpointConfig = useMemo(() => {
     if (typeof window === "undefined") {
@@ -137,6 +148,85 @@ export function ProductViewerApp() {
       renderer.dispose();
     };
   }, [endpointConfig.websocketUrl, state.fixturePath, state.modelPath]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const keyboardCapture = keyboardCaptureRef.current;
+    const keyboardSender = createViewerKeyboardControlSender({
+      url: endpointConfig.websocketUrl,
+    });
+
+    const publishKeyboardState = (): void => {
+      keyboardSender.publish(keyboardCapture.snapshot());
+    };
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!keyboardCapture.isBoundKey(event.code)) {
+        return;
+      }
+      if (!keyboardCapture.handleKeyDown(event.code, event.repeat)) {
+        return;
+      }
+
+      event.preventDefault();
+      publishKeyboardState();
+    };
+
+    const onKeyUp = (event: KeyboardEvent): void => {
+      if (!keyboardCapture.isBoundKey(event.code)) {
+        return;
+      }
+      if (!keyboardCapture.handleKeyUp(event.code)) {
+        return;
+      }
+
+      event.preventDefault();
+      publishKeyboardState();
+    };
+
+    const onWindowBlur = (): void => {
+      if (!keyboardCapture.handleBlur()) {
+        return;
+      }
+
+      publishKeyboardState();
+    };
+
+    const onWindowFocus = (): void => {
+      if (!keyboardCapture.handleFocus()) {
+        return;
+      }
+
+      publishKeyboardState();
+    };
+
+    const onVisibilityChange = (): void => {
+      if (!keyboardCapture.handleVisibilityChange(document.visibilityState === "visible")) {
+        return;
+      }
+
+      publishKeyboardState();
+    };
+
+    publishKeyboardState();
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("focus", onWindowFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("focus", onWindowFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      keyboardSender.dispose();
+    };
+  }, [endpointConfig.websocketUrl]);
 
   const currentQposText = state.currentQpos === null ? "qpos unavailable" : formatQpos(state.currentQpos);
 
