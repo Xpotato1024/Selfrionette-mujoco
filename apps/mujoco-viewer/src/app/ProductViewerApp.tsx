@@ -17,6 +17,7 @@ import {
 } from "../wasm-scene/endpointEvaluationFormat.js";
 import {
   createInitialProductViewerState,
+  formatInputOverlayText,
   type ProductViewerState,
 } from "../wasm-scene/productViewerState.js";
 import { VISUAL_LEGEND_ITEMS } from "../wasm-scene/visualStyles.js";
@@ -105,6 +106,10 @@ function EndpointEvaluationPanel({ state }: { state: ProductViewerState }) {
       </div>
     </dl>
   );
+}
+
+function InputOverlayPanel({ state }: { state: ProductViewerState }) {
+  return <pre className="viewer-input-overlay__text">{formatInputOverlayText(state.inputOverlay)}</pre>;
 }
 
 export function ProductViewerApp() {
@@ -410,11 +415,11 @@ export function ProductViewerApp() {
         </section>
       </div>
 
-      <section className="viewer-panel viewer-panel--status">
-        <div className="viewer-status__header">
-          <h2>Status</h2>
-          <div className="viewer-subtle">qpos path is render-only; diagnostics are read-only</div>
-        </div>
+        <section className="viewer-panel viewer-panel--status">
+          <div className="viewer-status__header">
+            <h2>Status</h2>
+            <div className="viewer-subtle">qpos path is render-only; diagnostics are read-only</div>
+          </div>
         <pre className="viewer-status">{state.statusText}</pre>
         {state.qposError === null ? null : <div className="viewer-error">{state.qposError}</div>}
         <div className="viewer-endpoint-evaluation">
@@ -423,6 +428,13 @@ export function ProductViewerApp() {
             <div className="viewer-subtle">read-only diagnostic overlay</div>
           </div>
           <EndpointEvaluationPanel state={state} />
+        </div>
+        <div className="viewer-input-overlay">
+          <div className="viewer-input-overlay__header">
+            <h3>Input overlay</h3>
+            <div className="viewer-subtle">source, keys, axes, buttons, age, stale state</div>
+          </div>
+          <InputOverlayPanel state={state} />
         </div>
       </section>
 

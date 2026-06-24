@@ -241,6 +241,35 @@ body {
   word-break: break-word;
 }
 
+.viewer-input-overlay {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(51, 65, 85, 0.7);
+}
+
+.viewer-input-overlay__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.viewer-input-overlay__header h3 {
+  margin: 0;
+  font-size: 13px;
+  color: #f8fafc;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.viewer-input-overlay__text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.55;
+  color: #cbd5e1;
+}
+
 .viewer-error {
   margin-top: 12px;
   padding: 12px 14px;

@@ -97,6 +97,10 @@ R6-A-P4 freezes the handoff contract for R6-B:
 - Transport must not create a separate physics state.
 - Transport only transforms `qpos`, `qvel`, `bodies`, `sites`,
   `target_position_m`, and `metadata` into a delivery payload.
+- `metadata` may carry runtime input source observability fields such as
+  `source_kind`, `source_active`, `command_age_ms`, `stale_reason`, and the
+  viewer control summary used by the R6-L overlay. The viewer treats those
+  fields as read-only presentation data.
 - Transport may also lift an optional `endpoint_evaluation` diagnostic object
   out of runtime metadata into the top-level payload.
 - `endpoint_evaluation` is diagnostic-only runtime/backend data. The viewer
