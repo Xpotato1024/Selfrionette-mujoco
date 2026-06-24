@@ -35,6 +35,10 @@ here instead of restating field lists.
 - `MuJoCoState`: backend snapshot passed to transport and viewer layers; see
   `docs/contracts/mujoco-state.md`.
 - `RenderState`: placeholder render contract for viewer-side state handoff.
+- `ViewerControlMessage`, `ViewerControlKeyboardMessage`,
+  `ViewerControlGamepadMessage`, `ViewerControlGamepadButtonMessage`: strict
+  viewer-to-backend control envelope; see
+  `docs/contracts/viewer-control-message-schema.md`.
 
 ## Responsibility Notes
 
@@ -59,6 +63,8 @@ here instead of restating field lists.
   boundary.
 - `MotionCommand.joint` is the qpos command boundary input, not viewer
   feedback.
+- `ViewerControlMessage` is schema-only control intent. It does not authorize
+  viewer-side simulation mutation, FK / IK recompute, or physics mutation.
 - `MuJoCoState.target_position_m` is viewer-visible feedback, not a command
   source.
 - `MuJoCoState` snapshot generation lives in `mujoco_backend` and is fed by

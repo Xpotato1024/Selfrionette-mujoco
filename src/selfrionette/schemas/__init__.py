@@ -6,6 +6,18 @@ from selfrionette.schemas.joint_command import JointCommand
 from selfrionette.schemas.motion_command import MotionCommand
 from selfrionette.schemas.mujoco_state import BodyTransform, MuJoCoState, SiteTransform
 from selfrionette.schemas.render_state import RenderState
+from selfrionette.schemas.viewer_control_message import (
+    ViewerControlEnvelopeType,
+    ViewerControlGamepadButtonMessage,
+    ViewerControlGamepadMessage,
+    ViewerControlKeyboardFocusState,
+    ViewerControlKeyboardMessage,
+    ViewerControlMessage,
+    ViewerControlMessageError,
+    ViewerControlSourceKind,
+    coerce_viewer_control_message,
+    parse_viewer_control_message_json,
+)
 from selfrionette.schemas.target_command import TargetCommand
 from selfrionette.schemas.types import JointVector, QuaternionWXYZ, ScalarVector, Vector3
 
@@ -23,4 +35,14 @@ __all__ = [
     "SiteTransform",
     "TargetCommand",
     "Vector3",
+    "ViewerControlEnvelopeType",
+    "ViewerControlGamepadButtonMessage",
+    "ViewerControlGamepadMessage",
+    "ViewerControlKeyboardFocusState",
+    "ViewerControlKeyboardMessage",
+    "ViewerControlMessage",
+    "ViewerControlMessageError",
+    "ViewerControlSourceKind",
+    "coerce_viewer_control_message",
+    "parse_viewer_control_message_json",
 ]
