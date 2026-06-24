@@ -106,7 +106,7 @@ def _coerce_key_state(value: object, *, context: str) -> dict[str, bool]:
 
 def _coerce_optional_bool(value: object, *, context: str) -> bool | None:
     if value is None:
-        return None
+        raise ViewerControlMessageError(f"{context} must be a boolean")
     if not _is_bool(value):
         raise ViewerControlMessageError(f"{context} must be a boolean")
     return value
@@ -114,7 +114,7 @@ def _coerce_optional_bool(value: object, *, context: str) -> bool | None:
 
 def _coerce_optional_focus_state(value: object, *, context: str) -> ViewerControlKeyboardFocusState | None:
     if value is None:
-        return None
+        raise ViewerControlMessageError(f"{context} must be 'focused' or 'blurred'")
     if value not in {"focused", "blurred"}:
         raise ViewerControlMessageError(f"{context} must be 'focused' or 'blurred'")
     return value
@@ -122,7 +122,7 @@ def _coerce_optional_focus_state(value: object, *, context: str) -> ViewerContro
 
 def _coerce_optional_number(value: object, *, context: str) -> float | None:
     if value is None:
-        return None
+        raise ViewerControlMessageError(f"{context} must be a finite number")
     if not _is_finite_number(value):
         raise ViewerControlMessageError(f"{context} must be a finite number")
     return float(value)
@@ -141,7 +141,7 @@ def _coerce_gamepad_button_message(value: object, *, context: str) -> ViewerCont
         raise ViewerControlMessageError(f"{context}.pressed must be a boolean")
 
     pressed = value["pressed"]
-    button_value = _coerce_optional_number(value.get("value"), context=f"{context}.value")
+    button_value = _coerce_optional_number(value["value"], context=f"{context}.value") if "value" in value else None
 
     return ViewerControlGamepadButtonMessage(pressed=pressed, value=button_value)
 
@@ -175,8 +175,8 @@ def _coerce_keyboard_message(value: object) -> ViewerControlKeyboardMessage:
 
     active_key_codes = _coerce_string_tuple(value["active_key_codes"], context="keyboard.active_key_codes")
     key_state = _coerce_key_state(value["key_state"], context="keyboard.key_state")
-    focus_state = _coerce_optional_focus_state(value.get("focus_state"), context="keyboard.focus_state")
-    zero_state = _coerce_optional_bool(value.get("zero_state"), context="keyboard.zero_state")
+    focus_state = _coerce_optional_focus_state(value["focus_state"], context="keyboard.focus_state") if "focus_state" in value else None
+    zero_state = _coerce_optional_bool(value["zero_state"], context="keyboard.zero_state") if "zero_state" in value else None
 
     return ViewerControlKeyboardMessage(
         active_key_codes=active_key_codes,
@@ -200,22 +200,27 @@ def _coerce_gamepad_message(value: object) -> ViewerControlGamepadMessage:
     if "buttons" not in value:
         raise ViewerControlMessageError("gamepad.buttons is required")
 
-    index = value.get("index")
-    if index is not None and not _is_int(index):
-        raise ViewerControlMessageError("gamepad.index must be an integer")
-    if index is not None:
+    if "index" in value:
+        index = value["index"]
+        if not _is_int(index):
+            raise ViewerControlMessageError("gamepad.index must be an integer")
         index = int(index)
+    else:
+        index = None
 
-    gamepad_id = value.get("id")
-    if gamepad_id is not None and not _is_str(gamepad_id):
-        raise ViewerControlMessageError("gamepad.id must be a string")
+    if "id" in value:
+        gamepad_id = value["id"]
+        if not _is_str(gamepad_id):
+            raise ViewerControlMessageError("gamepad.id must be a string")
+    else:
+        gamepad_id = None
     if not _is_bool(value["connected"]):
         raise ViewerControlMessageError("gamepad.connected must be a boolean")
 
     axes = _coerce_number_tuple(value["axes"], context="gamepad.axes")
     buttons = _coerce_button_tuple(value["buttons"], context="gamepad.buttons")
-    stale = _coerce_optional_bool(value.get("stale"), context="gamepad.stale")
-    zero_state = _coerce_optional_bool(value.get("zero_state"), context="gamepad.zero_state")
+    stale = _coerce_optional_bool(value["stale"], context="gamepad.stale") if "stale" in value else None
+    zero_state = _coerce_optional_bool(value["zero_state"], context="gamepad.zero_state") if "zero_state" in value else None
 
     return ViewerControlGamepadMessage(
         index=index,
@@ -250,11 +255,14 @@ def coerce_viewer_control_message(payload: object) -> ViewerControlMessage:
     if source_kind not in {"keyboard", "gamepad"}:
         raise ViewerControlMessageError("viewer control message.source_kind must be 'keyboard' or 'gamepad'")
 
-    sequence = payload.get("sequence")
-    if sequence is not None and not _is_int(sequence):
-        raise ViewerControlMessageError("viewer control message.sequence must be an integer")
+    if "sequence" in payload:
+        sequence = payload["sequence"]
+        if not _is_int(sequence):
+            raise ViewerControlMessageError("viewer control message.sequence must be an integer")
+    else:
+        sequence = None
 
-    metadata = payload.get("metadata", {})
+    metadata = payload["metadata"] if "metadata" in payload else {}
     if not _is_plain_mapping(metadata):
         raise ViewerControlMessageError("viewer control message.metadata must be a JSON object")
     metadata_copy: dict[str, object] = {}
@@ -263,22 +271,22 @@ def coerce_viewer_control_message(payload: object) -> ViewerControlMessage:
             raise ViewerControlMessageError("viewer control message.metadata keys must be strings")
         metadata_copy[key] = value_item
 
-    keyboard_value = payload.get("keyboard")
-    gamepad_value = payload.get("gamepad")
+    keyboard_present = "keyboard" in payload
+    gamepad_present = "gamepad" in payload
     if source_kind == "keyboard":
-        if keyboard_value is None:
+        if not keyboard_present:
             raise ViewerControlMessageError("keyboard payload is required when source_kind is 'keyboard'")
-        if gamepad_value is not None:
+        if gamepad_present:
             raise ViewerControlMessageError("gamepad payload is not allowed when source_kind is 'keyboard'")
-        keyboard = _coerce_keyboard_message(keyboard_value)
+        keyboard = _coerce_keyboard_message(payload["keyboard"])
         gamepad = None
     else:
-        if gamepad_value is None:
+        if not gamepad_present:
             raise ViewerControlMessageError("gamepad payload is required when source_kind is 'gamepad'")
-        if keyboard_value is not None:
+        if keyboard_present:
             raise ViewerControlMessageError("keyboard payload is not allowed when source_kind is 'gamepad'")
         keyboard = None
-        gamepad = _coerce_gamepad_message(gamepad_value)
+        gamepad = _coerce_gamepad_message(payload["gamepad"])
 
     return ViewerControlMessage(
         type="viewer_control_message",

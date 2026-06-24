@@ -116,6 +116,42 @@ function testParseViewerControlMessageJsonRejectsUnknownSourceKind(): void {
   );
 }
 
+function testParseViewerControlMessageJsonRejectsMixedSourcePayloads(): void {
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "keyboard",
+      keyboard: {
+        active_key_codes: ["KeyW"],
+        key_state: { KeyW: true },
+      },
+      gamepad: {
+        connected: true,
+        axes: [],
+        buttons: [],
+      },
+    }),
+  "gamepad payload is not allowed when source_kind is 'keyboard'");
+
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "gamepad",
+      keyboard: {
+        active_key_codes: ["KeyW"],
+        key_state: { KeyW: true },
+      },
+      gamepad: {
+        connected: true,
+        axes: [],
+        buttons: [],
+      },
+    }),
+  "keyboard payload is not allowed when source_kind is 'gamepad'");
+}
+
 function testParseViewerControlMessageJsonRejectsUnknownTopLevelField(): void {
   assertThrows(() =>
     coerceViewerControlMessage({
@@ -129,6 +165,88 @@ function testParseViewerControlMessageJsonRejectsUnknownTopLevelField(): void {
       unexpected: true,
     }),
   "contains unknown fields");
+}
+
+function testParseViewerControlMessageJsonRejectsExplicitNullOptionalFields(): void {
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "keyboard",
+      sequence: null,
+      keyboard: {
+        active_key_codes: ["KeyW"],
+        key_state: { KeyW: true },
+      },
+    }),
+  "sequence must be an integer");
+
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "keyboard",
+      keyboard: {
+        active_key_codes: ["KeyW"],
+        key_state: { KeyW: true },
+        focus_state: null,
+      },
+    }),
+  "keyboard.focus_state must be 'focused' or 'blurred'");
+
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "keyboard",
+      keyboard: {
+        active_key_codes: ["KeyW"],
+        key_state: { KeyW: true },
+        zero_state: null,
+      },
+    }),
+  "keyboard.zero_state must be a boolean");
+
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "gamepad",
+      gamepad: {
+        index: null,
+        connected: true,
+        axes: [0.0],
+        buttons: [{ pressed: true }],
+      },
+    }),
+  "gamepad.index must be an integer");
+
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "gamepad",
+      gamepad: {
+        id: null,
+        connected: true,
+        axes: [0.0],
+        buttons: [{ pressed: true }],
+      },
+    }),
+  "gamepad.id must be a string");
+
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "gamepad",
+      gamepad: {
+        connected: true,
+        axes: [0.0],
+        buttons: [{ pressed: true, value: null }],
+      },
+    }),
+  "gamepad.buttons[0].value must be a finite number");
 }
 
 function testParseViewerControlMessageJsonRequiresSourceSpecificPayload(): void {
@@ -275,7 +393,9 @@ testParseViewerControlMessageJsonAcceptsKeyboardPayload();
 testParseViewerControlMessageJsonAcceptsGamepadPayload();
 testParseViewerControlMessageJsonRejectsMalformedPayload();
 testParseViewerControlMessageJsonRejectsUnknownSourceKind();
+testParseViewerControlMessageJsonRejectsMixedSourcePayloads();
 testParseViewerControlMessageJsonRejectsUnknownTopLevelField();
+testParseViewerControlMessageJsonRejectsExplicitNullOptionalFields();
 testParseViewerControlMessageJsonRequiresSourceSpecificPayload();
 testParseViewerControlMessageJsonRejectsWrongFieldTypes();
 testParseViewerControlMessageJsonRejectsWrongButtonsShape();

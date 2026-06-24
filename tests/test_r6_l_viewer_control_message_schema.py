@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from selfrionette.schemas import (
@@ -121,6 +123,55 @@ def test_parse_viewer_control_message_json_rejects_unknown_source_kind() -> None
         (
             {
                 "type": "viewer_control_message",
+                "timestamp_s": 1.0,
+                "source_kind": "keyboard",
+                "keyboard": {
+                    "active_key_codes": ["KeyW"],
+                    "key_state": {"KeyW": True},
+                },
+                "gamepad": {
+                    "connected": True,
+                    "axes": [],
+                    "buttons": [],
+                },
+                "metadata": {},
+            },
+            "gamepad payload is not allowed when source_kind is 'keyboard'",
+        ),
+        (
+            {
+                "type": "viewer_control_message",
+                "timestamp_s": 1.0,
+                "source_kind": "gamepad",
+                "keyboard": {
+                    "active_key_codes": ["KeyW"],
+                    "key_state": {"KeyW": True},
+                },
+                "gamepad": {
+                    "connected": True,
+                    "axes": [],
+                    "buttons": [],
+                },
+                "metadata": {},
+            },
+            "keyboard payload is not allowed when source_kind is 'gamepad'",
+        ),
+    ],
+)
+def test_parse_viewer_control_message_json_rejects_mixed_source_payloads(
+    payload: dict[str, object],
+    expected_message: str,
+) -> None:
+    with pytest.raises(ViewerControlMessageError, match=expected_message):
+        coerce_viewer_control_message(payload)
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_message"),
+    [
+        (
+            {
+                "type": "viewer_control_message",
                 "timestamp_s": "1.0",
                 "source_kind": "keyboard",
                 "keyboard": {
@@ -230,6 +281,105 @@ def test_parse_viewer_control_message_json_rejects_unknown_top_level_field() -> 
                 "unexpected": True,
             }
         )
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_message"),
+    [
+        (
+            {
+                "type": "viewer_control_message",
+                "timestamp_s": 1.0,
+                "source_kind": "keyboard",
+                "sequence": None,
+                "keyboard": {
+                    "active_key_codes": ["KeyW"],
+                    "key_state": {"KeyW": True},
+                },
+                "metadata": {},
+            },
+            "viewer control message.sequence must be an integer",
+        ),
+        (
+            {
+                "type": "viewer_control_message",
+                "timestamp_s": 1.0,
+                "source_kind": "keyboard",
+                "keyboard": {
+                    "active_key_codes": ["KeyW"],
+                    "key_state": {"KeyW": True},
+                    "focus_state": None,
+                },
+                "metadata": {},
+            },
+            "keyboard.focus_state must be 'focused' or 'blurred'",
+        ),
+        (
+            {
+                "type": "viewer_control_message",
+                "timestamp_s": 1.0,
+                "source_kind": "keyboard",
+                "keyboard": {
+                    "active_key_codes": ["KeyW"],
+                    "key_state": {"KeyW": True},
+                    "zero_state": None,
+                },
+                "metadata": {},
+            },
+            "keyboard.zero_state must be a boolean",
+        ),
+        (
+            {
+                "type": "viewer_control_message",
+                "timestamp_s": 1.0,
+                "source_kind": "gamepad",
+                "gamepad": {
+                    "index": None,
+                    "connected": True,
+                    "axes": [0.0],
+                    "buttons": [{"pressed": True}],
+                },
+                "metadata": {},
+            },
+            "gamepad.index must be an integer",
+        ),
+        (
+            {
+                "type": "viewer_control_message",
+                "timestamp_s": 1.0,
+                "source_kind": "gamepad",
+                "gamepad": {
+                    "id": None,
+                    "connected": True,
+                    "axes": [0.0],
+                    "buttons": [{"pressed": True}],
+                },
+                "metadata": {},
+            },
+            "gamepad.id must be a string",
+        ),
+        (
+            {
+                "type": "viewer_control_message",
+                "timestamp_s": 1.0,
+                "source_kind": "gamepad",
+                "gamepad": {
+                    "connected": True,
+                    "axes": [0.0],
+                    "buttons": [{"pressed": True, "value": None}],
+                },
+                "metadata": {},
+            },
+            "gamepad.buttons[0].value must be a finite number",
+        ),
+    ],
+)
+def test_parse_viewer_control_message_json_rejects_explicit_null_optional_fields(
+    payload: dict[str, object],
+    expected_message: str,
+) -> None:
+    with pytest.raises(ViewerControlMessageError, match=re.escape(expected_message)):
+        coerce_viewer_control_message(payload)
 
 
 @pytest.mark.parametrize(
