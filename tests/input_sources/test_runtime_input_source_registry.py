@@ -34,7 +34,7 @@ def test_runtime_input_source_registry_initial_metadata_contract(
     if source_name == "viewer":
         assert descriptor.initial_metadata["source_active"] is False
         assert descriptor.initial_metadata["command_age_ms"] == 0
-        assert descriptor.initial_metadata["stale_reason"] == "source_inactive"
+        assert descriptor.initial_metadata["stale_reason"] == "no_control_message_received"
         assert descriptor.initial_metadata["desired_endpoint_m"] == descriptor.initial_metadata["target_position_m"]
 
 

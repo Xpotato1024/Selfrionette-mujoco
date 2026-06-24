@@ -77,10 +77,10 @@ def test_viewer_step_loop_holds_on_stale_source_state() -> None:
     assert len(records) == 1
     assert records[0].motion_command.target is None
     assert records[0].motion_command.joint is not None
-    assert records[0].motion_command.metadata["stale_reason"] == "source_inactive"
+    assert records[0].motion_command.metadata["stale_reason"] == "command_age_ms_exceeded_timeout_250"
     assert records[0].motion_command.metadata["runtime_input_safety_applied"] is True
     assert "desired_endpoint_m" not in records[0].state.metadata
     assert "target_position_m" not in records[0].state.metadata
     assert records[0].state.metadata["source_kind"] == "viewer_keyboard"
     assert records[0].state.metadata["source_active"] is False
-    assert records[0].state.metadata["stale_reason"] == "source_inactive"
+    assert records[0].state.metadata["stale_reason"] == "command_age_ms_exceeded_timeout_250"

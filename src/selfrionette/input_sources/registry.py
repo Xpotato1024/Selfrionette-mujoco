@@ -98,7 +98,7 @@ INPUT_SOURCE_REGISTRY: dict[str, InputSourceDescriptor] = {
             "source_kind": "viewer",
             "source_active": False,
             "command_age_ms": 0,
-            "stale_reason": "source_inactive",
+            "stale_reason": "no_control_message_received",
             "desired_endpoint_m": DEFAULT_VIEWER_SAFE_ENDPOINT_M,
             "target_position_m": DEFAULT_VIEWER_SAFE_ENDPOINT_M,
         },
