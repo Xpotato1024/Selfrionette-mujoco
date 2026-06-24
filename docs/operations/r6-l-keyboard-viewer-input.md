@@ -59,7 +59,8 @@ http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 
 1. viewer を開く。
 1. `KeyW`, `KeyA`, `KeyS`, `KeyD`, `Space`, `ShiftLeft`, `ShiftRight` を押して離す。
-1. `keydown` / `keyup` が viewer control message に変換されることを確認する。
+1. `keydown` / `keyup` が browser から viewer control message に変換されることを確認する
+   （DevTools の Network / console などの client-side 観測を使う）。
 1. repeat key は状態変化がない限り再送しないことを確認する。
 1. render receiver が open になってから control sender が接続されることを確認する。
 

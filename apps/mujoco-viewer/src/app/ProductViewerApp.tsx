@@ -226,7 +226,7 @@ export function ProductViewerApp() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       keyboardSender.dispose();
     };
-  }, [endpointConfig.websocketUrl]);
+  }, [endpointConfig.websocketUrl, state.connectionStatus]);
 
   const currentQposText = state.currentQpos === null ? "qpos unavailable" : formatQpos(state.currentQpos);
 
