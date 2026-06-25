@@ -67,9 +67,13 @@ def build_runtime_input_source_step_loop_plan(
     publisher: StatePublisher | None = None,
     model_path: str | Path | None = None,
     viewer_clock: Callable[[], float] | None = None,
+    viewer_input_source: ViewerInputSource | None = None,
 ) -> RuntimeInputSourceStepLoopPlan:
     runtime_config = RuntimeConfig() if config is None else config
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
+
+    if viewer_input_source is not None and selection.source_name != "viewer":
+        raise ValueError("viewer_input_source can only be supplied when selection.source_name == 'viewer'")
 
     if selection.source_name == "programmed_target":
         pipeline = build_concrete_mujoco_pipeline(
@@ -115,6 +119,16 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if selection.source_name == "viewer":
+        pipeline_input_source = viewer_input_source
+        if pipeline_input_source is None:
+            initial_endpoint_m = _coerce_viewer_endpoint_m(
+                selection.initial_metadata.get("desired_endpoint_m", selection.initial_metadata.get("target_position_m"))
+            )
+            pipeline_input_source = ViewerInputSource(
+                clock=viewer_clock if viewer_clock is not None else monotonic,
+                initial_endpoint_m=initial_endpoint_m,
+            )
+
         pipeline = build_concrete_mujoco_pipeline(
             frames=selection.frames,
             config=runtime_config,
@@ -122,14 +136,7 @@ def build_runtime_input_source_step_loop_plan(
             loop=selection.loop,
             publisher=publisher if publisher is not None else NoOpStatePublisher(),
         )
-        initial_endpoint_m = _coerce_viewer_endpoint_m(
-            selection.initial_metadata.get("desired_endpoint_m", selection.initial_metadata.get("target_position_m"))
-        )
-
-        pipeline.input_source = ViewerInputSource(
-            clock=viewer_clock if viewer_clock is not None else monotonic,
-            initial_endpoint_m=initial_endpoint_m,
-        )
+        pipeline.input_source = pipeline_input_source
 
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,

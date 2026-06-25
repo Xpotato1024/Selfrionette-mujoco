@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
+from selfrionette.input_sources import ViewerInputSource
 from selfrionette.runtime import (
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
@@ -48,9 +51,17 @@ def test_viewer_step_loop_accepts_ingested_message_and_updates_endpoint_state() 
     clock = _FakeClock()
     selection = select_runtime_input_source("viewer", steps=1)
     publisher = RecordingPublisher()
-    plan = build_runtime_input_source_step_loop_plan(selection, publisher=publisher, viewer_clock=clock.monotonic)
+    viewer_input_source = ViewerInputSource(clock=clock.monotonic)
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        publisher=publisher,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=viewer_input_source,
+    )
 
-    ingest_viewer_control_message(plan.pipeline.input_source, _build_keyboard_message(timestamp_s=1.0))
+    assert plan.pipeline.input_source is viewer_input_source
+
+    ingest_viewer_control_message(viewer_input_source, _build_keyboard_message(timestamp_s=1.0))
     records = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))
 
     desired_endpoint_m = records[0].motion_command.metadata["desired_endpoint_m"]
@@ -68,9 +79,15 @@ def test_viewer_step_loop_holds_on_stale_source_state() -> None:
     clock = _FakeClock()
     selection = select_runtime_input_source("viewer", steps=1)
     publisher = RecordingPublisher()
-    plan = build_runtime_input_source_step_loop_plan(selection, publisher=publisher, viewer_clock=clock.monotonic)
+    viewer_input_source = ViewerInputSource(clock=clock.monotonic)
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        publisher=publisher,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=viewer_input_source,
+    )
 
-    ingest_viewer_control_message(plan.pipeline.input_source, _build_keyboard_message(timestamp_s=1.0))
+    ingest_viewer_control_message(viewer_input_source, _build_keyboard_message(timestamp_s=1.0))
     clock.advance(0.30)
     records = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))
 
@@ -84,3 +101,14 @@ def test_viewer_step_loop_holds_on_stale_source_state() -> None:
     assert records[0].state.metadata["source_kind"] == "viewer_keyboard"
     assert records[0].state.metadata["source_active"] is False
     assert records[0].state.metadata["stale_reason"] == "command_age_ms_exceeded_timeout_250"
+
+
+def test_viewer_step_loop_rejects_external_viewer_source_for_non_viewer_selection() -> None:
+    selection = select_runtime_input_source("programmed_target", steps=1)
+    viewer_input_source = ViewerInputSource(clock=lambda: 0.0)
+
+    with pytest.raises(ValueError, match="viewer_input_source can only be supplied"):
+        build_runtime_input_source_step_loop_plan(
+            selection,
+            viewer_input_source=viewer_input_source,
+        )

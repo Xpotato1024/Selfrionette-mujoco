@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 from websockets.asyncio.server import serve
@@ -20,7 +22,13 @@ class _WebSocketClient(Protocol):
 class WebSocketPublisherServer:
     """Local/dev WebSocket server that relays JSON strings to connected clients."""
 
-    def __init__(self, *, host: str = "127.0.0.1", port: int = 8766) -> None:
+    def __init__(
+        self,
+        *,
+        host: str = "127.0.0.1",
+        port: int = 8766,
+        on_message: Callable[[str], Awaitable[None] | None] | None = None,
+    ) -> None:
         if not host:
             raise ValueError("host must not be empty")
         if port < 1 or port > 65535:
@@ -28,8 +36,10 @@ class WebSocketPublisherServer:
 
         self._host = host
         self._port = port
+        self._on_message = on_message
         self._clients: set[_WebSocketClient] = set()
         self._client_connected = asyncio.Event()
+        self._handler_errors: list[Exception] = []
         self._server_cm: Any | None = None
         self._server: Any | None = None
 
@@ -44,6 +54,10 @@ class WebSocketPublisherServer:
     @property
     def is_running(self) -> bool:
         return self._server is not None
+
+    @property
+    def message_handler_errors(self) -> tuple[Exception, ...]:
+        return tuple(self._handler_errors)
 
     @property
     def bound_port(self) -> int:
@@ -118,7 +132,20 @@ class WebSocketPublisherServer:
         self._clients.add(websocket)
         self._client_connected.set()
         try:
-            await websocket.wait_closed()
+            if self._on_message is None:
+                await websocket.wait_closed()
+                return
+
+            async for message in websocket:
+                if not isinstance(message, str):
+                    continue
+
+                try:
+                    result = self._on_message(message)
+                    if inspect.isawaitable(result):
+                        await result
+                except Exception as exc:  # keep the server alive on handler errors
+                    self._handler_errors.append(exc)
         finally:
             self._clients.discard(websocket)
             if not self._clients:
