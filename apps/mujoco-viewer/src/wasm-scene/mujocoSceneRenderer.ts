@@ -36,6 +36,7 @@ import { AXIS_VISUAL_STYLES, BODY_VISUAL_STYLES, resolveBodyVisualStyleKey } fro
 import type { BodyVisualStyle } from "./visualStyles.js";
 import {
   createInitialProductViewerState,
+  buildProductViewerInputOverlayState,
   formatViewerStatusText,
   type ProductViewerState,
 } from "./productViewerState.js";
@@ -353,6 +354,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     frameIndex: number | null,
     timeS: number | null,
     endpointEvaluation: TransportPayloadV0["endpoint_evaluation"] | null,
+    inputOverlay: ProductViewerState["inputOverlay"],
   ): void => {
     data.qpos.set(qpos);
     mujocoApi.mj_forward(model, data);
@@ -366,6 +368,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       currentTimestampS: timeS,
       currentQpos: Array.from(qpos),
       endpointEvaluation,
+      inputOverlay,
       modelNq: model.nq,
       modelNv: model.nv,
       modelNgeom: model.ngeom,
@@ -374,11 +377,12 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   };
 
   const applyStartupPose = (): void => {
-    applyModelPose(startupQpos, "compiled model default qpos", null, null, null);
+    applyModelPose(startupQpos, "compiled model default qpos", null, null, null, null);
   };
 
   const applyTransportPayload = (payload: TransportPayloadV0): void => {
     const endpointEvaluation = payload.endpoint_evaluation ?? null;
+    const inputOverlay = buildProductViewerInputOverlayState(payload);
     const qposResolution = resolveTransportQpos(payload, model.nq);
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
       updateStatus({
@@ -391,6 +395,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
         currentQpos: null,
         currentQposText: "[]",
         endpointEvaluation,
+        inputOverlay,
       });
       return;
     }
@@ -401,6 +406,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       qposResolution.currentFrameIndex,
       qposResolution.currentTimestampS,
       endpointEvaluation,
+      inputOverlay,
     );
   };
 

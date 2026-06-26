@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { parseTransportPayloadV0Message } from "../src/transport/parseTransportPayloadV0Message.js";
 import {
   createViewerWebSocketClient,
@@ -5,6 +6,10 @@ import {
   type ViewerWebSocketMessageEventLike,
 } from "../src/transport/websocketClient.js";
 import type { TransportPayloadV0 } from "../src/types/transportPayload.js";
+import {
+  buildProductViewerInputOverlayState,
+  formatInputOverlayText,
+} from "../src/wasm-scene/productViewerState.js";
 
 const TRANSPORT_PAYLOAD_FIXTURE: TransportPayloadV0 = {
   version: 0,
@@ -104,7 +109,57 @@ const INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_FEEDBACK_TARGET: TransportPayloadV0 = {
   endpoint_evaluation: VALID_ENDPOINT_EVALUATION,
 };
 
-function assert(condition: unknown, message: string): asserts condition {
+const VIEWER_OVERLAY_KEYBOARD_PAYLOAD_FIXTURE: TransportPayloadV0 = {
+  ...TRANSPORT_PAYLOAD_FIXTURE,
+  metadata: {
+    source_kind: "viewer_keyboard",
+    source_active: true,
+    command_age_ms: 18,
+    stale_reason: null,
+    viewer_control_message: {
+      viewer_source_kind: "keyboard",
+      sequence: 4,
+      keyboard: {
+        active_key_codes: ["KeyW", "KeyD"],
+        key_state: {
+          KeyW: true,
+          KeyD: true,
+          KeyS: false,
+        },
+        focus_state: "focused",
+        zero_state: false,
+      },
+    },
+  },
+};
+
+const VIEWER_OVERLAY_GAMEPAD_PAYLOAD_FIXTURE: TransportPayloadV0 = {
+  ...TRANSPORT_PAYLOAD_FIXTURE,
+  metadata: {
+    source_kind: "viewer_gamepad",
+    source_active: false,
+    command_age_ms: 287,
+    stale_reason: "command_age_ms_exceeded_timeout_250",
+    viewer_control_message: {
+      viewer_source_kind: "gamepad",
+      sequence: 19,
+      gamepad: {
+        connected: false,
+        index: 2,
+        id: "Browser Pad",
+        axes: [0.3, -1.2, 0.05],
+        buttons: [
+          { pressed: true, value: 0.75 },
+          { pressed: false, value: 0.0 },
+        ],
+        stale: true,
+        zero_state: true,
+      },
+    },
+  },
+};
+
+function assertCondition(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
@@ -114,8 +169,8 @@ function assertThrows(fn: () => void, expectedMessage: string): void {
   try {
     fn();
   } catch (error) {
-    assert(error instanceof Error, "expected an Error instance");
-    assert(
+    assertCondition(error instanceof Error, "expected an Error instance");
+    assertCondition(
       error.message.includes(expectedMessage),
       `expected "${expectedMessage}" in "${error.message}"`,
     );
@@ -128,12 +183,12 @@ function assertThrows(fn: () => void, expectedMessage: string): void {
 function testParseTransportPayloadV0Message(): void {
   const parsed = parseTransportPayloadV0Message(JSON.stringify(TRANSPORT_PAYLOAD_FIXTURE));
 
-  assert(parsed.version === 0, "parsed payload should keep version 0");
-  assert(parsed.frame_index === TRANSPORT_PAYLOAD_FIXTURE.frame_index, "frame_index should match fixture");
-  assert(parsed.time_s === TRANSPORT_PAYLOAD_FIXTURE.time_s, "time_s should match fixture");
-  assert(parsed.qpos.length === TRANSPORT_PAYLOAD_FIXTURE.qpos.length, "qpos should be preserved");
-  assert(parsed.bodies.length === TRANSPORT_PAYLOAD_FIXTURE.bodies.length, "bodies should be preserved");
-  assert(parsed.sites.length === TRANSPORT_PAYLOAD_FIXTURE.sites.length, "sites should be preserved");
+  assertCondition(parsed.version === 0, "parsed payload should keep version 0");
+  assertCondition(parsed.frame_index === TRANSPORT_PAYLOAD_FIXTURE.frame_index, "frame_index should match fixture");
+  assertCondition(parsed.time_s === TRANSPORT_PAYLOAD_FIXTURE.time_s, "time_s should match fixture");
+  assertCondition(parsed.qpos.length === TRANSPORT_PAYLOAD_FIXTURE.qpos.length, "qpos should be preserved");
+  assertCondition(parsed.bodies.length === TRANSPORT_PAYLOAD_FIXTURE.bodies.length, "bodies should be preserved");
+  assertCondition(parsed.sites.length === TRANSPORT_PAYLOAD_FIXTURE.sites.length, "sites should be preserved");
 }
 
 function testParseTransportPayloadV0MessageRetainsOfflineLoadcellMetadataWithoutEndpointEvaluation(): void {
@@ -151,24 +206,24 @@ function testParseTransportPayloadV0MessageRetainsOfflineLoadcellMetadataWithout
     }),
   );
 
-  assert(
+  assertCondition(
     JSON.stringify(parsed.metadata.desired_endpoint_m) === JSON.stringify([0.2496233, 0.5009906, 0.751376]),
     "desired_endpoint_m should be preserved in metadata",
   );
-  assert(
+  assertCondition(
     JSON.stringify(parsed.metadata.endpoint_delta_m) === JSON.stringify([-0.0003767, 0.0009906, 0.001376]),
     "endpoint_delta_m should be preserved in metadata",
   );
-  assert(
+  assertCondition(
     JSON.stringify(parsed.metadata.active_channels) === JSON.stringify([0, 1, 2]),
     "active_channels should be preserved in metadata",
   );
-  assert(
+  assertCondition(
     JSON.stringify(parsed.metadata.current_tip_position_m) === JSON.stringify([0.25, 0.5, 0.75]),
     "current_tip_position_m should be preserved in metadata",
   );
-  assert(parsed.target_position_m === null, "target_position_m should stay optional feedback");
-  assert(parsed.endpoint_evaluation === undefined, "endpoint_evaluation should remain optional");
+  assertCondition(parsed.target_position_m === null, "target_position_m should stay optional feedback");
+  assertCondition(parsed.endpoint_evaluation === undefined, "endpoint_evaluation should remain optional");
 }
 
 function testParseTransportPayloadV0MessageRejectsInvalidJson(): void {
@@ -208,42 +263,169 @@ function testParseTransportPayloadV0MessageRejectsMissingRequiredFields(): void 
 function testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithNullTargetPositionAndMissingEndpointEvaluation(): void {
   const parsed = parseTransportPayloadV0Message(JSON.stringify(INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_NULL_TARGET));
 
-  assert(
+  assertCondition(
     JSON.stringify(parsed.metadata.desired_endpoint_m) === JSON.stringify([0.11, 0.0, 0.3]),
     "desired_endpoint_m should be preserved in metadata",
   );
-  assert(
+  assertCondition(
     JSON.stringify(parsed.metadata.endpoint_delta_m) === JSON.stringify([0.01, 0.0, 0.0]),
     "endpoint_delta_m should be preserved in metadata",
   );
-  assert(
+  assertCondition(
     JSON.stringify(parsed.metadata.current_tip_position_m) === JSON.stringify([0.1, 0.0, 0.3]),
     "current_tip_position_m should be preserved in metadata",
   );
-  assert(parsed.target_position_m === null, "target_position_m should allow null feedback");
-  assert(parsed.endpoint_evaluation === undefined, "endpoint_evaluation should remain optional");
+  assertCondition(parsed.target_position_m === null, "target_position_m should allow null feedback");
+  assertCondition(parsed.endpoint_evaluation === undefined, "endpoint_evaluation should remain optional");
 }
 
 function testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithFeedbackTargetAndEndpointEvaluation(): void {
   const parsed = parseTransportPayloadV0Message(JSON.stringify(INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_FEEDBACK_TARGET));
 
-  assert(
+  assertCondition(
     JSON.stringify(parsed.metadata.desired_endpoint_m) === JSON.stringify([0.11, 0.0, 0.3]),
     "desired_endpoint_m should be preserved in metadata",
   );
-  assert(
+  assertCondition(
     JSON.stringify(parsed.metadata.target_position_m) === JSON.stringify([0.24, 0.5, 0.75]),
     "target_position_m should be preserved in metadata as feedback",
   );
-  assert(
+  assertCondition(
     JSON.stringify(parsed.target_position_m) === JSON.stringify([0.24, 0.5, 0.75]),
     "target_position_m should stay parseable as feedback",
   );
-  assert(parsed.endpoint_evaluation !== null && parsed.endpoint_evaluation !== undefined, "endpoint_evaluation should parse");
-  assert(
+  assertCondition(parsed.endpoint_evaluation !== null && parsed.endpoint_evaluation !== undefined, "endpoint_evaluation should parse");
+  assertCondition(
     JSON.stringify(parsed.endpoint_evaluation) === JSON.stringify(VALID_ENDPOINT_EVALUATION),
     "endpoint_evaluation should preserve the diagnostic payload",
   );
+}
+
+function testBuildProductViewerInputOverlayStateFormatsKeyboardPayload(): void {
+  const payload = parseTransportPayloadV0Message(JSON.stringify(VIEWER_OVERLAY_KEYBOARD_PAYLOAD_FIXTURE));
+  const overlay = buildProductViewerInputOverlayState(payload);
+
+  assertCondition(overlay !== null, "overlay should parse");
+  assert.deepEqual(overlay, {
+    sourceKind: "viewer_keyboard",
+    sourceActive: true,
+    commandAgeMs: 18,
+    staleReason: null,
+    viewerSourceKind: "keyboard",
+    sequence: 4,
+    keyboardActiveKeyCodes: ["KeyW", "KeyD"],
+    keyboardFocusState: "focused",
+    keyboardZeroState: false,
+    keyboardKeyState: {
+      KeyW: true,
+      KeyD: true,
+      KeyS: false,
+    },
+    gamepadConnected: null,
+    gamepadIndex: null,
+    gamepadId: null,
+    gamepadAxes: [],
+    gamepadButtons: [],
+    gamepadStale: null,
+    gamepadZeroState: null,
+  });
+
+  assert.match(formatInputOverlayText(overlay), /input source: viewer_keyboard/);
+  assert.match(formatInputOverlayText(overlay), /keyboard active keys: KeyW, KeyD/);
+  assert.match(formatInputOverlayText(overlay), /gamepad axes: none/);
+}
+
+function testBuildProductViewerInputOverlayStateFormatsGamepadPayloadAndFallsBackSafely(): void {
+  const payload = parseTransportPayloadV0Message(JSON.stringify(VIEWER_OVERLAY_GAMEPAD_PAYLOAD_FIXTURE));
+  const overlay = buildProductViewerInputOverlayState(payload);
+
+  assertCondition(overlay !== null, "overlay should parse");
+  assert.deepEqual(overlay, {
+    sourceKind: "viewer_gamepad",
+    sourceActive: false,
+    commandAgeMs: 287,
+    staleReason: "command_age_ms_exceeded_timeout_250",
+    viewerSourceKind: "gamepad",
+    sequence: 19,
+    keyboardActiveKeyCodes: [],
+    keyboardFocusState: null,
+    keyboardZeroState: null,
+    keyboardKeyState: {},
+    gamepadConnected: false,
+    gamepadIndex: 2,
+    gamepadId: "Browser Pad",
+    gamepadAxes: [0.3, -1.2, 0.05],
+    gamepadButtons: [
+      { pressed: true, value: 0.75 },
+      { pressed: false, value: 0 },
+    ],
+    gamepadStale: true,
+    gamepadZeroState: true,
+  });
+
+  const formatted = formatInputOverlayText(overlay);
+  assert.match(formatted, /input source: viewer_gamepad/);
+  assert.match(formatted, /active: no/);
+  assert.match(formatted, /gamepad axes: \[0\.3000, -1\.2000, 0\.0500\]/);
+  assert.match(formatted, /gamepad buttons: 0:pressed 0\.75, 1:released 0\.00/);
+}
+
+function testBuildProductViewerInputOverlayStateFallsBackSafelyWhenMetadataIsMalformed(): void {
+  const payload = parseTransportPayloadV0Message(
+    JSON.stringify({
+      ...TRANSPORT_PAYLOAD_FIXTURE,
+      metadata: {
+        source_kind: 123,
+        source_active: "no",
+        command_age_ms: -5,
+        stale_reason: 42,
+        viewer_control_message: {
+          viewer_source_kind: 99,
+          sequence: "bad",
+          keyboard: {
+            active_key_codes: ["KeyA", 99],
+            key_state: {
+              KeyA: true,
+              KeyB: "no",
+            },
+            focus_state: 123,
+            zero_state: "no",
+          },
+          gamepad: {
+            connected: "no",
+            index: "bad",
+            id: 42,
+            axes: [0.5, "bad", Infinity],
+            buttons: [{ pressed: true, value: "bad" }],
+            stale: "no",
+            zero_state: "no",
+          },
+        },
+      },
+    }),
+  );
+  const overlay = buildProductViewerInputOverlayState(payload);
+
+  assertCondition(overlay !== null, "overlay should still be created");
+  assert.equal(overlay.sourceKind, "n/a");
+  assert.equal(overlay.sourceActive, false);
+  assert.equal(overlay.commandAgeMs, null);
+  assert.equal(overlay.staleReason, null);
+  assert.equal(overlay.viewerSourceKind, null);
+  assert.equal(overlay.sequence, null);
+  assert.deepEqual(overlay.keyboardActiveKeyCodes, ["KeyA"]);
+  assert.deepEqual(overlay.keyboardKeyState, {
+    KeyA: true,
+  });
+  assert.equal(overlay.keyboardFocusState, null);
+  assert.equal(overlay.keyboardZeroState, null);
+  assert.equal(overlay.gamepadConnected, null);
+  assert.equal(overlay.gamepadIndex, null);
+  assert.equal(overlay.gamepadId, null);
+  assert.deepEqual(overlay.gamepadAxes, [0.5]);
+  assert.deepEqual(overlay.gamepadButtons, [{ pressed: true, value: null }]);
+  assert.equal(overlay.gamepadStale, null);
+  assert.equal(overlay.gamepadZeroState, null);
 }
 
 class FakeWebSocket implements ViewerWebSocketLike {
@@ -382,13 +564,13 @@ function testViewerWebSocketClientRoutesMalformedMessageToErrorCallback(): void 
   });
 
   client.start();
-  assert(socket !== null, "websocket should be created");
+  assertCondition(socket !== null, "websocket should be created");
   const activeSocket = socket as FakeWebSocket;
   activeSocket.dispatchMessage("{not json");
 
-  assert(payloads.length === 0, "malformed message should not produce payload");
-  assert(errors.length === 1, "malformed message should produce one error");
-  assert(errors[0].message.includes("malformed JSON"), "error should mention malformed JSON");
+  assertCondition(payloads.length === 0, "malformed message should not produce payload");
+  assertCondition(errors.length === 1, "malformed message should produce one error");
+  assertCondition(errors[0].message.includes("malformed JSON"), "error should mention malformed JSON");
   client.stop();
 }
 
@@ -416,30 +598,30 @@ function testViewerWebSocketClientDeliversValidPayloadThroughInjectedSocket(): v
   });
 
   client.start();
-  assert(socket !== null, "websocket should be created");
+  assertCondition(socket !== null, "websocket should be created");
   const activeSocket = socket as FakeWebSocket;
   activeSocket.dispatchMessage(JSON.stringify(TRANSPORT_PAYLOAD_FIXTURE));
 
-  assert(payloads.length === 1, "valid payload should be delivered once");
-  assert(payloads[0].version === 0, "delivered payload should keep version 0");
-  assert(
+  assertCondition(payloads.length === 1, "valid payload should be delivered once");
+  assertCondition(payloads[0].version === 0, "delivered payload should keep version 0");
+  assertCondition(
     payloads[0].frame_index === TRANSPORT_PAYLOAD_FIXTURE.frame_index,
     "delivered payload should preserve frame_index",
   );
-  assert(
+  assertCondition(
     client.getLatestPayload()?.frame_index === TRANSPORT_PAYLOAD_FIXTURE.frame_index,
     "client should keep the latest payload in state",
   );
-  assert(
+  assertCondition(
     client.getLatestPayload()?.endpoint_evaluation?.desired_endpoint_m?.[0] ===
       TRANSPORT_PAYLOAD_FIXTURE.endpoint_evaluation?.desired_endpoint_m?.[0],
     "client should preserve endpoint evaluation",
   );
-  assert(errors.length === 0, "valid payload should not produce errors");
+  assertCondition(errors.length === 0, "valid payload should not produce errors");
 
   client.stop();
-  assert(socket !== null, "websocket should be created");
-  assert(activeSocket.closed, "client.stop should close the socket");
+  assertCondition(socket !== null, "websocket should be created");
+  assertCondition(activeSocket.closed, "client.stop should close the socket");
 }
 
 function testViewerWebSocketClientRoutesSocketErrorsToErrorCallback(): void {
@@ -473,16 +655,16 @@ function testViewerWebSocketClientRoutesSocketErrorsToErrorCallback(): void {
   });
 
   client.start();
-  assert(socket !== null, "websocket should be created");
+  assertCondition(socket !== null, "websocket should be created");
   const activeSocket = socket as FakeWebSocket;
   activeSocket.dispatchOpen();
   activeSocket.dispatchError();
   activeSocket.dispatchClose();
 
-  assert(errors.length === 3, "socket lifecycle events should be routed");
-  assert(errors[0].message === "open", "open event should be routed");
-  assert(errors[1].message.includes("connection error"), "socket error should mention connection error");
-  assert(errors[2].message === "close", "close event should be routed");
+  assertCondition(errors.length === 3, "socket lifecycle events should be routed");
+  assertCondition(errors[0].message === "open", "open event should be routed");
+  assertCondition(errors[1].message.includes("connection error"), "socket error should mention connection error");
+  assertCondition(errors[2].message === "close", "close event should be routed");
   client.stop();
 }
 
@@ -490,6 +672,9 @@ testParseTransportPayloadV0Message();
 testParseTransportPayloadV0MessageRetainsOfflineLoadcellMetadataWithoutEndpointEvaluation();
 testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithNullTargetPositionAndMissingEndpointEvaluation();
 testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithFeedbackTargetAndEndpointEvaluation();
+testBuildProductViewerInputOverlayStateFormatsKeyboardPayload();
+testBuildProductViewerInputOverlayStateFormatsGamepadPayloadAndFallsBackSafely();
+testBuildProductViewerInputOverlayStateFallsBackSafelyWhenMetadataIsMalformed();
 testParseTransportPayloadV0MessageRejectsInvalidJson();
 testParseTransportPayloadV0MessageRejectsInvalidVersion();
 testParseTransportPayloadV0MessageRejectsMissingRequiredFields();

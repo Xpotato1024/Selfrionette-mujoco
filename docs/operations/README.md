@@ -14,3 +14,4 @@ here.
 
 - `docs/operations/r6-l-keyboard-viewer-input.md`: viewer keyboard capture smoke note for R6-L.
 - `docs/operations/r6-l-gamepad-viewer-input.md`: viewer gamepad capture smoke note for R6-L.
+- `docs/operations/r6-l-viewer-input-overlay.md`: viewer read-only input overlay note for R6-L.
