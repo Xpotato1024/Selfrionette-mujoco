@@ -129,3 +129,11 @@ def test_viewer_input_source_marks_frame_stale_after_timeout() -> None:
     assert stale_frame.metadata["stale_reason"] == "command_age_ms_exceeded_timeout_250"
     assert stale_frame.metadata["desired_endpoint_m"] == (0.6, 0.01, 0.1)
     assert stale_frame.metadata["target_position_m"] == (0.6, 0.01, 0.1)
+
+
+def test_viewer_input_source_can_rebase_current_endpoint() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+
+    source.rebase_current_endpoint_m((0.2, 0.3, 0.4))
+
+    assert source.current_endpoint_m == (0.2, 0.3, 0.4)

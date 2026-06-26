@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
+from math import sqrt
 
 from selfrionette.kinematics import InverseKinematicsSolver
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, TargetCommand
+
+DEFAULT_TARGET_DISCONTINUITY_THRESHOLD_RAD = 2.0
+_KNOWN_TARGET_REJECTION_MESSAGES = {
+    "target_position_m must remain on the solver plane",
+    "target_position_m is outside the reachable workspace",
+}
 
 
 def _has_non_zero_delta(delta_m: tuple[float, float, float]) -> bool:
@@ -18,7 +26,62 @@ def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
     if len(components) != 3:
         raise ValueError(f"{name} must contain exactly three values")
 
+    for component_index, component in enumerate(components):
+        if not math.isfinite(component):
+            raise ValueError(f"{name} must contain only finite values at index {component_index}")
+
     return components
+
+
+def _coerce_joint_angles(name: str, values: Sequence[float] | None) -> tuple[float, ...] | None:
+    if values is None:
+        return None
+
+    joint_angles_rad = tuple(float(value) for value in values)
+    if not joint_angles_rad:
+        return None
+
+    return joint_angles_rad
+
+
+def _build_rejected_metadata(
+    metadata: Mapping[str, object] | None,
+    *,
+    reason: str,
+    rejection_message: str,
+    rejected_desired_endpoint_m: tuple[float, float, float] | None,
+) -> dict[str, object]:
+    rejected_metadata = {} if metadata is None else dict(metadata)
+    rejected_metadata.pop("desired_endpoint_m", None)
+    rejected_metadata.pop("target_position_m", None)
+    rejected_metadata["runtime_input_safety_applied"] = True
+    rejected_metadata["target_status"] = "held"
+    rejected_metadata["target_rejected"] = True
+    rejected_metadata["target_rejection_reason"] = reason
+    rejected_metadata["target_rejection_message"] = rejection_message
+    if rejected_desired_endpoint_m is not None:
+        rejected_metadata["rejected_desired_endpoint_m"] = rejected_desired_endpoint_m
+    return rejected_metadata
+
+
+def _is_target_rejection_error(exc: ValueError) -> bool:
+    return str(exc) in _KNOWN_TARGET_REJECTION_MESSAGES
+
+
+def _qpos_discontinuity_norm_rad(
+    candidate_qpos_rad: Sequence[float],
+    current_qpos_rad: Sequence[float],
+) -> float:
+    overlap = min(len(candidate_qpos_rad), len(current_qpos_rad))
+    if overlap == 0:
+        return 0.0
+
+    return math.sqrt(
+        sum(
+            (float(candidate_qpos_rad[index]) - float(current_qpos_rad[index])) ** 2
+            for index in range(overlap)
+        )
+    )
 
 
 def _resolve_target_endpoint_m(intent: InputIntent) -> tuple[float, float, float] | None:
@@ -100,11 +163,18 @@ class TargetToJointMotionGenerator:
         ik_solver: InverseKinematicsSolver,
         *,
         seed_joint_angles_rad: tuple[float, ...] | None = None,
+        current_qpos_rad: tuple[float, ...] | None = None,
         qpos_joint_count: int | None = None,
+        discontinuity_threshold_rad: float = DEFAULT_TARGET_DISCONTINUITY_THRESHOLD_RAD,
     ) -> None:
         self._ik_solver = ik_solver
         self._seed_joint_angles_rad = seed_joint_angles_rad
+        self._current_qpos_rad = current_qpos_rad
         self._qpos_joint_count = qpos_joint_count
+        self._discontinuity_threshold_rad = float(discontinuity_threshold_rad)
+
+    def set_current_qpos_rad(self, current_qpos_rad: Sequence[float] | None) -> None:
+        self._current_qpos_rad = _coerce_joint_angles("current_qpos_rad", current_qpos_rad)
 
     def update(self, intent: InputIntent, dt_s: float) -> MotionCommand:
         _ = dt_s  # Protocol compatibility; this skeleton does not use delta time yet.
@@ -125,10 +195,69 @@ class TargetToJointMotionGenerator:
             raise ValueError("desired_endpoint_m or target_position_m is required for TargetToJointMotionGenerator")
 
         target = TargetCommand(delta_m=intent.target_delta_m) if _has_non_zero_delta(intent.target_delta_m) else None
-        joint = self._ik_solver.solve(
-            desired_endpoint_m,
-            seed_joint_angles_rad=self._seed_joint_angles_rad,
-        )
+        seed_joint_angles_rad = self._seed_joint_angles_rad
+        if self._current_qpos_rad is not None:
+            seed_joint_angles_rad = self._current_qpos_rad[:2]
+
+        try:
+            joint = self._ik_solver.solve(
+                desired_endpoint_m,
+                seed_joint_angles_rad=seed_joint_angles_rad,
+            )
+        except ValueError as exc:
+            if not _is_target_rejection_error(exc):
+                raise
+
+            hold_qpos_rad = self._current_qpos_rad
+            if hold_qpos_rad is None and seed_joint_angles_rad is not None:
+                hold_qpos_rad = tuple(seed_joint_angles_rad)
+
+            if self._qpos_joint_count is not None and hold_qpos_rad is not None and len(hold_qpos_rad) < self._qpos_joint_count:
+                hold_qpos_rad = hold_qpos_rad + (0.0,) * (self._qpos_joint_count - len(hold_qpos_rad))
+
+            if hold_qpos_rad is None:
+                hold_joint = None
+            else:
+                hold_joint = JointCommand(joint_angles_rad=tuple(hold_qpos_rad))
+
+            return MotionCommand(
+                timestamp_s=intent.timestamp_s,
+                target=None,
+                joint=hold_joint,
+                metadata=_build_rejected_metadata(
+                    intent.metadata,
+                    reason="invalid_target",
+                    rejection_message=str(exc),
+                    rejected_desired_endpoint_m=desired_endpoint_m,
+                ),
+            )
+
+        if self._current_qpos_rad is not None:
+            current_qpos_rad = self._current_qpos_rad
+            candidate_qpos_rad = joint.joint_angles_rad
+            discontinuity_norm_rad = _qpos_discontinuity_norm_rad(
+                candidate_qpos_rad,
+                current_qpos_rad,
+            )
+            if discontinuity_norm_rad > self._discontinuity_threshold_rad:
+                hold_qpos_rad = current_qpos_rad
+                if self._qpos_joint_count is not None and len(hold_qpos_rad) < self._qpos_joint_count:
+                    hold_qpos_rad = hold_qpos_rad + (0.0,) * (self._qpos_joint_count - len(hold_qpos_rad))
+
+                return MotionCommand(
+                    timestamp_s=intent.timestamp_s,
+                    target=None,
+                    joint=JointCommand(joint_angles_rad=tuple(hold_qpos_rad)),
+                    metadata=_build_rejected_metadata(
+                        intent.metadata,
+                        reason="target_discontinuous",
+                        rejection_message=(
+                            "candidate qpos exceeds the discontinuity threshold "
+                            f"{self._discontinuity_threshold_rad}"
+                        ),
+                        rejected_desired_endpoint_m=desired_endpoint_m,
+                    ),
+                )
 
         if self._qpos_joint_count is not None:
             joint_angles_rad = joint.joint_angles_rad
@@ -154,4 +283,5 @@ __all__ = [
     "build_motion_command_from_input_intent",
     "build_motion_command_from_target_command",
     "TargetToJointMotionGenerator",
+    "DEFAULT_TARGET_DISCONTINUITY_THRESHOLD_RAD",
 ]
