@@ -11,6 +11,7 @@ DEFAULT_TARGET_DISCONTINUITY_THRESHOLD_RAD = 2.0
 _KNOWN_TARGET_REJECTION_MESSAGES = {
     "target_position_m must remain on the solver plane",
     "target_position_m is outside the reachable workspace",
+    "target_position_m did not converge",
 }
 
 

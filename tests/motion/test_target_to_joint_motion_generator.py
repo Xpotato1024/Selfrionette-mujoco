@@ -140,3 +140,31 @@ def test_target_to_joint_motion_generator_keeps_four_dof_fast_arm_seed_and_does_
     assert len(command.joint.joint_angles_rad) == 4
     assert command.joint.joint_angles_rad[2:] != (0.0, 0.0)
     assert fk.forward(command.joint.joint_angles_rad) == pytest.approx(desired_endpoint_m, abs=1e-4)
+
+
+def test_target_to_joint_motion_generator_rejects_non_converged_fast_arm_targets() -> None:
+    class _NonConvergingSolver:
+        def solve(self, target_position_m, seed_joint_angles_rad=None):  # noqa: ANN001
+            _ = target_position_m
+            _ = seed_joint_angles_rad
+            raise ValueError("target_position_m did not converge")
+
+    intent = InputIntent(
+        source="replay",
+        timestamp_s=3.0,
+        metadata={"origin": "fast-arm", "desired_endpoint_m": (0.58, 0.02, 0.11)},
+    )
+
+    command = TargetToJointMotionGenerator(
+        _NonConvergingSolver(),
+        current_qpos_rad=(0.1, -0.1, 0.2, -0.2),
+        qpos_joint_count=4,
+    ).update(intent, dt_s=0.016)
+
+    assert command.target is None
+    assert command.joint is not None
+    assert command.joint.joint_angles_rad == (0.1, -0.1, 0.2, -0.2)
+    assert command.metadata["target_rejected"] is True
+    assert command.metadata["target_rejection_reason"] == "invalid_target"
+    assert command.metadata["target_rejection_message"] == "target_position_m did not converge"
+    assert command.metadata["runtime_input_safety_applied"] is True

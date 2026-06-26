@@ -5,6 +5,7 @@ from pathlib import Path
 
 from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
+from selfrionette.kinematics import FAST_ARM_ENDPOINT_LINK_LENGTHS_M
 from selfrionette.kinematics import FastArmEndpointForwardKinematicsSolver
 from selfrionette.kinematics import FastArmEndpointInverseKinematicsSolver
 from selfrionette.motion import TargetToJointMotionGenerator
@@ -16,7 +17,7 @@ from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
 
 DEFAULT_CONCRETE_TARGET_POSITION_M = (0.6, 0.0, 0.1)
-DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M = (0.26, 0.24, 0.23)
+DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M = FAST_ARM_ENDPOINT_LINK_LENGTHS_M
 
 
 def _resolve_model_path(*, model_path: str | Path | None, config: RuntimeConfig) -> Path:

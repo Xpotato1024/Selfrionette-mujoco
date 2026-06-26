@@ -16,6 +16,7 @@ _IK_STEP_LIMIT_RAD = 0.35
 _IK_DAMPING = 1e-3
 _IK_FINITE_DIFFERENCE_EPSILON_RAD = 1e-4
 _IK_POSITION_TOLERANCE_M = 1e-5
+_IK_NON_CONVERGENCE_MESSAGE = "target_position_m did not converge"
 
 
 def _validate_vector3(name: str, value: object) -> tuple[float, float, float]:
@@ -228,6 +229,18 @@ def _solve_fast_arm_endpoint(
 
         joint_angles_rad = joint_angles_rad + step_vector
         joint_angles_rad = np.asarray([_wrap_angle(angle) for angle in joint_angles_rad], dtype=np.float64)
+
+    final_position = np.asarray(
+        _forward_endpoint(
+            joint_angles_rad,
+            link_lengths_m=link_lengths_m,
+            base_position_m=base_position_m,
+        ),
+        dtype=np.float64,
+    )
+    final_error_norm_m = float(np.linalg.norm(target_vector - final_position))
+    if final_error_norm_m > _IK_POSITION_TOLERANCE_M:
+        raise ValueError(_IK_NON_CONVERGENCE_MESSAGE)
 
     return tuple(float(angle) for angle in joint_angles_rad)
 
