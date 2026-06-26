@@ -178,6 +178,9 @@ class ViewerInputSource:
     def current_endpoint_m(self) -> tuple[float, float, float]:
         return self._current_endpoint_m
 
+    def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
+        self._current_endpoint_m = _coerce_vector3("endpoint_m", endpoint_m)
+
     def _build_inactive_frame(
         self,
         *,
@@ -344,8 +347,6 @@ class ViewerInputSource:
 
     def ingest_control_message(self, message: ViewerControlMessage) -> RawInputFrame:
         spec = self._build_spec_from_message(message)
-        if spec.source_active:
-            self._current_endpoint_m = spec.desired_endpoint_m
 
         self._last_update_monotonic_s = self._clock()
         self._last_message_kind = message.source_kind

@@ -174,7 +174,7 @@ def test_viewer_step_loop_rejects_off_plane_keyboard_input_without_crashing() ->
     assert state.metadata["target_rejection_reason"] == "invalid_target"
     assert "desired_endpoint_m" not in state.metadata
     assert "target_position_m" not in state.metadata
-    assert state.target_position_m is None
+    assert state.target_position_m == (0.6, 0.0, 0.1)
 
 
 def test_viewer_step_loop_rejects_space_shift_boundary_without_crashing() -> None:
@@ -363,7 +363,131 @@ def test_viewer_step_loop_does_not_publish_rejected_target_as_active_target() ->
     assert "desired_endpoint_m" not in state.metadata
     assert "target_position_m" not in state.metadata
     assert "rejected_desired_endpoint_m" in state.metadata
-    assert state.target_position_m is None
+    assert state.target_position_m == (0.6, 0.0, 0.1)
+
+
+def test_viewer_step_loop_recovers_after_rejected_repeated_ad_input() -> None:
+    clock = _FakeClock()
+    selection = select_runtime_input_source("viewer", steps=1)
+    publisher = RecordingPublisher()
+    viewer_input_source = ViewerInputSource(clock=clock.monotonic)
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        publisher=publisher,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=viewer_input_source,
+    )
+
+    rejected_record = None
+    last_valid_endpoint_m = viewer_input_source.current_endpoint_m
+    for step_index in range(40):
+        clock.advance(0.01)
+        ingest_viewer_control_message(
+            viewer_input_source,
+            ViewerControlMessage(
+                type="viewer_control_message",
+                timestamp_s=6.0 + step_index,
+                source_kind="keyboard",
+                keyboard=ViewerControlKeyboardMessage(
+                    active_key_codes=("KeyD",),
+                    key_state={"KeyD": True},
+                    focus_state="focused",
+                    zero_state=False,
+                ),
+            ),
+        )
+        records = _run_single_viewer_step(plan)
+        if records[0].motion_command.metadata.get("target_rejected"):
+            rejected_record = records[0]
+            break
+        last_valid_endpoint_m = records[0].state.target_position_m
+
+    assert rejected_record is not None
+    assert viewer_input_source.current_endpoint_m != rejected_record.motion_command.metadata["rejected_desired_endpoint_m"]
+    assert viewer_input_source.current_endpoint_m in {(0.6, 0.0, 0.1), last_valid_endpoint_m}
+
+    clock.advance(0.01)
+    ingest_viewer_control_message(
+        viewer_input_source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=60.0,
+            source_kind="keyboard",
+            keyboard=ViewerControlKeyboardMessage(
+                active_key_codes=("KeyA",),
+                key_state={"KeyA": True},
+                focus_state="focused",
+                zero_state=False,
+            ),
+        ),
+    )
+    recovery_records = _run_single_viewer_step(plan)
+
+    assert recovery_records[0].motion_command.metadata.get("target_rejected") is not True
+    assert recovery_records[0].state.target_position_m is not None
+    assert recovery_records[0].state.target_position_m != last_valid_endpoint_m
+    assert viewer_input_source.current_endpoint_m == recovery_records[0].state.target_position_m
+
+
+def test_viewer_step_loop_recovers_after_rejected_vertical_input() -> None:
+    clock = _FakeClock()
+    selection = select_runtime_input_source("viewer", steps=1)
+    publisher = RecordingPublisher()
+    viewer_input_source = ViewerInputSource(clock=clock.monotonic)
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        publisher=publisher,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=viewer_input_source,
+    )
+
+    rejected_record = None
+    for step_index in range(40):
+        clock.advance(0.01)
+        ingest_viewer_control_message(
+            viewer_input_source,
+            ViewerControlMessage(
+                type="viewer_control_message",
+                timestamp_s=7.0 + step_index,
+                source_kind="keyboard",
+                keyboard=ViewerControlKeyboardMessage(
+                    active_key_codes=("Space",),
+                    key_state={"Space": True},
+                    focus_state="focused",
+                    zero_state=False,
+                ),
+            ),
+        )
+        records = _run_single_viewer_step(plan)
+        if records[0].motion_command.metadata.get("target_rejected"):
+            rejected_record = records[0]
+            break
+
+    assert rejected_record is not None
+    rejected_endpoint_m = rejected_record.motion_command.metadata["rejected_desired_endpoint_m"]
+    assert viewer_input_source.current_endpoint_m != rejected_endpoint_m
+
+    clock.advance(0.01)
+    ingest_viewer_control_message(
+        viewer_input_source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=8.0,
+            source_kind="keyboard",
+            keyboard=ViewerControlKeyboardMessage(
+                active_key_codes=("KeyD",),
+                key_state={"KeyD": True},
+                focus_state="focused",
+                zero_state=False,
+            ),
+        ),
+    )
+    recovery_records = _run_single_viewer_step(plan)
+
+    assert recovery_records[0].motion_command.metadata.get("target_rejected") is not True
+    assert recovery_records[0].state.target_position_m is not None
+    assert viewer_input_source.current_endpoint_m == recovery_records[0].state.target_position_m
+    assert recovery_records[0].state.target_position_m != rejected_record.state.target_position_m
 
 
 def test_viewer_step_loop_rejects_external_viewer_source_for_non_viewer_selection() -> None:

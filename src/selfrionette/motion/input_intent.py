@@ -7,7 +7,7 @@ from math import sqrt
 from selfrionette.kinematics import InverseKinematicsSolver
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, TargetCommand
 
-DEFAULT_TARGET_DISCONTINUITY_THRESHOLD_RAD = 1.0
+DEFAULT_TARGET_DISCONTINUITY_THRESHOLD_RAD = 2.0
 _KNOWN_TARGET_REJECTION_MESSAGES = {
     "target_position_m must remain on the solver plane",
     "target_position_m is outside the reachable workspace",
