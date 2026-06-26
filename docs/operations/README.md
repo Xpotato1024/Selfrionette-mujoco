@@ -11,3 +11,5 @@ related:
 
 Operational rules for Git, validation, Codex prompts, and hardware safety live
 here.
+
+- `docs/operations/r6-l-keyboard-viewer-input.md`: viewer keyboard capture smoke note for R6-L.
