@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from selfrionette.kinematics.fast_arm_endpoint import FastArmEndpointForwardKinematicsSolver
 from selfrionette.schemas import Vector3
 
 
@@ -48,4 +49,7 @@ class PlanarChainForwardKinematicsSolver:
         return (x, y, z)
 
 
-__all__ = ["PlanarChainForwardKinematicsSolver"]
+__all__ = [
+    "FastArmEndpointForwardKinematicsSolver",
+    "PlanarChainForwardKinematicsSolver",
+]

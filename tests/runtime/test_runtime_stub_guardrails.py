@@ -10,7 +10,7 @@ from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
 from selfrionette.input_sources.stubs import StaticInputSource
-from selfrionette.kinematics import PlanarTwoLinkInverseKinematicsSolver
+from selfrionette.kinematics import FastArmEndpointInverseKinematicsSolver
 from selfrionette.kinematics.stubs import ZeroInverseKinematicsSolver
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
@@ -142,7 +142,7 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_components() -> None:
     assert isinstance(pipeline.input_interpreter, ReplayInputInterpreter)
     assert not isinstance(pipeline.input_interpreter, NoOpInputInterpreter)
     assert isinstance(pipeline.motion_generator, TargetToJointMotionGenerator)
-    assert isinstance(pipeline.motion_generator._ik_solver, PlanarTwoLinkInverseKinematicsSolver)
+    assert isinstance(pipeline.motion_generator._ik_solver, FastArmEndpointInverseKinematicsSolver)
     assert not isinstance(pipeline.motion_generator._ik_solver, ZeroInverseKinematicsSolver)
     assert isinstance(pipeline.simulator, HeadlessMuJoCoSimulator)
     assert not isinstance(pipeline.simulator, NoOpMuJoCoSimulator)
@@ -151,7 +151,7 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_components() -> None:
     assert not isinstance(pipeline.publisher, NoOpStatePublisher)
 
 
-def test_build_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_padded_qpos() -> None:
+def test_build_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_four_dof_qpos() -> None:
     publisher = RecordingPublisher()
     command_pipeline = build_concrete_mujoco_pipeline(publisher=publisher)
     frame = command_pipeline.input_source.read_frame()
@@ -166,6 +166,7 @@ def test_build_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_padded
     assert command.joint.joint_angles_rad != ()
     assert len(command.joint.joint_angles_rad) == 4
     assert command.joint.joint_angles_rad[:2] != (0.0, 0.0)
+    assert command.joint.joint_angles_rad[2:] != (0.0, 0.0)
     assert state.qpos[:4] == command.joint.joint_angles_rad
 
 

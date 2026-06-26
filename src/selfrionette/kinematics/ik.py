@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from selfrionette.kinematics.fast_arm_endpoint import FastArmEndpointInverseKinematicsSolver
 from selfrionette.schemas import JointCommand, Vector3
 
 
@@ -98,4 +99,7 @@ class PlanarTwoLinkInverseKinematicsSolver:
         return JointCommand(joint_angles_rad=(shoulder_angle_rad, elbow_angle_rad))
 
 
-__all__ = ["PlanarTwoLinkInverseKinematicsSolver"]
+__all__ = [
+    "FastArmEndpointInverseKinematicsSolver",
+    "PlanarTwoLinkInverseKinematicsSolver",
+]

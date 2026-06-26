@@ -5,8 +5,8 @@ from pathlib import Path
 
 from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
-from selfrionette.kinematics import PlanarChainForwardKinematicsSolver
-from selfrionette.kinematics import PlanarTwoLinkInverseKinematicsSolver
+from selfrionette.kinematics import FastArmEndpointForwardKinematicsSolver
+from selfrionette.kinematics import FastArmEndpointInverseKinematicsSolver
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
 from selfrionette.runtime.config import RuntimeConfig
@@ -16,7 +16,7 @@ from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
 
 DEFAULT_CONCRETE_TARGET_POSITION_M = (0.6, 0.0, 0.1)
-DEFAULT_CONCRETE_LINK_LENGTHS_M = (0.5, 0.25)
+DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M = (0.26, 0.24, 0.23)
 
 
 def _resolve_model_path(*, model_path: str | Path | None, config: RuntimeConfig) -> Path:
@@ -51,8 +51,8 @@ def build_concrete_mujoco_pipeline(
     runtime_config = RuntimeConfig() if config is None else config
     replay_frames = tuple(frames) if frames is not None else (_default_concrete_frame(),)
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
-    ik_solver = PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_LINK_LENGTHS_M)
-    fk_solver = PlanarChainForwardKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_LINK_LENGTHS_M)
+    ik_solver = FastArmEndpointInverseKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M)
+    fk_solver = FastArmEndpointForwardKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M)
     simulator = HeadlessMuJoCoSimulator.from_model_path(resolved_model_path)
 
     return RuntimePipeline(
@@ -69,7 +69,7 @@ def build_concrete_mujoco_pipeline(
             publisher,
             simulator=simulator,
             fk_solver=fk_solver,
-            solver_joint_count=len(DEFAULT_CONCRETE_LINK_LENGTHS_M),
+            solver_joint_count=4,
         ),
     )
 

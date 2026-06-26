@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from selfrionette.kinematics import (
+    FastArmEndpointForwardKinematicsSolver,
+    FastArmEndpointInverseKinematicsSolver,
     InverseKinematicsSolver,
     PlanarChainForwardKinematicsSolver,
     PlanarTwoLinkInverseKinematicsSolver,
@@ -51,6 +53,32 @@ def test_planar_two_link_inverse_kinematics_solver_round_trips_with_fk_baseline(
     assert fk.forward(command.joint_angles_rad) == pytest.approx(target_position_m, abs=1e-9)
 
 
+def test_fast_arm_endpoint_inverse_kinematics_solver_returns_four_joint_angles() -> None:
+    fk = FastArmEndpointForwardKinematicsSolver()
+    solver = FastArmEndpointInverseKinematicsSolver()
+
+    desired_joint_angles_rad = (0.2, -0.3, 0.25, -0.15)
+    target_position_m = fk.forward(desired_joint_angles_rad)
+
+    command = solver.solve(target_position_m, seed_joint_angles_rad=(0.0, 0.0, 0.0, 0.0))
+
+    assert isinstance(command, JointCommand)
+    assert len(command.joint_angles_rad) == 4
+    assert command.joint_angles_rad != ()
+    assert command.joint_angles_rad[2:] != (0.0, 0.0)
+    assert fk.forward(command.joint_angles_rad) == pytest.approx(target_position_m, abs=1e-4)
+
+
+def test_fast_arm_endpoint_inverse_kinematics_solver_accepts_small_y_delta() -> None:
+    solver = FastArmEndpointInverseKinematicsSolver()
+
+    command = solver.solve((0.58, 0.04, 0.12), seed_joint_angles_rad=(0.0, 0.0, 0.0, 0.0))
+
+    assert isinstance(command, JointCommand)
+    assert len(command.joint_angles_rad) == 4
+    assert command.joint_angles_rad != ()
+
+
 def test_planar_two_link_inverse_kinematics_solver_rejects_invalid_inputs_and_unreachable_targets() -> None:
     solver = PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=(0.5, 0.25))
 
@@ -74,6 +102,13 @@ def test_planar_two_link_inverse_kinematics_solver_rejects_invalid_inputs_and_un
 
     with pytest.raises(ValueError, match="non-negative"):
         PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=(-0.5, 0.25))
+
+
+def test_fast_arm_endpoint_inverse_kinematics_solver_rejects_invalid_seed_shape() -> None:
+    solver = FastArmEndpointInverseKinematicsSolver()
+
+    with pytest.raises(ValueError, match="exactly four values"):
+        solver.solve((0.6, 0.0, 0.1), seed_joint_angles_rad=(0.0, 0.0, 0.0))
 
 
 def test_concrete_inverse_kinematics_solver_differs_from_zero_stub() -> None:

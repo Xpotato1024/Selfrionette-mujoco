@@ -132,7 +132,7 @@ def test_viewer_step_loop_holds_on_stale_source_state() -> None:
     assert records[0].state.metadata["stale_reason"] == "command_age_ms_exceeded_timeout_250"
 
 
-def test_viewer_step_loop_rejects_off_plane_keyboard_input_without_crashing() -> None:
+def test_viewer_step_loop_accepts_off_plane_keyboard_input_without_crashing() -> None:
     clock = _FakeClock()
     selection = select_runtime_input_source("viewer", steps=1)
     publisher = RecordingPublisher()
@@ -166,15 +166,13 @@ def test_viewer_step_loop_rejects_off_plane_keyboard_input_without_crashing() ->
     assert len(records) == 1
     assert command.target is None
     assert command.joint is not None
-    assert command.metadata["target_rejected"] is True
-    assert command.metadata["target_rejection_reason"] == "invalid_target"
-    assert command.metadata["target_rejection_message"] == "target_position_m must remain on the solver plane"
-    assert command.metadata["runtime_input_safety_applied"] is True
-    assert state.metadata["target_rejected"] is True
-    assert state.metadata["target_rejection_reason"] == "invalid_target"
-    assert "desired_endpoint_m" not in state.metadata
-    assert "target_position_m" not in state.metadata
-    assert state.target_position_m == (0.6, 0.0, 0.1)
+    assert command.metadata.get("target_rejected") is not True
+    assert "target_rejection_reason" not in command.metadata
+    assert "target_rejection_message" not in command.metadata
+    assert state.metadata.get("target_rejected") is not True
+    assert state.metadata["desired_endpoint_m"] == state.target_position_m
+    assert state.metadata["target_position_m"] == state.target_position_m
+    assert state.target_position_m is not None
 
 
 def test_viewer_step_loop_rejects_space_shift_boundary_without_crashing() -> None:
@@ -329,7 +327,7 @@ def test_viewer_step_loop_keeps_first_input_qpos_continuous() -> None:
     assert "target_rejected" not in post_step_state.metadata
 
 
-def test_viewer_step_loop_does_not_publish_rejected_target_as_active_target() -> None:
+def test_viewer_step_loop_publishes_active_target_for_keyboard_input() -> None:
     clock = _FakeClock()
     selection = select_runtime_input_source("viewer", steps=1)
     publisher = RecordingPublisher()
@@ -359,11 +357,10 @@ def test_viewer_step_loop_does_not_publish_rejected_target_as_active_target() ->
 
     state = records[0].state
 
-    assert state.metadata["target_rejected"] is True
-    assert "desired_endpoint_m" not in state.metadata
-    assert "target_position_m" not in state.metadata
-    assert "rejected_desired_endpoint_m" in state.metadata
-    assert state.target_position_m == (0.6, 0.0, 0.1)
+    assert state.metadata.get("target_rejected") is not True
+    assert state.metadata["desired_endpoint_m"] == state.target_position_m
+    assert state.metadata["target_position_m"] == state.target_position_m
+    assert "rejected_desired_endpoint_m" not in state.metadata
 
 
 def test_viewer_step_loop_recovers_after_rejected_repeated_ad_input() -> None:

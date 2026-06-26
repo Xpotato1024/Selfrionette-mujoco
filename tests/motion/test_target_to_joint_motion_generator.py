@@ -4,7 +4,12 @@ from dataclasses import dataclass
 
 import pytest
 
-from selfrionette.kinematics import PlanarChainForwardKinematicsSolver, PlanarTwoLinkInverseKinematicsSolver
+from selfrionette.kinematics import (
+    FastArmEndpointForwardKinematicsSolver,
+    FastArmEndpointInverseKinematicsSolver,
+    PlanarChainForwardKinematicsSolver,
+    PlanarTwoLinkInverseKinematicsSolver,
+)
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.schemas import InputIntent, JointCommand
 
@@ -109,3 +114,29 @@ def test_target_to_joint_motion_generator_uses_metadata_target_position_and_pads
     assert command.joint.joint_angles_rad[2:] == (0.0, 0.0)
     assert command.joint != JointCommand()
     assert len(command.joint.joint_angles_rad) == 4
+
+
+def test_target_to_joint_motion_generator_keeps_four_dof_fast_arm_seed_and_does_not_pad_output() -> None:
+    fk = FastArmEndpointForwardKinematicsSolver()
+    solver = FastArmEndpointInverseKinematicsSolver()
+    target_joint_angles_rad = (0.15, -0.25, 0.3, -0.05)
+    desired_endpoint_m = fk.forward(target_joint_angles_rad)
+    intent = InputIntent(
+        source="replay",
+        timestamp_s=2.0,
+        metadata={"origin": "fast-arm", "desired_endpoint_m": desired_endpoint_m},
+    )
+
+    command = TargetToJointMotionGenerator(
+        solver,
+        current_qpos_rad=(0.0, 0.0, 0.0, 0.0),
+        qpos_joint_count=4,
+    ).update(intent, dt_s=0.016)
+
+    assert command.timestamp_s == 2.0
+    assert command.target is None
+    assert command.metadata == {"origin": "fast-arm", "desired_endpoint_m": desired_endpoint_m}
+    assert command.joint is not None
+    assert len(command.joint.joint_angles_rad) == 4
+    assert command.joint.joint_angles_rad[2:] != (0.0, 0.0)
+    assert fk.forward(command.joint.joint_angles_rad) == pytest.approx(desired_endpoint_m, abs=1e-4)
