@@ -32,10 +32,6 @@ class RuntimePipeline:
         dt = self.config.dt_s if dt_s is None else dt_s
         frame = self.input_source.read_frame()
         intent = self.input_interpreter.interpret(frame)
-        current_state = self.simulator.snapshot()
-        set_current_qpos = getattr(self.motion_generator, "set_current_qpos_rad", None)
-        if callable(set_current_qpos):
-            set_current_qpos(current_state.qpos)
         command = self.motion_generator.update(intent, dt)
         self.simulator.apply_command(command)
         self.simulator.step(dt)

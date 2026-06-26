@@ -189,10 +189,6 @@ def _annotate_state(
     elif not should_publish_target:
         if last_valid_endpoint_m is not None:
             target_position_m = last_valid_endpoint_m
-        elif previous_state.target_position_m is not None:
-            target_position_m = previous_state.target_position_m
-        else:
-            target_position_m = DEFAULT_VIEWER_SAFE_ENDPOINT_M
 
     metadata.update(runtime_input_source_state_to_metadata(source_state))
 
