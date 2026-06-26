@@ -49,10 +49,10 @@ Run the backend runtime with the viewer input source enabled:
 uv run python scripts/run_replay_mujoco_websocket_publisher.py `
   --host 127.0.0.1 `
   --port 8766 `
-  --steps 600 `
+  --steps 18000 `
   --dt-s 0.0166666667 `
   --interval-s 0.0166666667 `
-  --grace-period-s 10 `
+  --grace-period-s 30 `
   --input-source viewer
 ```
 
@@ -65,6 +65,10 @@ Notes:
 - The runtime step loop advances simulation after ingesting viewer messages.
 - This backend command is only a live-control smoke path when the checkout
   already contains the #283 ingress wiring in the base branch / stack.
+- This finite run lasts about five minutes at the documented step interval.
+  If the operator finishes earlier, stop the backend with `Ctrl+C`. If the
+  backend completes before keyboard and gamepad checks finish, rerun the
+  backend and record that as a failure note.
 
 ## Viewer Startup
 
