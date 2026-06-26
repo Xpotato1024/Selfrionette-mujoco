@@ -47,6 +47,7 @@ Do not create or use `doc/`.
 | R6-K-P4 live input stale command safety | `docs/operations/r6-k-p4-live-input-stale-command-safety.md` | R6-K-P4 stale command timeout / hold policy |
 | R6-K completion audit | `docs/operations/r6-k-completion-audit.md` | R6-K completion audit and issue #251 / parent #152 handoff readiness |
 | R6-L keyboard viewer input | `docs/operations/r6-l-keyboard-viewer-input.md` | viewer keyboard capture and backend control message smoke note |
+| R6-L gamepad viewer input | `docs/operations/r6-l-gamepad-viewer-input.md` | viewer gamepad capture and backend control message smoke note |
 | WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0; browser diagnostic parse smoke is separate from proper 3D GUI smoke |
 | WebSocket / host / port contract | `docs/operations/websocket-host-port-contract.md` | bind host, browser-visible host, viewer page URL, and WebSocket endpoint URL contract |
 | Live viewer smoke path | `docs/operations/live-viewer-smoke.md` | deterministic dry-run payload -> browser viewer smoke path for R6-C-P3 |
