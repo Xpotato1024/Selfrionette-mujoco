@@ -39,8 +39,8 @@ serial / OSC / hardware access、source code、tests のいずれも変更しな
 | `#253` viewer keyboard input capture を追加する | `#281` | issue open / PR open | `d9e0d2795bb13baa342bf3b845acf1350b2e99c0` | `codex/252-viewer-control-message-schema` | keyboard capture skeleton は積み上がっているが未 merge |
 | `#254` browser gamepad input capture を追加する | `#282` | issue open / PR open | `1c13b8b7d21227be6d8e6139b81e654943088f7e` | `codex/253-viewer-keyboard-input-capture` | gamepad capture skeleton は積み上がっているが未 merge |
 | `#255` backend ViewerInputSource consumer を追加する | `#283` | issue open / PR open | `cbca1ff520f1cd1f2110eb7a5108841697560c31` | `codex/254-viewer-gamepad-input-capture` | `#283` が live ingress wiring の本体で、R6-L の runtime 接続点 |
-| `#256` viewer input overlay display を追加する | `#284` | issue open / PR open | `67f1cec7d5a3253ad6cdb293286b0d26617e9a81` | `codex/255-backend-viewer-input-source` | overlay は read-only skeleton として積み上がっている |
-| `#257` keyboard / gamepad live viewer smoke procedure を追加する | `#285` | issue open / PR open | `16931a295b513e017b274a40a5a745b024ff4a0d` | `codex/255-backend-viewer-input-source` | `#285` は smoke procedure 本体だが、manual browser smoke はまだ未完了 |
+| `#256` viewer input overlay display を追加する | `#284` | issue open / PR open | `cbd1036ddc9448ea5c3ccebbacf50436a737e40c2` | `codex/255-backend-viewer-input-source` | overlay は current `#283` head へ rebase 済みで、read-only skeleton として積み上がっている |
+| `#257` keyboard / gamepad live viewer smoke procedure を追加する | `#285` | issue open / PR open | `c15cf7bd7a2113668b05183a48292a36025a034a` | `codex/256-viewer-input-overlay` | `#285` は smoke procedure 本体で、diff は docs-only に戻したが manual browser smoke はまだ未完了 |
 
 ## Implementation / Review Model Audit Matrix
 
@@ -50,8 +50,8 @@ serial / OSC / hardware access、source code、tests のいずれも変更しな
 | `#281` | GPT-5.4-mini | GPT-5.5 | viewer keyboard input capture | open | keyboard capture は read-only で backend mutation を持たない |
 | `#282` | GPT-5.4-mini | GPT-5.5 | browser gamepad input capture | open | gamepad capture は read-only で安全側に落ちる |
 | `#283` | GPT-5.4-mini | GPT-5.5 | backend ViewerInputSource consumer | open | live ingress wiring の本体で、`--input-source viewer` を実質化する |
-| `#284` | GPT-5.4-mini | GPT-5.5 | viewer input overlay display | open | overlay は read-only diagnostics のみを扱う |
-| `#285` | GPT-5.4-mini | GPT-5.5 | keyboard / gamepad live viewer smoke procedure | open | manual browser smoke の運用手順であり、`#283` の ingress wiring が前提 |
+| `#284` | GPT-5.4-mini | GPT-5.5 | viewer input overlay display | open | current `#283` head に rebase 済みで、overlay は read-only diagnostics のみを扱う |
+| `#285` | GPT-5.4-mini | GPT-5.5 | keyboard / gamepad live viewer smoke procedure | open | `codex/256-viewer-input-overlay` を base に戻し、manual browser smoke の運用手順として docs-only 化した |
 
 ## Skeleton Reuse Audit
 
