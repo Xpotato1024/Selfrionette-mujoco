@@ -153,10 +153,14 @@ def _annotate_state(
     frame: RawInputFrame,
     intent: InputIntent,
     motion_command: MotionCommand,
+    previous_command: MotionCommand | None,
+    previous_state: MuJoCoState,
     state: MuJoCoState,
     annotate_target_position_m: bool,
     safety_result: RuntimeInputSafetyResult,
 ) -> MuJoCoState:
+    target_rejected = bool(motion_command.metadata.get("target_rejected", False))
+    should_publish_target = safety_result.should_update_target_position_m and not target_rejected
     metadata = {
         **state.metadata,
         **frame.metadata,
@@ -164,7 +168,7 @@ def _annotate_state(
         **motion_command.metadata,
     }
 
-    if not safety_result.should_update_target_position_m:
+    if not should_publish_target:
         metadata.pop("desired_endpoint_m", None)
         metadata.pop("target_position_m", None)
         metadata["runtime_input_safety_applied"] = True
@@ -172,7 +176,7 @@ def _annotate_state(
 
     target_position_m = state.target_position_m
     resolved_desired_endpoint = None
-    if annotate_target_position_m and safety_result.should_update_target_position_m:
+    if annotate_target_position_m and should_publish_target:
         try:
             resolved_desired_endpoint = resolve_desired_endpoint_from_motion_command(motion_command)
         except ValueError:
@@ -182,6 +186,18 @@ def _annotate_state(
             target_position_m = resolved_desired_endpoint.desired_endpoint_m
             metadata["desired_endpoint_m"] = resolved_desired_endpoint.desired_endpoint_m
             metadata["target_position_m"] = resolved_desired_endpoint.desired_endpoint_m
+    elif not should_publish_target:
+        if previous_command is not None:
+            try:
+                previous_resolved_desired_endpoint = resolve_desired_endpoint_from_motion_command(previous_command)
+            except ValueError:
+                previous_resolved_desired_endpoint = None
+            if previous_resolved_desired_endpoint is not None:
+                target_position_m = previous_resolved_desired_endpoint.desired_endpoint_m
+            else:
+                target_position_m = previous_state.target_position_m
+        else:
+            target_position_m = previous_state.target_position_m
 
     metadata.update(runtime_input_source_state_to_metadata(source_state))
 
@@ -209,6 +225,11 @@ async def run_runtime_input_source_step_loop(
             default_source_kind=plan.selection.source_name,
         )
         pre_step_state = plan.pipeline.simulator.snapshot()
+        previous_command = plan.pipeline.simulator.last_command
+        current_qpos_rad = tuple(pre_step_state.qpos)
+        set_current_qpos = getattr(plan.pipeline.motion_generator, "set_current_qpos_rad", None)
+        if callable(set_current_qpos):
+            set_current_qpos(current_qpos_rad)
         motion_command = plan.pipeline.motion_generator.update(intent, dt)
         safety_result = build_runtime_input_safety_result(
             motion_command,
@@ -224,6 +245,8 @@ async def run_runtime_input_source_step_loop(
             frame=frame,
             intent=intent,
             motion_command=safety_result.motion_command,
+            previous_command=previous_command,
+            previous_state=pre_step_state,
             state=state,
             annotate_target_position_m=plan.annotate_target_position_m,
             safety_result=safety_result,

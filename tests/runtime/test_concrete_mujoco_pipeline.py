@@ -68,5 +68,12 @@ def test_concrete_mujoco_pipeline_rejects_unreachable_target() -> None:
     )
     pipeline = build_concrete_mujoco_pipeline(frames=(frame,), publisher=publisher)
 
-    with pytest.raises(ValueError, match="workspace"):
-        asyncio.run(pipeline.run_once())
+    state = asyncio.run(pipeline.run_once())
+
+    assert isinstance(state, MuJoCoState)
+    assert pipeline.simulator.last_command is not None
+    assert pipeline.simulator.last_command.metadata["target_rejected"] is True
+    assert pipeline.simulator.last_command.metadata["target_rejection_reason"] == "invalid_target"
+    assert pipeline.simulator.last_command.metadata["target_rejection_message"] == "target_position_m is outside the reachable workspace"
+    assert state.target_position_m is None
+    assert "endpoint_evaluation" not in publisher.states[0].metadata
