@@ -35,11 +35,11 @@ def _derive_stale_reason(
     *,
     timeout_ms: int,
 ) -> str | None:
-    if not source_state.source_active:
-        return "source_inactive"
-
     if source_state.stale_reason is not None:
         return source_state.stale_reason
+
+    if not source_state.source_active:
+        return "source_inactive"
 
     if source_state.command_age_ms is not None and source_state.command_age_ms > timeout_ms:
         return f"command_age_ms_exceeded_timeout_{timeout_ms}"

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from time import monotonic
 
+from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M, ViewerInputSource
 from selfrionette.mujoco_backend import default_fast_arm_scene_path
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
@@ -46,15 +49,31 @@ def _resolve_model_path(*, model_path: str | Path | None, config: RuntimeConfig)
     return default_fast_arm_scene_path()
 
 
+def _coerce_viewer_endpoint_m(value: object) -> tuple[float, float, float]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return DEFAULT_VIEWER_SAFE_ENDPOINT_M
+
+    endpoint_m = tuple(float(component) for component in value)
+    if len(endpoint_m) != 3:
+        return DEFAULT_VIEWER_SAFE_ENDPOINT_M
+
+    return endpoint_m
+
+
 def build_runtime_input_source_step_loop_plan(
     selection: RuntimeInputSourceSelection,
     *,
     config: RuntimeConfig | None = None,
     publisher: StatePublisher | None = None,
     model_path: str | Path | None = None,
+    viewer_clock: Callable[[], float] | None = None,
+    viewer_input_source: ViewerInputSource | None = None,
 ) -> RuntimeInputSourceStepLoopPlan:
     runtime_config = RuntimeConfig() if config is None else config
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
+
+    if viewer_input_source is not None and selection.source_name != "viewer":
+        raise ValueError("viewer_input_source can only be supplied when selection.source_name == 'viewer'")
 
     if selection.source_name == "programmed_target":
         pipeline = build_concrete_mujoco_pipeline(
@@ -97,6 +116,32 @@ def build_runtime_input_source_step_loop_plan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=False,
+        )
+
+    if selection.source_name == "viewer":
+        pipeline_input_source = viewer_input_source
+        if pipeline_input_source is None:
+            initial_endpoint_m = _coerce_viewer_endpoint_m(
+                selection.initial_metadata.get("desired_endpoint_m", selection.initial_metadata.get("target_position_m"))
+            )
+            pipeline_input_source = ViewerInputSource(
+                clock=viewer_clock if viewer_clock is not None else monotonic,
+                initial_endpoint_m=initial_endpoint_m,
+            )
+
+        pipeline = build_concrete_mujoco_pipeline(
+            frames=selection.frames,
+            config=runtime_config,
+            model_path=resolved_model_path,
+            loop=selection.loop,
+            publisher=publisher if publisher is not None else NoOpStatePublisher(),
+        )
+        pipeline.input_source = pipeline_input_source
+
+        return RuntimeInputSourceStepLoopPlan(
+            selection=selection,
+            pipeline=pipeline,
+            annotate_target_position_m=True,
         )
 
     raise ValueError(f"unsupported input source for step loop: {selection.source_name!r}")

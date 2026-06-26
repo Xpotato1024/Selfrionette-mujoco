@@ -6,7 +6,7 @@ from selfrionette.input_sources import INPUT_SOURCE_REGISTRY, SUPPORTED_INPUT_SO
 
 
 def test_runtime_input_source_registry_exposes_supported_sources() -> None:
-    assert SUPPORTED_INPUT_SOURCE_NAMES == ("programmed_target", "replay", "noop")
+    assert SUPPORTED_INPUT_SOURCE_NAMES == ("programmed_target", "replay", "noop", "viewer")
     assert tuple(INPUT_SOURCE_REGISTRY) == SUPPORTED_INPUT_SOURCE_NAMES
 
 
@@ -16,6 +16,7 @@ def test_runtime_input_source_registry_exposes_supported_sources() -> None:
         ("programmed_target", "trajectory_name", "sweep_x"),
         ("replay", "preset", "r6-h-p5-default"),
         ("noop", "source_kind", "noop"),
+        ("viewer", "source_kind", "viewer"),
     ],
 )
 def test_runtime_input_source_registry_initial_metadata_contract(
@@ -29,6 +30,12 @@ def test_runtime_input_source_registry_initial_metadata_contract(
     assert expected_contract_key in descriptor.initial_metadata
     assert descriptor.initial_metadata[expected_contract_key] == expected_contract_value
     assert callable(descriptor.build_frames)
+
+    if source_name == "viewer":
+        assert descriptor.initial_metadata["source_active"] is False
+        assert descriptor.initial_metadata["command_age_ms"] == 0
+        assert descriptor.initial_metadata["stale_reason"] == "no_control_message_received"
+        assert descriptor.initial_metadata["desired_endpoint_m"] == descriptor.initial_metadata["target_position_m"]
 
 
 def test_runtime_input_source_registry_rejects_unknown_source() -> None:

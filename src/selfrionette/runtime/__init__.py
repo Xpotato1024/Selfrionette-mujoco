@@ -73,6 +73,11 @@ from selfrionette.mujoco_backend.endpoint_extraction import (
 )
 from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline
 from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
+from selfrionette.runtime.viewer_control_ingress import (
+    build_viewer_input_source,
+    ingest_viewer_control_message,
+    ingest_viewer_control_message_json,
+)
 from selfrionette.runtime.websocket_publisher_runner import run_replay_mujoco_websocket_publisher
 from selfrionette.runtime.pipeline import RuntimePipeline, build_noop_pipeline
 
@@ -126,7 +131,10 @@ __all__ = [
     "build_runtime_input_source_step_loop_plan",
     "run_runtime_input_source_step_loop",
     "build_replay_mujoco_pipeline",
+    "build_viewer_input_source",
     "run_replay_mujoco_dry_run",
+    "ingest_viewer_control_message",
+    "ingest_viewer_control_message_json",
     "run_live_viewer_smoke",
     "run_live_loadcell_runtime_runner",
     "run_offline_input_runtime_stepping_smoke",

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import io
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -33,6 +35,7 @@ def test_select_runtime_input_source_reports_initial_metadata_contract() -> None
     programmed_target = select_runtime_input_source("programmed_target", steps=2)
     replay = select_runtime_input_source("replay", steps=1)
     noop = select_runtime_input_source("noop", steps=1)
+    viewer = select_runtime_input_source("viewer", steps=1)
 
     assert programmed_target.source_name == "programmed_target"
     assert programmed_target.loop is False
@@ -46,6 +49,14 @@ def test_select_runtime_input_source_reports_initial_metadata_contract() -> None
     assert noop.source_name == "noop"
     assert noop.loop is True
     assert noop.initial_metadata["source_kind"] == "noop"
+
+    assert viewer.source_name == "viewer"
+    assert viewer.loop is True
+    assert viewer.frames[0].source == "viewer"
+    assert viewer.initial_metadata["source_kind"] == "viewer"
+    assert viewer.initial_metadata["source_active"] is False
+    assert viewer.initial_metadata["stale_reason"] == "no_control_message_received"
+    assert viewer.initial_metadata["desired_endpoint_m"] == (0.6, 0.0, 0.1)
 
 
 def test_select_runtime_input_source_rejects_unknown_source() -> None:
@@ -170,3 +181,99 @@ def test_websocket_cli_input_source_no_client_path_runs_without_real_server() ->
     assert exit_code == 0
     assert len(created_servers) == 1
     assert created_servers[0].wait_for_client_calls == [0.05]
+
+
+def test_websocket_cli_viewer_source_wires_inbound_messages_into_the_same_viewer_input_source() -> None:
+    created_servers: list[object] = []
+    viewer_input_source = object()
+    ingested_messages: list[tuple[object, str]] = []
+    step_loop_calls: list[dict[str, object]] = []
+
+    class FakeWebSocketPublisherServer:
+        def __init__(self, *, host: str, port: int, on_message=None) -> None:
+            self.host = host
+            self.port = port
+            self.bound_port = port
+            self.on_message = on_message
+            self.wait_for_client_calls: list[float] = []
+            created_servers.append(self)
+
+        async def __aenter__(self) -> "FakeWebSocketPublisherServer":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def wait_for_client(self, *, timeout_s: float) -> bool:
+            self.wait_for_client_calls.append(timeout_s)
+            assert self.on_message is not None
+            result = self.on_message(
+                '{"type":"viewer_control_message","timestamp_s":1.0,"source_kind":"keyboard","keyboard":{"active_key_codes":["KeyW"],"key_state":{"KeyW":true},"focus_state":"focused","zero_state":false}}'
+            )
+            if inspect.isawaitable(result):
+                await result
+            return True
+
+    async def fake_run_runtime_input_source_step_loop(plan, *, steps, dt_s, interval_s):
+        step_loop_calls.append(
+            {
+                "plan": plan,
+                "steps": steps,
+                "dt_s": dt_s,
+                "interval_s": interval_s,
+            }
+        )
+        return ()
+
+    with (
+        patch.object(WEBSOCKET_SCRIPT, "WebSocketPublisherServer", FakeWebSocketPublisherServer),
+        patch.object(WEBSOCKET_SCRIPT, "build_viewer_input_source", return_value=viewer_input_source),
+        patch.object(
+            WEBSOCKET_SCRIPT,
+            "ingest_viewer_control_message_json",
+            side_effect=lambda source, message: ingested_messages.append((source, message)),
+        ),
+        patch.object(
+            WEBSOCKET_SCRIPT,
+            "build_runtime_input_source_step_loop_plan",
+            return_value=SimpleNamespace(selection="viewer-selection", pipeline=SimpleNamespace()),
+        ) as build_plan,
+        patch.object(
+            WEBSOCKET_SCRIPT,
+            "run_runtime_input_source_step_loop",
+            side_effect=fake_run_runtime_input_source_step_loop,
+        ),
+    ):
+        exit_code = WEBSOCKET_SCRIPT.main(
+            [
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8766",
+                "--steps",
+                "1",
+                "--input-source",
+                "viewer",
+            ]
+        )
+
+    assert exit_code == 0
+    assert len(created_servers) == 1
+    assert created_servers[0].wait_for_client_calls == [0.05]
+    assert ingested_messages == [
+        (
+            viewer_input_source,
+            '{"type":"viewer_control_message","timestamp_s":1.0,"source_kind":"keyboard","keyboard":{"active_key_codes":["KeyW"],"key_state":{"KeyW":true},"focus_state":"focused","zero_state":false}}',
+        )
+    ]
+    build_plan.assert_called_once()
+    _, build_plan_kwargs = build_plan.call_args
+    assert build_plan_kwargs["viewer_input_source"] is viewer_input_source
+    assert step_loop_calls == [
+        {
+            "plan": build_plan.return_value,
+            "steps": 1,
+            "dt_s": 1.0 / 60.0,
+            "interval_s": 0.0,
+        }
+    ]

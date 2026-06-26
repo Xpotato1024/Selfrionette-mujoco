@@ -17,6 +17,10 @@ from selfrionette.runtime.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
     run_runtime_input_source_step_loop,
 )
+from selfrionette.runtime.viewer_control_ingress import (
+    build_viewer_input_source,
+    ingest_viewer_control_message_json,
+)
 from selfrionette.runtime.input_source_selection import select_runtime_input_source
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
 from selfrionette.runtime.websocket_publisher_runner import SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS
@@ -73,6 +77,41 @@ async def _run_input_source_websocket_publisher_async(
     input_source: str,
 ) -> None:
     runtime_config = RuntimeConfig(dt_s=dt_s)
+
+    if input_source == "viewer":
+        viewer_input_source = build_viewer_input_source()
+
+        def handle_viewer_message(message: str) -> None:
+            ingest_viewer_control_message_json(viewer_input_source, message)
+
+        async with WebSocketPublisherServer(host=host, port=port, on_message=handle_viewer_message) as server:
+            _log(f"serving on ws://{server.host}:{server.bound_port}")
+            _log(f"Waiting for viewer during grace period ({grace_period_s:.2f}s)")
+
+            has_client = await server.wait_for_client(timeout_s=grace_period_s)
+            if not has_client:
+                _log("No viewer connected during grace period; no payloads published.")
+                _log("Completed without publishing because no viewer connected.")
+                return
+
+            _log("Viewer connected; publishing started.")
+
+            selection = select_runtime_input_source(input_source, steps=steps, preset=preset)
+            plan = build_runtime_input_source_step_loop_plan(
+                selection,
+                config=runtime_config,
+                publisher=WebSocketStatePublisher(server),
+                viewer_input_source=viewer_input_source,
+            )
+            await run_runtime_input_source_step_loop(
+                plan,
+                steps=steps,
+                dt_s=dt_s,
+                interval_s=interval_s,
+            )
+
+            _log(f"Completed after publishing {steps} frame(s).")
+        return
 
     async with WebSocketPublisherServer(host=host, port=port) as server:
         _log(f"serving on ws://{server.host}:{server.bound_port}")
