@@ -1,135 +1,130 @@
 ---
 status: canonical
 owner: operations
+last_verified: 2026-06-26
 canonical_for:
   - R6-L completion audit
 related:
   - docs/README.md
   - docs/operations/README.md
+  - docs/operations/r6-l-keyboard-viewer-input.md
+  - docs/operations/r6-l-gamepad-viewer-input.md
+  - docs/operations/r6-l-viewer-input-overlay.md
   - docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md
   - docs/contracts/viewer-control-message-schema.md
-  - docs/contracts/runtime-input-source-registry.md
+  - docs/contracts/transport-payload.md
   - docs/contracts/runtime-input-source-state.md
   - docs/contracts/runtime-input-safety.md
   - docs/contracts/r7-b-runtime-input-pipeline-contract.md
-  - docs/operations/r6-k-completion-audit.md
+  - docs/operations/validation.md
 ---
 
 # R6-L Completion Audit
 
 ## Scope
 
-R6-L は viewer の keyboard / browser gamepad 入力を capture し、control message schema を経由して backend inbound WebSocket ingress で `ViewerInputSource` に流し、既存の runtime input pipeline と MuJoCo state、WebSocket payload、read-only viewer overlay、manual smoke procedure までをつなぐラウンドである。
+R6-L は viewer 主導の input stack で、`#252` から `#257` までの 6 件を含む。
+この監査は、現在の stacked PR `#280` から `#285` の状態を固定し、viewer control message schema、
+keyboard capture、gamepad capture、backend `ViewerInputSource` consumer、read-only overlay、
+keyboard / gamepad live smoke procedure の完了境界を記録する。
 
-R6-L は次を含まない。
+この文書は docs-only であり、runtime behavior、viewer behavior、transport schema、
+serial / OSC / hardware access、source code、tests のいずれも変更しない。
 
-- live serial
-- Arduino upload
-- OSC
-- real robot output
-- loadcell live mapping
-- hardware validation
-- IK / FK redesign
-- CI browser automation
+## Issue / PR Status Matrix
 
-## Issue / PR Status
+| Issue | PR | Current GitHub State | Head SHA | Base | Judgment |
+|---|---|---|---|---|---|
+| `#252` viewer-to-backend control message schema を追加する | `#280` | issue open / PR open | `e91b3bc3dd5cb5b1db2a0a4373544bf9de228310` | `main` | schema skeleton は実装済みで、現時点では open のまま |
+| `#253` viewer keyboard input capture を追加する | `#281` | issue open / PR open | `d9e0d2795bb13baa342bf3b845acf1350b2e99c0` | `codex/252-viewer-control-message-schema` | keyboard capture skeleton は積み上がっているが未 merge |
+| `#254` browser gamepad input capture を追加する | `#282` | issue open / PR open | `1c13b8b7d21227be6d8e6139b81e654943088f7e` | `codex/253-viewer-keyboard-input-capture` | gamepad capture skeleton は積み上がっているが未 merge |
+| `#255` backend ViewerInputSource consumer を追加する | `#283` | issue open / PR open | `cbca1ff520f1cd1f2110eb7a5108841697560c31` | `codex/254-viewer-gamepad-input-capture` | `#283` が live ingress wiring の本体で、R6-L の runtime 接続点 |
+| `#256` viewer input overlay display を追加する | `#284` | issue open / PR open | `67f1cec7d5a3253ad6cdb293286b0d26617e9a81` | `codex/255-backend-viewer-input-source` | overlay は read-only skeleton として積み上がっている |
+| `#257` keyboard / gamepad live viewer smoke procedure を追加する | `#285` | issue open / PR open | `16931a295b513e017b274a40a5a745b024ff4a0d` | `codex/255-backend-viewer-input-source` | `#285` は smoke procedure 本体だが、manual browser smoke はまだ未完了 |
 
-| Issue | PR | Branch | Status | Summary | Blocking risk |
-|---|---:|---|---|---|---|
-| `#252` | `#280` | `codex/252-viewer-control-message-schema` | OPEN | viewer-to-backend control message schema を追加し、backend 側の validation boundary を固定した。 | なし。schema / viewer boundary は完了。 |
-| `#253` | `#281` | `codex/253-viewer-keyboard-input-capture` | OPEN | viewer keyboard capture を追加し、schema へ変換して送る。 | なし。backend 結線は #255 に委譲済み。 |
-| `#254` | `#282` | `codex/254-viewer-gamepad-input-capture` | OPEN | browser gamepad capture を追加し、deadzone / clamp を適用して送る。 | なし。backend 結線は #255 に委譲済み。 |
-| `#255` | `#283` | `codex/255-backend-viewer-input-source` | OPEN | backend が viewer-origin WebSocket control message を受け、同一 `ViewerInputSource` を step loop へ渡す。 | 低。stacked だが live ingress は実装済み。 |
-| `#256` | `#284` | `codex/256-viewer-input-overlay` | OPEN | viewer overlay で input source state を read-only 表示する。 | 低。backend payload metadata に依存する。 |
-| `#257` | `#285` | `codex/257-keyboard-gamepad-viewer-smoke` | OPEN | keyboard / gamepad live viewer smoke procedure を文書化した。 | 低。manual browser E2E は operator 実行が必要。 |
+## Implementation / Review Model Audit Matrix
 
-PR URL:
-
-- `#280`: <https://github.com/Xpotato1024/Selfrionette-mujoco/pull/280>
-- `#281`: <https://github.com/Xpotato1024/Selfrionette-mujoco/pull/281>
-- `#282`: <https://github.com/Xpotato1024/Selfrionette-mujoco/pull/282>
-- `#283`: <https://github.com/Xpotato1024/Selfrionette-mujoco/pull/283>
-- `#284`: <https://github.com/Xpotato1024/Selfrionette-mujoco/pull/284>
-- `#285`: <https://github.com/Xpotato1024/Selfrionette-mujoco/pull/285>
-
-## Implementation / Review Model Audit
-
-| PR | Implementation subagent | Review model | P0 | P1 | P2 | Notes |
-|---:|---|---|---|---|---|---|
-| `#280` | `GPT-5.4-mini` | `GPT-5.5` | none | none | optional / null handling policy aligned | schema / frontend validator / docs contract を固定。 |
-| `#281` | `GPT-5.4-mini` | `GPT-5.5` | none | none | none | keyboard capture は viewer read-only boundary を維持。 |
-| `#282` | `GPT-5.4-mini` | `GPT-5.5` | none | none | none | gamepad capture は deadzone / clamp を含む安全な snapshot 化。 |
-| `#283` | `GPT-5.4-mini` | `GPT-5.5` | none | none | none | live ingress を backend runner に接続し、同一 `ViewerInputSource` を再利用。 |
-| `#284` | `GPT-5.4-mini` | `GPT-5.5` | none | none | none | overlay は read-only display と fallback のみ。 |
-| `#285` | `GPT-5.4-mini` | `GPT-5.5` | none | none | none | live smoke procedure を docs 化。 |
+| PR | Implementation subagent | Review model | Coverage | Current State | Note |
+|---|---|---|---|---|---|
+| `#280` | GPT-5.4-mini | GPT-5.5 | viewer-to-backend control message schema | open | schema-only; viewer control envelope の SoT を固定する |
+| `#281` | GPT-5.4-mini | GPT-5.5 | viewer keyboard input capture | open | keyboard capture は read-only で backend mutation を持たない |
+| `#282` | GPT-5.4-mini | GPT-5.5 | browser gamepad input capture | open | gamepad capture は read-only で安全側に落ちる |
+| `#283` | GPT-5.4-mini | GPT-5.5 | backend ViewerInputSource consumer | open | live ingress wiring の本体で、`--input-source viewer` を実質化する |
+| `#284` | GPT-5.4-mini | GPT-5.5 | viewer input overlay display | open | overlay は read-only diagnostics のみを扱う |
+| `#285` | GPT-5.4-mini | GPT-5.5 | keyboard / gamepad live viewer smoke procedure | open | manual browser smoke の運用手順であり、`#283` の ingress wiring が前提 |
 
 ## Skeleton Reuse Audit
 
-| Check | Result | Evidence / Notes |
-|---|---|---|
-| `viewer` source is registered in `INPUT_SOURCE_REGISTRY` | pass | `#283` で viewer descriptor を登録済み。 |
-| `SUPPORTED_INPUT_SOURCE_NAMES` includes `viewer` | pass | `#283` の selection contract に含まれる。 |
-| `select_runtime_input_source("viewer")` works | pass | `#283` で正規 source として扱う。 |
-| `build_runtime_input_source_step_loop_plan()` accepts viewer | pass | `#283` で viewer selection を既存 plan に接続。 |
-| externally supplied `ViewerInputSource` can be reused by the step loop | pass | `#283` で同一 instance を runner と step loop が共有。 |
-| backend WebSocket inbound handler ingests viewer control messages | pass | `#283` で `on_message` / ingest 経路を追加。 |
-| viewer ingress does not call simulator directly | pass | `#283` の inbound handler は source state 更新のみ。 |
-| viewer JS does not mutate target / qpos / arm state | pass | `#280`〜`#282` は capture / schema だけ、viewer read-only boundary を維持。 |
-| stale / timeout uses existing `input_safety` | pass | `#283` で既存 safety result を通す。 |
-| overlay remains read-only | pass | `#284` で payload metadata のみ表示。 |
-| no duplicate runtime loop was added | pass | `#283` は既存 step loop の composition に留まる。 |
-| no serial / Arduino / OSC / robot output was added | pass | 全 PR で hardware / output side effect を追加していない。 |
+| Skeleton / Contract | Reuse Source | Reuse Judgment | R6-L Result |
+|---|---|---|---|
+| viewer-to-backend control envelope | `docs/contracts/viewer-control-message-schema.md` | reuse existing schema skeleton | `#252` / `#280` は新しい command truth を作らず、既存 schema を公開するだけ |
+| keyboard capture handler | `docs/operations/r6-l-keyboard-viewer-input.md` | reuse existing viewer capture skeleton | `#253` / `#281` は capture-only で、backend state には触れない |
+| gamepad capture handler | `docs/operations/r6-l-gamepad-viewer-input.md` | reuse existing viewer capture skeleton | `#254` / `#282` は capture-only で、safe fallback を維持する |
+| backend `ViewerInputSource` consumer | `docs/contracts/r7-b-runtime-input-pipeline-contract.md` / `docs/architecture/runtime-composition.md` | reuse runtime ingress skeleton | `#255` / `#283` は live ingress wiring を runtime に接続する |
+| read-only input overlay | `docs/operations/r6-l-viewer-input-overlay.md` / `docs/contracts/runtime-input-source-state.md` / `docs/contracts/transport-payload.md` | reuse diagnostic overlay skeleton | `#256` / `#284` は可視化のみで、control path にならない |
+| keyboard / gamepad live smoke procedure | `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | reuse manual smoke skeleton | `#257` / `#285` は運用 procedure であり、manual browser smoke は未完了 |
+
+R6-L では新しい skeleton は追加していない。既存の schema、runtime ingress、diagnostic overlay、manual smoke の骨格を再利用している。
 
 ## Validation Summary
 
-| PR | Focused validation | Full pytest | Known failure | Hardware validation |
-|---:|---|---|---|---|
-| `#280` | `uv run pytest tests/test_r6_l_viewer_control_message_schema.py tests/architecture/test_import_boundaries.py`; `cd apps/mujoco-viewer && npm test`; `cd apps/mujoco-viewer && npm run typecheck`; `git diff --check` | not run in this audit | none recorded | Not run |
-| `#281` | `git diff --check`; `git diff --name-only origin/main...HEAD`; backend / frontend validation from PR body | not run in this audit | none recorded | Not run |
-| `#282` | `git diff --check`; `git diff --name-only origin/main...HEAD`; backend / frontend validation from PR body | not run in this audit | none recorded | Not run |
-| `#283` | `git diff --check`; `git diff --name-only origin/main...HEAD`; backend/runtime validation from PR body | legacy full pytest baseline fails on `legacy/fast_arm_control/mujoco_sim/test_controller.py` with `ModuleNotFoundError: No module named 'arm_communicator'` | baseline debt unrelated to R6-L only | Not run |
-| `#284` | `git diff --check`; `git diff --cached --check`; `git diff --name-only origin/main...HEAD`; frontend/import boundary/docs validation from PR body | not run in this audit | legacy full pytest baseline debt remains present in checkout | Not run |
-| `#285` | `git diff --check`; `uv run pytest tests/architecture/test_import_boundaries.py -q`; `uv run pytest -q`; docs link checker not found | legacy full pytest baseline fails on `legacy/fast_arm_control/mujoco_sim/test_controller.py` with `ModuleNotFoundError: No module named 'arm_communicator'` | baseline debt unrelated to R6-L only | Not run |
+| Check | Result | Notes |
+|---|---|---|
+| `git diff --check` | pass | 差分の構文崩れなし |
+| `uv run pytest tests/architecture/test_import_boundaries.py -q` | pass | `1 passed in 0.36s` |
+| `uv run pytest -q` | fail | `legacy/fast_arm_control/mujoco_sim/test_controller.py` 収集中に `ModuleNotFoundError: No module named 'arm_communicator'` |
+| `scripts/check_docs_links.py` | not found | `Test-Path scripts/check_docs_links.py` は `False` |
 
-`scripts/check_docs_links.py`: not found.
+## Manual Browser Smoke Status
 
-## Manual Smoke Status
+- status: not run
+- reason: `#283` live ingress wiring と `#285` smoke procedure がともに open で、この監査は browser / hardware validation を実行しない
+- explicit note: `#283` は live ingress wiring の実装本体で、`#285` は manual smoke 手順の PR だが、現時点ではどちらも未 merge
 
-- Manual browser smoke: Not run in Codex.
-- Procedure added in `#285`.
-- Operator must execute the procedure before presentation if actual browser E2E evidence is required.
+## R6-L Readiness Judgment
 
-## R6-L Readiness
+R6-L readiness: Not ready.
 
-R6-L readiness: Ready for merge chain review.
+R6-L は docs 上の completion audit としては整理できているが、execution readiness はまだ完了していない。
 
-Ready means:
+- docs readiness: yes
+- implementation readiness: no
+- manual browser smoke readiness: no
+- key blocker: `#283` live ingress wiring が open
+- secondary blocker: `#285` smoke procedure が open
+- handoff blocker: R6-M / R7-A への実運用 handoff は、`#283` と `#285` の完了確認が必要
 
-- code / docs PR chain is reviewable;
-- backend live ingress path is implemented;
-- smoke procedure is documented;
-- no hardware / serial / OSC was performed;
-- manual browser E2E remains operator-run validation, not Codex-run validation.
+## R6-M Handoff
 
-## Handoff to R6-M
+R6-M には、R6-L で固定した viewer control schema と overlay boundary を前提にした次の小さな follow-up を渡す。
+この手渡しでは、viewer が read-only である境界を維持し、runtime ingress の責務を増やしても browser 側を source of truth にしない。
 
-- R6-M may proceed to loadcell replay mapping only after the R6-L PR chain is merged, or after an explicit stacked-base acceptance decision is made.
-- R6-M must not assume live serial.
-- R6-M should reuse the established viewer control / runtime input source boundary instead of creating a second control path.
+R6-M 側で必要なのは、R6-L の残作業を再定義することではなく、`#283` / `#285` 以後の最終運用や追加 smoke が必要かどうかを別 issue で切り出すこと。
 
-## Handoff to R7-A
+## R7-A Handoff
 
-- R7-A live serial / Arduino work remains manual-gated.
-- R7-A must not run in CI.
-- R7-A must require explicit port selection, finite frames, and operator confirmation.
-- R6-L did not open a serial port or send hardware output.
+R7-A には、R6-L で凍結した viewer input boundary を引き継ぎ、次のフェーズで必要になる新しい contract / docs を別線で積み上げる。
+この監査は R7-A に runtime や viewer の再設計を持ち込まない。必要なのは、R6-L の完了事実を SoT として固定し、次の phase を別 issue 群で始めることだけである。
 
 ## Known Limitations
 
-- PRs are still stacked and open; merge order still matters.
-- Manual browser smoke is not run by Codex.
-- Full pytest baseline still fails because of legacy `arm_communicator` collection debt.
-- `MUJOCO_LOG.TXT` remains untracked in the sibling worktree and is intentionally excluded.
-- No hardware validation was run.
-- No production WebSocket auth / TLS / deployment work was added.
+- `uv run pytest -q` は legacy `arm_communicator` の collection failure が出る可能性があり、その場合は baseline debt として記録する。
+- manual browser smoke は未実施。
+- hardware validation は未実施。
+- serial / OSC / robot / firmware access は未実施。
+- この監査は docs-only なので、runtime / viewer / transport の実装変更は含まれない。
+- `scripts/check_docs_links.py` が存在しない場合は、リンク検査は not found として記録する。
 
+## Explicit Non-Goals
+
+- source code changes
+- runtime changes
+- viewer implementation changes
+- transport schema changes
+- serial access
+- OSC send
+- hardware validation
+- browser automation beyond document audit
+- PR body / GitHub metadata edits
+- touching unrelated branch edits
+- touching `MUJOCO_LOG.TXT`
