@@ -77,6 +77,7 @@ Do not create or use `doc/`.
 | Parallel work contracts | `docs/contracts/parallel-work-contracts.md` | Step 5-0 contract lock |
 | MotionCommand contract | `docs/contracts/motion-command.md` | command not state |
 | Transport payload contract | `docs/contracts/transport-payload.md` | versioned JSON-compatible payload |
+| Viewer control message schema | `docs/contracts/viewer-control-message-schema.md` | strict viewer-to-backend control intent; read-only and schema-only |
 | Asset contract | `docs/contracts/assets.md` | MJCF/STL/scale/axis rules |
 | Git and PR workflow | `docs/operations/git-pr-workflow.md` | branch / PR / diff gate |
 | Validation policy | `docs/operations/validation.md` | validation categories |

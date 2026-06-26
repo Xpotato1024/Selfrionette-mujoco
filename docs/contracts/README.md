@@ -12,5 +12,6 @@ Canonical contract docs:
 - `docs/contracts/runtime-forward-kinematics-evaluation.md`
 - `docs/contracts/transport-payload.md`
 - `docs/contracts/schemas.md`
+- `docs/contracts/viewer-control-message-schema.md`
 - `docs/contracts/programmed-target-input-source.md`
 - `docs/contracts/r7-b-runtime-input-pipeline-contract.md`
