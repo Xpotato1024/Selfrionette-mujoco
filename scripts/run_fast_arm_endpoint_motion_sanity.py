@@ -26,6 +26,20 @@ def _format_vector3(value: tuple[float, float, float] | None) -> str:
     return "[" + ", ".join(f"{component:.6f}" for component in value) + "]"
 
 
+def _format_value(value: object) -> str:
+    if isinstance(value, tuple):
+        formatted_components: list[str] = []
+        for component in value:
+            if isinstance(component, float):
+                formatted_components.append(f"{component:.6f}")
+            else:
+                formatted_components.append(str(component))
+        return "[" + ", ".join(formatted_components) + "]"
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{key}={_format_value(item)}" for key, item in value.items()) + "}"
+    return str(value)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the fast_arm endpoint motion sanity check.")
     parser.add_argument(
@@ -48,6 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="optional MuJoCo model path override",
     )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="print structured backend diagnostics for command, solver, qpos, and MuJoCo tip alignment",
+    )
     return parser
 
 
@@ -65,26 +84,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     for result in results:
-        print(
-            " ".join(
-                (
-                    f"axis={result.command_label}",
-                    f"status={result.status}",
-                    f"reason={result.reason}",
-                    f"base_endpoint_source={result.base_endpoint_source}",
-                    f"base_endpoint_m={_format_vector3(result.base_endpoint_m)}",
-                    f"commanded_delta={_format_vector3(result.commanded_delta_m)}",
-                    f"actual_delta={_format_vector3(result.actual_delta_m)}",
-                    f"initial_tip={_format_vector3(result.initial_tip_position_m)}",
-                    f"final_tip={_format_vector3(result.final_tip_position_m)}",
-                    f"desired_endpoint_m={_format_vector3(result.desired_endpoint_m)}",
-                    f"target_position_m={_format_vector3(result.target_position_m)}",
-                    f"qpos_before={list(result.qpos_before[:4])}",
-                    f"qpos_after={list(result.qpos_after[:4])}",
-                    f"direction_dot={result.direction_dot}",
-                )
-            )
+        fields = (
+            f"case_label={result.command_label}",
+            f"axis={result.command_label}",
+            f"status={result.status}",
+            f"reason={result.reason}",
+            f"base_endpoint_source={result.base_endpoint_source}",
+            f"base_endpoint_m={_format_vector3(result.base_endpoint_m)}",
+            f"commanded_delta_m={_format_vector3(result.commanded_delta_m)}",
+            f"actual_delta_m={_format_vector3(result.actual_delta_m)}",
+            f"initial_tip_position_m={_format_vector3(result.initial_tip_position_m)}",
+            f"final_tip_position_m={_format_vector3(result.final_tip_position_m)}",
+            f"desired_endpoint_m={_format_vector3(result.desired_endpoint_m)}",
+            f"target_position_m={_format_vector3(result.target_position_m)}",
+            f"target_rejected={result.target_rejected}",
+            f"target_rejection_reason={result.target_rejection_reason}",
+            f"target_rejection_message={result.target_rejection_message}",
+            f"qpos_before={list(result.qpos_before[:4])}",
+            f"qpos_after={list(result.qpos_after[:4])}",
+            f"direction_dot={result.direction_dot}",
         )
+        if args.diagnostics:
+            fields = fields + (
+                f"solver_input_endpoint_m={_format_value(result.solver_input_endpoint_m)}",
+                f"solver_seed_qpos={_format_value(result.solver_seed_qpos)}",
+                f"solver_result_qpos={_format_value(result.solver_result_qpos)}",
+                f"reachable_workspace_summary={_format_value(result.reachable_workspace_summary)}",
+                f"distance_from_solver_base_m={_format_value(result.distance_from_solver_base_m)}",
+                f"target_constraints_summary={_format_value(result.target_constraints_summary)}",
+                f"frame_mapping_summary={_format_value(result.frame_mapping_summary)}",
+                f"rejected_desired_endpoint_m={_format_value(result.rejected_desired_endpoint_m)}",
+                f"last_valid_target_position_m={_format_value(result.last_valid_target_position_m)}",
+                f"diagnosis={result.diagnosis}",
+            )
+        print(" ".join(fields))
 
     return 0
 
