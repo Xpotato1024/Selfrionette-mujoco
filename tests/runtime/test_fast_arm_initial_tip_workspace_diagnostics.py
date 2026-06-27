@@ -43,6 +43,6 @@ def test_initial_tip_workspace_diagnostics_keep_qpos_reference_details_without_c
         assert result.solver_seed_qpos == pytest.approx((0.0, 0.0, 0.0, 0.0), abs=1e-9)
         assert result.solver_result_qpos != "unavailable"
         assert isinstance(result.qpos_ref_summary, dict)
-        assert result.qpos_ref_summary["mapping_status"] == "partial_xz_adapter"
+        assert result.qpos_ref_summary["mapping_status"] == "q1_ref_adapter_with_q0_q2_q3_hold"
         assert len(result.qpos_before) == 4
         assert len(result.qpos_after) == 4

@@ -52,6 +52,8 @@ from selfrionette.runtime.endpoint_metrics import (
 )
 from selfrionette.runtime.endpoint_motion_sanity import (
     FastArmEndpointMotionSanityResult,
+    FastArmJointAxisPerturbationResult,
+    run_fast_arm_joint_axis_mapping_diagnostics,
     run_fast_arm_endpoint_motion_sanity,
 )
 from selfrionette.runtime.offline_input_runtime_smoke import (
@@ -97,6 +99,7 @@ __all__ = [
     "RuntimeForwardKinematicsEvaluation",
     "RuntimeEndpointEvaluationMetrics",
     "FastArmEndpointMotionSanityResult",
+    "FastArmJointAxisPerturbationResult",
     "EndpointEvaluationStatePublisher",
     "DEFAULT_LIVE_LOADCELL_BAUD_RATE",
     "DEFAULT_LIVE_LOADCELL_CURRENT_TIP_POSITION_M",
@@ -111,6 +114,7 @@ __all__ = [
     "build_runtime_endpoint_evaluation_payload",
     "build_runtime_endpoint_evaluation_payload_from_state",
     "build_runtime_endpoint_evaluation_metrics",
+    "run_fast_arm_joint_axis_mapping_diagnostics",
     "run_fast_arm_endpoint_motion_sanity",
     "build_noop_pipeline",
     "build_mujoco_pipeline",

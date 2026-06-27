@@ -14,6 +14,7 @@ from selfrionette.kinematics.fast_arm_endpoint import (
     FastArmEndpointInverseKinematicsSolver,
 )
 from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, inspect_mujoco_model
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
@@ -27,6 +28,8 @@ _BASE_ENDPOINT_SOURCE_UNAVAILABLE = "unavailable"
 _UNAVAILABLE = "unavailable"
 _MUJOCO_SOLVER_BASE_BODY_NAME = "base_link"
 _MUJOCO_QPOS_REF_MINUS_90_RAD = -math.pi / 2.0
+_JOINT_AXIS_PERTURBATION_RAD = 0.02
+_PERTURBATION_NO_MOVEMENT_EPSILON_M = 1e-9
 _COMMAND_AXES: tuple[tuple[str, int, Vector3], ...] = (
     ("x", 1, (1.0, 0.0, 0.0)),
     ("x", -1, (-1.0, 0.0, 0.0)),
@@ -66,6 +69,19 @@ def _dot_vector3(lhs_m: Sequence[float], rhs_m: Sequence[float]) -> float:
 
 def _dominant_axis_index(vector_m: Sequence[float]) -> int:
     return max(range(3), key=lambda index: abs(float(vector_m[index])))
+
+
+def _dominant_axis_label(vector_m: Sequence[float]) -> str:
+    if _vector_norm_m(vector_m) <= _PERTURBATION_NO_MOVEMENT_EPSILON_M:
+        return "none"
+    return "xyz"[_dominant_axis_index(vector_m)]
+
+
+def _dominant_axis_sign(vector_m: Sequence[float]) -> int:
+    if _vector_norm_m(vector_m) <= _PERTURBATION_NO_MOVEMENT_EPSILON_M:
+        return 0
+    component = float(vector_m[_dominant_axis_index(vector_m)])
+    return 1 if component >= 0.0 else -1
 
 
 def _axis_label(axis: str, sign: int) -> str:
@@ -168,11 +184,48 @@ def _frame_mapping_summary() -> dict[str, object]:
 
 def _qpos_ref_summary() -> dict[str, object]:
     return {
-        "mapping_status": "partial_xz_adapter",
+        "mapping_status": "q1_ref_adapter_with_q0_q2_q3_hold",
         "mujoco_to_solver": "solver_q1 = mujoco_qpos1 + pi/2",
         "solver_to_mujoco": "mujoco_qpos1 = solver_q1 - pi/2",
         "held_joints": ("qpos0", "qpos2", "qpos3"),
-        "limitation": "q0/q2/q3 MuJoCo axis mapping is diagnostic-only and held current in this sanity helper",
+        "limitation": (
+            "q0/q2/q3 solver values are not applied because MuJoCo perturbation "
+            "diagnostics do not match the solver's yaw/planar joint convention"
+        ),
+    }
+
+
+def _solver_to_mujoco_mapping_summary() -> dict[str, object]:
+    return {
+        "q0": "held at current MuJoCo qpos0; solver q0 is yaw but MuJoCo qpos0 axis is shoulder pitch-like",
+        "q1": "mujoco_qpos1 = solver_q1 - pi/2",
+        "q2": "held at current MuJoCo qpos2; solver q2 is planar bend but MuJoCo qpos2 axis duplicates qpos0 pitch-like axis",
+        "q3": "held at current MuJoCo qpos3; MuJoCo qpos3 is local elbow z-axis and is not solver base yaw",
+    }
+
+
+def _mujoco_to_solver_mapping_summary() -> dict[str, object]:
+    return {
+        "qpos0": "solver seed q0 = mujoco_qpos0 for continuity only",
+        "qpos1": "solver seed q1 = mujoco_qpos1 + pi/2",
+        "qpos2": "solver seed q2 = mujoco_qpos2 for continuity only",
+        "qpos3": "solver seed q3 = mujoco_qpos3 for continuity only",
+    }
+
+
+def _joint_axis_mapping_summary(
+    perturbation_results: Sequence["FastArmJointAxisPerturbationResult"],
+) -> dict[str, object]:
+    return {
+        "mapping_status": "q1_ref_adapter_with_q0_q2_q3_hold",
+        "perturbation_rad": _JOINT_AXIS_PERTURBATION_RAD,
+        "solver_to_mujoco_mapping": _solver_to_mujoco_mapping_summary(),
+        "mujoco_to_solver_mapping": _mujoco_to_solver_mapping_summary(),
+        "mapping_decision": (
+            "keep q0/q2/q3 held in endpoint sanity helper; do not claim x/y "
+            "alignment until a 3D solver DOF allocation matches the MuJoCo axes"
+        ),
+        "joint_order": tuple(result.joint_name for result in perturbation_results),
     }
 
 
@@ -252,6 +305,134 @@ class FastArmEndpointMotionSanityResult:
     qpos_ref_summary: dict[str, object] | str = _UNAVAILABLE
     solver_fk_endpoint_m: Vector3 | str = _UNAVAILABLE
     transformed_solver_fk_world_m: Vector3 | str = _UNAVAILABLE
+    joint_axis_mapping_summary: dict[str, object] | str = _UNAVAILABLE
+    qpos_perturbation_results: tuple["FastArmJointAxisPerturbationResult", ...] = ()
+    solver_to_mujoco_mapping: dict[str, object] | str = _UNAVAILABLE
+    mujoco_to_solver_mapping: dict[str, object] | str = _UNAVAILABLE
+    mapping_status: str = _UNAVAILABLE
+
+
+@dataclass(frozen=True, slots=True)
+class FastArmJointAxisPerturbationResult:
+    joint_name: str
+    qpos_index: int
+    mujoco_joint_axis: Vector3
+    mujoco_joint_ref_rad: float
+    perturbation_rad: float
+    qpos_before: tuple[float, ...]
+    qpos_after: tuple[float, ...]
+    tip_before: Vector3
+    tip_after: Vector3
+    tip_delta_m: Vector3
+    dominant_axis: str
+    dominant_sign: int
+    direction_dot_to_positive_axes: dict[str, float]
+    solver_to_mujoco_mapping: str
+    mujoco_to_solver_mapping: str
+    mapping_status: str
+
+
+def _mapping_status_for_qpos_index(qpos_index: int) -> str:
+    if qpos_index == 1:
+        return "mapped_with_ref_minus_90_adapter"
+    return "diagnostic_only_held_current"
+
+
+def _solver_to_mujoco_mapping_for_qpos_index(qpos_index: int) -> str:
+    return str(_solver_to_mujoco_mapping_summary()[f"q{qpos_index}"])
+
+
+def _mujoco_to_solver_mapping_for_qpos_index(qpos_index: int) -> str:
+    return str(_mujoco_to_solver_mapping_summary()[f"qpos{qpos_index}"])
+
+
+def _build_joint_axis_perturbation_result(
+    *,
+    simulator: HeadlessMuJoCoSimulator,
+    joint_name: str,
+    qpos_index: int,
+    mujoco_joint_axis: Vector3,
+    perturbation_rad: float,
+) -> FastArmJointAxisPerturbationResult:
+    initial_state = simulator.snapshot()
+    qpos_before = tuple(initial_state.qpos[:4])
+    tip_before = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
+    qpos_after_values = list(qpos_before)
+    qpos_after_values[qpos_index] += perturbation_rad
+    qpos_after = tuple(qpos_after_values)
+
+    simulator.apply_qpos_command(JointCommand(joint_angles_rad=qpos_after))
+    perturbed_state = simulator.snapshot()
+    tip_after = extract_fast_arm_tip_site_endpoint_from_state(perturbed_state).position_m
+    tip_delta_m = _vector_subtract(tip_after, tip_before)
+    actual_direction_m = (
+        (0.0, 0.0, 0.0)
+        if _vector_norm_m(tip_delta_m) <= _PERTURBATION_NO_MOVEMENT_EPSILON_M
+        else (_normalize_vector3(tip_delta_m) or (0.0, 0.0, 0.0))
+    )
+
+    return FastArmJointAxisPerturbationResult(
+        joint_name=joint_name,
+        qpos_index=qpos_index,
+        mujoco_joint_axis=mujoco_joint_axis,
+        mujoco_joint_ref_rad=qpos_before[qpos_index],
+        perturbation_rad=perturbation_rad,
+        qpos_before=qpos_before,
+        qpos_after=qpos_after,
+        tip_before=tip_before,
+        tip_after=tip_after,
+        tip_delta_m=tip_delta_m,
+        dominant_axis=_dominant_axis_label(tip_delta_m),
+        dominant_sign=_dominant_axis_sign(tip_delta_m),
+        direction_dot_to_positive_axes={
+            "x": _dot_vector3(actual_direction_m, (1.0, 0.0, 0.0)),
+            "y": _dot_vector3(actual_direction_m, (0.0, 1.0, 0.0)),
+            "z": _dot_vector3(actual_direction_m, (0.0, 0.0, 1.0)),
+        },
+        solver_to_mujoco_mapping=_solver_to_mujoco_mapping_for_qpos_index(qpos_index),
+        mujoco_to_solver_mapping=_mujoco_to_solver_mapping_for_qpos_index(qpos_index),
+        mapping_status=_mapping_status_for_qpos_index(qpos_index),
+    )
+
+
+def run_fast_arm_joint_axis_mapping_diagnostics(
+    *,
+    model_path: str | Path | None = None,
+    perturbation_rad: float = _JOINT_AXIS_PERTURBATION_RAD,
+) -> tuple[FastArmJointAxisPerturbationResult, ...]:
+    if perturbation_rad <= 0.0:
+        raise ValueError("perturbation_rad must be positive")
+
+    simulator = (
+        HeadlessMuJoCoSimulator.from_default_fast_arm()
+        if model_path is None
+        else HeadlessMuJoCoSimulator.from_model_path(model_path)
+    )
+    mujoco = simulator._import_mujoco()
+    joint_names = inspect_mujoco_model(simulator.model).joint_names
+    results: list[FastArmJointAxisPerturbationResult] = []
+    for joint_name in joint_names[:4]:
+        joint_id = mujoco.mj_name2id(simulator.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+        qpos_index = int(simulator.model.jnt_qposadr[joint_id])
+        axis = tuple(float(component) for component in simulator.model.jnt_axis[joint_id])
+        if len(axis) != 3:
+            raise ValueError("mujoco_joint_axis must contain exactly three values")
+        result_simulator = (
+            HeadlessMuJoCoSimulator.from_default_fast_arm()
+            if model_path is None
+            else HeadlessMuJoCoSimulator.from_model_path(model_path)
+        )
+        results.append(
+            _build_joint_axis_perturbation_result(
+                simulator=result_simulator,
+                joint_name=joint_name,
+                qpos_index=qpos_index,
+                mujoco_joint_axis=axis,
+                perturbation_rad=perturbation_rad,
+            )
+        )
+
+    return tuple(results)
 
 
 def _build_command_frame(
@@ -305,7 +486,9 @@ def _unavailable_result(
     reason: str,
     qpos_before: tuple[float, ...] = (),
     error_message: str | None = None,
+    qpos_perturbation_results: tuple[FastArmJointAxisPerturbationResult, ...] = (),
 ) -> FastArmEndpointMotionSanityResult:
+    joint_axis_mapping_summary = _joint_axis_mapping_summary(qpos_perturbation_results)
     return FastArmEndpointMotionSanityResult(
         axis=axis,
         sign=sign,
@@ -342,6 +525,11 @@ def _unavailable_result(
         frame_mapping_summary=_frame_mapping_summary(),
         diagnosis=reason,
         qpos_ref_summary=_qpos_ref_summary(),
+        joint_axis_mapping_summary=joint_axis_mapping_summary,
+        qpos_perturbation_results=qpos_perturbation_results,
+        solver_to_mujoco_mapping=_solver_to_mujoco_mapping_summary(),
+        mujoco_to_solver_mapping=_mujoco_to_solver_mapping_summary(),
+        mapping_status=str(joint_axis_mapping_summary["mapping_status"]),
     )
 
 
@@ -400,9 +588,11 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
     config: RuntimeConfig,
     model_path: str | Path | None,
     seed_joint_angles_rad: tuple[float, ...] | None,
+    qpos_perturbation_results: tuple[FastArmJointAxisPerturbationResult, ...],
 ) -> FastArmEndpointMotionSanityResult:
     command_delta_vector_m = _axis_delta(axis, sign, command_delta_m)
     command_label = _axis_label(axis, sign)
+    joint_axis_mapping_summary = _joint_axis_mapping_summary(qpos_perturbation_results)
     try:
         pipeline = build_concrete_mujoco_pipeline(
             frames=(_initialization_frame(command_label),),
@@ -424,6 +614,7 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
             target_position_m=None,
             reason="backend_exception",
             error_message=str(exc),
+            qpos_perturbation_results=qpos_perturbation_results,
         )
 
     initial_state = pipeline.simulator.snapshot()
@@ -450,6 +641,7 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
                 target_position_m=None,
                 reason="missing_initial_tip_position",
                 qpos_before=qpos_before,
+                qpos_perturbation_results=qpos_perturbation_results,
             )
         base_endpoint_m = initial_tip_position_m
         base_endpoint_source = _BASE_ENDPOINT_SOURCE_INITIAL_TIP
@@ -573,6 +765,7 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
             reason="backend_exception",
             qpos_before=qpos_before,
             error_message=error_message,
+            qpos_perturbation_results=qpos_perturbation_results,
         )
 
     final_tip_position_m: Vector3 | None = None
@@ -689,6 +882,11 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         qpos_ref_summary=_qpos_ref_summary(),
         solver_fk_endpoint_m=solver_fk_endpoint_m,
         transformed_solver_fk_world_m=transformed_solver_fk_world_m,
+        joint_axis_mapping_summary=joint_axis_mapping_summary,
+        qpos_perturbation_results=qpos_perturbation_results,
+        solver_to_mujoco_mapping=_solver_to_mujoco_mapping_summary(),
+        mujoco_to_solver_mapping=_mujoco_to_solver_mapping_summary(),
+        mapping_status=str(joint_axis_mapping_summary["mapping_status"]),
     )
 
 
@@ -701,6 +899,10 @@ async def _run_fast_arm_endpoint_motion_sanity_async(
     seed_joint_angles_rad: tuple[float, ...] | None,
 ) -> tuple[FastArmEndpointMotionSanityResult, ...]:
     results: list[FastArmEndpointMotionSanityResult] = []
+    try:
+        qpos_perturbation_results = run_fast_arm_joint_axis_mapping_diagnostics(model_path=model_path)
+    except Exception:  # noqa: BLE001
+        qpos_perturbation_results = ()
     for axis, sign, _ in _COMMAND_AXES:
         result = await _run_fast_arm_endpoint_motion_sanity_case_async(
             axis=axis,
@@ -710,6 +912,7 @@ async def _run_fast_arm_endpoint_motion_sanity_async(
             config=config,
             model_path=model_path,
             seed_joint_angles_rad=seed_joint_angles_rad,
+            qpos_perturbation_results=qpos_perturbation_results,
         )
         results.append(result)
 
@@ -745,6 +948,8 @@ def run_fast_arm_endpoint_motion_sanity(
 
 
 __all__ = [
+    "FastArmJointAxisPerturbationResult",
     "FastArmEndpointMotionSanityResult",
+    "run_fast_arm_joint_axis_mapping_diagnostics",
     "run_fast_arm_endpoint_motion_sanity",
 ]
