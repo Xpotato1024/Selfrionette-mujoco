@@ -17,6 +17,15 @@ export interface ProductViewerInputOverlayState {
   staleReason: string | null;
   viewerSourceKind: string | null;
   sequence: number | null;
+  runtimeInputSafetyApplied: boolean | null;
+  targetStatus: string | null;
+  targetRejected: boolean | null;
+  targetRejectionReason: string | null;
+  targetRejectionMessage: string | null;
+  rejectedDesiredEndpointM: number[] | null;
+  lastValidTargetPositionM: number[] | null;
+  endpointEvaluationState: "available" | "missing" | "malformed";
+  endpointEvaluationUnavailableReason: string | null;
   keyboardActiveKeyCodes: string[];
   keyboardFocusState: string | null;
   keyboardZeroState: boolean | null;
@@ -155,6 +164,15 @@ function parseOptionalFiniteNumber(value: unknown): number | null {
   return isFiniteNumber(value) ? value : null;
 }
 
+function parseOptionalVector3(value: unknown): number[] | null {
+  if (!Array.isArray(value) || value.length !== 3) {
+    return null;
+  }
+
+  const parsed = value.filter((component): component is number => isFiniteNumber(component));
+  return parsed.length === 3 ? parsed : null;
+}
+
 function parseInputOverlayButtons(value: unknown): ProductViewerInputOverlayButtonState[] {
   if (!Array.isArray(value)) {
     return [];
@@ -172,10 +190,38 @@ function parseInputOverlayButtons(value: unknown): ProductViewerInputOverlayButt
   });
 }
 
-function parseInputOverlayState(metadata: Record<string, unknown>): ProductViewerInputOverlayState {
+function parseInputOverlayState(
+  payloadOrMetadata: Record<string, unknown>,
+): ProductViewerInputOverlayState {
+  const isPayload = isRecord(payloadOrMetadata.metadata);
+  const metadata: Record<string, unknown> = isPayload
+    ? (payloadOrMetadata.metadata as Record<string, unknown>)
+    : payloadOrMetadata;
   const controlMessage = isRecord(metadata.viewer_control_message) ? metadata.viewer_control_message : null;
   const keyboard = controlMessage !== null && isRecord(controlMessage.keyboard) ? controlMessage.keyboard : null;
   const gamepad = controlMessage !== null && isRecord(controlMessage.gamepad) ? controlMessage.gamepad : null;
+  const runtimeInputSafetyApplied = metadata.runtime_input_safety_applied === true;
+  const targetRejected = metadata.target_rejected === true;
+  const rejectedDesiredEndpointM = parseOptionalVector3(metadata.rejected_desired_endpoint_m);
+  const lastValidTargetPositionM = isPayload ? parseOptionalVector3(payloadOrMetadata.target_position_m) : null;
+  const targetStatusRaw = parseOptionalString(metadata.target_status);
+  const endpointEvaluationPresent = isPayload && "endpoint_evaluation" in payloadOrMetadata;
+  const endpointEvaluation = endpointEvaluationPresent ? payloadOrMetadata.endpoint_evaluation : undefined;
+  const endpointEvaluationState = !endpointEvaluationPresent
+    ? "missing"
+      : endpointEvaluation === null
+      ? "malformed"
+      : "available";
+  const endpointEvaluationUnavailableReason =
+    endpointEvaluationState === "available"
+      ? null
+      : endpointEvaluationState === "malformed"
+        ? "endpoint_evaluation present but failed validation"
+        : runtimeInputSafetyApplied
+          ? targetRejected
+            ? "endpoint_evaluation withheld on rejected target"
+            : "endpoint_evaluation withheld on runtime input safety hold"
+          : "endpoint_evaluation missing from payload";
 
   return {
     sourceKind: typeof metadata.source_kind === "string" ? metadata.source_kind : "n/a",
@@ -184,6 +230,23 @@ function parseInputOverlayState(metadata: Record<string, unknown>): ProductViewe
     staleReason: parseOptionalString(metadata.stale_reason),
     viewerSourceKind: controlMessage === null ? null : parseOptionalString(controlMessage.viewer_source_kind),
     sequence: controlMessage === null ? null : parseOptionalInteger(controlMessage.sequence),
+    runtimeInputSafetyApplied: runtimeInputSafetyApplied ? true : metadata.runtime_input_safety_applied === false ? false : null,
+    targetStatus:
+      targetStatusRaw ??
+      (targetRejected
+        ? "rejected"
+        : runtimeInputSafetyApplied
+          ? "held"
+          : lastValidTargetPositionM === null
+            ? null
+            : "accepted"),
+    targetRejected: targetRejected ? true : metadata.target_rejected === false ? false : null,
+    targetRejectionReason: parseOptionalString(metadata.target_rejection_reason),
+    targetRejectionMessage: parseOptionalString(metadata.target_rejection_message),
+    rejectedDesiredEndpointM,
+    lastValidTargetPositionM,
+    endpointEvaluationState,
+    endpointEvaluationUnavailableReason,
     keyboardActiveKeyCodes: keyboard === null ? [] : parseStringArray(keyboard.active_key_codes),
     keyboardFocusState: keyboard === null ? null : parseOptionalString(keyboard.focus_state),
     keyboardZeroState: keyboard === null ? null : parseOptionalBoolean(keyboard.zero_state),
@@ -207,15 +270,11 @@ export function buildProductViewerInputOverlayState(
     return null;
   }
 
-  const metadata = "metadata" in payloadOrMetadata && isRecord(payloadOrMetadata.metadata)
-    ? payloadOrMetadata.metadata
-    : payloadOrMetadata;
-
-  if (!isRecord(metadata)) {
+  if (!isRecord(payloadOrMetadata)) {
     return null;
   }
 
-  return parseInputOverlayState(metadata);
+  return parseInputOverlayState(payloadOrMetadata);
 }
 
 function formatNumberList(values: readonly number[]): string {
@@ -247,6 +306,18 @@ function formatButtonList(buttons: readonly ProductViewerInputOverlayButtonState
     .join(", ");
 }
 
+function formatVector3List(values: readonly number[] | null): string {
+  if (values === null) {
+    return "n/a";
+  }
+
+  if (values.length === 0) {
+    return "none";
+  }
+
+  return `[${values.map((value) => value.toFixed(4)).join(", ")}]`;
+}
+
 export function formatInputOverlayText(inputOverlay: ProductViewerInputOverlayState | null): string {
   if (inputOverlay === null) {
     return [
@@ -254,6 +325,15 @@ export function formatInputOverlayText(inputOverlay: ProductViewerInputOverlaySt
       "active: n/a",
       "command age_ms: n/a",
       "stale reason: n/a",
+      "runtime input safety: n/a",
+      "target status: n/a",
+      "target rejected: n/a",
+      "target rejection reason: n/a",
+      "target rejection message: n/a",
+      "rejected desired endpoint_m: n/a",
+      "last valid target_m: n/a",
+      "endpoint evaluation: unavailable",
+      "endpoint evaluation unavailable reason: n/a",
       "keyboard active keys: none",
       "keyboard focus: n/a",
       "gamepad axes: none",
@@ -268,6 +348,17 @@ export function formatInputOverlayText(inputOverlay: ProductViewerInputOverlaySt
     `sequence: ${inputOverlay.sequence === null ? "n/a" : String(inputOverlay.sequence)}`,
     `command age_ms: ${inputOverlay.commandAgeMs === null ? "n/a" : String(inputOverlay.commandAgeMs)}`,
     `stale reason: ${inputOverlay.staleReason ?? "none"}`,
+    `runtime input safety: ${
+      inputOverlay.runtimeInputSafetyApplied === null ? "n/a" : String(inputOverlay.runtimeInputSafetyApplied)
+    }`,
+    `target status: ${inputOverlay.targetStatus ?? "n/a"}`,
+    `target rejected: ${inputOverlay.targetRejected === null ? "none" : String(inputOverlay.targetRejected)}`,
+    `target rejection reason: ${inputOverlay.targetRejectionReason ?? "none"}`,
+    `target rejection message: ${inputOverlay.targetRejectionMessage ?? "none"}`,
+    `rejected desired endpoint_m: ${formatVector3List(inputOverlay.rejectedDesiredEndpointM)}`,
+    `last valid target_m: ${formatVector3List(inputOverlay.lastValidTargetPositionM)}`,
+    `endpoint evaluation: ${inputOverlay.endpointEvaluationState}`,
+    `endpoint evaluation unavailable reason: ${inputOverlay.endpointEvaluationUnavailableReason ?? "none"}`,
     `keyboard active keys: ${formatKeyList(inputOverlay.keyboardActiveKeyCodes)}`,
     `keyboard focus: ${inputOverlay.keyboardFocusState ?? "n/a"}`,
     `keyboard zero state: ${inputOverlay.keyboardZeroState === null ? "n/a" : String(inputOverlay.keyboardZeroState)}`,

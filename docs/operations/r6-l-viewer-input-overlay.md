@@ -46,3 +46,9 @@ The overlay should show at least:
 - Missing or malformed optional fields must not crash the viewer.
 - Unknown source kinds must degrade to a safe fallback display.
 - The overlay updates independently from endpoint evaluation and qpos display.
+- The overlay also shows target rejection diagnostics when backend metadata
+  provides them: `runtime_input_safety_applied`, `target_status`,
+  `target_rejected`, `target_rejection_reason`, `target_rejection_message`,
+  `rejected_desired_endpoint_m`, and the last valid `target_position_m`.
+- Missing `endpoint_evaluation` is shown as unavailable rather than inferred
+  on the browser side.

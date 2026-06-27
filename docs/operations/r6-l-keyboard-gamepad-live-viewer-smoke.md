@@ -125,6 +125,12 @@ http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 - gamepad axes and buttons are visible while a pad is connected.
 - `command_age_ms` and `stale_reason` are visible as read-only diagnostics.
 - Missing optional fields do not crash the viewer.
+- Target rejection / hold frames should make `runtime_input_safety_applied`,
+  `target_status`, `target_rejected`, `target_rejection_reason`,
+  `target_rejection_message`, `rejected_desired_endpoint_m`, and the held
+  `target_position_m` readable in the overlay.
+- If `endpoint_evaluation` is missing on a rejected or held frame, the overlay
+  should say it is unavailable rather than recomputing it.
 - The procedure assumes viewer-origin WebSocket messages are being ingested by
   the backend runner.
 
