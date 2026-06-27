@@ -10,7 +10,11 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from selfrionette.runtime import run_fast_arm_endpoint_motion_sanity
+from selfrionette.runtime import (
+    run_fast_arm_endpoint_motion_sanity,
+    run_fast_arm_endpoint_trajectory_diagnostics,
+    run_fast_arm_local_jacobian_diagnostics,
+)
 
 
 def _positive_float(value: str) -> float:
@@ -72,6 +76,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--diagnostics",
         action="store_true",
         help="print structured backend diagnostics for command, solver, qpos, and MuJoCo tip alignment",
+    )
+    parser.add_argument(
+        "--jacobian-diagnostics",
+        action="store_true",
+        help="print local Jacobian diagnostics around the initial and nearby qpos presets",
+    )
+    parser.add_argument(
+        "--trajectory-diagnostics",
+        action="store_true",
+        help="print multi-step endpoint command trajectory diagnostics",
+    )
+    parser.add_argument(
+        "--trajectory-steps",
+        type=int,
+        default=30,
+        help="number of repeated endpoint command steps for trajectory diagnostics",
+    )
+    parser.add_argument(
+        "--trajectory-delta-m",
+        type=_positive_float,
+        default=0.005,
+        help="endpoint delta per repeated trajectory step in meters",
     )
     return parser
 
@@ -141,6 +167,45 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"diagnosis={result.diagnosis}",
             )
         print(" ".join(fields))
+
+    if args.diagnostics or args.jacobian_diagnostics:
+        jacobian_results = run_fast_arm_local_jacobian_diagnostics(model_path=args.model_path)
+        for pose in jacobian_results:
+            print(
+                " ".join(
+                    (
+                        "local_jacobian",
+                        f"pose_label={pose.pose_label}",
+                        f"qpos={_format_value(pose.qpos)}",
+                        f"tip_position_m={_format_value(pose.tip_position_m)}",
+                        f"jacobian_matrix={_format_value(pose.jacobian_matrix)}",
+                        f"joint_contribution_summary={_format_value(pose.joint_contribution_summary)}",
+                    )
+                )
+            )
+
+    if args.trajectory_diagnostics:
+        if args.trajectory_steps <= 0:
+            parser.error("--trajectory-steps must be positive")
+        trajectory_results = run_fast_arm_endpoint_trajectory_diagnostics(
+            trajectory_steps=args.trajectory_steps,
+            trajectory_delta_m=args.trajectory_delta_m,
+            model_path=args.model_path,
+        )
+        for trajectory in trajectory_results:
+            print(
+                " ".join(
+                    (
+                        "endpoint_trajectory",
+                        f"command_label={trajectory.command_label}",
+                        f"steps={trajectory.step_count}",
+                        f"delta_m={trajectory.command_delta_m_per_step}",
+                        f"initial_tip_position_m={_format_value(trajectory.initial_tip_position_m)}",
+                        f"initial_qpos={_format_value(trajectory.initial_qpos)}",
+                        f"summary={_format_value(trajectory.summary)}",
+                    )
+                )
+            )
 
     return 0
 

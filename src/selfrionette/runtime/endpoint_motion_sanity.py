@@ -29,7 +29,10 @@ _UNAVAILABLE = "unavailable"
 _MUJOCO_SOLVER_BASE_BODY_NAME = "base_link"
 _MUJOCO_QPOS_REF_MINUS_90_RAD = -math.pi / 2.0
 _JOINT_AXIS_PERTURBATION_RAD = 0.02
+_LOCAL_JACOBIAN_PERTURBATION_RAD = 0.01
 _PERTURBATION_NO_MOVEMENT_EPSILON_M = 1e-9
+_TRAJECTORY_DIRECTION_DOT_THRESHOLD = 0.85
+_TRAJECTORY_MOVEMENT_EPSILON_M = 1e-6
 _COMMAND_AXES: tuple[tuple[str, int, Vector3], ...] = (
     ("x", 1, (1.0, 0.0, 0.0)),
     ("x", -1, (-1.0, 0.0, 0.0)),
@@ -96,6 +99,10 @@ def _axis_delta(axis: str, sign: int, delta_m: float) -> Vector3:
     if axis == "z":
         return (0.0, 0.0, float(sign) * delta_m)
     raise ValueError(f"unsupported axis: {axis!r}")
+
+
+def _axis_index(axis: str) -> int:
+    return "xyz".index(axis)
 
 
 def _vector_subtract(lhs_m: Sequence[float], rhs_m: Sequence[float]) -> Vector3:
@@ -332,6 +339,92 @@ class FastArmJointAxisPerturbationResult:
     mapping_status: str
 
 
+@dataclass(frozen=True, slots=True)
+class FastArmLocalJacobianColumn:
+    pose_label: str
+    qpos: tuple[float, ...]
+    qpos_index: int
+    joint_name: str
+    joint_axis: Vector3
+    perturbation_rad: float
+    plus_tip_delta_m: Vector3
+    minus_tip_delta_m: Vector3
+    central_difference_column: Vector3
+    dominant_axis: str
+    dominant_sign: int
+    norm: float
+
+
+@dataclass(frozen=True, slots=True)
+class FastArmLocalJacobianPoseDiagnostics:
+    pose_label: str
+    qpos: tuple[float, ...]
+    tip_position_m: Vector3
+    perturbation_rad: float
+    jacobian_matrix: tuple[tuple[float, float, float, float], tuple[float, float, float, float], tuple[float, float, float, float]]
+    columns: tuple[FastArmLocalJacobianColumn, ...]
+    joint_contribution_summary: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class FastArmEndpointTrajectoryStepRecord:
+    command_label: str
+    step_index: int
+    desired_endpoint_m: Vector3
+    solver_local_target_m: Vector3 | str
+    qpos_before: tuple[float, ...]
+    qpos_after: tuple[float, ...]
+    tip_before_m: Vector3
+    tip_after_m: Vector3
+    actual_delta_m: Vector3
+    cumulative_actual_delta_m: Vector3
+    command_direction_m: Vector3
+    direction_dot: float | None
+    dominant_axis: str
+    status: str
+    reason: str
+    target_rejected: bool
+    target_rejection_reason: str | None
+    distance_from_solver_base_m: float | str
+
+
+@dataclass(frozen=True, slots=True)
+class FastArmEndpointTrajectorySummary:
+    command_label: str
+    step_count: int
+    command_delta_m_per_step: float
+    initial_alignment: str
+    final_alignment: str
+    best_alignment: float | None
+    worst_alignment: float | None
+    mean_direction_dot: float | None
+    drift_from_command_axis_m: float
+    orthogonal_drift_m: float
+    cumulative_commanded_delta_m: Vector3
+    cumulative_actual_delta_m: Vector3
+    saturation_step: int | None
+    first_rejection_step: int | None
+    first_off_plane_step: int | None
+    first_opposite_direction_step: int | None
+    safe_hold_step: int | None
+    final_status: str
+    final_reason: str
+    decision: str
+
+
+@dataclass(frozen=True, slots=True)
+class FastArmEndpointTrajectoryDiagnostics:
+    command_label: str
+    axis: str
+    sign: int
+    command_delta_m_per_step: float
+    step_count: int
+    initial_tip_position_m: Vector3
+    initial_qpos: tuple[float, ...]
+    records: tuple[FastArmEndpointTrajectoryStepRecord, ...]
+    summary: FastArmEndpointTrajectorySummary
+
+
 def _mapping_status_for_qpos_index(qpos_index: int) -> str:
     if qpos_index == 1:
         return "mapped_with_ref_minus_90_adapter"
@@ -433,6 +526,141 @@ def run_fast_arm_joint_axis_mapping_diagnostics(
         )
 
     return tuple(results)
+
+
+def _build_fast_arm_simulator(model_path: str | Path | None) -> HeadlessMuJoCoSimulator:
+    return (
+        HeadlessMuJoCoSimulator.from_default_fast_arm()
+        if model_path is None
+        else HeadlessMuJoCoSimulator.from_model_path(model_path)
+    )
+
+
+def _joint_name_axis_pairs(simulator: HeadlessMuJoCoSimulator) -> tuple[tuple[str, int, Vector3], ...]:
+    mujoco = simulator._import_mujoco()
+    pairs: list[tuple[str, int, Vector3]] = []
+    for joint_name in inspect_mujoco_model(simulator.model).joint_names[:4]:
+        joint_id = mujoco.mj_name2id(simulator.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+        qpos_index = int(simulator.model.jnt_qposadr[joint_id])
+        axis = tuple(float(component) for component in simulator.model.jnt_axis[joint_id])
+        if len(axis) != 3:
+            raise ValueError("mujoco_joint_axis must contain exactly three values")
+        pairs.append((joint_name, qpos_index, axis))
+    return tuple(pairs)
+
+
+def _tip_for_qpos(
+    *,
+    model_path: str | Path | None,
+    qpos_rad: Sequence[float],
+) -> Vector3:
+    simulator = _build_fast_arm_simulator(model_path)
+    simulator.apply_qpos_command(JointCommand(joint_angles_rad=tuple(float(value) for value in qpos_rad[:4])))
+    return extract_fast_arm_tip_site_endpoint_from_state(simulator.snapshot()).position_m
+
+
+def _local_jacobian_pose_presets(
+    initial_qpos: tuple[float, ...],
+) -> tuple[tuple[str, tuple[float, ...]], ...]:
+    q1_offset = list(initial_qpos)
+    q1_offset[1] += 0.1
+    q3_offset = list(initial_qpos)
+    q3_offset[3] += 0.1
+    q1_q3_offset = list(initial_qpos)
+    q1_q3_offset[1] += 0.1
+    q1_q3_offset[3] += 0.1
+    return (
+        ("initial", initial_qpos),
+        ("q1_offset", tuple(q1_offset)),
+        ("q3_offset", tuple(q3_offset)),
+        ("q1_q3_offset", tuple(q1_q3_offset)),
+    )
+
+
+def _summarize_local_jacobian_columns(
+    columns: Sequence[FastArmLocalJacobianColumn],
+) -> dict[str, object]:
+    effective_by_axis: dict[str, list[str]] = {"x": [], "y": [], "z": []}
+    for column in columns:
+        if column.dominant_axis in effective_by_axis and column.norm > _PERTURBATION_NO_MOVEMENT_EPSILON_M:
+            label = f"{column.joint_name}:{'+' if column.dominant_sign > 0 else '-'}{column.dominant_axis}"
+            effective_by_axis[column.dominant_axis].append(label)
+
+    return {
+        "x": tuple(effective_by_axis["x"]),
+        "y": tuple(effective_by_axis["y"]),
+        "z": tuple(effective_by_axis["z"]),
+        "decision": (
+            "q1 contributes primarily to z near the initial pose; q3 can contribute to y "
+            "when its MuJoCo local elbow axis is active; q0/q2 remain weak or singular "
+            "in the checked local presets"
+        ),
+    }
+
+
+def run_fast_arm_local_jacobian_diagnostics(
+    *,
+    model_path: str | Path | None = None,
+    perturbation_rad: float = _LOCAL_JACOBIAN_PERTURBATION_RAD,
+) -> tuple[FastArmLocalJacobianPoseDiagnostics, ...]:
+    if perturbation_rad <= 0.0:
+        raise ValueError("perturbation_rad must be positive")
+
+    base_simulator = _build_fast_arm_simulator(model_path)
+    initial_qpos = tuple(base_simulator.snapshot().qpos[:4])
+    joint_pairs = _joint_name_axis_pairs(base_simulator)
+    diagnostics: list[FastArmLocalJacobianPoseDiagnostics] = []
+
+    for pose_label, qpos in _local_jacobian_pose_presets(initial_qpos):
+        tip_position_m = _tip_for_qpos(model_path=model_path, qpos_rad=qpos)
+        columns: list[FastArmLocalJacobianColumn] = []
+        for joint_name, qpos_index, joint_axis in joint_pairs:
+            plus_qpos = list(qpos)
+            minus_qpos = list(qpos)
+            plus_qpos[qpos_index] += perturbation_rad
+            minus_qpos[qpos_index] -= perturbation_rad
+            plus_tip = _tip_for_qpos(model_path=model_path, qpos_rad=plus_qpos)
+            minus_tip = _tip_for_qpos(model_path=model_path, qpos_rad=minus_qpos)
+            plus_tip_delta_m = _vector_subtract(plus_tip, tip_position_m)
+            minus_tip_delta_m = _vector_subtract(minus_tip, tip_position_m)
+            central_difference_column = tuple(
+                (plus_tip[index] - minus_tip[index]) / (2.0 * perturbation_rad)
+                for index in range(3)
+            )
+            columns.append(
+                FastArmLocalJacobianColumn(
+                    pose_label=pose_label,
+                    qpos=qpos,
+                    qpos_index=qpos_index,
+                    joint_name=joint_name,
+                    joint_axis=joint_axis,
+                    perturbation_rad=perturbation_rad,
+                    plus_tip_delta_m=plus_tip_delta_m,
+                    minus_tip_delta_m=minus_tip_delta_m,
+                    central_difference_column=central_difference_column,
+                    dominant_axis=_dominant_axis_label(central_difference_column),
+                    dominant_sign=_dominant_axis_sign(central_difference_column),
+                    norm=_vector_norm_m(central_difference_column),
+                )
+            )
+
+        diagnostics.append(
+            FastArmLocalJacobianPoseDiagnostics(
+                pose_label=pose_label,
+                qpos=qpos,
+                tip_position_m=tip_position_m,
+                perturbation_rad=perturbation_rad,
+                jacobian_matrix=(
+                    tuple(column.central_difference_column[0] for column in columns),  # type: ignore[assignment]
+                    tuple(column.central_difference_column[1] for column in columns),  # type: ignore[assignment]
+                    tuple(column.central_difference_column[2] for column in columns),  # type: ignore[assignment]
+                ),
+                columns=tuple(columns),
+                joint_contribution_summary=_summarize_local_jacobian_columns(columns),
+            )
+        )
+
+    return tuple(diagnostics)
 
 
 def _build_command_frame(
@@ -577,6 +805,333 @@ def _classify_sanity_result(
         return "limitation", "opposite_direction", False, direction_dot
 
     return "limitation", "off_plane", False, direction_dot
+
+
+def _build_endpoint_motion_command_for_world_target(
+    *,
+    world_target_m: Vector3,
+    qpos_before: tuple[float, ...],
+    solver_base_world_position_m: Vector3 | None,
+    metadata: dict[str, object],
+) -> tuple[
+    MotionCommand,
+    Vector3 | str,
+    tuple[float, ...] | str,
+    tuple[float, ...] | str,
+    bool,
+    str | None,
+    str | None,
+]:
+    solver_seed_qpos = _mujoco_qpos_to_solver_joint_angles(qpos_before)
+    if solver_base_world_position_m is None:
+        reason = "solver_base_unavailable"
+        return (
+            MotionCommand(
+                timestamp_s=0.0,
+                joint=JointCommand(joint_angles_rad=qpos_before),
+                metadata={
+                    **metadata,
+                    "target_rejected": True,
+                    "target_rejection_reason": reason,
+                    "target_rejection_message": f"missing MuJoCo body {_MUJOCO_SOLVER_BASE_BODY_NAME!r}",
+                    "rejected_desired_endpoint_m": world_target_m,
+                },
+            ),
+            _UNAVAILABLE,
+            solver_seed_qpos,
+            _UNAVAILABLE,
+            True,
+            reason,
+            f"missing MuJoCo body {_MUJOCO_SOLVER_BASE_BODY_NAME!r}",
+        )
+
+    solver_local_target_m = _vector_subtract(world_target_m, solver_base_world_position_m)
+    solver = FastArmEndpointInverseKinematicsSolver()
+    try:
+        solver_joint_command = solver.solve(
+            solver_local_target_m,
+            seed_joint_angles_rad=solver_seed_qpos if len(solver_seed_qpos) == 4 else None,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        reason = (
+            "target_unreachable"
+            if message == "target_position_m is outside the reachable workspace"
+            else "target_non_convergence"
+        )
+        return (
+            MotionCommand(
+                timestamp_s=0.0,
+                joint=JointCommand(joint_angles_rad=qpos_before),
+                metadata={
+                    **metadata,
+                    "target_rejected": True,
+                    "target_rejection_reason": reason,
+                    "target_rejection_message": message,
+                    "rejected_desired_endpoint_m": world_target_m,
+                    "solver_input_endpoint_m": solver_local_target_m,
+                    "solver_seed_qpos": solver_seed_qpos,
+                    "solver_base_world_position_m": solver_base_world_position_m,
+                    "world_target_m": world_target_m,
+                    "frame_transform_status": "world_minus_mujoco_base_link",
+                    "qpos_ref_summary": _qpos_ref_summary(),
+                },
+            ),
+            solver_local_target_m,
+            solver_seed_qpos,
+            _UNAVAILABLE,
+            True,
+            reason,
+            message,
+        )
+
+    solver_result_qpos = tuple(solver_joint_command.joint_angles_rad[:4])
+    mujoco_qpos_command = _solver_joint_angles_to_mujoco_qpos(
+        solver_joint_command.joint_angles_rad,
+        current_qpos_rad=qpos_before,
+    )
+    return (
+        MotionCommand(
+            timestamp_s=0.0,
+            joint=JointCommand(joint_angles_rad=mujoco_qpos_command),
+            metadata={
+                **metadata,
+                "solver_input_endpoint_m": solver_local_target_m,
+                "solver_seed_qpos": solver_seed_qpos,
+                "solver_result_qpos": solver_result_qpos,
+                "solver_base_world_position_m": solver_base_world_position_m,
+                "world_target_m": world_target_m,
+                "frame_transform_status": "world_minus_mujoco_base_link",
+                "qpos_ref_summary": _qpos_ref_summary(),
+            },
+        ),
+        solver_local_target_m,
+        solver_seed_qpos,
+        solver_result_qpos,
+        False,
+        None,
+        None,
+    )
+
+
+def _trajectory_decision(summary_status: str, command_label: str) -> str:
+    if command_label in {"+x", "-x", "+y", "-y"}:
+        return "current_solver_dof_allocation_limitation"
+    if summary_status == "pass":
+        return "short_range_aligned"
+    if command_label in {"+z", "-z"}:
+        return "z_primary_but_degrades_over_repeated_commands"
+    return "current_solver_dof_allocation_limitation"
+
+
+def _summarize_trajectory_records(
+    *,
+    command_label: str,
+    command_delta_vector_m: Vector3,
+    command_delta_m_per_step: float,
+    records: Sequence[FastArmEndpointTrajectoryStepRecord],
+) -> FastArmEndpointTrajectorySummary:
+    direction_dots = [record.direction_dot for record in records if record.direction_dot is not None]
+    cumulative_actual_delta_m = records[-1].cumulative_actual_delta_m if records else (0.0, 0.0, 0.0)
+    command_axis = _dominant_axis_index(command_delta_vector_m)
+    signed_actual_along_axis_m = cumulative_actual_delta_m[command_axis]
+    commanded_axis_delta_m = command_delta_vector_m[command_axis] * len(records)
+    drift_from_command_axis_m = signed_actual_along_axis_m - commanded_axis_delta_m
+    orthogonal_components = [
+        cumulative_actual_delta_m[index]
+        for index in range(3)
+        if index != command_axis
+    ]
+    orthogonal_drift_m = math.sqrt(sum(component * component for component in orthogonal_components))
+
+    saturation_step = next(
+        (
+            record.step_index
+            for record in records
+            if _vector_norm_m(record.actual_delta_m) <= _TRAJECTORY_MOVEMENT_EPSILON_M
+        ),
+        None,
+    )
+    first_rejection_step = next((record.step_index for record in records if record.target_rejected), None)
+    first_off_plane_step = next((record.step_index for record in records if record.reason == "off_plane"), None)
+    first_opposite_direction_step = next(
+        (record.step_index for record in records if record.reason == "opposite_direction"),
+        None,
+    )
+    safe_hold_step = next(
+        (
+            record.step_index
+            for record in records
+            if record.target_rejected or record.reason in {"no_movement", "safe_hold"}
+        ),
+        None,
+    )
+    final_status = records[-1].status if records else "unavailable"
+    final_reason = records[-1].reason if records else "no_records"
+    return FastArmEndpointTrajectorySummary(
+        command_label=command_label,
+        step_count=len(records),
+        command_delta_m_per_step=command_delta_m_per_step,
+        initial_alignment=records[0].reason if records else "no_records",
+        final_alignment=final_reason,
+        best_alignment=max(direction_dots) if direction_dots else None,
+        worst_alignment=min(direction_dots) if direction_dots else None,
+        mean_direction_dot=(sum(direction_dots) / len(direction_dots)) if direction_dots else None,
+        drift_from_command_axis_m=drift_from_command_axis_m,
+        orthogonal_drift_m=orthogonal_drift_m,
+        cumulative_commanded_delta_m=tuple(component * len(records) for component in command_delta_vector_m),
+        cumulative_actual_delta_m=cumulative_actual_delta_m,
+        saturation_step=saturation_step,
+        first_rejection_step=first_rejection_step,
+        first_off_plane_step=first_off_plane_step,
+        first_opposite_direction_step=first_opposite_direction_step,
+        safe_hold_step=safe_hold_step,
+        final_status=final_status,
+        final_reason=final_reason,
+        decision=_trajectory_decision(final_status, command_label),
+    )
+
+
+def _run_fast_arm_endpoint_trajectory_case(
+    *,
+    axis: str,
+    sign: int,
+    trajectory_steps: int,
+    trajectory_delta_m: float,
+    config: RuntimeConfig,
+    model_path: str | Path | None,
+    seed_joint_angles_rad: tuple[float, ...] | None,
+) -> FastArmEndpointTrajectoryDiagnostics:
+    command_label = _axis_label(axis, sign)
+    command_delta_vector_m = _axis_delta(axis, sign, trajectory_delta_m)
+    command_direction_m = _normalize_vector3(command_delta_vector_m) or command_delta_vector_m
+    simulator = _build_fast_arm_simulator(model_path)
+    if seed_joint_angles_rad is not None:
+        simulator.apply_qpos_command(JointCommand(joint_angles_rad=seed_joint_angles_rad))
+
+    initial_state = simulator.snapshot()
+    initial_tip_position_m = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
+    initial_qpos = tuple(initial_state.qpos[:4])
+    solver_base_world_position_m = _body_position_from_state(initial_state, _MUJOCO_SOLVER_BASE_BODY_NAME)
+    desired_endpoint_m = initial_tip_position_m
+    cumulative_actual_delta_m: Vector3 = (0.0, 0.0, 0.0)
+    records: list[FastArmEndpointTrajectoryStepRecord] = []
+
+    for step_index in range(1, trajectory_steps + 1):
+        before_state = simulator.snapshot()
+        tip_before_m = extract_fast_arm_tip_site_endpoint_from_state(before_state).position_m
+        qpos_before = tuple(before_state.qpos[:4])
+        desired_endpoint_m = _vector_add(desired_endpoint_m, command_delta_vector_m)
+        command, solver_local_target_m, _, _, target_rejected, target_rejection_reason, target_rejection_message = (
+            _build_endpoint_motion_command_for_world_target(
+                world_target_m=desired_endpoint_m,
+                qpos_before=qpos_before,
+                solver_base_world_position_m=solver_base_world_position_m,
+                metadata={
+                    "preset": "r7-e-p1-fast-arm-endpoint-trajectory-diagnostics",
+                    "command_label": command_label,
+                    "step_index": step_index,
+                    "desired_endpoint_m": desired_endpoint_m,
+                    "target_position_m": desired_endpoint_m,
+                    "commanded_delta_m": command_delta_vector_m,
+                },
+            )
+        )
+        simulator.apply_command(command)
+        error_message: str | None = None
+        try:
+            simulator.step(config.dt_s)
+        except Exception as exc:  # noqa: BLE001
+            error_message = str(exc)
+        after_state = simulator.snapshot()
+        tip_after_m = extract_fast_arm_tip_site_endpoint_from_state(after_state).position_m
+        qpos_after = tuple(after_state.qpos[:4])
+        actual_delta_m = _vector_subtract(tip_after_m, tip_before_m)
+        cumulative_actual_delta_m = _vector_add(cumulative_actual_delta_m, actual_delta_m)
+        status, reason, _, direction_dot = _classify_sanity_result(
+            axis_index=_axis_index(axis),
+            command_delta_m=command_delta_vector_m,
+            actual_delta_m=actual_delta_m,
+            target_rejected=target_rejected,
+            target_rejection_reason=target_rejection_reason,
+            target_rejection_message=target_rejection_message,
+            error_message=error_message,
+        )
+        if direction_dot is not None and direction_dot < _TRAJECTORY_DIRECTION_DOT_THRESHOLD and reason == "aligned":
+            status = "limitation"
+            reason = "alignment_degraded"
+        records.append(
+            FastArmEndpointTrajectoryStepRecord(
+                command_label=command_label,
+                step_index=step_index,
+                desired_endpoint_m=desired_endpoint_m,
+                solver_local_target_m=solver_local_target_m,
+                qpos_before=qpos_before,
+                qpos_after=qpos_after,
+                tip_before_m=tip_before_m,
+                tip_after_m=tip_after_m,
+                actual_delta_m=actual_delta_m,
+                cumulative_actual_delta_m=cumulative_actual_delta_m,
+                command_direction_m=command_direction_m,
+                direction_dot=direction_dot,
+                dominant_axis=_dominant_axis_label(actual_delta_m),
+                status=status,
+                reason=reason,
+                target_rejected=target_rejected,
+                target_rejection_reason=target_rejection_reason,
+                distance_from_solver_base_m=(
+                    _vector_norm_m(solver_local_target_m)
+                    if isinstance(solver_local_target_m, tuple)
+                    else _UNAVAILABLE
+                ),
+            )
+        )
+
+    summary = _summarize_trajectory_records(
+        command_label=command_label,
+        command_delta_vector_m=command_delta_vector_m,
+        command_delta_m_per_step=trajectory_delta_m,
+        records=records,
+    )
+    return FastArmEndpointTrajectoryDiagnostics(
+        command_label=command_label,
+        axis=axis,
+        sign=sign,
+        command_delta_m_per_step=trajectory_delta_m,
+        step_count=trajectory_steps,
+        initial_tip_position_m=initial_tip_position_m,
+        initial_qpos=initial_qpos,
+        records=tuple(records),
+        summary=summary,
+    )
+
+
+def run_fast_arm_endpoint_trajectory_diagnostics(
+    *,
+    trajectory_steps: int = 30,
+    trajectory_delta_m: float = 0.005,
+    config: RuntimeConfig | None = None,
+    model_path: str | Path | None = None,
+    seed_joint_angles_rad: tuple[float, ...] | None = None,
+) -> tuple[FastArmEndpointTrajectoryDiagnostics, ...]:
+    if trajectory_steps <= 0:
+        raise ValueError("trajectory_steps must be positive")
+    if trajectory_delta_m <= 0.0:
+        raise ValueError("trajectory_delta_m must be positive")
+
+    runtime_config = RuntimeConfig() if config is None else config
+    return tuple(
+        _run_fast_arm_endpoint_trajectory_case(
+            axis=axis,
+            sign=sign,
+            trajectory_steps=trajectory_steps,
+            trajectory_delta_m=trajectory_delta_m,
+            config=runtime_config,
+            model_path=model_path,
+            seed_joint_angles_rad=seed_joint_angles_rad,
+        )
+        for axis, sign, _ in _COMMAND_AXES
+    )
 
 
 async def _run_fast_arm_endpoint_motion_sanity_case_async(
@@ -948,8 +1503,15 @@ def run_fast_arm_endpoint_motion_sanity(
 
 
 __all__ = [
+    "FastArmEndpointTrajectoryDiagnostics",
+    "FastArmEndpointTrajectoryStepRecord",
+    "FastArmEndpointTrajectorySummary",
+    "FastArmLocalJacobianColumn",
+    "FastArmLocalJacobianPoseDiagnostics",
     "FastArmJointAxisPerturbationResult",
     "FastArmEndpointMotionSanityResult",
+    "run_fast_arm_endpoint_trajectory_diagnostics",
+    "run_fast_arm_local_jacobian_diagnostics",
     "run_fast_arm_joint_axis_mapping_diagnostics",
     "run_fast_arm_endpoint_motion_sanity",
 ]
