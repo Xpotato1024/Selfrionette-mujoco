@@ -140,7 +140,7 @@ http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 互換 alias:
 
 ```text
-http://127.0.0.1:5173/apps/mujoco-viewer/?ws=ws://127.0.0.1:8766
+http://127.0.0.1:5173/index.html?ws=ws://127.0.0.1:8766
 ```
 
 - browser page URL と WebSocket URL は別概念。
