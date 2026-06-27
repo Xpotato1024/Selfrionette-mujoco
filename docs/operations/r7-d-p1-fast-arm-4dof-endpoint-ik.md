@@ -29,3 +29,30 @@ contact task: deferred
 physical axis finalization: deferred
 actual MuJoCo tip site runtime test: yes
 ```
+
+## R7-D-P2 メモ
+
+`#295` では、`#294` で切り替えた fast_arm 4DOF endpoint IK v0 を操作デモ向けに安定化した。
+
+安定化した範囲:
+
+- current `qpos` を solver seed として一貫して使う
+- repeated input 時に `qpos` が不連続に飛びにくいようにする
+- reverse direction 入力で recovery できるようにする
+- reject / hold / recovery の状態遷移を整理する
+- `qpos[2]` / `qpos[3]` を zero padding に戻さず、solver output として維持する
+- actual MuJoCo `tip` site が desired endpoint 方向へ動くことを維持する
+
+まだ扱わない範囲:
+
+- full robotics-grade IK
+- physical axis finalization
+- contact task
+- real robot output
+
+MuJoCo stability warning について:
+
+- 連続入力や境界付近の操作で `Nan, Inf or huge value in QACC` 系の warning が出る場合がある
+- この warning は backend crash ではなく warning-only として扱う
+- `#295` では warning の完全解消よりも、reject / hold / recovery の安定化を優先する
+- warning が出る条件の整理と後続対応は `#296` / `#297` で継続する

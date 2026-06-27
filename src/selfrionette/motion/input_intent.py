@@ -13,6 +13,11 @@ _KNOWN_TARGET_REJECTION_MESSAGES = {
     "target_position_m is outside the reachable workspace",
     "target_position_m did not converge",
 }
+_TARGET_REJECTION_REASON_BY_MESSAGE = {
+    "target_position_m must remain on the solver plane": "target_plane_mismatch",
+    "target_position_m is outside the reachable workspace": "target_unreachable",
+    "target_position_m did not converge": "target_non_convergence",
+}
 
 
 def _has_non_zero_delta(delta_m: tuple[float, float, float]) -> bool:
@@ -73,6 +78,10 @@ def _is_seed_shape_error(exc: ValueError) -> bool:
     return "seed_joint_angles_rad" in str(exc)
 
 
+def _target_rejection_reason_for_error(exc: ValueError) -> str:
+    return _TARGET_REJECTION_REASON_BY_MESSAGE.get(str(exc), "invalid_target")
+
+
 def _qpos_discontinuity_norm_rad(
     candidate_qpos_rad: Sequence[float],
     current_qpos_rad: Sequence[float],
@@ -106,6 +115,26 @@ def _resolve_target_endpoint_m(intent: InputIntent) -> tuple[float, float, float
         return None
 
     return _coerce_vector3(source_name, desired_endpoint_m)
+
+
+def _candidate_seed_joint_angles_rad(
+    *,
+    current_qpos_rad: tuple[float, ...] | None,
+    explicit_seed_joint_angles_rad: tuple[float, ...] | None,
+) -> tuple[tuple[float, ...] | None, ...]:
+    candidates: list[tuple[float, ...] | None] = []
+    if current_qpos_rad is not None:
+        candidates.append(current_qpos_rad)
+    if explicit_seed_joint_angles_rad is not None and explicit_seed_joint_angles_rad not in candidates:
+        candidates.append(explicit_seed_joint_angles_rad)
+    if current_qpos_rad is not None and len(current_qpos_rad) >= 2:
+        truncated_current_qpos_rad = current_qpos_rad[:2]
+        if truncated_current_qpos_rad not in candidates:
+            candidates.append(truncated_current_qpos_rad)
+    if not candidates:
+        candidates.append(None)
+
+    return tuple(candidates)
 
 
 def _build_motion_command(
@@ -200,34 +229,35 @@ class TargetToJointMotionGenerator:
             raise ValueError("desired_endpoint_m or target_position_m is required for TargetToJointMotionGenerator")
 
         target = TargetCommand(delta_m=intent.target_delta_m) if _has_non_zero_delta(intent.target_delta_m) else None
-        seed_joint_angles_rad = self._current_qpos_rad if self._current_qpos_rad is not None else self._seed_joint_angles_rad
+        seed_joint_angles_candidates_rad = _candidate_seed_joint_angles_rad(
+            current_qpos_rad=self._current_qpos_rad,
+            explicit_seed_joint_angles_rad=self._seed_joint_angles_rad,
+        )
+        last_seed_shape_error: ValueError | None = None
 
-        try:
-            joint = self._ik_solver.solve(
-                desired_endpoint_m,
-                seed_joint_angles_rad=seed_joint_angles_rad,
-            )
-        except ValueError as exc:
-            if self._current_qpos_rad is not None and _is_seed_shape_error(exc):
-                try:
-                    joint = self._ik_solver.solve(
-                        desired_endpoint_m,
-                        seed_joint_angles_rad=self._current_qpos_rad[:2],
-                    )
-                except ValueError as fallback_exc:
-                    exc = fallback_exc
-                else:
-                    exc = None
-
-            if exc is not None:
+        joint = None
+        for candidate_seed_joint_angles_rad in seed_joint_angles_candidates_rad:
+            try:
+                joint = self._ik_solver.solve(
+                    desired_endpoint_m,
+                    seed_joint_angles_rad=candidate_seed_joint_angles_rad,
+                )
+            except ValueError as exc:
+                if _is_seed_shape_error(exc):
+                    last_seed_shape_error = exc
+                    continue
                 if not _is_target_rejection_error(exc):
                     raise
 
                 hold_qpos_rad = self._current_qpos_rad
-                if hold_qpos_rad is None and seed_joint_angles_rad is not None:
-                    hold_qpos_rad = tuple(seed_joint_angles_rad)
+                if hold_qpos_rad is None and candidate_seed_joint_angles_rad is not None:
+                    hold_qpos_rad = tuple(candidate_seed_joint_angles_rad)
 
-                if self._qpos_joint_count is not None and hold_qpos_rad is not None and len(hold_qpos_rad) < self._qpos_joint_count:
+                if (
+                    self._qpos_joint_count is not None
+                    and hold_qpos_rad is not None
+                    and len(hold_qpos_rad) < self._qpos_joint_count
+                ):
                     hold_qpos_rad = hold_qpos_rad + (0.0,) * (self._qpos_joint_count - len(hold_qpos_rad))
 
                 if hold_qpos_rad is None:
@@ -241,11 +271,17 @@ class TargetToJointMotionGenerator:
                     joint=hold_joint,
                     metadata=_build_rejected_metadata(
                         intent.metadata,
-                        reason="invalid_target",
+                        reason=_target_rejection_reason_for_error(exc),
                         rejection_message=str(exc),
                         rejected_desired_endpoint_m=desired_endpoint_m,
                     ),
                 )
+            else:
+                break
+        else:
+            if last_seed_shape_error is not None:
+                raise last_seed_shape_error
+            raise ValueError("seed_joint_angles_rad is required for TargetToJointMotionGenerator")
 
         if self._current_qpos_rad is not None:
             current_qpos_rad = self._current_qpos_rad

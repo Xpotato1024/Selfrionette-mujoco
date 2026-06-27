@@ -212,6 +212,7 @@ def test_viewer_step_loop_rejects_space_shift_boundary_without_crashing() -> Non
     assert rejected_record is not None
     assert rejected_record.motion_command.metadata["target_rejection_reason"] in {
         "invalid_target",
+        "target_unreachable",
         "target_discontinuous",
     }
     assert rejected_record.state.metadata["target_rejected"] is True
@@ -325,6 +326,47 @@ def test_viewer_step_loop_keeps_first_input_qpos_continuous() -> None:
     assert dist(pre_step_state.qpos[:2], post_step_state.qpos[:2]) < 1.0
     assert post_step_state.metadata["source_kind"] == "viewer_keyboard"
     assert "target_rejected" not in post_step_state.metadata
+
+
+def test_viewer_step_loop_keeps_repeated_small_inputs_continuous_and_nonzero_fast_arm_qpos() -> None:
+    clock = _FakeClock()
+    selection = select_runtime_input_source("viewer", steps=3)
+    publisher = RecordingPublisher()
+    viewer_input_source = ViewerInputSource(clock=clock.monotonic)
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        publisher=publisher,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=viewer_input_source,
+    )
+
+    ingest_viewer_control_message(
+        viewer_input_source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=9.0,
+            source_kind="keyboard",
+            keyboard=ViewerControlKeyboardMessage(
+                active_key_codes=("KeyD",),
+                key_state={"KeyD": True},
+                focus_state="focused",
+                zero_state=False,
+            ),
+        ),
+    )
+
+    previous_qpos = plan.pipeline.simulator.snapshot().qpos
+    for _ in range(3):
+        clock.advance(0.01)
+        records = _run_single_viewer_step(plan)
+        state = records[0].state
+
+        assert records[0].motion_command.metadata.get("target_rejected") is not True
+        assert state.metadata["desired_endpoint_m"] == state.target_position_m
+        assert len(state.qpos[:4]) == 4
+        assert state.qpos[2:] != (0.0, 0.0)
+        assert dist(previous_qpos[:4], state.qpos[:4]) < 2.0
+        previous_qpos = state.qpos
 
 
 def test_viewer_step_loop_publishes_active_target_for_keyboard_input() -> None:
