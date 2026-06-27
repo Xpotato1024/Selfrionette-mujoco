@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from selfrionette.input_sources import ReplayInputSource
+from selfrionette.kinematics.fast_arm_endpoint import (
+    FAST_ARM_ENDPOINT_BASE_POSITION_M,
+    FAST_ARM_ENDPOINT_LINK_LENGTHS_M,
+)
 from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
@@ -18,6 +22,7 @@ _DEFAULT_COMMAND_DELTA_M = 0.02
 _BASE_ENDPOINT_SOURCE_INITIAL_TIP = "initial_tip"
 _BASE_ENDPOINT_SOURCE_EXPLICIT = "explicit"
 _BASE_ENDPOINT_SOURCE_UNAVAILABLE = "unavailable"
+_UNAVAILABLE = "unavailable"
 _COMMAND_AXES: tuple[tuple[str, int, Vector3], ...] = (
     ("x", 1, (1.0, 0.0, 0.0)),
     ("x", -1, (-1.0, 0.0, 0.0)),
@@ -73,6 +78,77 @@ def _axis_delta(axis: str, sign: int, delta_m: float) -> Vector3:
     raise ValueError(f"unsupported axis: {axis!r}")
 
 
+def _vector_subtract(lhs_m: Sequence[float], rhs_m: Sequence[float]) -> Vector3:
+    return tuple(float(lhs_m[index]) - float(rhs_m[index]) for index in range(3))
+
+
+def _workspace_summary() -> dict[str, object]:
+    link_lengths_m = tuple(float(length) for length in FAST_ARM_ENDPOINT_LINK_LENGTHS_M)
+    min_radius_m = abs(link_lengths_m[0] - sum(link_lengths_m[1:]))
+    max_radius_m = sum(link_lengths_m)
+    return {
+        "solver_base_position_m": FAST_ARM_ENDPOINT_BASE_POSITION_M,
+        "link_lengths_m": link_lengths_m,
+        "min_radius_m": min_radius_m,
+        "max_radius_m": max_radius_m,
+        "distance_rule": "Euclidean distance from solver_base_position_m must be within min/max radius",
+    }
+
+
+def _target_constraints_summary() -> dict[str, object]:
+    return {
+        "target_rejection_reasons": (
+            "target_unreachable",
+            "target_non_convergence",
+            "target_discontinuous",
+        ),
+        "target_unreachable_message": "target_position_m is outside the reachable workspace",
+        "target_non_convergence_message": "target_position_m did not converge",
+        "last_valid_target_position_m": _UNAVAILABLE,
+    }
+
+
+def _frame_mapping_summary() -> dict[str, object]:
+    return {
+        "command_frame": "command-side endpoint frame",
+        "solver_frame": "FastArmEndpoint solver frame",
+        "mujoco_tip_frame": "MuJoCo world / scene frame",
+        "mapping_status": "not transformed in endpoint_motion_sanity",
+        "known_mujoco_offset": (
+            "fast_arm MJCF places base_link near world z=0.7 "
+            "and sholder_joint_2 has ref=-90"
+        ),
+    }
+
+
+def _diagnose_case(
+    *,
+    distance_from_solver_base_m: float | str,
+    target_rejected: bool,
+    target_rejection_reason: str | None,
+    initial_tip_position_m: Vector3 | None,
+    qpos_before: tuple[float, ...],
+    solver_seed_qpos: tuple[float, ...] | str,
+) -> str:
+    workspace = _workspace_summary()
+    max_radius_m = float(workspace["max_radius_m"])
+    if isinstance(distance_from_solver_base_m, float) and distance_from_solver_base_m > max_radius_m + 1e-9:
+        return "initial_tip_target_outside_solver_reachable_workspace"
+    if target_rejected and target_rejection_reason == "target_unreachable":
+        return "solver_rejected_target_as_unreachable"
+    if target_rejected and target_rejection_reason == "target_non_convergence":
+        return "solver_rejected_target_after_non_convergence"
+    if initial_tip_position_m is not None:
+        initial_tip_to_solver_base_m = _vector_norm_m(
+            _vector_subtract(initial_tip_position_m, FAST_ARM_ENDPOINT_BASE_POSITION_M)
+        )
+        if initial_tip_to_solver_base_m > max_radius_m + 1e-9:
+            return "initial_tip_outside_solver_reachable_workspace"
+    if solver_seed_qpos == _UNAVAILABLE and qpos_before:
+        return "current_qpos_not_used_as_solver_seed_in_runtime_pipeline"
+    return "no_single_cause_identified"
+
+
 @dataclass(frozen=True, slots=True)
 class FastArmEndpointMotionSanityResult:
     axis: str
@@ -99,6 +175,16 @@ class FastArmEndpointMotionSanityResult:
     target_rejection_reason: str | None = None
     target_rejection_message: str | None = None
     error_message: str | None = None
+    solver_input_endpoint_m: Vector3 | None = None
+    solver_seed_qpos: tuple[float, ...] | str = _UNAVAILABLE
+    solver_result_qpos: tuple[float, ...] | str = _UNAVAILABLE
+    reachable_workspace_summary: dict[str, object] | str = _UNAVAILABLE
+    distance_from_solver_base_m: float | str = _UNAVAILABLE
+    target_constraints_summary: dict[str, object] | str = _UNAVAILABLE
+    frame_mapping_summary: dict[str, object] | str = _UNAVAILABLE
+    diagnosis: str = _UNAVAILABLE
+    rejected_desired_endpoint_m: Vector3 | str = _UNAVAILABLE
+    last_valid_target_position_m: Vector3 | str = _UNAVAILABLE
 
 
 def _build_command_frame(
@@ -176,6 +262,18 @@ def _unavailable_result(
         desired_endpoint_source=None,
         target_rejected=False,
         error_message=error_message,
+        solver_input_endpoint_m=desired_endpoint_m,
+        solver_seed_qpos=_UNAVAILABLE,
+        solver_result_qpos=_UNAVAILABLE,
+        reachable_workspace_summary=_workspace_summary(),
+        distance_from_solver_base_m=(
+            _UNAVAILABLE
+            if desired_endpoint_m is None
+            else _vector_norm_m(_vector_subtract(desired_endpoint_m, FAST_ARM_ENDPOINT_BASE_POSITION_M))
+        ),
+        target_constraints_summary=_target_constraints_summary(),
+        frame_mapping_summary=_frame_mapping_summary(),
+        diagnosis=reason,
     )
 
 
@@ -339,6 +437,7 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
     target_rejection_reason = None
     target_rejection_message = None
     desired_endpoint_source = None
+    rejected_desired_endpoint_m: Vector3 | str = _UNAVAILABLE
     if last_command is not None:
         try:
             resolved_desired_endpoint = resolve_desired_endpoint_from_motion_command(last_command)
@@ -349,6 +448,12 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         if target_rejected:
             target_rejection_reason = str(last_command.metadata.get("target_rejection_reason", "target_rejected"))
             target_rejection_message = str(last_command.metadata.get("target_rejection_message", target_rejection_reason))
+            rejected_desired_endpoint = last_command.metadata.get("rejected_desired_endpoint_m")
+            if rejected_desired_endpoint is not None:
+                rejected_desired_endpoint_m = _coerce_vector3(
+                    "rejected_desired_endpoint_m",
+                    rejected_desired_endpoint,
+                )
 
     status, reason, direction_matches, direction_dot = _classify_sanity_result(
         axis_index=("xyz".index(axis)),
@@ -358,6 +463,23 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         target_rejection_reason=target_rejection_reason,
         target_rejection_message=target_rejection_message,
         error_message=error_message,
+    )
+    solver_input_endpoint_m = frame.metadata["desired_endpoint_m"]  # type: ignore[assignment]
+    solver_result_qpos: tuple[float, ...] | str = (
+        tuple(last_command.joint.joint_angles_rad[:4])
+        if last_command is not None and last_command.joint is not None
+        else _UNAVAILABLE
+    )
+    distance_from_solver_base_m = _vector_norm_m(
+        _vector_subtract(solver_input_endpoint_m, FAST_ARM_ENDPOINT_BASE_POSITION_M)
+    )
+    diagnosis = _diagnose_case(
+        distance_from_solver_base_m=distance_from_solver_base_m,
+        target_rejected=target_rejected,
+        target_rejection_reason=target_rejection_reason,
+        initial_tip_position_m=initial_tip_position_m,
+        qpos_before=qpos_before,
+        solver_seed_qpos=_UNAVAILABLE,
     )
 
     return FastArmEndpointMotionSanityResult(
@@ -385,6 +507,16 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         target_rejection_reason=target_rejection_reason,
         target_rejection_message=target_rejection_message,
         error_message=error_message,
+        solver_input_endpoint_m=solver_input_endpoint_m,
+        solver_seed_qpos=_UNAVAILABLE,
+        solver_result_qpos=solver_result_qpos,
+        reachable_workspace_summary=_workspace_summary(),
+        distance_from_solver_base_m=distance_from_solver_base_m,
+        target_constraints_summary=_target_constraints_summary(),
+        frame_mapping_summary=_frame_mapping_summary(),
+        diagnosis=diagnosis,
+        rejected_desired_endpoint_m=rejected_desired_endpoint_m,
+        last_valid_target_position_m=_UNAVAILABLE,
     )
 
 
