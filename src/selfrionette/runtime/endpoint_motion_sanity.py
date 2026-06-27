@@ -10,12 +10,14 @@ from selfrionette.input_sources import ReplayInputSource
 from selfrionette.kinematics.fast_arm_endpoint import (
     FAST_ARM_ENDPOINT_BASE_POSITION_M,
     FAST_ARM_ENDPOINT_LINK_LENGTHS_M,
+    FastArmEndpointForwardKinematicsSolver,
+    FastArmEndpointInverseKinematicsSolver,
 )
 from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
-from selfrionette.schemas import MuJoCoState, RawInputFrame, Vector3
+from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, RawInputFrame, Vector3
 from selfrionette.transport.stubs import NoOpStatePublisher
 
 _DEFAULT_COMMAND_DELTA_M = 0.02
@@ -23,6 +25,8 @@ _BASE_ENDPOINT_SOURCE_INITIAL_TIP = "initial_tip"
 _BASE_ENDPOINT_SOURCE_EXPLICIT = "explicit"
 _BASE_ENDPOINT_SOURCE_UNAVAILABLE = "unavailable"
 _UNAVAILABLE = "unavailable"
+_MUJOCO_SOLVER_BASE_BODY_NAME = "base_link"
+_MUJOCO_QPOS_REF_MINUS_90_RAD = -math.pi / 2.0
 _COMMAND_AXES: tuple[tuple[str, int, Vector3], ...] = (
     ("x", 1, (1.0, 0.0, 0.0)),
     ("x", -1, (-1.0, 0.0, 0.0)),
@@ -82,6 +86,47 @@ def _vector_subtract(lhs_m: Sequence[float], rhs_m: Sequence[float]) -> Vector3:
     return tuple(float(lhs_m[index]) - float(rhs_m[index]) for index in range(3))
 
 
+def _vector_add(lhs_m: Sequence[float], rhs_m: Sequence[float]) -> Vector3:
+    return tuple(float(lhs_m[index]) + float(rhs_m[index]) for index in range(3))
+
+
+def _body_position_from_state(state: MuJoCoState, body_name: str) -> Vector3 | None:
+    for body in state.bodies:
+        if body.name == body_name:
+            return body.position_m
+    return None
+
+
+def _mujoco_qpos_to_solver_joint_angles(qpos_rad: Sequence[float]) -> tuple[float, ...]:
+    qpos = tuple(float(value) for value in qpos_rad[:4])
+    if len(qpos) != 4:
+        return qpos
+    return (
+        qpos[0],
+        qpos[1] - _MUJOCO_QPOS_REF_MINUS_90_RAD,
+        qpos[2],
+        qpos[3],
+    )
+
+
+def _solver_joint_angles_to_mujoco_qpos(
+    solver_joint_angles_rad: Sequence[float],
+    *,
+    current_qpos_rad: Sequence[float],
+) -> tuple[float, ...]:
+    solver_qpos = tuple(float(value) for value in solver_joint_angles_rad[:4])
+    current_qpos = tuple(float(value) for value in current_qpos_rad[:4])
+    if len(solver_qpos) != 4 or len(current_qpos) != 4:
+        return solver_qpos
+
+    return (
+        current_qpos[0],
+        solver_qpos[1] + _MUJOCO_QPOS_REF_MINUS_90_RAD,
+        current_qpos[2],
+        current_qpos[3],
+    )
+
+
 def _workspace_summary() -> dict[str, object]:
     link_lengths_m = tuple(float(length) for length in FAST_ARM_ENDPOINT_LINK_LENGTHS_M)
     min_radius_m = abs(link_lengths_m[0] - sum(link_lengths_m[1:]))
@@ -111,13 +156,23 @@ def _target_constraints_summary() -> dict[str, object]:
 def _frame_mapping_summary() -> dict[str, object]:
     return {
         "command_frame": "command-side endpoint frame",
-        "solver_frame": "FastArmEndpoint solver frame",
+        "solver_frame": f"FastArmEndpoint local frame rooted at MuJoCo body '{_MUJOCO_SOLVER_BASE_BODY_NAME}'",
         "mujoco_tip_frame": "MuJoCo world / scene frame",
-        "mapping_status": "not transformed in endpoint_motion_sanity",
+        "mapping_status": "world target is transformed to solver local target",
         "known_mujoco_offset": (
             "fast_arm MJCF places base_link near world z=0.7 "
             "and sholder_joint_2 has ref=-90"
         ),
+    }
+
+
+def _qpos_ref_summary() -> dict[str, object]:
+    return {
+        "mapping_status": "partial_xz_adapter",
+        "mujoco_to_solver": "solver_q1 = mujoco_qpos1 + pi/2",
+        "solver_to_mujoco": "mujoco_qpos1 = solver_q1 - pi/2",
+        "held_joints": ("qpos0", "qpos2", "qpos3"),
+        "limitation": "q0/q2/q3 MuJoCo axis mapping is diagnostic-only and held current in this sanity helper",
     }
 
 
@@ -185,6 +240,18 @@ class FastArmEndpointMotionSanityResult:
     diagnosis: str = _UNAVAILABLE
     rejected_desired_endpoint_m: Vector3 | str = _UNAVAILABLE
     last_valid_target_position_m: Vector3 | str = _UNAVAILABLE
+    mujoco_base_link_position_m: Vector3 | str = _UNAVAILABLE
+    mujoco_base_link_frame: str = _UNAVAILABLE
+    mujoco_tip_position_m: Vector3 | str = _UNAVAILABLE
+    tip_relative_to_base_link_m: Vector3 | str = _UNAVAILABLE
+    tip_relative_to_solver_base_m: Vector3 | str = _UNAVAILABLE
+    solver_base_world_position_m: Vector3 | str = _UNAVAILABLE
+    solver_local_target_m: Vector3 | str = _UNAVAILABLE
+    world_target_m: Vector3 | str = _UNAVAILABLE
+    frame_transform_status: str = _UNAVAILABLE
+    qpos_ref_summary: dict[str, object] | str = _UNAVAILABLE
+    solver_fk_endpoint_m: Vector3 | str = _UNAVAILABLE
+    transformed_solver_fk_world_m: Vector3 | str = _UNAVAILABLE
 
 
 def _build_command_frame(
@@ -274,6 +341,7 @@ def _unavailable_result(
         target_constraints_summary=_target_constraints_summary(),
         frame_mapping_summary=_frame_mapping_summary(),
         diagnosis=reason,
+        qpos_ref_summary=_qpos_ref_summary(),
     )
 
 
@@ -366,6 +434,8 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         initial_tip_position_m = None
 
     qpos_before = tuple(initial_state.qpos[:4])
+    solver_seed_qpos = _mujoco_qpos_to_solver_joint_angles(qpos_before)
+    mujoco_base_link_position_m = _body_position_from_state(initial_state, _MUJOCO_SOLVER_BASE_BODY_NAME)
     if base_desired_endpoint_m is None:
         if initial_tip_position_m is None:
             return _unavailable_result(
@@ -394,11 +464,98 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         command_label=command_label,
     )
     pipeline.input_source = ReplayInputSource((frame,))
-
-    final_state: MuJoCoState | None = None
+    solver_base_world_position_m = mujoco_base_link_position_m
+    world_target_m = frame.metadata["desired_endpoint_m"]  # type: ignore[assignment]
+    solver_local_target_m: Vector3 | str = _UNAVAILABLE
+    solver_result_qpos: tuple[float, ...] | str = _UNAVAILABLE
+    solver_fk_endpoint_m: Vector3 | str = _UNAVAILABLE
+    transformed_solver_fk_world_m: Vector3 | str = _UNAVAILABLE
+    frame_transform_status = "unavailable"
+    target_rejected = False
+    target_rejection_reason = None
+    target_rejection_message = None
+    rejected_desired_endpoint_m: Vector3 | str = _UNAVAILABLE
     error_message: str | None = None
+
+    if solver_base_world_position_m is None:
+        command = MotionCommand(
+            timestamp_s=0.0,
+            joint=JointCommand(joint_angles_rad=qpos_before),
+            metadata={
+                **frame.metadata,
+                "target_rejected": True,
+                "target_rejection_reason": "solver_base_unavailable",
+                "target_rejection_message": f"missing MuJoCo body {_MUJOCO_SOLVER_BASE_BODY_NAME!r}",
+                "rejected_desired_endpoint_m": world_target_m,
+            },
+        )
+        target_rejected = True
+        target_rejection_reason = "solver_base_unavailable"
+        target_rejection_message = f"missing MuJoCo body {_MUJOCO_SOLVER_BASE_BODY_NAME!r}"
+        rejected_desired_endpoint_m = world_target_m
+    else:
+        solver_local_target_m = _vector_subtract(world_target_m, solver_base_world_position_m)
+        frame_transform_status = "world_minus_mujoco_base_link"
+        solver = FastArmEndpointInverseKinematicsSolver()
+        fk_solver = FastArmEndpointForwardKinematicsSolver()
+        try:
+            solver_joint_command = solver.solve(
+                solver_local_target_m,
+                seed_joint_angles_rad=solver_seed_qpos if len(solver_seed_qpos) == 4 else None,
+            )
+            solver_result_qpos = tuple(solver_joint_command.joint_angles_rad[:4])
+            solver_fk_endpoint_m = fk_solver.forward(solver_joint_command.joint_angles_rad[:4])
+            transformed_solver_fk_world_m = _vector_add(solver_fk_endpoint_m, solver_base_world_position_m)
+            mujoco_qpos_command = _solver_joint_angles_to_mujoco_qpos(
+                solver_joint_command.joint_angles_rad,
+                current_qpos_rad=qpos_before,
+            )
+            command = MotionCommand(
+                timestamp_s=0.0,
+                joint=JointCommand(joint_angles_rad=mujoco_qpos_command),
+                metadata={
+                    **frame.metadata,
+                    "solver_input_endpoint_m": solver_local_target_m,
+                    "solver_seed_qpos": solver_seed_qpos,
+                    "solver_result_qpos": solver_result_qpos,
+                    "solver_base_world_position_m": solver_base_world_position_m,
+                    "world_target_m": world_target_m,
+                    "frame_transform_status": frame_transform_status,
+                    "qpos_ref_summary": _qpos_ref_summary(),
+                },
+            )
+        except ValueError as exc:
+            target_rejected = True
+            target_rejection_message = str(exc)
+            target_rejection_reason = (
+                "target_unreachable"
+                if target_rejection_message == "target_position_m is outside the reachable workspace"
+                else "target_non_convergence"
+            )
+            rejected_desired_endpoint_m = world_target_m
+            command = MotionCommand(
+                timestamp_s=0.0,
+                joint=JointCommand(joint_angles_rad=qpos_before),
+                metadata={
+                    **frame.metadata,
+                    "target_rejected": True,
+                    "target_rejection_reason": target_rejection_reason,
+                    "target_rejection_message": target_rejection_message,
+                    "rejected_desired_endpoint_m": rejected_desired_endpoint_m,
+                    "solver_input_endpoint_m": solver_local_target_m,
+                    "solver_seed_qpos": solver_seed_qpos,
+                    "solver_base_world_position_m": solver_base_world_position_m,
+                    "world_target_m": world_target_m,
+                    "frame_transform_status": frame_transform_status,
+                    "qpos_ref_summary": _qpos_ref_summary(),
+                },
+            )
+
+    pipeline.simulator.apply_command(command)
+    final_state: MuJoCoState | None = None
     try:
-        final_state = await pipeline.run_once(dt_s=config.dt_s)
+        pipeline.simulator.step(config.dt_s)
+        final_state = pipeline.simulator.snapshot()
     except Exception as exc:  # noqa: BLE001
         error_message = str(exc)
 
@@ -433,18 +590,14 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         )
 
     last_command = pipeline.simulator.last_command
-    target_rejected = False
-    target_rejection_reason = None
-    target_rejection_message = None
     desired_endpoint_source = None
-    rejected_desired_endpoint_m: Vector3 | str = _UNAVAILABLE
     if last_command is not None:
         try:
             resolved_desired_endpoint = resolve_desired_endpoint_from_motion_command(last_command)
             desired_endpoint_source = resolved_desired_endpoint.source
         except ValueError:
             desired_endpoint_source = None
-        target_rejected = bool(last_command.metadata.get("target_rejected", False))
+        target_rejected = bool(last_command.metadata.get("target_rejected", target_rejected))
         if target_rejected:
             target_rejection_reason = str(last_command.metadata.get("target_rejection_reason", "target_rejected"))
             target_rejection_message = str(last_command.metadata.get("target_rejection_message", target_rejection_reason))
@@ -464,14 +617,11 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         target_rejection_message=target_rejection_message,
         error_message=error_message,
     )
-    solver_input_endpoint_m = frame.metadata["desired_endpoint_m"]  # type: ignore[assignment]
-    solver_result_qpos: tuple[float, ...] | str = (
-        tuple(last_command.joint.joint_angles_rad[:4])
-        if last_command is not None and last_command.joint is not None
+    solver_input_endpoint_m = solver_local_target_m if isinstance(solver_local_target_m, tuple) else None
+    distance_from_solver_base_m = (
+        _vector_norm_m(solver_local_target_m)
+        if isinstance(solver_local_target_m, tuple)
         else _UNAVAILABLE
-    )
-    distance_from_solver_base_m = _vector_norm_m(
-        _vector_subtract(solver_input_endpoint_m, FAST_ARM_ENDPOINT_BASE_POSITION_M)
     )
     diagnosis = _diagnose_case(
         distance_from_solver_base_m=distance_from_solver_base_m,
@@ -479,8 +629,10 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         target_rejection_reason=target_rejection_reason,
         initial_tip_position_m=initial_tip_position_m,
         qpos_before=qpos_before,
-        solver_seed_qpos=_UNAVAILABLE,
+        solver_seed_qpos=solver_seed_qpos,
     )
+    if not target_rejected and isinstance(actual_delta_m, tuple):
+        diagnosis = "world_target_transformed_to_mujoco_base_link_solver_frame"
 
     return FastArmEndpointMotionSanityResult(
         axis=axis,
@@ -508,7 +660,7 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         target_rejection_message=target_rejection_message,
         error_message=error_message,
         solver_input_endpoint_m=solver_input_endpoint_m,
-        solver_seed_qpos=_UNAVAILABLE,
+        solver_seed_qpos=solver_seed_qpos,
         solver_result_qpos=solver_result_qpos,
         reachable_workspace_summary=_workspace_summary(),
         distance_from_solver_base_m=distance_from_solver_base_m,
@@ -517,6 +669,26 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
         diagnosis=diagnosis,
         rejected_desired_endpoint_m=rejected_desired_endpoint_m,
         last_valid_target_position_m=_UNAVAILABLE,
+        mujoco_base_link_position_m=mujoco_base_link_position_m or _UNAVAILABLE,
+        mujoco_base_link_frame="MuJoCo world / scene frame",
+        mujoco_tip_position_m=initial_tip_position_m or _UNAVAILABLE,
+        tip_relative_to_base_link_m=(
+            _vector_subtract(initial_tip_position_m, mujoco_base_link_position_m)
+            if initial_tip_position_m is not None and mujoco_base_link_position_m is not None
+            else _UNAVAILABLE
+        ),
+        tip_relative_to_solver_base_m=(
+            _vector_subtract(initial_tip_position_m, solver_base_world_position_m)
+            if initial_tip_position_m is not None and solver_base_world_position_m is not None
+            else _UNAVAILABLE
+        ),
+        solver_base_world_position_m=solver_base_world_position_m or _UNAVAILABLE,
+        solver_local_target_m=solver_local_target_m,
+        world_target_m=world_target_m,
+        frame_transform_status=frame_transform_status,
+        qpos_ref_summary=_qpos_ref_summary(),
+        solver_fk_endpoint_m=solver_fk_endpoint_m,
+        transformed_solver_fk_world_m=transformed_solver_fk_world_m,
     )
 
 

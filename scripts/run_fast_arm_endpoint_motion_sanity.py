@@ -115,6 +115,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"frame_mapping_summary={_format_value(result.frame_mapping_summary)}",
                 f"rejected_desired_endpoint_m={_format_value(result.rejected_desired_endpoint_m)}",
                 f"last_valid_target_position_m={_format_value(result.last_valid_target_position_m)}",
+                f"mujoco_base_link_position_m={_format_value(result.mujoco_base_link_position_m)}",
+                f"mujoco_base_link_frame={result.mujoco_base_link_frame}",
+                f"mujoco_tip_position_m={_format_value(result.mujoco_tip_position_m)}",
+                f"tip_relative_to_base_link_m={_format_value(result.tip_relative_to_base_link_m)}",
+                f"tip_relative_to_solver_base_m={_format_value(result.tip_relative_to_solver_base_m)}",
+                f"solver_base_world_position_m={_format_value(result.solver_base_world_position_m)}",
+                f"solver_local_target_m={_format_value(result.solver_local_target_m)}",
+                f"world_target_m={_format_value(result.world_target_m)}",
+                f"frame_transform_status={result.frame_transform_status}",
+                f"qpos_ref_summary={_format_value(result.qpos_ref_summary)}",
+                f"solver_fk_endpoint_m={_format_value(result.solver_fk_endpoint_m)}",
+                f"transformed_solver_fk_world_m={_format_value(result.transformed_solver_fk_world_m)}",
                 f"diagnosis={result.diagnosis}",
             )
         print(" ".join(fields))
