@@ -174,3 +174,9 @@ R6-A-P4 freezes the handoff contract for R6-B:
   `target_position_m`.
 - `endpoint_evaluation` is emitted only when runtime/backend evaluation data
   is available. Existing payload consumers may ignore it.
+- Runtime/backend may also carry target rejection diagnostics in payload
+  `metadata`, including `runtime_input_safety_applied`, `target_status`,
+  `target_rejected`, `target_rejection_reason`, `target_rejection_message`,
+  and `rejected_desired_endpoint_m`.
+- When a frame is held, the top-level `target_position_m` remains the last
+  valid target feedback for read-only viewer display.

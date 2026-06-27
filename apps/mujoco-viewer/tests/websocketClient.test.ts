@@ -109,6 +109,34 @@ const INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_FEEDBACK_TARGET: TransportPayloadV0 = {
   endpoint_evaluation: VALID_ENDPOINT_EVALUATION,
 };
 
+const INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_REJECTED_TARGET: TransportPayloadV0 = {
+  ...INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_NULL_TARGET,
+  target_position_m: [0.24, 0.5, 0.75],
+  metadata: {
+    source_kind: "keyboard",
+    source_active: true,
+    command_age_ms: 22,
+    stale_reason: null,
+    runtime_input_safety_applied: true,
+    target_status: "held",
+    target_rejected: true,
+    target_rejection_reason: "target_unreachable",
+    target_rejection_message: "target_position_m is outside the reachable workspace",
+    rejected_desired_endpoint_m: [0.95, 0.5, 0.75],
+    target_position_m: [0.24, 0.5, 0.75],
+    viewer_control_message: {
+      viewer_source_kind: "keyboard",
+      sequence: 5,
+      keyboard: {
+        active_key_codes: ["KeyD"],
+        key_state: { KeyD: true },
+        focus_state: "focused",
+        zero_state: false,
+      },
+    },
+  },
+};
+
 const VIEWER_OVERLAY_KEYBOARD_PAYLOAD_FIXTURE: TransportPayloadV0 = {
   ...TRANSPORT_PAYLOAD_FIXTURE,
   metadata: {
@@ -313,6 +341,15 @@ function testBuildProductViewerInputOverlayStateFormatsKeyboardPayload(): void {
     staleReason: null,
     viewerSourceKind: "keyboard",
     sequence: 4,
+    runtimeInputSafetyApplied: null,
+    targetStatus: null,
+    targetRejected: null,
+    targetRejectionReason: null,
+    targetRejectionMessage: null,
+    rejectedDesiredEndpointM: null,
+    lastValidTargetPositionM: null,
+    endpointEvaluationState: "available",
+    endpointEvaluationUnavailableReason: null,
     keyboardActiveKeyCodes: ["KeyW", "KeyD"],
     keyboardFocusState: "focused",
     keyboardZeroState: false,
@@ -347,6 +384,15 @@ function testBuildProductViewerInputOverlayStateFormatsGamepadPayloadAndFallsBac
     staleReason: "command_age_ms_exceeded_timeout_250",
     viewerSourceKind: "gamepad",
     sequence: 19,
+    runtimeInputSafetyApplied: null,
+    targetStatus: null,
+    targetRejected: null,
+    targetRejectionReason: null,
+    targetRejectionMessage: null,
+    rejectedDesiredEndpointM: null,
+    lastValidTargetPositionM: null,
+    endpointEvaluationState: "available",
+    endpointEvaluationUnavailableReason: null,
     keyboardActiveKeyCodes: [],
     keyboardFocusState: null,
     keyboardZeroState: null,
@@ -413,6 +459,15 @@ function testBuildProductViewerInputOverlayStateFallsBackSafelyWhenMetadataIsMal
   assert.equal(overlay.staleReason, null);
   assert.equal(overlay.viewerSourceKind, null);
   assert.equal(overlay.sequence, null);
+  assert.equal(overlay.runtimeInputSafetyApplied, null);
+  assert.equal(overlay.targetStatus, null);
+  assert.equal(overlay.targetRejected, null);
+  assert.equal(overlay.targetRejectionReason, null);
+  assert.equal(overlay.targetRejectionMessage, null);
+  assert.equal(overlay.rejectedDesiredEndpointM, null);
+  assert.equal(overlay.lastValidTargetPositionM, null);
+  assert.equal(overlay.endpointEvaluationState, "available");
+  assert.equal(overlay.endpointEvaluationUnavailableReason, null);
   assert.deepEqual(overlay.keyboardActiveKeyCodes, ["KeyA"]);
   assert.deepEqual(overlay.keyboardKeyState, {
     KeyA: true,
@@ -426,6 +481,92 @@ function testBuildProductViewerInputOverlayStateFallsBackSafelyWhenMetadataIsMal
   assert.deepEqual(overlay.gamepadButtons, [{ pressed: true, value: null }]);
   assert.equal(overlay.gamepadStale, null);
   assert.equal(overlay.gamepadZeroState, null);
+}
+
+function testBuildProductViewerInputOverlayStateHandlesEmptyMetadataAndMissingEndpointEvaluation(): void {
+  const payload = parseTransportPayloadV0Message(
+    JSON.stringify({
+      ...TRANSPORT_PAYLOAD_FIXTURE,
+      metadata: {},
+      endpoint_evaluation: undefined,
+      target_position_m: null,
+    }),
+  );
+  const overlay = buildProductViewerInputOverlayState(payload);
+
+  assertCondition(overlay !== null, "overlay should still be created");
+  assert.equal(overlay.sourceKind, "n/a");
+  assert.equal(overlay.runtimeInputSafetyApplied, null);
+  assert.equal(overlay.targetStatus, null);
+  assert.equal(overlay.targetRejected, null);
+  assert.equal(overlay.targetRejectionReason, null);
+  assert.equal(overlay.targetRejectionMessage, null);
+  assert.equal(overlay.rejectedDesiredEndpointM, null);
+  assert.equal(overlay.lastValidTargetPositionM, null);
+  assert.equal(overlay.endpointEvaluationState, "missing");
+  assert.equal(overlay.endpointEvaluationUnavailableReason, "endpoint_evaluation missing from payload");
+}
+
+function testBuildProductViewerInputOverlayStateMarksMalformedEndpointEvaluationAsUnavailable(): void {
+  const payload = parseTransportPayloadV0Message(
+    JSON.stringify({
+      ...TRANSPORT_PAYLOAD_FIXTURE,
+      endpoint_evaluation: {
+        ...VALID_ENDPOINT_EVALUATION,
+        desired_to_fk_error_norm_m: "bad",
+      },
+    }),
+  );
+  const overlay = buildProductViewerInputOverlayState(payload);
+
+  assertCondition(overlay !== null, "overlay should still be created");
+  assert.equal(overlay.endpointEvaluationState, "malformed");
+  assert.equal(overlay.endpointEvaluationUnavailableReason, "endpoint_evaluation present but failed validation");
+}
+
+function testBuildProductViewerInputOverlayStateShowsRejectedTargetDiagnosticsAndClearsOnAcceptedPayload(): void {
+  const rejectedPayload = parseTransportPayloadV0Message(JSON.stringify(INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_REJECTED_TARGET));
+  const rejectedOverlay = buildProductViewerInputOverlayState(rejectedPayload);
+
+  assertCondition(rejectedOverlay !== null, "rejected overlay should parse");
+  assert.equal(rejectedOverlay.runtimeInputSafetyApplied, true);
+  assert.equal(rejectedOverlay.targetStatus, "held");
+  assert.equal(rejectedOverlay.targetRejected, true);
+  assert.equal(rejectedOverlay.targetRejectionReason, "target_unreachable");
+  assert.equal(
+    rejectedOverlay.targetRejectionMessage,
+    "target_position_m is outside the reachable workspace",
+  );
+  assert.deepEqual(rejectedOverlay.rejectedDesiredEndpointM, [0.95, 0.5, 0.75]);
+  assert.deepEqual(rejectedOverlay.lastValidTargetPositionM, [0.24, 0.5, 0.75]);
+  assert.equal(rejectedOverlay.endpointEvaluationState, "missing");
+  assert.equal(
+    rejectedOverlay.endpointEvaluationUnavailableReason,
+    "endpoint_evaluation withheld on rejected target",
+  );
+  assert.match(formatInputOverlayText(rejectedOverlay), /target rejection reason: target_unreachable/);
+  assert.match(
+    formatInputOverlayText(rejectedOverlay),
+    /target rejection message: target_position_m is outside the reachable workspace/,
+  );
+  assert.match(formatInputOverlayText(rejectedOverlay), /last valid target_m: \[0\.2400, 0\.5000, 0\.7500\]/);
+
+  const acceptedPayload = parseTransportPayloadV0Message(JSON.stringify(INPUT_DRIVEN_PAYLOAD_FIXTURE_WITH_FEEDBACK_TARGET));
+  const acceptedOverlay = buildProductViewerInputOverlayState(acceptedPayload);
+
+  assertCondition(acceptedOverlay !== null, "accepted overlay should parse");
+  assert.equal(acceptedOverlay.runtimeInputSafetyApplied, null);
+  assert.equal(acceptedOverlay.targetStatus, "accepted");
+  assert.equal(acceptedOverlay.targetRejected, null);
+  assert.equal(acceptedOverlay.targetRejectionReason, null);
+  assert.equal(acceptedOverlay.targetRejectionMessage, null);
+  assert.equal(acceptedOverlay.rejectedDesiredEndpointM, null);
+  assert.deepEqual(acceptedOverlay.lastValidTargetPositionM, [0.24, 0.5, 0.75]);
+  assert.equal(acceptedOverlay.endpointEvaluationState, "available");
+  assert.equal(acceptedOverlay.endpointEvaluationUnavailableReason, null);
+  assert.match(formatInputOverlayText(acceptedOverlay), /target rejected: none/);
+  assert.match(formatInputOverlayText(acceptedOverlay), /target status: accepted/);
+  assert.match(formatInputOverlayText(acceptedOverlay), /endpoint evaluation: available/);
 }
 
 class FakeWebSocket implements ViewerWebSocketLike {
@@ -675,6 +816,9 @@ testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithFeedbackTargetA
 testBuildProductViewerInputOverlayStateFormatsKeyboardPayload();
 testBuildProductViewerInputOverlayStateFormatsGamepadPayloadAndFallsBackSafely();
 testBuildProductViewerInputOverlayStateFallsBackSafelyWhenMetadataIsMalformed();
+testBuildProductViewerInputOverlayStateHandlesEmptyMetadataAndMissingEndpointEvaluation();
+testBuildProductViewerInputOverlayStateMarksMalformedEndpointEvaluationAsUnavailable();
+testBuildProductViewerInputOverlayStateShowsRejectedTargetDiagnosticsAndClearsOnAcceptedPayload();
 testParseTransportPayloadV0MessageRejectsInvalidJson();
 testParseTransportPayloadV0MessageRejectsInvalidVersion();
 testParseTransportPayloadV0MessageRejectsMissingRequiredFields();

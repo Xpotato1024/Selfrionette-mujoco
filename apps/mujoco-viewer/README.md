@@ -14,6 +14,7 @@
 - MuJoCo model loading: browser-side source of truth ではない
 - `public/fixtures/fast_arm_sweep_x_qpos.json`: reference path only
 - endpoint evaluation overlay: read-only diagnostic
+- input overlay: read-only source state plus target rejection / hold metadata
 
 ## 参照用の検証コマンド
 

@@ -30,6 +30,14 @@ metadata として扱い、offline の programmed_target / replay / noop は
 deterministic な `0` を emit してよい。R6-L の browser / live sources は
 age と stale metadata を source 側で emit する。
 
+## overlay diagnostics
+
+- viewer overlay で `runtime_input_safety_applied`, `target_status`,
+  `target_rejected`, `target_rejection_reason`, `target_rejection_message`,
+  `rejected_desired_endpoint_m`, `target_position_m` を read-only で読む。
+- accepted frame では rejection fields は `none` / `n/a` に戻る。
+- missing metadata でも viewer parser は crash しない。
+
 ## rules
 
 - これらは optional metadata であり、既存 payload の parse を壊さない
