@@ -43,6 +43,7 @@ Do not create or use `doc/`.
 | R7-D-P3 fast_arm endpoint command check procedure | `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | no-hardware manual smoke for endpoint command, qpos, reject / hold / recovery, and MuJoCo warning handling |
 | R7-E-P1 fast_arm endpoint motion sanity | `docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md` | gate before cube task; x / y / z small command direction check and pass / rejected / limitation recording |
 | R7-E-P1 initial-tip workspace diagnostics | `docs/operations/r7-e-p1-initial-tip-workspace-diagnostics.md` | #311 follow-up; backend numeric diagnosis for initial tip, solver reachable workspace, qpos, and MuJoCo tip alignment before cube task |
+| R7-E-P1 solver / MuJoCo frame alignment | `docs/operations/r7-e-p1-solver-mujoco-frame-alignment.md` | #313 follow-up; selected `base_link` solver base, world-to-local target transform, partial qpos reference adapter, and updated endpoint sanity results |
 | R7-D-P4 fast_arm IK / FK completion audit | `docs/operations/r7-d-completion-audit.md` | R7-D 全体の completion audit と parent #150 の close-readiness 条件を固定する |
 | Runtime input source registry | `docs/contracts/runtime-input-source-registry.md` | runtime input source selection contract |
 | R6-K-P1 runtime input source registry | `docs/operations/r6-k-p1-runtime-input-source-registry.md` | runtime input source registry operation note |
