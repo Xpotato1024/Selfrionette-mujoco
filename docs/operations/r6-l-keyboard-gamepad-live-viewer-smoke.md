@@ -75,15 +75,17 @@ Notes:
 ```powershell
 cd apps/mujoco-viewer
 npm ci
-npm run browser:build
-python -m http.server 5173
+npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
 Expected URL:
 
 ```text
-http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
+http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
+
+`/apps/mujoco-viewer/` alone is the disconnected viewer. The live smoke URL
+must include `websocketUrl=ws://127.0.0.1:8766`.
 
 ## Keyboard Smoke Steps
 

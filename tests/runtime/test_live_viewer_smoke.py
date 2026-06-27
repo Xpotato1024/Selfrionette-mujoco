@@ -24,7 +24,7 @@ def test_live_viewer_smoke_endpoint_helper_uses_loopback_endpoint() -> None:
 def test_live_viewer_smoke_viewer_url_helper_uses_browser_viewer_url() -> None:
     assert (
         build_live_viewer_smoke_viewer_url("127.0.0.1", 8766)
-        == "apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766"
+        == "apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766"
     )
 
 
@@ -32,7 +32,7 @@ def test_live_viewer_smoke_report_lines_include_endpoint_and_viewer_url() -> Non
     lines = build_live_viewer_smoke_report_lines("127.0.0.1", 8766)
 
     assert lines[0] == "WebSocket endpoint: ws://127.0.0.1:8766"
-    assert lines[1] == "Viewer URL: apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766"
+    assert lines[1] == "Viewer URL: apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766"
 
 
 def test_live_viewer_smoke_report_lines_keep_endpoint_and_viewer_url_separate() -> None:

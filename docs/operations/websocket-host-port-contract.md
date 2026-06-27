@@ -82,7 +82,7 @@ browser で開く HTML の URL または file path。
 例:
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 apps/mujoco-viewer/index.html?ws=ws://127.0.0.1:8766
 ```
 
@@ -99,7 +99,7 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 
 ```
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 - browser URL に入れる host は、browser から見える host を使う。
@@ -118,7 +118,7 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 0.0.0.0 --
 same machine の browser から見る場合:
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 - server は `0.0.0.0` で listen している。
@@ -135,7 +135,7 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 0.0.0.0 --
 ```
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://192.168.x.x:8766
+apps/mujoco-viewer/?websocketUrl=ws://192.168.x.x:8766
 ```
 
 - `192.168.x.x` は browser から見える publisher machine の LAN IP に置き換える。
@@ -150,7 +150,7 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 0.0.0.0 --
 ```
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://100.x.x.x:8766
+apps/mujoco-viewer/?websocketUrl=ws://100.x.x.x:8766
 ```
 
 - `100.x.x.x` は browser から見える Tailscale IP に置き換える。
@@ -161,7 +161,7 @@ apps/mujoco-viewer/index.html?websocketUrl=ws://100.x.x.x:8766
 public host 名が browser から解決でき、かつ publisher がその host で到達可能な場合は、browser から見える public host 名を使う。
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://example.example.com:8766
+apps/mujoco-viewer/?websocketUrl=ws://example.example.com:8766
 ```
 
 - `0.0.0.0` は public host 名の代わりではない。
@@ -174,7 +174,7 @@ viewer page URL は HTML を開く URL、WebSocket endpoint URL は viewer が�
 
 ```text
 viewer page URL:
-  apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+  apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 
 WebSocket endpoint URL:
   ws://127.0.0.1:8766

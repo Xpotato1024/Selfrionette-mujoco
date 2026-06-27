@@ -13,7 +13,7 @@ from selfrionette.runtime.websocket_publisher_runner import (
 )
 
 DEFAULT_LIVE_VIEWER_SMOKE_GRACE_PERIOD_S = 5.0
-DEFAULT_LIVE_VIEWER_SMOKE_VIEWER_PATH = "apps/mujoco-viewer/index.html"
+DEFAULT_LIVE_VIEWER_SMOKE_VIEWER_PATH = "apps/mujoco-viewer/"
 
 
 @dataclass(frozen=True, slots=True)
