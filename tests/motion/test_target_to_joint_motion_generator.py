@@ -165,6 +165,80 @@ def test_target_to_joint_motion_generator_rejects_non_converged_fast_arm_targets
     assert command.joint is not None
     assert command.joint.joint_angles_rad == (0.1, -0.1, 0.2, -0.2)
     assert command.metadata["target_rejected"] is True
-    assert command.metadata["target_rejection_reason"] == "invalid_target"
+    assert command.metadata["target_rejection_reason"] == "target_non_convergence"
     assert command.metadata["target_rejection_message"] == "target_position_m did not converge"
     assert command.metadata["runtime_input_safety_applied"] is True
+
+
+def test_target_to_joint_motion_generator_rejects_unreachable_fast_arm_targets_with_specific_reason() -> None:
+    solver = FastArmEndpointInverseKinematicsSolver()
+    intent = InputIntent(
+        source="replay",
+        timestamp_s=3.0,
+        metadata={"origin": "fast-arm", "desired_endpoint_m": (10.0, 0.0, 0.0)},
+    )
+
+    command = TargetToJointMotionGenerator(
+        solver,
+        current_qpos_rad=(0.1, -0.1, 0.2, -0.2),
+        qpos_joint_count=4,
+    ).update(intent, dt_s=0.016)
+
+    assert command.target is None
+    assert command.joint is not None
+    assert command.joint.joint_angles_rad == (0.1, -0.1, 0.2, -0.2)
+    assert command.metadata["target_rejected"] is True
+    assert command.metadata["target_rejection_reason"] == "target_unreachable"
+    assert command.metadata["target_rejection_message"] == "target_position_m is outside the reachable workspace"
+
+
+def test_target_to_joint_motion_generator_prefers_four_dof_current_qpos_seed_without_planar_fallback() -> None:
+    class _SeedRecordingSolver:
+        def __init__(self) -> None:
+            self.seeds: list[tuple[float, ...] | None] = []
+
+        def solve(self, target_position_m, seed_joint_angles_rad=None):  # noqa: ANN001
+            _ = target_position_m
+            self.seeds.append(seed_joint_angles_rad)
+            if seed_joint_angles_rad is None or len(seed_joint_angles_rad) != 4:
+                raise ValueError("seed_joint_angles_rad must contain exactly four values for this solver")
+            return JointCommand(joint_angles_rad=seed_joint_angles_rad)
+
+    solver = _SeedRecordingSolver()
+    intent = InputIntent(
+        source="replay",
+        timestamp_s=4.0,
+        metadata={"origin": "fast-arm", "desired_endpoint_m": (0.58, 0.0, 0.1)},
+    )
+
+    command = TargetToJointMotionGenerator(
+        solver,
+        current_qpos_rad=(0.4, -0.3, 0.2, -0.1),
+        qpos_joint_count=4,
+    ).update(intent, dt_s=0.016)
+
+    assert solver.seeds[0] == (0.4, -0.3, 0.2, -0.1)
+    assert solver.seeds == [(0.4, -0.3, 0.2, -0.1)]
+    assert command.joint is not None
+    assert command.joint.joint_angles_rad == (0.4, -0.3, 0.2, -0.1)
+
+
+def test_target_to_joint_motion_generator_falls_back_to_planar_seed_shape_when_needed() -> None:
+    fk = PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25))
+    solver = PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=(0.5, 0.25))
+    target_joint_angles_rad = (0.3, -0.2)
+    target_position_m = fk.forward(target_joint_angles_rad)
+    intent = InputIntent(
+        source="replay",
+        timestamp_s=5.0,
+        metadata={"origin": "planar", "desired_endpoint_m": target_position_m},
+    )
+
+    command = TargetToJointMotionGenerator(
+        solver,
+        current_qpos_rad=(0.0, -0.2, 0.4, -0.1),
+    ).update(intent, dt_s=0.016)
+
+    assert command.joint is not None
+    assert command.joint.joint_angles_rad[:2] == pytest.approx(target_joint_angles_rad, abs=1e-9)
+    assert len(command.joint.joint_angles_rad) == 2
