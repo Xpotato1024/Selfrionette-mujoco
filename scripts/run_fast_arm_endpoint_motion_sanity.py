@@ -32,9 +32,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-desired-endpoint-m",
         nargs=3,
         type=float,
-        default=(0.6, 0.0, 0.1),
+        default=None,
         metavar=("X", "Y", "Z"),
-        help="command-side base desired endpoint in meters",
+        help="explicit command-side base endpoint in meters; omitted uses the initial tip position",
     )
     parser.add_argument(
         "--command-delta-m",
@@ -55,7 +55,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     results = run_fast_arm_endpoint_motion_sanity(
-        base_desired_endpoint_m=tuple(args.base_desired_endpoint_m),
+        base_desired_endpoint_m=(
+            None
+            if args.base_desired_endpoint_m is None
+            else tuple(args.base_desired_endpoint_m)
+        ),
         command_delta_m=args.command_delta_m,
         model_path=args.model_path,
     )
@@ -67,6 +71,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     f"axis={result.command_label}",
                     f"status={result.status}",
                     f"reason={result.reason}",
+                    f"base_endpoint_source={result.base_endpoint_source}",
+                    f"base_endpoint_m={_format_vector3(result.base_endpoint_m)}",
                     f"commanded_delta={_format_vector3(result.commanded_delta_m)}",
                     f"actual_delta={_format_vector3(result.actual_delta_m)}",
                     f"initial_tip={_format_vector3(result.initial_tip_position_m)}",
