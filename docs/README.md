@@ -40,6 +40,7 @@ Do not create or use `doc/`.
 | R6-I completion audit | `docs/operations/r6-i-completion-audit.md` | R6-I completion audit and parent #133 close readiness |
 | R6-J completion audit | `docs/operations/r6-j-completion-audit.md` | R6-J completion audit and parent #134 close readiness |
 | R7-D-P1 fast_arm 4DOF endpoint IK v0 note | `docs/operations/r7-d-p1-fast-arm-4dof-endpoint-ik.md` | concrete fast_arm path から 2-link planar IK + zero padding を外した最小 note |
+| R7-D-P3 fast_arm endpoint command check procedure | `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | no-hardware manual smoke for endpoint command, qpos, reject / hold / recovery, and MuJoCo warning handling |
 | Runtime input source registry | `docs/contracts/runtime-input-source-registry.md` | runtime input source selection contract |
 | R6-K-P1 runtime input source registry | `docs/operations/r6-k-p1-runtime-input-source-registry.md` | runtime input source registry operation note |
 | Runtime input source state | `docs/contracts/runtime-input-source-state.md` | optional runtime input source state payload metadata |
