@@ -11,6 +11,7 @@ DEFAULT_TARGET_DISCONTINUITY_THRESHOLD_RAD = 2.0
 _KNOWN_TARGET_REJECTION_MESSAGES = {
     "target_position_m must remain on the solver plane",
     "target_position_m is outside the reachable workspace",
+    "target_position_m did not converge",
 }
 
 
@@ -66,6 +67,10 @@ def _build_rejected_metadata(
 
 def _is_target_rejection_error(exc: ValueError) -> bool:
     return str(exc) in _KNOWN_TARGET_REJECTION_MESSAGES
+
+
+def _is_seed_shape_error(exc: ValueError) -> bool:
+    return "seed_joint_angles_rad" in str(exc)
 
 
 def _qpos_discontinuity_norm_rad(
@@ -195,9 +200,7 @@ class TargetToJointMotionGenerator:
             raise ValueError("desired_endpoint_m or target_position_m is required for TargetToJointMotionGenerator")
 
         target = TargetCommand(delta_m=intent.target_delta_m) if _has_non_zero_delta(intent.target_delta_m) else None
-        seed_joint_angles_rad = self._seed_joint_angles_rad
-        if self._current_qpos_rad is not None:
-            seed_joint_angles_rad = self._current_qpos_rad[:2]
+        seed_joint_angles_rad = self._current_qpos_rad if self._current_qpos_rad is not None else self._seed_joint_angles_rad
 
         try:
             joint = self._ik_solver.solve(
@@ -205,32 +208,44 @@ class TargetToJointMotionGenerator:
                 seed_joint_angles_rad=seed_joint_angles_rad,
             )
         except ValueError as exc:
-            if not _is_target_rejection_error(exc):
-                raise
+            if self._current_qpos_rad is not None and _is_seed_shape_error(exc):
+                try:
+                    joint = self._ik_solver.solve(
+                        desired_endpoint_m,
+                        seed_joint_angles_rad=self._current_qpos_rad[:2],
+                    )
+                except ValueError as fallback_exc:
+                    exc = fallback_exc
+                else:
+                    exc = None
 
-            hold_qpos_rad = self._current_qpos_rad
-            if hold_qpos_rad is None and seed_joint_angles_rad is not None:
-                hold_qpos_rad = tuple(seed_joint_angles_rad)
+            if exc is not None:
+                if not _is_target_rejection_error(exc):
+                    raise
 
-            if self._qpos_joint_count is not None and hold_qpos_rad is not None and len(hold_qpos_rad) < self._qpos_joint_count:
-                hold_qpos_rad = hold_qpos_rad + (0.0,) * (self._qpos_joint_count - len(hold_qpos_rad))
+                hold_qpos_rad = self._current_qpos_rad
+                if hold_qpos_rad is None and seed_joint_angles_rad is not None:
+                    hold_qpos_rad = tuple(seed_joint_angles_rad)
 
-            if hold_qpos_rad is None:
-                hold_joint = None
-            else:
-                hold_joint = JointCommand(joint_angles_rad=tuple(hold_qpos_rad))
+                if self._qpos_joint_count is not None and hold_qpos_rad is not None and len(hold_qpos_rad) < self._qpos_joint_count:
+                    hold_qpos_rad = hold_qpos_rad + (0.0,) * (self._qpos_joint_count - len(hold_qpos_rad))
 
-            return MotionCommand(
-                timestamp_s=intent.timestamp_s,
-                target=None,
-                joint=hold_joint,
-                metadata=_build_rejected_metadata(
-                    intent.metadata,
-                    reason="invalid_target",
-                    rejection_message=str(exc),
-                    rejected_desired_endpoint_m=desired_endpoint_m,
-                ),
-            )
+                if hold_qpos_rad is None:
+                    hold_joint = None
+                else:
+                    hold_joint = JointCommand(joint_angles_rad=tuple(hold_qpos_rad))
+
+                return MotionCommand(
+                    timestamp_s=intent.timestamp_s,
+                    target=None,
+                    joint=hold_joint,
+                    metadata=_build_rejected_metadata(
+                        intent.metadata,
+                        reason="invalid_target",
+                        rejection_message=str(exc),
+                        rejected_desired_endpoint_m=desired_endpoint_m,
+                    ),
+                )
 
         if self._current_qpos_rad is not None:
             current_qpos_rad = self._current_qpos_rad
