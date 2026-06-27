@@ -15,3 +15,4 @@ Canonical contract docs:
 - `docs/contracts/viewer-control-message-schema.md`
 - `docs/contracts/programmed-target-input-source.md`
 - `docs/contracts/r7-b-runtime-input-pipeline-contract.md`
+- `docs/contracts/endpoint-target-generator.md`
