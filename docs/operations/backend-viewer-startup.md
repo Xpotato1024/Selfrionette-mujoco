@@ -25,7 +25,7 @@ R6-G-P2 の README 拡充は、この手順への案内だけを担い、起動�
 
 - Python 側は `uv run ...` を使う。
 - viewer 側は `apps/mujoco-viewer` 配下で `npm ci` を実行する。
-- browser viewer 用には `npm run browser:build` を実行する。
+- browser viewer 用には `npm run dev -- --host 127.0.0.1 --port 5173` を実行する。
 - `npm run typecheck` と `npm run build` は TypeScript の静的検証。
 - `npm test` は viewer runtime / WebSocket skeleton のテスト。
 
@@ -271,8 +271,7 @@ Viewer:
 ```powershell
 cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
 npm ci
-npm run browser:build
-python -m http.server 5173
+npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
 Publisher:
@@ -292,6 +291,19 @@ Browser:
 
 ```text
 http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
+```
+
+Legacy static fallback:
+
+```powershell
+cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+npm ci
+npm run browser:build
+python -m http.server 5173
+```
+
+```text
+http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 
 確認項目:

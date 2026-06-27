@@ -93,7 +93,7 @@ Selected WebSocket publisher:
   websocket: ws://100.x.x.x:8766
 
 Open viewer:
-  apps/mujoco-viewer/?websocketUrl=ws://100.x.x.x:8766
+  apps/mujoco-viewer/index.html?websocketUrl=ws://100.x.x.x:8766
 ```
 
 ## R6-G-P7 への handoff

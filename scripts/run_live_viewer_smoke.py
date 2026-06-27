@@ -20,7 +20,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_live_viewer_smoke_parser()
     args = parser.parse_args(argv)
 
-    for line in build_live_viewer_smoke_report_lines(args.host, args.port, viewer_path="apps/mujoco-viewer/"):
+    for line in build_live_viewer_smoke_report_lines(args.host, args.port):
         print(line)
     run_live_viewer_smoke(
         host=args.host,
