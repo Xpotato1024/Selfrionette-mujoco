@@ -18,3 +18,4 @@ here.
 - `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md`: canonical manual smoke for keyboard / gamepad live viewer control with backend ingress.
 - `docs/operations/r6-l-completion-audit.md`: R6-L completion audit and R6-M / R7-A handoff.
 - `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md`: no-hardware manual smoke for fast_arm endpoint command, qpos, reject / hold / recovery, and MuJoCo warning handling.
+- `docs/operations/r7-d-completion-audit.md`: R7-D completion audit and parent #150 close-readiness matrix.
