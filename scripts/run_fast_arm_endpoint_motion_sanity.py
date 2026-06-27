@@ -27,13 +27,19 @@ def _format_vector3(value: tuple[float, float, float] | None) -> str:
 
 
 def _format_value(value: object) -> str:
+    if hasattr(value, "__dataclass_fields__"):
+        items = {
+            field_name: getattr(value, field_name)
+            for field_name in value.__dataclass_fields__  # type: ignore[attr-defined]
+        }
+        return _format_value(items)
     if isinstance(value, tuple):
         formatted_components: list[str] = []
         for component in value:
             if isinstance(component, float):
                 formatted_components.append(f"{component:.6f}")
             else:
-                formatted_components.append(str(component))
+                formatted_components.append(_format_value(component))
         return "[" + ", ".join(formatted_components) + "]"
     if isinstance(value, dict):
         return "{" + ", ".join(f"{key}={_format_value(item)}" for key, item in value.items()) + "}"
@@ -125,6 +131,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"world_target_m={_format_value(result.world_target_m)}",
                 f"frame_transform_status={result.frame_transform_status}",
                 f"qpos_ref_summary={_format_value(result.qpos_ref_summary)}",
+                f"joint_axis_mapping_summary={_format_value(result.joint_axis_mapping_summary)}",
+                f"qpos_perturbation_results={_format_value(result.qpos_perturbation_results)}",
+                f"solver_to_mujoco_mapping={_format_value(result.solver_to_mujoco_mapping)}",
+                f"mujoco_to_solver_mapping={_format_value(result.mujoco_to_solver_mapping)}",
+                f"mapping_status={result.mapping_status}",
                 f"solver_fk_endpoint_m={_format_value(result.solver_fk_endpoint_m)}",
                 f"transformed_solver_fk_world_m={_format_value(result.transformed_solver_fk_world_m)}",
                 f"diagnosis={result.diagnosis}",
