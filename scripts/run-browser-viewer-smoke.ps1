@@ -179,7 +179,8 @@ function Wait-ForStartupHealth {
 $publisherUrlHost = Get-UrlHost -Value $HostName
 $viewerUrlHost = Get-UrlHost -Value $HostName
 $websocketUrl = "ws://$publisherUrlHost`:$PublisherPort"
-$viewerUrl = "http://$viewerUrlHost`:$ViewerPort/?websocketUrl=$websocketUrl"
+$viewerPath = "/apps/mujoco-viewer/"
+$viewerUrl = "http://$viewerUrlHost`:$ViewerPort$viewerPath?websocketUrl=$websocketUrl"
 $shouldOpenBrowser = $false
 if ($NoBrowser) {
     $shouldOpenBrowser = $false

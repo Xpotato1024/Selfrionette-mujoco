@@ -99,7 +99,7 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 
 ```
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 - browser URL に入れる host は、browser から見える host を使う。
@@ -174,7 +174,7 @@ viewer page URL は HTML を開く URL、WebSocket endpoint URL は viewer が�
 
 ```text
 viewer page URL:
-  apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+  apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 
 WebSocket endpoint URL:
   ws://127.0.0.1:8766

@@ -25,12 +25,15 @@ uv run python scripts/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --st
 ## Viewer URL
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 The WebSocket endpoint shown by the CLI is `ws://127.0.0.1:8766`.
-The browser viewer URL shown by the CLI is `apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766`.
+The browser viewer URL shown by the CLI is `apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766`.
 The CLI prints both values so the endpoint and browser page are not mixed up.
+
+Opening `/apps/mujoco-viewer/` without `websocketUrl` keeps the viewer
+disconnected by design.
 
 `?ws=ws://127.0.0.1:8766` is accepted as a compatibility alias.
 

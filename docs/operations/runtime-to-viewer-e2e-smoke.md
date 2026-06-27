@@ -57,7 +57,7 @@ npm run browser:build
 browser URL:
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 `?ws=ws://127.0.0.1:8766` は互換 alias である。`websocketUrl` と `ws` を混同しない。
@@ -86,7 +86,7 @@ npm run browser:build
 
 ## browser 接続
 
-- `apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766` を browser で開く。
+- `apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766` を browser で開く。
 - `ws://` を使い、`http://` と混同しない。
 - viewer page URL と WebSocket endpoint URL を分けて考える。
 - `localhost` と `127.0.0.1` は same machine の loopback 用であり、`0.0.0.0` ではない。

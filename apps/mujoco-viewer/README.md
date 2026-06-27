@@ -31,3 +31,17 @@ npm run build
 cd D:\Xpotato-apps\Selfrionette-mujoco
 git diff --check
 ```
+
+## Live Viewer URL
+
+```powershell
+cd apps\mujoco-viewer
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+```text
+http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
+```
+
+`/apps/mujoco-viewer/` alone is the disconnected viewer. The canonical live
+viewer URL is the same route with `?websocketUrl=ws://127.0.0.1:8766`.

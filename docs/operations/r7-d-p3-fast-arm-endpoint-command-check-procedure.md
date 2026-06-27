@@ -78,7 +78,7 @@ npm run dev -- --host 127.0.0.1 --port 5176 --strictPort
 ### Browser URL
 
 ```text
-http://127.0.0.1:5176/?websocketUrl=ws://127.0.0.1:8766
+http://127.0.0.1:5176/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 ### Startup logs to confirm

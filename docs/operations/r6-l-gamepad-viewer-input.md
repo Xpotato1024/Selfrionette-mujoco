@@ -44,7 +44,7 @@ python -m http.server 5173
 Viewer URL:
 
 ```text
-http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
+http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 Client-side checks:

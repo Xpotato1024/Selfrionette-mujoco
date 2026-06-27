@@ -51,7 +51,7 @@ marker, arm skeleton, fast_arm mesh scene, error vector skeleton である。
 ## Browser URL
 
 ```text
-apps/mujoco-viewer/index.html?websocketUrl=ws://127.0.0.1:8766
+apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 `?ws=ws://127.0.0.1:8766` は互換 alias として受け付ける。
@@ -76,7 +76,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-browser-viewer-s
 default URL:
 
 ```text
-http://127.0.0.1:5176/?websocketUrl=ws://127.0.0.1:8768
+http://127.0.0.1:5176/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8768
 ```
 
 - default host は `127.0.0.1`、default publisher port は `8768`、default viewer port は `5176`。

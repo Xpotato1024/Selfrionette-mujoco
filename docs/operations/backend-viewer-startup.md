@@ -100,7 +100,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-browser-viewer-s
 default URL:
 
 ```text
-http://127.0.0.1:5176/?websocketUrl=ws://127.0.0.1:8768
+http://127.0.0.1:5176/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8768
 ```
 
 - default host は `127.0.0.1`、default publisher port は `8768`、default viewer port は `5176`。
@@ -134,13 +134,13 @@ python -m http.server 5173
 browser で開く URL:
 
 ```text
-http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
+http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 互換 alias:
 
 ```text
-http://127.0.0.1:5173/index.html?ws=ws://127.0.0.1:8766
+http://127.0.0.1:5173/apps/mujoco-viewer/?ws=ws://127.0.0.1:8766
 ```
 
 - browser page URL と WebSocket URL は別概念。
@@ -291,7 +291,7 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py `
 Browser:
 
 ```text
-http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
+http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
 確認項目:
