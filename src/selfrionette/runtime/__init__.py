@@ -39,6 +39,14 @@ from selfrionette.runtime.desired_endpoint_resolver import (
     ResolvedDesiredEndpoint,
     resolve_desired_endpoint_from_motion_command,
 )
+from selfrionette.runtime.endpoint_target_generator import (
+    EndpointTargetGeneratorConfig,
+    EndpointTargetGeneratorInput,
+    EndpointTargetGeneratorResult,
+    EndpointTargetGeneratorState,
+    endpoint_target_generation_result_to_metadata,
+    generate_endpoint_target,
+)
 from selfrionette.runtime.endpoint_metrics import (
     EndpointEvaluationStatePublisher,
     RuntimeEndpointEvaluationMetrics,
@@ -119,6 +127,10 @@ __all__ = [
     "DEFAULT_LIVE_LOADCELL_STEPS_PER_FRAME",
     "LiveLoadcellRuntimeRunnerConfig",
     "ResolvedDesiredEndpoint",
+    "EndpointTargetGeneratorConfig",
+    "EndpointTargetGeneratorInput",
+    "EndpointTargetGeneratorResult",
+    "EndpointTargetGeneratorState",
     "OfflineInputRuntimeSmokeResult",
     "RuntimeMuJoCoSiteEndpointEvaluation",
     "build_concrete_mujoco_pipeline",
@@ -143,6 +155,8 @@ __all__ = [
     "extract_mujoco_site_endpoint",
     "extract_mujoco_site_endpoint_from_state",
     "resolve_desired_endpoint_from_motion_command",
+    "endpoint_target_generation_result_to_metadata",
+    "generate_endpoint_target",
     "annotate_raw_input_frame",
     "annotate_runtime_input_source_metadata",
     "build_runtime_input_source_state",

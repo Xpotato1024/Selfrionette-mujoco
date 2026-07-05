@@ -46,6 +46,8 @@ Do not create or use `doc/`.
 | R7-E-P1 solver / MuJoCo frame alignment | `docs/operations/r7-e-p1-solver-mujoco-frame-alignment.md` | #313 follow-up; selected `base_link` solver base, world-to-local target transform, partial qpos reference adapter, and updated endpoint sanity results |
 | R7-E-P1 q0/q2/q3 MuJoCo axis mapping | `docs/operations/r7-e-p1-q0-q2-q3-axis-mapping.md` | #316 follow-up; backend joint perturbation diagnostics, q1 ref adapter retention, q0/q2/q3 hold decision, and updated endpoint sanity results |
 | R7-E-P1 local Jacobian / DOF allocation | `docs/operations/r7-e-p1-local-jacobian-dof-allocation.md` | #318 follow-up; backend local Jacobian, multi-step endpoint trajectory diagnostics, and #305 proceedability decision |
+| EndpointTargetGenerator contract | `docs/contracts/endpoint-target-generator.md` | input vector -> command-side `desired_endpoint_m` target generation contract |
+| R7-E-P1 EndpointTargetGenerator contract | `docs/operations/r7-e-p1-endpoint-target-generator-contract.md` | #319 follow-up; deadzone / gain / max step / workspace projection / rejection hold decision |
 | R7-D-P4 fast_arm IK / FK completion audit | `docs/operations/r7-d-completion-audit.md` | R7-D 全体の completion audit と parent #150 の close-readiness 条件を固定する |
 | Runtime input source registry | `docs/contracts/runtime-input-source-registry.md` | runtime input source selection contract |
 | R6-K-P1 runtime input source registry | `docs/operations/r6-k-p1-runtime-input-source-registry.md` | runtime input source registry operation note |
