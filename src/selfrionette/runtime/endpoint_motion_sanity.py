@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import json
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -33,6 +35,25 @@ _LOCAL_JACOBIAN_PERTURBATION_RAD = 0.01
 _PERTURBATION_NO_MOVEMENT_EPSILON_M = 1e-9
 _TRAJECTORY_DIRECTION_DOT_THRESHOLD = 0.85
 _TRAJECTORY_MOVEMENT_EPSILON_M = 1e-6
+_TRAJECTORY_LOG_COLUMNS = (
+    "step",
+    "time_s",
+    "dt_s",
+    "command_axis",
+    "command_label",
+    "target_x_m",
+    "target_y_m",
+    "target_z_m",
+    "tip_x_m",
+    "tip_y_m",
+    "tip_z_m",
+    "error_x_m",
+    "error_y_m",
+    "error_z_m",
+    "error_norm_m",
+    "status",
+    "reason",
+)
 _COMMAND_AXES: tuple[tuple[str, int, Vector3], ...] = (
     ("x", 1, (1.0, 0.0, 0.0)),
     ("x", -1, (-1.0, 0.0, 0.0)),
@@ -423,6 +444,94 @@ class FastArmEndpointTrajectoryDiagnostics:
     initial_qpos: tuple[float, ...]
     records: tuple[FastArmEndpointTrajectoryStepRecord, ...]
     summary: FastArmEndpointTrajectorySummary
+
+
+def _vector_error_m(lhs_m: Sequence[float], rhs_m: Sequence[float]) -> Vector3:
+    return tuple(float(lhs_m[index]) - float(rhs_m[index]) for index in range(3))
+
+
+def _trajectory_log_row_from_record(
+    *,
+    diagnostics: FastArmEndpointTrajectoryDiagnostics,
+    record: FastArmEndpointTrajectoryStepRecord,
+    dt_s: float,
+) -> dict[str, object]:
+    error_m = _vector_error_m(record.tip_after_m, record.desired_endpoint_m)
+    return {
+        "step": record.step_index,
+        "time_s": float(record.step_index - 1) * float(dt_s),
+        "dt_s": float(dt_s),
+        "command_axis": diagnostics.axis,
+        "command_label": diagnostics.command_label,
+        "target_x_m": record.desired_endpoint_m[0],
+        "target_y_m": record.desired_endpoint_m[1],
+        "target_z_m": record.desired_endpoint_m[2],
+        "tip_x_m": record.tip_after_m[0],
+        "tip_y_m": record.tip_after_m[1],
+        "tip_z_m": record.tip_after_m[2],
+        "error_x_m": error_m[0],
+        "error_y_m": error_m[1],
+        "error_z_m": error_m[2],
+        "error_norm_m": _vector_norm_m(error_m),
+        "status": record.status,
+        "reason": record.reason,
+    }
+
+
+def build_fast_arm_endpoint_trajectory_log_rows(
+    trajectory_diagnostics: Sequence[FastArmEndpointTrajectoryDiagnostics],
+    *,
+    dt_s: float | None = None,
+) -> tuple[dict[str, object], ...]:
+    if dt_s is None:
+        dt_s = RuntimeConfig().dt_s
+    if dt_s <= 0.0:
+        raise ValueError("dt_s must be positive")
+
+    rows: list[dict[str, object]] = []
+    for diagnostics in trajectory_diagnostics:
+        for record in diagnostics.records:
+            rows.append(
+                _trajectory_log_row_from_record(
+                    diagnostics=diagnostics,
+                    record=record,
+                    dt_s=dt_s,
+                )
+            )
+    return tuple(rows)
+
+
+def write_fast_arm_endpoint_trajectory_log_csv(
+    trajectory_diagnostics: Sequence[FastArmEndpointTrajectoryDiagnostics],
+    output_path: str | Path,
+    *,
+    dt_s: float | None = None,
+) -> Path:
+    rows = build_fast_arm_endpoint_trajectory_log_rows(trajectory_diagnostics, dt_s=dt_s)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=_TRAJECTORY_LOG_COLUMNS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    return path
+
+
+def write_fast_arm_endpoint_trajectory_log_jsonl(
+    trajectory_diagnostics: Sequence[FastArmEndpointTrajectoryDiagnostics],
+    output_path: str | Path,
+    *,
+    dt_s: float | None = None,
+) -> Path:
+    rows = build_fast_arm_endpoint_trajectory_log_rows(trajectory_diagnostics, dt_s=dt_s)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False))
+            handle.write("\n")
+    return path
 
 
 def _mapping_status_for_qpos_index(qpos_index: int) -> str:
@@ -1514,4 +1623,7 @@ __all__ = [
     "run_fast_arm_local_jacobian_diagnostics",
     "run_fast_arm_joint_axis_mapping_diagnostics",
     "run_fast_arm_endpoint_motion_sanity",
+    "build_fast_arm_endpoint_trajectory_log_rows",
+    "write_fast_arm_endpoint_trajectory_log_csv",
+    "write_fast_arm_endpoint_trajectory_log_jsonl",
 ]

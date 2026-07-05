@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import csv
+from pathlib import Path
+
 from selfrionette.runtime import run_fast_arm_endpoint_trajectory_diagnostics
+from selfrionette.runtime.endpoint_motion_sanity import (
+    write_fast_arm_endpoint_trajectory_log_csv,
+)
 
 
 def test_endpoint_trajectory_diagnostics_cover_all_axis_commands() -> None:
@@ -86,3 +92,65 @@ def test_trajectory_summary_contains_cumulative_drift_metrics() -> None:
         assert summary.mean_direction_dot is not None
         assert summary.orthogonal_drift_m >= 0.0
         assert summary.drift_from_command_axis_m != 0.0
+
+
+def test_trajectory_csv_export_creates_parent_directories_and_required_fields(tmp_path: Path) -> None:
+    diagnostics = run_fast_arm_endpoint_trajectory_diagnostics(
+        trajectory_steps=3,
+        trajectory_delta_m=0.005,
+    )
+    output_path = tmp_path / "nested" / "presentation" / "trajectory_log.csv"
+
+    exported_path = write_fast_arm_endpoint_trajectory_log_csv(diagnostics, output_path)
+
+    assert exported_path == output_path
+    assert exported_path.exists()
+    assert exported_path.parent.exists()
+
+    with exported_path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert len(rows) == len(diagnostics) * 3
+    first_row = rows[0]
+    for column in [
+        "step",
+        "time_s",
+        "dt_s",
+        "command_axis",
+        "target_x_m",
+        "target_y_m",
+        "target_z_m",
+        "tip_x_m",
+        "tip_y_m",
+        "tip_z_m",
+        "error_x_m",
+        "error_y_m",
+        "error_z_m",
+        "error_norm_m",
+        "status",
+        "reason",
+    ]:
+        assert column in first_row
+        assert first_row[column] != ""
+
+
+def test_trajectory_csv_export_records_target_tip_and_error_values(tmp_path: Path) -> None:
+    diagnostics = run_fast_arm_endpoint_trajectory_diagnostics(
+        trajectory_steps=1,
+        trajectory_delta_m=0.005,
+    )
+    output_path = tmp_path / "trajectory_log.csv"
+
+    write_fast_arm_endpoint_trajectory_log_csv(diagnostics, output_path)
+
+    with output_path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    z_rows = [row for row in rows if row["command_axis"] == "z"]
+    assert z_rows
+    row = z_rows[0]
+    error_norm = float(row["error_norm_m"])
+    assert error_norm >= 0.0
+    assert row["status"]
+    assert row["reason"]
+    assert row["target_x_m"] != row["tip_x_m"] or row["target_y_m"] != row["tip_y_m"] or row["target_z_m"] != row["tip_z_m"]

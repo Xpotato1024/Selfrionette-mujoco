@@ -15,6 +15,10 @@ from selfrionette.runtime import (
     run_fast_arm_endpoint_trajectory_diagnostics,
     run_fast_arm_local_jacobian_diagnostics,
 )
+from selfrionette.runtime.endpoint_motion_sanity import (
+    write_fast_arm_endpoint_trajectory_log_csv,
+    write_fast_arm_endpoint_trajectory_log_jsonl,
+)
 
 
 def _positive_float(value: str) -> float:
@@ -98,6 +102,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=_positive_float,
         default=0.005,
         help="endpoint delta per repeated trajectory step in meters",
+    )
+    parser.add_argument(
+        "--trajectory-export-csv",
+        type=Path,
+        default=None,
+        help="write trajectory diagnostics rows to a CSV file",
+    )
+    parser.add_argument(
+        "--trajectory-export-jsonl",
+        type=Path,
+        default=None,
+        help="write trajectory diagnostics rows to a JSONL file",
     )
     return parser
 
@@ -206,6 +222,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                     )
                 )
             )
+        if args.trajectory_export_csv is not None:
+            csv_path = write_fast_arm_endpoint_trajectory_log_csv(
+                trajectory_results,
+                args.trajectory_export_csv,
+            )
+            print(f"trajectory_export_csv={csv_path}")
+        if args.trajectory_export_jsonl is not None:
+            jsonl_path = write_fast_arm_endpoint_trajectory_log_jsonl(
+                trajectory_results,
+                args.trajectory_export_jsonl,
+            )
+            print(f"trajectory_export_jsonl={jsonl_path}")
+    elif args.trajectory_export_csv is not None or args.trajectory_export_jsonl is not None:
+        parser.error("--trajectory-export-csv and --trajectory-export-jsonl require --trajectory-diagnostics")
 
     return 0
 
