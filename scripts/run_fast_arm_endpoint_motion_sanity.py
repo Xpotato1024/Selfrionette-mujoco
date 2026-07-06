@@ -17,6 +17,9 @@ from selfrionette.runtime import (
 )
 from selfrionette.runtime.endpoint_motion_sanity import (
     build_fast_arm_endpoint_diagnostic_log_rows,
+    build_fast_arm_fk_site_consistency_log_rows,
+    run_fast_arm_fk_site_consistency_diagnostics,
+    write_fast_arm_fk_site_consistency_log_jsonl,
     write_fast_arm_endpoint_trajectory_log_csv,
     write_fast_arm_endpoint_trajectory_log_jsonl,
     write_fast_arm_endpoint_diagnostic_log_jsonl,
@@ -122,6 +125,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="write endpoint diagnostic rows to a JSONL file",
+    )
+    parser.add_argument(
+        "--fk-site-consistency",
+        action="store_true",
+        help="print runtime FK versus MuJoCo tip site consistency diagnostics for fixed qpos fixtures",
+    )
+    parser.add_argument(
+        "--fk-site-consistency-jsonl",
+        type=Path,
+        default=None,
+        help="write FK versus MuJoCo tip site consistency diagnostics to a JSONL file",
     )
     return parser
 
@@ -258,6 +272,35 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.endpoint_diagnostics_jsonl,
         )
         print(f"endpoint_diagnostics_jsonl={jsonl_path}")
+
+    if args.fk_site_consistency or args.fk_site_consistency_jsonl is not None:
+        fk_site_results = run_fast_arm_fk_site_consistency_diagnostics(model_path=args.model_path)
+        fk_site_rows = build_fast_arm_fk_site_consistency_log_rows(fk_site_results)
+        for index, (record, row) in enumerate(zip(fk_site_results, fk_site_rows, strict=True), start=1):
+            print(
+                " ".join(
+                    (
+                        "fk_site_consistency",
+                        f"step_index={index}",
+                        f"fixture_label={row['fixture_label']}",
+                        f"qpos={_format_value(row['qpos'])}",
+                        f"fk_endpoint_m={_format_value(row['fk_endpoint_m'])}",
+                        f"mujoco_tip_site_position_m={_format_value(row['mujoco_tip_site_position_m'])}",
+                        f"fk_site_error_m={_format_value(row['fk_site_error_m'])}",
+                        f"fk_site_error_norm_m={_format_value(row['fk_site_error_norm_m'])}",
+                        f"status={record.status}",
+                        f"reason={record.reason}",
+                        f"site_name={row['site_name']}",
+                        f"joint_names={_format_value(row['joint_names'])}",
+                    )
+                )
+            )
+        if args.fk_site_consistency_jsonl is not None:
+            jsonl_path = write_fast_arm_fk_site_consistency_log_jsonl(
+                fk_site_results,
+                args.fk_site_consistency_jsonl,
+            )
+            print(f"fk_site_consistency_jsonl={jsonl_path}")
 
     return 0
 
