@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.input_sources.keyboard import build_keyboard_motion_command
 from selfrionette.schemas import (
@@ -64,6 +66,8 @@ def test_viewer_input_source_converts_keyboard_message_to_raw_input_frame() -> N
     assert frame.metadata["stale_reason"] is None
     assert frame.metadata["desired_endpoint_m"] == expected_command.metadata["desired_endpoint_m"]
     assert frame.metadata["target_position_m"] == expected_command.metadata["desired_endpoint_m"]
+    assert frame.metadata["endpoint_delta_m"] == expected_command.metadata["endpoint_delta_m"]
+    assert frame.metadata["current_tip_position_m"] == (0.6, 0.0, 0.1)
     assert frame.metadata["viewer_control_message"]["keyboard"]["active_key_codes"] == ("KeyW", "KeyD")
     assert frame.values == expected_command.metadata["endpoint_delta_m"]
     assert frame.buttons == (True, True)
@@ -137,3 +141,61 @@ def test_viewer_input_source_can_rebase_current_endpoint() -> None:
     source.rebase_current_endpoint_m((0.2, 0.3, 0.4))
 
     assert source.current_endpoint_m == (0.2, 0.3, 0.4)
+
+
+def test_viewer_input_source_uses_rebased_endpoint_for_first_keyboard_command() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    initial_tip_site_position_m = (0.622, 0.0, 0.7)
+    source.rebase_current_endpoint_m(initial_tip_site_position_m)
+
+    frame = source.ingest_control_message(
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=6.0,
+            source_kind="keyboard",
+            keyboard=ViewerControlKeyboardMessage(
+                active_key_codes=("Space",),
+                key_state={"Space": True},
+                focus_state="focused",
+                zero_state=False,
+            ),
+        )
+    )
+
+    assert frame.metadata["current_tip_position_m"] == initial_tip_site_position_m
+    assert frame.metadata["endpoint_delta_m"] == (0.0, 0.0, 0.01)
+    assert frame.metadata["desired_endpoint_m"] == (0.622, 0.0, 0.71)
+    assert frame.metadata["desired_endpoint_m"] != (0.6, 0.0, 0.11)
+
+
+def test_viewer_input_source_keyboard_z_axis_bindings_are_preserved() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0, initial_endpoint_m=(0.2, 0.3, 0.4))
+
+    cases = (
+        ("Space", 1),
+        ("ShiftLeft", -1),
+        ("ShiftRight", -1),
+    )
+
+    for key_code, expected_sign in cases:
+        frame = source.ingest_control_message(
+            ViewerControlMessage(
+                type="viewer_control_message",
+                timestamp_s=7.0,
+                source_kind="keyboard",
+                keyboard=ViewerControlKeyboardMessage(
+                    active_key_codes=(key_code,),
+                    key_state={key_code: True},
+                    focus_state="focused",
+                    zero_state=False,
+                ),
+            )
+        )
+
+        assert frame.metadata["endpoint_delta_m"][0] == 0.0
+        assert frame.metadata["endpoint_delta_m"][1] == 0.0
+        assert frame.metadata["endpoint_delta_m"][2] == expected_sign * 0.01
+        assert frame.metadata["desired_endpoint_m"][2] == pytest.approx(
+            0.4 + expected_sign * 0.01,
+            abs=1e-12,
+        )

@@ -8,6 +8,7 @@ from time import monotonic
 
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M, ViewerInputSource
 from selfrionette.mujoco_backend import default_fast_arm_scene_path
+from selfrionette.mujoco_backend.endpoint_extraction import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
@@ -58,6 +59,15 @@ def _coerce_viewer_endpoint_m(value: object) -> tuple[float, float, float]:
         return DEFAULT_VIEWER_SAFE_ENDPOINT_M
 
     return endpoint_m
+
+
+def _extract_current_tip_site_endpoint_m(pipeline: RuntimePipeline) -> tuple[float, float, float] | None:
+    try:
+        return extract_fast_arm_tip_site_endpoint_from_state(
+            pipeline.simulator.snapshot()
+        ).position_m
+    except ValueError:
+        return None
 
 
 def build_runtime_input_source_step_loop_plan(
@@ -137,6 +147,12 @@ def build_runtime_input_source_step_loop_plan(
             publisher=publisher if publisher is not None else NoOpStatePublisher(),
         )
         pipeline.input_source = pipeline_input_source
+        initial_tip_site_position_m = _extract_current_tip_site_endpoint_m(pipeline)
+        if initial_tip_site_position_m is not None:
+            _sync_viewer_input_source_endpoint(
+                pipeline.input_source,
+                endpoint_m=initial_tip_site_position_m,
+            )
 
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
@@ -224,9 +240,11 @@ async def run_runtime_input_source_step_loop(
     records: list[RuntimeInputSourceStepLoopRecord] = []
     last_valid_endpoint_m: tuple[float, float, float] | None = None
     if plan.selection.source_name == "viewer":
-        last_valid_endpoint_m = _coerce_viewer_endpoint_m(
-            plan.selection.initial_metadata.get("desired_endpoint_m", plan.selection.initial_metadata.get("target_position_m"))
-        )
+        last_valid_endpoint_m = _extract_current_tip_site_endpoint_m(plan.pipeline)
+        if last_valid_endpoint_m is None:
+            last_valid_endpoint_m = _coerce_viewer_endpoint_m(
+                plan.selection.initial_metadata.get("desired_endpoint_m", plan.selection.initial_metadata.get("target_position_m"))
+            )
 
     for index in range(steps):
         frame = plan.pipeline.input_source.read_frame()
