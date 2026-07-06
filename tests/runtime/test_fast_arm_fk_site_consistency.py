@@ -36,11 +36,15 @@ def test_fast_arm_fk_site_consistency_records_include_qpos_fk_endpoint_tip_site_
         assert len(record.mujoco_tip_site_position_m) == 3
         assert len(record.fk_site_error_m) == 3
         assert record.fk_site_error_norm_m == pytest.approx(_vector_norm_m(record.fk_site_error_m), abs=1e-12)
-        assert record.status == "mismatch"
-        assert record.reason == "remaining_model_axis_or_link_contract_mismatch"
+        assert record.status == "pass"
+        assert record.reason == "fk_endpoint_matches_tip_site_within_tolerance"
         assert record.site_name == "tip"
         assert len(record.joint_names) == 4
         assert record.solver_qpos[1] == pytest.approx(record.qpos[1] + math.pi / 2.0, abs=1e-12)
+        assert record.fk_endpoint_m == pytest.approx(
+            record.transformed_solver_fk_world_m,
+            abs=1e-12,
+        )
         assert record.fk_site_error_m == pytest.approx(
             tuple(
                 record.transformed_solver_fk_world_m[index] - record.mujoco_tip_site_position_m[index]
@@ -71,20 +75,16 @@ def test_fast_arm_fk_site_consistency_default_qpos_fixture_is_deterministic_and_
         ),
         abs=1e-12,
     )
-    assert diagnostic.fk_site_error_norm_m > 1e-3
-    assert diagnostic.fk_site_error_norm_m == pytest.approx(0.039, abs=1e-12)
+    assert diagnostic.fk_site_error_norm_m <= 1e-9
 
 
-def test_fast_arm_fk_site_consistency_narrows_but_does_not_repair_current_residuals() -> None:
+def test_fast_arm_fk_site_consistency_fixed_fixtures_pass_after_model_aligned_fk_repair() -> None:
     records = run_fast_arm_fk_site_consistency_diagnostics()
 
-    assert max(record.fk_site_error_norm_m for record in records) == pytest.approx(
-        0.3450012998489505,
-        abs=1e-12,
-    )
-    assert all(record.status == "mismatch" for record in records)
+    assert max(record.fk_site_error_norm_m for record in records) <= 1e-9
+    assert all(record.status == "pass" for record in records)
     assert all(
-        record.reason == "remaining_model_axis_or_link_contract_mismatch"
+        record.reason == "fk_endpoint_matches_tip_site_within_tolerance"
         for record in records
     )
 
