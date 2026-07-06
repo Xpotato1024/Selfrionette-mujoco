@@ -10,6 +10,7 @@ related:
   - docs/contracts/mujoco-model-name-contract.md
   - docs/architecture/runtime-composition.md
   - src/selfrionette/runtime/evaluation.py
+  - docs/operations/r7-e-followup-joint-convention-fast-arm-model-contract.md
 ---
 
 # Runtime Forward Kinematics Evaluation Contract
