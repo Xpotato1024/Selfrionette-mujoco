@@ -88,19 +88,25 @@ def test_viewer_runtime_loop_rebases_first_input_to_initial_tip_site_position() 
         ),
         abs=1e-12,
     )
-    assert record.motion_command.metadata.get("target_rejected") is not True
+    assert record.motion_command.metadata["target_rejected"] is True
+    assert record.motion_command.metadata["target_rejection_reason"] == "target_discontinuous"
+    assert record.motion_command.metadata["target_rejection_message"].startswith(
+        "candidate qpos exceeds the viewer endpoint continuity threshold"
+    )
     assert record.motion_command.metadata["qpos_before_ik_rad"] == pytest.approx(
         tuple(initial_state.qpos[:4]),
         abs=1e-12,
     )
-    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] > 0.0
-    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] < 2.0
-    assert dist(initial_state.qpos[:4], record.state.qpos[:4]) == pytest.approx(
-        record.motion_command.metadata["qpos_discontinuity_norm_rad"],
+    assert record.motion_command.metadata["ik_output_qpos_rad"] == pytest.approx(
+        (-3.5811621840715073e-13, -0.4201823747665194, 0.585645549824969, 0.17374725940673852),
         abs=1e-9,
     )
+    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] > 1.0
+    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] == pytest.approx(1.3027207247846728, abs=1e-9)
+    assert record.motion_command.metadata["target_discontinuity_threshold_rad"] == pytest.approx(0.2, abs=1e-12)
+    assert dist(initial_state.qpos[:4], record.state.qpos[:4]) == pytest.approx(0.0, abs=1e-12)
     assert record.state.target_position_m == pytest.approx(
-        record.frame.metadata["desired_endpoint_m"],
+        initial_tip_site_position_m,
         abs=1e-12,
     )
 
@@ -144,10 +150,15 @@ def test_viewer_runtime_loop_preserves_keyboard_z_axis_delta(
         ),
         abs=1e-12,
     )
-    assert record.motion_command.metadata.get("target_rejected") is not True
+    if record.motion_command.metadata.get("target_rejected"):
+        assert record.motion_command.metadata["target_rejection_reason"] == "target_discontinuous"
+        assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] > 0.2
+        assert record.state.target_position_m == pytest.approx(initial_tip_site_position_m, abs=1e-12)
+    else:
+        assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] <= 0.2
+        assert record.state.target_position_m == pytest.approx(
+            record.frame.metadata["desired_endpoint_m"],
+            abs=1e-12,
+        )
     assert record.motion_command.metadata["endpoint_delta_m"] == (0.0, 0.0, expected_z_delta_m)
     assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] > 0.0
-    assert record.state.target_position_m == pytest.approx(
-        record.frame.metadata["desired_endpoint_m"],
-        abs=1e-12,
-    )

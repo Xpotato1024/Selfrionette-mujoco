@@ -29,6 +29,8 @@ from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInp
 from selfrionette.transport import StatePublisher
 from selfrionette.transport.stubs import NoOpStatePublisher
 
+VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD = 0.2
+
 
 @dataclass(frozen=True, slots=True)
 class RuntimeInputSourceStepLoopPlan:
@@ -177,6 +179,8 @@ def build_runtime_input_source_step_loop_plan(
             model_path=resolved_model_path,
             loop=selection.loop,
             publisher=publisher if publisher is not None else NoOpStatePublisher(),
+            discontinuity_threshold_rad=VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
+            discontinuity_threshold_label="viewer endpoint continuity threshold",
         )
         pipeline.input_source = pipeline_input_source
         initial_tip_site_position_m = _extract_current_tip_site_endpoint_m(pipeline)
@@ -299,6 +303,8 @@ async def run_runtime_input_source_step_loop(
                             desired_endpoint_m=_coerce_viewer_endpoint_m(desired_endpoint_m),
                             solver_base_world_position_m=solver_base_world_position_m,
                         ),
+                        "viewer_endpoint_continuity_threshold_rad": VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
+                        "accepted_small_motion_threshold_rad": VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
                     },
                 )
         current_qpos_rad = tuple(pre_step_state.qpos)

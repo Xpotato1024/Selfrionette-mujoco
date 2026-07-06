@@ -399,6 +399,22 @@ class FastArmIkFkSanityDiagnostic:
 
 
 @dataclass(frozen=True, slots=True)
+class FastArmViewerEndpointWorkspaceDiagnostic:
+    sample_label: str
+    sample_kind: str
+    qpos_sample: tuple[float, ...]
+    mujoco_tip_site_world_position_m: Vector3
+    solver_local_fk_endpoint_m: Vector3
+    model_aligned_fk_endpoint_m: Vector3
+    desired_world_endpoint_m: Vector3
+    solver_local_ik_target_m: Vector3
+    ik_success: bool
+    ik_output_qpos_rad: tuple[float, ...] | None
+    qpos_delta_norm_from_seed_rad: float | None
+    rejection_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class FastArmJointAxisPerturbationResult:
     joint_name: str
     qpos_index: int
@@ -1179,6 +1195,159 @@ def run_fast_arm_joint_axis_mapping_diagnostics(
         )
 
     return tuple(results)
+
+
+def _fast_arm_viewer_workspace_qpos_samples(
+    *,
+    initial_qpos: tuple[float, ...],
+    perturbation_rad: float = 0.02,
+) -> tuple[tuple[str, tuple[float, ...]], ...]:
+    qpos = tuple(float(value) for value in initial_qpos[:4])
+    samples = [("default_qpos", qpos)]
+    for index, name in enumerate(("joint_1", "joint_2", "joint_3", "elbow")):
+        samples.append(
+            (
+                f"{name}_positive_small",
+                tuple(value + perturbation_rad if axis_index == index else value for axis_index, value in enumerate(qpos)),
+            )
+        )
+        samples.append(
+            (
+                f"{name}_negative_small",
+                tuple(value - perturbation_rad if axis_index == index else value for axis_index, value in enumerate(qpos)),
+            )
+        )
+    return tuple(samples)
+
+
+def _fast_arm_viewer_workspace_endpoint_samples(
+    *,
+    initial_tip_position_m: Vector3,
+    delta_m: float = 0.01,
+) -> tuple[tuple[str, Vector3], ...]:
+    return (
+        ("desired_initial_tip_x_positive_small", _vector_add(initial_tip_position_m, (delta_m, 0.0, 0.0))),
+        ("desired_initial_tip_x_negative_small", _vector_add(initial_tip_position_m, (-delta_m, 0.0, 0.0))),
+        ("desired_initial_tip_y_positive_small", _vector_add(initial_tip_position_m, (0.0, delta_m, 0.0))),
+        ("desired_initial_tip_y_negative_small", _vector_add(initial_tip_position_m, (0.0, -delta_m, 0.0))),
+        ("desired_initial_tip_z_positive_small", _vector_add(initial_tip_position_m, (0.0, 0.0, delta_m))),
+        ("desired_initial_tip_z_negative_small", _vector_add(initial_tip_position_m, (0.0, 0.0, -delta_m))),
+        ("safe_endpoint", (0.6, 0.0, 0.1)),
+        ("initial_mujoco_tip", initial_tip_position_m),
+    )
+
+
+def _set_fast_arm_qpos(
+    simulator: HeadlessMuJoCoSimulator,
+    qpos: Sequence[float],
+) -> None:
+    simulator.apply_qpos_command(JointCommand(joint_angles_rad=tuple(float(value) for value in qpos[:4])))
+
+
+def _build_fast_arm_viewer_workspace_diagnostic(
+    *,
+    sample_label: str,
+    sample_kind: str,
+    qpos_sample: tuple[float, ...],
+    desired_world_endpoint_m: Vector3 | None,
+    model_path: str | Path | None,
+) -> FastArmViewerEndpointWorkspaceDiagnostic:
+    simulator = _build_fast_arm_simulator(model_path)
+    _set_fast_arm_qpos(simulator, qpos_sample)
+    state = simulator.snapshot()
+    mujoco_tip_site_world_position_m = extract_fast_arm_tip_site_endpoint_from_state(state).position_m
+    base_world_position_m = _body_position_from_state(state, _MUJOCO_SOLVER_BASE_BODY_NAME)
+    if base_world_position_m is None:
+        raise ValueError(f"missing MuJoCo body {_MUJOCO_SOLVER_BASE_BODY_NAME!r}")
+
+    solver_fk = FastArmEndpointForwardKinematicsSolver()
+    model_fk = FastArmMuJoCoModelForwardKinematicsSolver()
+    solver_seed_qpos = _mujoco_qpos_to_solver_joint_angles(qpos_sample)
+    solver_local_fk_endpoint_m = solver_fk.forward(solver_seed_qpos)
+    model_aligned_fk_endpoint_m = model_fk.forward(qpos_sample)
+    world_endpoint_m = mujoco_tip_site_world_position_m if desired_world_endpoint_m is None else desired_world_endpoint_m
+    solver_local_ik_target_m = _vector_subtract(world_endpoint_m, base_world_position_m)
+
+    ik_solver = FastArmEndpointInverseKinematicsSolver()
+    try:
+        ik_command = ik_solver.solve(
+            solver_local_ik_target_m,
+            seed_joint_angles_rad=qpos_sample,
+        )
+    except ValueError as exc:
+        return FastArmViewerEndpointWorkspaceDiagnostic(
+            sample_label=sample_label,
+            sample_kind=sample_kind,
+            qpos_sample=qpos_sample,
+            mujoco_tip_site_world_position_m=mujoco_tip_site_world_position_m,
+            solver_local_fk_endpoint_m=solver_local_fk_endpoint_m,
+            model_aligned_fk_endpoint_m=model_aligned_fk_endpoint_m,
+            desired_world_endpoint_m=world_endpoint_m,
+            solver_local_ik_target_m=solver_local_ik_target_m,
+            ik_success=False,
+            ik_output_qpos_rad=None,
+            qpos_delta_norm_from_seed_rad=None,
+            rejection_reason=(
+                "target_unreachable"
+                if str(exc) == "target_position_m is outside the reachable workspace"
+                else "target_non_convergence"
+            ),
+        )
+
+    ik_output_qpos_rad = tuple(ik_command.joint_angles_rad[:4])
+    return FastArmViewerEndpointWorkspaceDiagnostic(
+        sample_label=sample_label,
+        sample_kind=sample_kind,
+        qpos_sample=qpos_sample,
+        mujoco_tip_site_world_position_m=mujoco_tip_site_world_position_m,
+        solver_local_fk_endpoint_m=solver_local_fk_endpoint_m,
+        model_aligned_fk_endpoint_m=model_aligned_fk_endpoint_m,
+        desired_world_endpoint_m=world_endpoint_m,
+        solver_local_ik_target_m=solver_local_ik_target_m,
+        ik_success=True,
+        ik_output_qpos_rad=ik_output_qpos_rad,
+        qpos_delta_norm_from_seed_rad=_vector_norm_m(
+            tuple(ik_output_qpos_rad[index] - qpos_sample[index] for index in range(4))
+        ),
+        rejection_reason=None,
+    )
+
+
+def sample_fast_arm_viewer_endpoint_workspace(
+    *,
+    model_path: str | Path | None = None,
+) -> tuple[FastArmViewerEndpointWorkspaceDiagnostic, ...]:
+    simulator = _build_fast_arm_simulator(model_path)
+    initial_state = simulator.snapshot()
+    initial_qpos = tuple(initial_state.qpos[:4])
+    initial_tip_position_m = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
+    diagnostics: list[FastArmViewerEndpointWorkspaceDiagnostic] = []
+
+    for sample_label, qpos_sample in _fast_arm_viewer_workspace_qpos_samples(initial_qpos=initial_qpos):
+        diagnostics.append(
+            _build_fast_arm_viewer_workspace_diagnostic(
+                sample_label=sample_label,
+                sample_kind="qpos_sample",
+                qpos_sample=qpos_sample,
+                desired_world_endpoint_m=None,
+                model_path=model_path,
+            )
+        )
+
+    for sample_label, desired_world_endpoint_m in _fast_arm_viewer_workspace_endpoint_samples(
+        initial_tip_position_m=initial_tip_position_m
+    ):
+        diagnostics.append(
+            _build_fast_arm_viewer_workspace_diagnostic(
+                sample_label=sample_label,
+                sample_kind="desired_world_endpoint_sample",
+                qpos_sample=initial_qpos,
+                desired_world_endpoint_m=desired_world_endpoint_m,
+                model_path=model_path,
+            )
+        )
+
+    return tuple(diagnostics)
 
 
 def _build_fast_arm_simulator(model_path: str | Path | None) -> HeadlessMuJoCoSimulator:
@@ -2162,12 +2331,14 @@ __all__ = [
     "FastArmFkSiteConsistencyDiagnostic",
     "FastArmEndpointDiagnosticRecord",
     "FastArmIkFkSanityDiagnostic",
+    "FastArmViewerEndpointWorkspaceDiagnostic",
     "FastArmLocalJacobianColumn",
     "FastArmLocalJacobianPoseDiagnostics",
     "FastArmJointAxisPerturbationResult",
     "FastArmEndpointMotionSanityResult",
     "run_fast_arm_fk_site_consistency_diagnostics",
     "run_fast_arm_ik_fk_sanity_diagnostics",
+    "sample_fast_arm_viewer_endpoint_workspace",
     "run_fast_arm_endpoint_trajectory_diagnostics",
     "run_fast_arm_local_jacobian_diagnostics",
     "run_fast_arm_joint_axis_mapping_diagnostics",

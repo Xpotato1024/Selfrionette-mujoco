@@ -48,6 +48,8 @@ def build_concrete_mujoco_pipeline(
     loop: bool = False,
     publisher: StatePublisher,
     seed_joint_angles_rad: tuple[float, ...] | None = None,
+    discontinuity_threshold_rad: float | None = None,
+    discontinuity_threshold_label: str = "global safety threshold",
 ) -> RuntimePipeline:
     runtime_config = RuntimeConfig() if config is None else config
     replay_frames = tuple(frames) if frames is not None else (_default_concrete_frame(),)
@@ -64,6 +66,14 @@ def build_concrete_mujoco_pipeline(
             ik_solver,
             seed_joint_angles_rad=seed_joint_angles_rad,
             qpos_joint_count=4,
+            **(
+                {}
+                if discontinuity_threshold_rad is None
+                else {
+                    "discontinuity_threshold_rad": discontinuity_threshold_rad,
+                    "discontinuity_threshold_label": discontinuity_threshold_label,
+                }
+            ),
         ),
         simulator=simulator,
         publisher=build_endpoint_evaluation_state_publisher(

@@ -58,7 +58,6 @@ def _build_rejected_metadata(
     rejected_desired_endpoint_m: tuple[float, float, float] | None,
 ) -> dict[str, object]:
     rejected_metadata = {} if metadata is None else dict(metadata)
-    rejected_metadata.pop("desired_endpoint_m", None)
     rejected_metadata.pop("target_position_m", None)
     rejected_metadata["runtime_input_safety_applied"] = True
     rejected_metadata["target_status"] = "held"
@@ -135,6 +134,22 @@ def _resolve_target_endpoint_m(intent: InputIntent) -> tuple[float, float, float
 
     if desired_endpoint_m is None:
         return None
+
+    return _coerce_vector3(source_name, desired_endpoint_m)
+
+
+def _resolve_rejected_desired_endpoint_m(
+    intent: InputIntent,
+    *,
+    fallback_endpoint_m: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    desired_endpoint_m = getattr(intent, "desired_endpoint_m", None)
+    source_name = "desired_endpoint_m"
+    if desired_endpoint_m is None:
+        desired_endpoint_m = intent.metadata.get("desired_endpoint_m")
+
+    if desired_endpoint_m is None:
+        return fallback_endpoint_m
 
     return _coerce_vector3(source_name, desired_endpoint_m)
 
@@ -222,12 +237,14 @@ class TargetToJointMotionGenerator:
         current_qpos_rad: tuple[float, ...] | None = None,
         qpos_joint_count: int | None = None,
         discontinuity_threshold_rad: float = DEFAULT_TARGET_DISCONTINUITY_THRESHOLD_RAD,
+        discontinuity_threshold_label: str = "global safety threshold",
     ) -> None:
         self._ik_solver = ik_solver
         self._seed_joint_angles_rad = seed_joint_angles_rad
         self._current_qpos_rad = current_qpos_rad
         self._qpos_joint_count = qpos_joint_count
         self._discontinuity_threshold_rad = float(discontinuity_threshold_rad)
+        self._discontinuity_threshold_label = discontinuity_threshold_label
 
     def set_current_qpos_rad(self, current_qpos_rad: Sequence[float] | None) -> None:
         self._current_qpos_rad = _coerce_joint_angles("current_qpos_rad", current_qpos_rad)
@@ -291,7 +308,10 @@ class TargetToJointMotionGenerator:
                     intent.metadata,
                     reason=_target_rejection_reason_for_error(exc),
                     rejection_message=str(exc),
-                    rejected_desired_endpoint_m=desired_endpoint_m,
+                    rejected_desired_endpoint_m=_resolve_rejected_desired_endpoint_m(
+                        intent,
+                        fallback_endpoint_m=desired_endpoint_m,
+                    ),
                 )
                 rejected_metadata.update(
                     _metadata_with_qpos_diagnostics(
@@ -301,6 +321,8 @@ class TargetToJointMotionGenerator:
                         qpos_discontinuity_norm_rad=0.0 if self._current_qpos_rad is not None else None,
                     )
                 )
+                rejected_metadata["target_discontinuity_threshold_rad"] = self._discontinuity_threshold_rad
+                rejected_metadata["target_discontinuity_threshold_label"] = self._discontinuity_threshold_label
                 return MotionCommand(
                     timestamp_s=intent.timestamp_s,
                     target=None,
@@ -330,10 +352,14 @@ class TargetToJointMotionGenerator:
                     intent.metadata,
                     reason="target_discontinuous",
                     rejection_message=(
-                        "candidate qpos exceeds the discontinuity threshold "
+                        "candidate qpos exceeds the "
+                        f"{self._discontinuity_threshold_label} "
                         f"{self._discontinuity_threshold_rad}"
                     ),
-                    rejected_desired_endpoint_m=desired_endpoint_m,
+                    rejected_desired_endpoint_m=_resolve_rejected_desired_endpoint_m(
+                        intent,
+                        fallback_endpoint_m=desired_endpoint_m,
+                    ),
                 )
                 rejected_metadata.update(
                     _metadata_with_qpos_diagnostics(
@@ -343,6 +369,8 @@ class TargetToJointMotionGenerator:
                         qpos_discontinuity_norm_rad=discontinuity_norm_rad,
                     )
                 )
+                rejected_metadata["target_discontinuity_threshold_rad"] = self._discontinuity_threshold_rad
+                rejected_metadata["target_discontinuity_threshold_label"] = self._discontinuity_threshold_label
                 return MotionCommand(
                     timestamp_s=intent.timestamp_s,
                     target=None,
@@ -368,7 +396,11 @@ class TargetToJointMotionGenerator:
             target_command=target,
             joint_command=joint,
             metadata=_metadata_with_qpos_diagnostics(
-                intent.metadata,
+                {
+                    **intent.metadata,
+                    "target_discontinuity_threshold_rad": self._discontinuity_threshold_rad,
+                    "target_discontinuity_threshold_label": self._discontinuity_threshold_label,
+                },
                 qpos_before_ik_rad=self._current_qpos_rad,
                 ik_output_qpos_rad=joint.joint_angles_rad,
                 qpos_discontinuity_norm_rad=discontinuity_norm_rad,
