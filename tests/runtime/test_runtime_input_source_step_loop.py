@@ -6,7 +6,10 @@ from math import dist
 import pytest
 
 from selfrionette.input_sources import ViewerInputSource
-from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.mujoco_backend import (
+    extract_fast_arm_base_link_position_from_state,
+    extract_fast_arm_tip_site_endpoint_from_state,
+)
 from selfrionette.runtime import (
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
@@ -58,6 +61,7 @@ def test_viewer_runtime_loop_rebases_first_input_to_initial_tip_site_position() 
     initial_tip_site_position_m = extract_fast_arm_tip_site_endpoint_from_state(
         initial_state
     ).position_m
+    initial_base_link_position_m = extract_fast_arm_base_link_position_from_state(initial_state)
 
     ingest_viewer_control_message(source, _keyboard_message("Space"))
     record = _run_one_step(plan)
@@ -76,14 +80,29 @@ def test_viewer_runtime_loop_rebases_first_input_to_initial_tip_site_position() 
         abs=1e-12,
     )
     assert record.frame.metadata["desired_endpoint_m"] != (0.6, 0.0, 0.11)
-    assert record.motion_command.metadata["target_rejected"] is True
-    assert record.motion_command.metadata["target_rejection_reason"] == "target_unreachable"
+    assert record.motion_command.metadata["ik_target_endpoint_m"] == pytest.approx(
+        (
+            initial_tip_site_position_m[0] - initial_base_link_position_m[0],
+            initial_tip_site_position_m[1] - initial_base_link_position_m[1],
+            initial_tip_site_position_m[2] - initial_base_link_position_m[2] + 0.01,
+        ),
+        abs=1e-12,
+    )
+    assert record.motion_command.metadata.get("target_rejected") is not True
     assert record.motion_command.metadata["qpos_before_ik_rad"] == pytest.approx(
         tuple(initial_state.qpos[:4]),
         abs=1e-12,
     )
-    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] == pytest.approx(0.0, abs=1e-12)
-    assert dist(initial_state.qpos[:4], record.state.qpos[:4]) == pytest.approx(0.0, abs=1e-12)
+    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] > 0.0
+    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] < 2.0
+    assert dist(initial_state.qpos[:4], record.state.qpos[:4]) == pytest.approx(
+        record.motion_command.metadata["qpos_discontinuity_norm_rad"],
+        abs=1e-9,
+    )
+    assert record.state.target_position_m == pytest.approx(
+        record.frame.metadata["desired_endpoint_m"],
+        abs=1e-12,
+    )
 
 
 @pytest.mark.parametrize(
@@ -109,13 +128,26 @@ def test_viewer_runtime_loop_preserves_keyboard_z_axis_delta(
     initial_tip_site_position_m = extract_fast_arm_tip_site_endpoint_from_state(
         plan.pipeline.simulator.snapshot()
     ).position_m
+    initial_base_link_position_m = extract_fast_arm_base_link_position_from_state(
+        plan.pipeline.simulator.snapshot()
+    )
 
     ingest_viewer_control_message(source, _keyboard_message(key_code))
     record = _run_one_step(plan)
 
     assert record.frame.metadata["endpoint_delta_m"] == (0.0, 0.0, expected_z_delta_m)
+    assert record.motion_command.metadata["ik_target_endpoint_m"] == pytest.approx(
+        (
+            initial_tip_site_position_m[0] - initial_base_link_position_m[0],
+            initial_tip_site_position_m[1] - initial_base_link_position_m[1],
+            initial_tip_site_position_m[2] - initial_base_link_position_m[2] + expected_z_delta_m,
+        ),
+        abs=1e-12,
+    )
+    assert record.motion_command.metadata.get("target_rejected") is not True
     assert record.motion_command.metadata["endpoint_delta_m"] == (0.0, 0.0, expected_z_delta_m)
-    assert record.motion_command.metadata["rejected_desired_endpoint_m"][2] == pytest.approx(
-        initial_tip_site_position_m[2] + expected_z_delta_m,
+    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] > 0.0
+    assert record.state.target_position_m == pytest.approx(
+        record.frame.metadata["desired_endpoint_m"],
         abs=1e-12,
     )

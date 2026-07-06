@@ -6,7 +6,10 @@ from math import dist
 import pytest
 
 from selfrionette.input_sources import ViewerInputSource
-from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.mujoco_backend import (
+    extract_fast_arm_base_link_position_from_state,
+    extract_fast_arm_tip_site_endpoint_from_state,
+)
 from selfrionette.runtime import (
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
@@ -91,6 +94,9 @@ def test_viewer_step_loop_accepts_ingested_message_and_updates_endpoint_state() 
     )
 
     assert plan.pipeline.input_source is viewer_input_source
+    initial_state = plan.pipeline.simulator.snapshot()
+    initial_tip_position_m = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
+    initial_base_link_position_m = extract_fast_arm_base_link_position_from_state(initial_state)
     ingest_viewer_control_message(viewer_input_source, _build_keyboard_message(timestamp_s=1.0))
     records = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))
 
@@ -99,12 +105,24 @@ def test_viewer_step_loop_accepts_ingested_message_and_updates_endpoint_state() 
     assert len(records) == 1
     assert records[0].frame.metadata["source_kind"] == "viewer_keyboard"
     assert records[0].motion_command.metadata["source_kind"] == "viewer_keyboard"
-    assert records[0].frame.metadata["current_tip_position_m"] == pytest.approx((0.622, 0.0, 0.7), abs=1e-9)
-    assert desired_endpoint_m == pytest.approx((0.632, 0.0, 0.7), abs=1e-9)
-    assert records[0].motion_command.metadata["target_rejected"] is True
-    assert records[0].motion_command.metadata["target_rejection_reason"] == "target_unreachable"
-    assert records[0].motion_command.metadata["rejected_desired_endpoint_m"] == desired_endpoint_m
-    assert publisher.states[0].target_position_m == pytest.approx((0.622, 0.0, 0.7), abs=1e-9)
+    assert records[0].frame.metadata["current_tip_position_m"] == pytest.approx(initial_tip_position_m, abs=1e-9)
+    assert desired_endpoint_m == pytest.approx((initial_tip_position_m[0] + 0.01, initial_tip_position_m[1], initial_tip_position_m[2]), abs=1e-9)
+    assert records[0].motion_command.metadata.get("target_rejected") is not True
+    assert records[0].motion_command.metadata["ik_target_endpoint_m"] == pytest.approx(
+        (
+            initial_tip_position_m[0] - initial_base_link_position_m[0] + 0.01,
+            initial_tip_position_m[1] - initial_base_link_position_m[1],
+            initial_tip_position_m[2] - initial_base_link_position_m[2],
+        ),
+        abs=1e-9,
+    )
+    assert records[0].motion_command.metadata["qpos_discontinuity_norm_rad"] > 0.0
+    assert records[0].motion_command.metadata["qpos_discontinuity_norm_rad"] < 2.0
+    assert publisher.states[0].target_position_m == pytest.approx(desired_endpoint_m, abs=1e-9)
+    assert publisher.states[0].metadata["ik_target_endpoint_m"] == pytest.approx(
+        records[0].motion_command.metadata["ik_target_endpoint_m"],
+        abs=1e-9,
+    )
 
 
 def test_viewer_step_loop_holds_on_stale_source_state() -> None:
@@ -140,6 +158,13 @@ def test_viewer_step_loop_accepts_off_plane_keyboard_input_without_crashing() ->
     selection = select_runtime_input_source("viewer", steps=1)
     publisher = RecordingPublisher()
     viewer_input_source = ViewerInputSource(clock=clock.monotonic)
+
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        publisher=publisher,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=viewer_input_source,
+    )
     ingest_viewer_control_message(
         viewer_input_source,
         ViewerControlMessage(
@@ -154,33 +179,27 @@ def test_viewer_step_loop_accepts_off_plane_keyboard_input_without_crashing() ->
             ),
         ),
     )
-
-    plan = build_runtime_input_source_step_loop_plan(
-        selection,
-        publisher=publisher,
-        viewer_clock=clock.monotonic,
-        viewer_input_source=viewer_input_source,
-    )
     records = _run_single_viewer_step(plan)
 
     state = records[0].state
     command = records[0].motion_command
 
     assert len(records) == 1
-    assert records[0].frame.metadata["current_tip_position_m"] == (0.6, 0.0, 0.1)
+    assert records[0].frame.metadata["current_tip_position_m"] == pytest.approx((0.622, 0.0, 0.7), abs=1e-9)
     assert command.joint is not None
     assert command.metadata.get("target_rejected") is not True
     assert command.metadata["endpoint_delta_m"] == (0.0, 0.01, 0.0)
-    assert command.metadata["qpos_before_ik_rad"] == pytest.approx((0.0, -1.5707963267948966, 0.0, 0.0), abs=1e-12)
     assert len(command.metadata["ik_output_qpos_rad"]) == 4
+    assert command.metadata["qpos_discontinuity_norm_rad"] > 0.0
     assert command.metadata["qpos_discontinuity_norm_rad"] < 2.0
     assert state.metadata.get("target_rejected") is not True
-    assert state.metadata["desired_endpoint_m"] == state.target_position_m
-    assert state.metadata["target_position_m"] == state.target_position_m
+    assert state.metadata["desired_endpoint_m"] == pytest.approx((0.622, 0.01, 0.7), abs=1e-9)
+    assert state.metadata["ik_target_endpoint_m"] == pytest.approx((0.6910000000000001, 0.01, 0.0), abs=1e-9)
+    assert state.target_position_m == state.metadata["desired_endpoint_m"]
     assert state.target_position_m is not None
 
 
-def test_viewer_step_loop_rejects_space_shift_boundary_without_crashing() -> None:
+def test_viewer_step_loop_accepts_space_inputs_before_boundary_without_crashing() -> None:
     clock = _FakeClock()
     selection = select_runtime_input_source("viewer", steps=1)
     publisher = RecordingPublisher()
@@ -308,34 +327,45 @@ def test_viewer_step_loop_keeps_first_input_qpos_continuous() -> None:
         viewer_input_source=viewer_input_source,
     )
     pre_step_state = plan.pipeline.simulator.snapshot()
+    initial_tip_site_position_m = extract_fast_arm_tip_site_endpoint_from_state(pre_step_state).position_m
+    initial_base_link_position_m = extract_fast_arm_base_link_position_from_state(pre_step_state)
 
+    assert viewer_input_source.current_endpoint_m == pytest.approx(initial_tip_site_position_m, abs=1e-9)
     ingest_viewer_control_message(
         viewer_input_source,
-        ViewerControlMessage(
-            type="viewer_control_message",
-            timestamp_s=4.0,
-            source_kind="keyboard",
-            keyboard=ViewerControlKeyboardMessage(
-                active_key_codes=("KeyA",),
-                key_state={"KeyA": True},
-                focus_state="focused",
-                zero_state=False,
-            ),
-        ),
+        _build_keyboard_message(timestamp_s=4.5, key_code="Space"),
     )
+
     records = _run_single_viewer_step(plan)
 
     post_step_state = records[0].state
 
-    initial_tip_site_position_m = extract_fast_arm_tip_site_endpoint_from_state(pre_step_state).position_m
-    assert viewer_input_source.current_endpoint_m == pytest.approx(initial_tip_site_position_m, abs=1e-9)
     assert records[0].frame.metadata["current_tip_position_m"] == pytest.approx(initial_tip_site_position_m, abs=1e-9)
-    assert records[0].frame.metadata["desired_endpoint_m"] != (0.59, 0.0, 0.1)
-    assert records[0].motion_command.metadata["target_rejected"] is True
-    assert records[0].motion_command.metadata["target_rejection_reason"] == "target_unreachable"
-    assert dist(pre_step_state.qpos[:4], post_step_state.qpos[:4]) == pytest.approx(0.0, abs=1e-12)
+    assert records[0].frame.metadata["desired_endpoint_m"] == pytest.approx(
+        (
+            initial_tip_site_position_m[0],
+            initial_tip_site_position_m[1],
+            initial_tip_site_position_m[2] + 0.01,
+        ),
+        abs=1e-9,
+    )
+    assert records[0].motion_command.metadata.get("target_rejected") is not True
+    assert records[0].motion_command.metadata["ik_target_endpoint_m"] == pytest.approx(
+        (
+            initial_tip_site_position_m[0] - initial_base_link_position_m[0],
+            initial_tip_site_position_m[1] - initial_base_link_position_m[1],
+            initial_tip_site_position_m[2] - initial_base_link_position_m[2] + 0.01,
+        ),
+        abs=1e-9,
+    )
+    assert records[0].motion_command.metadata["qpos_discontinuity_norm_rad"] > 0.0
+    assert records[0].motion_command.metadata["qpos_discontinuity_norm_rad"] < 2.0
+    assert dist(pre_step_state.qpos[:4], post_step_state.qpos[:4]) == pytest.approx(
+        records[0].motion_command.metadata["qpos_discontinuity_norm_rad"],
+        abs=1e-9,
+    )
     assert post_step_state.metadata["source_kind"] == "viewer_keyboard"
-    assert post_step_state.metadata["target_rejected"] is True
+    assert post_step_state.metadata.get("target_rejected") is not True
 
 
 @pytest.mark.parametrize(
@@ -361,6 +391,9 @@ def test_viewer_step_loop_preserves_keyboard_z_axis_delta_after_initial_tip_reba
     )
     initial_state = plan.pipeline.simulator.snapshot()
     initial_tip_site_position_m = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
+    initial_base_link_position_m = extract_fast_arm_base_link_position_from_state(initial_state)
+
+    assert viewer_input_source.current_endpoint_m == pytest.approx(initial_tip_site_position_m, abs=1e-9)
 
     ingest_viewer_control_message(
         viewer_input_source,
@@ -368,21 +401,32 @@ def test_viewer_step_loop_preserves_keyboard_z_axis_delta_after_initial_tip_reba
     )
     records = _run_single_viewer_step(plan)
     record = records[0]
-
-    assert viewer_input_source.current_endpoint_m == pytest.approx(initial_tip_site_position_m, abs=1e-9)
     assert record.frame.metadata["current_tip_position_m"] == pytest.approx(initial_tip_site_position_m, abs=1e-9)
     assert record.frame.metadata["endpoint_delta_m"] == (0.0, 0.0, expected_z_delta_m)
-    assert record.frame.metadata["desired_endpoint_m"][2] == pytest.approx(
-        initial_tip_site_position_m[2] + expected_z_delta_m,
-        abs=1e-12,
+    assert record.frame.metadata["desired_endpoint_m"] == pytest.approx(
+        (
+            initial_tip_site_position_m[0],
+            initial_tip_site_position_m[1],
+            initial_tip_site_position_m[2] + expected_z_delta_m,
+        ),
+        abs=1e-9,
     )
     assert record.motion_command.metadata["endpoint_delta_m"] == (0.0, 0.0, expected_z_delta_m)
-    assert record.motion_command.metadata["rejected_desired_endpoint_m"][2] == pytest.approx(
-        initial_tip_site_position_m[2] + expected_z_delta_m,
-        abs=1e-12,
+    assert record.motion_command.metadata["ik_target_endpoint_m"] == pytest.approx(
+        (
+            initial_tip_site_position_m[0] - initial_base_link_position_m[0],
+            initial_tip_site_position_m[1] - initial_base_link_position_m[1],
+            initial_tip_site_position_m[2] - initial_base_link_position_m[2] + expected_z_delta_m,
+        ),
+        abs=1e-9,
     )
-    assert record.motion_command.metadata["target_rejection_reason"] == "target_unreachable"
-    assert dist(initial_state.qpos[:4], record.state.qpos[:4]) == pytest.approx(0.0, abs=1e-12)
+    assert record.motion_command.metadata.get("target_rejected") is not True
+    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] > 0.0
+    assert record.motion_command.metadata["qpos_discontinuity_norm_rad"] < 2.0
+    assert dist(initial_state.qpos[:4], record.state.qpos[:4]) == pytest.approx(
+        record.motion_command.metadata["qpos_discontinuity_norm_rad"],
+        abs=1e-9,
+    )
 
 
 def test_viewer_step_loop_keeps_repeated_small_inputs_continuous_and_nonzero_fast_arm_qpos() -> None:
@@ -412,16 +456,22 @@ def test_viewer_step_loop_keeps_repeated_small_inputs_continuous_and_nonzero_fas
         ),
     )
 
-    previous_qpos = plan.pipeline.simulator.snapshot().qpos
+    saw_nonzero_motion = False
     for _ in range(3):
         clock.advance(0.01)
         records = _run_single_viewer_step(plan)
         state = records[0].state
 
-        assert records[0].motion_command.metadata["target_rejected"] is True
+        assert records[0].motion_command.metadata.get("target_rejected") is not True
         assert len(state.qpos[:4]) == 4
-        assert dist(previous_qpos[:4], state.qpos[:4]) == pytest.approx(0.0, abs=1e-12)
-        previous_qpos = state.qpos
+        assert dist(
+            records[0].motion_command.metadata["qpos_before_ik_rad"][:4],
+            tuple(state.qpos[:4]),
+        ) == pytest.approx(records[0].motion_command.metadata["qpos_discontinuity_norm_rad"], abs=1e-9)
+        if records[0].motion_command.metadata["qpos_discontinuity_norm_rad"] > 0.0:
+            saw_nonzero_motion = True
+        assert records[0].motion_command.metadata["qpos_discontinuity_norm_rad"] < 2.0
+    assert saw_nonzero_motion is True
 
 
 def test_viewer_step_loop_publishes_active_target_for_keyboard_input() -> None:
@@ -429,7 +479,12 @@ def test_viewer_step_loop_publishes_active_target_for_keyboard_input() -> None:
     selection = select_runtime_input_source("viewer", steps=1)
     publisher = RecordingPublisher()
     viewer_input_source = ViewerInputSource(clock=clock.monotonic)
-
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        publisher=publisher,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=viewer_input_source,
+    )
     ingest_viewer_control_message(
         viewer_input_source,
         ViewerControlMessage(
@@ -444,18 +499,15 @@ def test_viewer_step_loop_publishes_active_target_for_keyboard_input() -> None:
             ),
         ),
     )
-    plan = build_runtime_input_source_step_loop_plan(
-        selection,
-        publisher=publisher,
-        viewer_clock=clock.monotonic,
-        viewer_input_source=viewer_input_source,
-    )
     records = _run_single_viewer_step(plan)
 
     state = records[0].state
 
-    assert records[0].frame.metadata["current_tip_position_m"] == (0.6, 0.0, 0.1)
+    assert records[0].frame.metadata["current_tip_position_m"] == pytest.approx((0.622, 0.0, 0.7), abs=1e-9)
     assert state.metadata.get("target_rejected") is not True
+    assert state.metadata["desired_endpoint_m"] == pytest.approx((0.622, 0.01, 0.7), abs=1e-9)
+    assert state.metadata["ik_target_endpoint_m"] == pytest.approx((0.6910000000000001, 0.01, 0.0), abs=1e-9)
+    assert records[0].motion_command.metadata.get("target_rejected") is not True
     assert state.metadata["desired_endpoint_m"] == state.target_position_m
     assert state.metadata["target_position_m"] == state.target_position_m
     assert "rejected_desired_endpoint_m" not in state.metadata
@@ -499,7 +551,7 @@ def test_viewer_step_loop_keeps_rebased_endpoint_after_rejected_repeated_ad_inpu
 
     assert rejected_record is not None
     assert viewer_input_source.current_endpoint_m != rejected_record.motion_command.metadata["rejected_desired_endpoint_m"]
-    assert viewer_input_source.current_endpoint_m in {(0.6, 0.0, 0.1), last_valid_endpoint_m}
+    assert viewer_input_source.current_endpoint_m == pytest.approx(rejected_record.state.target_position_m, abs=1e-9)
 
     clock.advance(0.01)
     ingest_viewer_control_message(
@@ -518,9 +570,9 @@ def test_viewer_step_loop_keeps_rebased_endpoint_after_rejected_repeated_ad_inpu
     )
     recovery_records = _run_single_viewer_step(plan)
 
-    assert recovery_records[0].motion_command.metadata["target_rejected"] is True
-    assert recovery_records[0].state.target_position_m == last_valid_endpoint_m
-    assert viewer_input_source.current_endpoint_m == last_valid_endpoint_m
+    assert recovery_records[0].motion_command.metadata.get("target_rejected") is not True
+    assert recovery_records[0].state.target_position_m == recovery_records[0].state.metadata["desired_endpoint_m"]
+    assert viewer_input_source.current_endpoint_m == recovery_records[0].state.target_position_m
 
 
 def test_viewer_step_loop_keeps_rebased_endpoint_after_rejected_vertical_input() -> None:

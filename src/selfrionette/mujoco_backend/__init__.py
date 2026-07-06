@@ -27,6 +27,7 @@ from selfrionette.mujoco_backend.model_loader import (
 )
 from selfrionette.mujoco_backend.endpoint_extraction import (
     RuntimeMuJoCoSiteEndpointEvaluation,
+    extract_fast_arm_base_link_position_from_state,
     extract_fast_arm_end_effector_site_endpoint,
     extract_fast_arm_end_effector_site_endpoint_from_state,
     extract_fast_arm_tip_site_endpoint,
@@ -58,6 +59,7 @@ __all__ = [
     "ResolvedModelReference",
     "RuntimeMuJoCoSiteEndpointEvaluation",
     "fast_arm_model_name_contract",
+    "extract_fast_arm_base_link_position_from_state",
     "extract_fast_arm_end_effector_site_endpoint",
     "extract_fast_arm_end_effector_site_endpoint_from_state",
     "extract_fast_arm_tip_site_endpoint",

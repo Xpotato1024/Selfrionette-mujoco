@@ -101,6 +101,25 @@ def _resolve_reference_position_from_state(
     )
 
 
+def _resolve_body_position_from_state(
+    state: MuJoCoState,
+    *,
+    body_name: str,
+    role: str,
+) -> Vector3:
+    for body in state.bodies:
+        if body.name == body_name:
+            return body.position_m
+
+    raise ValueError(
+        _missing_name_message(
+            kind="body",
+            name=body_name,
+            role=role,
+        )
+    )
+
+
 def _resolve_fast_arm_reference_from_state(
     state: MuJoCoState,
     *,
@@ -219,6 +238,14 @@ def extract_fast_arm_end_effector_site_endpoint_from_state(
     )
 
 
+def extract_fast_arm_base_link_position_from_state(state: MuJoCoState) -> Vector3:
+    return _resolve_body_position_from_state(
+        state,
+        body_name="base_link",
+        role="solver base",
+    )
+
+
 def extract_mujoco_site_endpoint_from_state(
     state: MuJoCoState,
     *,
@@ -234,6 +261,7 @@ __all__ = [
     "RuntimeMuJoCoSiteEndpointEvaluation",
     "extract_fast_arm_end_effector_site_endpoint",
     "extract_fast_arm_end_effector_site_endpoint_from_state",
+    "extract_fast_arm_base_link_position_from_state",
     "extract_fast_arm_tip_site_endpoint",
     "extract_fast_arm_tip_site_endpoint_from_state",
     "extract_mujoco_site_endpoint",

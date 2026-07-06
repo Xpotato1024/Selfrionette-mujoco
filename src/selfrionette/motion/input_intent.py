@@ -116,6 +116,11 @@ def _metadata_with_qpos_diagnostics(
 
 
 def _resolve_target_endpoint_m(intent: InputIntent) -> tuple[float, float, float] | None:
+    ik_target_endpoint_m = intent.metadata.get("ik_target_endpoint_m")
+    source_name = "ik_target_endpoint_m"
+    if ik_target_endpoint_m is not None:
+        return _coerce_vector3(source_name, ik_target_endpoint_m)
+
     desired_endpoint_m = getattr(intent, "desired_endpoint_m", None)
     source_name = "desired_endpoint_m"
     if desired_endpoint_m is None:
