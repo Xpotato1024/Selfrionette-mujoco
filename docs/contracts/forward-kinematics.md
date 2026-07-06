@@ -11,6 +11,7 @@ related:
   - docs/operations/r6-h-p1-stub-inventory.md
   - docs/contracts/motion-command.md
   - docs/architecture/runtime-composition.md
+  - docs/operations/r7-e-followup-joint-convention-fast-arm-model-contract.md
 ---
 
 # Forward Kinematics Contract
