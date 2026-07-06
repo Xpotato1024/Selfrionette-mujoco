@@ -11,6 +11,7 @@ related:
   - docs/architecture/runtime-composition.md
   - src/selfrionette/runtime/evaluation.py
   - docs/operations/r7-e-followup-joint-convention-fast-arm-model-contract.md
+  - docs/operations/r7-e-followup-viewer-backend-endpoint-separation.md
 ---
 
 # Runtime Forward Kinematics Evaluation Contract

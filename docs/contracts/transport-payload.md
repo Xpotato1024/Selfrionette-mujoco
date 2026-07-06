@@ -9,6 +9,7 @@ related:
   - docs/contracts/mujoco-state.md
   - docs/contracts/mujoco-model-name-contract.md
   - docs/contracts/parallel-work-contracts.md
+  - docs/operations/r7-e-followup-viewer-backend-endpoint-separation.md
 ---
 
 # Transport Payload Contract
