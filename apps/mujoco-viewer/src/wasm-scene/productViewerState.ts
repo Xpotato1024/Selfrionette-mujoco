@@ -12,16 +12,27 @@ export interface ProductViewerInputOverlayButtonState {
 
 export interface ProductViewerInputOverlayState {
   sourceKind: string;
+  intentKind: string | null;
+  inputContinuity: string | null;
   sourceActive: boolean;
   commandAgeMs: number | null;
   staleReason: string | null;
   viewerSourceKind: string | null;
   sequence: number | null;
+  axisValues: number[];
+  localEndpointSpeedMS: number | null;
+  localEndpointMaxDeltaM: number | null;
+  endpointVelocityMS: number[];
+  endpointDeltaM: number[];
   runtimeInputSafetyApplied: boolean | null;
   targetStatus: string | null;
   targetRejected: boolean | null;
   targetRejectionReason: string | null;
   targetRejectionMessage: string | null;
+  localMotionPolicy: string | null;
+  motionStatus: string | null;
+  motionRejectionReason: string | null;
+  qposDeltaNormRad: number | null;
   rejectedDesiredEndpointM: number[] | null;
   lastValidTargetPositionM: number[] | null;
   endpointEvaluationState: "available" | "missing" | "malformed";
@@ -205,6 +216,9 @@ function parseInputOverlayState(
   const rejectedDesiredEndpointM = parseOptionalVector3(metadata.rejected_desired_endpoint_m);
   const lastValidTargetPositionM = isPayload ? parseOptionalVector3(payloadOrMetadata.target_position_m) : null;
   const targetStatusRaw = parseOptionalString(metadata.target_status);
+  const axisValues = parseOptionalVector3(metadata.axis_values) ?? [];
+  const endpointVelocityMS = parseOptionalVector3(metadata.endpoint_velocity_m_s) ?? [];
+  const endpointDeltaM = parseOptionalVector3(metadata.endpoint_delta_m) ?? [];
   const endpointEvaluationPresent = isPayload && "endpoint_evaluation" in payloadOrMetadata;
   const endpointEvaluation = endpointEvaluationPresent ? payloadOrMetadata.endpoint_evaluation : undefined;
   const endpointEvaluationState = !endpointEvaluationPresent
@@ -225,11 +239,18 @@ function parseInputOverlayState(
 
   return {
     sourceKind: typeof metadata.source_kind === "string" ? metadata.source_kind : "n/a",
+    intentKind: parseOptionalString(metadata.intent_kind),
+    inputContinuity: parseOptionalString(metadata.input_continuity),
     sourceActive: metadata.source_active === true,
     commandAgeMs: parseOptionalNonNegativeInteger(metadata.command_age_ms),
     staleReason: parseOptionalString(metadata.stale_reason),
     viewerSourceKind: controlMessage === null ? null : parseOptionalString(controlMessage.viewer_source_kind),
     sequence: controlMessage === null ? null : parseOptionalInteger(controlMessage.sequence),
+    axisValues,
+    localEndpointSpeedMS: parseOptionalFiniteNumber(metadata.local_endpoint_speed_m_s),
+    localEndpointMaxDeltaM: parseOptionalFiniteNumber(metadata.local_endpoint_max_delta_m),
+    endpointVelocityMS,
+    endpointDeltaM,
     runtimeInputSafetyApplied: runtimeInputSafetyApplied ? true : metadata.runtime_input_safety_applied === false ? false : null,
     targetStatus:
       targetStatusRaw ??
@@ -243,6 +264,10 @@ function parseInputOverlayState(
     targetRejected: targetRejected ? true : metadata.target_rejected === false ? false : null,
     targetRejectionReason: parseOptionalString(metadata.target_rejection_reason),
     targetRejectionMessage: parseOptionalString(metadata.target_rejection_message),
+    localMotionPolicy: parseOptionalString(metadata.local_motion_policy),
+    motionStatus: parseOptionalString(metadata.motion_status),
+    motionRejectionReason: parseOptionalString(metadata.motion_rejection_reason),
+    qposDeltaNormRad: parseOptionalFiniteNumber(metadata.qpos_delta_norm_rad),
     rejectedDesiredEndpointM,
     lastValidTargetPositionM,
     endpointEvaluationState,
@@ -322,6 +347,8 @@ export function formatInputOverlayText(inputOverlay: ProductViewerInputOverlaySt
   if (inputOverlay === null) {
     return [
       "input source: unavailable",
+      "intent kind: n/a",
+      "input continuity: n/a",
       "active: n/a",
       "command age_ms: n/a",
       "stale reason: n/a",
@@ -330,6 +357,13 @@ export function formatInputOverlayText(inputOverlay: ProductViewerInputOverlaySt
       "target rejected: n/a",
       "target rejection reason: n/a",
       "target rejection message: n/a",
+      "local motion policy: n/a",
+      "motion status: n/a",
+      "motion rejection reason: n/a",
+      "qpos delta norm_rad: n/a",
+      "axis values: none",
+      "endpoint velocity_m_s: none",
+      "endpoint delta_m: none",
       "rejected desired endpoint_m: n/a",
       "last valid target_m: n/a",
       "endpoint evaluation: unavailable",
@@ -344,6 +378,8 @@ export function formatInputOverlayText(inputOverlay: ProductViewerInputOverlaySt
   return [
     `input source: ${inputOverlay.sourceKind}`,
     `viewer source kind: ${inputOverlay.viewerSourceKind ?? "n/a"}`,
+    `intent kind: ${inputOverlay.intentKind ?? "n/a"}`,
+    `input continuity: ${inputOverlay.inputContinuity ?? "n/a"}`,
     `active: ${inputOverlay.sourceActive ? "yes" : "no"}`,
     `sequence: ${inputOverlay.sequence === null ? "n/a" : String(inputOverlay.sequence)}`,
     `command age_ms: ${inputOverlay.commandAgeMs === null ? "n/a" : String(inputOverlay.commandAgeMs)}`,
@@ -355,6 +391,13 @@ export function formatInputOverlayText(inputOverlay: ProductViewerInputOverlaySt
     `target rejected: ${inputOverlay.targetRejected === null ? "none" : String(inputOverlay.targetRejected)}`,
     `target rejection reason: ${inputOverlay.targetRejectionReason ?? "none"}`,
     `target rejection message: ${inputOverlay.targetRejectionMessage ?? "none"}`,
+    `local motion policy: ${inputOverlay.localMotionPolicy ?? "n/a"}`,
+    `motion status: ${inputOverlay.motionStatus ?? "n/a"}`,
+    `motion rejection reason: ${inputOverlay.motionRejectionReason ?? "none"}`,
+    `qpos delta norm_rad: ${inputOverlay.qposDeltaNormRad === null ? "n/a" : inputOverlay.qposDeltaNormRad.toFixed(6)}`,
+    `axis values: ${formatNumberList(inputOverlay.axisValues)}`,
+    `endpoint velocity_m_s: ${formatNumberList(inputOverlay.endpointVelocityMS)}`,
+    `endpoint delta_m: ${formatNumberList(inputOverlay.endpointDeltaM)}`,
     `rejected desired endpoint_m: ${formatVector3List(inputOverlay.rejectedDesiredEndpointM)}`,
     `last valid target_m: ${formatVector3List(inputOverlay.lastValidTargetPositionM)}`,
     `endpoint evaluation: ${inputOverlay.endpointEvaluationState}`,

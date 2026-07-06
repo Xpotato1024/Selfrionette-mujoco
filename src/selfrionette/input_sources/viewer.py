@@ -61,21 +61,19 @@ def _round_vector3(vector: tuple[float, float, float], *, places: int = 12) -> t
 def _coerce_axis_vector3(
     axes: Sequence[float],
     *,
-    step_m: float,
     deadzone: float,
-    max_delta_m: float,
 ) -> tuple[float, float, float]:
     axis_values = tuple(float(axis) for axis in axes)
-    raw_delta_m = (
+    raw_axis_values = (
         axis_values[0] if len(axis_values) > 0 else 0.0,
         axis_values[1] if len(axis_values) > 1 else 0.0,
         axis_values[2] if len(axis_values) > 2 else 0.0,
     )
-    deadzoned_delta_m = tuple(
-        0.0 if abs(component) <= deadzone else component * step_m
-        for component in raw_delta_m
+    deadzoned_axis_values = tuple(
+        0.0 if abs(component) <= deadzone else component
+        for component in raw_axis_values
     )
-    return _clamp_vector3(deadzoned_delta_m, limit=max_delta_m)
+    return _clamp_vector3(deadzoned_axis_values, limit=1.0)
 
 
 def _gamepad_button_buttons(buttons: Sequence[ViewerControlGamepadButtonMessage]) -> tuple[bool, ...]:
@@ -105,11 +103,16 @@ def _stale_reason_for_timeout(timeout_ms: int) -> str:
 @dataclass(frozen=True, slots=True)
 class _ViewerFrameSpec:
     source_kind: str
+    intent_kind: str
+    input_continuity: str
     source_active: bool
     stale_reason: str | None
     desired_endpoint_m: tuple[float, float, float]
-    endpoint_delta_m: tuple[float, float, float]
+    endpoint_velocity_m_s: tuple[float, float, float]
     current_tip_position_m: tuple[float, float, float]
+    axis_values: tuple[float, float, float]
+    local_endpoint_speed_m_s: float
+    local_endpoint_max_delta_m: float
     values: tuple[float, ...]
     buttons: tuple[bool, ...]
     viewer_source_kind: str | None
@@ -127,14 +130,14 @@ class ViewerInputSource:
         timeout_ms: int = DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS,
         clock: Callable[[], float] = monotonic,
         keyboard_config: KeyboardInputConfig | None = None,
-        gamepad_step_m: float = 0.01,
+        gamepad_speed_m_s: float = 0.1,
         gamepad_deadzone: float = 0.1,
         gamepad_max_delta_m: float = 0.03,
     ) -> None:
         if timeout_ms < 0:
             raise ValueError("timeout_ms must be non-negative")
-        if not isfinite(gamepad_step_m) or gamepad_step_m < 0.0:
-            raise ValueError("gamepad_step_m must be finite and non-negative")
+        if not isfinite(gamepad_speed_m_s) or gamepad_speed_m_s < 0.0:
+            raise ValueError("gamepad_speed_m_s must be finite and non-negative")
         if not isfinite(gamepad_deadzone) or gamepad_deadzone < 0.0:
             raise ValueError("gamepad_deadzone must be finite and non-negative")
         if not isfinite(gamepad_max_delta_m) or gamepad_max_delta_m < 0.0:
@@ -143,7 +146,7 @@ class ViewerInputSource:
         self._clock = clock
         self._timeout_ms = timeout_ms
         self._keyboard_config = build_default_keyboard_input_config() if keyboard_config is None else keyboard_config
-        self._gamepad_step_m = float(gamepad_step_m)
+        self._gamepad_speed_m_s = float(gamepad_speed_m_s)
         self._gamepad_deadzone = float(gamepad_deadzone)
         self._gamepad_max_delta_m = float(gamepad_max_delta_m)
 
@@ -163,6 +166,9 @@ class ViewerInputSource:
                 "sequence": None,
                 "keyboard": None,
                 "gamepad": None,
+                "metadata": {},
+                "intent_kind": None,
+                "input_continuity": None,
             },
             values=(),
             buttons=(),
@@ -205,6 +211,8 @@ class ViewerInputSource:
             "target_position_m": self._current_endpoint_m,
             "viewer_source_kind": viewer_source_kind,
             _VIEWER_CONTROL_SUMMARY_KEY: dict(control_summary),
+            "intent_kind": None,
+            "input_continuity": None,
         }
         return RawInputFrame(
             source=_VIEWER_SOURCE_KIND,
@@ -222,12 +230,11 @@ class ViewerInputSource:
             timestamp_s=message.timestamp_s,
             config=self._keyboard_config,
         )
-        desired_endpoint_m = _round_vector3(
-            _coerce_vector3("desired_endpoint_m", motion_command.metadata["desired_endpoint_m"])
+        axis_values = _round_vector3(_coerce_vector3("axis_values", motion_command.metadata["axis_values"]))
+        endpoint_velocity_m_s = _round_vector3(
+            _coerce_vector3("endpoint_velocity_m_s", motion_command.metadata["endpoint_velocity_m_s"])
         )
-        endpoint_delta_m = _round_vector3(
-            _coerce_vector3("endpoint_delta_m", motion_command.metadata["endpoint_delta_m"])
-        )
+        desired_endpoint_m = _round_vector3(self._current_endpoint_m)
         key_state = dict(message.keyboard.key_state)
         summary = {
             "viewer_source_kind": "keyboard",
@@ -238,16 +245,24 @@ class ViewerInputSource:
                 "focus_state": message.keyboard.focus_state,
                 "zero_state": message.keyboard.zero_state,
             },
+            "metadata": dict(message.metadata),
+            "intent_kind": motion_command.metadata["intent_kind"],
+            "input_continuity": motion_command.metadata["input_continuity"],
         }
 
         return _ViewerFrameSpec(
             source_kind=_VIEWER_KEYBOARD_SOURCE_KIND,
+            intent_kind=str(motion_command.metadata["intent_kind"]),
+            input_continuity=str(motion_command.metadata["input_continuity"]),
             source_active=source_active,
             stale_reason=stale_reason,
             desired_endpoint_m=desired_endpoint_m,
-            endpoint_delta_m=endpoint_delta_m,
+            endpoint_velocity_m_s=endpoint_velocity_m_s,
             current_tip_position_m=_round_vector3(self._current_endpoint_m),
-            values=endpoint_delta_m,
+            axis_values=axis_values,
+            local_endpoint_speed_m_s=float(motion_command.metadata["local_endpoint_speed_m_s"]),
+            local_endpoint_max_delta_m=float(motion_command.metadata["local_endpoint_max_delta_m"]),
+            values=axis_values,
             buttons=_keyboard_button_values(key_state, message.keyboard.active_key_codes),
             viewer_source_kind="keyboard",
             control_summary=summary,
@@ -256,25 +271,22 @@ class ViewerInputSource:
 
     def _build_gamepad_frame(self, message: ViewerControlMessage, *, source_active: bool, stale_reason: str | None) -> _ViewerFrameSpec:
         assert message.gamepad is not None
-        axis_delta_m = _coerce_axis_vector3(
+        axis_values = _coerce_axis_vector3(
             message.gamepad.axes,
-            step_m=self._gamepad_step_m,
             deadzone=self._gamepad_deadzone,
-            max_delta_m=self._gamepad_max_delta_m,
         )
         if message.gamepad.buttons:
             pressed_button_indices = {index for index, button in enumerate(message.gamepad.buttons) if button.pressed}
             if 0 in pressed_button_indices:
-                axis_delta_m = (axis_delta_m[0], axis_delta_m[1], axis_delta_m[2] + self._gamepad_step_m)
+                axis_values = (axis_values[0], axis_values[1], axis_values[2] + 1.0)
             if 1 in pressed_button_indices:
-                axis_delta_m = (axis_delta_m[0], axis_delta_m[1], axis_delta_m[2] - self._gamepad_step_m)
+                axis_values = (axis_values[0], axis_values[1], axis_values[2] - 1.0)
 
-        desired_endpoint_m = _round_vector3(
-            tuple(
-                self._current_endpoint_m[index] + axis_delta_m[index]
-                for index in range(3)
-            )
+        axis_values = _clamp_vector3(axis_values, limit=1.0)
+        endpoint_velocity_m_s = _round_vector3(
+            tuple(component * self._gamepad_speed_m_s for component in axis_values)
         )
+        desired_endpoint_m = _round_vector3(self._current_endpoint_m)
         summary = {
             "viewer_source_kind": "gamepad",
             "sequence": message.sequence,
@@ -287,16 +299,24 @@ class ViewerInputSource:
                 "stale": message.gamepad.stale,
                 "zero_state": message.gamepad.zero_state,
             },
+            "metadata": dict(message.metadata),
+            "intent_kind": "local_endpoint_velocity",
+            "input_continuity": "continuous",
         }
 
         return _ViewerFrameSpec(
             source_kind=_VIEWER_GAMEPAD_SOURCE_KIND,
+            intent_kind="local_endpoint_velocity",
+            input_continuity="continuous",
             source_active=source_active,
             stale_reason=stale_reason,
             desired_endpoint_m=desired_endpoint_m,
-            endpoint_delta_m=_round_vector3(axis_delta_m),
+            endpoint_velocity_m_s=endpoint_velocity_m_s,
             current_tip_position_m=_round_vector3(self._current_endpoint_m),
-            values=message.gamepad.axes,
+            axis_values=axis_values,
+            local_endpoint_speed_m_s=self._gamepad_speed_m_s,
+            local_endpoint_max_delta_m=self._gamepad_max_delta_m,
+            values=axis_values,
             buttons=_gamepad_button_buttons(message.gamepad.buttons),
             viewer_source_kind="gamepad",
             control_summary=summary,
@@ -335,12 +355,17 @@ class ViewerInputSource:
     ) -> RawInputFrame:
         metadata: dict[str, object] = {
             "source_kind": spec.source_kind,
+            "intent_kind": spec.intent_kind,
+            "input_continuity": spec.input_continuity,
             "source_active": spec.source_active,
             "command_age_ms": command_age_ms,
             "stale_reason": stale_reason,
             "desired_endpoint_m": spec.desired_endpoint_m,
             "target_position_m": spec.desired_endpoint_m,
-            "endpoint_delta_m": spec.endpoint_delta_m,
+            "endpoint_velocity_m_s": spec.endpoint_velocity_m_s,
+            "axis_values": spec.axis_values,
+            "local_endpoint_speed_m_s": spec.local_endpoint_speed_m_s,
+            "local_endpoint_max_delta_m": spec.local_endpoint_max_delta_m,
             "current_tip_position_m": spec.current_tip_position_m,
             "viewer_source_kind": spec.viewer_source_kind,
             _VIEWER_CONTROL_SUMMARY_KEY: dict(spec.control_summary),
@@ -379,6 +404,9 @@ class ViewerInputSource:
                     "sequence": None,
                     "keyboard": None,
                     "gamepad": None,
+                    "metadata": {},
+                    "intent_kind": None,
+                    "input_continuity": None,
                 },
                 values=(),
                 buttons=(),

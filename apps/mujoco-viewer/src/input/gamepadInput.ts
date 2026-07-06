@@ -191,6 +191,14 @@ export function buildViewerGamepadControlMessage(
     timestamp_s: timestampS,
     source_kind: "gamepad",
     gamepad: snapshotToGamepadMessage(snapshot),
+    metadata: {
+      intent_kind: "local_endpoint_velocity",
+      input_continuity: "continuous",
+      source_kind: "viewer_gamepad",
+      local_endpoint_speed_m_s: 0.1,
+      local_endpoint_max_delta_m: 0.03,
+      ...options.metadata,
+    },
   };
 
   if (options.sequence !== undefined) {

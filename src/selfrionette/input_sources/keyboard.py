@@ -27,15 +27,15 @@ class KeyboardBinding:
 @dataclass(frozen=True, slots=True)
 class KeyboardInputConfig:
     bindings: Mapping[str, KeyboardBinding]
-    step_m: float
+    speed_m_s: float
     deadzone: float
     max_delta_m: float
 
     def __post_init__(self) -> None:
-        if not isfinite(self.step_m):
-            raise ValueError("step_m must be finite")
-        if self.step_m < 0.0:
-            raise ValueError("step_m must be non-negative")
+        if not isfinite(self.speed_m_s):
+            raise ValueError("speed_m_s must be finite")
+        if self.speed_m_s < 0.0:
+            raise ValueError("speed_m_s must be non-negative")
 
         if not isfinite(self.deadzone):
             raise ValueError("deadzone must be finite")
@@ -115,7 +115,7 @@ def _load_keyboard_config_from_path(path: Path) -> KeyboardInputConfig:
 
     return KeyboardInputConfig(
         bindings=bindings,
-        step_m=float(payload["step_m"]),
+        speed_m_s=float(payload["speed_m_s"]),
         deadzone=float(payload["deadzone"]),
         max_delta_m=float(payload["max_delta_m"]),
     )
@@ -136,39 +136,44 @@ def build_keyboard_motion_command(
     current_tip_position_m = _coerce_vector3("current_tip_position_m", current_tip_position_m)
     pressed_key_tuple = _coerce_pressed_keys(pressed_keys)
 
-    endpoint_delta_by_axis = {"x": 0.0, "y": 0.0, "z": 0.0}
+    axis_by_axis = {"x": 0.0, "y": 0.0, "z": 0.0}
     for key_code in pressed_key_tuple:
         binding = keyboard_config.bindings.get(key_code)
         if binding is None:
             continue
-        endpoint_delta_by_axis[binding.axis] += keyboard_config.step_m * float(binding.direction)
+        axis_by_axis[binding.axis] += float(binding.direction)
 
-    endpoint_delta_m = (
-        endpoint_delta_by_axis["x"],
-        endpoint_delta_by_axis["y"],
-        endpoint_delta_by_axis["z"],
+    axis_values = _clamp_vector3(
+        (
+            axis_by_axis["x"],
+            axis_by_axis["y"],
+            axis_by_axis["z"],
+        ),
+        limit=1.0,
     )
 
     if keyboard_config.deadzone > 0.0:
-        endpoint_delta_m = tuple(
+        axis_values = tuple(
             0.0 if abs(component) <= keyboard_config.deadzone else component
-            for component in endpoint_delta_m
+            for component in axis_values
         )
 
-    endpoint_delta_m = _clamp_vector3(endpoint_delta_m, limit=keyboard_config.max_delta_m)
-    desired_endpoint_m = tuple(
-        current_tip_position_m[index] + endpoint_delta_m[index]
-        for index in range(3)
+    endpoint_velocity_m_s = tuple(
+        component * keyboard_config.speed_m_s for component in axis_values
     )
 
     return MotionCommand(
         timestamp_s=timestamp_s,
         metadata={
             "source_kind": "keyboard",
+            "intent_kind": "local_endpoint_velocity",
+            "input_continuity": "continuous",
             "pressed_keys": pressed_key_tuple,
-            "endpoint_delta_m": endpoint_delta_m,
+            "axis_values": axis_values,
+            "local_endpoint_speed_m_s": keyboard_config.speed_m_s,
+            "local_endpoint_max_delta_m": keyboard_config.max_delta_m,
+            "endpoint_velocity_m_s": endpoint_velocity_m_s,
             "current_tip_position_m": current_tip_position_m,
-            "desired_endpoint_m": desired_endpoint_m,
         },
     )
 
