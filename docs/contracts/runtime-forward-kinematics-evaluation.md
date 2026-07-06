@@ -80,6 +80,15 @@ error vector / norm を並べて扱う runtime/backend internal metrics helper �
 - P6 で dry-run / programmed input / WebSocket payload integration に接続する。
 - P7 で viewer read-only overlay に handoff する。
 
+### R7-E follow-up P5 diagnostic narrowing
+
+The FK/site diagnostic now reports both the solver-local FK endpoint and the
+world-transformed FK endpoint after qpos adaptation and `base_link` translation.
+This narrows the comparison frame mismatch, but it does not make runtime FK a
+physical MuJoCo-model FK. Residuals above tolerance remain
+`remaining_model_axis_or_link_contract_mismatch` and must not be treated as a
+closed repair.
+
 ## Scope check
 
 ```text

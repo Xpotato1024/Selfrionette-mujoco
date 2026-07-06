@@ -40,6 +40,9 @@ related:
 - `#326 / PR #331`
   - runtime FK vs MuJoCo `tip` site consistency diagnostic completed.
   - Current result: FK / site mismatch remains.
+  - Diagnostic narrowing now records solver-local FK, qpos-adapted solver input, world-transformed FK, MuJoCo `tip` site, and residual, with reason `remaining_model_axis_or_link_contract_mismatch`.
+  - R7-E follow-up P5 diagnostic narrowing reduces the maximum fixed-fixture residual from `1.7507877360829562` m to `0.3450012998489505` m, but this is still not a pass-level repair.
+  - The remaining blocker is narrower: after solver qpos adaptation and `base_link` world transform, residuals still point to model axis / link / physical FK contract mismatch.
 - `#327 / PR #332`
   - target -> IK output qpos -> runtime FK endpoint sanity completed.
   - Current result: IK / FK self-consistency passes under solver local transform.

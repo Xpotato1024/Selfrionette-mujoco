@@ -363,7 +363,9 @@ class FastArmEndpointDiagnosticRecord:
 class FastArmFkSiteConsistencyDiagnostic:
     fixture_label: str
     qpos: tuple[float, ...]
+    solver_qpos: tuple[float, ...]
     fk_endpoint_m: Vector3
+    transformed_solver_fk_world_m: Vector3
     mujoco_tip_site_position_m: Vector3
     fk_site_error_m: Vector3
     fk_site_error_norm_m: float
@@ -621,7 +623,7 @@ def _fk_site_consistency_status_reason(
         return "mismatch", "tip_site_reference_is_not_primary"
     if fk_site_error_norm_m <= _FK_SITE_CONSISTENCY_TOLERANCE_M:
         return "pass", "fk_endpoint_matches_tip_site_within_tolerance"
-    return "mismatch", "fk_endpoint_does_not_match_tip_site_world_position"
+    return "mismatch", "remaining_model_axis_or_link_contract_mismatch"
 
 
 def _build_fast_arm_fk_site_consistency_diagnostic(
@@ -638,12 +640,19 @@ def _build_fast_arm_fk_site_consistency_diagnostic(
     simulator.apply_qpos_command(JointCommand(joint_angles_rad=qpos_tuple))
     state = simulator.snapshot()
     tip_site = extract_fast_arm_tip_site_endpoint_from_state(state)
+    solver_base_world_position_m = _body_position_from_state(state, _MUJOCO_SOLVER_BASE_BODY_NAME)
+    solver_qpos = _mujoco_qpos_to_solver_joint_angles(qpos_tuple)
     fk_evaluation = evaluate_fk_endpoint_from_qpos(
         FastArmEndpointForwardKinematicsSolver(),
-        qpos_tuple,
+        solver_qpos,
         solver_joint_count=4,
     )
-    fk_site_error_m = _vector_subtract(fk_evaluation.endpoint_m, tip_site.position_m)
+    transformed_solver_fk_world_m = (
+        _vector_add(fk_evaluation.endpoint_m, solver_base_world_position_m)
+        if solver_base_world_position_m is not None
+        else fk_evaluation.endpoint_m
+    )
+    fk_site_error_m = _vector_subtract(transformed_solver_fk_world_m, tip_site.position_m)
     fk_site_error_norm_m = _vector_norm_m(fk_site_error_m)
     status, reason = _fk_site_consistency_status_reason(
         fk_site_error_norm_m=fk_site_error_norm_m,
@@ -653,7 +662,9 @@ def _build_fast_arm_fk_site_consistency_diagnostic(
     return FastArmFkSiteConsistencyDiagnostic(
         fixture_label=fixture_label,
         qpos=qpos_tuple,
+        solver_qpos=solver_qpos,
         fk_endpoint_m=fk_evaluation.endpoint_m,
+        transformed_solver_fk_world_m=transformed_solver_fk_world_m,
         mujoco_tip_site_position_m=tip_site.position_m,
         fk_site_error_m=fk_site_error_m,
         fk_site_error_norm_m=fk_site_error_norm_m,
@@ -878,7 +889,9 @@ def _fk_site_consistency_diagnostic_row(
     return {
         "fixture_label": record.fixture_label,
         "qpos": record.qpos,
+        "solver_qpos": record.solver_qpos,
         "fk_endpoint_m": record.fk_endpoint_m,
+        "transformed_solver_fk_world_m": record.transformed_solver_fk_world_m,
         "mujoco_tip_site_position_m": record.mujoco_tip_site_position_m,
         "fk_site_error_m": record.fk_site_error_m,
         "fk_site_error_norm_m": record.fk_site_error_norm_m,
