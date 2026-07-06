@@ -18,11 +18,14 @@ from selfrionette.runtime import (
 from selfrionette.runtime.endpoint_motion_sanity import (
     build_fast_arm_endpoint_diagnostic_log_rows,
     build_fast_arm_fk_site_consistency_log_rows,
+    build_fast_arm_ik_fk_sanity_log_rows,
     run_fast_arm_fk_site_consistency_diagnostics,
+    run_fast_arm_ik_fk_sanity_diagnostics,
     write_fast_arm_fk_site_consistency_log_jsonl,
     write_fast_arm_endpoint_trajectory_log_csv,
     write_fast_arm_endpoint_trajectory_log_jsonl,
     write_fast_arm_endpoint_diagnostic_log_jsonl,
+    write_fast_arm_ik_fk_sanity_log_jsonl,
 )
 
 
@@ -136,6 +139,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="write FK versus MuJoCo tip site consistency diagnostics to a JSONL file",
+    )
+    parser.add_argument(
+        "--ik-fk-sanity",
+        action="store_true",
+        help="print structured diagnostics for target -> IK output qpos -> runtime FK endpoint",
+    )
+    parser.add_argument(
+        "--ik-fk-sanity-jsonl",
+        type=Path,
+        default=None,
+        help="write IK/FK sanity diagnostic rows to a JSONL file",
     )
     return parser
 
@@ -272,6 +286,41 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.endpoint_diagnostics_jsonl,
         )
         print(f"endpoint_diagnostics_jsonl={jsonl_path}")
+
+    if args.ik_fk_sanity or args.ik_fk_sanity_jsonl is not None:
+        ik_fk_results = run_fast_arm_ik_fk_sanity_diagnostics(model_path=args.model_path)
+        ik_fk_rows = build_fast_arm_ik_fk_sanity_log_rows(ik_fk_results)
+        if args.ik_fk_sanity:
+            for index, (record, row) in enumerate(zip(ik_fk_results, ik_fk_rows, strict=True), start=1):
+                print(
+                    " ".join(
+                        (
+                            "ik_fk_sanity",
+                            f"step_index={index}",
+                            f"fixture_label={row['fixture_label']}",
+                            f"status={record.status}",
+                            f"ik_status={row['ik_status']}",
+                            f"reason={record.reason}",
+                            f"target_endpoint_m={_format_value(row['target_endpoint_m'])}",
+                            f"ik_input_target_m={_format_value(row['ik_input_target_m'])}",
+                            f"ik_output_qpos={_format_value(row['ik_output_qpos'])}",
+                            f"fk_endpoint_from_ik_qpos_m={_format_value(row['fk_endpoint_from_ik_qpos_m'])}",
+                            f"ik_fk_error_m={_format_value(row['ik_fk_error_m'])}",
+                            f"ik_fk_error_norm_m={_format_value(row['ik_fk_error_norm_m'])}",
+                            f"known_fk_site_consistency_status={row['known_fk_site_consistency_status']}",
+                            f"known_fk_site_consistency_note={row['known_fk_site_consistency_note']}",
+                            f"seed_qpos={_format_value(row['seed_qpos'])}",
+                            f"joint_names={_format_value(row['joint_names'])}",
+                            f"model_path={_format_value(row['model_path'])}",
+                        )
+                    )
+                )
+        if args.ik_fk_sanity_jsonl is not None:
+            jsonl_path = write_fast_arm_ik_fk_sanity_log_jsonl(
+                ik_fk_results,
+                args.ik_fk_sanity_jsonl,
+            )
+            print(f"ik_fk_sanity_jsonl={jsonl_path}")
 
     if args.fk_site_consistency or args.fk_site_consistency_jsonl is not None:
         fk_site_results = run_fast_arm_fk_site_consistency_diagnostics(model_path=args.model_path)

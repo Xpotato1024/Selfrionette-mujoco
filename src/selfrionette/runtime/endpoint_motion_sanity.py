@@ -35,6 +35,7 @@ _JOINT_AXIS_PERTURBATION_RAD = 0.02
 _LOCAL_JACOBIAN_PERTURBATION_RAD = 0.01
 _PERTURBATION_NO_MOVEMENT_EPSILON_M = 1e-9
 _FK_SITE_CONSISTENCY_TOLERANCE_M = 1e-9
+_IK_FK_SANITY_TOLERANCE_M = 1e-5
 _TRAJECTORY_DIRECTION_DOT_THRESHOLD = 0.85
 _TRAJECTORY_MOVEMENT_EPSILON_M = 1e-6
 _TRAJECTORY_LOG_COLUMNS = (
@@ -374,6 +375,25 @@ class FastArmFkSiteConsistencyDiagnostic:
 
 
 @dataclass(frozen=True, slots=True)
+class FastArmIkFkSanityDiagnostic:
+    fixture_label: str
+    target_endpoint_m: Vector3
+    ik_input_target_m: Vector3
+    ik_output_qpos: tuple[float, ...] | None
+    fk_endpoint_from_ik_qpos_m: Vector3 | None
+    ik_fk_error_m: Vector3 | None
+    ik_fk_error_norm_m: float | None
+    ik_status: str
+    status: str
+    reason: str
+    known_fk_site_consistency_status: str
+    known_fk_site_consistency_note: str
+    seed_qpos: tuple[float, ...] | None = None
+    joint_names: tuple[str, ...] = ()
+    model_path: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class FastArmJointAxisPerturbationResult:
     joint_name: str
     qpos_index: int
@@ -493,6 +513,13 @@ def _endpoint_error_vector_m(
     )
 
 
+def _ik_fk_error_vector_m(
+    target_endpoint_m: Sequence[float],
+    fk_endpoint_m: Sequence[float],
+) -> Vector3:
+    return _endpoint_error_vector_m(target_endpoint_m, fk_endpoint_m)
+
+
 def _build_fast_arm_endpoint_diagnostic_records(
     results: Sequence[FastArmEndpointMotionSanityResult],
 ) -> tuple[FastArmEndpointDiagnosticRecord, ...]:
@@ -544,6 +571,44 @@ def _fast_arm_fk_site_consistency_qpos_fixtures(
         ("small_positive_perturbation", positive_qpos),
         ("small_negative_perturbation", negative_qpos),
         ("representative_endpoint_motion_sanity_qpos", representative_qpos),
+    )
+
+
+def _fast_arm_ik_fk_sanity_target_fixtures(
+    *,
+    model_path: str | Path | None = None,
+) -> tuple[tuple[str, Vector3, tuple[float, ...], str], ...]:
+    simulator = _build_fast_arm_simulator(model_path)
+    initial_state = simulator.snapshot()
+    default_tip_position_m = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
+    seed_qpos = tuple(float(value) for value in initial_state.qpos[:4])
+    small_delta_m = 0.01
+    representative_delta_m = 0.02
+    return (
+        (
+            "default_tip_position",
+            default_tip_position_m,
+            seed_qpos,
+            "reachability_unverified: target derived from the default tip position",
+        ),
+        (
+            "small_positive_x_target",
+            _vector_add(default_tip_position_m, (small_delta_m, 0.0, 0.0)),
+            seed_qpos,
+            "reachability_unverified: small positive x offset from the default tip position",
+        ),
+        (
+            "small_positive_z_target",
+            _vector_add(default_tip_position_m, (0.0, 0.0, small_delta_m)),
+            seed_qpos,
+            "reachability_unverified: small positive z offset from the default tip position",
+        ),
+        (
+            "representative_endpoint_motion_sanity_target",
+            _vector_add(default_tip_position_m, (0.0, 0.0, representative_delta_m)),
+            seed_qpos,
+            "reachability_unverified: representative short-step target derived from endpoint motion sanity",
+        ),
     )
 
 
@@ -618,6 +683,193 @@ def run_fast_arm_fk_site_consistency_diagnostics(
         )
         for label, qpos in fixtures
     )
+
+
+def _ik_fk_sanity_status_reason(
+    *,
+    ik_status: str,
+    ik_fk_error_norm_m: float | None,
+    fixture_note: str,
+) -> tuple[str, str]:
+    if ik_status != "solved":
+        return "ik_failed", "target_position_m did not converge"
+    if ik_fk_error_norm_m is None:
+        return "diagnostic_only", "ik_solved_but_fk_endpoint_was_unavailable"
+    if ik_fk_error_norm_m <= _IK_FK_SANITY_TOLERANCE_M:
+        return "pass", f"ik_solved_and_target_vs_fk_within_tolerance; {fixture_note}"
+    return "mismatch", f"ik_solved_but_target_vs_fk_error_exceeds_tolerance; {fixture_note}"
+
+
+def _build_fast_arm_ik_fk_sanity_diagnostic(
+    *,
+    fixture_label: str,
+    target_endpoint_m: Sequence[float],
+    seed_qpos: Sequence[float] | None = None,
+    model_path: str | Path | None = None,
+    fixture_note: str = "reachability_unverified",
+) -> FastArmIkFkSanityDiagnostic:
+    target_endpoint_tuple = _coerce_vector3("target_endpoint_m", target_endpoint_m)
+    seed_qpos_tuple = None if seed_qpos is None else tuple(float(value) for value in seed_qpos[:4])
+    model_path_value = str(Path(model_path)) if model_path is not None else None
+    simulator = _build_fast_arm_simulator(model_path)
+    initial_state = simulator.snapshot()
+    solver_base_world_position_m = _body_position_from_state(initial_state, _MUJOCO_SOLVER_BASE_BODY_NAME)
+    joint_names = tuple(inspect_mujoco_model(simulator.model).joint_names[:4])
+    ik_solver = FastArmEndpointInverseKinematicsSolver()
+    fk_solver = FastArmEndpointForwardKinematicsSolver()
+
+    if solver_base_world_position_m is None:
+        return FastArmIkFkSanityDiagnostic(
+            fixture_label=fixture_label,
+            target_endpoint_m=target_endpoint_tuple,
+            ik_input_target_m=target_endpoint_tuple,
+            ik_output_qpos=None,
+            fk_endpoint_from_ik_qpos_m=None,
+            ik_fk_error_m=None,
+            ik_fk_error_norm_m=None,
+            ik_status="failed",
+            status="diagnostic_only",
+            reason="missing MuJoCo body 'base_link'; " + fixture_note,
+            known_fk_site_consistency_status="mismatch",
+            known_fk_site_consistency_note="fk_site_mismatch_observed_in_326_pr331_do_not_treat_as_ik_only",
+            seed_qpos=seed_qpos_tuple,
+            joint_names=joint_names,
+            model_path=model_path_value,
+        )
+
+    ik_input_target_m = _vector_subtract(target_endpoint_tuple, solver_base_world_position_m)
+
+    try:
+        solver_joint_command = ik_solver.solve(
+            ik_input_target_m,
+            seed_joint_angles_rad=seed_qpos_tuple,
+        )
+    except ValueError as exc:
+        return FastArmIkFkSanityDiagnostic(
+            fixture_label=fixture_label,
+            target_endpoint_m=target_endpoint_tuple,
+            ik_input_target_m=ik_input_target_m,
+            ik_output_qpos=None,
+            fk_endpoint_from_ik_qpos_m=None,
+            ik_fk_error_m=None,
+            ik_fk_error_norm_m=None,
+            ik_status="failed",
+            status="ik_failed",
+            reason=f"{exc}; {fixture_note}",
+            known_fk_site_consistency_status="mismatch",
+            known_fk_site_consistency_note="fk_site_mismatch_observed_in_326_pr331_do_not_treat_as_ik_only",
+            seed_qpos=seed_qpos_tuple,
+            joint_names=joint_names,
+            model_path=model_path_value,
+        )
+
+    ik_output_qpos = tuple(float(value) for value in solver_joint_command.joint_angles_rad[:4])
+    fk_evaluation = evaluate_fk_endpoint_from_qpos(
+        fk_solver,
+        ik_output_qpos,
+        solver_joint_count=4,
+    )
+    fk_endpoint_from_ik_qpos_m = _vector_add(fk_evaluation.endpoint_m, solver_base_world_position_m)
+    ik_fk_error_m = _ik_fk_error_vector_m(target_endpoint_tuple, fk_endpoint_from_ik_qpos_m)
+    ik_fk_error_norm_m = _vector_norm_m(ik_fk_error_m)
+    status, reason = _ik_fk_sanity_status_reason(
+        ik_status="solved",
+        ik_fk_error_norm_m=ik_fk_error_norm_m,
+        fixture_note=fixture_note,
+    )
+    return FastArmIkFkSanityDiagnostic(
+        fixture_label=fixture_label,
+        target_endpoint_m=target_endpoint_tuple,
+        ik_input_target_m=ik_input_target_m,
+        ik_output_qpos=ik_output_qpos,
+        fk_endpoint_from_ik_qpos_m=fk_endpoint_from_ik_qpos_m,
+        ik_fk_error_m=ik_fk_error_m,
+        ik_fk_error_norm_m=ik_fk_error_norm_m,
+        ik_status="solved",
+        status=status,
+        reason=reason,
+        known_fk_site_consistency_status="mismatch",
+        known_fk_site_consistency_note="fk_site_mismatch_observed_in_326_pr331_do_not_treat_as_ik_only",
+        seed_qpos=seed_qpos_tuple,
+        joint_names=joint_names,
+        model_path=model_path_value,
+    )
+
+
+def run_fast_arm_ik_fk_sanity_diagnostics(
+    *,
+    model_path: str | Path | None = None,
+    target_fixtures: Sequence[tuple[str, Sequence[float], Sequence[float] | None, str]] | None = None,
+) -> tuple[FastArmIkFkSanityDiagnostic, ...]:
+    fixtures = (
+        _fast_arm_ik_fk_sanity_target_fixtures(model_path=model_path)
+        if target_fixtures is None
+        else tuple(
+            (
+                label,
+                tuple(float(value) for value in target_endpoint_m),
+                None if seed_qpos is None else tuple(float(value) for value in seed_qpos),
+                fixture_note,
+            )
+            for label, target_endpoint_m, seed_qpos, fixture_note in target_fixtures
+        )
+    )
+    return tuple(
+        _build_fast_arm_ik_fk_sanity_diagnostic(
+            fixture_label=label,
+            target_endpoint_m=target_endpoint_m,
+            seed_qpos=seed_qpos,
+            model_path=model_path,
+            fixture_note=fixture_note,
+        )
+        for label, target_endpoint_m, seed_qpos, fixture_note in fixtures
+    )
+
+
+def _ik_fk_sanity_diagnostic_row(
+    record: FastArmIkFkSanityDiagnostic,
+) -> dict[str, object]:
+    return {
+        "fixture_label": record.fixture_label,
+        "target_endpoint_m": record.target_endpoint_m,
+        "ik_input_target_m": record.ik_input_target_m,
+        "ik_output_qpos": record.ik_output_qpos if record.ik_output_qpos is not None else _UNAVAILABLE,
+        "fk_endpoint_from_ik_qpos_m": (
+            record.fk_endpoint_from_ik_qpos_m if record.fk_endpoint_from_ik_qpos_m is not None else _UNAVAILABLE
+        ),
+        "ik_fk_error_m": record.ik_fk_error_m if record.ik_fk_error_m is not None else _UNAVAILABLE,
+        "ik_fk_error_norm_m": (
+            record.ik_fk_error_norm_m if record.ik_fk_error_norm_m is not None else _UNAVAILABLE
+        ),
+        "ik_status": record.ik_status,
+        "status": record.status,
+        "reason": record.reason,
+        "known_fk_site_consistency_status": record.known_fk_site_consistency_status,
+        "known_fk_site_consistency_note": record.known_fk_site_consistency_note,
+        "seed_qpos": record.seed_qpos if record.seed_qpos is not None else _UNAVAILABLE,
+        "joint_names": record.joint_names or _UNAVAILABLE,
+        "model_path": record.model_path or _UNAVAILABLE,
+    }
+
+
+def build_fast_arm_ik_fk_sanity_log_rows(
+    records: Sequence[FastArmIkFkSanityDiagnostic],
+) -> tuple[dict[str, object], ...]:
+    return tuple(_ik_fk_sanity_diagnostic_row(record) for record in records)
+
+
+def write_fast_arm_ik_fk_sanity_log_jsonl(
+    records: Sequence[FastArmIkFkSanityDiagnostic],
+    output_path: str | Path,
+) -> Path:
+    rows = build_fast_arm_ik_fk_sanity_log_rows(records)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False))
+            handle.write("\n")
+    return path
 
 
 def _fk_site_consistency_diagnostic_row(
@@ -1898,18 +2150,22 @@ __all__ = [
     "FastArmEndpointTrajectorySummary",
     "FastArmFkSiteConsistencyDiagnostic",
     "FastArmEndpointDiagnosticRecord",
+    "FastArmIkFkSanityDiagnostic",
     "FastArmLocalJacobianColumn",
     "FastArmLocalJacobianPoseDiagnostics",
     "FastArmJointAxisPerturbationResult",
     "FastArmEndpointMotionSanityResult",
     "run_fast_arm_fk_site_consistency_diagnostics",
+    "run_fast_arm_ik_fk_sanity_diagnostics",
     "run_fast_arm_endpoint_trajectory_diagnostics",
     "run_fast_arm_local_jacobian_diagnostics",
     "run_fast_arm_joint_axis_mapping_diagnostics",
     "run_fast_arm_endpoint_motion_sanity",
     "build_fast_arm_fk_site_consistency_log_rows",
+    "build_fast_arm_ik_fk_sanity_log_rows",
     "build_fast_arm_endpoint_diagnostic_log_rows",
     "write_fast_arm_fk_site_consistency_log_jsonl",
+    "write_fast_arm_ik_fk_sanity_log_jsonl",
     "write_fast_arm_endpoint_diagnostic_log_csv",
     "write_fast_arm_endpoint_diagnostic_log_jsonl",
     "build_fast_arm_endpoint_trajectory_log_rows",
