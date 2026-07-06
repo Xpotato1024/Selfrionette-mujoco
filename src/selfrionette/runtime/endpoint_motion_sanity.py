@@ -341,6 +341,22 @@ class FastArmEndpointMotionSanityResult:
 
 
 @dataclass(frozen=True, slots=True)
+class FastArmEndpointDiagnosticRecord:
+    step_index: int
+    command_label: str
+    base_endpoint_source: str
+    desired_endpoint_source: str | None
+    desired_endpoint_m: Vector3 | None
+    actual_tip_position_m: Vector3 | None
+    endpoint_error_m: Vector3 | None
+    endpoint_error_norm_m: float | None
+    qpos_before: tuple[float, ...]
+    qpos_after: tuple[float, ...]
+    status: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class FastArmJointAxisPerturbationResult:
     joint_name: str
     qpos_index: int
@@ -448,6 +464,122 @@ class FastArmEndpointTrajectoryDiagnostics:
 
 def _vector_error_m(lhs_m: Sequence[float], rhs_m: Sequence[float]) -> Vector3:
     return tuple(float(lhs_m[index]) - float(rhs_m[index]) for index in range(3))
+
+
+def _endpoint_error_vector_m(
+    desired_endpoint_m: Sequence[float],
+    actual_tip_position_m: Sequence[float],
+) -> Vector3:
+    return tuple(
+        float(desired_endpoint_m[index]) - float(actual_tip_position_m[index])
+        for index in range(3)
+    )
+
+
+def _build_fast_arm_endpoint_diagnostic_records(
+    results: Sequence[FastArmEndpointMotionSanityResult],
+) -> tuple[FastArmEndpointDiagnosticRecord, ...]:
+    records: list[FastArmEndpointDiagnosticRecord] = []
+    for step_index, result in enumerate(results, start=1):
+        desired_endpoint_m = result.desired_endpoint_m
+        actual_tip_position_m = result.final_tip_position_m
+        endpoint_error_m = (
+            None
+            if desired_endpoint_m is None or actual_tip_position_m is None
+            else _endpoint_error_vector_m(desired_endpoint_m, actual_tip_position_m)
+        )
+        records.append(
+            FastArmEndpointDiagnosticRecord(
+                step_index=step_index,
+                command_label=result.command_label,
+                base_endpoint_source=result.base_endpoint_source,
+                desired_endpoint_source=result.desired_endpoint_source,
+                desired_endpoint_m=desired_endpoint_m,
+                actual_tip_position_m=actual_tip_position_m,
+                endpoint_error_m=endpoint_error_m,
+                endpoint_error_norm_m=(
+                    None if endpoint_error_m is None else _vector_norm_m(endpoint_error_m)
+                ),
+                qpos_before=result.qpos_before,
+                qpos_after=result.qpos_after,
+                status=result.status,
+                reason=result.reason,
+            )
+        )
+    return tuple(records)
+
+
+def _endpoint_diagnostic_row_from_record(
+    record: FastArmEndpointDiagnosticRecord,
+) -> dict[str, object]:
+    return {
+        "step_index": record.step_index,
+        "command_label": record.command_label,
+        "base_endpoint_source": record.base_endpoint_source,
+        "desired_endpoint_source": record.desired_endpoint_source or _UNAVAILABLE,
+        "desired_endpoint_m": record.desired_endpoint_m or _UNAVAILABLE,
+        "actual_tip_position_m": record.actual_tip_position_m or _UNAVAILABLE,
+        "endpoint_error_m": record.endpoint_error_m or _UNAVAILABLE,
+        "endpoint_error_norm_m": (
+            record.endpoint_error_norm_m if record.endpoint_error_norm_m is not None else _UNAVAILABLE
+        ),
+        "qpos_before": record.qpos_before,
+        "qpos_after": record.qpos_after,
+        "status": record.status,
+        "reason": record.reason,
+    }
+
+
+def build_fast_arm_endpoint_diagnostic_log_rows(
+    results: Sequence[FastArmEndpointMotionSanityResult],
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        _endpoint_diagnostic_row_from_record(record)
+        for record in _build_fast_arm_endpoint_diagnostic_records(results)
+    )
+
+
+def write_fast_arm_endpoint_diagnostic_log_csv(
+    results: Sequence[FastArmEndpointMotionSanityResult],
+    output_path: str | Path,
+) -> Path:
+    rows = build_fast_arm_endpoint_diagnostic_log_rows(results)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        fieldnames = (
+            "step_index",
+            "command_label",
+            "base_endpoint_source",
+            "desired_endpoint_source",
+            "desired_endpoint_m",
+            "actual_tip_position_m",
+            "endpoint_error_m",
+            "endpoint_error_norm_m",
+            "qpos_before",
+            "qpos_after",
+            "status",
+            "reason",
+        )
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    return path
+
+
+def write_fast_arm_endpoint_diagnostic_log_jsonl(
+    results: Sequence[FastArmEndpointMotionSanityResult],
+    output_path: str | Path,
+) -> Path:
+    rows = build_fast_arm_endpoint_diagnostic_log_rows(results)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False))
+            handle.write("\n")
+    return path
 
 
 def _trajectory_log_row_from_record(
@@ -1615,6 +1747,7 @@ __all__ = [
     "FastArmEndpointTrajectoryDiagnostics",
     "FastArmEndpointTrajectoryStepRecord",
     "FastArmEndpointTrajectorySummary",
+    "FastArmEndpointDiagnosticRecord",
     "FastArmLocalJacobianColumn",
     "FastArmLocalJacobianPoseDiagnostics",
     "FastArmJointAxisPerturbationResult",
@@ -1623,6 +1756,9 @@ __all__ = [
     "run_fast_arm_local_jacobian_diagnostics",
     "run_fast_arm_joint_axis_mapping_diagnostics",
     "run_fast_arm_endpoint_motion_sanity",
+    "build_fast_arm_endpoint_diagnostic_log_rows",
+    "write_fast_arm_endpoint_diagnostic_log_csv",
+    "write_fast_arm_endpoint_diagnostic_log_jsonl",
     "build_fast_arm_endpoint_trajectory_log_rows",
     "write_fast_arm_endpoint_trajectory_log_csv",
     "write_fast_arm_endpoint_trajectory_log_jsonl",

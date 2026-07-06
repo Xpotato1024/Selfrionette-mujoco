@@ -16,8 +16,10 @@ from selfrionette.runtime import (
     run_fast_arm_local_jacobian_diagnostics,
 )
 from selfrionette.runtime.endpoint_motion_sanity import (
+    build_fast_arm_endpoint_diagnostic_log_rows,
     write_fast_arm_endpoint_trajectory_log_csv,
     write_fast_arm_endpoint_trajectory_log_jsonl,
+    write_fast_arm_endpoint_diagnostic_log_jsonl,
 )
 
 
@@ -115,6 +117,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="write trajectory diagnostics rows to a JSONL file",
     )
+    parser.add_argument(
+        "--endpoint-diagnostics-jsonl",
+        type=Path,
+        default=None,
+        help="write endpoint diagnostic rows to a JSONL file",
+    )
     return parser
 
 
@@ -131,20 +139,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         model_path=args.model_path,
     )
 
-    for result in results:
+    endpoint_diagnostic_rows = build_fast_arm_endpoint_diagnostic_log_rows(results)
+
+    for step_index, (result, endpoint_row) in enumerate(zip(results, endpoint_diagnostic_rows, strict=True), start=1):
         fields = (
+            f"step_index={step_index}",
             f"case_label={result.command_label}",
             f"axis={result.command_label}",
             f"status={result.status}",
             f"reason={result.reason}",
             f"base_endpoint_source={result.base_endpoint_source}",
+            f"desired_endpoint_source={endpoint_row['desired_endpoint_source']}",
             f"base_endpoint_m={_format_vector3(result.base_endpoint_m)}",
             f"commanded_delta_m={_format_vector3(result.commanded_delta_m)}",
             f"actual_delta_m={_format_vector3(result.actual_delta_m)}",
             f"initial_tip_position_m={_format_vector3(result.initial_tip_position_m)}",
             f"final_tip_position_m={_format_vector3(result.final_tip_position_m)}",
+            f"actual_tip_position_m={_format_value(endpoint_row['actual_tip_position_m'])}",
             f"desired_endpoint_m={_format_vector3(result.desired_endpoint_m)}",
             f"target_position_m={_format_vector3(result.target_position_m)}",
+            f"endpoint_error_m={_format_value(endpoint_row['endpoint_error_m'])}",
+            f"endpoint_error_norm_m={_format_value(endpoint_row['endpoint_error_norm_m'])}",
             f"target_rejected={result.target_rejected}",
             f"target_rejection_reason={result.target_rejection_reason}",
             f"target_rejection_message={result.target_rejection_message}",
@@ -236,6 +251,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"trajectory_export_jsonl={jsonl_path}")
     elif args.trajectory_export_csv is not None or args.trajectory_export_jsonl is not None:
         parser.error("--trajectory-export-csv and --trajectory-export-jsonl require --trajectory-diagnostics")
+
+    if args.endpoint_diagnostics_jsonl is not None:
+        jsonl_path = write_fast_arm_endpoint_diagnostic_log_jsonl(
+            results,
+            args.endpoint_diagnostics_jsonl,
+        )
+        print(f"endpoint_diagnostics_jsonl={jsonl_path}")
 
     return 0
 
