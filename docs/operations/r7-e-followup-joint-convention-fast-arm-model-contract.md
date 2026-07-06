@@ -13,6 +13,7 @@ related:
   - docs/operations/r7-e-followup-endpoint-diagnostic-logging.md
   - docs/operations/r7-e-followup-fk-site-consistency.md
   - docs/operations/r7-e-followup-ik-fk-sanity.md
+  - docs/operations/r7-e-followup-viewer-backend-endpoint-separation.md
 ---
 
 # R7-E follow-up P3 joint convention and fast_arm model contract docs
