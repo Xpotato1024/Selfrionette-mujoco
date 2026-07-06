@@ -14,6 +14,7 @@ from selfrionette.kinematics.fast_arm_endpoint import (
     FAST_ARM_ENDPOINT_LINK_LENGTHS_M,
     FastArmEndpointForwardKinematicsSolver,
     FastArmEndpointInverseKinematicsSolver,
+    FastArmMuJoCoModelForwardKinematicsSolver,
 )
 from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, inspect_mujoco_model
@@ -36,6 +37,8 @@ _LOCAL_JACOBIAN_PERTURBATION_RAD = 0.01
 _PERTURBATION_NO_MOVEMENT_EPSILON_M = 1e-9
 _FK_SITE_CONSISTENCY_TOLERANCE_M = 1e-9
 _IK_FK_SANITY_TOLERANCE_M = 1e-5
+_KNOWN_FK_SITE_CONSISTENCY_STATUS = "pass"
+_KNOWN_FK_SITE_CONSISTENCY_NOTE = "fk_site_consistency_repaired_with_mujoco_model_aligned_fk"
 _TRAJECTORY_DIRECTION_DOT_THRESHOLD = 0.85
 _TRAJECTORY_MOVEMENT_EPSILON_M = 1e-6
 _TRAJECTORY_LOG_COLUMNS = (
@@ -640,18 +643,13 @@ def _build_fast_arm_fk_site_consistency_diagnostic(
     simulator.apply_qpos_command(JointCommand(joint_angles_rad=qpos_tuple))
     state = simulator.snapshot()
     tip_site = extract_fast_arm_tip_site_endpoint_from_state(state)
-    solver_base_world_position_m = _body_position_from_state(state, _MUJOCO_SOLVER_BASE_BODY_NAME)
     solver_qpos = _mujoco_qpos_to_solver_joint_angles(qpos_tuple)
     fk_evaluation = evaluate_fk_endpoint_from_qpos(
-        FastArmEndpointForwardKinematicsSolver(),
-        solver_qpos,
+        FastArmMuJoCoModelForwardKinematicsSolver(),
+        qpos_tuple,
         solver_joint_count=4,
     )
-    transformed_solver_fk_world_m = (
-        _vector_add(fk_evaluation.endpoint_m, solver_base_world_position_m)
-        if solver_base_world_position_m is not None
-        else fk_evaluation.endpoint_m
-    )
+    transformed_solver_fk_world_m = fk_evaluation.endpoint_m
     fk_site_error_m = _vector_subtract(transformed_solver_fk_world_m, tip_site.position_m)
     fk_site_error_norm_m = _vector_norm_m(fk_site_error_m)
     status, reason = _fk_site_consistency_status_reason(
@@ -741,8 +739,8 @@ def _build_fast_arm_ik_fk_sanity_diagnostic(
             ik_status="failed",
             status="diagnostic_only",
             reason="missing MuJoCo body 'base_link'; " + fixture_note,
-            known_fk_site_consistency_status="mismatch",
-            known_fk_site_consistency_note="fk_site_mismatch_observed_in_326_pr331_do_not_treat_as_ik_only",
+            known_fk_site_consistency_status=_KNOWN_FK_SITE_CONSISTENCY_STATUS,
+            known_fk_site_consistency_note=_KNOWN_FK_SITE_CONSISTENCY_NOTE,
             seed_qpos=seed_qpos_tuple,
             joint_names=joint_names,
             model_path=model_path_value,
@@ -767,8 +765,8 @@ def _build_fast_arm_ik_fk_sanity_diagnostic(
             ik_status="failed",
             status="ik_failed",
             reason=f"{exc}; {fixture_note}",
-            known_fk_site_consistency_status="mismatch",
-            known_fk_site_consistency_note="fk_site_mismatch_observed_in_326_pr331_do_not_treat_as_ik_only",
+            known_fk_site_consistency_status=_KNOWN_FK_SITE_CONSISTENCY_STATUS,
+            known_fk_site_consistency_note=_KNOWN_FK_SITE_CONSISTENCY_NOTE,
             seed_qpos=seed_qpos_tuple,
             joint_names=joint_names,
             model_path=model_path_value,
@@ -799,8 +797,8 @@ def _build_fast_arm_ik_fk_sanity_diagnostic(
         ik_status="solved",
         status=status,
         reason=reason,
-        known_fk_site_consistency_status="mismatch",
-        known_fk_site_consistency_note="fk_site_mismatch_observed_in_326_pr331_do_not_treat_as_ik_only",
+        known_fk_site_consistency_status=_KNOWN_FK_SITE_CONSISTENCY_STATUS,
+        known_fk_site_consistency_note=_KNOWN_FK_SITE_CONSISTENCY_NOTE,
         seed_qpos=seed_qpos_tuple,
         joint_names=joint_names,
         model_path=model_path_value,

@@ -30,10 +30,10 @@ def test_fast_arm_ik_fk_sanity_records_include_target_endpoint_ik_input_fk_outpu
     for record in records:
         assert len(record.target_endpoint_m) == 3
         assert len(record.ik_input_target_m) == 3
-        assert record.known_fk_site_consistency_status == "mismatch"
+        assert record.known_fk_site_consistency_status == "pass"
         assert (
             record.known_fk_site_consistency_note
-            == "fk_site_mismatch_observed_in_326_pr331_do_not_treat_as_ik_only"
+            == "fk_site_consistency_repaired_with_mujoco_model_aligned_fk"
         )
         assert "reachability_unverified" in record.reason
         assert record.status in {"pass", "mismatch", "ik_failed", "diagnostic_only"}
@@ -94,8 +94,8 @@ def test_fast_arm_ik_fk_sanity_row_builder_keeps_success_fields_visible() -> Non
         ik_status="solved",
         status="pass",
         reason="ik_solved_and_target_vs_fk_within_tolerance; reachability_unverified",
-        known_fk_site_consistency_status="mismatch",
-        known_fk_site_consistency_note="fk_site_mismatch_observed_in_326_pr331_do_not_treat_as_ik_only",
+        known_fk_site_consistency_status="pass",
+        known_fk_site_consistency_note="fk_site_consistency_repaired_with_mujoco_model_aligned_fk",
         seed_qpos=(0.0, 0.0, 0.0, 0.0),
         joint_names=("joint_a", "joint_b", "joint_c", "joint_d"),
         model_path="model.xml",
@@ -112,7 +112,7 @@ def test_fast_arm_ik_fk_sanity_row_builder_keeps_success_fields_visible() -> Non
     assert row["ik_fk_error_norm_m"] == 0.0
     assert row["ik_status"] == "solved"
     assert row["status"] == "pass"
-    assert row["known_fk_site_consistency_status"] == "mismatch"
+    assert row["known_fk_site_consistency_status"] == "pass"
     assert row["seed_qpos"] == (0.0, 0.0, 0.0, 0.0)
     assert row["joint_names"] == ("joint_a", "joint_b", "joint_c", "joint_d")
     assert row["model_path"] == "model.xml"
@@ -134,4 +134,4 @@ def test_fast_arm_ik_fk_sanity_jsonl_export_writes_records(tmp_path: Path) -> No
     assert first_row["fixture_label"] == "default_tip_position"
     assert len(first_row["target_endpoint_m"]) == 3
     assert len(first_row["ik_input_target_m"]) == 3
-    assert first_row["known_fk_site_consistency_status"] == "mismatch"
+    assert first_row["known_fk_site_consistency_status"] == "pass"

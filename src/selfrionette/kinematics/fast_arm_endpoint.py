@@ -11,6 +11,13 @@ from selfrionette.schemas import JointCommand, Vector3
 FAST_ARM_ENDPOINT_JOINT_COUNT = 4
 FAST_ARM_ENDPOINT_LINK_LENGTHS_M: tuple[float, float, float] = (0.26, 0.24, 0.23)
 FAST_ARM_ENDPOINT_BASE_POSITION_M: Vector3 = (0.0, 0.0, 0.0)
+FAST_ARM_MUJOCO_MODEL_TIP_SITE_NAME = "tip"
+FAST_ARM_MUJOCO_MODEL_JOINT_REFS_RAD: tuple[float, float, float, float] = (
+    0.0,
+    -math.pi / 2.0,
+    0.0,
+    0.0,
+)
 _IK_MAX_ITERATIONS = 24
 _IK_STEP_LIMIT_RAD = 0.35
 _IK_DAMPING = 1e-3
@@ -49,6 +56,83 @@ def _validate_seed_joint_angles(values: Sequence[float] | None) -> tuple[float, 
 
 def _wrap_angle(value_rad: float) -> float:
     return math.atan2(math.sin(value_rad), math.cos(value_rad))
+
+
+def _rotation_matrix(axis: Sequence[float], angle_rad: float) -> np.ndarray:
+    axis_vector = np.asarray(tuple(float(component) for component in axis), dtype=np.float64)
+    norm = float(np.linalg.norm(axis_vector))
+    if norm == 0.0:
+        raise ValueError("rotation axis must be non-zero")
+    x_axis, y_axis, z_axis = axis_vector / norm
+    cos_angle = math.cos(angle_rad)
+    sin_angle = math.sin(angle_rad)
+    one_minus_cos = 1.0 - cos_angle
+    return np.asarray(
+        (
+            (
+                cos_angle + x_axis * x_axis * one_minus_cos,
+                x_axis * y_axis * one_minus_cos - z_axis * sin_angle,
+                x_axis * z_axis * one_minus_cos + y_axis * sin_angle,
+            ),
+            (
+                y_axis * x_axis * one_minus_cos + z_axis * sin_angle,
+                cos_angle + y_axis * y_axis * one_minus_cos,
+                y_axis * z_axis * one_minus_cos - x_axis * sin_angle,
+            ),
+            (
+                z_axis * x_axis * one_minus_cos - y_axis * sin_angle,
+                z_axis * y_axis * one_minus_cos + x_axis * sin_angle,
+                cos_angle + z_axis * z_axis * one_minus_cos,
+            ),
+        ),
+        dtype=np.float64,
+    )
+
+
+def _vector3_from_array(value: np.ndarray) -> Vector3:
+    return (float(value[0]), float(value[1]), float(value[2]))
+
+
+def _forward_fast_arm_mujoco_model_tip_site(qpos_rad: Sequence[float]) -> Vector3:
+    qpos = tuple(float(value) for value in qpos_rad)
+    if len(qpos) != FAST_ARM_ENDPOINT_JOINT_COUNT:
+        raise ValueError(
+            "qpos_rad must contain exactly four values for the fast_arm MuJoCo model"
+        )
+
+    rotation = _rotation_matrix((0.0, 0.0, 1.0), math.pi / 2.0)
+    position = np.zeros(3, dtype=np.float64)
+    body_chain = (
+        (None, (0.0, 0.069, 0.7), None, None, 0.0),
+        (0, (0.0, -0.014, 0.0), (0.0, -0.055, 0.0), (0.0, -1.0, 0.0), 0.0),
+        (
+            1,
+            (0.0, -0.131, 0.0),
+            (0.0, 0.076, 0.0),
+            (1.0, 0.0, 0.0),
+            -math.pi / 2.0,
+        ),
+        (2, (0.0, -0.0115, 0.0), (0.0, 0.0, 0.0), (0.0, -1.0, 0.0), 0.0),
+        (3, (0.0, -0.2505, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 0.0),
+    )
+
+    for joint_index, body_pos_m, joint_pos_m, joint_axis, joint_ref_rad in body_chain:
+        body_pos = np.asarray(body_pos_m, dtype=np.float64)
+        parent_rotation = rotation
+        if joint_index is None:
+            position = position + parent_rotation @ body_pos
+            continue
+
+        joint_pos = np.asarray(joint_pos_m, dtype=np.float64)
+        joint_anchor_m = position + parent_rotation @ (body_pos + joint_pos)
+        rotation = parent_rotation @ _rotation_matrix(
+            joint_axis,
+            qpos[joint_index] - joint_ref_rad,
+        )
+        position = joint_anchor_m - rotation @ joint_pos
+
+    tip_site_pos = np.asarray((0.0, -0.284, 0.0), dtype=np.float64)
+    return _vector3_from_array(position + rotation @ tip_site_pos)
 
 
 def _forward_endpoint(
@@ -274,6 +358,24 @@ class FastArmEndpointForwardKinematicsSolver:
 
 
 @dataclass(frozen=True, slots=True)
+class FastArmMuJoCoModelForwardKinematicsSolver:
+    """fast_arm FK aligned with assets/mujoco/fast_arm/arm.xml tip site."""
+
+    tip_site_name: str = FAST_ARM_MUJOCO_MODEL_TIP_SITE_NAME
+    joint_refs_rad: tuple[float, float, float, float] = FAST_ARM_MUJOCO_MODEL_JOINT_REFS_RAD
+    coordinate_frame: str = "MuJoCo world / scene frame"
+
+    def __post_init__(self) -> None:
+        if self.tip_site_name != FAST_ARM_MUJOCO_MODEL_TIP_SITE_NAME:
+            raise ValueError("tip_site_name must match the fast_arm MuJoCo model contract")
+        if self.joint_refs_rad != FAST_ARM_MUJOCO_MODEL_JOINT_REFS_RAD:
+            raise ValueError("joint_refs_rad must match the fast_arm MuJoCo model contract")
+
+    def forward(self, qpos_rad: tuple[float, ...]) -> Vector3:
+        return _forward_fast_arm_mujoco_model_tip_site(qpos_rad)
+
+
+@dataclass(frozen=True, slots=True)
 class FastArmEndpointInverseKinematicsSolver:
     """Minimal fast_arm endpoint IK v0 for the concrete 4DOF runtime path."""
 
@@ -306,6 +408,9 @@ __all__ = [
     "FAST_ARM_ENDPOINT_BASE_POSITION_M",
     "FAST_ARM_ENDPOINT_JOINT_COUNT",
     "FAST_ARM_ENDPOINT_LINK_LENGTHS_M",
+    "FAST_ARM_MUJOCO_MODEL_JOINT_REFS_RAD",
+    "FAST_ARM_MUJOCO_MODEL_TIP_SITE_NAME",
     "FastArmEndpointForwardKinematicsSolver",
     "FastArmEndpointInverseKinematicsSolver",
+    "FastArmMuJoCoModelForwardKinematicsSolver",
 ]

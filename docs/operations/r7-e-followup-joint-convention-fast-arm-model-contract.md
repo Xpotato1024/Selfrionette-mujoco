@@ -35,6 +35,25 @@ related:
 
 ## Current diagnostic state
 
+### R7-E follow-up P5 continuation update
+
+The P5 continuation selected MuJoCo `assets/mujoco/fast_arm/arm.xml` and the
+`tip` site as the physical fast_arm source of truth. Runtime FK now has a
+MuJoCo-model-aligned pure Python path for the physical `tip` site, while the
+existing solver-local FK remains for IK/FK self-consistency.
+
+Before this repair, PR #336 narrowed but did not close the mismatch:
+
+- `default_qpos` residual: `0.03899999999999981` m
+- maximum fixed-fixture residual: `0.3450012998489505` m
+- IK/FK sanity maximum: about `9.739068046871986e-08` m
+
+After this repair, the fixed FK/site fixtures pass with residuals below `1e-9`
+m and reason `fk_endpoint_matches_tip_site_within_tolerance`. The #327 IK/FK
+sanity diagnostic remains pass. The repair is in runtime FK code and tests; the
+MuJoCo XML, endpoint extraction, viewer, input mapping, hardware, serial, OSC,
+and robot output paths are unchanged.
+
 - `#325 / PR #330`
   - Program / Replay endpoint diagnostic logging completed.
 - `#326 / PR #331`

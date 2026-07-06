@@ -86,6 +86,23 @@ runtime default が zero / no-op stub に戻らないことを test で固定す
 - `ZeroForwardKinematicsSolver` remains a retirement candidate
 - runtime path does not route through zero-valued FK
 
+## R7-E follow-up P5 physical fast_arm FK
+
+`assets/mujoco/fast_arm/arm.xml` and its `tip` site are the source of truth for
+the physical fast_arm endpoint. Runtime FK now has two explicit fast_arm paths:
+
+- `FastArmEndpointForwardKinematicsSolver`: solver-local FK kept for the
+  existing IK/FK self-consistency diagnostic.
+- `FastArmMuJoCoModelForwardKinematicsSolver`: MuJoCo-model-aligned FK for the
+  physical `tip` site in MuJoCo world / scene frame.
+
+The model-aligned FK is a pure Python transform derived from the MJCF body,
+joint, ref, and `tip` site constants. It does not alias MuJoCo `site_xpos` as
+the FK return value. The R7-E P5 repair reduced the FK/site fixed-fixture
+residuals from `default_qpos=0.03899999999999981` m and
+`max=0.3450012998489505` m to numerical residuals below `1e-9` m. The #327
+IK/FK self-consistency diagnostic remains on the solver-local FK path.
+
 ## Non-Goals
 
 - final robotics-grade FK

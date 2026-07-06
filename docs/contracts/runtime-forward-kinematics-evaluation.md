@@ -89,6 +89,26 @@ physical MuJoCo-model FK. Residuals above tolerance remain
 `remaining_model_axis_or_link_contract_mismatch` and must not be treated as a
 closed repair.
 
+### R7-E follow-up P5 physical FK repair
+
+The P5 continuation treats `assets/mujoco/fast_arm/arm.xml` and the `tip` site
+as the physical source of truth. The FK/site consistency diagnostic now uses the
+MuJoCo-model-aligned fast_arm FK path for the runtime FK endpoint being compared
+to `mujoco_tip_site_position_m`.
+
+Before the repair, PR #336 measured:
+
+- `default_qpos` FK/site residual: `0.03899999999999981` m
+- maximum fixed-fixture residual: `0.3450012998489505` m
+- IK/FK sanity maximum: about `9.739068046871986e-08` m
+
+After the repair, fixed qpos fixtures pass `fk_endpoint_matches_tip_site_within_tolerance`
+with residuals below `1e-9` m, and IK/FK sanity remains pass. The solver-local
+FK path remains separate for #327 compatibility. Viewer coordinates, input
+mapping, `desired_endpoint_m`, `target_position_m`, and `current_tip_position_m`
+semantics are unchanged. Hardware, serial, OSC, and robot output are not part of
+this validation.
+
 ## Scope check
 
 ```text
