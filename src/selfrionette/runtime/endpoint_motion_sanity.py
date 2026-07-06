@@ -20,6 +20,7 @@ from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, inspect_mujoco_
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
+from selfrionette.runtime.evaluation import evaluate_fk_endpoint_from_qpos
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, RawInputFrame, Vector3
 from selfrionette.transport.stubs import NoOpStatePublisher
 
@@ -33,6 +34,7 @@ _MUJOCO_QPOS_REF_MINUS_90_RAD = -math.pi / 2.0
 _JOINT_AXIS_PERTURBATION_RAD = 0.02
 _LOCAL_JACOBIAN_PERTURBATION_RAD = 0.01
 _PERTURBATION_NO_MOVEMENT_EPSILON_M = 1e-9
+_FK_SITE_CONSISTENCY_TOLERANCE_M = 1e-9
 _TRAJECTORY_DIRECTION_DOT_THRESHOLD = 0.85
 _TRAJECTORY_MOVEMENT_EPSILON_M = 1e-6
 _TRAJECTORY_LOG_COLUMNS = (
@@ -357,6 +359,21 @@ class FastArmEndpointDiagnosticRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class FastArmFkSiteConsistencyDiagnostic:
+    fixture_label: str
+    qpos: tuple[float, ...]
+    fk_endpoint_m: Vector3
+    mujoco_tip_site_position_m: Vector3
+    fk_site_error_m: Vector3
+    fk_site_error_norm_m: float
+    status: str
+    reason: str
+    site_name: str | None = None
+    model_path: str | None = None
+    joint_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class FastArmJointAxisPerturbationResult:
     joint_name: str
     qpos_index: int
@@ -507,6 +524,138 @@ def _build_fast_arm_endpoint_diagnostic_records(
             )
         )
     return tuple(records)
+
+
+def _fast_arm_fk_site_consistency_qpos_fixtures(
+    *,
+    model_path: str | Path | None = None,
+) -> tuple[tuple[str, tuple[float, ...]], ...]:
+    simulator = _build_fast_arm_simulator(model_path)
+    initial_qpos = tuple(float(value) for value in simulator.snapshot().qpos[:4])
+    qpos_offset = (0.02, 0.01, 0.015, 0.005)
+    positive_qpos = tuple(initial_qpos[index] + qpos_offset[index] for index in range(4))
+    negative_qpos = tuple(initial_qpos[index] - qpos_offset[index] for index in range(4))
+
+    representative_motion_results = run_fast_arm_endpoint_motion_sanity(model_path=model_path)
+    representative_qpos = tuple(float(value) for value in representative_motion_results[0].qpos_after[:4])
+
+    return (
+        ("default_qpos", initial_qpos),
+        ("small_positive_perturbation", positive_qpos),
+        ("small_negative_perturbation", negative_qpos),
+        ("representative_endpoint_motion_sanity_qpos", representative_qpos),
+    )
+
+
+def _fk_site_consistency_status_reason(
+    *,
+    fk_site_error_norm_m: float,
+    tip_site_kind: str,
+) -> tuple[str, str]:
+    if tip_site_kind != "site":
+        return "mismatch", "tip_site_reference_is_not_primary"
+    if fk_site_error_norm_m <= _FK_SITE_CONSISTENCY_TOLERANCE_M:
+        return "pass", "fk_endpoint_matches_tip_site_within_tolerance"
+    return "mismatch", "fk_endpoint_does_not_match_tip_site_world_position"
+
+
+def _build_fast_arm_fk_site_consistency_diagnostic(
+    *,
+    fixture_label: str,
+    qpos: Sequence[float],
+    model_path: str | Path | None = None,
+) -> FastArmFkSiteConsistencyDiagnostic:
+    qpos_tuple = tuple(float(value) for value in qpos[:4])
+    if len(qpos_tuple) != 4:
+        raise ValueError("qpos must contain exactly four values")
+
+    simulator = _build_fast_arm_simulator(model_path)
+    simulator.apply_qpos_command(JointCommand(joint_angles_rad=qpos_tuple))
+    state = simulator.snapshot()
+    tip_site = extract_fast_arm_tip_site_endpoint_from_state(state)
+    fk_evaluation = evaluate_fk_endpoint_from_qpos(
+        FastArmEndpointForwardKinematicsSolver(),
+        qpos_tuple,
+        solver_joint_count=4,
+    )
+    fk_site_error_m = _vector_subtract(fk_evaluation.endpoint_m, tip_site.position_m)
+    fk_site_error_norm_m = _vector_norm_m(fk_site_error_m)
+    status, reason = _fk_site_consistency_status_reason(
+        fk_site_error_norm_m=fk_site_error_norm_m,
+        tip_site_kind=tip_site.kind,
+    )
+    joint_names = inspect_mujoco_model(simulator.model).joint_names[:4]
+    return FastArmFkSiteConsistencyDiagnostic(
+        fixture_label=fixture_label,
+        qpos=qpos_tuple,
+        fk_endpoint_m=fk_evaluation.endpoint_m,
+        mujoco_tip_site_position_m=tip_site.position_m,
+        fk_site_error_m=fk_site_error_m,
+        fk_site_error_norm_m=fk_site_error_norm_m,
+        status=status,
+        reason=reason,
+        site_name=tip_site.name,
+        model_path=(str(Path(model_path)) if model_path is not None else None),
+        joint_names=tuple(joint_names),
+    )
+
+
+def run_fast_arm_fk_site_consistency_diagnostics(
+    *,
+    model_path: str | Path | None = None,
+    qpos_fixtures: Sequence[tuple[str, Sequence[float]]] | None = None,
+) -> tuple[FastArmFkSiteConsistencyDiagnostic, ...]:
+    fixtures = (
+        _fast_arm_fk_site_consistency_qpos_fixtures(model_path=model_path)
+        if qpos_fixtures is None
+        else tuple((label, tuple(float(value) for value in qpos)) for label, qpos in qpos_fixtures)
+    )
+    return tuple(
+        _build_fast_arm_fk_site_consistency_diagnostic(
+            fixture_label=label,
+            qpos=qpos,
+            model_path=model_path,
+        )
+        for label, qpos in fixtures
+    )
+
+
+def _fk_site_consistency_diagnostic_row(
+    record: FastArmFkSiteConsistencyDiagnostic,
+) -> dict[str, object]:
+    return {
+        "fixture_label": record.fixture_label,
+        "qpos": record.qpos,
+        "fk_endpoint_m": record.fk_endpoint_m,
+        "mujoco_tip_site_position_m": record.mujoco_tip_site_position_m,
+        "fk_site_error_m": record.fk_site_error_m,
+        "fk_site_error_norm_m": record.fk_site_error_norm_m,
+        "status": record.status,
+        "reason": record.reason,
+        "site_name": record.site_name or _UNAVAILABLE,
+        "model_path": record.model_path or _UNAVAILABLE,
+        "joint_names": record.joint_names or _UNAVAILABLE,
+    }
+
+
+def build_fast_arm_fk_site_consistency_log_rows(
+    records: Sequence[FastArmFkSiteConsistencyDiagnostic],
+) -> tuple[dict[str, object], ...]:
+    return tuple(_fk_site_consistency_diagnostic_row(record) for record in records)
+
+
+def write_fast_arm_fk_site_consistency_log_jsonl(
+    records: Sequence[FastArmFkSiteConsistencyDiagnostic],
+    output_path: str | Path,
+) -> Path:
+    rows = build_fast_arm_fk_site_consistency_log_rows(records)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False))
+            handle.write("\n")
+    return path
 
 
 def _endpoint_diagnostic_row_from_record(
@@ -1747,16 +1896,20 @@ __all__ = [
     "FastArmEndpointTrajectoryDiagnostics",
     "FastArmEndpointTrajectoryStepRecord",
     "FastArmEndpointTrajectorySummary",
+    "FastArmFkSiteConsistencyDiagnostic",
     "FastArmEndpointDiagnosticRecord",
     "FastArmLocalJacobianColumn",
     "FastArmLocalJacobianPoseDiagnostics",
     "FastArmJointAxisPerturbationResult",
     "FastArmEndpointMotionSanityResult",
+    "run_fast_arm_fk_site_consistency_diagnostics",
     "run_fast_arm_endpoint_trajectory_diagnostics",
     "run_fast_arm_local_jacobian_diagnostics",
     "run_fast_arm_joint_axis_mapping_diagnostics",
     "run_fast_arm_endpoint_motion_sanity",
+    "build_fast_arm_fk_site_consistency_log_rows",
     "build_fast_arm_endpoint_diagnostic_log_rows",
+    "write_fast_arm_fk_site_consistency_log_jsonl",
     "write_fast_arm_endpoint_diagnostic_log_csv",
     "write_fast_arm_endpoint_diagnostic_log_jsonl",
     "build_fast_arm_endpoint_trajectory_log_rows",
