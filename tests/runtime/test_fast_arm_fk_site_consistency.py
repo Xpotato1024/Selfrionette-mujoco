@@ -30,14 +30,24 @@ def test_fast_arm_fk_site_consistency_records_include_qpos_fk_endpoint_tip_site_
 
     for record in records:
         assert len(record.qpos) == 4
+        assert len(record.solver_qpos) == 4
         assert len(record.fk_endpoint_m) == 3
+        assert len(record.transformed_solver_fk_world_m) == 3
         assert len(record.mujoco_tip_site_position_m) == 3
         assert len(record.fk_site_error_m) == 3
         assert record.fk_site_error_norm_m == pytest.approx(_vector_norm_m(record.fk_site_error_m), abs=1e-12)
         assert record.status == "mismatch"
-        assert record.reason == "fk_endpoint_does_not_match_tip_site_world_position"
+        assert record.reason == "remaining_model_axis_or_link_contract_mismatch"
         assert record.site_name == "tip"
         assert len(record.joint_names) == 4
+        assert record.solver_qpos[1] == pytest.approx(record.qpos[1] + math.pi / 2.0, abs=1e-12)
+        assert record.fk_site_error_m == pytest.approx(
+            tuple(
+                record.transformed_solver_fk_world_m[index] - record.mujoco_tip_site_position_m[index]
+                for index in range(3)
+            ),
+            abs=1e-12,
+        )
 
 
 def test_fast_arm_fk_site_consistency_default_qpos_fixture_is_deterministic_and_non_default_fixtures_exist() -> None:
@@ -52,7 +62,31 @@ def test_fast_arm_fk_site_consistency_default_qpos_fixture_is_deterministic_and_
         qpos=fixtures[0][1],
     )
     assert diagnostic.qpos == pytest.approx(fixtures[0][1], abs=1e-12)
-    assert diagnostic.fk_site_error_norm_m > 1.0
+    assert diagnostic.solver_qpos == pytest.approx(
+        (
+            fixtures[0][1][0],
+            fixtures[0][1][1] + math.pi / 2.0,
+            fixtures[0][1][2],
+            fixtures[0][1][3],
+        ),
+        abs=1e-12,
+    )
+    assert diagnostic.fk_site_error_norm_m > 1e-3
+    assert diagnostic.fk_site_error_norm_m == pytest.approx(0.039, abs=1e-12)
+
+
+def test_fast_arm_fk_site_consistency_narrows_but_does_not_repair_current_residuals() -> None:
+    records = run_fast_arm_fk_site_consistency_diagnostics()
+
+    assert max(record.fk_site_error_norm_m for record in records) == pytest.approx(
+        0.3450012998489505,
+        abs=1e-12,
+    )
+    assert all(record.status == "mismatch" for record in records)
+    assert all(
+        record.reason == "remaining_model_axis_or_link_contract_mismatch"
+        for record in records
+    )
 
 
 def test_fast_arm_fk_site_consistency_tip_site_is_primary_and_body_reference_is_not_treated_as_primary(
@@ -105,7 +139,9 @@ def test_fast_arm_fk_site_consistency_jsonl_export_writes_records(tmp_path: Path
     first_row = json.loads(lines[0])
     assert first_row["fixture_label"] == "default_qpos"
     assert len(first_row["qpos"]) == 4
+    assert len(first_row["solver_qpos"]) == 4
     assert len(first_row["fk_endpoint_m"]) == 3
+    assert len(first_row["transformed_solver_fk_world_m"]) == 3
     assert len(first_row["mujoco_tip_site_position_m"]) == 3
     assert len(first_row["fk_site_error_m"]) == 3
     assert first_row["fk_site_error_norm_m"] >= 0.0
