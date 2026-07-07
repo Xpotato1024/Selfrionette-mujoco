@@ -75,6 +75,8 @@ def test_runtime_step_loop_rebases_viewer_source_to_initial_tip_site_position() 
     assert records[0].motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.0, 0.0, 1.0 / 600.0), abs=1e-12)
     assert records[0].motion_command.metadata["endpoint_delta_requested_m"] == pytest.approx((0.0, 0.0, 1.0 / 600.0), abs=1e-12)
     assert records[0].motion_command.metadata["motion_status"] in {"accepted", "scaled"}
+    assert records[0].motion_command.metadata["endpoint_model"] == "mujoco_model_aligned_tip_site"
+    assert records[0].state.metadata["actual_tip_delta_m"][2] > 0.0
     assert dist(initial_state.qpos[:4], records[0].state.qpos[:4]) > 0.0
 
 
@@ -92,9 +94,9 @@ def test_runtime_step_loop_dt_scales_viewer_endpoint_delta() -> None:
 
     assert record_a.frame.metadata["endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
     assert record_b.frame.metadata["endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
-    assert record_a.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(1.0 / 600.0, abs=1e-12)
-    assert record_b.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(1.0 / 300.0, abs=1e-12)
-    assert record_b.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(record_a.motion_command.metadata["endpoint_delta_m"][1] * 2.0, abs=1e-12)
+    assert record_a.motion_command.metadata["endpoint_delta_m"][0] == pytest.approx(-1.0 / 600.0, abs=1e-12)
+    assert record_b.motion_command.metadata["endpoint_delta_m"][0] == pytest.approx(-1.0 / 300.0, abs=1e-12)
+    assert record_b.motion_command.metadata["endpoint_delta_m"][0] == pytest.approx(record_a.motion_command.metadata["endpoint_delta_m"][0] * 2.0, abs=1e-12)
 
 
 def test_runtime_step_loop_holds_keyboard_z_binding_and_updates_target_metadata() -> None:
@@ -114,6 +116,8 @@ def test_runtime_step_loop_holds_keyboard_z_binding_and_updates_target_metadata(
     assert len(record.motion_command.metadata["current_tip_position_m"]) == 3
     assert record.motion_command.metadata["motion_status"] in {"accepted", "scaled"}
     assert record.motion_command.metadata["motion_rejection_reason"] is None
+    assert record.motion_command.metadata["endpoint_model"] == "mujoco_model_aligned_tip_site"
+    assert record.state.metadata["actual_tip_delta_m"][2] < 0.0
     assert record.state.target_position_m == pytest.approx(record.motion_command.metadata["desired_endpoint_m"], abs=1e-12)
     assert record.state.metadata.get("target_rejected") is not True
     assert record.state.metadata["local_motion_policy"] == "finite_difference_jacobian"
@@ -148,3 +152,4 @@ def test_runtime_step_loop_stops_after_zero_state_update() -> None:
     assert stopped_record.motion_command.metadata["endpoint_delta_m"] == (0.0, 0.0, 0.0)
     assert stopped_record.motion_command.metadata["motion_status"] == "accepted"
     assert stopped_record.state.metadata["source_active"] is False
+    assert stopped_record.state.metadata["actual_tip_delta_m"] == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)

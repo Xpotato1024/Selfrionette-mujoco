@@ -68,11 +68,15 @@ def test_viewer_step_loop_accepts_continuous_keyboard_motion_with_small_bounded_
     assert record.frame.metadata["input_continuity"] == "continuous"
     assert record.frame.metadata["axis_values"] == pytest.approx((1.0, 0.0, 0.0), abs=1e-12)
     assert record.frame.metadata["endpoint_velocity_m_s"] == pytest.approx((0.1, 0.0, 0.0), abs=1e-12)
-    assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx((1.0 / 600.0, 0.0, 0.0), abs=1e-12)
-    assert record.motion_command.metadata["endpoint_delta_requested_m"] == pytest.approx((1.0 / 600.0, 0.0, 0.0), abs=1e-12)
+    assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.0, 1.0 / 600.0, 0.0), abs=1e-12)
+    assert record.motion_command.metadata["endpoint_delta_requested_m"] == pytest.approx((0.0, 1.0 / 600.0, 0.0), abs=1e-12)
     assert record.motion_command.metadata["local_motion_policy"] == "finite_difference_jacobian"
     assert record.motion_command.metadata["motion_status"] in {"accepted", "scaled"}
     assert record.motion_command.metadata["qpos_delta_norm_rad"] <= 0.2 + 1e-12
+    assert record.motion_command.metadata["endpoint_model"] == "mujoco_model_aligned_tip_site"
+    assert record.state.metadata["endpoint_model"] == "mujoco_model_aligned_tip_site"
+    assert record.motion_command.metadata["endpoint_velocity_m_s"][1] > 0.0
+    assert record.state.metadata["actual_tip_delta_m"][1] > 0.0
     assert dist(initial_state.qpos[:4], record.state.qpos[:4]) > 0.0
     assert dist(initial_state.qpos[:4], record.state.qpos[:4]) <= 0.2 + 1e-12
     assert record.state.target_position_m is not None
@@ -104,6 +108,8 @@ def test_viewer_step_loop_preserves_keyboard_z_axis_binding(
     assert record.frame.metadata["endpoint_velocity_m_s"][2] == pytest.approx(expected_z_sign * 0.1, abs=1e-12)
     assert record.motion_command.metadata["endpoint_delta_m"][2] == pytest.approx(expected_z_sign / 600.0, abs=1e-12)
     assert record.motion_command.metadata["endpoint_delta_requested_m"][2] == pytest.approx(expected_z_sign / 600.0, abs=1e-12)
+    assert record.motion_command.metadata["endpoint_model"] == "mujoco_model_aligned_tip_site"
+    assert record.state.metadata["actual_tip_delta_m"][2] * expected_z_sign > 0.0
 
 
 def test_viewer_step_loop_dt_scales_endpoint_delta() -> None:
@@ -116,10 +122,10 @@ def test_viewer_step_loop_dt_scales_endpoint_delta() -> None:
     fast_record = _run_single_viewer_step(plan_fast, dt_s=1.0 / 60.0)
     slow_record = _run_single_viewer_step(plan_slow, dt_s=1.0 / 30.0)
 
-    assert fast_record.motion_command.metadata["endpoint_delta_requested_m"][1] == pytest.approx(1.0 / 600.0, abs=1e-12)
-    assert slow_record.motion_command.metadata["endpoint_delta_requested_m"][1] == pytest.approx(1.0 / 300.0, abs=1e-12)
-    assert slow_record.motion_command.metadata["endpoint_delta_requested_m"][1] == pytest.approx(
-        fast_record.motion_command.metadata["endpoint_delta_requested_m"][1] * 2.0,
+    assert fast_record.motion_command.metadata["endpoint_delta_requested_m"][0] == pytest.approx(-1.0 / 600.0, abs=1e-12)
+    assert slow_record.motion_command.metadata["endpoint_delta_requested_m"][0] == pytest.approx(-1.0 / 300.0, abs=1e-12)
+    assert slow_record.motion_command.metadata["endpoint_delta_requested_m"][0] == pytest.approx(
+        fast_record.motion_command.metadata["endpoint_delta_requested_m"][0] * 2.0,
         abs=1e-12,
     )
 
@@ -137,6 +143,9 @@ def test_viewer_step_loop_holds_motion_without_repeated_keydown_until_keyup() ->
     assert records[2].motion_command.metadata["motion_status"] in {"accepted", "scaled"}
     assert records[0].state.qpos[:4] != records[1].state.qpos[:4]
     assert records[1].state.qpos[:4] != records[2].state.qpos[:4]
+    assert any(abs(component) > 1e-12 for component in records[0].state.metadata["actual_tip_delta_m"])
+    assert any(abs(component) > 1e-12 for component in records[1].state.metadata["actual_tip_delta_m"])
+    assert any(abs(component) > 1e-12 for component in records[2].state.metadata["actual_tip_delta_m"])
 
     ingest_viewer_control_message(
         source,
@@ -156,6 +165,7 @@ def test_viewer_step_loop_holds_motion_without_repeated_keydown_until_keyup() ->
 
     assert stopped_record.motion_command.metadata["motion_status"] == "accepted"
     assert stopped_record.motion_command.metadata["endpoint_delta_m"] == (0.0, 0.0, 0.0)
+    assert stopped_record.state.metadata["actual_tip_delta_m"] == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
 
 def test_viewer_step_loop_scales_large_dt_boundary_motion() -> None:
@@ -167,5 +177,5 @@ def test_viewer_step_loop_scales_large_dt_boundary_motion() -> None:
 
     assert record.frame.metadata["endpoint_velocity_m_s"] == pytest.approx((0.1, 0.0, 0.0), abs=1e-12)
     assert record.motion_command.metadata["motion_status"] == "scaled"
-    assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.01, 0.0, 0.0), abs=1e-12)
+    assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.0, 0.01, 0.0), abs=1e-12)
     assert record.motion_command.metadata["motion_rejection_reason"] is None

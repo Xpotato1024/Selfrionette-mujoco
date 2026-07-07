@@ -3,17 +3,17 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite, sqrt
+from typing import Protocol
 
 import numpy as np
 
-from selfrionette.kinematics import FastArmEndpointForwardKinematicsSolver
 from selfrionette.schemas import JointCommand, MotionCommand, InputIntent
 
-_DEFAULT_FK_SOLVER = FastArmEndpointForwardKinematicsSolver()
 _DEFAULT_FD_EPSILON_RAD = 1e-4
 _DEFAULT_DAMPING = 1e-3
 _DEFAULT_MAX_QPOS_DELTA_NORM_RAD = 0.2
 _DEFAULT_MAX_ENDPOINT_DELTA_PER_TICK_M = 0.01
+_DEFAULT_ENDPOINT_MODEL = "mujoco_model_aligned_tip_site"
 
 
 def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
@@ -82,19 +82,24 @@ def _resolve_axis_values(intent: InputIntent) -> tuple[float, float, float]:
     return values
 
 
+class EndpointKinematics(Protocol):
+    def forward(self, qpos_rad: Sequence[float]) -> tuple[float, float, float]:
+        ...
+
+
 def _finite_difference_jacobian(
     qpos_rad: tuple[float, ...],
     *,
-    fk_solver: FastArmEndpointForwardKinematicsSolver,
+    endpoint_kinematics: EndpointKinematics,
     epsilon_rad: float,
 ) -> np.ndarray:
-    base = np.asarray(fk_solver.forward(qpos_rad), dtype=np.float64)
+    base = np.asarray(endpoint_kinematics.forward(qpos_rad), dtype=np.float64)
     jacobian = np.zeros((3, len(qpos_rad)), dtype=np.float64)
 
     for joint_index in range(len(qpos_rad)):
         perturbed = list(qpos_rad)
         perturbed[joint_index] += epsilon_rad
-        perturbed_endpoint = np.asarray(fk_solver.forward(tuple(perturbed)), dtype=np.float64)
+        perturbed_endpoint = np.asarray(endpoint_kinematics.forward(tuple(perturbed)), dtype=np.float64)
         jacobian[:, joint_index] = (perturbed_endpoint - base) / epsilon_rad
 
     return jacobian
@@ -116,12 +121,15 @@ class LocalEndpointMotionGenerator:
     def __init__(
         self,
         *,
-        fk_solver: FastArmEndpointForwardKinematicsSolver | None = None,
+        endpoint_kinematics: EndpointKinematics,
+        endpoint_model: str = _DEFAULT_ENDPOINT_MODEL,
         fd_epsilon_rad: float = _DEFAULT_FD_EPSILON_RAD,
         damping: float = _DEFAULT_DAMPING,
         max_qpos_delta_norm_rad: float = _DEFAULT_MAX_QPOS_DELTA_NORM_RAD,
         max_endpoint_delta_per_tick_m: float = _DEFAULT_MAX_ENDPOINT_DELTA_PER_TICK_M,
     ) -> None:
+        if not endpoint_model:
+            raise ValueError("endpoint_model must be a non-empty string")
         if not isfinite(fd_epsilon_rad) or fd_epsilon_rad <= 0.0:
             raise ValueError("fd_epsilon_rad must be finite and positive")
         if not isfinite(damping) or damping < 0.0:
@@ -131,7 +139,8 @@ class LocalEndpointMotionGenerator:
         if not isfinite(max_endpoint_delta_per_tick_m) or max_endpoint_delta_per_tick_m <= 0.0:
             raise ValueError("max_endpoint_delta_per_tick_m must be finite and positive")
 
-        self._fk_solver = _DEFAULT_FK_SOLVER if fk_solver is None else fk_solver
+        self._endpoint_kinematics = endpoint_kinematics
+        self._endpoint_model = endpoint_model
         self._fd_epsilon_rad = float(fd_epsilon_rad)
         self._damping = float(damping)
         self._max_qpos_delta_norm_rad = float(max_qpos_delta_norm_rad)
@@ -151,7 +160,7 @@ class LocalEndpointMotionGenerator:
         motion_status: str = "held",
     ) -> MotionCommand:
         qpos_before = tuple(qpos_before_rad)
-        current_tip_position_m = self._fk_solver.forward(qpos_before)
+        current_tip_position_m = self._endpoint_kinematics.forward(qpos_before)
         desired_endpoint_m = tuple(
             current_tip_position_m[index] + endpoint_delta_requested_m[index]
             for index in range(3)
@@ -159,6 +168,7 @@ class LocalEndpointMotionGenerator:
         metadata = {
             **dict(intent.metadata),
             "local_motion_policy": "finite_difference_jacobian",
+            "endpoint_model": self._endpoint_model,
             "motion_status": motion_status,
             "motion_rejection_reason": reason,
             "qpos_before_rad": qpos_before,
@@ -207,7 +217,7 @@ class LocalEndpointMotionGenerator:
             limit=self._max_endpoint_delta_per_tick_m,
         )
 
-        current_tip_position_m = self._fk_solver.forward(current_qpos_rad)
+        current_tip_position_m = self._endpoint_kinematics.forward(current_qpos_rad)
         desired_endpoint_m = tuple(
             current_tip_position_m[index] + requested_endpoint_delta_m[index]
             for index in range(3)
@@ -216,7 +226,7 @@ class LocalEndpointMotionGenerator:
         try:
             jacobian = _finite_difference_jacobian(
                 current_qpos_rad,
-                fk_solver=self._fk_solver,
+                endpoint_kinematics=self._endpoint_kinematics,
                 epsilon_rad=self._fd_epsilon_rad,
             )
             jj_t = jacobian @ jacobian.T
@@ -258,7 +268,7 @@ class LocalEndpointMotionGenerator:
                 endpoint_delta_requested_m=requested_endpoint_delta_m,
             )
 
-        candidate_endpoint_m = self._fk_solver.forward(candidate_qpos_rad)
+        candidate_endpoint_m = self._endpoint_kinematics.forward(candidate_qpos_rad)
         endpoint_delta_achieved_m = tuple(
             candidate_endpoint_m[index] - current_tip_position_m[index]
             for index in range(3)
@@ -267,6 +277,7 @@ class LocalEndpointMotionGenerator:
         metadata = {
             **dict(intent.metadata),
             "local_motion_policy": "finite_difference_jacobian",
+            "endpoint_model": self._endpoint_model,
             "motion_status": motion_status,
             "motion_rejection_reason": motion_rejection_reason,
             "qpos_before_rad": current_qpos_rad,
@@ -292,6 +303,7 @@ class LocalEndpointMotionGenerator:
 
 
 __all__ = [
+    "EndpointKinematics",
     "LocalEndpointMotionGenerator",
     "LocalEndpointMotionResult",
 ]
