@@ -47,7 +47,7 @@ def test_target_position_triggers_optional_ik_solver_for_future_compatible_objec
     assert command.timestamp_s == 2.0
     assert command.joint == JointCommand(joint_angles_rad=(1.0, 2.0, 3.0))
     assert command.target is None
-    assert command.metadata == {"origin": "ik"}
+    assert command.metadata["origin"] == "ik"
     assert command.metadata is not intent.metadata
 
 

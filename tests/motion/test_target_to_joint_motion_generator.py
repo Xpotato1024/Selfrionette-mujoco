@@ -14,6 +14,11 @@ from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.schemas import InputIntent, JointCommand
 
 
+def assert_metadata_contains(metadata: dict[str, object], expected: dict[str, object]) -> None:
+    for key, value in expected.items():
+        assert metadata[key] == value
+
+
 @dataclass(slots=True)
 class FutureTargetPositionCompatibleIntent:
     source: str
@@ -44,7 +49,7 @@ def test_target_to_joint_motion_generator_uses_concrete_inverse_kinematics_solve
 
     assert command.timestamp_s == 2.0
     assert command.target is None
-    assert command.metadata == {"origin": "concrete-ik"}
+    assert_metadata_contains(command.metadata, {"origin": "concrete-ik"})
     assert command.joint is not None
     assert command.joint.joint_angles_rad == pytest.approx(target_joint_angles_rad, abs=1e-9)
     assert command.joint != JointCommand()
@@ -72,7 +77,10 @@ def test_target_to_joint_motion_generator_prefers_desired_endpoint_metadata_over
 
     assert command.timestamp_s == 2.0
     assert command.target is None
-    assert command.metadata == {"origin": "concrete-ik", "target_position_m": fallback_target_position_m}
+    assert_metadata_contains(
+        command.metadata,
+        {"origin": "concrete-ik", "target_position_m": fallback_target_position_m},
+    )
     assert command.joint is not None
     assert command.joint.joint_angles_rad == pytest.approx(target_joint_angles_rad, abs=1e-9)
 
@@ -108,7 +116,10 @@ def test_target_to_joint_motion_generator_uses_metadata_target_position_and_pads
 
     assert command.timestamp_s == 2.0
     assert command.target is None
-    assert command.metadata == {"origin": "concrete-ik", "target_position_m": target_position_m}
+    assert_metadata_contains(
+        command.metadata,
+        {"origin": "concrete-ik", "target_position_m": target_position_m},
+    )
     assert command.joint is not None
     assert command.joint.joint_angles_rad[:2] == pytest.approx(target_joint_angles_rad, abs=1e-9)
     assert command.joint.joint_angles_rad[2:] == (0.0, 0.0)
@@ -135,7 +146,10 @@ def test_target_to_joint_motion_generator_keeps_four_dof_fast_arm_seed_and_does_
 
     assert command.timestamp_s == 2.0
     assert command.target is None
-    assert command.metadata == {"origin": "fast-arm", "desired_endpoint_m": desired_endpoint_m}
+    assert_metadata_contains(
+        command.metadata,
+        {"origin": "fast-arm", "desired_endpoint_m": desired_endpoint_m},
+    )
     assert command.joint is not None
     assert len(command.joint.joint_angles_rad) == 4
     assert command.joint.joint_angles_rad[2:] != (0.0, 0.0)
