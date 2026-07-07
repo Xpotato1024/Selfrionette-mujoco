@@ -108,6 +108,8 @@ class _ViewerFrameSpec:
     source_active: bool
     stale_reason: str | None
     desired_endpoint_m: tuple[float, float, float]
+    endpoint_delta_m: tuple[float, float, float]
+    current_tip_position_m: tuple[float, float, float]
     values: tuple[float, ...]
     buttons: tuple[bool, ...]
     viewer_source_kind: str | None
@@ -243,6 +245,8 @@ class ViewerInputSource:
             source_active=source_active,
             stale_reason=stale_reason,
             desired_endpoint_m=desired_endpoint_m,
+            endpoint_delta_m=endpoint_delta_m,
+            current_tip_position_m=_round_vector3(self._current_endpoint_m),
             values=endpoint_delta_m,
             buttons=_keyboard_button_values(key_state, message.keyboard.active_key_codes),
             viewer_source_kind="keyboard",
@@ -290,6 +294,8 @@ class ViewerInputSource:
             source_active=source_active,
             stale_reason=stale_reason,
             desired_endpoint_m=desired_endpoint_m,
+            endpoint_delta_m=_round_vector3(axis_delta_m),
+            current_tip_position_m=_round_vector3(self._current_endpoint_m),
             values=message.gamepad.axes,
             buttons=_gamepad_button_buttons(message.gamepad.buttons),
             viewer_source_kind="gamepad",
@@ -334,6 +340,8 @@ class ViewerInputSource:
             "stale_reason": stale_reason,
             "desired_endpoint_m": spec.desired_endpoint_m,
             "target_position_m": spec.desired_endpoint_m,
+            "endpoint_delta_m": spec.endpoint_delta_m,
+            "current_tip_position_m": spec.current_tip_position_m,
             "viewer_source_kind": spec.viewer_source_kind,
             _VIEWER_CONTROL_SUMMARY_KEY: dict(spec.control_summary),
         }

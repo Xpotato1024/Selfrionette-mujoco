@@ -8,6 +8,10 @@ from time import monotonic
 
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M, ViewerInputSource
 from selfrionette.mujoco_backend import default_fast_arm_scene_path
+from selfrionette.mujoco_backend.endpoint_extraction import (
+    extract_fast_arm_base_link_position_from_state,
+    extract_fast_arm_tip_site_endpoint_from_state,
+)
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
@@ -24,6 +28,8 @@ from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipe
 from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInputFrame
 from selfrionette.transport import StatePublisher
 from selfrionette.transport.stubs import NoOpStatePublisher
+
+VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD = 0.2
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +64,44 @@ def _coerce_viewer_endpoint_m(value: object) -> tuple[float, float, float]:
         return DEFAULT_VIEWER_SAFE_ENDPOINT_M
 
     return endpoint_m
+
+
+def _extract_current_tip_site_endpoint_m(pipeline: RuntimePipeline) -> tuple[float, float, float] | None:
+    try:
+        return extract_fast_arm_tip_site_endpoint_from_state(
+            pipeline.simulator.snapshot()
+        ).position_m
+    except ValueError:
+        return None
+
+
+def _extract_current_solver_base_world_position_m(
+    pipeline: RuntimePipeline,
+) -> tuple[float, float, float] | None:
+    try:
+        return extract_fast_arm_base_link_position_from_state(
+            pipeline.simulator.snapshot()
+        )
+    except ValueError:
+        return None
+
+
+def _vector_subtract(lhs_m: Sequence[float], rhs_m: Sequence[float]) -> tuple[float, float, float]:
+    return tuple(float(lhs_m[index]) - float(rhs_m[index]) for index in range(3))
+
+
+def _build_viewer_ik_target_metadata(
+    *,
+    desired_endpoint_m: Sequence[float],
+    solver_base_world_position_m: Sequence[float],
+) -> dict[str, object]:
+    ik_target_endpoint_m = _vector_subtract(desired_endpoint_m, solver_base_world_position_m)
+    return {
+        "ik_target_endpoint_m": ik_target_endpoint_m,
+        "ik_target_coordinate_frame": "solver-local fast_arm endpoint frame",
+        "desired_endpoint_coordinate_frame": "MuJoCo world / scene frame",
+        "solver_base_world_position_m": tuple(float(component) for component in solver_base_world_position_m),
+    }
 
 
 def build_runtime_input_source_step_loop_plan(
@@ -135,8 +179,16 @@ def build_runtime_input_source_step_loop_plan(
             model_path=resolved_model_path,
             loop=selection.loop,
             publisher=publisher if publisher is not None else NoOpStatePublisher(),
+            discontinuity_threshold_rad=VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
+            discontinuity_threshold_label="viewer endpoint continuity threshold",
         )
         pipeline.input_source = pipeline_input_source
+        initial_tip_site_position_m = _extract_current_tip_site_endpoint_m(pipeline)
+        if initial_tip_site_position_m is not None:
+            _sync_viewer_input_source_endpoint(
+                pipeline.input_source,
+                endpoint_m=initial_tip_site_position_m,
+            )
 
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
@@ -224,9 +276,11 @@ async def run_runtime_input_source_step_loop(
     records: list[RuntimeInputSourceStepLoopRecord] = []
     last_valid_endpoint_m: tuple[float, float, float] | None = None
     if plan.selection.source_name == "viewer":
-        last_valid_endpoint_m = _coerce_viewer_endpoint_m(
-            plan.selection.initial_metadata.get("desired_endpoint_m", plan.selection.initial_metadata.get("target_position_m"))
-        )
+        last_valid_endpoint_m = _extract_current_tip_site_endpoint_m(plan.pipeline)
+        if last_valid_endpoint_m is None:
+            last_valid_endpoint_m = _coerce_viewer_endpoint_m(
+                plan.selection.initial_metadata.get("desired_endpoint_m", plan.selection.initial_metadata.get("target_position_m"))
+            )
 
     for index in range(steps):
         frame = plan.pipeline.input_source.read_frame()
@@ -236,11 +290,28 @@ async def run_runtime_input_source_step_loop(
             default_source_kind=plan.selection.source_name,
         )
         pre_step_state = plan.pipeline.simulator.snapshot()
+        motion_intent = intent
+        if plan.selection.source_name == "viewer":
+            desired_endpoint_m = frame.metadata.get("desired_endpoint_m")
+            solver_base_world_position_m = _extract_current_solver_base_world_position_m(plan.pipeline)
+            if desired_endpoint_m is not None and solver_base_world_position_m is not None:
+                motion_intent = replace(
+                    intent,
+                    metadata={
+                        **intent.metadata,
+                        **_build_viewer_ik_target_metadata(
+                            desired_endpoint_m=_coerce_viewer_endpoint_m(desired_endpoint_m),
+                            solver_base_world_position_m=solver_base_world_position_m,
+                        ),
+                        "viewer_endpoint_continuity_threshold_rad": VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
+                        "accepted_small_motion_threshold_rad": VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
+                    },
+                )
         current_qpos_rad = tuple(pre_step_state.qpos)
         set_current_qpos = getattr(plan.pipeline.motion_generator, "set_current_qpos_rad", None)
         if callable(set_current_qpos):
             set_current_qpos(current_qpos_rad)
-        motion_command = plan.pipeline.motion_generator.update(intent, dt)
+        motion_command = plan.pipeline.motion_generator.update(motion_intent, dt)
         safety_result = build_runtime_input_safety_result(
             motion_command,
             source_state=source_state,
