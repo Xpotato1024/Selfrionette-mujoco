@@ -71,6 +71,18 @@ def _resolve_vector3_from_intent(
     return _coerce_vector3(key, value)
 
 
+def _resolve_control_frame(intent: InputIntent) -> str:
+    control_frame = intent.metadata.get("control_frame", "world")
+    if not isinstance(control_frame, str):
+        return "world"
+
+    normalized_control_frame = control_frame.strip().lower()
+    if normalized_control_frame in {"world", "tool"}:
+        return normalized_control_frame
+
+    return "world"
+
+
 def _resolve_axis_values(intent: InputIntent) -> tuple[float, float, float]:
     axis_values = intent.metadata.get("axis_values")
     if axis_values is not None:
@@ -207,10 +219,18 @@ class LocalEndpointMotionGenerator:
             )
 
         axis_values = _resolve_axis_values(intent)
+        control_frame = _resolve_control_frame(intent)
         local_endpoint_speed_m_s = float(intent.metadata.get("local_endpoint_speed_m_s", 0.0) or 0.0)
-        endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="endpoint_velocity_m_s")
+        local_endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="local_endpoint_velocity_m_s")
+        endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="resolved_world_endpoint_velocity_m_s")
         if endpoint_velocity_m_s is None:
-            endpoint_velocity_m_s = tuple(component * local_endpoint_speed_m_s for component in axis_values)
+            endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="endpoint_velocity_m_s")
+        if local_endpoint_velocity_m_s is None:
+            local_endpoint_velocity_m_s = endpoint_velocity_m_s
+        if local_endpoint_velocity_m_s is None:
+            local_endpoint_velocity_m_s = tuple(component * local_endpoint_speed_m_s for component in axis_values)
+        if endpoint_velocity_m_s is None:
+            endpoint_velocity_m_s = local_endpoint_velocity_m_s
         raw_requested_endpoint_delta_m = tuple(component * dt_s for component in endpoint_velocity_m_s)
         requested_endpoint_delta_m = _scale_vector(
             raw_requested_endpoint_delta_m,
@@ -280,6 +300,10 @@ class LocalEndpointMotionGenerator:
             "endpoint_model": self._endpoint_model,
             "motion_status": motion_status,
             "motion_rejection_reason": motion_rejection_reason,
+            "control_frame": control_frame,
+            "local_endpoint_velocity_frame": intent.metadata.get("local_endpoint_velocity_frame", control_frame),
+            "local_endpoint_velocity_m_s": local_endpoint_velocity_m_s,
+            "resolved_world_endpoint_velocity_m_s": endpoint_velocity_m_s,
             "qpos_before_rad": current_qpos_rad,
             "candidate_qpos_rad": candidate_qpos_rad,
             "qpos_delta_norm_rad": qpos_delta_norm_rad,
@@ -288,6 +312,7 @@ class LocalEndpointMotionGenerator:
             "axis_values": axis_values,
             "local_endpoint_speed_m_s": local_endpoint_speed_m_s,
             "endpoint_velocity_m_s": endpoint_velocity_m_s,
+            "endpoint_velocity_frame": "mujoco_world",
             "endpoint_delta_requested_m": requested_endpoint_delta_m,
             "endpoint_delta_m": requested_endpoint_delta_m,
             "endpoint_delta_achieved_m": endpoint_delta_achieved_m,

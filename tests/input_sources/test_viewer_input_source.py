@@ -31,6 +31,7 @@ def test_viewer_input_source_returns_safe_inactive_frame_before_ingest() -> None
     assert frame.metadata["source_active"] is False
     assert frame.metadata["command_age_ms"] == 0
     assert frame.metadata["stale_reason"] == "source_inactive"
+    assert frame.metadata["control_frame"] == "world"
     assert frame.metadata["desired_endpoint_m"] == (0.6, 0.0, 0.1)
     assert frame.metadata["target_position_m"] == (0.6, 0.0, 0.1)
     assert frame.metadata["intent_kind"] is None
@@ -66,11 +67,22 @@ def test_viewer_input_source_converts_keyboard_message_to_continuous_axis_frame(
     assert frame.metadata["source_active"] is True
     assert frame.metadata["command_age_ms"] == 0
     assert frame.metadata["stale_reason"] is None
+    assert frame.metadata["control_frame"] == "world"
     assert frame.metadata["axis_values"] == pytest.approx(expected_axis_values, abs=1e-12)
     assert frame.metadata["endpoint_velocity_m_s"] == pytest.approx(
         tuple(component * 0.1 for component in expected_axis_values),
         abs=1e-12,
     )
+    assert frame.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx(
+        tuple(component * 0.1 for component in expected_axis_values),
+        abs=1e-12,
+    )
+    assert frame.metadata["local_endpoint_velocity_m_s"] == pytest.approx(
+        tuple(component * 0.1 for component in expected_axis_values),
+        abs=1e-12,
+    )
+    assert frame.metadata["local_endpoint_velocity_frame"] == "world"
+    assert frame.metadata["endpoint_velocity_frame"] == "mujoco_world"
     assert frame.metadata["local_endpoint_speed_m_s"] == pytest.approx(0.1, abs=1e-12)
     assert frame.metadata["local_endpoint_max_delta_m"] == pytest.approx(0.03, abs=1e-12)
     assert frame.metadata["viewer_control_message"]["keyboard"]["active_key_codes"] == ("KeyW", "KeyD")
@@ -115,6 +127,7 @@ def test_viewer_input_source_keyboard_digital_axis_semantics(
 
     assert frame.metadata["axis_values"] == pytest.approx(expected_axis_values, abs=1e-12)
     assert frame.values == pytest.approx(expected_axis_values, abs=1e-12)
+    assert frame.metadata["control_frame"] == "world"
 
 
 def test_viewer_input_source_converts_gamepad_message_to_continuous_axis_frame() -> None:
@@ -148,9 +161,13 @@ def test_viewer_input_source_converts_gamepad_message_to_continuous_axis_frame()
     assert frame.metadata["source_active"] is True
     assert frame.metadata["command_age_ms"] == 0
     assert frame.metadata["stale_reason"] is None
+    assert frame.metadata["control_frame"] == "world"
     assert frame.metadata["viewer_control_message"]["gamepad"]["axes"] == (1.0, 0.0, -0.5)
     assert frame.metadata["local_endpoint_speed_m_s"] == pytest.approx(0.1, abs=1e-12)
     assert frame.metadata["local_endpoint_max_delta_m"] == pytest.approx(0.03, abs=1e-12)
+    assert frame.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx(frame.metadata["endpoint_velocity_m_s"], abs=1e-12)
+    assert frame.metadata["local_endpoint_velocity_frame"] == "world"
+    assert frame.metadata["endpoint_velocity_frame"] == "mujoco_world"
     assert frame.values == pytest.approx((0.85065080835204, 0.0, 0.5257311121191337), abs=1e-12)
     assert frame.buttons == (True, False)
 
@@ -177,6 +194,7 @@ def test_viewer_input_source_marks_frame_stale_after_timeout() -> None:
     assert stale_frame.metadata["source_active"] is False
     assert stale_frame.metadata["command_age_ms"] == 301
     assert stale_frame.metadata["stale_reason"] == "command_age_ms_exceeded_timeout_250"
+    assert stale_frame.metadata["control_frame"] == "world"
     assert stale_frame.metadata["axis_values"] == (0.0, 1.0, 0.0)
     assert stale_frame.metadata["endpoint_velocity_m_s"] == pytest.approx((0.0, 0.1, 0.0), abs=1e-12)
 

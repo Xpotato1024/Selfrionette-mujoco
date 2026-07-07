@@ -12,6 +12,7 @@ DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_DELTA_PER_TICK_M = 0.01
 DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD = 1e-4
 DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING = 1e-3
 DEFAULT_VIEWER_LOCAL_ENDPOINT_MODEL = "mujoco_model_aligned_tip_site"
+DEFAULT_VIEWER_LOCAL_ENDPOINT_CONTROL_FRAME = "world"
 
 
 def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
@@ -27,6 +28,17 @@ def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
 
 def _vector_norm(vector: Sequence[float]) -> float:
     return sqrt(sum(float(component) * float(component) for component in vector))
+
+
+def _normalize_control_frame(value: object) -> tuple[str, object | None]:
+    if not isinstance(value, str):
+        return DEFAULT_VIEWER_LOCAL_ENDPOINT_CONTROL_FRAME, value
+
+    normalized_control_frame = value.strip().lower()
+    if normalized_control_frame in {"world", "tool"}:
+        return normalized_control_frame, None
+
+    return DEFAULT_VIEWER_LOCAL_ENDPOINT_CONTROL_FRAME, value
 
 
 def _rotate_vector_by_quaternion_wxyz(
@@ -84,27 +96,57 @@ def build_viewer_local_motion_metadata(
     intent_metadata = dict(metadata)
     axis_values = intent_metadata.get("axis_values")
     endpoint_velocity_m_s = intent_metadata.get("endpoint_velocity_m_s")
+    resolved_world_endpoint_velocity_m_s = intent_metadata.get("resolved_world_endpoint_velocity_m_s")
+    local_endpoint_velocity_m_s = intent_metadata.get("local_endpoint_velocity_m_s")
     local_endpoint_speed_m_s = float(intent_metadata.get("local_endpoint_speed_m_s", DEFAULT_VIEWER_LOCAL_ENDPOINT_SPEED_M_S))
     local_endpoint_max_delta_m = float(
         intent_metadata.get("local_endpoint_max_delta_m", DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_DELTA_PER_TICK_M)
     )
     current_tip_orientation_wxyz = intent_metadata.get("current_tip_orientation_wxyz")
+    control_frame, normalized_from = _normalize_control_frame(intent_metadata.get("control_frame", DEFAULT_VIEWER_LOCAL_ENDPOINT_CONTROL_FRAME))
 
     if axis_values is not None:
         axis_values = _coerce_vector3("axis_values", axis_values)
 
-    local_endpoint_velocity_m_s = None
-    if axis_values is not None:
+    if local_endpoint_velocity_m_s is not None:
+        local_endpoint_velocity_m_s = _coerce_vector3("local_endpoint_velocity_m_s", local_endpoint_velocity_m_s)
+    elif axis_values is not None:
         local_endpoint_velocity_m_s = tuple(component * local_endpoint_speed_m_s for component in axis_values)
-    if endpoint_velocity_m_s is None and local_endpoint_velocity_m_s is not None:
-        endpoint_velocity_m_s = local_endpoint_velocity_m_s
+    elif endpoint_velocity_m_s is not None:
+        local_endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
+
+    if resolved_world_endpoint_velocity_m_s is not None:
+        resolved_world_endpoint_velocity_m_s = _coerce_vector3(
+            "resolved_world_endpoint_velocity_m_s",
+            resolved_world_endpoint_velocity_m_s,
+        )
+    elif local_endpoint_velocity_m_s is not None:
+        if control_frame == "tool" and current_tip_orientation_wxyz is not None:
+            resolved_world_endpoint_velocity_m_s = _rotate_vector_by_quaternion_wxyz(
+                local_endpoint_velocity_m_s,
+                current_tip_orientation_wxyz,
+            )
+        else:
+            resolved_world_endpoint_velocity_m_s = local_endpoint_velocity_m_s
+    elif endpoint_velocity_m_s is not None:
+        resolved_world_endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
+
+    if resolved_world_endpoint_velocity_m_s is None and endpoint_velocity_m_s is not None:
+        resolved_world_endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
+
+    if endpoint_velocity_m_s is None and resolved_world_endpoint_velocity_m_s is not None:
+        endpoint_velocity_m_s = resolved_world_endpoint_velocity_m_s
     elif endpoint_velocity_m_s is not None:
         endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
-    if endpoint_velocity_m_s is not None and current_tip_orientation_wxyz is not None:
-        endpoint_velocity_m_s = _rotate_vector_by_quaternion_wxyz(
-            _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s),
-            current_tip_orientation_wxyz,
-        )
+
+    if resolved_world_endpoint_velocity_m_s is not None:
+        endpoint_velocity_m_s = resolved_world_endpoint_velocity_m_s
+
+    if control_frame == "tool" and local_endpoint_velocity_m_s is not None and current_tip_orientation_wxyz is None:
+        resolved_world_endpoint_velocity_m_s = local_endpoint_velocity_m_s
+
+    if normalized_from is not None:
+        intent_metadata["control_frame_normalized_from"] = normalized_from
 
     endpoint_delta_m = None
     if endpoint_velocity_m_s is not None:
@@ -119,17 +161,22 @@ def build_viewer_local_motion_metadata(
             "intent_kind": intent_metadata.get("intent_kind", "local_endpoint_velocity"),
             "input_continuity": intent_metadata.get("input_continuity", "continuous"),
             "endpoint_model": intent_metadata.get("endpoint_model", DEFAULT_VIEWER_LOCAL_ENDPOINT_MODEL),
+            "control_frame": control_frame,
             "dt_s": dt_s,
             "local_endpoint_speed_m_s": local_endpoint_speed_m_s,
             "local_endpoint_max_delta_m": local_endpoint_max_delta_m,
+            "local_endpoint_velocity_frame": control_frame,
         }
     )
     if axis_values is not None:
         intent_metadata["axis_values"] = axis_values
     if local_endpoint_velocity_m_s is not None:
         intent_metadata["local_endpoint_velocity_m_s"] = local_endpoint_velocity_m_s
+    if resolved_world_endpoint_velocity_m_s is not None:
+        intent_metadata["resolved_world_endpoint_velocity_m_s"] = resolved_world_endpoint_velocity_m_s
     if endpoint_velocity_m_s is not None:
         intent_metadata["endpoint_velocity_m_s"] = endpoint_velocity_m_s
+        intent_metadata["endpoint_velocity_frame"] = "mujoco_world"
     if endpoint_delta_m is not None:
         intent_metadata["endpoint_delta_m"] = endpoint_delta_m
     if current_tip_orientation_wxyz is not None:
@@ -141,6 +188,7 @@ def build_viewer_local_motion_metadata(
 __all__ = [
     "DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING",
     "DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD",
+    "DEFAULT_VIEWER_LOCAL_ENDPOINT_CONTROL_FRAME",
     "DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_DELTA_PER_TICK_M",
     "DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD",
     "DEFAULT_VIEWER_LOCAL_ENDPOINT_MODEL",

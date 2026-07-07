@@ -7,6 +7,7 @@ import pytest
 from selfrionette.kinematics.fast_arm_endpoint import FastArmMuJoCoModelForwardKinematicsSolver
 from selfrionette.motion import LocalEndpointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.schemas import InputIntent, JointCommand
 
 
@@ -18,6 +19,39 @@ class _RecordingEndpointKinematics:
         qpos = tuple(float(component) for component in qpos_rad)
         self.calls.append(qpos)
         return (qpos[0], qpos[1], qpos[2])
+
+
+def _rotate_vector_by_quaternion_wxyz(
+    vector: tuple[float, float, float],
+    quaternion_wxyz: tuple[float, float, float, float],
+) -> tuple[float, float, float]:
+    w, x, y, z = quaternion_wxyz
+    xx = x * x
+    yy = y * y
+    zz = z * z
+    xy = x * y
+    xz = x * z
+    yz = y * z
+    wx = w * x
+    wy = w * y
+    wz = w * z
+
+    rot00 = 1.0 - 2.0 * (yy + zz)
+    rot01 = 2.0 * (xy - wz)
+    rot02 = 2.0 * (xz + wy)
+    rot10 = 2.0 * (xy + wz)
+    rot11 = 1.0 - 2.0 * (xx + zz)
+    rot12 = 2.0 * (yz - wx)
+    rot20 = 2.0 * (xz - wy)
+    rot21 = 2.0 * (yz + wx)
+    rot22 = 1.0 - 2.0 * (xx + yy)
+
+    vx, vy, vz = vector
+    return (
+        rot00 * vx + rot01 * vy + rot02 * vz,
+        rot10 * vx + rot11 * vy + rot12 * vz,
+        rot20 * vx + rot21 * vy + rot22 * vz,
+    )
 
 
 def _intent(
@@ -62,6 +96,10 @@ def test_local_endpoint_motion_generator_uses_injected_endpoint_kinematics() -> 
     assert endpoint_kinematics.calls
     assert command.metadata["endpoint_model"] == "recording_endpoint_model"
     assert command.metadata["local_motion_policy"] == "finite_difference_jacobian"
+    assert command.metadata["control_frame"] == "world"
+    assert command.metadata["local_endpoint_velocity_frame"] == "world"
+    assert command.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx((0.1, 0.0, 0.0), abs=1e-12)
+    assert command.metadata["endpoint_velocity_frame"] == "mujoco_world"
     assert command.metadata["current_tip_position_m"] == pytest.approx((0.0, -1.5707963267948966, 0.0), abs=1e-12)
 
 
@@ -120,6 +158,57 @@ def test_local_endpoint_motion_generator_dt_scales_requested_endpoint_delta() ->
     assert slow_command.metadata["endpoint_delta_requested_m"][1] == pytest.approx(1.0 / 300.0, abs=1e-12)
     assert slow_command.metadata["endpoint_delta_requested_m"][1] == pytest.approx(
         fast_command.metadata["endpoint_delta_requested_m"][1] * 2.0,
+        abs=1e-12,
+    )
+
+
+def test_viewer_local_motion_metadata_defaults_to_world_frame_without_rotation() -> None:
+    metadata = build_viewer_local_motion_metadata(
+        {
+            "intent_kind": "local_endpoint_velocity",
+            "input_continuity": "continuous",
+            "axis_values": (1.0, 0.0, 0.0),
+            "local_endpoint_speed_m_s": 0.1,
+            "local_endpoint_velocity_m_s": (0.1, 0.0, 0.0),
+            "endpoint_velocity_m_s": (0.1, 0.0, 0.0),
+            "control_frame": "world",
+            "current_tip_orientation_wxyz": (0.0, 0.0, 0.0, 1.0),
+        },
+        dt_s=1.0 / 60.0,
+    )
+
+    assert metadata["control_frame"] == "world"
+    assert metadata["local_endpoint_velocity_frame"] == "world"
+    assert metadata["local_endpoint_velocity_m_s"] == pytest.approx((0.1, 0.0, 0.0), abs=1e-12)
+    assert metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx((0.1, 0.0, 0.0), abs=1e-12)
+    assert metadata["endpoint_velocity_m_s"] == pytest.approx((0.1, 0.0, 0.0), abs=1e-12)
+    assert metadata["endpoint_velocity_frame"] == "mujoco_world"
+    assert metadata["endpoint_delta_m"] == pytest.approx((1.0 / 600.0, 0.0, 0.0), abs=1e-12)
+
+
+def test_viewer_local_motion_metadata_rotates_tool_frame_velocity() -> None:
+    quaternion_wxyz = (0.7071067811865476, 0.0, 0.0, 0.7071067811865476)
+    metadata = build_viewer_local_motion_metadata(
+        {
+            "intent_kind": "local_endpoint_velocity",
+            "input_continuity": "continuous",
+            "axis_values": (1.0, 0.0, 0.0),
+            "local_endpoint_speed_m_s": 0.1,
+            "local_endpoint_velocity_m_s": (0.1, 0.0, 0.0),
+            "control_frame": "tool",
+            "current_tip_orientation_wxyz": quaternion_wxyz,
+        },
+        dt_s=1.0 / 60.0,
+    )
+
+    expected_world_velocity = _rotate_vector_by_quaternion_wxyz((0.1, 0.0, 0.0), quaternion_wxyz)
+    assert metadata["control_frame"] == "tool"
+    assert metadata["local_endpoint_velocity_frame"] == "tool"
+    assert metadata["local_endpoint_velocity_m_s"] == pytest.approx((0.1, 0.0, 0.0), abs=1e-12)
+    assert metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx(expected_world_velocity, abs=1e-12)
+    assert metadata["endpoint_velocity_m_s"] == pytest.approx(expected_world_velocity, abs=1e-12)
+    assert metadata["endpoint_delta_m"] == pytest.approx(
+        tuple(component / 60.0 for component in expected_world_velocity),
         abs=1e-12,
     )
 

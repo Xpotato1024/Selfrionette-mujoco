@@ -71,7 +71,11 @@ def test_runtime_step_loop_rebases_viewer_source_to_initial_tip_site_position() 
     records = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))
 
     assert records[0].frame.metadata["current_tip_position_m"] == pytest.approx(initial_tip_site_position_m, abs=1e-12)
+    assert records[0].frame.metadata["control_frame"] == "world"
+    assert records[0].motion_command.metadata["control_frame"] == "world"
     assert records[0].frame.metadata["endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, 0.1), abs=1e-12)
+    assert records[0].motion_command.metadata["local_endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, 0.1), abs=1e-12)
+    assert records[0].motion_command.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, 0.1), abs=1e-12)
     assert records[0].motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.0, 0.0, 1.0 / 600.0), abs=1e-12)
     assert records[0].motion_command.metadata["endpoint_delta_requested_m"] == pytest.approx((0.0, 0.0, 1.0 / 600.0), abs=1e-12)
     assert records[0].motion_command.metadata["motion_status"] in {"accepted", "scaled"}
@@ -94,9 +98,13 @@ def test_runtime_step_loop_dt_scales_viewer_endpoint_delta() -> None:
 
     assert record_a.frame.metadata["endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
     assert record_b.frame.metadata["endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
-    assert record_a.motion_command.metadata["endpoint_delta_m"][0] == pytest.approx(-1.0 / 600.0, abs=1e-12)
-    assert record_b.motion_command.metadata["endpoint_delta_m"][0] == pytest.approx(-1.0 / 300.0, abs=1e-12)
-    assert record_b.motion_command.metadata["endpoint_delta_m"][0] == pytest.approx(record_a.motion_command.metadata["endpoint_delta_m"][0] * 2.0, abs=1e-12)
+    assert record_a.frame.metadata["resolved_world_endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
+    assert record_b.frame.metadata["resolved_world_endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
+    assert record_a.frame.metadata["control_frame"] == "world"
+    assert record_b.frame.metadata["control_frame"] == "world"
+    assert record_a.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(1.0 / 600.0, abs=1e-12)
+    assert record_b.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(1.0 / 300.0, abs=1e-12)
+    assert record_b.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(record_a.motion_command.metadata["endpoint_delta_m"][1] * 2.0, abs=1e-12)
 
 
 def test_runtime_step_loop_holds_keyboard_z_binding_and_updates_target_metadata() -> None:
@@ -109,7 +117,9 @@ def test_runtime_step_loop_holds_keyboard_z_binding_and_updates_target_metadata(
     record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))[0]
 
     assert record.frame.metadata["axis_values"] == (0.0, 0.0, -1.0)
+    assert record.frame.metadata["control_frame"] == "world"
     assert record.frame.metadata["endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, -0.1), abs=1e-12)
+    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, -0.1), abs=1e-12)
     assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.0, 0.0, -1.0 / 600.0), abs=1e-12)
     assert record.motion_command.metadata["endpoint_delta_requested_m"][2] < 0.0
     assert record.motion_command.metadata["qpos_before_rad"] == pytest.approx(tuple(initial_state.qpos[:4]), abs=1e-12)
@@ -123,6 +133,41 @@ def test_runtime_step_loop_holds_keyboard_z_binding_and_updates_target_metadata(
     assert record.state.metadata["local_motion_policy"] == "finite_difference_jacobian"
     assert record.state.metadata["source_kind"] == "viewer_keyboard"
     assert record.state.metadata["viewer_control_message"]["keyboard"]["active_key_codes"] == ("ShiftLeft",)
+
+
+def test_runtime_step_loop_uses_tool_frame_when_explicitly_requested() -> None:
+    clock = _ClockSequence((0.0, 0.0))
+    viewer_input_source, plan = _build_plan(clock)
+    initial_state = plan.pipeline.simulator.snapshot()
+
+    ingest_viewer_control_message(
+        viewer_input_source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=5.0,
+            source_kind="keyboard",
+            keyboard=ViewerControlKeyboardMessage(
+                active_key_codes=("KeyD",),
+                key_state={"KeyD": True},
+                focus_state="focused",
+                zero_state=False,
+            ),
+            metadata={"control_frame": "tool"},
+        ),
+    )
+    record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))[0]
+
+    assert record.frame.metadata["control_frame"] == "tool"
+    assert record.motion_command.metadata["control_frame"] == "tool"
+    assert record.motion_command.metadata["local_endpoint_velocity_frame"] == "tool"
+    assert any(abs(component) > 1e-12 for component in record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"])
+    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx(
+        record.motion_command.metadata["endpoint_velocity_m_s"],
+        abs=1e-12,
+    )
+    assert record.motion_command.metadata["qpos_delta_norm_rad"] <= 0.2 + 1e-12
+    assert dist(initial_state.qpos[:4], record.state.qpos[:4]) > 0.0
+    assert record.state.metadata["actual_tip_delta_m"] != pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
 
 def test_runtime_step_loop_stops_after_zero_state_update() -> None:

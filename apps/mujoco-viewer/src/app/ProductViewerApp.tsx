@@ -176,6 +176,7 @@ export function ProductViewerApp() {
           intent_kind: "local_endpoint_velocity",
           input_continuity: "continuous",
           source_kind: "viewer_keyboard",
+          control_frame: "world",
           local_endpoint_speed_m_s: 0.1,
           local_endpoint_max_delta_m: 0.03,
         },

@@ -24,6 +24,7 @@ DEFAULT_VIEWER_SAFE_ENDPOINT_M: tuple[float, float, float] = (0.6, 0.0, 0.1)
 _VIEWER_SOURCE_KIND = "viewer"
 _VIEWER_KEYBOARD_SOURCE_KIND = "viewer_keyboard"
 _VIEWER_GAMEPAD_SOURCE_KIND = "viewer_gamepad"
+_DEFAULT_CONTROL_FRAME = "world"
 _SOURCE_INACTIVE_STALE_REASON = "source_inactive"
 _VIEWER_KEYBOARD_INACTIVE_STALE_REASON = "keyboard_inactive"
 _VIEWER_GAMEPAD_INACTIVE_STALE_REASON = "gamepad_inactive"
@@ -56,6 +57,17 @@ def _clamp_vector3(vector: tuple[float, float, float], *, limit: float) -> tuple
 
 def _round_vector3(vector: tuple[float, float, float], *, places: int = 12) -> tuple[float, float, float]:
     return tuple(round(component, places) for component in vector)
+
+
+def _normalize_control_frame(value: object) -> str:
+    if not isinstance(value, str):
+        return _DEFAULT_CONTROL_FRAME
+
+    normalized_control_frame = value.strip().lower()
+    if normalized_control_frame in {"world", "tool"}:
+        return normalized_control_frame
+
+    return _DEFAULT_CONTROL_FRAME
 
 
 def _coerce_axis_vector3(
@@ -105,9 +117,11 @@ class _ViewerFrameSpec:
     source_kind: str
     intent_kind: str
     input_continuity: str
+    control_frame: str
     source_active: bool
     stale_reason: str | None
     desired_endpoint_m: tuple[float, float, float]
+    local_endpoint_velocity_m_s: tuple[float, float, float]
     endpoint_velocity_m_s: tuple[float, float, float]
     current_tip_position_m: tuple[float, float, float]
     axis_values: tuple[float, float, float]
@@ -210,9 +224,11 @@ class ViewerInputSource:
             "desired_endpoint_m": self._current_endpoint_m,
             "target_position_m": self._current_endpoint_m,
             "viewer_source_kind": viewer_source_kind,
+            "control_frame": _DEFAULT_CONTROL_FRAME,
             _VIEWER_CONTROL_SUMMARY_KEY: dict(control_summary),
             "intent_kind": None,
             "input_continuity": None,
+            "local_endpoint_velocity_frame": _DEFAULT_CONTROL_FRAME,
         }
         return RawInputFrame(
             source=_VIEWER_SOURCE_KIND,
@@ -224,6 +240,7 @@ class ViewerInputSource:
 
     def _build_keyboard_frame(self, message: ViewerControlMessage, *, source_active: bool, stale_reason: str | None) -> _ViewerFrameSpec:
         assert message.keyboard is not None
+        control_frame = _normalize_control_frame(message.metadata.get("control_frame", _DEFAULT_CONTROL_FRAME))
         motion_command = build_keyboard_motion_command(
             message.keyboard.active_key_codes,
             current_tip_position_m=self._current_endpoint_m,
@@ -248,15 +265,23 @@ class ViewerInputSource:
             "metadata": dict(message.metadata),
             "intent_kind": motion_command.metadata["intent_kind"],
             "input_continuity": motion_command.metadata["input_continuity"],
+            "control_frame": control_frame,
         }
 
         return _ViewerFrameSpec(
             source_kind=_VIEWER_KEYBOARD_SOURCE_KIND,
             intent_kind=str(motion_command.metadata["intent_kind"]),
             input_continuity=str(motion_command.metadata["input_continuity"]),
+            control_frame=control_frame,
             source_active=source_active,
             stale_reason=stale_reason,
             desired_endpoint_m=desired_endpoint_m,
+            local_endpoint_velocity_m_s=_round_vector3(
+                _coerce_vector3(
+                    "local_endpoint_velocity_m_s",
+                    motion_command.metadata["local_endpoint_velocity_m_s"],
+                )
+            ),
             endpoint_velocity_m_s=endpoint_velocity_m_s,
             current_tip_position_m=_round_vector3(self._current_endpoint_m),
             axis_values=axis_values,
@@ -271,6 +296,7 @@ class ViewerInputSource:
 
     def _build_gamepad_frame(self, message: ViewerControlMessage, *, source_active: bool, stale_reason: str | None) -> _ViewerFrameSpec:
         assert message.gamepad is not None
+        control_frame = _normalize_control_frame(message.metadata.get("control_frame", _DEFAULT_CONTROL_FRAME))
         axis_values = _coerce_axis_vector3(
             message.gamepad.axes,
             deadzone=self._gamepad_deadzone,
@@ -302,15 +328,20 @@ class ViewerInputSource:
             "metadata": dict(message.metadata),
             "intent_kind": "local_endpoint_velocity",
             "input_continuity": "continuous",
+            "control_frame": control_frame,
         }
 
         return _ViewerFrameSpec(
             source_kind=_VIEWER_GAMEPAD_SOURCE_KIND,
             intent_kind="local_endpoint_velocity",
             input_continuity="continuous",
+            control_frame=control_frame,
             source_active=source_active,
             stale_reason=stale_reason,
             desired_endpoint_m=desired_endpoint_m,
+            local_endpoint_velocity_m_s=_round_vector3(
+                tuple(component * self._gamepad_speed_m_s for component in axis_values)
+            ),
             endpoint_velocity_m_s=endpoint_velocity_m_s,
             current_tip_position_m=_round_vector3(self._current_endpoint_m),
             axis_values=axis_values,
@@ -362,7 +393,10 @@ class ViewerInputSource:
             "stale_reason": stale_reason,
             "desired_endpoint_m": spec.desired_endpoint_m,
             "target_position_m": spec.desired_endpoint_m,
+            "control_frame": spec.control_frame,
             "endpoint_velocity_m_s": spec.endpoint_velocity_m_s,
+            "local_endpoint_velocity_m_s": spec.local_endpoint_velocity_m_s,
+            "local_endpoint_velocity_frame": spec.control_frame,
             "axis_values": spec.axis_values,
             "local_endpoint_speed_m_s": spec.local_endpoint_speed_m_s,
             "local_endpoint_max_delta_m": spec.local_endpoint_max_delta_m,
@@ -370,6 +404,9 @@ class ViewerInputSource:
             "viewer_source_kind": spec.viewer_source_kind,
             _VIEWER_CONTROL_SUMMARY_KEY: dict(spec.control_summary),
         }
+        if spec.control_frame == _DEFAULT_CONTROL_FRAME:
+            metadata["resolved_world_endpoint_velocity_m_s"] = spec.endpoint_velocity_m_s
+            metadata["endpoint_velocity_frame"] = "mujoco_world"
         return RawInputFrame(
             source=_VIEWER_SOURCE_KIND,
             timestamp_s=spec.timestamp_s,
