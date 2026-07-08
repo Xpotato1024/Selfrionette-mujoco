@@ -9,7 +9,7 @@
     "ShiftLeft": { "axis": "z", "direction": -1 },
     "ShiftRight": { "axis": "z", "direction": -1 }
   },
-  "step_m": 0.01,
+  "speed_m_s": 0.1,
   "deadzone": 0.0,
   "max_delta_m": 0.03
 }

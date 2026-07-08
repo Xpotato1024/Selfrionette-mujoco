@@ -147,6 +147,14 @@ function testBuildViewerGamepadControlMessageBuildsSchemaPayload(): void {
     type: "viewer_control_message",
     timestamp_s: 42.5,
     source_kind: "gamepad",
+    metadata: {
+      intent_kind: "local_endpoint_velocity",
+      input_continuity: "continuous",
+      source_kind: "viewer_gamepad",
+      control_frame: "world",
+      local_endpoint_speed_m_s: 0.1,
+      local_endpoint_max_delta_m: 0.03,
+    },
     sequence: 3,
     gamepad: {
       connected: true,
@@ -202,6 +210,14 @@ function testViewerGamepadControlSenderQueuesUntilOpen(): void {
     type: "viewer_control_message",
     timestamp_s: 7.5,
     source_kind: "gamepad",
+    metadata: {
+      intent_kind: "local_endpoint_velocity",
+      input_continuity: "continuous",
+      source_kind: "viewer_gamepad",
+      control_frame: "world",
+      local_endpoint_speed_m_s: 0.1,
+      local_endpoint_max_delta_m: 0.03,
+    },
     sequence: 0,
     gamepad: {
       connected: true,

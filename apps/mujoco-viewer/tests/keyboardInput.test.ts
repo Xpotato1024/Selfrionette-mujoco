@@ -155,6 +155,14 @@ function testViewerKeyboardControlMessageBuildsSchemaPayload(): void {
     type: "viewer_control_message",
     timestamp_s: 12.5,
     source_kind: "keyboard",
+    metadata: {
+      intent_kind: "local_endpoint_velocity",
+      input_continuity: "continuous",
+      source_kind: "viewer_keyboard",
+      control_frame: "world",
+      local_endpoint_speed_m_s: 0.1,
+      local_endpoint_max_delta_m: 0.03,
+    },
     sequence: 7,
     keyboard: {
       active_key_codes: ["KeyS", "KeyW"],
@@ -200,6 +208,14 @@ function testViewerKeyboardControlSenderQueuesUntilOpen(): void {
     type: "viewer_control_message",
     timestamp_s: 9.5,
     source_kind: "keyboard",
+    metadata: {
+      intent_kind: "local_endpoint_velocity",
+      input_continuity: "continuous",
+      source_kind: "viewer_keyboard",
+      control_frame: "world",
+      local_endpoint_speed_m_s: 0.1,
+      local_endpoint_max_delta_m: 0.03,
+    },
     sequence: 0,
     keyboard: {
       active_key_codes: ["KeyD"],
@@ -225,6 +241,14 @@ function testViewerKeyboardControlSenderHandlesMissingBackendGracefully(): void 
     type: "viewer_control_message",
     timestamp_s: 4.25,
     source_kind: "keyboard",
+    metadata: {
+      intent_kind: "local_endpoint_velocity",
+      input_continuity: "continuous",
+      source_kind: "viewer_keyboard",
+      control_frame: "world",
+      local_endpoint_speed_m_s: 0.1,
+      local_endpoint_max_delta_m: 0.03,
+    },
     sequence: 0,
     keyboard: {
       active_key_codes: ["KeyW"],
@@ -259,6 +283,10 @@ function testViewerKeyboardControlSenderSwallowsConstructorAndSendFailures(): vo
     constructorFailureSender.publish(capture.snapshot(), 5.5);
   });
   assert.deepEqual(constructorFailureSender.getLatestMessage()?.keyboard?.active_key_codes, ["KeyA"]);
+  assert.equal(
+    constructorFailureSender.getLatestMessage()?.metadata?.intent_kind,
+    "local_endpoint_velocity",
+  );
 
   let createdSocket: FakeWebSocket | null = null;
   const sendFailureSender = createViewerKeyboardControlSender({

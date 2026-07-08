@@ -167,9 +167,29 @@ export function ProductViewerApp() {
     const keyboardSender = createViewerKeyboardControlSender({
       url: endpointConfig.websocketUrl,
     });
+    let disposed = false;
+    let animationFrameId = 0;
 
     const publishKeyboardState = (): void => {
-      keyboardSender.publish(keyboardCapture.snapshot());
+      keyboardSender.publish(keyboardCapture.snapshot(), undefined, {
+        metadata: {
+          intent_kind: "local_endpoint_velocity",
+          input_continuity: "continuous",
+          source_kind: "viewer_keyboard",
+          control_frame: "world",
+          local_endpoint_speed_m_s: 0.1,
+          local_endpoint_max_delta_m: 0.03,
+        },
+      });
+    };
+
+    const scheduleKeyboardPublish = (): void => {
+      if (disposed) {
+        return;
+      }
+
+      publishKeyboardState();
+      animationFrameId = window.requestAnimationFrame(scheduleKeyboardPublish);
     };
 
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -221,6 +241,7 @@ export function ProductViewerApp() {
     };
 
     publishKeyboardState();
+    animationFrameId = window.requestAnimationFrame(scheduleKeyboardPublish);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onWindowBlur);
@@ -228,6 +249,8 @@ export function ProductViewerApp() {
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
+      disposed = true;
+      window.cancelAnimationFrame(animationFrameId);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onWindowBlur);

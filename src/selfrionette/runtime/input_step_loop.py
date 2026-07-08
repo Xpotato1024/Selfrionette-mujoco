@@ -22,6 +22,10 @@ from selfrionette.runtime.input_source_state import (
     runtime_input_source_state_to_metadata,
 )
 from selfrionette.runtime.input_safety import RuntimeInputSafetyResult, build_runtime_input_safety_result
+from selfrionette.runtime.viewer_motion_policy import (
+    build_viewer_local_endpoint_motion_generator,
+    build_viewer_local_motion_metadata,
+)
 from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
@@ -75,33 +79,24 @@ def _extract_current_tip_site_endpoint_m(pipeline: RuntimePipeline) -> tuple[flo
         return None
 
 
-def _extract_current_solver_base_world_position_m(
-    pipeline: RuntimePipeline,
-) -> tuple[float, float, float] | None:
+def _extract_tip_site_endpoint_m_from_state(state: MuJoCoState) -> tuple[float, float, float] | None:
     try:
-        return extract_fast_arm_base_link_position_from_state(
-            pipeline.simulator.snapshot()
-        )
+        return extract_fast_arm_tip_site_endpoint_from_state(state).position_m
     except ValueError:
         return None
 
 
-def _vector_subtract(lhs_m: Sequence[float], rhs_m: Sequence[float]) -> tuple[float, float, float]:
-    return tuple(float(lhs_m[index]) - float(rhs_m[index]) for index in range(3))
+def _extract_tip_site_orientation_wxyz_from_state(state: MuJoCoState) -> tuple[float, float, float, float] | None:
+    try:
+        tip_site = extract_fast_arm_tip_site_endpoint_from_state(state)
+    except ValueError:
+        return None
 
+    for site in state.sites:
+        if site.name == tip_site.name:
+            return tuple(site.quaternion_wxyz)
 
-def _build_viewer_ik_target_metadata(
-    *,
-    desired_endpoint_m: Sequence[float],
-    solver_base_world_position_m: Sequence[float],
-) -> dict[str, object]:
-    ik_target_endpoint_m = _vector_subtract(desired_endpoint_m, solver_base_world_position_m)
-    return {
-        "ik_target_endpoint_m": ik_target_endpoint_m,
-        "ik_target_coordinate_frame": "solver-local fast_arm endpoint frame",
-        "desired_endpoint_coordinate_frame": "MuJoCo world / scene frame",
-        "solver_base_world_position_m": tuple(float(component) for component in solver_base_world_position_m),
-    }
+    return None
 
 
 def build_runtime_input_source_step_loop_plan(
@@ -183,6 +178,7 @@ def build_runtime_input_source_step_loop_plan(
             discontinuity_threshold_label="viewer endpoint continuity threshold",
         )
         pipeline.input_source = pipeline_input_source
+        pipeline.motion_generator = build_viewer_local_endpoint_motion_generator()
         initial_tip_site_position_m = _extract_current_tip_site_endpoint_m(pipeline)
         if initial_tip_site_position_m is not None:
             _sync_viewer_input_source_endpoint(
@@ -208,6 +204,7 @@ def _annotate_state(
     last_valid_endpoint_m: tuple[float, float, float] | None,
     previous_state: MuJoCoState,
     state: MuJoCoState,
+    actual_tip_delta_m: tuple[float, float, float] | None,
     annotate_target_position_m: bool,
     safety_result: RuntimeInputSafetyResult,
 ) -> MuJoCoState:
@@ -225,6 +222,8 @@ def _annotate_state(
         metadata.pop("target_position_m", None)
         metadata["runtime_input_safety_applied"] = True
         metadata["endpoint_evaluation"] = None
+    if actual_tip_delta_m is not None:
+        metadata["actual_tip_delta_m"] = actual_tip_delta_m
 
     target_position_m = state.target_position_m
     resolved_desired_endpoint = None
@@ -290,23 +289,23 @@ async def run_runtime_input_source_step_loop(
             default_source_kind=plan.selection.source_name,
         )
         pre_step_state = plan.pipeline.simulator.snapshot()
+        pre_step_tip_site_m = None
+        pre_step_tip_site_orientation_wxyz = None
+        if plan.selection.source_name == "viewer":
+            pre_step_tip_site_m = _extract_tip_site_endpoint_m_from_state(pre_step_state)
+            pre_step_tip_site_orientation_wxyz = _extract_tip_site_orientation_wxyz_from_state(pre_step_state)
         motion_intent = intent
         if plan.selection.source_name == "viewer":
-            desired_endpoint_m = frame.metadata.get("desired_endpoint_m")
-            solver_base_world_position_m = _extract_current_solver_base_world_position_m(plan.pipeline)
-            if desired_endpoint_m is not None and solver_base_world_position_m is not None:
-                motion_intent = replace(
-                    intent,
-                    metadata={
-                        **intent.metadata,
-                        **_build_viewer_ik_target_metadata(
-                            desired_endpoint_m=_coerce_viewer_endpoint_m(desired_endpoint_m),
-                            solver_base_world_position_m=solver_base_world_position_m,
-                        ),
-                        "viewer_endpoint_continuity_threshold_rad": VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
-                        "accepted_small_motion_threshold_rad": VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
-                    },
-                )
+            motion_intent_metadata = {
+                **frame.metadata,
+                **intent.metadata,
+            }
+            if pre_step_tip_site_orientation_wxyz is not None:
+                motion_intent_metadata["current_tip_orientation_wxyz"] = pre_step_tip_site_orientation_wxyz
+            motion_intent = replace(
+                intent,
+                metadata=build_viewer_local_motion_metadata(motion_intent_metadata, dt_s=dt),
+            )
         current_qpos_rad = tuple(pre_step_state.qpos)
         set_current_qpos = getattr(plan.pipeline.motion_generator, "set_current_qpos_rad", None)
         if callable(set_current_qpos):
@@ -327,6 +326,14 @@ async def run_runtime_input_source_step_loop(
         plan.pipeline.simulator.step(dt)
 
         state = plan.pipeline.simulator.snapshot()
+        post_step_tip_site_m = None
+        if plan.selection.source_name == "viewer":
+            post_step_tip_site_m = _extract_tip_site_endpoint_m_from_state(state)
+        actual_tip_delta_m = None
+        if pre_step_tip_site_m is not None and post_step_tip_site_m is not None:
+            actual_tip_delta_m = tuple(
+                post_step_tip_site_m[index] - pre_step_tip_site_m[index] for index in range(3)
+            )
         annotated_state = _annotate_state(
             source_state=safety_result.source_state,
             frame=frame,
@@ -335,6 +342,7 @@ async def run_runtime_input_source_step_loop(
             last_valid_endpoint_m=last_valid_endpoint_m,
             previous_state=pre_step_state,
             state=state,
+            actual_tip_delta_m=actual_tip_delta_m,
             annotate_target_position_m=plan.annotate_target_position_m,
             safety_result=safety_result,
         )

@@ -75,7 +75,11 @@ export interface ViewerKeyboardControlSenderOptions {
 }
 
 export interface ViewerKeyboardControlSender {
-  publish(snapshot: ViewerKeyboardCaptureSnapshot, timestampS?: number): void;
+  publish(
+    snapshot: ViewerKeyboardCaptureSnapshot,
+    timestampS?: number,
+    options?: ViewerKeyboardControlMessageOptions,
+  ): void;
   dispose(): void;
   getLatestMessage(): ViewerControlMessage | null;
 }
@@ -205,13 +209,19 @@ export function buildViewerKeyboardControlMessage(
     timestamp_s: timestampS,
     source_kind: "keyboard",
     keyboard,
+    metadata: {
+      intent_kind: "local_endpoint_velocity",
+      input_continuity: "continuous",
+      source_kind: "viewer_keyboard",
+      control_frame: "world",
+      local_endpoint_speed_m_s: 0.1,
+      local_endpoint_max_delta_m: 0.03,
+      ...options.metadata,
+    },
   };
 
   if (options.sequence !== undefined) {
     message.sequence = options.sequence;
-  }
-  if (options.metadata !== undefined) {
-    message.metadata = options.metadata;
   }
 
   return message;
@@ -282,8 +292,15 @@ export function createViewerKeyboardControlSender(
   };
 
   return {
-    publish(snapshot: ViewerKeyboardCaptureSnapshot, timestampS = currentTimestampS()): void {
-      latestMessage = buildViewerKeyboardControlMessage(snapshot, timestampS, { sequence });
+    publish(
+      snapshot: ViewerKeyboardCaptureSnapshot,
+      timestampS = currentTimestampS(),
+      messageOptions: ViewerKeyboardControlMessageOptions = {},
+    ): void {
+      latestMessage = buildViewerKeyboardControlMessage(snapshot, timestampS, {
+        sequence,
+        ...messageOptions,
+      });
       sequence += 1;
       attachSocket();
       flush();

@@ -39,6 +39,12 @@ def test_offline_input_runtime_stepping_smoke_accepts_keyboard_motion_command() 
         current_tip_position_m=(0.1, 0.0, 0.3),
         timestamp_s=0.5,
     )
+    command = command.__class__(
+        timestamp_s=command.timestamp_s,
+        target=command.target,
+        joint=command.joint,
+        metadata={**command.metadata, "desired_endpoint_m": (0.1, 0.0, 0.3)},
+    )
 
     result = run_offline_input_runtime_stepping_smoke(command)
 
@@ -56,12 +62,18 @@ def test_offline_input_runtime_stepping_smoke_changes_desired_endpoint_for_keybo
         current_tip_position_m=(0.1, 0.0, 0.3),
         timestamp_s=1.0,
     )
+    command = command.__class__(
+        timestamp_s=command.timestamp_s,
+        target=command.target,
+        joint=command.joint,
+        metadata={**command.metadata, "desired_endpoint_m": (0.1 + 0.1 / 60.0, 0.0, 0.3)},
+    )
 
     result = run_offline_input_runtime_stepping_smoke(command)
 
     _assert_runtime_smoke_result(
         result,
-        expected_desired_endpoint_m=(0.11, 0.0, 0.3),
+        expected_desired_endpoint_m=(0.1 + 0.1 / 60.0, 0.0, 0.3),
         expected_target_position_m=None,
     )
     assert result.resolved_desired_endpoint_m != (0.1, 0.0, 0.3)
