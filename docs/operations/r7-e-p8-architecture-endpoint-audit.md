@@ -41,7 +41,9 @@ PR #337 で solver-local FK と MuJoCo-model-aligned FK が分離され、PR #34
   また一部の既存 contract note は「FK/site repair 済み」と「未修復」の記述が同居する。
 
 P0 は見つからなかった。大規模リファクタは始めず、次の実装 Issue は local Jacobian
-の rank / singular values / per-axis mobility / requested-vs-achieved を固定する P9 とする。
+の rank / singular values / per-axis mobility / requested-vs-achieved を証拠として固定する
+P9 とする。axis-aware acceptance semantics は P10、gamepad heartbeat は P11、tool-frame
+orientation fallback は P12 とし、P9 の evidence gathering に挙動変更を混ぜない。
 
 ## 2. Numbering / SoT Confirmation
 
@@ -49,7 +51,7 @@ P0 は見つからなかった。大規模リファクタは始めず、次の�
 
 - Numbering SoT: Issue #293
 - R7-E follow-up parent: Issue #324
-- repository 全 Issue を `R7-E` および P8-P17 で検索した。
+- repository 全 Issue を `R7-E` および P8-P21 で検索した。
 - used P-numbers:
   - P0: #325
   - P1: #326
@@ -59,7 +61,7 @@ P0 は見つからなかった。大規模リファクタは始めず、次の�
   - P5: #335
   - P6: #339
   - P7: #341
-- P8-P17 に既存の R7-E follow-up Issue はなかった。
+- P9-P21 に既存の R7-E follow-up Issue はなく、未割当である。
 - selected P-number: P8
 - tracking issue: #343
 
@@ -70,9 +72,11 @@ P0 は見つからなかった。大規模リファクタは始めず、次の�
 #293 の「parent 内で P-number を管理する」という規則と repository-wide Issue 検索を
 併用した。P8 は未使用であり、tracking issue #343 に割り当てた。
 
-ユーザー提示の実装候補 A-J は P8-P17 の provisional sequence だったが、P8 を本監査
-tracking issue が使用するため、最終 draft は P9-P18 に繰り下げる。子 Issue はこの PR
-では作成しない。
+P8 は本監査 tracking issue #343 / PR #344 が使用する。review correction で独立 P1 owner
+と axis-aware acceptance semantics を分離したため、最終 proposal は P9-P21 とする。
+P9-P21 の title は Issue 作成前の provisional title であり、この PR では子 Issue を作成しない。
+Issue #293 body は P8 completion の一部として P5-P8 の実状態へ更新し、P9 を次の proposed
+available slot として未割当のまま保持する。
 
 ## 3. Current Status
 
@@ -279,10 +283,24 @@ command clamp、future actuator path が入れば乖離し得る。
 3. Accepted without requested-axis progress
    - D/A world X は direction cosine がほぼ 0 でも `motion_status=accepted` になる。
    - accepted は numerical solve / cap success であり、task-space progress success ではない。
-4. Numbering / contract docs drift
-   - #293 body は P6/P7 を未記録。
+4. Numbering SoT drift
+   - #293 body は P5 completion と P6/P7/P8 を未記録。
+   - P8 completion で #293 body を履歴保持のまま更新する。
+5. Stale endpoint contract note
    - `r7-e-followup-joint-convention-fast-arm-model-contract.md` に repair 後 summary と
      「FK/site mismatch 未修復」が同居する。
+   - 本 PR では historical contract note を変更せず、documentation consolidation を P13 に割り当てる。
+
+### P1 Primary Owner Mapping
+
+| P1 finding | Primary owner | P8 completion status |
+|---|---|---|
+| Jacobian rank / singularity / weak world X evidence | provisional P9 | evidence-only follow-up。未修復。 |
+| almost-zero requested-axis progress still accepted | provisional P10 | P9 と分離した policy follow-up。未修復。 |
+| gamepad held input becomes stale | provisional P11 | independent bug-fix track。未修復。 |
+| tool orientation fallback inconsistency | provisional P12 | independent bug-fix track。未修復。 |
+| #293 numbering drift | P8 / #343 / PR #344 | #293 body update で解消する。 |
+| stale endpoint contract note | provisional P13 | terminology / metadata contract planning と同時に訂正する。未修復。 |
 
 ### P2
 
@@ -319,8 +337,10 @@ command clamp、future actuator path が入れば乖離し得る。
 ### Immediate
 
 - P9 で Jacobian rank / singular values / per-axis mobility / direction cosine を診断する。
-- gamepad heartbeat mismatch と tool orientation fallback を小さい correctness PR に分ける。
-- #293 と stale contract note を production behavior 変更なしで整合させる。
+- P10 で axis-aware acceptance semantics を P9 から分離して定義する。
+- P11 / P12 で gamepad heartbeat mismatch と tool orientation fallback を独立した小さい
+  correctness PR に分ける。broad refactor を待たせない。
+- #293 は P8 で更新する。stale contract note は P13 の owner scope に含める。
 
 ### Short-term
 
@@ -343,116 +363,184 @@ command clamp、future actuator path が入れば乖離し得る。
 - task metrics と NASA-TLX 等の主観評価を runtime control から独立した evaluation layer に置く。
 - requested / resolved / qpos / predicted / actual / task result を同一 experiment record に保存する。
 
-## 12. Proposed Issue Split
+## 12. Proposed Issue Split P9-P21
 
-以下は draft であり、この PR では Issue を作成しない。P8 は tracking issue #343 が使用したため、
-provisional P8-P17 を P9-P18 に繰り下げた。
+以下は provisional title / draft plan であり、この PR では Issue を作成しない。P8 は tracking
+issue #343 / PR #344 が使用する。P9 は次の proposed available slot だが、Issue が作成され
+#293 が更新されるまでは未割当である。
 
 ### P9: Diagnose local Jacobian mobility for weak world-frame X viewer motion
 
-- Goal: D/A world X の弱さを rank / singular values / per-axis mobility / direction cosine で説明する。
-- Scope: initial + representative pose、MuJoCo-aligned finite-difference Jacobian、MuJoCo native
-  Jacobian cross-check、epsilon / damping / qpos cap sensitivity、requested delta / solved delta_q /
-  predicted delta / actual delta。
-- Non-goals: IK rewrite、viewer behavior change、XML change。
-- Acceptance: rank、singular values、condition number、axis mobility、direction cosine、hold/accept
-  interpretationを deterministic test / log に固定し、#341 の次判断を記録する。
+- Provisional title: `[R7-E follow-up P9] Diagnose local Jacobian mobility for weak world-frame X viewer motion`
+- Goal: D/A world X の弱さについて evidence のみを収集する。
+- Scope: MuJoCo-aligned local Jacobian、rank、singular values、condition number、X/Y/Z row norms、
+  per-axis mobility、requested-vs-achieved direction cosine、finite-difference epsilon / damping /
+  qpos cap sensitivity、initial / nearby pose sweep、可能なら MuJoCo native Jacobian cross-check。
+- Non-goals: accepted/scaled/held semantics変更、default pose変更、D/A remap、IK rewrite。
+- Acceptance: deterministic numeric record と interpretation boundary を固定する。
 - Branch: `codex/r7-e-p9-jacobian-mobility-diagnostics`
-- Dependencies: #341、PR #342、#343。
-- Model: GPT-5.6 Sol が correctness と解釈を所有。Luna は fixture / field inventory のみ可。
+- Dependencies: #341、PR #342、P8 completion。
+- Model: GPT-5.6 Sol が evidence interpretation を所有。Luna は fixture/field inventory のみ可。
 
-### P10: Consolidate endpoint terminology and metadata schema
+### P10: Define axis-aware local motion acceptance semantics
 
-- Goal: endpoint terms と status metadata を一つの typed contract に集約する。
-- Scope: glossary、field ownership、units/frame、compatibility aliases、Python/TypeScript schema plan。
-- Non-goals: public API breaking change、behavior change。
-- Acceptance: termごとの owner / frame / truth / lifecycle が定義され、migration order と compatibility
-  test がある。
-- Branch: `codex/r7-e-p10-endpoint-metadata-schema`
-- Dependencies: P9 の field interpretation。
-- Model: Sol owns semantics; Luna may list repeated keys and prepare tables。
+- Provisional title: `[R7-E follow-up P10] Define axis-aware local motion acceptance semantics`
+- Goal: requested-axis progress と P9 evidence に基づく success / failure semantics を定義する。
+- Scope: `accepted`、`scaled`、`held`、`insufficient_progress`、`singular_direction`、
+  `axis_unavailable` の候補と互換性を評価する。
+- Non-goals: P9 を越える新規 Jacobian 実装、device-specific key remap。
+- Acceptance: axis-aware status contract、threshold根拠、compatibility plan を固定する。
+- Branch: `codex/r7-e-p10-axis-aware-motion-acceptance`
+- Dependencies: P9。P9 と同一 PR にしない。
+- Model: GPT-5.6 Sol が correctness / policy semantics を所有。Luna は field list のみ可。
 
-### P11: Separate runtime diagnostics from production input stepping
+### P11: Fix gamepad held-input heartbeat and stale-timeout contract
 
-- Goal: runtime step の control path と diagnostic annotation / export を分離する。
-- Scope: module boundary、pure helper extraction、behavior-preserving tests。
+- Provisional title: `[R7-E follow-up P11] Fix gamepad held-input heartbeat and stale-timeout contract`
+- Goal: held gamepad input が backend stale timeout を越えて active のまま継続できるようにする。
+- Scope: frontend cadence、unchanged snapshot suppression、backend 250 ms timeout、keyboard
+  requestAnimationFrame、gamepad polling の比較と最小修復。
+- Non-goals: input mapping redesign、broad viewer refactor。
+- Acceptance: held input / release / disconnect / blur が timeout contract と一貫する test を持つ。
+- Branch: `codex/r7-e-p11-gamepad-heartbeat-stale-contract`
+- Dependencies: P8 completion。P9/P10/P13 を待たない independent P1 bug-fix track。
+- Model: GPT-5.6 Sol が safety semantics を所有。Luna は cadence/test inventory のみ可。
+
+### P12: Make missing tool-orientation fallback explicit and metadata-consistent
+
+- Provisional title: `[R7-E follow-up P12] Make missing tool-orientation fallback explicit and metadata-consistent`
+- Goal: world fallback と tool metadata が矛盾しない contract にする。
+- Scope: `orientation_unavailable` hold/reject、`effective_control_frame`、requested/resolved frame、
+  intentional world fallback の候補を比較する。
+- Non-goals: tool transform redesign、device mapping変更。
+- Acceptance: missing/invalid orientation で behavior と metadata が一致し、diagnostic reason が残る。
+- Branch: `codex/r7-e-p12-tool-orientation-fallback-contract`
+- Dependencies: P8 completion。P9/P10/P13 を待たない independent P1 bug-fix track。
+- Model: GPT-5.6 Sol が frame semantics を所有。Luna は metadata occurrence listing のみ可。
+
+### P13: Consolidate endpoint terminology and metadata schema
+
+- Provisional title: `[R7-E follow-up P13] Consolidate endpoint terminology and metadata schema`
+- Goal: requested / resolved / predicted / measured / target / desired / IK target / control frame を
+  typed contract と glossary に集約する。
+- Scope: field ownership、units/frame、compatibility aliases、migration order、stale contract note
+  `docs/operations/r7-e-followup-joint-convention-fast-arm-model-contract.md` の整理。
+- Non-goals: immediate public API break、motion behavior変更。
+- Acceptance: layer / truth / lifecycle / deprecation plan と stale documentation correction を固定する。
+- Branch: `codex/r7-e-p13-endpoint-metadata-schema`
+- Dependencies: P9、P10、P12。
+- Model: GPT-5.6 Sol が semantics を所有。Luna は repeated-key/table preparation のみ可。
+
+### P14: Separate runtime diagnostics from production input stepping
+
+- Provisional title: `[R7-E follow-up P14] Separate runtime diagnostics from production input stepping`
+- Goal: control path と diagnostic annotation / export を behavior-preserving に分離する。
+- Scope: module boundary、pure helper extraction、target lifecycle / publish order tests。
 - Non-goals: motion policy変更、transport schema break。
-- Acceptance: step order不変、target lifecycle不変、diagnostic optionalityが明確、targeted tests pass。
-- Branch: `codex/r7-e-p11-runtime-diagnostics-separation`
-- Dependencies: P10 schema。
-- Model: Sol owns boundary; Luna may inventory functions/tests。
+- Acceptance: step order / safety / target semantics が不変で、diagnostics optionality が明確になる。
+- Branch: `codex/r7-e-p14-runtime-diagnostics-separation`
+- Dependencies: P13。
+- Model: GPT-5.6 Sol が boundary を所有。Luna は function/test inventory のみ可。
 
-### P12: Clean up legacy pytest collection boundary
+### P15: Clean up legacy pytest collection boundary
 
-- Goal: repository root `pytest` が legacy `arm_communicator` import で collection stop しない境界を作る。
-- Scope: pytest discovery policy、legacy reference-only documentation、CI/local command alignment。
-- Non-goals: legacy code repair / execution、hardware / OSC。
-- Acceptance: full pytest collection resultが明示され、legacy tests は意図的な別 entry になる。
-- Branch: `codex/r7-e-p12-legacy-pytest-boundary`
-- Dependencies: none; CI workflow変更が必要なら別承認。
-- Model: Sol reviews safety/boundary; Luna may inventory legacy test files。
+- Provisional title: `[R7-E follow-up P15] Clean up legacy pytest collection boundary`
+- Goal: root pytest と reference-only legacy の discovery boundary を明示する。
+- Scope: pytest discovery policy、local/CI command alignment、legacy note。
+- Non-goals: legacy code repair/execute、hardware/OSC、current taskでのCI workflow変更。
+- Acceptance: canonical full test entry が legacy import で collection stop しない方針を固定する。
+- Branch: `codex/r7-e-p15-legacy-pytest-boundary`
+- Dependencies: P8 completion 後 independent。
+- Model: GPT-5.6 Sol が boundary/safety をreview。Luna は legacy test inventory のみ可。
 
-### P13: Prepare evaluation-ready input mapping API for keyboard, gamepad, and Selfrionette
+### P16: Prepare evaluation-ready input API for keyboard, gamepad, and Selfrionette
 
-- Goal: device state を共通 continuous endpoint velocity intent に変換する API を固定する。
-- Scope: digital / analog / force-derived axes、deadzone、scale、control frame、stale semantics。
+- Provisional title: `[R7-E follow-up P16] Prepare evaluation-ready input API for keyboard, gamepad, and Selfrionette`
+- Goal: digital / analog / force-derived source を共通 continuous velocity intent に接続する。
+- Scope: deadzone、scale、stale/zero、units、control frame、fixture-only parity。
 - Non-goals: live hardware validation、device superiority claim。
-- Acceptance: fixture-onlyで3 sourceの共通 contract、zero/stale、units、dt independenceがtestされる。
-- Branch: `codex/r7-e-p13-evaluation-input-api`
-- Dependencies: P10、gamepad heartbeat fix。
-- Model: Sol owns mapping semantics; Luna may prepare fixture matrix。
+- Acceptance: 3 source の共通 contract と deterministic fixture tests を定義する。
+- Branch: `codex/r7-e-p16-evaluation-input-api`
+- Dependencies: P11、P12、P13。
+- Model: GPT-5.6 Sol が mapping semantics を所有。Luna は fixture matrix のみ可。
 
-### P14: Document world-frame vs tool-frame evaluation design
+### P17: Document world-frame vs tool-frame evaluation design
 
-- Goal: world/tool comparisonを研究評価として再現可能にする。
+- Provisional title: `[R7-E follow-up P17] Document world-frame vs tool-frame evaluation design`
+- Goal: world/tool comparisonを再現可能な研究評価として設計する。
 - Scope: hypothesis、task、counterbalancing、metrics、frame表示、confounds、NASA-TLX placement。
-- Non-goals: participant experiment実施、runtime behavior change。
-- Acceptance: procedure、logging fields、analysis plan、limitation が明記される。
-- Branch: `codex/r7-e-p14-world-tool-evaluation-design`
-- Dependencies: P9、P10、P13。
-- Model: Sol owns research design; Luna may check links / formatting only。
+- Non-goals: participant experiment実施、runtime behavior変更。
+- Acceptance: procedure / logging requirements / analysis / limitations を明記する。
+- Branch: `codex/r7-e-p17-world-tool-evaluation-design`
+- Dependencies: P9、P13。
+- Model: GPT-5.6 Sol が研究設計を所有。Luna は link/format checks のみ可。
 
-### P15: Refactor viewer overlay diagnostics into typed read-only presentation layer
+### P18: Refactor viewer diagnostics into a typed read-only presentation layer
 
-- Goal: control / requested / resolved / predicted / actual を typed mapper で安全に表示する。
-- Scope: TypeScript types、payload parser、presentation mapper、read-only labels、malformed handling。
+- Provisional title: `[R7-E follow-up P18] Refactor viewer diagnostics into a typed read-only presentation layer`
+- Goal: requested / resolved / predicted / actual と frame/status source を型付きで表示する。
+- Scope: TypeScript types、payload parser、presentation mapper、malformed handling。
 - Non-goals: viewer FK/IK、control policy、backend truth変更。
-- Acceptance: `control_frame`、local/resolved velocity、requested/predicted/actual delta、status source が
-  区別表示され、parser tests がある。
-- Branch: `codex/r7-e-p15-typed-viewer-diagnostics-overlay`
-- Dependencies: P10。
-- Model: Sol reviews semantics; Luna may prepare field inventory / formatting cleanup。
+- Acceptance: read-only overlay が用語を区別し、parser/presentation tests を持つ。
+- Branch: `codex/r7-e-p18-typed-viewer-diagnostics`
+- Dependencies: P13、P14。
+- Model: GPT-5.6 Sol が semantics をreview。Luna は field/format checks のみ可。
 
-### P16: Audit and simplify runtime composition root responsibilities
+### P19: Audit and simplify runtime composition-root responsibilities
 
-- Goal: composition root を維持しつつ巨大 step loop の責務を分割する。
-- Scope: source planning、frame resolution、policy invocation、backend step、measurement、annotation の境界。
+- Provisional title: `[R7-E follow-up P19] Audit and simplify runtime composition-root responsibilities`
+- Goal: composition root を維持しつつ step-loop responsibility を小さい境界へ分割する。
+- Scope: source planning、frame resolution、policy、backend step、measurement、annotation ownership。
 - Non-goals: new DI framework、behavior rewrite。
-- Acceptance: architecture doc + tests と同時更新、import boundary維持、small PR plan。
-- Branch: `codex/r7-e-p16-runtime-composition-responsibilities`
-- Dependencies: P11、P10。
-- Model: Sol only for architecture decisions; Luna may list call sites。
+- Acceptance: docs/tests/import boundary と一致する small-PR plan または段階実装を得る。
+- Branch: `codex/r7-e-p19-runtime-composition-responsibilities`
+- Dependencies: P13、P14。
+- Model: GPT-5.6 Sol が architecture を所有。Luna は call-site inventory のみ可。
 
-### P17: Add experiment logging schema for requested/resolved/actual endpoint motion
+### P20: Add requested / resolved / predicted / actual experiment logging schema
 
-- Goal: evaluation-ready record を定義する。
-- Scope: requested velocity、resolved world velocity、qpos delta、predicted delta、actual tip delta、
-  direction cosine、task completion、error metrics、timestamps / trial IDs。
-- Non-goals: dashboard、participant study、generated artifacts commit。
-- Acceptance: versioned schema、units/frame、missing-value policy、fixture export / roundtrip tests。
-- Branch: `codex/r7-e-p17-experiment-motion-log-schema`
-- Dependencies: P9、P10、P14。
-- Model: Sol owns metric meaning; Luna may list fields / prepare sample table。
+- Provisional title: `[R7-E follow-up P20] Add requested / resolved / predicted / actual experiment logging schema`
+- Goal: evaluation-ready motion record を versioned schema として定義する。
+- Scope: velocities、qpos delta、predicted/actual tip delta、direction cosine、task/error metrics、
+  timestamps / trial IDs / missing-value policy。
+- Non-goals: dashboard、participant study、generated artifact commit。
+- Acceptance: units/frame/sourceが明確な schema と fixture roundtrip を持つ。
+- Branch: `codex/r7-e-p20-experiment-motion-log-schema`
+- Dependencies: P13、P16、P17。
+- Model: GPT-5.6 Sol が metric meaning を所有。Luna は field/sample table のみ可。
 
-### P18: Prepare Selfrionette force-input mapping through continuous local velocity intent
+### P21: Prepare Selfrionette force input through continuous velocity intent
 
-- Goal: force-derived analog axes を共通 intent API へ接続する設計と fixture path を作る。
-- Scope: normalization、deadzone、gain、saturation、control frame configuration、stale/zero behavior。
-- Non-goals: serial port open、Arduino upload、OSC、robot output、human evaluation。
-- Acceptance: recorded/injected fixture だけで deterministic mapping、safety hold、metadata が検証される。
-- Branch: `codex/r7-e-p18-selfrionette-force-velocity-intent`
-- Dependencies: P13、P17。
-- Model: Sol owns force/control semantics; Luna may inventory fixture metadata only。
+- Provisional title: `[R7-E follow-up P21] Prepare Selfrionette force input through continuous velocity intent`
+- Goal: force-derived analog axes を evaluation-ready continuous intent へ接続する。
+- Scope: normalization、deadzone、gain、saturation、frame configuration、stale/zero、injected fixture。
+- Non-goals: serial open、Arduino upload、OSC、robot output、human evaluation。
+- Acceptance: recorded/injected fixture だけで deterministic mapping と safety metadata を検証する。
+- Branch: `codex/r7-e-p21-selfrionette-force-velocity-intent`
+- Dependencies: P16、P20。
+- Model: GPT-5.6 Sol が force/control semantics を所有。Luna は fixture metadata inventory のみ可。
+
+### Issue Dependencies
+
+| Issue | Depends on |
+|---|---|
+| P9 | P8 completion、#341 / PR #342 context |
+| P10 | P9 |
+| P11 | P8 completion only |
+| P12 | P8 completion only |
+| P13 | P9、P10、P12 |
+| P14 | P13 |
+| P15 | P8 completion only |
+| P16 | P11、P12、P13 |
+| P17 | P9、P13 |
+| P18 | P13、P14 |
+| P19 | P13、P14 |
+| P20 | P13、P16、P17 |
+| P21 | P16、P20 |
+
+P9 は evidence only、P10 は acceptance policy であり、同一 Issue / PR に統合しない。
+P11 / P12 は独立 P1 bug-fix track で、broad refactor を待たず small PR として先行可能である。
+P13-P21 は contract、構造、presentation、評価基盤を段階化した follow-up である。
 
 ## 13. Recommended Next Issue
 
@@ -462,9 +550,10 @@ provisional P8-P17 を P9-P18 に繰り下げた。
 
 - #341 の close blocker に直接対応する。
 - broad refactor 前に correctness evidence を固定できる。
-- rank 2 / zero X mobility / accepted-without-progress の現象を、pose・parameter・native Jacobian
-  比較で機構要因と実装要因へ分解できる。
-- 結果は P10 metadata schema と P14 evaluation design の前提になる。
+- rank 2 / zero X mobility を pose・parameter・native Jacobian 比較で機構要因と実装要因へ分解できる。
+- accepted-without-progress の policy変更は P10 に分離し、P9 では変更しない。
+- P11 / P12 は P9 と並行可能な独立 P1 bug-fix track である。
+- broad refactor は P9 evidence と P13 contract planning の前に始めない。
 
 ## 14. CI / Legacy Test Notes
 
@@ -474,7 +563,7 @@ provisional P8-P17 を P9-P18 に繰り下げた。
 - root `uv run pytest` は `legacy/fast_arm_control/mujoco_sim/test_controller.py` collection で
   `ModuleNotFoundError: No module named 'arm_communicator'` になる既知 debt がある。
 - legacy は reference only であり、本 PR では import / execute / repair しない。
-- current CI が green でも local full pytest UX は壊れているため、P12 で discovery boundary を
+- current CI が green でも local full pytest UX は壊れているため、P15 で discovery boundary を
   明示する。
 - CI workflow 自体は本 PR で変更しない。
 
@@ -493,9 +582,11 @@ explicit `--port` runner に隔離されている。本監査ではその runner
 ## 16. Final Recommendation
 
 現行の layer direction と PR #337 / #340 / #342 の安全境界を維持する。今すぐ broad refactor
-を開始しない。P9 で Jacobian mobility と progress semantics を固定し、その証拠を使って P10
-metadata schema、P11 diagnostics separation、P15 typed viewer overlay、P16 composition-root
-整理へ進む。各 Issue は 1 issue = 1 small PR とし、#339 / #341 を未検証のまま close しない。
+を開始しない。P9 で Jacobian evidence を固定し、axis-aware acceptance は P10 に分離する。
+P11 / P12 は独立 P1 bug-fix として small PR で先行可能である。構造整理は P13 contract planning
+と P14 diagnostics separation を経て P18/P19 へ進める。各 Issue は 1 issue = 1 small PR とし、
+#339 / #341 を未検証のまま close しない。#293 は P8 completion で P5-P8 の実状態へ更新し、
+P9 は Issue 作成まで未割当とする。
 
 ### Scope Check
 
