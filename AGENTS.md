@@ -1,210 +1,163 @@
 # AGENTS.md
 
-## 0. 参照順序
+## 0. Purpose
 
-このリポジトリは `Selfrionette-mujoco` の source of truth として扱う。
+このファイルは、`Selfrionette-mujoco`で作業するAIエージェント向けのrepository-local instructionである。
 
-参照順序:
+目的、Issue、関連するcanonical documentsを確認し、リポジトリ内の設計、tests、既存実装から必要な作業方法を判断する。恒常ルールを個別プロンプトへ重複転記しない。
+
+## 1. Read first
+
+作業前に、タスクに関係する範囲を確認する。
 
 1. `AGENTS.md`
-2. `docs/architecture/development-policy.md`
-3. `docs/architecture/mujoco-skeleton-first-spec.md`
-4. `docs/conventions.md`
-5. `docs/design/`
-6. `docs/experiment-notes/`
-7. `legacy/`
+2. 対象タスクのIssueと依存Issue / PR（該当する場合）
+3. `docs/README.md`のSource of Truth Map
+4. 関連するcanonical architecture / contract / design / operations document
+5. 関連実装とtests
 
-詳細な正本は `docs/README.md` の Source of Truth Map に従う。
+主要な入口:
 
-## 1. 基本方針
+- 開発方針: `docs/architecture/development-policy.md`
+- architecture ownership: `docs/architecture/dependency-boundaries.md`
+- runtime composition: `docs/architecture/runtime-composition.md`
+- conventions: `docs/conventions.md`
+- Git / PR workflow: `docs/operations/git-pr-workflow.md`
+- validation: `docs/operations/validation.md`
+- hardware safety: `docs/operations/hardware-safety.md`
+- 日本語docs: `docs/operations/japanese-doc-writing-guardrails.md`
 
-MuJoCo 移行版は skeleton-first で進める。今回の architecture lock では
-動く機能ではなく、責務境界と documentation SoT を固定する。
+詳細な正本は`docs/README.md`を優先する。
 
-開発順序:
+## 2. Autonomy and permission boundary
 
-```text
-Step 1:
-  完全なスケルトンを作る
+説明、調査、レビュー、診断、計画では、依頼されていないファイル変更、commit、Issue / PR更新を行わない。read-only調査と非破壊的な検証は行ってよい。
 
-Step 2:
-  各層に stub 実装を入れる
+修正、実装、作成を依頼された場合は、task / Issue scope内の変更、直接必要なtests、canonical docs、非破壊的検証を行ってよい。
 
-Step 3:
-  stub 同士を runtime で結線する
+次は明示許可を必要とする。
 
-Step 4:
-  その後、各 stub の中身を 1 つずつ実装する
-```
+- merge、Issue / PR close、branch削除
+- destructive migrationまたは大量削除
+- material scope expansion
+- public contractの重大変更
+- 大幅なdependency追加
+- deployment、secrets、credentials
+- hardware access、serial open、Arduino upload、OSC送信、実機作動
 
-## 2. Source of Truth
+## 3. Architecture invariants
 
-- MuJoCo = physical source of truth
-- Three.js = rendering only
-- runtime = only composition root
-- schemas = layer contract
-- legacy = reference only
-- assets = model assets
+以下を維持する。
 
-Three.js 側で FK / IK を再実装しない。MuJoCo、FK、Three.js hierarchy、
-Rapier body、旧 PoseState がそれぞれ別々にアーム姿勢を持つ構造は禁止する。
+- MuJoCoはphysical stateのsource of truthである。
+- Three.jsはrenderingを担当し、独立したFK / IKまたは第二の姿勢SoTを持たない。
+- 複数層のcompositionは`runtime/`が所有する。
+- schemasはlayer contractであり、暗黙に破壊しない。
+- `legacy/`は参照用であり、明示scopeなしに新実装からimportまたは実行しない。
+- Rapier world / body / collider / joint / physics stepを新系統へ再導入しない。
+- 旧PoseStateは必要な互換境界以外でSoTにしない。
+- dependency boundaryはcanonical architecture docsと`tests/architecture/`を正とする。
+- boundaryを変更する場合は、対応するdocsとtestsを同じ変更で整合させる。
 
-## 3. 層と依存境界
+過去のskeleton-first移行手順を、新しいすべてのIssueへ自動適用しない。現在のtask / Issue、canonical docs、既存実装から、必要な成果が調査、設計、実装、bug fix、validationのどれかを判断する。
 
-標準層:
+新しい並行実装、互換層、stub、adapterは、それがtask / Issueの成功条件に必要な場合だけ追加する。
 
-```text
-input_sources
-  → input_interpreters
-  → motion
-  → kinematics
-  → mujoco_backend
-  → transport
-  → apps/mujoco-viewer
-```
+## 4. Documentation source of truth
 
-ただし複数層の結線は `runtime/` だけが行う。詳細は
-`docs/architecture/dependency-boundaries.md` と
-`docs/architecture/runtime-composition.md` を参照する。
+ドキュメントは`docs/`に置き、`doc/`を新設しない。
 
-この図は data flow であり、import dependency ではない。
-import boundary は docs/architecture/dependency-boundaries.md と
-tests/architecture/test_import_boundaries.py を正とする。
+- `docs/README.md`をSource of Truth Mapの正本とする。
+- 1 topic = 1 canonical documentを守る。
+- completion audit、handoff、過去Round文書を現在仕様の正本として扱わない。
+- 新しい文書を追加する前に、既存canonical documentを更新すべきでないか確認する。
+- 文書、実装、testsの主張を一致させる。
 
-## 4. Documentation SoT
+## 5. Scope discipline
 
-`doc/` は使用しない。ドキュメントは `docs/` に統一する。
-`docs/README.md` を SoT Map の正本とし、1 topic = 1 canonical document を守る。
-詳細は `docs/architecture/documentation-sot-policy.md` を参照する。
+task / Issueの目的と成功条件を優先する。
 
-## 5. Legacy / Assets / Rapier
+通常は完全なfile whitelistではなく、対象subsystemまたはtouch areaを作業範囲とする。直接必要なtestsとcanonical docsは同じ変更に含めてよい。
 
-- `legacy/` は参照元であり、新実装から直接 import しない。
-- legacy script は top-level 副作用の可能性があるため、原則実行しない。
-- `assets/` は採用する MJCF / XML / STL / mesh の置き場。
-- Rapier world/body/collider/joint/physics step を新系統へ持ち込まない。
-- 旧 PoseState は必要な場合のみ compatibility adapter とし、SoT にしない。
+次に進む前に停止して報告する。
 
-## 6. Hardware / Serial / OSC
+- 明示scope外の別subsystemに設計変更が必要
+- task / Issueで承認されていないpublic schemaまたはcontract変更が必要
+- 明示scope外のdependency追加またはCI workflow変更が必要
+- task / Issueの目的を実質的に拡張する必要がある
+- 既存SoT間に矛盾がある
+- 安全な実装方針を一意に決められない
 
-明示的に scope 化されていない限り、serial port を開かない、OSC を送信しない、
-実機を動かさない、hardware validation を実施しない。詳細は
-`docs/operations/hardware-safety.md` を参照する。
+unrelated cleanup、無関係なrename、format-only churnを混ぜない。
 
-## 7. Git 運用
+## 6. Hardware and external side effects
 
-`main` で直接作業しない。Codex が branch を作る場合は `codex/` 接頭辞を使う。
+明示的なhardware taskでない限り、以下を行わない。
 
-作業開始前:
+- serial port open
+- Arduino upload
+- OSC send
+- robot output
+- hardware validation
+- deploymentまたはcredential操作
 
-```bash
-git fetch origin
-git switch main
-git pull --ff-only
-git status --short --branch
-```
+dry-run、MuJoCo model load、forward、step、Web build、typecheckをhardware validationと呼ばない。
 
-PR 作成前:
+専用hardware taskでは`docs/operations/hardware-safety.md`に従い、operator gate、device / port、command、physical clearance、stop procedure、rollback、expected / observed outputを定義する。
 
-```bash
-git branch --show-current
-git diff --name-only origin/main...HEAD
-git diff --check
-git status --short --branch
-```
+## 7. Git and GitHub
 
-PR 作成後:
-
-```bash
-gh pr view <pr> --json headRefName,baseRefName,headRefOid,changedFiles,mergeable,url
-```
-
-PR 更新報告前は local HEAD、PR head、remote branch HEAD の一致を確認する。
-詳細は `docs/operations/git-pr-workflow.md` を参照する。
+- `main`へ直接commitしない。
+- Codexがbranchを作る場合は原則`codex/`接頭辞を使う。
+- repository-local Git / PR workflowに従う。
+- PR作成または更新前に、base、branch、actual diff、working treeを確認する。
+- PR報告前にlocal HEAD、remote branch HEAD、PR headの一致を確認する。
+- PR本文とactual diff、validation、task / Issue scopeを一致させる。
+- `mergeable: true`だけでmerge readinessを判断しない。
+- 明示許可なしにmergeまたはIssue closeを行わない。
+- Codex実行プロンプトを、明示依頼なしにIssue / PRコメントへ投稿しない。
 
 ## 8. Validation
 
-検証結果は category を分けて報告する。
+変更した層とfailure modeに対応する検証を選ぶ。全タスクへ同じコマンドを機械的に適用しない。
 
-- docs-only validation
-- unit / compile validation
-- MuJoCo model load validation
-- Web typecheck / build
-- dry-run
-- hardware validation
+必要に応じて次を組み合わせる。
 
-dry-run、build、typecheck、MuJoCo model load を hardware validation と書かない。
-詳細は `docs/operations/validation.md` を参照する。
+- focused regression tests
+- 関連test suite
+- `tests/architecture/`
+- compile / typecheck / build
+- MuJoCo model load / forward / step smoke
+- replay / dry-run
+- docs link / encoding / mojibake check
+- Git diff / PR metadata audit
 
-## 9. Repository Naming / URL Guardrail
+実行できない検証を成功扱いしない。未実行理由、代替証拠、残存リスクを報告する。
 
-新規リンク、Issue URL、PR URL、docs path では `Selfrionette-mujoco` を使う。
-旧名称や typo は historical note、legacy spelling、rename / migration 説明など、
-意図がある場合だけ残す。
+testsを削除、skip、弱体化して変更を通さない。
 
-## 10. 最重要原則
+## 9. Repository hygiene
 
-動くものを早く作ることより、ズレない構造を先に作ることを優先する。
+- repository名、URL、docs pathでは`Selfrionette-mujoco`を使用する。
+- generated artifacts、`node_modules/`、`dist/`、`.env.local`、secrets、local absolute pathをcommitしない。
+- `assets/`、schema、fixture、log formatを変更した場合は、consumerとcanonical docsへの影響を確認する。
+- 日本語MarkdownとテキストはUTF-8 without BOMを基本とする。
+- 日本語docsまたはPR bodyを変更した場合は、専用ガードレールに従ってmojibakeを確認する。
 
-## 11. Architecture Boundary Tests
+## 10. Completion
 
-- import boundary は `docs/architecture/dependency-boundaries.md` と `tests/architecture/test_import_boundaries.py` を正とする。
-- AGENTS.md の層図は data flow の説明であり、import dependency ではない。
-- dependency boundary を変更する場合は、docs と test を同時に更新する。
-- `tests/architecture` を削除・無効化してはならない。
+完了を宣言する前に、task / Issueのsuccess criteriaを実測結果で確認する。
 
-## 12. PR / 作業報告の最低項目
+最終報告は、関連する項目だけを簡潔に含める。
 
-PR本文と作業報告には、最低限以下を含める。
-
-- Summary
-- Changed Files
-- Architecture Impact
-- Validation
-- Scope Exclusions
-- Hardware Validation
-- Serial / OSC / Hardware Access
-- Remaining Risks
-
-## 13. Scope Check
-
-各作業報告では以下を明示する。
-
-```md
-legacy changed: 
-legacy imported/executed:
-assets changed:
-schema breaking change:
-import boundary changed:
-MuJoCo package imported:
-MuJoCo model load included:
-MuJoCo forward included:
-MuJoCo step included:
-MuJoCoState snapshot included:
-runtime composition included:
-Three.js FK/IK included:
-WebSocket included:
-serial port opened:
-OSC sent:
-hardware validation included:
-node_modules included:
-dist included:
-.env.local included:
-docs / SoT impact checked:
+```text
+Result
+Changed scope
+Validation
+Remaining risks or blocked items
+PR / Issue links, when applicable
 ```
 
-## 14. 日本語運用 / 文字化け対策
+architecture impact、SoT impact、hardware、numbering、merge order、rollbackは、実際に関係する場合だけ追加する。
 
-- `docs/` と Git 関連の文書、PR 本文、作業報告、コメントは原則として日本語で記述する。
-- 既存の日本語文書を編集するときは、意味を変えずに最小差分で直し、英訳への機械的な言い換えは避ける。
-- 文字化け対策として、Markdown とテキストファイルは UTF-8 を基本とし、必要に応じて UTF-8 no BOM で保存する。
-- 文字化けが疑われる場合は、表示結果だけで判断せず、バイト列や明示的なエンコーディング指定で確認する。
-- PR 作成前に、本文と関連文書が化けていないことを確認し、PowerShell のエンコーディング差で壊れやすい inline 生成は避ける。
-
-## 15. 日本語 docs 作成ガードレール
-
-- 日本語 Markdown / PR body の encoding、BOM、mojibake、handoff ずれは `docs/operations/japanese-doc-writing-guardrails.md` に従って確認する。
-- 日本語 docs は UTF-8 without BOM で保存する。
-- `git diff --check` だけを文字化け検出として扱わない。
-- 日本語 docs または PR body を編集した場合は、merge 前に guardrail doc の検証コマンドを実行する。
-- PR body は GitHub metadata のため file check では検出できない。`gh pr view <PR_NUMBER> --json body` で別途確認する。
+テンプレートを埋めたことではなく、要求された挙動、互換性、検証、リポジトリ状態が成立したことを完了条件とする。
