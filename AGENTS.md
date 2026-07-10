@@ -11,7 +11,7 @@
 作業前に、タスクに関係する範囲を確認する。
 
 1. `AGENTS.md`
-2. 対象Issueと依存Issue / PR
+2. 対象タスクのIssueと依存Issue / PR（該当する場合）
 3. `docs/README.md`のSource of Truth Map
 4. 関連するcanonical architecture / contract / design / operations document
 5. 関連実装とtests
@@ -33,7 +33,7 @@
 
 説明、調査、レビュー、診断、計画では、依頼されていないファイル変更、commit、Issue / PR更新を行わない。read-only調査と非破壊的な検証は行ってよい。
 
-修正、実装、作成を依頼された場合は、Issue scope内の変更、直接必要なtests、canonical docs、非破壊的検証を行ってよい。
+修正、実装、作成を依頼された場合は、task / Issue scope内の変更、直接必要なtests、canonical docs、非破壊的検証を行ってよい。
 
 次は明示許可を必要とする。
 
@@ -55,12 +55,13 @@
 - schemasはlayer contractであり、暗黙に破壊しない。
 - `legacy/`は参照用であり、明示scopeなしに新実装からimportまたは実行しない。
 - Rapier world / body / collider / joint / physics stepを新系統へ再導入しない。
+- 旧PoseStateは必要な互換境界以外でSoTにしない。
 - dependency boundaryはcanonical architecture docsと`tests/architecture/`を正とする。
 - boundaryを変更する場合は、対応するdocsとtestsを同じ変更で整合させる。
 
-過去のskeleton-first移行手順を、新しいすべてのIssueへ自動適用しない。現在のIssue、canonical docs、既存実装から、必要な成果が調査、設計、実装、bug fix、validationのどれかを判断する。
+過去のskeleton-first移行手順を、新しいすべてのIssueへ自動適用しない。現在のtask / Issue、canonical docs、既存実装から、必要な成果が調査、設計、実装、bug fix、validationのどれかを判断する。
 
-新しい並行実装、互換層、stub、adapterは、それがIssueの成功条件に必要な場合だけ追加する。
+新しい並行実装、互換層、stub、adapterは、それがtask / Issueの成功条件に必要な場合だけ追加する。
 
 ## 4. Documentation source of truth
 
@@ -74,16 +75,16 @@
 
 ## 5. Scope discipline
 
-Issueの目的と成功条件を優先する。
+task / Issueの目的と成功条件を優先する。
 
 通常は完全なfile whitelistではなく、対象subsystemまたはtouch areaを作業範囲とする。直接必要なtestsとcanonical docsは同じ変更に含めてよい。
 
 次に進む前に停止して報告する。
 
-- 別subsystemの設計変更が必要
-- public schemaまたはcontract変更が必要
-- 新しいdependencyまたはCI workflowが必要
-- Issueの目的を実質的に拡張する必要がある
+- 明示scope外の別subsystemに設計変更が必要
+- task / Issueで承認されていないpublic schemaまたはcontract変更が必要
+- 明示scope外のdependency追加またはCI workflow変更が必要
+- task / Issueの目的を実質的に拡張する必要がある
 - 既存SoT間に矛盾がある
 - 安全な実装方針を一意に決められない
 
@@ -111,7 +112,7 @@ dry-run、MuJoCo model load、forward、step、Web build、typecheckをhardware 
 - repository-local Git / PR workflowに従う。
 - PR作成または更新前に、base、branch、actual diff、working treeを確認する。
 - PR報告前にlocal HEAD、remote branch HEAD、PR headの一致を確認する。
-- PR本文とactual diff、validation、Issue scopeを一致させる。
+- PR本文とactual diff、validation、task / Issue scopeを一致させる。
 - `mergeable: true`だけでmerge readinessを判断しない。
 - 明示許可なしにmergeまたはIssue closeを行わない。
 - Codex実行プロンプトを、明示依頼なしにIssue / PRコメントへ投稿しない。
@@ -139,13 +140,13 @@ testsを削除、skip、弱体化して変更を通さない。
 
 - repository名、URL、docs pathでは`Selfrionette-mujoco`を使用する。
 - generated artifacts、`node_modules/`、`dist/`、`.env.local`、secrets、local absolute pathをcommitしない。
-- asset、schema、fixture、log formatを変更した場合は、consumerとcanonical docsへの影響を確認する。
+- `assets/`、schema、fixture、log formatを変更した場合は、consumerとcanonical docsへの影響を確認する。
 - 日本語MarkdownとテキストはUTF-8 without BOMを基本とする。
 - 日本語docsまたはPR bodyを変更した場合は、専用ガードレールに従ってmojibakeを確認する。
 
 ## 10. Completion
 
-完了を宣言する前に、Issueのsuccess criteriaを実測結果で確認する。
+完了を宣言する前に、task / Issueのsuccess criteriaを実測結果で確認する。
 
 最終報告は、関連する項目だけを簡潔に含める。
 
