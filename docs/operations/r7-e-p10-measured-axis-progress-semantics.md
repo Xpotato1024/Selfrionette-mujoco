@@ -70,7 +70,7 @@ weak world X修復、motion acceptance変更、qpos/IK/FK/damping/cap変更、vi
 5. alignedだがratioが`0.5`未満: `insufficient_progress`
 6. それ以外: `progressing`
 
-wrong shape/typeおよびnon-finite requested deltaはprogrammer errorとして`ValueError`にする。missing/non-finite measured deltaはexplicit unavailable resultにする。
+requested/measured vectorのmissing、wrong shape/type、non-finiteはすべてexplicit unavailable resultにする。threshold設定のinvalid valueだけはprogrammer errorとして`ValueError`にする。
 
 ## Metadata Fields
 

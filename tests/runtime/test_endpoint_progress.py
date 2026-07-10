@@ -29,13 +29,27 @@ def test_missing_or_non_finite_measurement_is_explicitly_unavailable() -> None:
     assert missing.direction_cosine is non_finite.direction_cosine is None
 
 
-def test_non_finite_request_and_wrong_shapes_are_rejected() -> None:
-    with pytest.raises(ValueError, match="requested_delta_m must contain only finite values"):
-        calculate_endpoint_progress((math.inf, 0.0, 0.0), (0.0, 0.0, 0.0))
-    with pytest.raises(ValueError, match="exactly three"):
-        calculate_endpoint_progress((1.0, 0.0), (0.0, 0.0, 0.0))
-    with pytest.raises(ValueError, match="exactly three"):
-        calculate_endpoint_progress((1.0, 0.0, 0.0), "invalid")
+@pytest.mark.parametrize(
+    ("requested", "measured"),
+    (
+        (None, (0.0, 0.0, 0.0)),
+        ((math.inf, 0.0, 0.0), (0.0, 0.0, 0.0)),
+        ((1.0, 0.0), (0.0, 0.0, 0.0)),
+        ((1.0, 0.0, 0.0), "invalid"),
+        ((1.0, 0.0, 0.0), (0.0, 0.0)),
+    ),
+)
+def test_missing_malformed_or_non_finite_vectors_are_unavailable(
+    requested: object,
+    measured: object,
+) -> None:
+    result = calculate_endpoint_progress(requested, measured)
+
+    assert result.status == "measurement_unavailable"
+    assert result.measurement_available is False
+    assert result.signed_progress_m is None
+    assert result.progress_ratio is None
+    assert result.direction_cosine is None
 
 
 def test_near_zero_measurement_is_insufficient_and_has_no_direction_cosine() -> None:
@@ -96,3 +110,12 @@ def test_metadata_field_names_are_stable_and_inputs_are_not_mutated() -> None:
         "endpoint_progress_measured_norm_m",
         "endpoint_progress_measurement_available",
     )
+
+
+def test_invalid_threshold_configuration_is_rejected() -> None:
+    with pytest.raises(ValueError, match="norm tolerances must be non-negative"):
+        calculate_endpoint_progress(
+            (1.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            request_norm_tolerance_m=-1.0,
+        )

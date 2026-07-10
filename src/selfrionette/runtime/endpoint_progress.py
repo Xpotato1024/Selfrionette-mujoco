@@ -41,16 +41,16 @@ class EndpointProgressResult:
         }
 
 
-def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
+def _coerce_finite_vector3(value: object) -> tuple[float, float, float] | None:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ValueError(f"{name} must contain exactly three values")
+        return None
 
     try:
         components = tuple(float(component) for component in value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must contain exactly three numeric values") from exc
-    if len(components) != 3:
-        raise ValueError(f"{name} must contain exactly three values")
+    except (TypeError, ValueError):
+        return None
+    if len(components) != 3 or not all(isfinite(component) for component in components):
+        return None
     return components
 
 
@@ -92,17 +92,17 @@ def calculate_endpoint_progress(
     if not -1.0 <= minimum_direction_cosine <= 1.0:
         raise ValueError("minimum_direction_cosine must be between -1 and 1")
 
-    requested = _coerce_vector3("requested_delta_m", requested_delta_m)
-    if not all(isfinite(component) for component in requested):
-        raise ValueError("requested_delta_m must contain only finite values")
+    requested = _coerce_finite_vector3(requested_delta_m)
+    if requested is None:
+        return _unavailable_result()
     requested_norm_m = _norm(requested)
 
     if requested_norm_m <= request_norm_tolerance_m:
         measured_norm_m: float | None = None
         measurement_available = False
         if measured_delta_m is not None:
-            measured = _coerce_vector3("measured_delta_m", measured_delta_m)
-            if all(isfinite(component) for component in measured):
+            measured = _coerce_finite_vector3(measured_delta_m)
+            if measured is not None:
                 measured_norm_m = _norm(measured)
                 measurement_available = True
         return EndpointProgressResult(
@@ -118,8 +118,8 @@ def calculate_endpoint_progress(
     if measured_delta_m is None:
         return _unavailable_result(requested_norm_m=requested_norm_m)
 
-    measured = _coerce_vector3("measured_delta_m", measured_delta_m)
-    if not all(isfinite(component) for component in measured):
+    measured = _coerce_finite_vector3(measured_delta_m)
+    if measured is None:
         return _unavailable_result(requested_norm_m=requested_norm_m)
 
     measured_norm_m = _norm(measured)
