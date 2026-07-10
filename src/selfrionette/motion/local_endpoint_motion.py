@@ -220,6 +220,16 @@ class LocalEndpointMotionGenerator:
 
         axis_values = _resolve_axis_values(intent)
         control_frame = _resolve_control_frame(intent)
+        if (
+            control_frame == "tool"
+            and intent.metadata.get("control_frame_resolution_status") != "tool_orientation_resolved"
+        ):
+            return self._build_holding_command(
+                intent=intent,
+                reason=str(intent.metadata.get("control_frame_resolution_reason", "tool_orientation_unavailable")),
+                qpos_before_rad=current_qpos_rad,
+                endpoint_delta_requested_m=(0.0, 0.0, 0.0),
+            )
         local_endpoint_speed_m_s = float(intent.metadata.get("local_endpoint_speed_m_s", 0.0) or 0.0)
         local_endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="local_endpoint_velocity_m_s")
         endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="resolved_world_endpoint_velocity_m_s")
@@ -301,6 +311,15 @@ class LocalEndpointMotionGenerator:
             "motion_status": motion_status,
             "motion_rejection_reason": motion_rejection_reason,
             "control_frame": control_frame,
+            "requested_control_frame": intent.metadata.get("requested_control_frame", control_frame),
+            "resolved_control_frame": intent.metadata.get(
+                "resolved_control_frame",
+                "mujoco_world" if control_frame == "world" else None,
+            ),
+            "control_frame_resolution_status": intent.metadata.get(
+                "control_frame_resolution_status",
+                "world_passthrough" if control_frame == "world" else "tool_orientation_unavailable",
+            ),
             "local_endpoint_velocity_frame": intent.metadata.get("local_endpoint_velocity_frame", control_frame),
             "local_endpoint_velocity_m_s": local_endpoint_velocity_m_s,
             "resolved_world_endpoint_velocity_m_s": endpoint_velocity_m_s,
