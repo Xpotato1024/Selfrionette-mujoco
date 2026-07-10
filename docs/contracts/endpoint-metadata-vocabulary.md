@@ -39,7 +39,7 @@ second (`m/s`); qpos uses radians (`rad`). The frame column is authoritative.
 |---|---|---|---|---|
 | `desired_endpoint_m` | command intent | target resolver | command-side endpoint frame | preferred command value; optional |
 | `target_position_m` | viewer feedback / compatibility | state annotation | viewer feedback target frame; not actual tip | nullable; fallback only |
-| `current_tip_position_m` | measured input | target generator / state annotation | MuJoCo `tip` site world frame | when a tip site exists |
+| `current_tip_position_m` | overloaded compatibility anchor | `ViewerInputSource`, endpoint target generator, loadcell converter | usually MuJoCo world / command endpoint frame; source is the stateful or caller-supplied anchor, not inherently MuJoCo state | absent-only in current producers; provenance must be known from the producer |
 | `ik_target_endpoint_m` | IK solver input | solver boundary | solver-local frame | optional; not world intent |
 | `local_endpoint_velocity_m_s` | command intent | input source / policy | `control_frame` (`world` or `tool`) | optional |
 | `control_frame` | compatibility input frame | input source / policy | requested frame | retained compatibility field |
@@ -80,6 +80,30 @@ The wire payload remains additive and open. No public field is removed.
 former is a policy prediction and the latter is a post-step MuJoCo measurement.
 `motion_status` and `endpoint_progress_status` are also independent.
 
+## `current_tip_position_m` provenance and lifecycle
+
+`current_tip_position_m` is an overloaded compatibility field. It is not a
+single MuJoCo-measured truth field and consumers must not infer physical truth
+from the key alone.
+It is not a MuJoCo physical measurement.
+
+The `ViewerInputSource` provenance is a stateful viewer command endpoint anchor;
+target-generator and loadcell paths use a caller-supplied endpoint anchor.
+
+| Producer path | What the value represents | Frame / source of truth | Lifecycle | May a consumer use it as physical truth? |
+|---|---|---|---|---|
+| `ViewerInputSource` | Stateful command endpoint anchor in `_current_endpoint_m` | MuJoCo world-aligned command frame when rebased; otherwise the configured safe endpoint | initialized, then updated by viewer command/rebase lifecycle | No; it may coincide with a tip-site sample at rebase but is not updated from every MuJoCo step |
+| `EndpointTargetGeneratorInput` / target generation | Caller-supplied current endpoint used to initialize or advance the desired target | Caller-defined endpoint frame, currently world-command frame | one target-generation call / stateful target lifecycle | No, unless the caller separately proves it came from MuJoCo state |
+| loadcell endpoint converter | Caller-supplied endpoint anchor copied into command metadata | caller-provided endpoint frame | one motion-command lifecycle | No; it is command-side provenance |
+| MuJoCo state / tip extraction | Physical tip position | MuJoCo world / scene frame; `MuJoCoState.sites` and `tip` site extractor | state snapshot lifecycle | Yes; use the site value, not this compatibility key |
+
+The viewer runtime rebase explains why the first viewer value can equal the
+initial MuJoCo tip site while later values remain command-side anchors. The
+post-step physical delta is `actual_tip_delta_m`, computed from MuJoCo tip
+samples. A future separately approved migration may introduce distinct
+canonical names such as `command_endpoint_anchor_m` and
+`mujoco_tip_position_m`; P13 does not add those wire fields.
+
 ## Migration order
 
 1. Establish this glossary, ownership map, and Python/TypeScript typed subset.
@@ -87,6 +111,21 @@ former is a policy prediction and the latter is a post-step MuJoCo measurement.
 3. Consumers prefer canonical fields and use compatibility fallback temporarily.
 4. Use tests and telemetry to identify remaining alias consumers.
 5. Remove an alias only in a separately approved issue. This PR removes none.
+
+## Nullability and validation boundary
+
+Nullability is field-specific rather than global:
+
+| Field family | Producer contract | Absent / `null` / malformed handling |
+|---|---|---|
+| Endpoint vectors, including `current_tip_position_m` | absent-only; Python and TypeScript type the valid value as `Vector3` | absent is unavailable; `null` or malformed values are discarded at the TypeScript parser boundary and do not fail the payload |
+| Resolution/status/detail fields | some producers explicitly emit `None`/`null` for unavailable details | absent and `null` are both unavailable; consumers use safe optional parsing |
+| Open metadata keys not in this glossary | unconstrained payload-v0 metadata | preserved without validation; presentation code must validate before use |
+
+`normalizeTransportEndpointMetadata` validates known endpoint vectors without
+closing the open metadata map. Unknown keys remain accepted. The viewer
+presentation parser separately validates values it renders, so partial or
+malformed metadata is ignored rather than treated as physical truth.
 
 ## Boundaries
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from selfrionette.schemas.endpoint_metadata import (
     ControlFrameResolutionStatus,
     EndpointMetadata,
@@ -22,6 +24,21 @@ def test_endpoint_metadata_contract_contains_canonical_and_compatibility_fields(
         "actual_tip_delta_m",
     ):
         assert field in annotations
+
+
+def test_current_tip_position_provenance_is_explicitly_overloaded_compatibility_metadata() -> None:
+    document = (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "contracts"
+        / "endpoint-metadata-vocabulary.md"
+    ).read_text(encoding="utf-8")
+
+    assert "overloaded compatibility field" in document
+    assert "stateful viewer command endpoint anchor" in document
+    assert "caller-supplied endpoint anchor" in document
+    assert "not a MuJoCo physical measurement" in document
+    assert "actual_tip_delta_m" in document
 
 
 def test_control_frame_and_progress_vocabularies_are_closed() -> None:
