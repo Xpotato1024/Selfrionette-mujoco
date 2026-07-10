@@ -13,6 +13,7 @@
 - [docs/operations/r6-g-p1-startup-path-audit.md](docs/operations/r6-g-p1-startup-path-audit.md)
 - [docs/operations/r6-g-p3-startup-script-gap-audit.md](docs/operations/r6-g-p3-startup-script-gap-audit.md)
 - [docs/operations/r6-g-completion-audit.md](docs/operations/r6-g-completion-audit.md)
+- [docs/operations/r7-e-p8-architecture-endpoint-audit.md](docs/operations/r7-e-p8-architecture-endpoint-audit.md)
 - [apps/mujoco-viewer/README.md](apps/mujoco-viewer/README.md)
 
 ## セットアップ
