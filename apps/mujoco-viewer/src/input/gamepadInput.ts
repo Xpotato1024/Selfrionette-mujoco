@@ -45,6 +45,20 @@ export interface ViewerGamepadControlSender {
   getLatestMessage(): ViewerControlMessage | null;
 }
 
+export interface ViewerGamepadPublicationControllerOptions {
+  publish(snapshot: ViewerGamepadSnapshot): void;
+  heartbeatIntervalMs?: number;
+  setTimeoutFn?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+  clearTimeoutFn?: (timeoutId: ReturnType<typeof setTimeout>) => void;
+}
+
+export interface ViewerGamepadPublicationController {
+  update(snapshot: ViewerGamepadSnapshot): void;
+  suspend(): void;
+  resume(): void;
+  dispose(): void;
+}
+
 export interface ViewerGamepadSamplingOptions {
   deadzone?: number;
   clampMin?: number;
@@ -67,6 +81,7 @@ export interface ViewerGamepadLike {
 const DEFAULT_DEADZONE = 0.1;
 const DEFAULT_CLAMP_MIN = -1;
 const DEFAULT_CLAMP_MAX = 1;
+export const DEFAULT_VIEWER_GAMEPAD_HEARTBEAT_INTERVAL_MS = 100;
 
 function currentTimestampS(): number {
   const performanceNow = globalThis.performance?.now();
@@ -153,6 +168,93 @@ export function sampleViewerGamepadSnapshot(
     buttons,
     stale: false,
     zero_state: zeroState,
+  };
+}
+
+function isActiveGamepadSnapshot(snapshot: ViewerGamepadSnapshot): boolean {
+  return snapshot.connected && !snapshot.stale && !snapshot.zero_state;
+}
+
+export function createViewerGamepadPublicationController(
+  options: ViewerGamepadPublicationControllerOptions,
+): ViewerGamepadPublicationController {
+  const heartbeatIntervalMs = options.heartbeatIntervalMs ?? DEFAULT_VIEWER_GAMEPAD_HEARTBEAT_INTERVAL_MS;
+  if (!Number.isFinite(heartbeatIntervalMs) || heartbeatIntervalMs <= 0) {
+    throw new Error("heartbeatIntervalMs must be a positive finite number");
+  }
+
+  const setTimeoutFn = options.setTimeoutFn ?? globalThis.setTimeout.bind(globalThis);
+  const clearTimeoutFn = options.clearTimeoutFn ?? globalThis.clearTimeout.bind(globalThis);
+  let latestSnapshot: ViewerGamepadSnapshot | null = null;
+  let latestSignature: string | null = null;
+  let heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let suspended = false;
+  let disposed = false;
+
+  const cancelHeartbeat = (): void => {
+    if (heartbeatTimeoutId === null) {
+      return;
+    }
+
+    clearTimeoutFn(heartbeatTimeoutId);
+    heartbeatTimeoutId = null;
+  };
+
+  const scheduleHeartbeat = (): void => {
+    cancelHeartbeat();
+    if (disposed || suspended || latestSnapshot === null || !isActiveGamepadSnapshot(latestSnapshot)) {
+      return;
+    }
+
+    heartbeatTimeoutId = setTimeoutFn(() => {
+      heartbeatTimeoutId = null;
+      if (disposed || suspended || latestSnapshot === null || !isActiveGamepadSnapshot(latestSnapshot)) {
+        return;
+      }
+
+      options.publish(latestSnapshot);
+      scheduleHeartbeat();
+    }, heartbeatIntervalMs);
+  };
+
+  return {
+    update(snapshot: ViewerGamepadSnapshot): void {
+      if (disposed || suspended) {
+        return;
+      }
+
+      const signature = JSON.stringify(snapshot);
+      latestSnapshot = snapshot;
+      if (signature === latestSignature) {
+        return;
+      }
+
+      latestSignature = signature;
+      options.publish(snapshot);
+      scheduleHeartbeat();
+    },
+    suspend(): void {
+      if (disposed || suspended) {
+        return;
+      }
+
+      suspended = true;
+      cancelHeartbeat();
+      latestSnapshot = null;
+    },
+    resume(): void {
+      if (disposed) {
+        return;
+      }
+
+      suspended = false;
+    },
+    dispose(): void {
+      disposed = true;
+      suspended = true;
+      cancelHeartbeat();
+      latestSnapshot = null;
+    },
   };
 }
 

@@ -7,8 +7,9 @@ import {
 } from "../input/keyboardInput.js";
 import {
   createViewerGamepadControlSender,
-  sampleViewerGamepadSnapshot,
+  type ViewerGamepadLike,
 } from "../input/gamepadInput.js";
+import { createViewerGamepadLifecycle } from "./gamepadLifecycle.js";
 import { formatQpos } from "../wasm-scene/mujocoQposSync.js";
 import {
   formatEndpointEvaluationAngles,
@@ -268,84 +269,24 @@ export function ProductViewerApp() {
     const gamepadSender = createViewerGamepadControlSender({
       url: endpointConfig.websocketUrl,
     });
-    let disposed = false;
-    let animationFrameId = 0;
-    let lastSnapshotSignature = "";
+    const gamepadLifecycle = createViewerGamepadLifecycle({
+      window,
+      document,
+      getGamepads: () => {
+        if (typeof navigator === "undefined" || typeof navigator.getGamepads !== "function") {
+          return null;
+        }
 
-    type BrowserGamepadLike = {
-      connected: boolean;
-      axes: ArrayLike<number>;
-      buttons: ArrayLike<{ pressed: boolean; value?: number }>;
-      index?: number;
-      id?: string;
-    };
-
-    const getGamepads = (): ArrayLike<BrowserGamepadLike | null | undefined> | null => {
-      if (typeof navigator === "undefined" || typeof navigator.getGamepads !== "function") {
-        return null;
-      }
-
-      return navigator.getGamepads() as unknown as ArrayLike<BrowserGamepadLike | null | undefined>;
-    };
-
-    const publishGamepadState = (
-      gamepads: ArrayLike<BrowserGamepadLike | null | undefined> | null = getGamepads(),
-    ): void => {
-      const snapshot = sampleViewerGamepadSnapshot(gamepads, { deadzone: 0.1 });
-      const snapshotSignature = JSON.stringify(snapshot);
-      if (snapshotSignature === lastSnapshotSignature) {
-        return;
-      }
-
-      lastSnapshotSignature = snapshotSignature;
-      gamepadSender.publish(snapshot);
-    };
-
-    const schedulePoll = (): void => {
-      if (disposed) {
-        return;
-      }
-
-      publishGamepadState();
-      animationFrameId = window.requestAnimationFrame(schedulePoll);
-    };
-
-    const onGamepadConnected = (): void => {
-      publishGamepadState();
-    };
-
-    const onGamepadDisconnected = (): void => {
-      publishGamepadState();
-    };
-
-    const onWindowBlur = (): void => {
-      publishGamepadState(null);
-    };
-
-    const onWindowFocus = (): void => {
-      publishGamepadState();
-    };
-
-    const onVisibilityChange = (): void => {
-      publishGamepadState(document.visibilityState === "visible" ? getGamepads() : null);
-    };
-
-    publishGamepadState();
-    animationFrameId = window.requestAnimationFrame(schedulePoll);
-    window.addEventListener("gamepadconnected", onGamepadConnected);
-    window.addEventListener("gamepaddisconnected", onGamepadDisconnected);
-    window.addEventListener("blur", onWindowBlur);
-    window.addEventListener("focus", onWindowFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
+        return navigator.getGamepads() as unknown as ArrayLike<ViewerGamepadLike | null | undefined>;
+      },
+      publish(snapshot) {
+        gamepadSender.publish(snapshot);
+      },
+    });
+    gamepadLifecycle.start();
 
     return () => {
-      disposed = true;
-      window.cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("gamepadconnected", onGamepadConnected);
-      window.removeEventListener("gamepaddisconnected", onGamepadDisconnected);
-      window.removeEventListener("blur", onWindowBlur);
-      window.removeEventListener("focus", onWindowFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      gamepadLifecycle.dispose();
       gamepadSender.dispose();
     };
   }, [endpointConfig.websocketUrl, state.connectionStatus]);
