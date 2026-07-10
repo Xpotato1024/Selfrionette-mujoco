@@ -13,7 +13,7 @@ related:
 
 ## Status
 
-Issue #348 に対する draft implementation である。active な gamepad held state の publication cadence を backend liveness contract に合わせる。Ready、merge、Issue close は未承認である。
+P11のcanonical contractである。activeなgamepad held stateのpublication cadenceをbackend liveness contractに合わせる。
 
 ## Publication contract
 
