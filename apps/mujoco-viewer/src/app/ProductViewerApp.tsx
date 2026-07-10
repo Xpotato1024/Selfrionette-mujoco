@@ -7,9 +7,9 @@ import {
 } from "../input/keyboardInput.js";
 import {
   createViewerGamepadControlSender,
-  createViewerGamepadPublicationController,
-  sampleViewerGamepadSnapshot,
+  type ViewerGamepadLike,
 } from "../input/gamepadInput.js";
+import { createViewerGamepadLifecycle } from "./gamepadLifecycle.js";
 import { formatQpos } from "../wasm-scene/mujocoQposSync.js";
 import {
   formatEndpointEvaluationAngles,
@@ -269,109 +269,24 @@ export function ProductViewerApp() {
     const gamepadSender = createViewerGamepadControlSender({
       url: endpointConfig.websocketUrl,
     });
-    const gamepadPublication = createViewerGamepadPublicationController({
+    const gamepadLifecycle = createViewerGamepadLifecycle({
+      window,
+      document,
+      getGamepads: () => {
+        if (typeof navigator === "undefined" || typeof navigator.getGamepads !== "function") {
+          return null;
+        }
+
+        return navigator.getGamepads() as unknown as ArrayLike<ViewerGamepadLike | null | undefined>;
+      },
       publish(snapshot) {
         gamepadSender.publish(snapshot);
       },
     });
-    let disposed = false;
-    let lifecycleActive = document.visibilityState === "visible" && document.hasFocus();
-    let animationFrameId = 0;
-
-    type BrowserGamepadLike = {
-      connected: boolean;
-      axes: ArrayLike<number>;
-      buttons: ArrayLike<{ pressed: boolean; value?: number }>;
-      index?: number;
-      id?: string;
-    };
-
-    const getGamepads = (): ArrayLike<BrowserGamepadLike | null | undefined> | null => {
-      if (typeof navigator === "undefined" || typeof navigator.getGamepads !== "function") {
-        return null;
-      }
-
-      return navigator.getGamepads() as unknown as ArrayLike<BrowserGamepadLike | null | undefined>;
-    };
-
-    const publishGamepadState = (
-      gamepads: ArrayLike<BrowserGamepadLike | null | undefined> | null = getGamepads(),
-    ): void => {
-      if (!lifecycleActive) {
-        return;
-      }
-
-      const snapshot = sampleViewerGamepadSnapshot(gamepads, { deadzone: 0.1 });
-      gamepadPublication.update(snapshot);
-    };
-
-    const setLifecycleActive = (nextActive: boolean): void => {
-      if (disposed || nextActive === lifecycleActive) {
-        return;
-      }
-
-      lifecycleActive = nextActive;
-      if (!nextActive) {
-        gamepadPublication.update(sampleViewerGamepadSnapshot(null));
-        gamepadPublication.suspend();
-        return;
-      }
-
-      gamepadPublication.resume();
-      publishGamepadState(getGamepads());
-    };
-
-    const schedulePoll = (): void => {
-      if (disposed) {
-        return;
-      }
-
-      publishGamepadState();
-      animationFrameId = window.requestAnimationFrame(schedulePoll);
-    };
-
-    const onGamepadConnected = (): void => {
-      publishGamepadState();
-    };
-
-    const onGamepadDisconnected = (): void => {
-      publishGamepadState();
-    };
-
-    const onWindowBlur = (): void => {
-      setLifecycleActive(false);
-    };
-
-    const onWindowFocus = (): void => {
-      setLifecycleActive(document.visibilityState === "visible");
-    };
-
-    const onVisibilityChange = (): void => {
-      setLifecycleActive(document.visibilityState === "visible" && document.hasFocus());
-    };
-
-    if (lifecycleActive) {
-      publishGamepadState();
-    } else {
-      gamepadPublication.update(sampleViewerGamepadSnapshot(null));
-      gamepadPublication.suspend();
-    }
-    animationFrameId = window.requestAnimationFrame(schedulePoll);
-    window.addEventListener("gamepadconnected", onGamepadConnected);
-    window.addEventListener("gamepaddisconnected", onGamepadDisconnected);
-    window.addEventListener("blur", onWindowBlur);
-    window.addEventListener("focus", onWindowFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    gamepadLifecycle.start();
 
     return () => {
-      disposed = true;
-      window.cancelAnimationFrame(animationFrameId);
-      gamepadPublication.dispose();
-      window.removeEventListener("gamepadconnected", onGamepadConnected);
-      window.removeEventListener("gamepaddisconnected", onGamepadDisconnected);
-      window.removeEventListener("blur", onWindowBlur);
-      window.removeEventListener("focus", onWindowFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      gamepadLifecycle.dispose();
       gamepadSender.dispose();
     };
   }, [endpointConfig.websocketUrl, state.connectionStatus]);

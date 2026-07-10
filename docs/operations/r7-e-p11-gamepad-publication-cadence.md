@@ -57,6 +57,10 @@ React effect ごとに gamepad sender と publication controller を1つずつ�
 
 timer test は injected deterministic timer を使用し、wall-clock sleep に依存しない。
 
+## Lifecycle integration evidence
+
+`apps/mujoco-viewer/tests/productViewerGamepadIntegration.test.ts` は、productionが利用する`gamepadLifecycle`結線に対してfake browserを注入する。windowの`blur`/`focus`、documentの`visibilitychange`と`hasFocus()`、animation-frame polling、`getGamepads()`のfresh sample、timerをdeterministicに制御し、active → inactive zero → polling抑制 → visibleだけでは待機 → focused resume → single heartbeat → dispose停止の状態遷移を検証する。
+
 ## Compatibility and scope
 
 - backend Python / liveness timeout: 変更なし
@@ -74,7 +78,7 @@ timer test は injected deterministic timer を使用し、wall-clock sleep に�
 - Python viewer input-source / runtime step-loop compatibility tests
 - `uv run pytest tests/architecture`
 - `uv run python -m compileall src tests scripts`
-- full `uv run pytest`（P15で明示された legacy `arm_communicator` collection error は別扱い）
+- canonical root `uv run pytest`（P15 merge後のpytest discoveryで全件passを要求）
 - `git diff --check`、UTF-8 without BOM、mojibake、PR metadata の確認
 
 browser manual operation、browser backend server、external runtime server は起動しない。
