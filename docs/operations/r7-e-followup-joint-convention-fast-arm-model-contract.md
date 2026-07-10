@@ -58,10 +58,10 @@ and robot output paths are unchanged.
   - Program / Replay endpoint diagnostic logging completed.
 - `#326 / PR #331`
   - runtime FK vs MuJoCo `tip` site consistency diagnostic completed.
-  - Current result: FK / site mismatch remains.
+  - Historical pre-P5 result: FK / site mismatch was exposed and remained unresolved at that point.
   - Diagnostic narrowing now records solver-local FK, qpos-adapted solver input, world-transformed FK, MuJoCo `tip` site, and residual, with reason `remaining_model_axis_or_link_contract_mismatch`.
-  - R7-E follow-up P5 diagnostic narrowing reduces the maximum fixed-fixture residual from `1.7507877360829562` m to `0.3450012998489505` m, but this is still not a pass-level repair.
-  - The remaining blocker is narrower: after solver qpos adaptation and `base_link` world transform, residuals still point to model axis / link / physical FK contract mismatch.
+  - Those residuals describe the pre-P5 diagnostic-narrowing history and are not the current physical FK/site status.
+  - P5 / PR #337 repaired the model-aligned physical FK and MuJoCo `tip` site contract; local endpoint motion, weak world-X behavior, and mapping evaluation remain separate follow-up concerns.
 - `#327 / PR #332`
   - target -> IK output qpos -> runtime FK endpoint sanity completed.
   - Current result: IK / FK self-consistency passes under solver local transform.
@@ -173,11 +173,10 @@ target endpoint -> IK output qpos -> runtime FK endpoint
 - Diagnostic logging path
 - FK / site mismatch visibility
 - IK / FK self-consistency visibility
+- Physical model-aligned FK / MuJoCo `tip` site consistency (P5 / PR #337)
 
 ### Not fixed
 
-- FK / site mismatch
-- MuJoCo `tip` site alignment
 - model joint axis / link length / offset mismatch
 - viewer / backend separation
 - actual contact task behavior

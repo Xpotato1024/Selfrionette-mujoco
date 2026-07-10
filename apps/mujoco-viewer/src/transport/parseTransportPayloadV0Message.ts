@@ -1,5 +1,6 @@
 import type {
   TransportEndpointEvaluationPayload,
+  TransportEndpointMetadata,
   TransportPayloadV0,
 } from "../types/transportPayload.js";
 
@@ -141,7 +142,11 @@ export function parseTransportPayloadV0Message(message: string): TransportPayloa
   const qvel = ensureArrayField(parsed, "qvel");
   const bodies = ensureArrayField(parsed, "bodies");
   const sites = ensureArrayField(parsed, "sites");
-  const metadata = isRecord(parsed.metadata) ? parsed.metadata : {};
+  // Keep payload-v0's open metadata behavior. Known endpoint fields are typed
+  // at the boundary; unknown or partial legacy fields remain non-fatal.
+  const metadata = isRecord(parsed.metadata)
+    ? (parsed.metadata as TransportEndpointMetadata)
+    : {};
   const targetPosition = parsed.target_position_m === undefined ? null : parsed.target_position_m;
   const endpointEvaluation = parseEndpointEvaluation(parsed.endpoint_evaluation);
 

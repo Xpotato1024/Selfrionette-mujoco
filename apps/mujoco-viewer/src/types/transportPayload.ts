@@ -1,6 +1,55 @@
 export type Vector3 = [number, number, number];
 export type QuaternionWXYZ = [number, number, number, number];
 
+export type EndpointControlFrame = "world" | "tool";
+export type ResolvedEndpointFrame = "mujoco_world";
+export type EndpointVelocityFrame = "mujoco_world";
+export type ControlFrameResolutionStatus =
+  | "world_passthrough"
+  | "tool_orientation_resolved"
+  | "tool_orientation_unavailable"
+  | "invalid_control_frame_defaulted";
+export type MotionStatus = "accepted" | "scaled" | "held";
+export type EndpointProgressStatus =
+  | "not_requested"
+  | "measurement_unavailable"
+  | "insufficient_progress"
+  | "misaligned"
+  | "progressing";
+
+/** Known endpoint metadata carried inside the open payload-v0 metadata map. */
+export interface TransportEndpointMetadata {
+  desired_endpoint_m?: Vector3;
+  current_tip_position_m?: Vector3;
+  ik_target_endpoint_m?: Vector3;
+  target_position_m?: Vector3;
+  target_rejected?: boolean;
+  target_rejection_reason?: string | null;
+  control_frame?: EndpointControlFrame;
+  requested_control_frame?: EndpointControlFrame;
+  resolved_control_frame?: ResolvedEndpointFrame | null;
+  control_frame_resolution_status?: ControlFrameResolutionStatus;
+  control_frame_resolution_reason?: string | null;
+  local_endpoint_velocity_m_s?: Vector3;
+  resolved_world_endpoint_velocity_m_s?: Vector3;
+  endpoint_velocity_m_s?: Vector3;
+  endpoint_velocity_frame?: EndpointVelocityFrame;
+  endpoint_delta_m?: Vector3;
+  endpoint_delta_requested_m?: Vector3;
+  endpoint_delta_achieved_m?: Vector3;
+  actual_tip_delta_m?: Vector3;
+  motion_status?: MotionStatus;
+  motion_rejection_reason?: string | null;
+  endpoint_progress_status?: EndpointProgressStatus;
+  endpoint_progress_signed_m?: number | null;
+  endpoint_progress_ratio?: number | null;
+  endpoint_progress_direction_cosine?: number | null;
+  endpoint_progress_requested_norm_m?: number | null;
+  endpoint_progress_measured_norm_m?: number | null;
+  endpoint_progress_measurement_available?: boolean;
+  [key: string]: unknown;
+}
+
 export interface TransportEndpointEvaluationPayload {
   desired_endpoint_m?: number[];
   qpos_like_joint_angles_rad?: number[];
@@ -41,7 +90,7 @@ export interface TransportPayloadV0 {
   sites: TransportSitePayload[];
   target_position_m: Vector3 | null;
   endpoint_evaluation?: TransportEndpointEvaluationPayload | null;
-  metadata: Record<string, unknown>;
+  metadata: TransportEndpointMetadata;
 }
 
 export type PayloadMarkerKind = "body" | "site" | "target" | "error_vector";
