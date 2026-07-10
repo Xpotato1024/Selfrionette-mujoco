@@ -208,6 +208,43 @@ def test_runtime_step_loop_holds_when_tool_orientation_is_unavailable(monkeypatc
     assert record.state.metadata["actual_tip_delta_m"] == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
 
+def test_runtime_step_loop_converts_scalar_tool_orientation_to_safe_hold(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = _ClockSequence((0.0, 0.0))
+    viewer_input_source, plan = _build_plan(clock)
+    initial_state = plan.pipeline.simulator.snapshot()
+
+    monkeypatch.setattr(input_step_loop, "_extract_tip_site_orientation_wxyz_from_state", lambda state: 7.0)
+    ingest_viewer_control_message(
+        viewer_input_source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=5.0,
+            source_kind="keyboard",
+            keyboard=ViewerControlKeyboardMessage(
+                active_key_codes=("KeyD",),
+                key_state={"KeyD": True},
+                focus_state="focused",
+                zero_state=False,
+            ),
+            metadata={"control_frame": "tool"},
+        ),
+    )
+    record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))[0]
+
+    assert record.motion_command.metadata["control_frame_resolution_status"] == "tool_orientation_unavailable"
+    assert record.motion_command.metadata["control_frame_resolution_reason"] == "tip_orientation_shape_invalid"
+    assert record.motion_command.metadata["motion_status"] == "held"
+    assert record.motion_command.metadata["candidate_qpos_rad"] == pytest.approx(initial_state.qpos, abs=1e-12)
+    assert "resolved_world_endpoint_velocity_m_s" not in record.motion_command.metadata
+    assert "endpoint_velocity_m_s" not in record.motion_command.metadata
+    assert "endpoint_velocity_frame" not in record.motion_command.metadata
+    assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
+    assert record.state.metadata["motion_status"] == "held"
+    assert "resolved_world_endpoint_velocity_m_s" not in record.state.metadata
+    assert "endpoint_velocity_m_s" not in record.state.metadata
+    assert "endpoint_velocity_frame" not in record.state.metadata
+
+
 def test_runtime_step_loop_stops_after_zero_state_update() -> None:
     clock = _ClockSequence((0.0, 0.0, 0.01, 0.02))
     viewer_input_source, plan = _build_plan(clock)

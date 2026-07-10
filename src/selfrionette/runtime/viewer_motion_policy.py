@@ -140,6 +140,12 @@ def build_viewer_local_motion_metadata(
     elif endpoint_velocity_m_s is not None:
         local_endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
 
+    if control_frame == "tool":
+        # A copied world-resolved value is not authoritative for a new tool
+        # resolution. Recompute it only after validating the current
+        # orientation.
+        resolved_world_endpoint_velocity_m_s = None
+
     if resolved_world_endpoint_velocity_m_s is not None:
         resolved_world_endpoint_velocity_m_s = _coerce_vector3(
             "resolved_world_endpoint_velocity_m_s",
@@ -156,7 +162,7 @@ def build_viewer_local_motion_metadata(
                 )
                 control_frame_resolution_status = CONTROL_FRAME_RESOLUTION_TOOL_RESOLVED
                 control_frame_resolution_reason = None
-            except (TypeError, ValueError, OverflowError) as exc:
+            except Exception as exc:
                 control_frame_resolution_status = CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE
                 if current_tip_orientation_wxyz is None:
                     control_frame_resolution_reason = "tip_orientation_missing"
@@ -182,6 +188,16 @@ def build_viewer_local_motion_metadata(
     if control_frame == "tool" and control_frame_resolution_status == CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE:
         resolved_world_endpoint_velocity_m_s = None
         endpoint_velocity_m_s = None
+        for stale_key in (
+            "resolved_world_endpoint_velocity_m_s",
+            "endpoint_velocity_m_s",
+            "endpoint_velocity_frame",
+            "endpoint_delta_m",
+            "endpoint_delta_requested_m",
+            "endpoint_delta_achieved_m",
+            "current_tip_orientation_wxyz",
+        ):
+            intent_metadata.pop(stale_key, None)
 
     if resolved_world_endpoint_velocity_m_s is None and endpoint_velocity_m_s is not None:
         resolved_world_endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
@@ -240,7 +256,12 @@ def build_viewer_local_motion_metadata(
         intent_metadata["endpoint_velocity_frame"] = "mujoco_world"
     if endpoint_delta_m is not None:
         intent_metadata["endpoint_delta_m"] = endpoint_delta_m
-    if current_tip_orientation_wxyz is not None:
+    if (
+        current_tip_orientation_wxyz is not None
+        and control_frame_resolution_status != CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE
+        and isinstance(current_tip_orientation_wxyz, Sequence)
+        and not isinstance(current_tip_orientation_wxyz, (str, bytes))
+    ):
         intent_metadata["current_tip_orientation_wxyz"] = tuple(current_tip_orientation_wxyz)
     if control_frame_resolution_reason is not None:
         intent_metadata["control_frame_resolution_reason"] = control_frame_resolution_reason

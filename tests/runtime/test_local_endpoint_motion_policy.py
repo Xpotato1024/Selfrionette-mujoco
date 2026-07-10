@@ -226,10 +226,14 @@ def test_viewer_local_motion_metadata_rotates_tool_frame_velocity() -> None:
         ((1.0, 2.0, 3.0), "tip_orientation_shape_invalid"),
         ((float("nan"), 0.0, 0.0, 1.0), "tip_orientation_non_finite"),
         ((0.0, 0.0, 0.0, 0.0), "tip_orientation_zero_norm"),
+        (7.0, "tip_orientation_shape_invalid"),
+        ("invalid", "tip_orientation_shape_invalid"),
+        (b"invalid", "tip_orientation_shape_invalid"),
+        (object(), "tip_orientation_shape_invalid"),
     ],
 )
 def test_viewer_local_motion_metadata_holds_tool_resolution_failure(
-    orientation: tuple[float, ...] | None,
+    orientation: object,
     reason: str,
 ) -> None:
     metadata = build_viewer_local_motion_metadata(
@@ -238,6 +242,10 @@ def test_viewer_local_motion_metadata_holds_tool_resolution_failure(
             "local_endpoint_velocity_m_s": (0.1, 0.0, 0.0),
             "control_frame": "tool",
             "current_tip_orientation_wxyz": orientation,
+            "endpoint_velocity_m_s": (0.2, 0.0, 0.0),
+            "resolved_world_endpoint_velocity_m_s": (0.2, 0.0, 0.0),
+            "endpoint_velocity_frame": "mujoco_world",
+            "endpoint_delta_m": (0.003, 0.0, 0.0),
         },
         dt_s=1.0 / 60.0,
     )
@@ -249,6 +257,8 @@ def test_viewer_local_motion_metadata_holds_tool_resolution_failure(
     assert "resolved_world_endpoint_velocity_m_s" not in metadata
     assert "endpoint_velocity_m_s" not in metadata
     assert "endpoint_delta_m" not in metadata
+    assert "endpoint_velocity_frame" not in metadata
+    assert "current_tip_orientation_wxyz" not in metadata
 
     generator = LocalEndpointMotionGenerator(
         endpoint_kinematics=_RecordingEndpointKinematics(),
