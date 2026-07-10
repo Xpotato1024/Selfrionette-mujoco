@@ -13,132 +13,68 @@ related:
 
 ## Status
 
-Issue #348 の draft implementation である。active non-zero gamepad held state の
-publication cadence を backend liveness contract に合わせる。Ready、merge、Issue close は
-未承認である。
+Issue #348 に対する draft implementation である。active な gamepad held state の publication cadence を backend liveness contract に合わせる。Ready、merge、Issue close は未承認である。
 
-## Numbering / SoT
+## Publication contract
 
-- Numbering SoT: #293
-- Parent: #324
-- Round: R7-E follow-up Batch 1
-- Slot: P11
-- Issue: #348
-- P8 evidence: #343 / PR #344
-- P16 handoff: #353
-
-## Problem
-
-browser は animation frame ごとに gamepad snapshot を取得していたが、値が変化しない
-snapshot の publication を抑止していた。一方、backend の
-`DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS` は `250 ms` である。そのため、analog input を
-保持していても最後の message から `250 ms` を超えると stale / hold になり得た。
-
-## Frontend Publication Contract
-
-- 初回 snapshot と変更 snapshot は直ちに publish する。
-- active non-zero held state は値が変化しなくても heartbeat で publish する。
-- zero / release / disconnect transition は直ちに publish する。
+- 初回 active sample と active state の変化は即時 publish する。
+- unchanged active held state は `100 ms` cadence で publish する。
+- zero、release、disconnect は即時 publish する。
 - unchanged zero state は継続 publish しない。
-- publication ごとに既存 sender が sequence を増加し、publication 時刻を timestamp に使う。
-- gamepad mapping、deadzone、gain、control frame、message shape は変更しない。
+- 実際の publication ごとに既存 sender の sequence を更新し、publication 時刻を timestamp に使う。
+- heartbeat は active held state だけが所有し、同時に1本だけ存在する。
 
-## Backend Liveness Contract
+backend の liveness timeout `250 ms`、gamepad mapping、deadzone `0.1`、gain、axes/buttons、control frame、wire message shape は変更しない。heartbeat interval `100 ms` は timeout の半分 `125 ms` 以下である。
 
-backend liveness threshold は `250 ms` のまま変更しない。frontend の heartbeat interval は
-threshold の半分以下とし、active held message が値の不変だけを理由に stale にならない
-ようにする。backend Python、runtime safety、hold behavior は本変更の対象外である。
+## Inactive lifecycle safety
 
-## Heartbeat Interval
+gamepad の animation-frame polling は viewer の lifecycle とは独立して継続し得るため、publication controller に inactive state を持たせる。
 
-heartbeat interval は `100 ms` とする。`250 ms / 2 = 125 ms` 以下であり、通常の timer
-dispatch jitter に対する余裕を持たせる。fixture の exact decimal へ合わせた値ではない。
-browser が OS や page lifecycle により timer を停止または大幅に throttle する場合まで
-liveness を保証するものではない。
+- `blur` または `document.visibilityState !== "visible"` への遷移時は zero snapshot を即時 publish し、heartbeat を停止する。
+- inactive 中の polling、`gamepadconnected`、`gamepaddisconnected`、その他の active sample は publication controller が無視する。
+- visible になっただけでは再開しない。`document.visibilityState === "visible"` かつ `window` が focused の場合だけ resume する。
+- resume 時は最新の `navigator.getGamepads()` を fresh sample として評価する。inactive 前に cached していた active snapshotをそのまま再送しない。
+- resume 後の heartbeat は既存 controller が1本だけ再所有する。
+- dispose 後は polling callback、publication、heartbeat のいずれも再開しない。
 
-## Change / Hold / Release / Disconnect Behavior
+これにより、blur/hidden 時に一度 zero を送っても、継続中の polling が active state や heartbeat を復活させることはない。
 
-| State | Publication |
-|---|---|
-| first active sample | immediate |
-| changed active sample | immediate; heartbeat timer を再開 |
-| unchanged active held sample | `100 ms` heartbeat |
-| zero / release transition | immediate; heartbeat 停止 |
-| unchanged zero state | suppressed |
-| disconnect transition | immediate zero snapshot; heartbeat 停止 |
+## Socket lifecycle
 
-release と disconnect は heartbeat を待たない。active held heartbeat は input を再解釈せず、
-最新の normalized snapshot を同じ wire shape で再送する。
+React effect ごとに gamepad sender と publication controller を1つずつ生成する。effect cleanup では animation frame と publication controller の heartbeat を cancel した後、sender を dispose する。reconnect や unmount で旧 lifecycle が残らず、heartbeat loop が重複しない。socket unavailable や send failure は viewer を crash させない。
 
-## Socket Lifecycle
+## Test matrix
 
-React effect ごとに既存 gamepad sender を一つだけ生成し、publication controller も一つだけ
-生成する。controller は active state に対して timeout を一つだけ所有する。変更時は既存
-timeout を cancel して再設定し、dispose / unmount では timeout と animation frame を
-cancel した後に sender を dispose する。connection state の再接続で旧 effect が cleanup
-されるため、heartbeat loop は重複しない。backend が unavailable でも sender は例外を
-viewer へ伝播しない。
+- 初回、変更、unchanged held の immediate/heartbeat publication
+- heartbeat publication ごとの sequence/timestamp 更新
+- zero/release/disconnect の immediate publication と heartbeat 停止
+- unchanged zero の抑制
+- inactive 中の active polling sample の publication 抑制
+- visible だけでは再開せず、visible+focused 復帰後の fresh sample だけで再開
+- resume 後の heartbeat 1本所有
+- dispose 後の publication/heartbeat 復活防止
+- sender の schema、mapping、backend unavailable の既存回帰
 
-## Compatibility
+timer test は injected deterministic timer を使用し、wall-clock sleep に依存しない。
 
-- source kind: unchanged
-- message shape: unchanged
-- axes / buttons: unchanged
-- deadzone: `0.1` unchanged
-- gain / local endpoint speed: unchanged
-- control frame: `world` unchanged
-- keyboard path: unchanged
-- backend threshold: `250 ms` unchanged
-- transport protocol: unchanged
-- dependency: added none
+## Compatibility and scope
 
-## Test Matrix
-
-- first / changed active sample の即時 publication
-- unchanged active state の `100 ms` heartbeat
-- heartbeat ごとの sequence 増加と timestamp 更新
-- zero / release / disconnect の即時 publication と timer 停止
-- unchanged zero suppression
-- dispose / reconnect 時の単一 timer ownership
-- backend unavailable 時の no-crash
-- existing mapping / schema fixture の維持
-
-timer test は injected deterministic timer を使い、wall-clock sleep や browser manual operation
-に依存しない。
-
-## Limitations
-
-background page や OS が JavaScript timer を停止する状態は browser lifecycle の外部条件で
-あり、本契約の `100 ms` cadence では保証しない。live browser / physical gamepad smoke は
-実施していない。backend timeout の変更や general scheduling framework は導入しない。
-
-## Handoff to P16
-
-P16 / #353 は keyboard、gamepad、Selfrionette の evaluation-ready input API を扱う。本変更は
-gamepad held-state liveness のみを固定し、mapping、normalization、deadzone、gain、frame の
-統合設計を先取りしない。
+- backend Python / liveness timeout: 変更なし
+- keyboard path: 変更なし
+- transport schema / WebSocket message shape: 変更なし
+- dependencies、package lock、CI: 変更なし
+- runtime composition、MuJoCo、IK/FK、Three.js rendering: 変更なし
+- serial、OSC、robot output、hardware validation: 実施しない
 
 ## Validation
 
-- viewer typecheck / build / tests
-- viewer input-source と runtime step-loop の Python compatibility tests
-- architecture tests
-- Python compileall
-- full pytest（P15前は既知の legacy collection failure を別記）
-- diff / UTF-8 without BOM / mojibake check
+- viewer `npm run typecheck`
+- viewer `npm run build`
+- viewer `npm test`
+- Python viewer input-source / runtime step-loop compatibility tests
+- `uv run pytest tests/architecture`
+- `uv run python -m compileall src tests scripts`
+- full `uv run pytest`（P15で明示された legacy `arm_communicator` collection error は別扱い）
+- `git diff --check`、UTF-8 without BOM、mojibake、PR metadata の確認
 
-browser backend server と external runtime server は起動しない。browser manual operation は
-validation pass として扱わない。
-
-## Hardware / External Effects
-
-- serial port opened: no
-- Arduino upload: no
-- OSC sent: no
-- robot output: no
-- hardware validation: not run
-- Selfrionette hardware accessed: no
-- runtime external network side effect: no
-- browser backend server launched: no
-
-GitHub Issue / PR operations のみ、明示された範囲で実施する。
+browser manual operation、browser backend server、external runtime server は起動しない。

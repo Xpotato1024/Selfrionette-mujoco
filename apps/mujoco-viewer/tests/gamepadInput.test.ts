@@ -360,6 +360,53 @@ function testViewerGamepadPublicationControllerPublishesReleaseAndDisconnectWith
   assert.equal(timer.pendingCount, 0, "disconnect must stop heartbeat");
 }
 
+function testViewerGamepadPublicationControllerSuspendsPollingUpdatesUntilFocusedResume(): void {
+  const timer = new FakeTimer();
+  const published: ReturnType<typeof activeSnapshot>[] = [];
+  const controller = createViewerGamepadPublicationController({
+    publish(snapshot) {
+      published.push(snapshot);
+    },
+    setTimeoutFn: timer.setTimeoutFn,
+    clearTimeoutFn: timer.clearTimeoutFn,
+  });
+
+  controller.update(activeSnapshot());
+  controller.update(zeroSnapshot());
+  controller.suspend();
+  const countAtSuspend = published.length;
+
+  controller.update(activeSnapshot());
+  assert.equal(published.length, countAtSuspend, "inactive polling must not publish an active sample");
+  assert.equal(timer.pendingCount, 0, "inactive lifecycle must stop the heartbeat");
+
+  controller.resume();
+  controller.update(activeSnapshot());
+  assert.equal(published.length, countAtSuspend + 1, "resume must publish only the fresh active sample");
+  assert.equal(timer.pendingCount, 1, "resume must own exactly one heartbeat");
+  controller.dispose();
+}
+
+function testViewerGamepadPublicationControllerDoesNotReviveAfterDispose(): void {
+  const timer = new FakeTimer();
+  const published: ReturnType<typeof activeSnapshot>[] = [];
+  const controller = createViewerGamepadPublicationController({
+    publish(snapshot) {
+      published.push(snapshot);
+    },
+    setTimeoutFn: timer.setTimeoutFn,
+    clearTimeoutFn: timer.clearTimeoutFn,
+  });
+
+  controller.update(activeSnapshot());
+  controller.suspend();
+  controller.dispose();
+  controller.resume();
+  controller.update(activeSnapshot());
+  assert.equal(published.length, 1, "dispose must prevent publication from resuming");
+  assert.equal(timer.pendingCount, 0, "dispose must prevent heartbeat revival");
+}
+
 function testViewerGamepadPublicationControllerDisposeAndRecreateAvoidDuplicateHeartbeats(): void {
   const timer = new FakeTimer();
   const published: ReturnType<typeof activeSnapshot>[] = [];
@@ -422,6 +469,8 @@ testViewerGamepadControlSenderQueuesUntilOpen();
 testViewerGamepadControlSenderHandlesMissingBackendGracefully();
 testViewerGamepadPublicationControllerPublishesChangesAndHeldHeartbeat();
 testViewerGamepadPublicationControllerPublishesReleaseAndDisconnectWithoutIdleHeartbeat();
+testViewerGamepadPublicationControllerSuspendsPollingUpdatesUntilFocusedResume();
+testViewerGamepadPublicationControllerDoesNotReviveAfterDispose();
 testViewerGamepadPublicationControllerDisposeAndRecreateAvoidDuplicateHeartbeats();
 testHeartbeatPublicationAdvancesSequenceAndTimestamp();
 

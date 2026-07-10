@@ -275,6 +275,7 @@ export function ProductViewerApp() {
       },
     });
     let disposed = false;
+    let lifecycleActive = document.visibilityState === "visible" && document.hasFocus();
     let animationFrameId = 0;
 
     type BrowserGamepadLike = {
@@ -296,8 +297,28 @@ export function ProductViewerApp() {
     const publishGamepadState = (
       gamepads: ArrayLike<BrowserGamepadLike | null | undefined> | null = getGamepads(),
     ): void => {
+      if (!lifecycleActive) {
+        return;
+      }
+
       const snapshot = sampleViewerGamepadSnapshot(gamepads, { deadzone: 0.1 });
       gamepadPublication.update(snapshot);
+    };
+
+    const setLifecycleActive = (nextActive: boolean): void => {
+      if (disposed || nextActive === lifecycleActive) {
+        return;
+      }
+
+      lifecycleActive = nextActive;
+      if (!nextActive) {
+        gamepadPublication.update(sampleViewerGamepadSnapshot(null));
+        gamepadPublication.suspend();
+        return;
+      }
+
+      gamepadPublication.resume();
+      publishGamepadState(getGamepads());
     };
 
     const schedulePoll = (): void => {
@@ -318,18 +339,23 @@ export function ProductViewerApp() {
     };
 
     const onWindowBlur = (): void => {
-      publishGamepadState(null);
+      setLifecycleActive(false);
     };
 
     const onWindowFocus = (): void => {
-      publishGamepadState();
+      setLifecycleActive(document.visibilityState === "visible");
     };
 
     const onVisibilityChange = (): void => {
-      publishGamepadState(document.visibilityState === "visible" ? getGamepads() : null);
+      setLifecycleActive(document.visibilityState === "visible" && document.hasFocus());
     };
 
-    publishGamepadState();
+    if (lifecycleActive) {
+      publishGamepadState();
+    } else {
+      gamepadPublication.update(sampleViewerGamepadSnapshot(null));
+      gamepadPublication.suspend();
+    }
     animationFrameId = window.requestAnimationFrame(schedulePoll);
     window.addEventListener("gamepadconnected", onGamepadConnected);
     window.addEventListener("gamepaddisconnected", onGamepadDisconnected);

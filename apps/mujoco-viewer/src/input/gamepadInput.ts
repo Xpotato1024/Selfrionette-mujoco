@@ -54,6 +54,8 @@ export interface ViewerGamepadPublicationControllerOptions {
 
 export interface ViewerGamepadPublicationController {
   update(snapshot: ViewerGamepadSnapshot): void;
+  suspend(): void;
+  resume(): void;
   dispose(): void;
 }
 
@@ -186,6 +188,7 @@ export function createViewerGamepadPublicationController(
   let latestSnapshot: ViewerGamepadSnapshot | null = null;
   let latestSignature: string | null = null;
   let heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let suspended = false;
   let disposed = false;
 
   const cancelHeartbeat = (): void => {
@@ -199,13 +202,13 @@ export function createViewerGamepadPublicationController(
 
   const scheduleHeartbeat = (): void => {
     cancelHeartbeat();
-    if (disposed || latestSnapshot === null || !isActiveGamepadSnapshot(latestSnapshot)) {
+    if (disposed || suspended || latestSnapshot === null || !isActiveGamepadSnapshot(latestSnapshot)) {
       return;
     }
 
     heartbeatTimeoutId = setTimeoutFn(() => {
       heartbeatTimeoutId = null;
-      if (disposed || latestSnapshot === null || !isActiveGamepadSnapshot(latestSnapshot)) {
+      if (disposed || suspended || latestSnapshot === null || !isActiveGamepadSnapshot(latestSnapshot)) {
         return;
       }
 
@@ -216,7 +219,7 @@ export function createViewerGamepadPublicationController(
 
   return {
     update(snapshot: ViewerGamepadSnapshot): void {
-      if (disposed) {
+      if (disposed || suspended) {
         return;
       }
 
@@ -230,8 +233,25 @@ export function createViewerGamepadPublicationController(
       options.publish(snapshot);
       scheduleHeartbeat();
     },
+    suspend(): void {
+      if (disposed || suspended) {
+        return;
+      }
+
+      suspended = true;
+      cancelHeartbeat();
+      latestSnapshot = null;
+    },
+    resume(): void {
+      if (disposed) {
+        return;
+      }
+
+      suspended = false;
+    },
     dispose(): void {
       disposed = true;
+      suspended = true;
       cancelHeartbeat();
       latestSnapshot = null;
     },
