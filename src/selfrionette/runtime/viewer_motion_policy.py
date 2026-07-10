@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from math import sqrt
+from math import isfinite, sqrt
 
 from selfrionette.kinematics.fast_arm_endpoint import FastArmMuJoCoModelForwardKinematicsSolver
 from selfrionette.motion import LocalEndpointMotionGenerator
@@ -13,6 +13,10 @@ DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD = 1e-4
 DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING = 1e-3
 DEFAULT_VIEWER_LOCAL_ENDPOINT_MODEL = "mujoco_model_aligned_tip_site"
 DEFAULT_VIEWER_LOCAL_ENDPOINT_CONTROL_FRAME = "world"
+CONTROL_FRAME_RESOLUTION_WORLD_PASSTHROUGH = "world_passthrough"
+CONTROL_FRAME_RESOLUTION_TOOL_RESOLVED = "tool_orientation_resolved"
+CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE = "tool_orientation_unavailable"
+CONTROL_FRAME_RESOLUTION_INVALID_DEFAULTED = "invalid_control_frame_defaulted"
 
 
 def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
@@ -45,10 +49,18 @@ def _rotate_vector_by_quaternion_wxyz(
     vector: tuple[float, float, float],
     quaternion_wxyz: Sequence[float],
 ) -> tuple[float, float, float]:
+    if not isinstance(quaternion_wxyz, Sequence) or isinstance(quaternion_wxyz, (str, bytes)):
+        raise ValueError("current_tip_orientation_wxyz must contain exactly four values")
     if len(quaternion_wxyz) != 4:
         raise ValueError("current_tip_orientation_wxyz must contain exactly four values")
 
     w, x, y, z = (float(component) for component in quaternion_wxyz)
+    if not all(isfinite(component) for component in (w, x, y, z)):
+        raise ValueError("current_tip_orientation_wxyz must contain only finite values")
+    quaternion_norm = sqrt(w * w + x * x + y * y + z * z)
+    if quaternion_norm == 0.0 or not isfinite(quaternion_norm):
+        raise ValueError("current_tip_orientation_wxyz must have a non-zero finite norm")
+    w, x, y, z = (component / quaternion_norm for component in (w, x, y, z))
     xx = x * x
     yy = y * y
     zz = z * z
@@ -103,7 +115,20 @@ def build_viewer_local_motion_metadata(
         intent_metadata.get("local_endpoint_max_delta_m", DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_DELTA_PER_TICK_M)
     )
     current_tip_orientation_wxyz = intent_metadata.get("current_tip_orientation_wxyz")
-    control_frame, normalized_from = _normalize_control_frame(intent_metadata.get("control_frame", DEFAULT_VIEWER_LOCAL_ENDPOINT_CONTROL_FRAME))
+    control_frame, normalized_from = _normalize_control_frame(
+        intent_metadata.get("control_frame", DEFAULT_VIEWER_LOCAL_ENDPOINT_CONTROL_FRAME)
+    )
+    requested_control_frame = control_frame
+    if normalized_from is None:
+        control_frame_resolution_status = (
+            CONTROL_FRAME_RESOLUTION_WORLD_PASSTHROUGH
+            if control_frame == "world"
+            else CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE
+        )
+        control_frame_resolution_reason = None if control_frame == "world" else "tip_orientation_missing"
+    else:
+        control_frame_resolution_status = CONTROL_FRAME_RESOLUTION_INVALID_DEFAULTED
+        control_frame_resolution_reason = "invalid_control_frame_defaulted_to_world"
 
     if axis_values is not None:
         axis_values = _coerce_vector3("axis_values", axis_values)
@@ -115,21 +140,64 @@ def build_viewer_local_motion_metadata(
     elif endpoint_velocity_m_s is not None:
         local_endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
 
+    if control_frame == "tool":
+        # A copied world-resolved value is not authoritative for a new tool
+        # resolution. Recompute it only after validating the current
+        # orientation.
+        resolved_world_endpoint_velocity_m_s = None
+
     if resolved_world_endpoint_velocity_m_s is not None:
         resolved_world_endpoint_velocity_m_s = _coerce_vector3(
             "resolved_world_endpoint_velocity_m_s",
             resolved_world_endpoint_velocity_m_s,
         )
     elif local_endpoint_velocity_m_s is not None:
-        if control_frame == "tool" and current_tip_orientation_wxyz is not None:
-            resolved_world_endpoint_velocity_m_s = _rotate_vector_by_quaternion_wxyz(
-                local_endpoint_velocity_m_s,
-                current_tip_orientation_wxyz,
-            )
+        if control_frame == "tool":
+            try:
+                if current_tip_orientation_wxyz is None:
+                    raise ValueError("tip_orientation_missing")
+                resolved_world_endpoint_velocity_m_s = _rotate_vector_by_quaternion_wxyz(
+                    local_endpoint_velocity_m_s,
+                    current_tip_orientation_wxyz,
+                )
+                control_frame_resolution_status = CONTROL_FRAME_RESOLUTION_TOOL_RESOLVED
+                control_frame_resolution_reason = None
+            except Exception as exc:
+                control_frame_resolution_status = CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE
+                if current_tip_orientation_wxyz is None:
+                    control_frame_resolution_reason = "tip_orientation_missing"
+                elif "four values" in str(exc):
+                    control_frame_resolution_reason = "tip_orientation_shape_invalid"
+                elif "non-zero" in str(exc):
+                    control_frame_resolution_reason = "tip_orientation_zero_norm"
+                elif "finite" in str(exc):
+                    control_frame_resolution_reason = "tip_orientation_non_finite"
+                else:
+                    control_frame_resolution_reason = "tip_orientation_invalid"
         else:
             resolved_world_endpoint_velocity_m_s = local_endpoint_velocity_m_s
     elif endpoint_velocity_m_s is not None:
-        resolved_world_endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
+        if control_frame == "tool":
+            resolved_world_endpoint_velocity_m_s = _rotate_vector_by_quaternion_wxyz(
+                _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s),
+                current_tip_orientation_wxyz,
+            )
+        else:
+            resolved_world_endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
+
+    if control_frame == "tool" and control_frame_resolution_status == CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE:
+        resolved_world_endpoint_velocity_m_s = None
+        endpoint_velocity_m_s = None
+        for stale_key in (
+            "resolved_world_endpoint_velocity_m_s",
+            "endpoint_velocity_m_s",
+            "endpoint_velocity_frame",
+            "endpoint_delta_m",
+            "endpoint_delta_requested_m",
+            "endpoint_delta_achieved_m",
+            "current_tip_orientation_wxyz",
+        ):
+            intent_metadata.pop(stale_key, None)
 
     if resolved_world_endpoint_velocity_m_s is None and endpoint_velocity_m_s is not None:
         resolved_world_endpoint_velocity_m_s = _coerce_vector3("endpoint_velocity_m_s", endpoint_velocity_m_s)
@@ -141,9 +209,6 @@ def build_viewer_local_motion_metadata(
 
     if resolved_world_endpoint_velocity_m_s is not None:
         endpoint_velocity_m_s = resolved_world_endpoint_velocity_m_s
-
-    if control_frame == "tool" and local_endpoint_velocity_m_s is not None and current_tip_orientation_wxyz is None:
-        resolved_world_endpoint_velocity_m_s = local_endpoint_velocity_m_s
 
     if normalized_from is not None:
         intent_metadata["control_frame_normalized_from"] = normalized_from
@@ -162,6 +227,18 @@ def build_viewer_local_motion_metadata(
             "input_continuity": intent_metadata.get("input_continuity", "continuous"),
             "endpoint_model": intent_metadata.get("endpoint_model", DEFAULT_VIEWER_LOCAL_ENDPOINT_MODEL),
             "control_frame": control_frame,
+            "requested_control_frame": requested_control_frame,
+            "resolved_control_frame": (
+                "mujoco_world"
+                if control_frame_resolution_status
+                in {
+                    CONTROL_FRAME_RESOLUTION_WORLD_PASSTHROUGH,
+                    CONTROL_FRAME_RESOLUTION_TOOL_RESOLVED,
+                    CONTROL_FRAME_RESOLUTION_INVALID_DEFAULTED,
+                }
+                else None
+            ),
+            "control_frame_resolution_status": control_frame_resolution_status,
             "dt_s": dt_s,
             "local_endpoint_speed_m_s": local_endpoint_speed_m_s,
             "local_endpoint_max_delta_m": local_endpoint_max_delta_m,
@@ -179,8 +256,15 @@ def build_viewer_local_motion_metadata(
         intent_metadata["endpoint_velocity_frame"] = "mujoco_world"
     if endpoint_delta_m is not None:
         intent_metadata["endpoint_delta_m"] = endpoint_delta_m
-    if current_tip_orientation_wxyz is not None:
+    if (
+        current_tip_orientation_wxyz is not None
+        and control_frame_resolution_status != CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE
+        and isinstance(current_tip_orientation_wxyz, Sequence)
+        and not isinstance(current_tip_orientation_wxyz, (str, bytes))
+    ):
         intent_metadata["current_tip_orientation_wxyz"] = tuple(current_tip_orientation_wxyz)
+    if control_frame_resolution_reason is not None:
+        intent_metadata["control_frame_resolution_reason"] = control_frame_resolution_reason
 
     return intent_metadata
 
@@ -193,6 +277,10 @@ __all__ = [
     "DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD",
     "DEFAULT_VIEWER_LOCAL_ENDPOINT_MODEL",
     "DEFAULT_VIEWER_LOCAL_ENDPOINT_SPEED_M_S",
+    "CONTROL_FRAME_RESOLUTION_INVALID_DEFAULTED",
+    "CONTROL_FRAME_RESOLUTION_TOOL_RESOLVED",
+    "CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE",
+    "CONTROL_FRAME_RESOLUTION_WORLD_PASSTHROUGH",
     "build_viewer_local_endpoint_motion_generator",
     "build_viewer_local_motion_metadata",
 ]

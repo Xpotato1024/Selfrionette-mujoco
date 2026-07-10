@@ -97,6 +97,9 @@ def test_local_endpoint_motion_generator_uses_injected_endpoint_kinematics() -> 
     assert command.metadata["endpoint_model"] == "recording_endpoint_model"
     assert command.metadata["local_motion_policy"] == "finite_difference_jacobian"
     assert command.metadata["control_frame"] == "world"
+    assert command.metadata["requested_control_frame"] == "world"
+    assert command.metadata["resolved_control_frame"] == "mujoco_world"
+    assert command.metadata["control_frame_resolution_status"] == "world_passthrough"
     assert command.metadata["local_endpoint_velocity_frame"] == "world"
     assert command.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx((0.1, 0.0, 0.0), abs=1e-12)
     assert command.metadata["endpoint_velocity_frame"] == "mujoco_world"
@@ -203,6 +206,9 @@ def test_viewer_local_motion_metadata_rotates_tool_frame_velocity() -> None:
 
     expected_world_velocity = _rotate_vector_by_quaternion_wxyz((0.1, 0.0, 0.0), quaternion_wxyz)
     assert metadata["control_frame"] == "tool"
+    assert metadata["requested_control_frame"] == "tool"
+    assert metadata["resolved_control_frame"] == "mujoco_world"
+    assert metadata["control_frame_resolution_status"] == "tool_orientation_resolved"
     assert metadata["local_endpoint_velocity_frame"] == "tool"
     assert metadata["local_endpoint_velocity_m_s"] == pytest.approx((0.1, 0.0, 0.0), abs=1e-12)
     assert metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx(expected_world_velocity, abs=1e-12)
@@ -211,6 +217,84 @@ def test_viewer_local_motion_metadata_rotates_tool_frame_velocity() -> None:
         tuple(component / 60.0 for component in expected_world_velocity),
         abs=1e-12,
     )
+
+
+@pytest.mark.parametrize(
+    ("orientation", "reason"),
+    [
+        (None, "tip_orientation_missing"),
+        ((1.0, 2.0, 3.0), "tip_orientation_shape_invalid"),
+        ((float("nan"), 0.0, 0.0, 1.0), "tip_orientation_non_finite"),
+        ((0.0, 0.0, 0.0, 0.0), "tip_orientation_zero_norm"),
+        (7.0, "tip_orientation_shape_invalid"),
+        ("invalid", "tip_orientation_shape_invalid"),
+        (b"invalid", "tip_orientation_shape_invalid"),
+        (object(), "tip_orientation_shape_invalid"),
+    ],
+)
+def test_viewer_local_motion_metadata_holds_tool_resolution_failure(
+    orientation: object,
+    reason: str,
+) -> None:
+    metadata = build_viewer_local_motion_metadata(
+        {
+            "axis_values": (1.0, 0.0, 0.0),
+            "local_endpoint_velocity_m_s": (0.1, 0.0, 0.0),
+            "control_frame": "tool",
+            "current_tip_orientation_wxyz": orientation,
+            "endpoint_velocity_m_s": (0.2, 0.0, 0.0),
+            "resolved_world_endpoint_velocity_m_s": (0.2, 0.0, 0.0),
+            "endpoint_velocity_frame": "mujoco_world",
+            "endpoint_delta_m": (0.003, 0.0, 0.0),
+        },
+        dt_s=1.0 / 60.0,
+    )
+
+    assert metadata["requested_control_frame"] == "tool"
+    assert metadata["resolved_control_frame"] is None
+    assert metadata["control_frame_resolution_status"] == "tool_orientation_unavailable"
+    assert metadata["control_frame_resolution_reason"] == reason
+    assert "resolved_world_endpoint_velocity_m_s" not in metadata
+    assert "endpoint_velocity_m_s" not in metadata
+    assert "endpoint_delta_m" not in metadata
+    assert "endpoint_velocity_frame" not in metadata
+    assert "current_tip_orientation_wxyz" not in metadata
+
+    generator = LocalEndpointMotionGenerator(
+        endpoint_kinematics=_RecordingEndpointKinematics(),
+        endpoint_model="recording_endpoint_model",
+    )
+    current_qpos = (0.0, -1.5707963267948966, 0.0, 0.0)
+    generator.set_current_qpos_rad(current_qpos)
+    command = generator.update(
+        InputIntent(
+            source="viewer_keyboard",
+            timestamp_s=1.0,
+            values=(1.0, 0.0, 0.0),
+            metadata=metadata,
+        ),
+        dt_s=1.0 / 60.0,
+    )
+
+    assert command.metadata["motion_status"] == "held"
+    assert command.metadata["motion_rejection_reason"] == reason
+    assert command.metadata["candidate_qpos_rad"] == current_qpos
+    assert command.metadata["resolved_control_frame"] is None
+
+
+def test_invalid_control_frame_defaults_to_world_explicitly() -> None:
+    metadata = build_viewer_local_motion_metadata(
+        {
+            "local_endpoint_velocity_m_s": (0.1, 0.0, 0.0),
+            "control_frame": "camera",
+        },
+        dt_s=1.0 / 60.0,
+    )
+
+    assert metadata["control_frame"] == "world"
+    assert metadata["requested_control_frame"] == "world"
+    assert metadata["resolved_control_frame"] == "mujoco_world"
+    assert metadata["control_frame_resolution_status"] == "invalid_control_frame_defaulted"
 
 
 def test_local_endpoint_motion_generator_scales_large_dt_boundary_motion() -> None:

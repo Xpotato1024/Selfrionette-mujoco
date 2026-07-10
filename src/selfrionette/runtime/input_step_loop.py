@@ -217,6 +217,16 @@ def _annotate_state(
         **intent.metadata,
         **motion_command.metadata,
     }
+    if metadata.get("control_frame_resolution_status") == "tool_orientation_unavailable":
+        for stale_key in (
+            "resolved_world_endpoint_velocity_m_s",
+            "endpoint_velocity_m_s",
+            "endpoint_velocity_frame",
+            "endpoint_delta_m",
+            "endpoint_delta_requested_m",
+            "endpoint_delta_achieved_m",
+        ):
+            metadata.pop(stale_key, None)
 
     if not should_publish_target:
         metadata.pop("desired_endpoint_m", None)
