@@ -15,7 +15,6 @@ from selfrionette.runtime.jacobian_mobility_diagnostics import run_fast_arm_jaco
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run deterministic offline fast_arm Jacobian mobility diagnostics.")
-    parser.add_argument("--model-path", type=Path, default=None)
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     parser.add_argument("--output", type=Path, default=None, help="explicitly write JSON to this path")
     return parser
@@ -24,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        result = run_fast_arm_jacobian_mobility_diagnostics(model_path=args.model_path)
+        result = run_fast_arm_jacobian_mobility_diagnostics()
         payload = result.to_json()
         if args.output is not None:
             args.output.write_text(payload + "\n", encoding="utf-8", newline="\n")
@@ -34,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wrote {args.output}")
         if not args.json:
             for pose in result.poses:
-                print(f"{pose.label}: rank={pose.finite_difference.rank} singular_values={pose.finite_difference.singular_values} row_norms={pose.finite_difference.row_norms}")
+                print(f"{pose.label}: numeric_rank={pose.finite_difference.numeric_rank} effective_rank={pose.finite_difference.effective_rank} singular_values={pose.finite_difference.singular_values} row_norms={pose.finite_difference.row_norms}")
         return 0
     except (OSError, ValueError, RuntimeError) as error:
         print(f"diagnostic failed: {error}", file=sys.stderr)

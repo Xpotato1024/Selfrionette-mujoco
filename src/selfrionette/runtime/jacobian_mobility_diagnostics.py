@@ -10,13 +10,12 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import asdict, dataclass
-from pathlib import Path
-from typing import Callable, Sequence
+from typing import Sequence
 
 import numpy as np
 
 from selfrionette.kinematics.fast_arm_endpoint import FastArmMuJoCoModelForwardKinematicsSolver
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.viewer_motion_policy import (
     DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING,
     DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD,
@@ -32,13 +31,11 @@ CONTROLLED_JOINT_NAMES = (
     "elbow_joint",
 )
 DEFAULT_DT_S = 1.0 / 60.0
-DEFAULT_RANK_TOLERANCE = 1e-9
+DEFAULT_ABSOLUTE_RANK_TOLERANCE = 1e-9
+DEFAULT_RELATIVE_RANK_TOLERANCE = 1e-4
 DEFAULT_DIRECTION_COSINE_TOLERANCE = 1e-12
 DEFAULT_NEARBY_PERTURBATION_RAD = 0.1
 DEFAULT_REQUESTED_DELTA_M = DEFAULT_VIEWER_LOCAL_ENDPOINT_SPEED_M_S * DEFAULT_DT_S
-DEFAULT_EPSILON_VALUES = (DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD / 10.0, DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD, DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD * 10.0)
-DEFAULT_DAMPING_VALUES = (DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING / 10.0, DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING, DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING * 10.0)
-DEFAULT_CAP_VALUES = (DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD / 2.0, DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD, DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD * 2.0)
 
 
 def _finite_vector(name: str, value: Sequence[float]) -> np.ndarray:
@@ -62,7 +59,11 @@ def _matrix(name: str, value: Sequence[Sequence[float]]) -> np.ndarray:
 @dataclass(frozen=True, slots=True)
 class JacobianMetrics:
     jacobian: tuple[tuple[float, ...], ...]
-    rank: int
+    numeric_rank: int
+    effective_rank: int
+    absolute_rank_tolerance: float
+    relative_rank_tolerance: float
+    effective_rank_tolerance: float
     singular_values: tuple[float, ...]
     minimum_singular_value: float
     condition_number: float
@@ -93,6 +94,11 @@ class DirectionDiagnostic:
 class PoseDiagnostic:
     label: str
     qpos_rad: tuple[float, ...]
+    perturbed_joint_name: str | None
+    requested_perturbation_rad: float | None
+    actual_perturbation_rad: float | None
+    actual_perturbation_vector_rad: tuple[float, ...]
+    clipped: bool
     tip_position_m: tuple[float, float, float]
     finite_difference: JacobianMetrics
     native: JacobianMetrics
@@ -108,15 +114,20 @@ class SensitivityPoint:
     qpos_delta_rad: tuple[float, ...]
     predicted_delta_m: tuple[float, float, float]
     measured_delta_m: tuple[float, float, float]
+    singular_values: tuple[float, ...]
+    numeric_rank: int
+    effective_rank: int
 
 
 @dataclass(frozen=True, slots=True)
 class JacobianMobilityDiagnostics:
     schema_version: str
+    model_identity: str
     endpoint_site: str
     coordinate_frame: str
     controlled_dof_mapping: tuple[dict[str, object], ...]
-    rank_tolerance: float
+    absolute_rank_tolerance: float
+    relative_rank_tolerance: float
     direction_cosine_tolerance: float
     dt_s: float
     requested_delta_m: float
@@ -144,21 +155,40 @@ class JacobianMobilityDiagnostics:
         return json.dumps(self.to_dict(), ensure_ascii=False, allow_nan=False, sort_keys=True)
 
 
-def summarize_jacobian(jacobian: Sequence[Sequence[float]], *, rank_tolerance: float = DEFAULT_RANK_TOLERANCE) -> JacobianMetrics:
+def summarize_jacobian(
+    jacobian: Sequence[Sequence[float]],
+    *,
+    absolute_rank_tolerance: float = DEFAULT_ABSOLUTE_RANK_TOLERANCE,
+    relative_rank_tolerance: float = DEFAULT_RELATIVE_RANK_TOLERANCE,
+    effective_rank_tolerance: float | None = None,
+) -> JacobianMetrics:
     matrix = _matrix("jacobian", jacobian)
     if matrix.shape[0] != 3:
         raise ValueError("jacobian must have shape 3xN")
-    if rank_tolerance <= 0.0 or not math.isfinite(rank_tolerance):
-        raise ValueError("rank_tolerance must be finite and positive")
+    if absolute_rank_tolerance <= 0.0 or not math.isfinite(absolute_rank_tolerance):
+        raise ValueError("absolute_rank_tolerance must be finite and positive")
+    if relative_rank_tolerance < 0.0 or not math.isfinite(relative_rank_tolerance):
+        raise ValueError("relative_rank_tolerance must be finite and non-negative")
     singular_values = np.linalg.svd(matrix, compute_uv=False)
-    rank = int(np.count_nonzero(singular_values > rank_tolerance))
+    largest = float(singular_values[0]) if singular_values.size else 0.0
+    effective_tolerance = max(absolute_rank_tolerance, relative_rank_tolerance * largest)
+    if effective_rank_tolerance is not None:
+        if effective_rank_tolerance <= 0.0 or not math.isfinite(effective_rank_tolerance):
+            raise ValueError("effective_rank_tolerance must be finite and positive")
+        effective_tolerance = max(effective_tolerance, effective_rank_tolerance)
+    numeric_rank = int(np.count_nonzero(singular_values > absolute_rank_tolerance))
+    effective_rank = int(np.count_nonzero(singular_values > effective_tolerance))
     minimum = float(singular_values[-1]) if singular_values.size else 0.0
-    condition = math.inf if minimum <= rank_tolerance else float(singular_values[0] / minimum)
+    condition = math.inf if minimum <= effective_tolerance else float(singular_values[0] / minimum)
     gram_determinant = float(np.linalg.det(matrix @ matrix.T))
-    manipulability = 0.0 if rank < 3 else math.sqrt(max(0.0, gram_determinant))
+    manipulability = 0.0 if effective_rank < 3 else math.sqrt(max(0.0, gram_determinant))
     return JacobianMetrics(
         jacobian=tuple(_tuple(row) for row in matrix),
-        rank=rank,
+        numeric_rank=numeric_rank,
+        effective_rank=effective_rank,
+        absolute_rank_tolerance=absolute_rank_tolerance,
+        relative_rank_tolerance=relative_rank_tolerance,
+        effective_rank_tolerance=effective_tolerance,
         singular_values=_tuple(singular_values),
         minimum_singular_value=minimum,
         condition_number=condition,
@@ -177,6 +207,8 @@ def build_delta_metrics(
     *,
     direction_cosine_tolerance: float = DEFAULT_DIRECTION_COSINE_TOLERANCE,
 ) -> DeltaMetrics:
+    if direction_cosine_tolerance <= 0.0 or not math.isfinite(direction_cosine_tolerance):
+        raise ValueError("direction_cosine_tolerance must be finite and positive")
     requested = _finite_vector("requested_delta_m", requested_delta_m)
     measured = _finite_vector("measured_delta_m", measured_delta_m)
     if requested.size != 3 or measured.size != 3:
@@ -251,21 +283,75 @@ def _tip(simulator: HeadlessMuJoCoSimulator, qpos: Sequence[float]) -> np.ndarra
     return _finite_vector("tip_position_m", simulator.data.site_xpos[site_id])
 
 
-def _pose_qpos(simulator: HeadlessMuJoCoSimulator) -> tuple[tuple[str, tuple[float, ...]], ...]:
-    initial = tuple(float(value) for value in simulator.data.qpos[:4])
-    poses: list[tuple[str, tuple[float, ...]]] = [("default_pose", initial)]
-    for index, joint_name in enumerate(CONTROLLED_JOINT_NAMES):
-        joint_id = int(simulator._import_mujoco().mj_name2id(simulator.model, simulator._import_mujoco().mjtObj.mjOBJ_JOINT, joint_name))
+def _pose_qpos(simulator: HeadlessMuJoCoSimulator) -> tuple[dict[str, object], ...]:
+    mujoco = simulator._import_mujoco()
+    initial = tuple(float(value) for value in simulator.data.qpos[: int(simulator.model.nq)])
+    poses: list[dict[str, object]] = [{
+        "label": "default_pose",
+        "qpos": initial,
+        "perturbed_joint_name": None,
+        "requested_perturbation_rad": None,
+        "actual_perturbation_rad": None,
+        "actual_perturbation_vector_rad": tuple(0.0 for _ in initial),
+        "clipped": False,
+    }]
+    seen = {initial}
+    for joint_name in CONTROLLED_JOINT_NAMES:
+        joint_id = int(mujoco.mj_name2id(simulator.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name))
+        if joint_id < 0:
+            raise ValueError(f"controlled joint is missing: {joint_name}")
+        qpos_address = int(simulator.model.jnt_qposadr[joint_id])
+        if qpos_address < 0 or qpos_address >= len(initial):
+            raise ValueError(f"controlled qpos address is outside diagnostic vector: {joint_name} -> {qpos_address}")
+        limited = bool(simulator.model.jnt_limited[joint_id])
         lower, upper = (float(value) for value in simulator.model.jnt_range[joint_id])
         for sign in (1.0, -1.0):
+            requested = sign * DEFAULT_NEARBY_PERTURBATION_RAD
             qpos = list(initial)
-            qpos[index] = min(upper, max(lower, qpos[index] + sign * DEFAULT_NEARBY_PERTURBATION_RAD))
-            poses.append((f"{joint_name}_{'positive' if sign > 0 else 'negative'}_nearby", tuple(qpos)))
+            proposed = qpos[qpos_address] + requested
+            clipped_value = min(upper, max(lower, proposed)) if limited else proposed
+            qpos[qpos_address] = clipped_value
+            actual = clipped_value - initial[qpos_address]
+            actual_vector = tuple(qpos[index] - initial[index] for index in range(len(initial)))
+            qpos_tuple = tuple(qpos)
+            if abs(actual) <= 1e-15:
+                raise ValueError(f"nearby pose is a no-op for {joint_name}")
+            if actual * sign <= 0.0:
+                raise ValueError(f"nearby pose has wrong perturbation sign for {joint_name}")
+            if qpos_tuple in seen:
+                raise ValueError(f"nearby pose duplicates an existing pose: {joint_name} {sign:+g}")
+            seen.add(qpos_tuple)
+            poses.append({
+                "label": f"{joint_name}_{'positive' if sign > 0 else 'negative'}_nearby",
+                "qpos": qpos_tuple,
+                "perturbed_joint_name": joint_name,
+                "requested_perturbation_rad": requested,
+                "actual_perturbation_rad": actual,
+                "actual_perturbation_vector_rad": actual_vector,
+                "clipped": limited and clipped_value != proposed,
+            })
+    # Reuse the existing small combined FK/site fixture as a representative pose.
+    combined_offset = (0.02, 0.01, 0.015, 0.005)
+    if len(initial) != len(combined_offset):
+        raise ValueError("canonical fast_arm qpos shape changed; representative fixture is invalid")
+    combined = tuple(initial[index] + combined_offset[index] for index in range(len(initial)))
+    if combined in seen:
+        raise ValueError("representative pose duplicates an existing pose")
+    poses.append({
+        "label": "representative_combined_fixture",
+        "qpos": combined,
+        "perturbed_joint_name": "combined_fixture",
+        "requested_perturbation_rad": None,
+        "actual_perturbation_rad": None,
+        "actual_perturbation_vector_rad": combined_offset,
+        "clipped": False,
+    })
+    if len({pose["qpos"] for pose in poses}) != len(poses):
+        raise ValueError("pose set contains duplicate qpos values")
     return tuple(poses)
 
 
-def _direction_results(simulator: HeadlessMuJoCoSimulator, qpos: tuple[float, ...], jacobian: np.ndarray, *, damping: float, cap: float, requested_delta_m: float, epsilon: float) -> tuple[DirectionDiagnostic, ...]:
-    endpoint = FastArmMuJoCoModelForwardKinematicsSolver()
+def _direction_results(simulator: HeadlessMuJoCoSimulator, qpos: tuple[float, ...], jacobian: np.ndarray, *, damping: float, cap: float, requested_delta_m: float) -> tuple[DirectionDiagnostic, ...]:
     result: list[DirectionDiagnostic] = []
     for label, axis in (("+X", (1.0, 0.0, 0.0)), ("-X", (-1.0, 0.0, 0.0)), ("+Y", (0.0, 1.0, 0.0)), ("-Y", (0.0, -1.0, 0.0)), ("+Z", (0.0, 0.0, 1.0)), ("-Z", (0.0, 0.0, -1.0))):
         requested = np.asarray(axis, dtype=np.float64) * requested_delta_m
@@ -273,30 +359,40 @@ def _direction_results(simulator: HeadlessMuJoCoSimulator, qpos: tuple[float, ..
         candidate = np.asarray(qpos, dtype=np.float64) + delta
         predicted = jacobian @ delta
         measured = _tip(simulator, candidate) - _tip(simulator, qpos)
-        # The endpoint solver is intentionally exercised so this diagnostic is tied to the existing FD contract.
-        _finite_difference_jacobian(tuple(qpos), endpoint_kinematics=endpoint, epsilon_rad=epsilon)
         result.append(DirectionDiagnostic(label=label, delta=build_delta_metrics(requested, unscaled, delta, predicted, measured)))
     return tuple(result)
 
 
-def run_fast_arm_jacobian_mobility_diagnostics(*, model_path: str | Path | None = None, dt_s: float = DEFAULT_DT_S, requested_delta_m: float = DEFAULT_REQUESTED_DELTA_M, epsilon_rad: float = DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD, damping: float = DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING, qpos_cap_rad: float = DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD) -> JacobianMobilityDiagnostics:
-    if dt_s <= 0.0 or requested_delta_m <= 0.0 or epsilon_rad <= 0.0:
-        raise ValueError("dt_s, requested_delta_m, and epsilon_rad must be positive")
-    simulator = HeadlessMuJoCoSimulator.from_model_path(model_path or default_fast_arm_scene_path())
+def _three_sensitivity_values(center: float, lower_factor: float, upper_factor: float) -> tuple[float, float, float]:
+    if center <= 0.0 or not math.isfinite(center):
+        raise ValueError("sensitivity center must be finite and positive")
+    return (center * lower_factor, center, center * upper_factor)
+
+
+def run_fast_arm_jacobian_mobility_diagnostics(*, dt_s: float = DEFAULT_DT_S, requested_delta_m: float | None = None, epsilon_rad: float = DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD, damping: float = DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING, qpos_cap_rad: float = DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD) -> JacobianMobilityDiagnostics:
+    if dt_s <= 0.0 or not math.isfinite(dt_s) or epsilon_rad <= 0.0 or damping < 0.0 or qpos_cap_rad <= 0.0:
+        raise ValueError("dt_s must be finite and positive; epsilon, damping, and cap must be valid")
+    resolved_requested_delta_m = DEFAULT_VIEWER_LOCAL_ENDPOINT_SPEED_M_S * dt_s if requested_delta_m is None else requested_delta_m
+    if resolved_requested_delta_m <= 0.0 or not math.isfinite(resolved_requested_delta_m):
+        raise ValueError("requested_delta_m must be finite and positive")
+    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
     endpoint = FastArmMuJoCoModelForwardKinematicsSolver()
     poses: list[PoseDiagnostic] = []
     mapping: tuple[dict[str, object], ...] | None = None
-    for label, qpos in _pose_qpos(simulator):
+    for pose_spec in _pose_qpos(simulator):
+        label = str(pose_spec["label"])
+        qpos = tuple(float(value) for value in pose_spec["qpos"])
         native, current_mapping = _native_jacobian(simulator, qpos)
         mapping = current_mapping if mapping is None else mapping
         fd = _finite_difference_jacobian(qpos, endpoint_kinematics=endpoint, epsilon_rad=epsilon_rad)
+        discrepancy = float(np.linalg.norm(fd - native))
+        effective_tolerance = max(DEFAULT_ABSOLUTE_RANK_TOLERANCE, DEFAULT_RELATIVE_RANK_TOLERANCE * float(np.linalg.svd(native, compute_uv=False)[0]), discrepancy)
         tip_position = _tip(simulator, qpos)
-        poses.append(PoseDiagnostic(label, qpos, _tuple(tip_position), summarize_jacobian(fd), summarize_jacobian(native), float(np.linalg.norm(fd - native)), _direction_results(simulator, qpos, fd, damping=damping, cap=qpos_cap_rad, requested_delta_m=requested_delta_m, epsilon=epsilon_rad)))
+        poses.append(PoseDiagnostic(label, qpos, pose_spec["perturbed_joint_name"], pose_spec["requested_perturbation_rad"], pose_spec["actual_perturbation_rad"], pose_spec["actual_perturbation_vector_rad"], pose_spec["clipped"], _tuple(tip_position), summarize_jacobian(fd, effective_rank_tolerance=effective_tolerance), summarize_jacobian(native, effective_rank_tolerance=effective_tolerance), discrepancy, _direction_results(simulator, qpos, fd, damping=damping, cap=qpos_cap_rad, requested_delta_m=resolved_requested_delta_m)))
     if mapping is None:
         raise ValueError("no diagnostic poses were generated")
     default_qpos = poses[0].qpos_rad
-    default_jacobian = np.asarray(poses[0].finite_difference.jacobian)
-    sensitivity_sets = (("epsilon", DEFAULT_EPSILON_VALUES), ("damping", DEFAULT_DAMPING_VALUES), ("qpos_cap", DEFAULT_CAP_VALUES))
+    sensitivity_sets = (("epsilon", _three_sensitivity_values(epsilon_rad, 0.1, 10.0)), ("damping", _three_sensitivity_values(damping, 0.1, 10.0)), ("qpos_cap", _three_sensitivity_values(qpos_cap_rad, 0.5, 2.0)))
     sensitivities: dict[str, tuple[SensitivityPoint, ...]] = {}
     for parameter, values in sensitivity_sets:
         points: list[SensitivityPoint] = []
@@ -304,13 +400,14 @@ def run_fast_arm_jacobian_mobility_diagnostics(*, model_path: str | Path | None 
             eps = value if parameter == "epsilon" else epsilon_rad
             damp = value if parameter == "damping" else damping
             cap = value if parameter == "qpos_cap" else qpos_cap_rad
-            requested = np.asarray((requested_delta_m, 0.0, 0.0), dtype=np.float64)
+            requested = np.asarray((resolved_requested_delta_m, 0.0, 0.0), dtype=np.float64)
             jacobian = _finite_difference_jacobian(default_qpos, endpoint_kinematics=endpoint, epsilon_rad=eps)
             unscaled, delta = _solve_delta(jacobian, requested, damp, cap)
             candidate = np.asarray(default_qpos) + delta
-            points.append(SensitivityPoint(parameter, float(value), _tuple(unscaled), _tuple(delta), _tuple(jacobian @ delta), _tuple(_tip(simulator, candidate) - _tip(simulator, default_qpos))))
+            metrics = summarize_jacobian(jacobian)
+            points.append(SensitivityPoint(parameter, float(value), _tuple(unscaled), _tuple(delta), _tuple(jacobian @ delta), _tuple(_tip(simulator, candidate) - _tip(simulator, default_qpos)), metrics.singular_values, metrics.numeric_rank, metrics.effective_rank))
         sensitivities[parameter] = tuple(points)
-    return JacobianMobilityDiagnostics("r7-e-p9-v1", "tip", "MuJoCo world / scene frame", mapping, DEFAULT_RANK_TOLERANCE, DEFAULT_DIRECTION_COSINE_TOLERANCE, dt_s, requested_delta_m, DEFAULT_EPSILON_VALUES, DEFAULT_DAMPING_VALUES, DEFAULT_CAP_VALUES, tuple(poses), sensitivities["epsilon"], sensitivities["damping"], sensitivities["qpos_cap"])
+    return JacobianMobilityDiagnostics("r7-e-p9-v2", "fast_arm_canonical", "tip", "MuJoCo world / scene frame", mapping, DEFAULT_ABSOLUTE_RANK_TOLERANCE, DEFAULT_RELATIVE_RANK_TOLERANCE, DEFAULT_DIRECTION_COSINE_TOLERANCE, dt_s, resolved_requested_delta_m, sensitivity_sets[0][1], sensitivity_sets[1][1], sensitivity_sets[2][1], tuple(poses), sensitivities["epsilon"], sensitivities["damping"], sensitivities["qpos_cap"])
 
 
 __all__ = ["JacobianMetrics", "DeltaMetrics", "DirectionDiagnostic", "PoseDiagnostic", "SensitivityPoint", "JacobianMobilityDiagnostics", "summarize_jacobian", "build_delta_metrics", "run_fast_arm_jacobian_mobility_diagnostics"]
