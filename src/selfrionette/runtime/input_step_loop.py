@@ -15,6 +15,7 @@ from selfrionette.mujoco_backend.endpoint_extraction import (
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
+from selfrionette.runtime.endpoint_progress import endpoint_progress_metadata
 from selfrionette.runtime.input_source_selection import RuntimeInputSourceSelection
 from selfrionette.runtime.input_source_state import (
     build_runtime_input_source_state_from_metadata,
@@ -224,6 +225,17 @@ def _annotate_state(
         metadata["endpoint_evaluation"] = None
     if actual_tip_delta_m is not None:
         metadata["actual_tip_delta_m"] = actual_tip_delta_m
+    if (
+        motion_command.metadata.get("local_motion_policy") == "finite_difference_jacobian"
+        and not target_rejected
+        and "endpoint_delta_requested_m" in motion_command.metadata
+    ):
+        metadata.update(
+            endpoint_progress_metadata(
+                motion_command.metadata["endpoint_delta_requested_m"],
+                actual_tip_delta_m,
+            )
+        )
 
     target_position_m = state.target_position_m
     resolved_desired_endpoint = None
