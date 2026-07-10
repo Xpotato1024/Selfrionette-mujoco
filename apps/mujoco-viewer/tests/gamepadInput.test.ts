@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import {
   buildViewerGamepadControlMessage,
+  createViewerGamepadPublicationController,
   createViewerGamepadControlSender,
+  DEFAULT_VIEWER_GAMEPAD_HEARTBEAT_INTERVAL_MS,
   normalizeViewerGamepadAxis,
   sampleViewerGamepadSnapshot,
   type ViewerGamepadControlSender,
@@ -70,6 +72,62 @@ class FakeWebSocket implements ViewerGamepadControlSocketLike {
       listener(new Event("open"));
     }
   }
+}
+
+class FakeTimer {
+  private nextId = 1;
+  private readonly callbacks = new Map<number, { callback: () => void; delayMs: number }>();
+
+  public readonly setTimeoutFn = (callback: () => void, delayMs: number): ReturnType<typeof setTimeout> => {
+    const id = this.nextId;
+    this.nextId += 1;
+    this.callbacks.set(id, { callback, delayMs });
+    return id as unknown as ReturnType<typeof setTimeout>;
+  };
+
+  public readonly clearTimeoutFn = (timeoutId: ReturnType<typeof setTimeout>): void => {
+    this.callbacks.delete(timeoutId as unknown as number);
+  };
+
+  get pendingCount(): number {
+    return this.callbacks.size;
+  }
+
+  get nextDelayMs(): number | null {
+    const entry = this.callbacks.values().next().value as { callback: () => void; delayMs: number } | undefined;
+    return entry?.delayMs ?? null;
+  }
+
+  runNext(): void {
+    const entry = this.callbacks.entries().next().value as [number, { callback: () => void; delayMs: number }] | undefined;
+    if (entry === undefined) {
+      throw new Error("expected a pending timer");
+    }
+
+    this.callbacks.delete(entry[0]);
+    entry[1].callback();
+  }
+}
+
+const ACTIVE_SNAPSHOT: ViewerGamepadLike = {
+  connected: true,
+  index: 0,
+  id: "Pad",
+  axes: [0.5],
+  buttons: [{ pressed: false, value: 0 }],
+};
+
+function activeSnapshot() {
+  return sampleViewerGamepadSnapshot([ACTIVE_SNAPSHOT]);
+}
+
+function zeroSnapshot() {
+  return sampleViewerGamepadSnapshot([
+    {
+      ...ACTIVE_SNAPSHOT,
+      axes: [0],
+    },
+  ]);
 }
 
 function testNormalizeViewerGamepadAxis(): void {
@@ -245,11 +303,126 @@ function testViewerGamepadControlSenderHandlesMissingBackendGracefully(): void {
   assert.deepEqual(sender.getLatestMessage()?.source_kind, "gamepad");
 }
 
+function testViewerGamepadPublicationControllerPublishesChangesAndHeldHeartbeat(): void {
+  const timer = new FakeTimer();
+  const published: ReturnType<typeof activeSnapshot>[] = [];
+  const controller = createViewerGamepadPublicationController({
+    publish(snapshot) {
+      published.push(snapshot);
+    },
+    setTimeoutFn: timer.setTimeoutFn,
+    clearTimeoutFn: timer.clearTimeoutFn,
+  });
+
+  const first = activeSnapshot();
+  controller.update(first);
+  assert.equal(published.length, 1, "first active sample must publish immediately");
+  assert.equal(timer.nextDelayMs, DEFAULT_VIEWER_GAMEPAD_HEARTBEAT_INTERVAL_MS);
+  assert.ok(DEFAULT_VIEWER_GAMEPAD_HEARTBEAT_INTERVAL_MS <= 125);
+
+  controller.update(first);
+  assert.equal(published.length, 1, "unchanged active sample must wait for heartbeat");
+  timer.runNext();
+  assert.equal(published.length, 2, "held active state must publish on heartbeat");
+  assert.equal(timer.nextDelayMs, DEFAULT_VIEWER_GAMEPAD_HEARTBEAT_INTERVAL_MS);
+
+  const changed = sampleViewerGamepadSnapshot([{ ...ACTIVE_SNAPSHOT, axes: [-0.5] }]);
+  controller.update(changed);
+  assert.equal(published.length, 3, "changed active sample must publish immediately");
+  assert.deepEqual(published.at(-1), changed);
+  assert.equal(timer.pendingCount, 1, "change must restart one heartbeat timer");
+}
+
+function testViewerGamepadPublicationControllerPublishesReleaseAndDisconnectWithoutIdleHeartbeat(): void {
+  const timer = new FakeTimer();
+  const published: ReturnType<typeof activeSnapshot>[] = [];
+  const controller = createViewerGamepadPublicationController({
+    publish(snapshot) {
+      published.push(snapshot);
+    },
+    setTimeoutFn: timer.setTimeoutFn,
+    clearTimeoutFn: timer.clearTimeoutFn,
+  });
+
+  controller.update(activeSnapshot());
+  controller.update(zeroSnapshot());
+  assert.equal(published.length, 2, "zero/release transition must publish immediately");
+  assert.equal(published.at(-1)?.zero_state, true);
+  assert.equal(timer.pendingCount, 0, "zero state must stop heartbeat");
+
+  controller.update(zeroSnapshot());
+  assert.equal(published.length, 2, "unchanged zero state must stay suppressed");
+
+  controller.update(activeSnapshot());
+  controller.update(sampleViewerGamepadSnapshot(null));
+  assert.equal(published.length, 4, "disconnect transition must publish immediately");
+  assert.equal(published.at(-1)?.connected, false);
+  assert.equal(timer.pendingCount, 0, "disconnect must stop heartbeat");
+}
+
+function testViewerGamepadPublicationControllerDisposeAndRecreateAvoidDuplicateHeartbeats(): void {
+  const timer = new FakeTimer();
+  const published: ReturnType<typeof activeSnapshot>[] = [];
+  const makeController = () =>
+    createViewerGamepadPublicationController({
+      publish(snapshot) {
+        published.push(snapshot);
+      },
+      setTimeoutFn: timer.setTimeoutFn,
+      clearTimeoutFn: timer.clearTimeoutFn,
+    });
+
+  const firstController = makeController();
+  firstController.update(activeSnapshot());
+  firstController.dispose();
+  assert.equal(timer.pendingCount, 0, "dispose must cancel active heartbeat");
+
+  const reconnectedController = makeController();
+  reconnectedController.update(activeSnapshot());
+  assert.equal(timer.pendingCount, 1, "reconnect must own exactly one heartbeat loop");
+  timer.runNext();
+  assert.equal(published.length, 3, "only the reconnected loop may heartbeat");
+  assert.equal(timer.pendingCount, 1);
+  reconnectedController.dispose();
+}
+
+function testHeartbeatPublicationAdvancesSequenceAndTimestamp(): void {
+  const timer = new FakeTimer();
+  const sender = createViewerGamepadControlSender({ url: null });
+  let timestampS = 1;
+  const messages: Array<{ sequence: number | undefined; timestampS: number }> = [];
+  const controller = createViewerGamepadPublicationController({
+    publish(snapshot) {
+      sender.publish(snapshot, timestampS);
+      const message = sender.getLatestMessage();
+      if (message === null) {
+        throw new Error("expected latest gamepad message");
+      }
+      messages.push({ sequence: message.sequence, timestampS: message.timestamp_s });
+      timestampS += 0.1;
+    },
+    setTimeoutFn: timer.setTimeoutFn,
+    clearTimeoutFn: timer.clearTimeoutFn,
+  });
+
+  controller.update(activeSnapshot());
+  timer.runNext();
+  assert.deepEqual(messages, [
+    { sequence: 0, timestampS: 1 },
+    { sequence: 1, timestampS: 1.1 },
+  ]);
+  controller.dispose();
+}
+
 testNormalizeViewerGamepadAxis();
 testSampleViewerGamepadSnapshotReturnsZeroSnapshotWhenNoPad();
 testSampleViewerGamepadSnapshotUsesFirstConnectedPad();
 testBuildViewerGamepadControlMessageBuildsSchemaPayload();
 testViewerGamepadControlSenderQueuesUntilOpen();
 testViewerGamepadControlSenderHandlesMissingBackendGracefully();
+testViewerGamepadPublicationControllerPublishesChangesAndHeldHeartbeat();
+testViewerGamepadPublicationControllerPublishesReleaseAndDisconnectWithoutIdleHeartbeat();
+testViewerGamepadPublicationControllerDisposeAndRecreateAvoidDuplicateHeartbeats();
+testHeartbeatPublicationAdvancesSequenceAndTimestamp();
 
 console.log("gamepad input tests passed");

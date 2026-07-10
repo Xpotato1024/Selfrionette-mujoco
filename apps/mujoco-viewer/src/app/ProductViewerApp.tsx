@@ -7,6 +7,7 @@ import {
 } from "../input/keyboardInput.js";
 import {
   createViewerGamepadControlSender,
+  createViewerGamepadPublicationController,
   sampleViewerGamepadSnapshot,
 } from "../input/gamepadInput.js";
 import { formatQpos } from "../wasm-scene/mujocoQposSync.js";
@@ -268,9 +269,13 @@ export function ProductViewerApp() {
     const gamepadSender = createViewerGamepadControlSender({
       url: endpointConfig.websocketUrl,
     });
+    const gamepadPublication = createViewerGamepadPublicationController({
+      publish(snapshot) {
+        gamepadSender.publish(snapshot);
+      },
+    });
     let disposed = false;
     let animationFrameId = 0;
-    let lastSnapshotSignature = "";
 
     type BrowserGamepadLike = {
       connected: boolean;
@@ -292,13 +297,7 @@ export function ProductViewerApp() {
       gamepads: ArrayLike<BrowserGamepadLike | null | undefined> | null = getGamepads(),
     ): void => {
       const snapshot = sampleViewerGamepadSnapshot(gamepads, { deadzone: 0.1 });
-      const snapshotSignature = JSON.stringify(snapshot);
-      if (snapshotSignature === lastSnapshotSignature) {
-        return;
-      }
-
-      lastSnapshotSignature = snapshotSignature;
-      gamepadSender.publish(snapshot);
+      gamepadPublication.update(snapshot);
     };
 
     const schedulePoll = (): void => {
@@ -341,6 +340,7 @@ export function ProductViewerApp() {
     return () => {
       disposed = true;
       window.cancelAnimationFrame(animationFrameId);
+      gamepadPublication.dispose();
       window.removeEventListener("gamepadconnected", onGamepadConnected);
       window.removeEventListener("gamepaddisconnected", onGamepadDisconnected);
       window.removeEventListener("blur", onWindowBlur);
