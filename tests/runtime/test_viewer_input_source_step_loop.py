@@ -79,6 +79,17 @@ def test_viewer_step_loop_accepts_continuous_keyboard_motion_with_small_bounded_
     assert record.state.metadata["endpoint_model"] == "mujoco_model_aligned_tip_site"
     assert record.motion_command.metadata["endpoint_velocity_m_s"][0] > 0.0
     assert abs(record.state.metadata["actual_tip_delta_m"][0]) < 1e-6
+    assert record.state.metadata["endpoint_progress_status"] == "insufficient_progress"
+    assert record.state.metadata["motion_status"] == record.motion_command.metadata["motion_status"]
+    post_step_tip_site_position_m = extract_fast_arm_tip_site_endpoint_from_state(record.state).position_m
+    expected_actual_tip_delta_m = tuple(
+        post_step_tip_site_position_m[index] - initial_tip_site_position_m[index]
+        for index in range(3)
+    )
+    assert record.state.metadata["actual_tip_delta_m"] == pytest.approx(
+        expected_actual_tip_delta_m,
+        abs=0.0,
+    )
     assert dist(initial_state.qpos[:4], record.state.qpos[:4]) > 0.0
     assert dist(initial_state.qpos[:4], record.state.qpos[:4]) <= 0.2 + 1e-12
     assert record.state.target_position_m is not None
@@ -117,8 +128,10 @@ def test_viewer_step_loop_world_frame_preserves_keyboard_axis_mapping(
     assert record.motion_command.metadata["motion_status"] in {"accepted", "scaled"}
     if expected_axis_index == 0:
         assert abs(record.state.metadata["actual_tip_delta_m"][expected_axis_index]) < 1e-6
+        assert record.state.metadata["endpoint_progress_status"] == "insufficient_progress"
     else:
         assert record.state.metadata["actual_tip_delta_m"][expected_axis_index] * expected_sign > 0.0
+        assert record.state.metadata["endpoint_progress_status"] == "progressing"
 
 
 @pytest.mark.parametrize(
@@ -206,6 +219,7 @@ def test_viewer_step_loop_holds_motion_without_repeated_keydown_until_keyup() ->
     stopped_record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
 
     assert stopped_record.motion_command.metadata["motion_status"] == "accepted"
+    assert stopped_record.state.metadata["endpoint_progress_status"] == "not_requested"
     assert stopped_record.motion_command.metadata["endpoint_delta_m"] == (0.0, 0.0, 0.0)
     assert stopped_record.state.metadata["actual_tip_delta_m"] == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
