@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Last updated: 2026-07-11
+
 ## 0. Purpose
 
 このファイルは、`Selfrionette-mujoco`で作業するAIエージェント向けのrepository-local instructionである。
@@ -116,6 +118,20 @@ dry-run、MuJoCo model load、forward、step、Web build、typecheckをhardware 
 - `mergeable: true`だけでmerge readinessを判断しない。
 - 明示許可なしにmergeまたはIssue closeを行わない。
 - Codex実行プロンプトを、明示依頼なしにIssue / PRコメントへ投稿しない。
+
+### Unicode-safe long-form updates
+
+GitHub Issue、PR、comment、discussionなど、非ASCII文字を含む長文を更新する場合は、次を守る。
+
+- 更新前に最新revisionの完全bodyを取得する。truncated snippetを更新元にせず、full bodyまたはexact backupを取得できない場合は更新しない。
+- 更新前bodyをUTF-8 backupとして保存し、既存body全体を置き換えるAPIでは変更箇所以外を完全に保持する。numbering SoT、parent Issue、長期履歴本文を要約や推測で再構成しない。
+- 日本語を含む本文はUTF-8 body fileまたはUnicode-safe APIで送信する。Windows legacy code pageやlocale-dependent shell pipeを経由しない。
+- write直前に完全bodyを再取得し、backup対象と一致することを確認する。更新中に別変更が入っている場合や、複数agentが同じbodyを並列更新している場合は停止する。
+- 更新後に完全bodyを再取得し、newlineを正規化したうえで送信bodyとの文字列完全一致を確認する。expected non-ASCII phrase、U+FFFD、文字化け、意図しない`?`置換も検査する。
+- read-back不一致、欠落、短文化、文字化けを検出した場合は次の更新へ進まず、exact backupからrollbackする。failed / expected / actual bodyの差分を保存し、原因を解消するまで再送しない。
+- connectorまたはAPIにrevision controlがない場合も、write直前のfull-body再取得とbackup一致をconcurrency gateとする。
+
+Issue / PR本文を変更した最終報告では、関連する場合に限り、update method、encoding、backup source、read-back検証、rollback要否、検査したnon-ASCII phrase、最終stateを記録する。同じ恒常ルールをtask promptへ全文転記せず、このsectionを参照し、事故リスク固有の差分だけを追加する。
 
 ## 8. Validation
 

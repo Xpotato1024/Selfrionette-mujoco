@@ -14,15 +14,16 @@ from selfrionette.mujoco_backend.endpoint_extraction import (
 )
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
-from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
-from selfrionette.runtime.endpoint_progress import endpoint_progress_metadata
+from selfrionette.runtime.input_step_diagnostics import (
+    PostStepMeasurement,
+    annotate_runtime_input_state,
+    measure_post_step_tip,
+)
 from selfrionette.runtime.input_source_selection import RuntimeInputSourceSelection
 from selfrionette.runtime.input_source_state import (
     build_runtime_input_source_state_from_metadata,
-    RuntimeInputSourceState,
-    runtime_input_source_state_to_metadata,
 )
-from selfrionette.runtime.input_safety import RuntimeInputSafetyResult, build_runtime_input_safety_result
+from selfrionette.runtime.input_safety import build_runtime_input_safety_result
 from selfrionette.runtime.viewer_motion_policy import (
     build_viewer_local_endpoint_motion_generator,
     build_viewer_local_motion_metadata,
@@ -76,13 +77,6 @@ def _extract_current_tip_site_endpoint_m(pipeline: RuntimePipeline) -> tuple[flo
         return extract_fast_arm_tip_site_endpoint_from_state(
             pipeline.simulator.snapshot()
         ).position_m
-    except ValueError:
-        return None
-
-
-def _extract_tip_site_endpoint_m_from_state(state: MuJoCoState) -> tuple[float, float, float] | None:
-    try:
-        return extract_fast_arm_tip_site_endpoint_from_state(state).position_m
     except ValueError:
         return None
 
@@ -196,78 +190,6 @@ def build_runtime_input_source_step_loop_plan(
     raise ValueError(f"unsupported input source for step loop: {selection.source_name!r}")
 
 
-def _annotate_state(
-    *,
-    source_state: RuntimeInputSourceState,
-    frame: RawInputFrame,
-    intent: InputIntent,
-    motion_command: MotionCommand,
-    last_valid_endpoint_m: tuple[float, float, float] | None,
-    previous_state: MuJoCoState,
-    state: MuJoCoState,
-    actual_tip_delta_m: tuple[float, float, float] | None,
-    annotate_target_position_m: bool,
-    safety_result: RuntimeInputSafetyResult,
-) -> MuJoCoState:
-    target_rejected = bool(motion_command.metadata.get("target_rejected", False))
-    should_publish_target = safety_result.should_update_target_position_m and not target_rejected
-    metadata = {
-        **state.metadata,
-        **frame.metadata,
-        **intent.metadata,
-        **motion_command.metadata,
-    }
-    if metadata.get("control_frame_resolution_status") == "tool_orientation_unavailable":
-        for stale_key in (
-            "resolved_world_endpoint_velocity_m_s",
-            "endpoint_velocity_m_s",
-            "endpoint_velocity_frame",
-            "endpoint_delta_m",
-            "endpoint_delta_requested_m",
-            "endpoint_delta_achieved_m",
-        ):
-            metadata.pop(stale_key, None)
-
-    if not should_publish_target:
-        metadata.pop("desired_endpoint_m", None)
-        metadata.pop("target_position_m", None)
-        metadata["runtime_input_safety_applied"] = True
-        metadata["endpoint_evaluation"] = None
-    if actual_tip_delta_m is not None:
-        metadata["actual_tip_delta_m"] = actual_tip_delta_m
-    if (
-        motion_command.metadata.get("local_motion_policy") == "finite_difference_jacobian"
-        and not target_rejected
-        and "endpoint_delta_requested_m" in motion_command.metadata
-    ):
-        metadata.update(
-            endpoint_progress_metadata(
-                motion_command.metadata["endpoint_delta_requested_m"],
-                actual_tip_delta_m,
-            )
-        )
-
-    target_position_m = state.target_position_m
-    resolved_desired_endpoint = None
-    if annotate_target_position_m and should_publish_target:
-        try:
-            resolved_desired_endpoint = resolve_desired_endpoint_from_motion_command(motion_command)
-        except ValueError:
-            resolved_desired_endpoint = None
-
-        if resolved_desired_endpoint is not None:
-            target_position_m = resolved_desired_endpoint.desired_endpoint_m
-            metadata["desired_endpoint_m"] = resolved_desired_endpoint.desired_endpoint_m
-            metadata["target_position_m"] = resolved_desired_endpoint.desired_endpoint_m
-    elif not should_publish_target:
-        if last_valid_endpoint_m is not None:
-            target_position_m = last_valid_endpoint_m
-
-    metadata.update(runtime_input_source_state_to_metadata(source_state))
-
-    return replace(state, target_position_m=target_position_m, metadata=metadata)
-
-
 def _sync_viewer_input_source_endpoint(
     input_source: object,
     *,
@@ -311,10 +233,8 @@ async def run_runtime_input_source_step_loop(
             default_source_kind=plan.selection.source_name,
         )
         pre_step_state = plan.pipeline.simulator.snapshot()
-        pre_step_tip_site_m = None
         pre_step_tip_site_orientation_wxyz = None
         if plan.selection.source_name == "viewer":
-            pre_step_tip_site_m = _extract_tip_site_endpoint_m_from_state(pre_step_state)
             pre_step_tip_site_orientation_wxyz = _extract_tip_site_orientation_wxyz_from_state(pre_step_state)
         motion_intent = intent
         if plan.selection.source_name == "viewer":
@@ -348,23 +268,17 @@ async def run_runtime_input_source_step_loop(
         plan.pipeline.simulator.step(dt)
 
         state = plan.pipeline.simulator.snapshot()
-        post_step_tip_site_m = None
+        measurement = PostStepMeasurement(None, None, None)
         if plan.selection.source_name == "viewer":
-            post_step_tip_site_m = _extract_tip_site_endpoint_m_from_state(state)
-        actual_tip_delta_m = None
-        if pre_step_tip_site_m is not None and post_step_tip_site_m is not None:
-            actual_tip_delta_m = tuple(
-                post_step_tip_site_m[index] - pre_step_tip_site_m[index] for index in range(3)
-            )
-        annotated_state = _annotate_state(
+            measurement = measure_post_step_tip(pre_step_state, state)
+        annotated_state = annotate_runtime_input_state(
             source_state=safety_result.source_state,
             frame=frame,
             intent=intent,
             motion_command=safety_result.motion_command,
             last_valid_endpoint_m=last_valid_endpoint_m,
-            previous_state=pre_step_state,
             state=state,
-            actual_tip_delta_m=actual_tip_delta_m,
+            measurement=measurement,
             annotate_target_position_m=plan.annotate_target_position_m,
             safety_result=safety_result,
         )

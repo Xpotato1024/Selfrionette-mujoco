@@ -286,3 +286,106 @@ def test_runtime_step_loop_does_not_fabricate_progress_for_programmed_target_pat
 
     assert "endpoint_progress_status" not in record.state.metadata
     assert "endpoint_progress_measurement_available" not in record.state.metadata
+    assert "actual_tip_delta_m" not in record.state.metadata
+
+
+def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+    clock = _ClockSequence((0.0, 0.0))
+    viewer_input_source, plan = _build_plan(clock)
+    ingest_viewer_control_message(viewer_input_source, _keyboard_message(6.0, "Space"))
+
+    original_measure = input_step_loop.measure_post_step_tip
+    original_annotate = input_step_loop.annotate_runtime_input_state
+    published_states = []
+
+    class SimulatorRecorder:
+        def __init__(self, simulator):
+            self.simulator = simulator
+            self.snapshot_count = 0
+            self.stepped = False
+
+        def snapshot(self):
+            self.snapshot_count += 1
+            if self.snapshot_count == 1:
+                events.append("pre_snapshot")
+            elif self.stepped:
+                events.append("post_snapshot")
+            return self.simulator.snapshot()
+
+        def apply_command(self, command):
+            events.append("apply")
+            return self.simulator.apply_command(command)
+
+        def step(self, dt_s):
+            events.append("step")
+            result = self.simulator.step(dt_s)
+            self.stepped = True
+            return result
+
+        def __getattr__(self, name):
+            return getattr(self.simulator, name)
+
+    class PublisherRecorder:
+        def __init__(self, publisher):
+            self.publisher = publisher
+
+        async def publish(self, state):
+            events.append("publish")
+            published_states.append(state)
+            await self.publisher.publish(state)
+
+    class InputSourceRecorder:
+        def read_frame(self):
+            return viewer_input_source.read_frame()
+
+        def rebase_current_endpoint_m(self, endpoint_m):
+            events.append("rebase")
+            return viewer_input_source.rebase_current_endpoint_m(endpoint_m)
+
+    def measure(pre_state, post_state):
+        events.append("measure")
+        return original_measure(pre_state, post_state)
+
+    def annotate(**kwargs):
+        events.append("annotate")
+        return original_annotate(**kwargs)
+
+    plan.pipeline.simulator = SimulatorRecorder(plan.pipeline.simulator)
+    plan.pipeline.publisher = PublisherRecorder(plan.pipeline.publisher)
+    plan.pipeline.input_source = InputSourceRecorder()
+    monkeypatch.setattr(input_step_loop, "measure_post_step_tip", measure)
+    monkeypatch.setattr(input_step_loop, "annotate_runtime_input_state", annotate)
+
+    record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))[0]
+
+    assert events == [
+        "pre_snapshot",
+        "apply",
+        "step",
+        "post_snapshot",
+        "measure",
+        "annotate",
+        "publish",
+        "rebase",
+    ], events
+    assert published_states[0] == record.state
+
+
+def test_runtime_step_loop_continues_publish_when_tip_measurement_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = _ClockSequence((0.0, 0.0))
+    viewer_input_source, plan = _build_plan(clock)
+    ingest_viewer_control_message(viewer_input_source, _keyboard_message(7.0, "Space"))
+    monkeypatch.setattr(
+        input_step_loop,
+        "measure_post_step_tip",
+        lambda pre_state, post_state: input_step_loop.PostStepMeasurement(None, None, None),
+        raising=False,
+    )
+
+    record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))[0]
+
+    assert record.state.metadata["endpoint_progress_status"] == "measurement_unavailable"
+    assert record.state.metadata["endpoint_progress_measurement_available"] is False
+    assert "actual_tip_delta_m" not in record.state.metadata
+    assert plan.pipeline.publisher.publisher.states

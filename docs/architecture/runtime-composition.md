@@ -170,3 +170,20 @@ Programmed targets keep `desired_endpoint_m` as the command-side endpoint and `t
 R6-K-P4 adds deterministic stale-command safety to that loop. Runtime reads input metadata `source_active`, `command_age_ms`, and `stale_reason`. Inactive sources, timeouts, or stale ages yield a hold-current-qpos no-motion command before MuJoCo step. This safety boundary lives in runtime composition, not in R6-K / IK / viewer-side control logic. Stale input does not update `desired_endpoint_m` or `MuJoCoState.target_position_m` as the active target. `command_age_ms` is source-provided metadata in R6-K; runtime consumes it but does not compute wall-clock or browser age.
 
 R6-K completion audit is recorded in `docs/operations/r6-k-completion-audit.md`; it documents the stacked PR evidence for `#247`-`#250` and does not alter runtime composition.
+
+R7-E follow-up P14 keeps the production input step loop as the control
+orchestrator while extracting a small pure diagnostic boundary in
+`runtime/input_step_diagnostics.py`. The boundary measures the MuJoCo `tip`
+from pre/post state snapshots, calculates `actual_tip_delta_m`, deterministically
+merges diagnostic metadata, applies P10 progress semantics and P12 stale-field
+removal, resolves target feedback annotation, and applies runtime input-source
+state metadata last. It does not step the simulator, apply commands, publish,
+read or mutate input sources, use clocks, or perform I/O.
+
+The step loop retains safety before step, target lifecycle candidate and
+last-valid-target ownership, command apply, MuJoCo step, publish, and
+publish-before-ViewerInputSource-rebase ordering. Missing tip measurement does
+not stop the loop or synthesize `actual_tip_delta_m`; local endpoint progress is
+annotated as `measurement_unavailable`. Runtime remains the only multi-layer
+composition root, payload-v0 and viewer behavior are unchanged, and the larger
+composition split remains owned by P19.
