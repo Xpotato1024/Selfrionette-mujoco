@@ -52,6 +52,7 @@ Do not create or use `doc/`.
 | R7-E follow-up P12 control-frame resolution metadata | `docs/operations/r7-e-followup-p12-control-frame-resolution-metadata.md` | #349 follow-up; requested/resolved frame, resolution status, orientation failure hold, and compatibility fields |
 | R7-E follow-up P14 runtime diagnostic boundary | `docs/operations/r7-e-followup-p14-runtime-diagnostic-boundary.md` | #351 follow-up; pure post-step measurement, diagnostic annotation, target-feedback boundary, and preserved step order |
 | Endpoint metadata vocabulary | `docs/contracts/endpoint-metadata-vocabulary.md` | canonical field glossary, ownership, units/frames, compatibility aliases, and migration order |
+| Continuous endpoint velocity input contract | `docs/contracts/continuous-endpoint-velocity-input.md` | P16 typed keyboard/gamepad/analog-fixture requested velocity contract, lifecycle, canonical metadata, and P20/P21 handoff |
 | EndpointTargetGenerator contract | `docs/contracts/endpoint-target-generator.md` | input vector -> command-side `desired_endpoint_m` target generation contract |
 | R7-E-P1 EndpointTargetGenerator contract | `docs/operations/r7-e-p1-endpoint-target-generator-contract.md` | #319 follow-up; deadzone / gain / max step / workspace projection / rejection hold decision |
 | R7-D-P4 fast_arm IK / FK completion audit | `docs/operations/r7-d-completion-audit.md` | R7-D 全体の completion audit と parent #150 の close-readiness 条件を固定する |

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from selfrionette.schemas.input_frame import RawInputFrame
+from selfrionette.schemas.continuous_endpoint_velocity import ContinuousEndpointVelocityIntent
 from selfrionette.schemas.input_intent import InputIntent
 from selfrionette.schemas.joint_command import JointCommand
 from selfrionette.schemas.motion_command import MotionCommand
@@ -33,6 +34,7 @@ from selfrionette.schemas.types import JointVector, QuaternionWXYZ, ScalarVector
 __all__ = [
     "BodyTransform",
     "ControlFrameResolutionStatus",
+    "ContinuousEndpointVelocityIntent",
     "EndpointControlFrame",
     "EndpointMetadata",
     "EndpointProgressStatus",

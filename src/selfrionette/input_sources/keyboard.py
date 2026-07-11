@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from math import isfinite, sqrt
+from math import isfinite
 from pathlib import Path
 
-from selfrionette.schemas import MotionCommand, RawInputFrame
+from selfrionette.schemas import ContinuousEndpointVelocityIntent, MotionCommand, RawInputFrame
+from selfrionette.input_sources.continuous_endpoint_velocity import build_continuous_endpoint_velocity_intent
 
 _VALID_AXES = {"x", "y", "z"}
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[3] / "configs" / "input" / "keyboard_default.json"
@@ -79,15 +80,6 @@ def _coerce_pressed_keys(pressed_keys: Iterable[str]) -> tuple[str, ...]:
     return tuple(sorted(deduplicated_keys))
 
 
-def _clamp_vector3(vector: tuple[float, float, float], *, limit: float) -> tuple[float, float, float]:
-    magnitude = sqrt(sum(component * component for component in vector))
-    if magnitude == 0.0 or magnitude <= limit:
-        return vector
-
-    scale = limit / magnitude
-    return tuple(component * scale for component in vector)
-
-
 def _load_keyboard_config_from_path(path: Path) -> KeyboardInputConfig:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -134,52 +126,56 @@ def build_keyboard_motion_command(
 ) -> MotionCommand:
     keyboard_config = build_default_keyboard_input_config() if config is None else config
     current_tip_position_m = _coerce_vector3("current_tip_position_m", current_tip_position_m)
-    pressed_key_tuple = _coerce_pressed_keys(pressed_keys)
-
-    axis_by_axis = {"x": 0.0, "y": 0.0, "z": 0.0}
-    for key_code in pressed_key_tuple:
-        binding = keyboard_config.bindings.get(key_code)
-        if binding is None:
-            continue
-        axis_by_axis[binding.axis] += float(binding.direction)
-
-    axis_values = _clamp_vector3(
-        (
-            axis_by_axis["x"],
-            axis_by_axis["y"],
-            axis_by_axis["z"],
-        ),
-        limit=1.0,
-    )
-
-    if keyboard_config.deadzone > 0.0:
-        axis_values = tuple(
-            0.0 if abs(component) <= keyboard_config.deadzone else component
-            for component in axis_values
-        )
-
-    endpoint_velocity_m_s = tuple(
-        component * keyboard_config.speed_m_s for component in axis_values
-    )
-
-    return MotionCommand(
+    intent = build_keyboard_continuous_velocity_intent(
+        pressed_keys,
         timestamp_s=timestamp_s,
-        metadata={
-            "source_kind": "keyboard",
-            "intent_kind": "local_endpoint_velocity",
-            "input_continuity": "continuous",
-            "control_frame": "world",
+        config=keyboard_config,
+    )
+    pressed_key_tuple = intent.source_diagnostics["pressed_keys"]
+    endpoint_velocity_m_s = intent.local_endpoint_velocity_m_s
+
+    metadata = dict(intent.to_metadata())
+    metadata.update(
+        {
             "pressed_keys": pressed_key_tuple,
-            "axis_values": axis_values,
-            "local_endpoint_speed_m_s": keyboard_config.speed_m_s,
-            "local_endpoint_max_delta_m": keyboard_config.max_delta_m,
-            "local_endpoint_velocity_frame": "world",
-            "local_endpoint_velocity_m_s": endpoint_velocity_m_s,
             "resolved_world_endpoint_velocity_m_s": endpoint_velocity_m_s,
             "endpoint_velocity_m_s": endpoint_velocity_m_s,
             "endpoint_velocity_frame": "mujoco_world",
             "current_tip_position_m": current_tip_position_m,
-        },
+        }
+    )
+    return MotionCommand(timestamp_s=timestamp_s, metadata=metadata)
+
+
+def build_keyboard_continuous_velocity_intent(
+    pressed_keys: Iterable[str],
+    *,
+    timestamp_s: float,
+    config: KeyboardInputConfig | None = None,
+    control_frame: str = "world",
+    source_active: bool = True,
+    stale_reason: str | None = None,
+    source_kind: str = "keyboard",
+) -> ContinuousEndpointVelocityIntent:
+    keyboard_config = build_default_keyboard_input_config() if config is None else config
+    pressed_key_tuple = _coerce_pressed_keys(pressed_keys)
+    axis_by_axis = {"x": 0.0, "y": 0.0, "z": 0.0}
+    for key_code in pressed_key_tuple:
+        binding = keyboard_config.bindings.get(key_code)
+        if binding is not None:
+            axis_by_axis[binding.axis] += float(binding.direction)
+    return build_continuous_endpoint_velocity_intent(
+        (axis_by_axis["x"], axis_by_axis["y"], axis_by_axis["z"]),
+        source_kind=source_kind,
+        source_timestamp_s=timestamp_s,
+        speed_m_s=keyboard_config.speed_m_s,
+        deadzone=keyboard_config.deadzone,
+        max_delta_m=keyboard_config.max_delta_m,
+        control_frame=control_frame,
+        source_active=source_active,
+        stale_reason=stale_reason,
+        source_diagnostics={"pressed_keys": pressed_key_tuple},
+        clamp_before_deadzone=True,
     )
 
 
@@ -187,5 +183,6 @@ __all__ = [
     "KeyboardBinding",
     "KeyboardInputConfig",
     "build_default_keyboard_input_config",
+    "build_keyboard_continuous_velocity_intent",
     "build_keyboard_motion_command",
 ]
