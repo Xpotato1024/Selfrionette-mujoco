@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from math import isfinite, sqrt
+from math import isfinite
 from time import monotonic
 
 from selfrionette.input_sources.keyboard import (
     KeyboardInputConfig,
     build_default_keyboard_input_config,
-    build_keyboard_motion_command,
+    build_keyboard_continuous_velocity_intent,
 )
+from selfrionette.input_sources.continuous_endpoint_velocity import build_continuous_endpoint_velocity_intent
 from selfrionette.schemas import (
     RawInputFrame,
     ViewerControlGamepadButtonMessage,
@@ -46,15 +47,6 @@ def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
     return components
 
 
-def _clamp_vector3(vector: tuple[float, float, float], *, limit: float) -> tuple[float, float, float]:
-    magnitude = sqrt(sum(component * component for component in vector))
-    if magnitude == 0.0 or magnitude <= limit:
-        return vector
-
-    scale = limit / magnitude
-    return tuple(component * scale for component in vector)
-
-
 def _round_vector3(vector: tuple[float, float, float], *, places: int = 12) -> tuple[float, float, float]:
     return tuple(round(component, places) for component in vector)
 
@@ -70,22 +62,14 @@ def _normalize_control_frame(value: object) -> str:
     return _DEFAULT_CONTROL_FRAME
 
 
-def _coerce_axis_vector3(
-    axes: Sequence[float],
-    *,
-    deadzone: float,
-) -> tuple[float, float, float]:
+def _coerce_axis_vector3(axes: Sequence[float]) -> tuple[float, float, float]:
     axis_values = tuple(float(axis) for axis in axes)
     raw_axis_values = (
         axis_values[0] if len(axis_values) > 0 else 0.0,
         axis_values[1] if len(axis_values) > 1 else 0.0,
         axis_values[2] if len(axis_values) > 2 else 0.0,
     )
-    deadzoned_axis_values = tuple(
-        0.0 if abs(component) <= deadzone else component
-        for component in raw_axis_values
-    )
-    return _clamp_vector3(deadzoned_axis_values, limit=1.0)
+    return raw_axis_values
 
 
 def _gamepad_button_buttons(buttons: Sequence[ViewerControlGamepadButtonMessage]) -> tuple[bool, ...]:
@@ -114,6 +98,7 @@ def _stale_reason_for_timeout(timeout_ms: int) -> str:
 
 @dataclass(frozen=True, slots=True)
 class _ViewerFrameSpec:
+    intent_metadata: Mapping[str, object]
     source_kind: str
     intent_kind: str
     input_continuity: str
@@ -241,16 +226,17 @@ class ViewerInputSource:
     def _build_keyboard_frame(self, message: ViewerControlMessage, *, source_active: bool, stale_reason: str | None) -> _ViewerFrameSpec:
         assert message.keyboard is not None
         control_frame = _normalize_control_frame(message.metadata.get("control_frame", _DEFAULT_CONTROL_FRAME))
-        motion_command = build_keyboard_motion_command(
+        intent = build_keyboard_continuous_velocity_intent(
             message.keyboard.active_key_codes,
-            current_tip_position_m=self._current_endpoint_m,
             timestamp_s=message.timestamp_s,
             config=self._keyboard_config,
+            control_frame=control_frame,
+            source_active=source_active,
+            stale_reason=stale_reason,
+            source_kind=_VIEWER_KEYBOARD_SOURCE_KIND,
         )
-        axis_values = _round_vector3(_coerce_vector3("axis_values", motion_command.metadata["axis_values"]))
-        endpoint_velocity_m_s = _round_vector3(
-            _coerce_vector3("endpoint_velocity_m_s", motion_command.metadata["endpoint_velocity_m_s"])
-        )
+        axis_values = _round_vector3(intent.axis_values)
+        endpoint_velocity_m_s = _round_vector3(intent.local_endpoint_velocity_m_s)
         desired_endpoint_m = _round_vector3(self._current_endpoint_m)
         key_state = dict(message.keyboard.key_state)
         summary = {
@@ -263,15 +249,16 @@ class ViewerInputSource:
                 "zero_state": message.keyboard.zero_state,
             },
             "metadata": dict(message.metadata),
-            "intent_kind": motion_command.metadata["intent_kind"],
-            "input_continuity": motion_command.metadata["input_continuity"],
+            "intent_kind": intent.intent_kind,
+            "input_continuity": intent.input_continuity,
             "control_frame": control_frame,
         }
 
         return _ViewerFrameSpec(
+            intent_metadata=intent.to_metadata(),
             source_kind=_VIEWER_KEYBOARD_SOURCE_KIND,
-            intent_kind=str(motion_command.metadata["intent_kind"]),
-            input_continuity=str(motion_command.metadata["input_continuity"]),
+            intent_kind=intent.intent_kind,
+            input_continuity=intent.input_continuity,
             control_frame=control_frame,
             source_active=source_active,
             stale_reason=stale_reason,
@@ -279,14 +266,14 @@ class ViewerInputSource:
             local_endpoint_velocity_m_s=_round_vector3(
                 _coerce_vector3(
                     "local_endpoint_velocity_m_s",
-                    motion_command.metadata["local_endpoint_velocity_m_s"],
+                    intent.local_endpoint_velocity_m_s,
                 )
             ),
             endpoint_velocity_m_s=endpoint_velocity_m_s,
             current_tip_position_m=_round_vector3(self._current_endpoint_m),
             axis_values=axis_values,
-            local_endpoint_speed_m_s=float(motion_command.metadata["local_endpoint_speed_m_s"]),
-            local_endpoint_max_delta_m=float(motion_command.metadata["local_endpoint_max_delta_m"]),
+            local_endpoint_speed_m_s=intent.local_endpoint_speed_m_s,
+            local_endpoint_max_delta_m=intent.local_endpoint_max_delta_m,
             values=axis_values,
             buttons=_keyboard_button_values(key_state, message.keyboard.active_key_codes),
             viewer_source_kind="keyboard",
@@ -297,21 +284,29 @@ class ViewerInputSource:
     def _build_gamepad_frame(self, message: ViewerControlMessage, *, source_active: bool, stale_reason: str | None) -> _ViewerFrameSpec:
         assert message.gamepad is not None
         control_frame = _normalize_control_frame(message.metadata.get("control_frame", _DEFAULT_CONTROL_FRAME))
-        axis_values = _coerce_axis_vector3(
-            message.gamepad.axes,
-            deadzone=self._gamepad_deadzone,
-        )
+        raw_axis_values = _coerce_axis_vector3(message.gamepad.axes)
+        supplemental_axis_values = (0.0, 0.0, 0.0)
         if message.gamepad.buttons:
             pressed_button_indices = {index for index, button in enumerate(message.gamepad.buttons) if button.pressed}
             if 0 in pressed_button_indices:
-                axis_values = (axis_values[0], axis_values[1], axis_values[2] + 1.0)
+                supplemental_axis_values = (0.0, 0.0, supplemental_axis_values[2] + 1.0)
             if 1 in pressed_button_indices:
-                axis_values = (axis_values[0], axis_values[1], axis_values[2] - 1.0)
-
-        axis_values = _clamp_vector3(axis_values, limit=1.0)
-        endpoint_velocity_m_s = _round_vector3(
-            tuple(component * self._gamepad_speed_m_s for component in axis_values)
+                supplemental_axis_values = (0.0, 0.0, supplemental_axis_values[2] - 1.0)
+        intent = build_continuous_endpoint_velocity_intent(
+            raw_axis_values,
+            source_kind=_VIEWER_GAMEPAD_SOURCE_KIND,
+            source_timestamp_s=message.timestamp_s,
+            speed_m_s=self._gamepad_speed_m_s,
+            deadzone=self._gamepad_deadzone,
+            max_delta_m=self._gamepad_max_delta_m,
+            control_frame=control_frame,
+            source_active=source_active,
+            stale_reason=stale_reason,
+            supplemental_axis_values=supplemental_axis_values,
+            source_diagnostics={"raw_axes": tuple(message.gamepad.axes)},
         )
+        axis_values = intent.axis_values
+        endpoint_velocity_m_s = _round_vector3(intent.local_endpoint_velocity_m_s)
         desired_endpoint_m = _round_vector3(self._current_endpoint_m)
         summary = {
             "viewer_source_kind": "gamepad",
@@ -332,6 +327,7 @@ class ViewerInputSource:
         }
 
         return _ViewerFrameSpec(
+            intent_metadata=intent.to_metadata(),
             source_kind=_VIEWER_GAMEPAD_SOURCE_KIND,
             intent_kind="local_endpoint_velocity",
             input_continuity="continuous",
@@ -384,7 +380,8 @@ class ViewerInputSource:
         command_age_ms: int | None,
         stale_reason: str | None,
     ) -> RawInputFrame:
-        metadata: dict[str, object] = {
+        metadata: dict[str, object] = dict(spec.intent_metadata)
+        metadata.update({
             "source_kind": spec.source_kind,
             "intent_kind": spec.intent_kind,
             "input_continuity": spec.input_continuity,
@@ -403,7 +400,7 @@ class ViewerInputSource:
             "current_tip_position_m": spec.current_tip_position_m,
             "viewer_source_kind": spec.viewer_source_kind,
             _VIEWER_CONTROL_SUMMARY_KEY: dict(spec.control_summary),
-        }
+        })
         if spec.control_frame == _DEFAULT_CONTROL_FRAME:
             metadata["resolved_world_endpoint_velocity_m_s"] = spec.endpoint_velocity_m_s
             metadata["endpoint_velocity_frame"] = "mujoco_world"
