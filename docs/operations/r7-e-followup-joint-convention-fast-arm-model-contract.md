@@ -29,9 +29,9 @@ related:
 - Scope: joint convention documentation and fast_arm model contract documentation
 - Builds on: `#325 / PR #330`, `#326 / PR #331`, `#327 / PR #332`
 
-この文書は `#326` の FK / MuJoCo `tip` site mismatch を修復しない。
-この文書は `#327` の IK / FK self-consistency pass を否定しない。
-この文書は、どの contract が不整合の境界にあるかを明文化し、次の repair issue を間違えないためにある。
+この文書は、P3時点のdiagnosisとP5/P12後のcurrent stateを分離して保持する。
+P3時点では `#326` のFK / MuJoCo `tip` site mismatchを修復していなかったが、
+P5 / PR #337でmodel-aligned physical FK / tip-site consistencyは修復済みである。
 
 ## Current diagnostic state
 
@@ -42,7 +42,9 @@ The P5 continuation selected MuJoCo `assets/mujoco/fast_arm/arm.xml` and the
 MuJoCo-model-aligned pure Python path for the physical `tip` site, while the
 existing solver-local FK remains for IK/FK self-consistency.
 
-Before this repair, PR #336 narrowed but did not close the mismatch:
+### Historical pre-P5 evidence
+
+Before P5, PR #336 narrowed but did not close the mismatch:
 
 - `default_qpos` residual: `0.03899999999999981` m
 - maximum fixed-fixture residual: `0.3450012998489505` m
@@ -58,18 +60,20 @@ and robot output paths are unchanged.
   - Program / Replay endpoint diagnostic logging completed.
 - `#326 / PR #331`
   - runtime FK vs MuJoCo `tip` site consistency diagnostic completed.
-  - Current result: FK / site mismatch remains.
-  - Diagnostic narrowing now records solver-local FK, qpos-adapted solver input, world-transformed FK, MuJoCo `tip` site, and residual, with reason `remaining_model_axis_or_link_contract_mismatch`.
-  - R7-E follow-up P5 diagnostic narrowing reduces the maximum fixed-fixture residual from `1.7507877360829562` m to `0.3450012998489505` m, but this is still not a pass-level repair.
-  - The remaining blocker is narrower: after solver qpos adaptation and `base_link` world transform, residuals still point to model axis / link / physical FK contract mismatch.
+  - Historical pre-P5 result: FK / site mismatch was exposed and remained unresolved at that point.
+  - Diagnostic narrowing recorded solver-local FK, qpos-adapted solver input, world-transformed FK, MuJoCo `tip` site, and residual, with reason `remaining_model_axis_or_link_contract_mismatch`.
+  - These residuals are historical pre-P5 evidence only.
 - `#327 / PR #332`
   - target -> IK output qpos -> runtime FK endpoint sanity completed.
   - Current result: IK / FK self-consistency passes under solver local transform.
-- Therefore:
-  - IK-only failure is not supported by current evidence.
-  - Remaining mismatch is likely in FK / model / site / frame / joint convention boundary.
+### Current state after P5 and P12
 
-## いつ治るのか
+- P5 / PR #337 repaired model-aligned physical FK / MuJoCo `tip` site consistency.
+- P12 / PR #363 made control-frame resolution failure explicit and prevents stale resolved metadata from returning.
+- `#327` remains a solver-local IK/FK self-consistency result; it is not a physical-site measurement.
+- Remaining work is weak world-X mobility, local differential behavior, mapping, and evaluation. These are not a repeat of the P5 FK/site repair.
+
+## Historical P3 repair decision
 
 > #328 では修復そのものは行わない。#328 は、#326 の FK/site mismatch と #327 の IK/FK pass を同時に説明できる contract を整理し、次に修復すべき層を決めるための作業である。修復は、#328 の結論をもとに作成する follow-up repair issue で行う。現時点では、IK solver 単独よりも FK / MuJoCo model / tip site / frame convention の修復が優先候補である。
 
@@ -79,7 +83,7 @@ and robot output paths are unchanged.
 |---|---|---|---|---|---|---|
 | Program / Replay command-side target | `desired_endpoint_m` | command-side endpoint frame | meter | `src/selfrionette/runtime/desired_endpoint_resolver.py::resolve_desired_endpoint_from_motion_command`, `src/selfrionette/runtime/endpoint_target_generator.py::generate_endpoint_target` | command-side intent の正本 | viewer feedback と混同すると、誤差の原因を state 側に誤帰属する |
 | Viewer feedback target | `target_position_m` | viewer feedback frame / compatibility field | meter | `src/selfrionette/runtime/input_step_loop.py::_annotate_state`, `src/selfrionette/runtime/endpoint_metrics.py::_resolve_desired_endpoint_m` | viewer / compatibility の参照値 | command-side target の代用にすると、診断の意味が壊れる |
-| Current tip position | `current_tip_position_m` | MuJoCo `tip` site world position | meter | `src/selfrionette/runtime/endpoint_target_generator.py::EndpointTargetGeneratorInput`, `docs/contracts/endpoint-target-generator.md` | target generator の入力としての現在先端位置 | `desired_endpoint_m` と混同すると、初期化と目標更新の境界がぼやける |
+| Current tip position compatibility anchor | `current_tip_position_m` | overloaded caller/stateful endpoint anchor; not inherently MuJoCo measurement | meter | `ViewerInputSource`, `EndpointTargetGeneratorInput`, loadcell converter | producer-specific command-side anchor; physical truth remains MuJoCo `tip` site | provenance is required before physical interpretation |
 | IK input target | `ik_input_target_m` | solver local frame | meter | `src/selfrionette/runtime/endpoint_motion_sanity.py`, `src/selfrionette/kinematics/fast_arm_endpoint.py` | IK solver に渡す局所ターゲット | world target をそのまま入れると、frame mismatch を見逃す |
 | IK output qpos | `ik_output_qpos` | solver / qpos-like joint space | rad | `src/selfrionette/kinematics/fast_arm_endpoint.py::FastArmEndpointInverseKinematicsSolver.solve` | IK の返却関節角 | qpos の並びを誤ると、後段 FK の比較が無意味になる |
 | Runtime FK endpoint | `fk_endpoint_m` | solver-defined frame | meter | `src/selfrionette/runtime/evaluation.py::evaluate_fk_endpoint_from_qpos` | runtime FK の endpoint | MuJoCo world / scene frame と混ぜると、比較軸が壊れる |
@@ -162,7 +166,7 @@ target endpoint -> IK output qpos -> runtime FK endpoint
 
 - world target と solver target の frame が違うため、IK 入力は local frame へ変換される。
 - solver local frame を仮定すれば、IK 出力と runtime FK は self-consistent になる。
-- しかしそれだけでは `#326` の runtime FK endpoint と MuJoCo `tip` site world position の mismatch は解消されない。
+- Historical P3 interpretation: solver-local self-consistency alone did not establish physical FK/site consistency. P5 / PR #337 subsequently repaired that physical contract.
 
 つまり、`#327` の pass は IK 単独 failure を支持しないが、`#326` の model / site / frame contract mismatch を否定もしない。
 
@@ -173,16 +177,17 @@ target endpoint -> IK output qpos -> runtime FK endpoint
 - Diagnostic logging path
 - FK / site mismatch visibility
 - IK / FK self-consistency visibility
+- Physical model-aligned FK / MuJoCo `tip` site consistency (P5 / PR #337)
 
-### Not fixed
+### Current unresolved work after P5/P12
 
-- FK / site mismatch
-- MuJoCo `tip` site alignment
-- model joint axis / link length / offset mismatch
-- viewer / backend separation
-- actual contact task behavior
+- weak world-X mobility, supported by the P9 Jacobian/mobility diagnostics
+- local differential behavior, still separate from physical FK/site consistency
+- mapping and evaluation design, tracked by the later R7-E follow-up roadmap
+- viewer/backend separation and actual contact-task behavior remain separate
+  product/runtime follow-ups; neither is a claim that P5 repair is incomplete
 
-## Repair Candidate Matrix
+## Historical pre-P5 Repair Candidate Matrix
 
 | Candidate cause | Evidence from #326 | Evidence from #327 | Likelihood | How to verify | Suggested next issue | Files likely touched | Risk |
 |---|---|---|---|---|---|---|---|
@@ -197,9 +202,9 @@ target endpoint -> IK output qpos -> runtime FK endpoint
 | viewer coordinate conversion issue | backend FK/site mismatch を viewer 表示に誤帰属しやすい | #327 は browser/viewer なしで pass した | low | viewer を除外して backend diagnostic だけで再現確認する | `#328` 結論後の repair issue B | `src/selfrionette/runtime/input_step_loop.py`, `docs/architecture/runtime-composition.md` | 中 |
 | body fallback / site extraction issue | tip site の取得方法が primary / fallback で変わると mismatch が出る | #327 は solver chain には効くが site extraction とは独立 | medium | `tip` site primary と body fallback を分けて検証する | `#328` 結論後の repair issue C | `src/selfrionette/mujoco_backend/endpoint_extraction.py`, `src/selfrionette/mujoco_backend/model_contract.py` | 中 |
 
-## Suggested next repair issue
+## Historical pre-P5 Suggested repair issue
 
-### Option A: FK / model / tip site frame contract repair
+### Historical Option A: FK / model / tip site frame contract repair
 
 - Title: `[R7-E follow-up P5] Repair FK / MuJoCo tip site frame contract mismatch`
 - Purpose: `#326` と `#327` の診断結果を使って、runtime FK endpoint、MuJoCo `tip` site world position、joint / frame contract を同じ基準に合わせる。
@@ -220,19 +225,19 @@ target endpoint -> IK output qpos -> runtime FK endpoint
 - Non-goals: immediate behavior change, IK rewrite, runtime FK rewrite, viewer behavior change.
 - When to choose: `#328` の時点で root cause の確度がまだ十分でないとき。
 
-## #326 mismatch interpretation
+## Historical #326 mismatch interpretation
 
 `#326` の mismatch は、runtime FK endpoint と MuJoCo `tip` site world position を同じ値として期待したときに残る不一致である。
 この mismatch は、IK が壊れている証拠ではない。
 むしろ、FK / model / site / frame / joint convention のどこかに contract mismatch が残っていることを示す。
 
-## #327 pass interpretation
+## Historical #327 pass interpretation
 
 `#327` の pass は、solver local transform を通した chain では IK 出力 qpos と runtime FK endpoint が整合することを示す。
 つまり、solver 自体の内部整合は保たれている。
 ただし、MuJoCo `tip` site world position との一致までは保証していない。
 
-## What to fix next
+## Historical P3 next-action interpretation
 
 - まず修復候補にすべき層は FK / MuJoCo model / tip site / frame convention である。
 - IK solver 単独の修復を先に行う根拠は、現在の診断だけでは弱い。
@@ -280,10 +285,10 @@ This doc states:
 - Numbering SoT: `#293`
 - This is R7-E follow-up P3
 - `#325 / PR #330` completed
-- `#326 / PR #331` completed and reports FK/site mismatch
+- Historical P3 record: `#326 / PR #331` reported the pre-P5 FK/site mismatch
 - `#327 / PR #332` completed and reports IK/FK internal consistency
-- This PR does not fix the mismatch
-- This PR prepares the next repair issue
+- Historical P3 record: this document did not fix the mismatch
+- Historical P3 record: this document prepared the repair that became P5 / PR #337
 - Hardware / serial / OSC were not used
 
 ## Hardware / serial / OSC

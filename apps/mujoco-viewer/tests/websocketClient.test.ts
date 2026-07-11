@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { parseTransportPayloadV0Message } from "../src/transport/parseTransportPayloadV0Message.js";
+import {
+  normalizeTransportEndpointMetadata,
+  parseTransportPayloadV0Message,
+} from "../src/transport/parseTransportPayloadV0Message.js";
 import {
   createViewerWebSocketClient,
   type ViewerWebSocketLike,
@@ -505,6 +508,46 @@ function testBuildProductViewerInputOverlayStateFallsBackSafelyWhenMetadataIsMal
   assert.equal(overlay.gamepadZeroState, null);
 }
 
+function testEndpointMetadataParserHandlesNullMalformedAndUnknownFieldsDeterministically(): void {
+  const normalized = normalizeTransportEndpointMetadata({
+    current_tip_position_m: [0.1, 0.2, 0.3],
+    target_position_m: [0.4, 0.5, 0.6],
+    desired_endpoint_m: null,
+    endpoint_delta_m: [0.1, "bad", 0.3],
+    unknown_metadata_field: { preserved: true },
+  });
+
+  assert.deepEqual(normalized.current_tip_position_m, [0.1, 0.2, 0.3]);
+  assert.deepEqual(normalized.target_position_m, [0.4, 0.5, 0.6]);
+  assert.equal(normalized.desired_endpoint_m, undefined);
+  assert.equal(normalized.endpoint_delta_m, undefined);
+  assert.deepEqual(normalized.unknown_metadata_field, { preserved: true });
+
+  assert.equal(
+    normalizeTransportEndpointMetadata({ target_position_m: null }).target_position_m,
+    undefined,
+  );
+  assert.equal(
+    normalizeTransportEndpointMetadata({ target_position_m: [0.1, 0.2] }).target_position_m,
+    undefined,
+  );
+  assert.equal(
+    normalizeTransportEndpointMetadata({ target_position_m: [0.1, Number.POSITIVE_INFINITY, 0.3] })
+      .target_position_m,
+    undefined,
+  );
+
+  const nullMetadataPayload = parseTransportPayloadV0Message(
+    JSON.stringify({ ...TRANSPORT_PAYLOAD_FIXTURE, metadata: null }),
+  );
+  const nonRecordMetadataPayload = parseTransportPayloadV0Message(
+    JSON.stringify({ ...TRANSPORT_PAYLOAD_FIXTURE, metadata: ["legacy"] }),
+  );
+  assert.deepEqual(nullMetadataPayload.metadata, {});
+  assert.deepEqual(nonRecordMetadataPayload.metadata, {});
+  assert.equal(nullMetadataPayload.target_position_m, null);
+}
+
 function testBuildProductViewerInputOverlayStateHandlesEmptyMetadataAndMissingEndpointEvaluation(): void {
   const payload = parseTransportPayloadV0Message(
     JSON.stringify({
@@ -838,6 +881,7 @@ testParseTransportPayloadV0MessagePreservesInputDrivenPayloadWithFeedbackTargetA
 testBuildProductViewerInputOverlayStateFormatsKeyboardPayload();
 testBuildProductViewerInputOverlayStateFormatsGamepadPayloadAndFallsBackSafely();
 testBuildProductViewerInputOverlayStateFallsBackSafelyWhenMetadataIsMalformed();
+testEndpointMetadataParserHandlesNullMalformedAndUnknownFieldsDeterministically();
 testBuildProductViewerInputOverlayStateHandlesEmptyMetadataAndMissingEndpointEvaluation();
 testBuildProductViewerInputOverlayStateMarksMalformedEndpointEvaluationAsUnavailable();
 testBuildProductViewerInputOverlayStateShowsRejectedTargetDiagnosticsAndClearsOnAcceptedPayload();

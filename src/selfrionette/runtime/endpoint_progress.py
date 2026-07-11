@@ -3,15 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite, sqrt
-from typing import Literal
-
-EndpointProgressStatus = Literal[
-    "not_requested",
-    "measurement_unavailable",
-    "insufficient_progress",
-    "misaligned",
-    "progressing",
-]
+from selfrionette.schemas.endpoint_metadata import EndpointProgressStatus
 
 DEFAULT_REQUEST_NORM_TOLERANCE_M = 1e-12
 DEFAULT_MEASURED_NORM_TOLERANCE_M = 1e-6

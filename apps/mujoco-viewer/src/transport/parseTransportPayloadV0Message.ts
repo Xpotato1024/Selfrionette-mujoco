@@ -1,5 +1,6 @@
 import type {
   TransportEndpointEvaluationPayload,
+  TransportEndpointMetadata,
   TransportPayloadV0,
 } from "../types/transportPayload.js";
 
@@ -44,6 +45,43 @@ function parseVector3(value: unknown): [number, number, number] | null {
   }
 
   return values as [number, number, number];
+}
+
+const ENDPOINT_VECTOR_METADATA_KEYS = [
+  "desired_endpoint_m",
+  "target_position_m",
+  "current_tip_position_m",
+  "ik_target_endpoint_m",
+  "local_endpoint_velocity_m_s",
+  "resolved_world_endpoint_velocity_m_s",
+  "endpoint_velocity_m_s",
+  "endpoint_delta_m",
+  "endpoint_delta_requested_m",
+  "endpoint_delta_achieved_m",
+  "actual_tip_delta_m",
+] as const;
+
+/**
+ * Validate known endpoint vectors at the presentation/parser boundary while
+ * preserving payload-v0's open metadata map and unknown fields.
+ *
+ * Known malformed or null vectors are treated as unavailable and removed;
+ * they never make the whole payload fail. Producers currently use
+ * absent-only availability for these vector fields.
+ */
+export function normalizeTransportEndpointMetadata(value: unknown): TransportEndpointMetadata {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const metadata: TransportEndpointMetadata = { ...value };
+  for (const key of ENDPOINT_VECTOR_METADATA_KEYS) {
+    if (key in metadata && parseVector3(metadata[key]) === null) {
+      delete metadata[key];
+    }
+  }
+
+  return metadata;
 }
 
 function parseEndpointEvaluation(
@@ -141,7 +179,9 @@ export function parseTransportPayloadV0Message(message: string): TransportPayloa
   const qvel = ensureArrayField(parsed, "qvel");
   const bodies = ensureArrayField(parsed, "bodies");
   const sites = ensureArrayField(parsed, "sites");
-  const metadata = isRecord(parsed.metadata) ? parsed.metadata : {};
+  // Keep payload-v0's open metadata behavior. Known endpoint fields are typed
+  // at the boundary; unknown or partial legacy fields remain non-fatal.
+  const metadata = normalizeTransportEndpointMetadata(parsed.metadata);
   const targetPosition = parsed.target_position_m === undefined ? null : parsed.target_position_m;
   const endpointEvaluation = parseEndpointEvaluation(parsed.endpoint_evaluation);
 
