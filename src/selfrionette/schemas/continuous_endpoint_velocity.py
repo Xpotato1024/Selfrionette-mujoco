@@ -29,6 +29,14 @@ def _freeze(value: object) -> object:
     return value
 
 
+def _json_compatible_copy(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {str(key): _json_compatible_copy(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return tuple(_json_compatible_copy(item) for item in value)
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class ContinuousEndpointVelocityIntent:
     """Requested continuous endpoint velocity before runtime frame resolution."""
@@ -106,6 +114,6 @@ class ContinuousEndpointVelocityIntent:
                 "local_endpoint_max_delta_m": self.local_endpoint_max_delta_m,
                 "zero_input": self.zero_input,
                 "norm_clamped": self.norm_clamped,
-                "source_diagnostics": self.source_diagnostics,
+                "source_diagnostics": _json_compatible_copy(self.source_diagnostics),
             }
         )

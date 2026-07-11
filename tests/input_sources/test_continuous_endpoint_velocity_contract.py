@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import FrozenInstanceError
 from math import sqrt
 
@@ -107,6 +108,10 @@ def test_contract_is_deterministic_and_deeply_immutable_without_mutating_inputs(
         first.source_diagnostics["raw"] = ()  # type: ignore[index]
     with pytest.raises(FrozenInstanceError):
         first.source_active = False  # type: ignore[misc]
+    serialized = first.to_metadata()
+    assert json.loads(json.dumps(dict(serialized)))["source_diagnostics"] == {"raw": [1, 2]}
+    serialized["source_diagnostics"]["raw"] = [9]  # type: ignore[index]
+    assert first.source_diagnostics["raw"] == (1, 2)
 
 
 def test_keyboard_gamepad_equivalent_builder_and_analog_fixture_have_common_field_parity() -> None:
