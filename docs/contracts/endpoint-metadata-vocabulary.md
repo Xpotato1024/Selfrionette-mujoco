@@ -38,7 +38,7 @@ second (`m/s`); qpos uses radians (`rad`). The frame column is authoritative.
 | Field | Category | Producer / owner | Frame / source of truth | Availability / lifecycle |
 |---|---|---|---|---|
 | `desired_endpoint_m` | command intent | target resolver | command-side endpoint frame | preferred command value; optional |
-| `target_position_m` | viewer feedback / compatibility | state annotation | viewer feedback target frame; not actual tip | nullable; fallback only |
+| `metadata.target_position_m` | viewer feedback / compatibility | state annotation | viewer feedback target frame; not actual tip | valid `Vector3`, absent-only; `null`/malformed values normalize to unavailable at the viewer parser boundary |
 | `current_tip_position_m` | overloaded compatibility anchor | `ViewerInputSource`, endpoint target generator, loadcell converter | usually MuJoCo world / command endpoint frame; source is the stateful or caller-supplied anchor, not inherently MuJoCo state | absent-only in current producers; provenance must be known from the producer |
 | `ik_target_endpoint_m` | IK solver input | solver boundary | solver-local frame | optional; not world intent |
 | `local_endpoint_velocity_m_s` | command intent | input source / policy | `control_frame` (`world` or `tool`) | optional |
@@ -61,6 +61,13 @@ second (`m/s`); qpos uses radians (`rad`). The frame column is authoritative.
 | `endpoint_progress_status` | measured progress quality | P10 progress evaluator | requested vs measured world delta | independent progress axis |
 | `endpoint_progress_*` | measured progress detail | P10 progress evaluator | requested/measured delta metrics | absent or null when unavailable |
 
+The metadata field above is distinct from the top-level payload field with the
+same wire name. `TransportPayloadV0.target_position_m` is a top-level
+`Vector3 | null` viewer-feedback field and retains its existing nullable
+payload contract. The metadata-map field is absent-only and is normalized by
+`normalizeTransportEndpointMetadata`; the two fields must not be treated as
+one nullability contract.
+
 ## Compatibility and precedence
 
 The wire payload remains additive and open. No public field is removed.
@@ -69,8 +76,9 @@ The wire payload remains additive and open. No public field is removed.
 2. `resolved_world_endpoint_velocity_m_s` is canonical;
    `endpoint_velocity_m_s` is an alias and must agree when both exist.
 3. `endpoint_delta_requested_m` is canonical; `endpoint_delta_m` is an alias.
-4. `desired_endpoint_m` wins over `target_position_m` in command diagnostics.
-   `target_position_m` is never a measured tip position.
+4. `desired_endpoint_m` wins over metadata `target_position_m` in command
+   diagnostics. Neither metadata nor top-level `target_position_m` is a
+   measured tip position.
 5. Endpoint vector fields are absent-only: missing means unavailable, while
    `None` / `null` is outside their producer contract and is normalized away.
 6. Only status/detail fields whose typed producer contract permits it use
