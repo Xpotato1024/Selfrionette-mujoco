@@ -71,9 +71,11 @@ The wire payload remains additive and open. No public field is removed.
 3. `endpoint_delta_requested_m` is canonical; `endpoint_delta_m` is an alias.
 4. `desired_endpoint_m` wins over `target_position_m` in command diagnostics.
    `target_position_m` is never a measured tip position.
-5. Missing means unavailable. Existing `None` / `null` means explicitly
-   unavailable; consumers tolerate both absent and null optional fields.
-6. Failed frame resolution must not revive stale resolved velocity, frame, or
+5. Endpoint vector fields are absent-only: missing means unavailable, while
+   `None` / `null` is outside their producer contract and is normalized away.
+6. Only status/detail fields whose typed producer contract permits it use
+   `None` / `null` for unavailable values. Unknown metadata remains open.
+7. Failed frame resolution must not revive stale resolved velocity, frame, or
    delta metadata from an earlier command.
 
 `endpoint_delta_achieved_m` and `actual_tip_delta_m` are never aliases: the

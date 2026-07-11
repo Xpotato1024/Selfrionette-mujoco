@@ -49,6 +49,7 @@ function parseVector3(value: unknown): [number, number, number] | null {
 
 const ENDPOINT_VECTOR_METADATA_KEYS = [
   "desired_endpoint_m",
+  "target_position_m",
   "current_tip_position_m",
   "ik_target_endpoint_m",
   "local_endpoint_velocity_m_s",

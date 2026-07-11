@@ -511,15 +511,31 @@ function testBuildProductViewerInputOverlayStateFallsBackSafelyWhenMetadataIsMal
 function testEndpointMetadataParserHandlesNullMalformedAndUnknownFieldsDeterministically(): void {
   const normalized = normalizeTransportEndpointMetadata({
     current_tip_position_m: [0.1, 0.2, 0.3],
+    target_position_m: [0.4, 0.5, 0.6],
     desired_endpoint_m: null,
     endpoint_delta_m: [0.1, "bad", 0.3],
     unknown_metadata_field: { preserved: true },
   });
 
   assert.deepEqual(normalized.current_tip_position_m, [0.1, 0.2, 0.3]);
+  assert.deepEqual(normalized.target_position_m, [0.4, 0.5, 0.6]);
   assert.equal(normalized.desired_endpoint_m, undefined);
   assert.equal(normalized.endpoint_delta_m, undefined);
   assert.deepEqual(normalized.unknown_metadata_field, { preserved: true });
+
+  assert.equal(
+    normalizeTransportEndpointMetadata({ target_position_m: null }).target_position_m,
+    undefined,
+  );
+  assert.equal(
+    normalizeTransportEndpointMetadata({ target_position_m: [0.1, 0.2] }).target_position_m,
+    undefined,
+  );
+  assert.equal(
+    normalizeTransportEndpointMetadata({ target_position_m: [0.1, Number.POSITIVE_INFINITY, 0.3] })
+      .target_position_m,
+    undefined,
+  );
 
   const nullMetadataPayload = parseTransportPayloadV0Message(
     JSON.stringify({ ...TRANSPORT_PAYLOAD_FIXTURE, metadata: null }),
@@ -529,6 +545,7 @@ function testEndpointMetadataParserHandlesNullMalformedAndUnknownFieldsDetermini
   );
   assert.deepEqual(nullMetadataPayload.metadata, {});
   assert.deepEqual(nonRecordMetadataPayload.metadata, {});
+  assert.equal(nullMetadataPayload.target_position_m, null);
 }
 
 function testBuildProductViewerInputOverlayStateHandlesEmptyMetadataAndMissingEndpointEvaluation(): void {

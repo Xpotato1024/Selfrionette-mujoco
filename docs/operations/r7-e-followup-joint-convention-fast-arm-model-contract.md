@@ -179,11 +179,13 @@ target endpoint -> IK output qpos -> runtime FK endpoint
 - IK / FK self-consistency visibility
 - Physical model-aligned FK / MuJoCo `tip` site consistency (P5 / PR #337)
 
-### Not fixed
+### Current unresolved work after P5/P12
 
-- model joint axis / link length / offset mismatch
-- viewer / backend separation
-- actual contact task behavior
+- weak world-X mobility, supported by the P9 Jacobian/mobility diagnostics
+- local differential behavior, still separate from physical FK/site consistency
+- mapping and evaluation design, tracked by the later R7-E follow-up roadmap
+- viewer/backend separation and actual contact-task behavior remain separate
+  product/runtime follow-ups; neither is a claim that P5 repair is incomplete
 
 ## Historical pre-P5 Repair Candidate Matrix
 
