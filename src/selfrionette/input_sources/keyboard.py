@@ -175,6 +175,7 @@ def build_keyboard_continuous_velocity_intent(
         source_active=source_active,
         stale_reason=stale_reason,
         source_diagnostics={"pressed_keys": pressed_key_tuple},
+        clamp_before_deadzone=True,
     )
 
 

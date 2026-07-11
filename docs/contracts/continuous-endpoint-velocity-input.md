@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: input contract
-last_verified: 2026-07-11
+last_verified: 2026-07-12
 canonical_for:
   - R7-E follow-up P16 evaluation-ready continuous endpoint velocity input
 related:
@@ -40,7 +40,7 @@ transport modules.
 | `control_frame` | Requested `world` or `tool` frame | requested, not resolved |
 | `source_active` | Whether the source currently participates in control | boolean |
 | `stale_reason` | Machine-readable stale/inactive reason when present | string or absent |
-| `zero_input` | Whether deadzone-applied input is zero | derived boolean |
+| `zero_input` | Whether final normalized requested `axis_values` is zero after supplements and all norm clamps | derived boolean |
 | `local_endpoint_speed_m_s` | Configured velocity scale | m/s |
 | `local_endpoint_max_delta_m` | Preserved motion-policy bound provenance | m |
 | `norm_clamped` | Whether normalization/saturation changed a norm greater than 1 | derived boolean |
@@ -61,6 +61,11 @@ participant IDs are excluded.
 5. Clamp the final vector norm to 1 and record `norm_clamped`.
 6. Multiply by non-negative `speed_m_s`.
 7. Construct and canonically serialize the immutable requested intent.
+
+Keyboard compatibility uses an explicit adapter option to preserve its legacy
+order: raw key-bound axes, norm clamp, component deadzone, then speed scaling.
+Gamepad and analog fixture retain the common order above. Keyboard
+`norm_clamped` includes the pre-deadzone clamp provenance.
 
 Deadzone, speed, and max delta must be finite and non-negative. Inputs and
 diagnostic mappings are copied/frozen and never mutated. Equal input and config
@@ -83,6 +88,11 @@ unconditionally duplicate requested values for tool requests.
 
 - Active zero is a valid continuous intent: `source_active=true`, zero velocity,
   no stale reason.
+- `zero_input` is derived from the final normalized requested `axis_values`,
+  not the pre-supplement base axes. Gamepad Z-button supplements therefore
+  count as input, while simultaneous opposite supplements can cancel to zero.
+- Zero input and zero velocity can differ: a nonzero final axis with
+  `speed_m_s=0` has `zero_input=false` and zero requested velocity.
 - Inactive is `source_active=false`; it may have no stale reason when no stale
   condition exists.
 - Stale is inactive with a machine-readable `stale_reason`.

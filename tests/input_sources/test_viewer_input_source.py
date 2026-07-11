@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from selfrionette.input_sources import ViewerInputSource
+from selfrionette.input_sources import KeyboardBinding, KeyboardInputConfig, ViewerInputSource
 from selfrionette.schemas import (
     ViewerControlGamepadButtonMessage,
     ViewerControlGamepadMessage,
@@ -170,6 +170,77 @@ def test_viewer_input_source_converts_gamepad_message_to_continuous_axis_frame()
     assert frame.metadata["endpoint_velocity_frame"] == "mujoco_world"
     assert frame.values == pytest.approx((0.85065080835204, 0.0, 0.5257311121191337), abs=1e-12)
     assert frame.buttons == (True, False)
+
+
+@pytest.mark.parametrize(
+    ("pressed_buttons", "expected_axis", "expected_zero"),
+    [
+        ((True, False), (0.0, 0.0, 1.0), False),
+        ((False, True), (0.0, 0.0, -1.0), False),
+        ((True, True), (0.0, 0.0, 0.0), True),
+        ((False, False), (0.0, 0.0, 0.0), True),
+    ],
+)
+def test_viewer_gamepad_zero_input_uses_final_button_supplemented_axis(
+    pressed_buttons: tuple[bool, bool],
+    expected_axis: tuple[float, float, float],
+    expected_zero: bool,
+) -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=4.0,
+            source_kind="gamepad",
+            gamepad=ViewerControlGamepadMessage(
+                connected=True,
+                index=0,
+                id="pad-1",
+                axes=(0.0, 0.0, 0.0),
+                buttons=tuple(
+                    ViewerControlGamepadButtonMessage(pressed=pressed, value=float(pressed))
+                    for pressed in pressed_buttons
+                ),
+                stale=False,
+                zero_state=False,
+            ),
+        )
+    )
+    assert frame.metadata["axis_values"] == expected_axis
+    assert frame.metadata["zero_input"] is expected_zero
+    assert frame.metadata["local_endpoint_velocity_m_s"] == pytest.approx(
+        tuple(component * 0.1 for component in expected_axis), abs=1e-12
+    )
+
+
+def test_viewer_keyboard_preserves_legacy_clamp_before_deadzone() -> None:
+    config = KeyboardInputConfig(
+        bindings={
+            "KeyD": KeyboardBinding("x", 1),
+            "KeyW": KeyboardBinding("y", 1),
+        },
+        speed_m_s=0.1,
+        deadzone=0.8,
+        max_delta_m=0.03,
+    )
+    source = ViewerInputSource(clock=lambda: 0.0, keyboard_config=config)
+    frame = source.ingest_control_message(
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=2.5,
+            source_kind="keyboard",
+            keyboard=ViewerControlKeyboardMessage(
+                active_key_codes=("KeyD", "KeyW"),
+                key_state={"KeyD": True, "KeyW": True},
+                focus_state="focused",
+                zero_state=False,
+            ),
+        )
+    )
+    assert frame.metadata["axis_values"] == (0.0, 0.0, 0.0)
+    assert frame.metadata["local_endpoint_velocity_m_s"] == (0.0, 0.0, 0.0)
+    assert frame.metadata["zero_input"] is True
+    assert frame.metadata["norm_clamped"] is True
 
 
 def test_viewer_input_source_marks_frame_stale_after_timeout() -> None:

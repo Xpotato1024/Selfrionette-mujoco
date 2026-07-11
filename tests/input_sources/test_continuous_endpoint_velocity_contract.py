@@ -9,6 +9,7 @@ import pytest
 from selfrionette.input_sources import (
     build_continuous_endpoint_velocity_intent,
     build_keyboard_continuous_velocity_intent,
+    build_keyboard_motion_command,
     build_normalized_analog_fixture_intent,
 )
 from selfrionette.input_sources.keyboard import KeyboardBinding, KeyboardInputConfig
@@ -50,6 +51,77 @@ def test_deadzone_speed_and_diagonal_norm_clamp_provenance() -> None:
     assert diagonal.local_endpoint_velocity_m_s == pytest.approx((0.2 / sqrt(2.0), 0.2 / sqrt(2.0), 0.0))
     assert diagonal.norm_clamped is True
     assert diagonal.local_endpoint_max_delta_m == 0.03
+
+
+@pytest.mark.parametrize(
+    ("supplement", "expected_axis", "expected_zero"),
+    [
+        ((0.0, 0.0, 1.0), (0.0, 0.0, 1.0), False),
+        ((0.0, 0.0, -1.0), (0.0, 0.0, -1.0), False),
+        ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), True),
+    ],
+)
+def test_zero_input_uses_final_axis_after_supplement(
+    supplement: tuple[float, float, float],
+    expected_axis: tuple[float, float, float],
+    expected_zero: bool,
+) -> None:
+    intent = build_continuous_endpoint_velocity_intent(
+        (0.0, 0.0, 0.0),
+        source_kind="viewer_gamepad",
+        source_timestamp_s=0.0,
+        speed_m_s=0.1,
+        deadzone=0.1,
+        max_delta_m=0.03,
+        supplemental_axis_values=supplement,
+    )
+    assert intent.axis_values == expected_axis
+    assert intent.zero_input is expected_zero
+
+
+def test_zero_speed_preserves_nonzero_input_semantics() -> None:
+    intent = build_continuous_endpoint_velocity_intent(
+        (1.0, 0.0, 0.0),
+        source_kind="fixture_analog",
+        source_timestamp_s=0.0,
+        speed_m_s=0.0,
+        deadzone=0.0,
+        max_delta_m=0.03,
+    )
+    assert intent.axis_values == (1.0, 0.0, 0.0)
+    assert intent.local_endpoint_velocity_m_s == (0.0, 0.0, 0.0)
+    assert intent.zero_input is False
+
+
+def test_keyboard_adapter_and_public_helper_preserve_legacy_clamp_before_deadzone() -> None:
+    config = KeyboardInputConfig(
+        bindings={
+            "KeyD": KeyboardBinding("x", 1),
+            "KeyW": KeyboardBinding("y", 1),
+        },
+        speed_m_s=0.1,
+        deadzone=0.8,
+        max_delta_m=0.03,
+    )
+    intent = build_keyboard_continuous_velocity_intent(
+        ("KeyD", "KeyW"), timestamp_s=1.0, config=config
+    )
+    command = build_keyboard_motion_command(
+        ("KeyD", "KeyW"),
+        current_tip_position_m=(0.0, 0.0, 0.0),
+        timestamp_s=1.0,
+        config=config,
+    )
+
+    assert intent.deadzone_applied_axis_values == (0.0, 0.0, 0.0)
+    assert intent.axis_values == (0.0, 0.0, 0.0)
+    assert intent.local_endpoint_velocity_m_s == (0.0, 0.0, 0.0)
+    assert intent.zero_input is True
+    assert intent.norm_clamped is True
+    assert command.metadata["axis_values"] == (0.0, 0.0, 0.0)
+    assert command.metadata["local_endpoint_velocity_m_s"] == (0.0, 0.0, 0.0)
+    assert command.metadata["zero_input"] is True
+    assert command.metadata["norm_clamped"] is True
 
 
 def test_active_zero_is_distinct_from_inactive_and_stale() -> None:

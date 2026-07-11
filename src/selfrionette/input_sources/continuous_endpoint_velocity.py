@@ -19,6 +19,7 @@ def build_continuous_endpoint_velocity_intent(
     stale_reason: str | None = None,
     source_diagnostics: Mapping[str, object] | None = None,
     supplemental_axis_values: Sequence[float] = (0.0, 0.0, 0.0),
+    clamp_before_deadzone: bool = False,
 ) -> ContinuousEndpointVelocityIntent:
     """Map already-defined source axes to the common requested-velocity contract."""
     components = tuple(float(component) for component in axis_values)
@@ -33,12 +34,19 @@ def build_continuous_endpoint_velocity_intent(
         if not isfinite(value) or value < 0.0:
             raise ValueError(f"{name} must be finite and non-negative")
 
-    deadzoned_base = tuple(0.0 if abs(component) <= deadzone else component for component in components)
-    base_magnitude = sqrt(sum(component * component for component in deadzoned_base))
-    base_was_clamped = base_magnitude > 1.0
+    raw_magnitude = sqrt(sum(component * component for component in components))
+    raw_was_clamped = raw_magnitude > 1.0
+    pre_deadzoned = (
+        tuple(component / raw_magnitude for component in components)
+        if clamp_before_deadzone and raw_was_clamped
+        else components
+    )
+    deadzoned_base = tuple(0.0 if abs(component) <= deadzone else component for component in pre_deadzoned)
+    deadzoned_magnitude = sqrt(sum(component * component for component in deadzoned_base))
+    post_deadzone_was_clamped = deadzoned_magnitude > 1.0
     normalized_base = (
-        tuple(component / base_magnitude for component in deadzoned_base)
-        if base_was_clamped
+        tuple(component / deadzoned_magnitude for component in deadzoned_base)
+        if post_deadzone_was_clamped
         else deadzoned_base
     )
     supplemented = tuple(
@@ -63,7 +71,9 @@ def build_continuous_endpoint_velocity_intent(
         stale_reason=stale_reason,
         local_endpoint_speed_m_s=speed_m_s,
         local_endpoint_max_delta_m=max_delta_m,
-        norm_clamped=base_was_clamped or final_was_clamped,
+        norm_clamped=(clamp_before_deadzone and raw_was_clamped)
+        or post_deadzone_was_clamped
+        or final_was_clamped,
         source_diagnostics={} if source_diagnostics is None else source_diagnostics,
     )
 

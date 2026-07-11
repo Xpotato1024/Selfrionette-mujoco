@@ -89,7 +89,7 @@ class ContinuousEndpointVelocityIntent:
 
     @property
     def zero_input(self) -> bool:
-        return all(component == 0.0 for component in self.deadzone_applied_axis_values)
+        return all(component == 0.0 for component in self.axis_values)
 
     @property
     def stale(self) -> bool:
