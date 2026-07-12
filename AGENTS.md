@@ -130,6 +130,9 @@ GitHub Issue、PR、comment、discussionなど、非ASCII文字を含む長文�
 - 更新後に完全bodyを再取得し、newlineを正規化したうえで送信bodyとの文字列完全一致を確認する。expected non-ASCII phrase、U+FFFD、文字化け、意図しない`?`置換も検査する。
 - read-back不一致、欠落、短文化、文字化けを検出した場合は次の更新へ進まず、exact backupからrollbackする。failed / expected / actual bodyの差分を保存し、原因を解消するまで再送しない。
 - connectorまたはAPIにrevision controlがない場合も、write直前のfull-body再取得とbackup一致をconcurrency gateとする。
+- exact read-backによるtransport integrityと、exact pre-update bodyに対するstructural preservationを独立したgateとして検証する。Read-back equality alone is insufficient. A body that was already malformed before transmission can pass exact read-back verification.
+- numbering SoT、parent Issue、長期roadmap、historical ledgerのmetadata更新は、既定で`localized-update`として`scripts/validate_github_body_structure.py`をwrite前に実行する。candidateはexact previous bodyへのnarrow replacementまたはpatch applicationで作り、文書全体を再構築しない。
+- structural rewriteはtaskが明示承認した場合だけ許可し、override reasonと保存済みunified diffを必須とし、最終報告へoverride使用を記録する。
 
 Issue / PR本文を変更した最終報告では、関連する場合に限り、update method、encoding、backup source、read-back検証、rollback要否、検査したnon-ASCII phrase、最終stateを記録する。同じ恒常ルールをtask promptへ全文転記せず、このsectionを参照し、事故リスク固有の差分だけを追加する。
 
