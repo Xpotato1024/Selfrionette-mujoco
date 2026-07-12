@@ -18,11 +18,13 @@ related:
 
 This document defines the minimal reproducible evaluation required by P17 / #354 and the logging handoff to P20 / #357. It does not define a runtime, input mapping, logging schema, experiment runner, or statistical implementation.
 
-The research question is:
+P17 is a limited exploratory pilot design. Its research question is:
 
-> When the input source and motion settings are held constant, how does `world` versus `tool` control affect free-space target-acquisition performance, and does that effect differ between a world-aligned task and a tool-aligned task?
+> At one prevalidated reset pose and for the selected world-axis and initial-tool-axis target families, what differences in measured task performance are observed between `world` and `tool` control?
 
-The expected effect is a control-frame x task-type interaction. No frame is assumed to be universally superior. Interpretation must account for task definition, initial tool orientation, and local robot workspace/mobility.
+The control-frame x task-family pattern is descriptive and exploratory. Because each task family uses a different selected physical direction at one tool orientation, task family is confounded with physical direction, Jacobian mobility, and workspace geometry. This pilot cannot identify a causal frame-task alignment effect. No frame is assumed or claimed to be universally superior.
+
+The pilot checks feasibility, event rates, metric stability, and target selection. A confirmatory comparison requires a later design revision that crosses the same physical directions with multiple tool orientations, so task alignment can be separated from direction and pose-dependent mobility.
 
 The study supports the broader position that input devices and mapping methods require a common basis recording operator intent, resolved motion, policy prediction, measured motion, task performance, system limitations, and subjective workload under consistent definitions.
 
@@ -52,6 +54,14 @@ Each trial starts from the same reset qpos and tool orientation. The target is f
 The two control conditions are `requested_control_frame=world` and `requested_control_frame=tool`. They use the same input source, physical or normalized input range, speed/gain, deadzone, maximum per-step delta, update cadence, target distance/tolerance/timeout, initial conditions, visual feedback, camera, and safety rules. Only the requested control frame changes.
 
 Contact, grasping, collision tasks, device comparison, and changing tool orientation during the task definition are outside this design.
+
+## Recorded repetitions and retries
+
+For each participant and control-frame condition, all four targets receive the same number of recorded repetitions. The repetition count is not set by P17: a protocol revision must declare it before data collection, or the versioned pilot manifest must freeze it as configuration. The same frozen count applies to both conditions. Practice trials do not count as recorded repetitions.
+
+Recorded repetition order is balanced or generated from a recorded deterministic seed under the same rule for both conditions. The pilot stopping rule and manifest-freeze condition, including the recorded repetition count, are fixed before outcome data are inspected. Participant count and effect size remain unspecified by P17.
+
+An operator-caused timeout, hold, rejection, or stale input is retained as a failed recorded trial and is not retried. Only a trial meeting the predeclared technical-invalid rule may be retried, and only up to a predeclared per-repetition limit. The original invalid record remains in the dataset; the retry receives a new trial identifier and links back to the original. Exhausting the retry limit leaves the repetition technically invalid rather than silently adding attempts.
 
 ## Outcomes
 
@@ -83,7 +93,7 @@ Per participant, the sequence is: standardized briefing, first-condition practic
 | Task and direction order | controlled by balanced schedules; exact order is logged |
 | Fatigue | controlled by the same rest and block-duration rules; block/order is included in analysis |
 | Initial qpos and tool orientation | controlled by reset to the same validated values before every trial; achieved values are logged; failed resets are excluded with a reason |
-| Target direction and distance | controlled by the fixed four-target manifest and matched distance; target identity is logged and task type is included in analysis |
+| Target direction and distance | fixed and logged by the four-target manifest, but not separated from task family in this pilot; the resulting confounding limits interpretation |
 | P6/P7 workspace and mobility limitations | excluded by the limited-pilot workspace gate; mobility evidence and selected axes are logged as configuration identity |
 | Stale input, hold, rejection, unavailable measurement | logged as statuses/reasons; trials remain failed for the primary outcome unless the predeclared technical-invalid rule applies |
 | Camera and visual feedback | controlled by identical camera pose, overlays, target appearance, and feedback latency/settings; configuration identity is logged |
@@ -99,7 +109,7 @@ Data collection may start only when all checks pass:
 5. World and tool conditions demonstrably use identical input and motion settings except for `requested_control_frame`.
 6. The selected axes avoid the known weak world-X/default-pose mobility and natural-motion limitations from P6 / #339 and P7 / #341; the P9 mobility diagnostic and a measured pilot confirm adequate progress in both directions.
 
-P17 adopts a **limited pilot outside the affected workspace**, rather than requiring universal P6/P7 completion. P6/P7 are known local mobility and natural-motion limitations, while this design asks a bounded interaction question. Avoidance is valid only when all four frozen targets pass the same measured reachability/progress checks. If no non-collinear matched axes pass, the study is blocked until P6/P7 are resolved; targets must not be silently weakened or replaced during collection.
+P17 adopts a **limited exploratory pilot outside the affected workspace**, rather than requiring universal P6/P7 completion. P6/P7 are known local mobility and natural-motion limitations, while this design asks a bounded descriptive question. Avoidance is valid only when all four frozen targets pass the same measured reachability/progress checks. If no non-collinear matched axes pass, the study is blocked until P6/P7 are resolved; targets must not be silently weakened or replaced during collection.
 
 ## P20 logging handoff
 
@@ -107,6 +117,7 @@ P20 defines the wire/schema representation, versioning, units, nullability, and 
 
 - software revision and configuration identity, including model, target-manifest, input/motion settings, camera/feedback settings, and schema version;
 - session, participant, block, trial, task-family, target, and practice/recorded identifiers;
+- `repetition_index`, `attempt_index`, and nullable `retry_of_trial_id`, preserving the original technically invalid trial and every bounded retry;
 - `requested_control_frame`, assigned condition order, task order, and target direction;
 - initial qpos, initial measured tip pose and tool orientation, target world position, tolerance, dwell interval, and timeout;
 - operator-requested motion, including existing `requested_endpoint_velocity` and source timing/lifecycle evidence;
@@ -121,9 +132,9 @@ Existing canonical field names take precedence. P20 must not create a synonym me
 
 ## Analysis policy
 
-Use a within-subject analysis of the control-frame x task-type interaction. Report effect sizes and uncertainty; do not infer universal superiority from a main effect alone. Participant count and effect size are not specified by P17. Pilot data estimate feasibility, event rates, variance, and inputs for a later power analysis; pilot findings are not confirmatory evidence.
+Use a within-subject exploratory analysis of the control-frame x task-family pattern. Report effect sizes and uncertainty, but do not interpret this pattern as a causal frame-task alignment effect or infer universal superiority from a main effect. Physical direction, Jacobian mobility, and workspace geometry remain inseparable from task family in this design. Participant count and effect size are not specified by P17. Pilot data estimate feasibility, event rates, metric stability, variance, target suitability, and inputs for a later power analysis; pilot findings are not confirmatory evidence.
 
-Before recorded data are inspected, declare the technical-invalid rule and missing-data handling. Practice trials are always excluded. A reset failure, corrupted identifier/order, or absence of required measured truth may be excluded as technically invalid with its logged reason. Operator-caused timeout, hold, rejection, or stale input remains a primary-outcome failure. Report all exclusions and missingness by control frame and task type; do not replace missing measured motion with requested, resolved, predicted, or zero motion.
+Before recorded data are inspected, declare the technical-invalid rule, retry limit, stopping rule, manifest-freeze condition, and missing-data handling. Practice trials are always excluded. A reset failure, corrupted identifier/order, or absence of required measured truth may be excluded as technically invalid with its logged reason and retained retry linkage. Operator-caused timeout, hold, rejection, or stale input remains a primary-outcome failure without retry. Report all exclusions, retries, and missingness by control frame and task family; do not replace missing measured motion with requested, resolved, predicted, or zero motion.
 
 ## Scope boundary
 
