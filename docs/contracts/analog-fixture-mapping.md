@@ -16,16 +16,26 @@ P21 maps one JSON-compatible recorded sample into the existing P16
 files itself, discovers no devices, performs no serial/Arduino/OSC I/O, and is
 not connected to the runtime composition root.
 
-The sample format has exactly `timestamp_s`, three numeric `raw_values`, JSON
+The sample format has exactly `timestamp_s`, numeric `raw_values`, JSON
 boolean `active`, and nullable non-empty `stale_reason`. Missing/extra fields,
 bool-as-number, numeric strings, NaN, Infinity, malformed vectors, and active
 plus stale are rejected rather than converted to zero.
 
-`AnalogFixtureMappingConfig` immutably freezes three centers and positive half
-ranges, a channel permutation, signs, per-output-axis scales, component
+The canonical Selfrionette recorded shape is the seven-channel `ch0` through
+`ch6` vector defined by `RawLoadcellVectorRecord` and
+`docs/contracts/r7-a-lite-serial-frame-contract.md`. The pure fixture type is
+generic only so a configuration can state its channel count explicitly; the
+checked-in canonical fixture uses seven values and does not create a competing
+wire or device contract.
+
+`AnalogFixtureMappingConfig` deeply and immutably freezes N centers, positive
+half ranges, an N by 3 `channel_axis_weights` matrix aligned with
+`LoadcellEndpointMappingConfig.channel_axis_weights`, signs, per-output-axis
+scales, component
 deadzone, velocity scale, max delta provenance, requested control frame, and
-source identity. Mapping order is center and half-range normalization,
-component clamp to `[-1, 1]`, axis reorder, sign, scale, then the P16 component
+source identity. Mapping order is finite-value validation, center and half-range
+normalization, component clamp to `[-1, 1]`, weighted channel-to-axis
+projection, sign, scale, then the P16 component
 deadzone and final vector norm clamp. Equal sample and config values produce an
 equal intent.
 

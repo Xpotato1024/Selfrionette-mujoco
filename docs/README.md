@@ -53,6 +53,7 @@ Do not create or use `doc/`.
 | R7-E follow-up P14 runtime diagnostic boundary | `docs/operations/r7-e-followup-p14-runtime-diagnostic-boundary.md` | #351 follow-up; pure post-step measurement, diagnostic annotation, target-feedback boundary, and preserved step order |
 | Endpoint metadata vocabulary | `docs/contracts/endpoint-metadata-vocabulary.md` | canonical field glossary, ownership, units/frames, compatibility aliases, and migration order |
 | Continuous endpoint velocity input contract | `docs/contracts/continuous-endpoint-velocity-input.md` | P16 typed keyboard/gamepad/analog-fixture requested velocity contract, lifecycle, canonical metadata, and P20/P21 handoff |
+| Recorded analog fixture mapping | `docs/contracts/analog-fixture-mapping.md` | P21 strict offline N-channel fixture to P16 mapping; canonical fixture is the recorded 7-channel Selfrionette shape |
 | World/tool control-frame evaluation design | `docs/evaluation/world-tool-frame-comparison-design.md` | P17 minimal within-subject free-space comparison and P20 logging requirements |
 | Experiment motion log v1 | `docs/contracts/experiment-motion-log-v1.md` | P20 versioned typed JSONL-compatible trial/configuration/sample/outcome contract and P21 handoff |
 | EndpointTargetGenerator contract | `docs/contracts/endpoint-target-generator.md` | input vector -> command-side `desired_endpoint_m` target generation contract |

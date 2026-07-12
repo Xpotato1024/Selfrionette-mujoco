@@ -20,9 +20,17 @@ FIXTURE = Path(__file__).parents[1] / "fixtures" / "analog_input_samples.json"
 
 def config(**changes: object) -> AnalogFixtureMappingConfig:
     values = dict(
-        centers=(512.0, 512.0, 512.0),
-        half_ranges=(400.0, 200.0, 100.0),
-        axis_order=(1, 2, 0),
+        centers=(512.0,) * 7,
+        half_ranges=(400.0, 200.0, 100.0, 400.0, 400.0, 400.0, 400.0),
+        channel_axis_weights=(
+            (0, 0, 1),
+            (1, 0, 0),
+            (0, 1, 0),
+            (0, 0, 0),
+            (0, 0, 0),
+            (0, 0, 0),
+            (0, 0, 0),
+        ),
         signs=(1, -1, 1),
         scales=(1.0, 0.5, 1.0),
         deadzone=0.1,
@@ -37,6 +45,7 @@ def config(**changes: object) -> AnalogFixtureMappingConfig:
 def test_recorded_fixture_mapping_is_deterministic_and_preserves_p16_fields() -> None:
     value = json.loads(FIXTURE.read_text(encoding="utf-8"))[0]
     sample = parse_analog_fixture_sample(value)
+    assert len(sample.raw_values) == 7
     first = map_analog_fixture_sample(sample, config())
     second = map_analog_fixture_sample(sample, config())
 
@@ -54,7 +63,7 @@ def test_recorded_fixture_mapping_is_deterministic_and_preserves_p16_fields() ->
 
 def test_normalization_component_clamp_deadzone_order_sign_and_scale() -> None:
     intent = map_analog_fixture_sample(
-        AnalogFixtureSample(1.0, (9999.0, 532.0, 412.0), True),
+        AnalogFixtureSample(1.0, (9999.0, 532.0, 412.0, 512, 512, 512, 512), True),
         config(),
     )
     # Raw channels normalize/clamp to (1, .1, -1), then reorder/sign/scale.
@@ -65,10 +74,10 @@ def test_normalization_component_clamp_deadzone_order_sign_and_scale() -> None:
 
 
 def test_active_zero_inactive_and_stale_remain_distinct() -> None:
-    zero = map_analog_fixture_sample(AnalogFixtureSample(1.0, (512, 512, 512), True), config())
-    inactive = map_analog_fixture_sample(AnalogFixtureSample(1.0, (700, 512, 512), False), config())
+    zero = map_analog_fixture_sample(AnalogFixtureSample(1.0, (512,) * 7, True), config())
+    inactive = map_analog_fixture_sample(AnalogFixtureSample(1.0, (700, 512, 512, 512, 512, 512, 512), False), config())
     stale = map_analog_fixture_sample(
-        AnalogFixtureSample(1.0, (700, 512, 512), False, "recording_stale"), config()
+        AnalogFixtureSample(1.0, (700, 512, 512, 512, 512, 512, 512), False, "recording_stale"), config()
     )
     assert (zero.source_active, zero.zero_input, zero.stale_reason) == (True, True, None)
     assert (inactive.source_active, inactive.zero_input, inactive.stale_reason) == (False, False, None)
@@ -84,11 +93,11 @@ def test_active_zero_inactive_and_stale_remain_distinct() -> None:
     [
         {},
         {"raw_values": None},
-        {"raw_values": [1, 2]},
-        {"raw_values": [True, 2, 3]},
-        {"raw_values": ["1", 2, 3]},
-        {"raw_values": [float("nan"), 2, 3]},
-        {"raw_values": [float("inf"), 2, 3]},
+        {"raw_values": []},
+        {"raw_values": [True, 2, 3, 4, 5, 6, 7]},
+        {"raw_values": ["1", 2, 3, 4, 5, 6, 7]},
+        {"raw_values": [float("nan"), 2, 3, 4, 5, 6, 7]},
+        {"raw_values": [float("inf"), 2, 3, 4, 5, 6, 7]},
         {"active": 1},
         {"timestamp_s": "1.0"},
     ],
@@ -96,7 +105,7 @@ def test_active_zero_inactive_and_stale_remain_distinct() -> None:
 def test_missing_extra_and_invalid_fixture_values_are_rejected(changes: dict[str, object]) -> None:
     value: dict[str, object] = {
         "timestamp_s": 1.0,
-        "raw_values": [1, 2, 3],
+        "raw_values": [1, 2, 3, 4, 5, 6, 7],
         "active": True,
         "stale_reason": None,
     }
@@ -113,15 +122,55 @@ def test_config_is_immutable_and_rejects_ambiguous_mapping() -> None:
     with pytest.raises(FrozenInstanceError):
         mapping.deadzone = 0.2  # type: ignore[misc]
     with pytest.raises(ValueError):
-        config(axis_order=(0, 0, 2))
+        config(channel_axis_weights=((1, 0),) * 7)
     with pytest.raises(ValueError):
         config(signs=(1, 0, -1))
     with pytest.raises(ValueError):
-        config(half_ranges=(1, 0, 1))
+        config(half_ranges=(1, 0, 1, 1, 1, 1, 1))
+
+
+def test_config_deep_copies_caller_sequences_and_nested_matrix_rows() -> None:
+    centers = [512.0] * 7
+    ranges = [100.0] * 7
+    rows = [[1.0, 0.0, 0.0] for _ in range(7)]
+    signs = [1, 1, 1]
+    mapping = config(centers=centers, half_ranges=ranges, channel_axis_weights=rows, signs=signs)
+    before = map_analog_fixture_sample(AnalogFixtureSample(1.0, (612.0,) * 7, True), mapping)
+    centers[0] = 0.0
+    ranges[0] = 1.0
+    rows[0][0] = -999.0
+    signs[0] = -1
+    after = map_analog_fixture_sample(AnalogFixtureSample(1.0, (612.0,) * 7, True), mapping)
+    assert mapping.channel_axis_weights[0] == (1.0, 0.0, 0.0)
+    assert before == after
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"centers": (0,) * 6},
+        {"half_ranges": (1,) * 8},
+        {"channel_axis_weights": ((1, 0, 0),) * 6},
+        {"channel_axis_weights": ((1, 0, 0, 0),) * 7},
+        {"channel_axis_weights": ((True, 0, 0),) * 7},
+        {"signs": (1, 1)},
+        {"signs": (1, 1, 1, 1)},
+        {"signs": None},
+        {"scales": (1, 1)},
+    ],
+)
+def test_invalid_config_dimensions_raise_deliberate_value_error(changes: dict[str, object]) -> None:
+    with pytest.raises(ValueError):
+        config(**changes)
+
+
+def test_fixture_channel_count_must_match_config() -> None:
+    with pytest.raises(ValueError, match="channel count"):
+        map_analog_fixture_sample(AnalogFixtureSample(1.0, (1, 2, 3), True), config())
 
 
 def test_p20_motion_sample_accepts_exact_p16_requested_fields() -> None:
-    intent = map_analog_fixture_sample(AnalogFixtureSample(1.0, (712, 512, 512), True), config())
+    intent = map_analog_fixture_sample(AnalogFixtureSample(1.0, (712, 512, 512, 512, 512, 512, 512), True), config())
     record = MotionSampleRecord(
         experiment_id="experiment", session_id="session", participant_id="participant",
         configuration_id="configuration", trial_id="trial", sample_index=0,

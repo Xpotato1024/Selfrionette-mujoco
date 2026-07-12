@@ -30,18 +30,30 @@ def _vector3(name: str, value: object) -> Vector3:
     return tuple(_number(name, item) for item in value)  # type: ignore[return-value]
 
 
+def _numbers(name: str, value: object) -> tuple[float, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or not value:
+        raise ValueError(f"{name} must be a non-empty sequence of JSON numbers")
+    return tuple(_number(f"{name}[{index}]", item) for index, item in enumerate(value))
+
+
+def _weight_matrix(value: object) -> tuple[Vector3, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or not value:
+        raise ValueError("channel_axis_weights must be a non-empty N x 3 matrix")
+    return tuple(_vector3(f"channel_axis_weights[{index}]", row) for index, row in enumerate(value))
+
+
 @dataclass(frozen=True, slots=True)
 class AnalogFixtureSample:
     """One already-recorded sample; no device or filesystem access is performed."""
 
     timestamp_s: float
-    raw_values: Vector3
+    raw_values: tuple[float, ...]
     active: bool
     stale_reason: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "timestamp_s", _number("timestamp_s", self.timestamp_s))
-        object.__setattr__(self, "raw_values", _vector3("raw_values", self.raw_values))
+        object.__setattr__(self, "raw_values", _numbers("raw_values", self.raw_values))
         if type(self.active) is not bool:
             raise ValueError("active must be a JSON boolean")
         if self.stale_reason is not None and (
@@ -56,9 +68,9 @@ class AnalogFixtureSample:
 class AnalogFixtureMappingConfig:
     """Immutable and fully explicit raw-channel mapping configuration."""
 
-    centers: Vector3
-    half_ranges: Vector3
-    axis_order: tuple[int, int, int] = (0, 1, 2)
+    centers: tuple[float, ...]
+    half_ranges: tuple[float, ...]
+    channel_axis_weights: tuple[Vector3, ...]
     signs: tuple[int, int, int] = (1, 1, 1)
     scales: Vector3 = (1.0, 1.0, 1.0)
     deadzone: float = 0.0
@@ -68,17 +80,22 @@ class AnalogFixtureMappingConfig:
     source_kind: str = "analog_fixture"
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "centers", _vector3("centers", self.centers))
-        ranges = _vector3("half_ranges", self.half_ranges)
+        centers = _numbers("centers", self.centers)
+        ranges = _numbers("half_ranges", self.half_ranges)
+        weights = _weight_matrix(self.channel_axis_weights)
+        if len(centers) != len(ranges) or len(centers) != len(weights):
+            raise ValueError("centers, half_ranges, and channel_axis_weights must have equal channel counts")
+        object.__setattr__(self, "centers", centers)
         if any(value <= 0.0 for value in ranges):
             raise ValueError("half_ranges must be positive")
         object.__setattr__(self, "half_ranges", ranges)
-        if tuple(sorted(self.axis_order)) != (0, 1, 2):
-            raise ValueError("axis_order must be a permutation of (0, 1, 2)")
-        if any(type(value) is not int for value in self.axis_order):
-            raise ValueError("axis_order values must be integers")
-        if any(type(value) is not int or value not in (-1, 1) for value in self.signs):
+        object.__setattr__(self, "channel_axis_weights", weights)
+        if not isinstance(self.signs, Sequence) or isinstance(self.signs, (str, bytes)):
+            raise ValueError("signs must contain exactly three integer -1 or 1 values")
+        signs = tuple(self.signs)
+        if len(signs) != 3 or any(type(value) is not int or value not in (-1, 1) for value in signs):
             raise ValueError("signs must contain only integer -1 or 1")
+        object.__setattr__(self, "signs", signs)
         scales = _vector3("scales", self.scales)
         if any(value < 0.0 for value in scales):
             raise ValueError("scales must be non-negative")
@@ -114,16 +131,28 @@ def map_analog_fixture_sample(
     sample: AnalogFixtureSample,
     config: AnalogFixtureMappingConfig,
 ) -> ContinuousEndpointVelocityIntent:
-    """Normalize, component-clamp, reorder, sign and scale one recorded sample."""
+    """Normalize, clamp, project, sign and scale one recorded sample."""
 
+    if len(sample.raw_values) != len(config.centers):
+        raise ValueError("fixture raw_values channel count must match mapping configuration")
     normalized_channels = tuple(
-        max(-1.0, min(1.0, (sample.raw_values[index] - config.centers[index]) / config.half_ranges[index]))
-        for index in range(3)
+        max(
+            -1.0,
+            min(
+                1.0,
+                (sample.raw_values[index] - config.centers[index]) / config.half_ranges[index],
+            ),
+        )
+        for index in range(len(config.centers))
     )
-    axes = tuple(
-        normalized_channels[channel] * config.signs[axis] * config.scales[axis]
-        for axis, channel in enumerate(config.axis_order)
+    weighted_axes = tuple(
+        sum(
+            value * config.channel_axis_weights[channel][axis]
+            for channel, value in enumerate(normalized_channels)
+        )
+        for axis in range(3)
     )
+    axes = tuple(weighted_axes[axis] * config.signs[axis] * config.scales[axis] for axis in range(3))
     return build_normalized_analog_fixture_intent(
         axes,
         source_timestamp_s=sample.timestamp_s,
