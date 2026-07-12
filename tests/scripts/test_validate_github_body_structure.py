@@ -488,3 +488,116 @@ def test_utf8_bom_is_rejected_by_imported_api(tmp_path: Path) -> None:
     after_path.write_bytes(b"\xef\xbb\xbf" + BASE.encode("utf-8"))
     with pytest.raises(MODULE.InputValidationError, match="BOM"):
         MODULE.validate(before_path, after_path)
+
+
+PROTECTED = """## Numbering / SoT status
+
+- Parent state: open
+
+## Current child roadmap
+
+| P | State |
+|---|---|
+| P18 | open |
+
+## Current batch
+
+- Batch state: draft.
+"""
+
+
+def protected_check(tmp_path: Path, before: str, after: str):
+    before_path, after_path = paths(tmp_path, after, before)
+    return MODULE.validate(
+        before_path,
+        after_path,
+        required_sections=["## Numbering / SoT status", "## Current child roadmap", "## Current batch"],
+        require_multiline_baseline=True,
+        required_table_sections=["## Current child roadmap"],
+    )
+
+
+def test_already_collapsed_before_and_one_line_after_is_hard_failure(tmp_path: Path) -> None:
+    before = "## Numbering / SoT status text ## Current child roadmap | P | State | ## Current batch draft"
+    result = protected_check(tmp_path, before, before + " updated")
+    assert not result.accepted
+    assert "inline Markdown heading markers" in hard_reasons(result)
+    assert not override(result, tmp_path).accepted
+
+
+def test_already_collapsed_before_and_superficially_multiline_after_is_hard_failure(tmp_path: Path) -> None:
+    before = "## Numbering / SoT status text ## Current child roadmap table ## Current batch draft"
+    result = protected_check(tmp_path, before, PROTECTED)
+    assert not result.accepted
+    assert "inline Markdown heading markers" in hard_reasons(result)
+
+
+def test_protected_valid_before_with_collapsed_new_after_section_is_hard_failure(tmp_path: Path) -> None:
+    after = PROTECTED + "\n## New state text ## New history text\n"
+    result = protected_check(tmp_path, PROTECTED, after)
+    assert not result.accepted
+    assert "proposed body contains multiple inline Markdown heading markers" in hard_reasons(result)
+    assert not override(result, tmp_path).accepted
+
+
+def test_protected_two_real_heading_fragments_in_after_are_rejected(tmp_path: Path) -> None:
+    result = protected_check(tmp_path, PROTECTED, PROTECTED.replace("- Batch state: draft.", "## A text ## B text"))
+    assert not result.accepted
+    assert "proposed body contains multiple inline Markdown heading markers" in hard_reasons(result)
+
+
+def test_protected_inline_code_heading_examples_are_accepted(tmp_path: Path) -> None:
+    prose = "\nUse `## Current state` and `## History` as section headings.\n"
+    assert protected_check(tmp_path, PROTECTED, PROTECTED + prose).accepted
+
+
+@pytest.mark.parametrize("fence", ["```", "~~~"])
+def test_protected_fenced_heading_examples_are_ignored(tmp_path: Path, fence: str) -> None:
+    example = f"\n{fence}\n## Current state text ## History text\n{fence}\n"
+    assert protected_check(tmp_path, PROTECTED + example, PROTECTED + example).accepted
+
+
+def test_standard_profile_does_not_apply_protected_inline_heading_health(tmp_path: Path) -> None:
+    before = "Prose uses `## Current state` and `## History` as examples."
+    after = before + " Updated."
+    before_path, after_path = paths(tmp_path, after, before)
+    assert MODULE.validate(before_path, after_path).accepted
+
+    real_fragments = "Collapsed-looking prose ## Current state text ## History text"
+    before_path, after_path = paths(tmp_path, real_fragments + " updated", real_fragments)
+    assert MODULE.validate(before_path, after_path).accepted
+
+
+def test_standard_localized_validation_still_accepts_existing_structure(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, BASE.replace("Parent state: open", "Parent state: open / draft"))
+    assert MODULE.validate(before_path, after_path).accepted
+
+
+def test_inline_heading_fragments_do_not_count_as_headings(tmp_path: Path) -> None:
+    collapsed = "prefix ## Numbering / SoT status text ## Current child roadmap text"
+    result = protected_check(tmp_path, collapsed, PROTECTED)
+    assert result.before.headings == []
+    assert "zero parsed headings" in hard_reasons(result)
+
+
+def test_protected_profile_requires_explicit_sentinels(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, PROTECTED, PROTECTED)
+    result = MODULE.validate(before_path, after_path, require_multiline_baseline=True)
+    assert not result.accepted
+    assert "requires explicit sentinel headings" in hard_reasons(result)
+
+
+def test_valid_multiline_protected_before_and_candidate_pass(tmp_path: Path) -> None:
+    result = protected_check(tmp_path, PROTECTED, PROTECTED.replace("| P18 | open |", "| P18 | open / draft |"))
+    assert result.accepted
+
+
+def test_damaged_324_shape_is_rejected_and_repaired_candidate_passes(tmp_path: Path) -> None:
+    damaged = PROTECTED.replace("\n", " ")
+    assert not protected_check(tmp_path, damaged, PROTECTED).accepted
+    assert protected_check(tmp_path, PROTECTED, PROTECTED.replace("draft.", "three draft PRs.")).accepted
+
+
+def test_293_normal_localized_update_still_passes_protected_profile(tmp_path: Path) -> None:
+    after = PROTECTED.replace("| P18 | open |", "| P18 | open / draft PR #372 |")
+    assert protected_check(tmp_path, PROTECTED, after).accepted

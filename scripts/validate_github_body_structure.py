@@ -166,6 +166,38 @@ def _scan_structure(lines: list[str]) -> tuple[list[str], list[TableBlock], list
     return headings, tables, blocks, f"unbalanced {opening[0] * opening[1]} code fence"
 
 
+def _mask_inline_code(line: str) -> str:
+    """Mask simple Markdown inline-code spans without implementing full Markdown."""
+    return re.sub(r"(`+)(.*?)\1", lambda match: " " * len(match.group(0)), line)
+
+
+def _outside_fence_heading_fragment_counts(lines: list[str]) -> list[tuple[str, int]]:
+    """Return heading-like fragment counts for lines outside fenced code blocks."""
+    counts: list[tuple[str, int]] = []
+    opening: tuple[str, int] | None = None
+    for line in lines:
+        match = FENCE_RE.fullmatch(line)
+        if match:
+            marker, rest = match.groups()
+            marker_type = marker[0]
+            marker_length = len(marker)
+            if opening is None and not (marker_type == "`" and "`" in rest):
+                opening = (marker_type, marker_length)
+                continue
+            if opening and marker_type == opening[0] and marker_length >= opening[1] and not rest.strip():
+                opening = None
+                continue
+        if opening is None:
+            count = len(re.findall(r"(?:^|\s)#{1,6}\s+\S", _mask_inline_code(line)))
+            counts.append((line, count))
+    return counts
+
+
+def _inline_heading_fragment_lines(lines: list[str]) -> list[str]:
+    """Return outside-fence lines containing two or more real heading fragments."""
+    return [line for line, count in _outside_fence_heading_fragment_counts(lines) if count >= 2]
+
+
 def _metrics(data: bytes, text: str) -> BodyMetrics:
     normalized = _lf(text)
     lines = normalized.splitlines()
@@ -191,6 +223,8 @@ def validate(
     after_path: Path,
     *,
     required_sections: list[str] | None = None,
+    require_multiline_baseline: bool = False,
+    required_table_sections: list[str] | None = None,
 ) -> ValidationResult:
     """Validate bodies without applying an override.
 
@@ -220,6 +254,22 @@ def validate(
         hard.append("proposed body is empty or effectively empty")
     if before.physical_line_count > 1 and after.physical_line_count <= 1:
         hard.append("multiline body collapsed to one physical line")
+    if require_multiline_baseline:
+        before_inline_fragments = _inline_heading_fragment_lines(before_lf.splitlines())
+        after_inline_fragments = _inline_heading_fragment_lines(after_lf.splitlines())
+        if before_inline_fragments:
+            hard.append("before body contains multiple inline Markdown heading markers on one physical line")
+        if after_inline_fragments:
+            hard.append("proposed body contains multiple inline Markdown heading markers on one physical line")
+    if require_multiline_baseline and before.physical_line_count <= 1:
+        hard.append("protected long-form update requires a multiline before body")
+    if require_multiline_baseline and not required_sections:
+        hard.append("protected long-form update requires explicit sentinel headings")
+    heading_like_count = sum(
+        count for _, count in _outside_fence_heading_fragment_counts(before_lf.splitlines())
+    )
+    if require_multiline_baseline and not before.headings and heading_like_count > 1:
+        hard.append("before body has zero parsed headings but multiple heading-like fragments")
     found_markers = [marker for marker in MOJIBAKE_MARKERS if marker in after_lf]
     if found_markers:
         hard.append(f"replacement or mojibake marker found: {found_markers!r}")
@@ -257,6 +307,16 @@ def validate(
             hard.append(f"required sentinel heading is absent outside fences in before body: {section}")
         elif section not in after.headings:
             structural.append(f"required sentinel section was removed: {section}")
+
+    before_table_sections = [block.section_identity for block in before.table_blocks]
+    after_table_sections = [block.section_identity for block in after.table_blocks]
+    for section in required_table_sections or []:
+        if not HEADING_RE.fullmatch(section):
+            hard.append(f"required table identity must be an exact Markdown heading line: {section}")
+        elif section not in before_table_sections:
+            hard.append(f"required table block is absent in before body under heading: {section}")
+        elif section not in after_table_sections:
+            structural.append(f"required table block was removed: {section}")
 
     return ValidationResult(str(before_path.absolute()), str(after_path.absolute()), before, after, diff, hard, structural)
 
@@ -322,6 +382,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("after_body", type=Path)
     parser.add_argument("--mode", choices=("localized-update",), default="localized-update")
     parser.add_argument("--required-section", action="append", default=[])
+    parser.add_argument("--profile", choices=("standard", "protected-long-form"), default="standard")
+    parser.add_argument("--required-table-section", action="append", default=[])
     parser.add_argument("--diff-output", type=Path)
     parser.add_argument("--allow-structural-change", action="store_true")
     parser.add_argument("--override-reason")
@@ -345,7 +407,13 @@ def _report(result: ValidationResult, mode: str) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        result = validate(args.before_body, args.after_body, required_sections=args.required_section)
+        result = validate(
+            args.before_body,
+            args.after_body,
+            required_sections=args.required_section,
+            require_multiline_baseline=args.profile == "protected-long-form",
+            required_table_sections=args.required_table_section,
+        )
     except InputValidationError as exc:
         print(json.dumps({"accepted": False, "hard_violations": [str(exc)], "structural_violations": []}, indent=2), file=sys.stderr)
         return 2
