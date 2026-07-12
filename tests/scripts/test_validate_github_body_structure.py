@@ -114,7 +114,63 @@ def test_reasoned_override_still_rejects_unbalanced_fence(tmp_path: Path, after:
 def test_mixed_backtick_and_tilde_fences_are_balanced_independently(tmp_path: Path) -> None:
     result = check(tmp_path, BASE.replace("backtick block", "backtick block with ~~~ inside"))
     assert result.accepted
-    assert result.after.code_fence_markers == ["```", "```", "~~~", "~~~"]
+    assert [(block.marker_type, block.opening_length, block.closing_compatible) for block in result.after.code_fence_blocks] == [("`", 3, True), ("~", 3, True)]
+
+
+@pytest.mark.parametrize("block_text", ["backtick block", "tilde block with ``` inside"])
+def test_heading_inside_fence_cannot_replace_real_heading(tmp_path: Path, block_text: str) -> None:
+    after = BASE.replace("## 詳細\n\n", "").replace(block_text, block_text + "\n## 詳細")
+    result = check(tmp_path, after)
+    assert not result.accepted
+    assert "headings are missing" in structural_reasons(result)
+
+
+def test_table_delimiter_inside_fence_cannot_replace_real_delimiter(tmp_path: Path) -> None:
+    after = BASE.replace("|---|---|\n", "").replace("backtick block", "backtick block\n|---|---|")
+    result = check(tmp_path, after)
+    assert not result.accepted
+    assert "table delimiter" in structural_reasons(result)
+
+
+def test_required_sentinel_inside_fence_cannot_replace_real_heading(tmp_path: Path) -> None:
+    after = BASE.replace("## 状態\n\n", "").replace("backtick block", "backtick block\n## 状態")
+    result = check(tmp_path, after)
+    assert not result.accepted
+    assert "required sentinel section was removed" in structural_reasons(result)
+
+
+@pytest.mark.parametrize("delimiter", [
+    "|---|---|",
+    "---|---",
+    "--- | ---",
+    "| --- | --- |",
+    ":--- | ---:",
+    "| :--- | :---: | ---: |",
+])
+def test_valid_gfm_table_delimiter_forms_are_recognized(tmp_path: Path, delimiter: str) -> None:
+    after = BASE.replace("|---|---|", delimiter)
+    result = check(tmp_path, after)
+    assert len(result.after.table_delimiter_rows) == 1
+
+
+def test_horizontal_rule_and_fenced_delimiter_are_not_table_rows(tmp_path: Path) -> None:
+    after = BASE.replace("|---|---|\n", "---\n").replace("backtick block", "backtick block\n|---|---|")
+    result = check(tmp_path, after)
+    assert result.after.table_delimiter_rows == []
+
+
+@pytest.mark.parametrize(
+    "after",
+    [
+        BASE.replace("```text", "~~~~text").replace("```\n\n~~~text", "~~~~\n\n~~~text"),
+        BASE.replace("```text", "````text").replace("```\n\n~~~text", "````\n\n~~~text"),
+        BASE.replace("~~~text\ntilde block with ``` inside\n~~~\n\n", ""),
+    ],
+)
+def test_localized_update_protects_ordered_fence_block_structure(tmp_path: Path, after: str) -> None:
+    result = check(tmp_path, after)
+    assert not result.accepted
+    assert "fence block structure changed" in structural_reasons(result)
 
 
 def test_drastic_newline_reduction_is_structural(tmp_path: Path) -> None:
@@ -215,6 +271,72 @@ def test_unwritable_diff_output_rejects_override(tmp_path: Path) -> None:
     overridden = MODULE.apply_structural_override(result, reason="authorized", diff_evidence_path=tmp_path)
     assert not overridden.accepted
     assert "failed to save" in hard_reasons(overridden)
+
+
+@pytest.mark.parametrize("which", ["before", "after"])
+def test_diff_evidence_cannot_equal_input_body(tmp_path: Path, which: str) -> None:
+    before_path, after_path = paths(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    result = MODULE.validate(before_path, after_path)
+    evidence = before_path if which == "before" else after_path
+    original = evidence.read_bytes()
+    overridden = MODULE.apply_structural_override(result, reason="authorized", diff_evidence_path=evidence)
+    assert not overridden.accepted
+    assert "must not alias" in hard_reasons(overridden)
+    assert evidence.read_bytes() == original
+
+
+def test_cli_diff_alias_cannot_overwrite_input(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    original = after_path.read_bytes()
+    exit_code = MODULE.main([
+        str(before_path), str(after_path),
+        "--allow-structural-change", "--override-reason", "authorized",
+        "--diff-output", str(after_path),
+    ])
+    assert exit_code == 1
+    assert after_path.read_bytes() == original
+
+
+def test_cli_localized_diff_output_cannot_overwrite_input(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, BASE.replace("| P20 | open |", "| P20 | draft |"))
+    original = before_path.read_bytes()
+    exit_code = MODULE.main([str(before_path), str(after_path), "--diff-output", str(before_path)])
+    assert exit_code == 1
+    assert before_path.read_bytes() == original
+
+
+def test_relative_diff_alias_cannot_overwrite_input(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    before_path, after_path = paths(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    result = MODULE.validate(before_path, after_path)
+    original = before_path.read_bytes()
+    monkeypatch.chdir(tmp_path)
+    overridden = MODULE.apply_structural_override(result, reason="authorized", diff_evidence_path=Path("before.md"))
+    assert not overridden.accepted
+    assert "must not alias" in hard_reasons(overridden)
+    assert before_path.read_bytes() == original
+
+
+def test_symlink_diff_alias_cannot_overwrite_input(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    alias = tmp_path / "before-alias.md"
+    try:
+        alias.symlink_to(before_path)
+    except OSError as exc:
+        pytest.skip(f"symlink unavailable: {exc}")
+    result = MODULE.validate(before_path, after_path)
+    original = before_path.read_bytes()
+    overridden = MODULE.apply_structural_override(result, reason="authorized", diff_evidence_path=alias)
+    assert not overridden.accepted
+    assert "must not alias" in hard_reasons(overridden)
+    assert before_path.read_bytes() == original
+
+
+def test_independent_diff_path_remains_valid(tmp_path: Path) -> None:
+    result = check(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    evidence = tmp_path / "independent.diff"
+    overridden = MODULE.apply_structural_override(result, reason="authorized", diff_evidence_path=evidence)
+    assert overridden.accepted and overridden.override_used
+    assert evidence.read_text(encoding="utf-8") == result.diff
 
 
 def test_exact_localized_state_row_replacement_is_accepted(tmp_path: Path) -> None:

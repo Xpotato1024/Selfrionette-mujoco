@@ -133,6 +133,7 @@ GitHub Issue、PR、comment、discussionなど、非ASCII文字を含む長文�
 - exact read-backによるtransport integrityと、exact pre-update bodyに対するstructural preservationを独立したgateとして検証する。Read-back equality alone is insufficient. A body that was already malformed before transmission can pass exact read-back verification.
 - numbering SoT、parent Issue、長期roadmap、historical ledgerのmetadata更新は、既定で`localized-update`として`scripts/validate_github_body_structure.py`をwrite前に実行する。candidateはexact previous bodyへのnarrow replacementまたはpatch applicationで作り、文書全体を再構築しない。
 - structural overrideはintentionalな構造差分だけを対象とし、encoding / corruption、one-line collapse、fence balanceのhard failureを回避できない。CLI / imported APIのどちらも明示承認、理由、保存済みunified diffを必須とする。
+- structural elementはfence外だけから抽出し、diff evidence pathはbefore / after bodyと同一またはaliasにしない。
 - 古い正常backupから復旧する場合は、damaged latest bodyをcontent evidenceとして照合し、後続の正当なhistorical entryが欠落していないことをwrite前に確認する。
 
 Issue / PR本文を変更した最終報告では、関連する場合に限り、update method、encoding、backup source、read-back検証、rollback要否、検査したnon-ASCII phrase、最終stateを記録する。同じ恒常ルールをtask promptへ全文転記せず、このsectionを参照し、事故リスク固有の差分だけを追加する。

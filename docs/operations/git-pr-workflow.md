@@ -59,13 +59,17 @@ python scripts/validate_github_body_structure.py before.md after.md \
   --diff-output body-update.diff
 ```
 
-helperはUTF-8 bodyのbyte length、SHA-256、physical line count、newline count、ordered headings、table delimiter rows、backtick / tilde code fence、required sentinels、unified diffを比較する。CRLFからLFだけの正規化と、構造を保持した小さなrow更新やstatus追記は受理する。
+helperはMarkdownを1回走査し、fenced code blockの内外を追跡する。heading、table delimiter row、required sentinel headingはfence外だけから抽出し、code sample内の同一文字列を文書構造として扱わない。required sentinelはfence外のexact heading lineでなければならない。
+
+GFM table delimiterはleading / trailing pipeを任意とし、各cellが空白を除いてoptional leading colon、3個以上のhyphen、optional trailing colonだけで構成される場合に認識する。`---|---`、`--- | ---`、`| :--- | :---: | ---: |`などを受理し、単独horizontal rule、通常本文、fence内のdelimiter-like textは除外する。
+
+localized updateではordered fence block structureとしてmarker typeとopening lengthを比較する。code block本文の通常編集は許可するが、block数、順序、backtick / tilde種別、opening lengthの変更はstructural violationとする。unbalanced / mismatched fenceはhard failureである。
 
 ### Failure classes and structural override
 
 hard failureはoverrideできない。対象はunreadable / non-UTF-8 / BOM input、empty body、multilineからone-lineへのcollapse、U+FFFD・既知mojibake・`???`などのreplacement marker、unbalancedまたはmismatched fence、無効なoverride reason、required diff evidenceの保存失敗である。一方、headingの削除・並べ替え、table変更、balanced fence削除、valid multilineを保つ大規模section置換やline/newline削減はstructural violationとして分類する。
 
-大規模なstructural rewriteはtaskが明示承認した場合に限り、`--allow-structural-change`、空でない`--override-reason`、`--diff-output`をすべて指定する。overrideはstructural violationが実在し、hard failureがなく、保存diffのexact read-backに成功した場合だけ有効になる。通常検証が通るcandidateでは`override_used=false`のままとする。imported Python APIでも`validate()`単体はoverride不能で、`apply_structural_override()`へreasonとdiff evidence pathを渡す同じgateを使用する。保存したdiffとoverride reasonを最終報告へ記録する。
+大規模なstructural rewriteはtaskが明示承認した場合に限り、`--allow-structural-change`、空でない`--override-reason`、`--diff-output`をすべて指定する。overrideはstructural violationが実在し、hard failureがなく、保存diffのexact read-backに成功した場合だけ有効になる。通常検証が通るcandidateでは`override_used=false`のままとする。imported Python APIでも`validate()`単体はoverride不能で、`apply_structural_override()`へreasonとdiff evidence pathを渡す同じgateを使用する。diff evidence pathはabsolute / resolved pathと可能な場合はsame-file検査を行い、before / after body自身、relative alias、symlink aliasへの書込みをhard failureとして拒否する。保存したdiffとoverride reasonを最終報告へ記録する。
 
 ### Older-backup recovery reconciliation
 
