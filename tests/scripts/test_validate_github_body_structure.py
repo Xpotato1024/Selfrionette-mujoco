@@ -32,8 +32,12 @@ BASE = """## 状態
 ## 詳細
 
 ```text
-preserved
+backtick block
 ```
+
+~~~text
+tilde block with ``` inside
+~~~
 
 historical line 1
 historical line 2
@@ -48,64 +52,179 @@ historical line 10
 """
 
 
-def check(tmp_path: Path, after: str, before: str = BASE):
+def paths(tmp_path: Path, after: str, before: str = BASE) -> tuple[Path, Path]:
     before_path = tmp_path / "before.md"
     after_path = tmp_path / "after.md"
     before_path.write_text(before, encoding="utf-8", newline="")
     after_path.write_text(after, encoding="utf-8", newline="")
+    return before_path, after_path
+
+
+def check(tmp_path: Path, after: str, before: str = BASE):
+    before_path, after_path = paths(tmp_path, after, before)
     return MODULE.validate(before_path, after_path, required_sections=["## 状態", "## 台帳"])
 
 
-def reasons(result) -> str:
-    return "\n".join(result.violations)
+def hard_reasons(result) -> str:
+    return "\n".join(result.hard_violations)
 
 
-def test_multiline_body_collapsed_to_one_line_is_rejected(tmp_path: Path) -> None:
+def structural_reasons(result) -> str:
+    return "\n".join(result.structural_violations)
+
+
+def override(result, tmp_path: Path, reason: str = "task explicitly authorizes this structural rewrite"):
+    return MODULE.apply_structural_override(result, reason=reason, diff_evidence_path=tmp_path / "override.diff")
+
+
+def test_multiline_body_collapsed_to_one_line_is_hard_failure(tmp_path: Path) -> None:
     result = check(tmp_path, BASE.replace("\n", " "))
     assert not result.accepted
-    assert "one physical line" in reasons(result)
+    assert "one physical line" in hard_reasons(result)
 
 
-def test_drastic_newline_reduction_is_rejected(tmp_path: Path) -> None:
-    result = check(tmp_path, "\n".join(BASE.splitlines()[:8]) + "\n")
+def test_reasoned_override_still_rejects_one_line_collapse(tmp_path: Path) -> None:
+    result = override(check(tmp_path, BASE.replace("\n", " ")), tmp_path)
     assert not result.accepted
-    assert "newline count collapsed" in reasons(result)
+    assert not result.override_used
 
 
-def test_required_heading_removed_is_rejected(tmp_path: Path) -> None:
+@pytest.mark.parametrize("marker", ["\ufffd", "???", "\u7e3a"])
+def test_reasoned_override_still_rejects_corruption_markers(tmp_path: Path, marker: str) -> None:
+    result = override(check(tmp_path, BASE + marker), tmp_path)
+    assert not result.accepted
+    assert not result.override_used
+    assert "mojibake marker" in hard_reasons(result)
+
+
+@pytest.mark.parametrize(
+    ("after", "marker"),
+    [
+        (BASE.replace("```\n\n~~~text", "\n\n~~~text"), "```"),
+        (BASE.replace("~~~\n\nhistorical", "\n\nhistorical"), "~~~"),
+    ],
+)
+def test_reasoned_override_still_rejects_unbalanced_fence(tmp_path: Path, after: str, marker: str) -> None:
+    result = override(check(tmp_path, after), tmp_path)
+    assert not result.accepted
+    assert not result.override_used
+    assert marker in hard_reasons(result)
+
+
+def test_mixed_backtick_and_tilde_fences_are_balanced_independently(tmp_path: Path) -> None:
+    result = check(tmp_path, BASE.replace("backtick block", "backtick block with ~~~ inside"))
+    assert result.accepted
+    assert result.after.code_fence_markers == ["```", "```", "~~~", "~~~"]
+
+
+def test_drastic_newline_reduction_is_structural(tmp_path: Path) -> None:
+    result = check(tmp_path, "\n".join(BASE.splitlines()[:10]) + "\n")
+    assert not result.accepted
+    assert "newline count collapsed" in structural_reasons(result)
+
+
+def test_required_heading_removed_is_structural(tmp_path: Path) -> None:
     result = check(tmp_path, BASE.replace("## 更新ルール", "更新ルール"))
     assert not result.accepted
-    assert "headings are missing" in reasons(result)
+    assert "headings are missing" in structural_reasons(result)
 
 
-def test_table_delimiter_removed_is_rejected(tmp_path: Path) -> None:
+def test_table_delimiter_removed_is_structural(tmp_path: Path) -> None:
     result = check(tmp_path, BASE.replace("|---|---|", "| Slot | 状態 |", 1))
     assert not result.accepted
-    assert "table delimiter" in reasons(result)
+    assert "table delimiter" in structural_reasons(result)
 
 
-def test_unbalanced_code_fence_is_rejected(tmp_path: Path) -> None:
-    result = check(tmp_path, BASE.replace("```\n\nhistorical", "\nhistorical"))
-    assert not result.accepted
-    assert "unbalanced code fences" in reasons(result)
-
-
-def test_unrelated_large_section_deletion_is_rejected(tmp_path: Path) -> None:
+def test_authorized_large_balanced_structural_rewrite_is_accepted(tmp_path: Path) -> None:
     before = BASE + "".join(f"extra historical line {index}\n" for index in range(100))
-    after = BASE + "".join(f"extra historical line {index}\n" for index in range(10))
-    result = check(tmp_path, after, before)
-    assert not result.accepted
-    assert "large" in reasons(result)
+    after = """## Replacement
+
+This is an explicitly authorized multiline rewrite.
+
+~~~text
+balanced
+~~~
+""" + "".join(f"replacement line {index}\n" for index in range(20))
+    result = override(check(tmp_path, after, before), tmp_path)
+    assert result.accepted
+    assert result.override_used
+    assert Path(result.diff_evidence_path).read_text(encoding="utf-8") == result.diff
+
+
+def test_authorized_heading_and_table_rewrite_is_accepted_with_saved_diff(tmp_path: Path) -> None:
+    after = BASE.replace("## 台帳", "## Ledger").replace("|---|---|", "|:---|---:|")
+    result = override(check(tmp_path, after), tmp_path)
+    assert result.accepted
+    assert result.override_used
+    assert result.structural_violations
+
+
+def test_cli_authorized_structural_rewrite_uses_same_evidence_gate(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    diff_path = tmp_path / "cli-override.diff"
+    exit_code = MODULE.main([
+        str(before_path), str(after_path),
+        "--allow-structural-change",
+        "--override-reason", "task explicitly authorizes this structural rewrite",
+        "--diff-output", str(diff_path),
+    ])
+    assert exit_code == 0
+    assert diff_path.read_text(encoding="utf-8").startswith("---")
+
+
+def test_cli_reasoned_override_cannot_accept_one_line_collapse(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, BASE.replace("\n", " "))
+    exit_code = MODULE.main([
+        str(before_path), str(after_path),
+        "--allow-structural-change",
+        "--override-reason", "task explicitly authorizes this structural rewrite",
+        "--diff-output", str(tmp_path / "hard.diff"),
+    ])
+    assert exit_code == 1
+
+
+def test_override_without_structural_violation_is_not_used(tmp_path: Path) -> None:
+    result = override(check(tmp_path, BASE.replace("| P20 | open |", "| P20 | open / draft |")), tmp_path)
+    assert result.accepted
+    assert not result.override_used
+    assert result.diff_evidence_path is None
+
+
+def test_direct_python_validate_has_no_override_bypass(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    with pytest.raises(TypeError):
+        MODULE.validate(before_path, after_path, allow_structural_change=True, override_reason="authorized")
+
+
+def test_direct_override_without_diff_evidence_is_rejected(tmp_path: Path) -> None:
+    result = check(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    overridden = MODULE.apply_structural_override(result, reason="authorized", diff_evidence_path=None)
+    assert not overridden.accepted
+    assert "saved diff evidence" in hard_reasons(overridden)
+
+
+def test_missing_reason_rejects_override(tmp_path: Path) -> None:
+    result = check(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    overridden = MODULE.apply_structural_override(result, reason=" ", diff_evidence_path=tmp_path / "override.diff")
+    assert not overridden.accepted
+    assert "non-empty reason" in hard_reasons(overridden)
+
+
+def test_unwritable_diff_output_rejects_override(tmp_path: Path) -> None:
+    result = check(tmp_path, BASE.replace("## 台帳", "## Ledger"))
+    overridden = MODULE.apply_structural_override(result, reason="authorized", diff_evidence_path=tmp_path)
+    assert not overridden.accepted
+    assert "failed to save" in hard_reasons(overridden)
 
 
 def test_exact_localized_state_row_replacement_is_accepted(tmp_path: Path) -> None:
     result = check(tmp_path, BASE.replace("| P20 | open |", "| P20 | open / draft PR #368 |"))
     assert result.accepted
+    assert not result.override_used
 
 
 def test_small_appended_status_section_is_accepted(tmp_path: Path) -> None:
-    result = check(tmp_path, BASE + "\n## Current status\n\n- P20 remains open.\n")
-    assert result.accepted
+    assert check(tmp_path, BASE + "\n## Current status\n\n- P20 remains open.\n").accepted
 
 
 def test_crlf_to_lf_normalization_only_is_accepted(tmp_path: Path) -> None:
@@ -115,41 +234,11 @@ def test_crlf_to_lf_normalization_only_is_accepted(tmp_path: Path) -> None:
 
 
 def test_japanese_utf8_body_round_trip_is_accepted(tmp_path: Path) -> None:
-    result = check(tmp_path, BASE.replace("日本語の長期台帳です。", "日本語の長期台帳を安全に更新します。"))
-    assert result.accepted
+    assert check(tmp_path, BASE.replace("日本語の長期台帳です。", "日本語の長期台帳を安全に更新します。")).accepted
 
 
-@pytest.mark.parametrize("marker", ["\ufffd", "???", "\u7e3a"])
-def test_replacement_or_mojibake_marker_is_rejected(tmp_path: Path, marker: str) -> None:
-    result = check(tmp_path, BASE + marker)
-    assert not result.accepted
-    assert "mojibake marker" in reasons(result)
-
-
-def test_unintended_question_mark_replacement_is_rejected(tmp_path: Path) -> None:
-    result = check(tmp_path, BASE.replace("日本語", "???"))
-    assert not result.accepted
-    assert "question-mark replacement" in reasons(result)
-
-
-def test_override_requires_reason_and_saved_diff(tmp_path: Path) -> None:
-    before_path = tmp_path / "before.md"
-    after_path = tmp_path / "after.md"
-    before_path.write_text(BASE, encoding="utf-8")
-    after_path.write_text(BASE.replace("\n", " "), encoding="utf-8")
-    assert MODULE.main([str(before_path), str(after_path), "--allow-structural-change"]) == 2
-
-
-def test_reasoned_override_accepts_and_saves_diff(tmp_path: Path) -> None:
-    before_path = tmp_path / "before.md"
-    after_path = tmp_path / "after.md"
-    diff_path = tmp_path / "override.diff"
-    before_path.write_text(BASE, encoding="utf-8")
-    after_path.write_text(BASE.replace("\n", " "), encoding="utf-8")
-    result = MODULE.main([
-        str(before_path), str(after_path), "--allow-structural-change",
-        "--override-reason", "task explicitly authorizes a rewrite",
-        "--diff-output", str(diff_path),
-    ])
-    assert result == 0
-    assert diff_path.read_text(encoding="utf-8").startswith("---")
+def test_utf8_bom_is_rejected_by_imported_api(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, BASE)
+    after_path.write_bytes(b"\xef\xbb\xbf" + BASE.encode("utf-8"))
+    with pytest.raises(MODULE.InputValidationError, match="BOM"):
+        MODULE.validate(before_path, after_path)

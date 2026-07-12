@@ -59,6 +59,14 @@ python scripts/validate_github_body_structure.py before.md after.md \
   --diff-output body-update.diff
 ```
 
-helperはUTF-8 bodyのbyte length、SHA-256、physical line count、newline count、ordered headings、table delimiter rows、code-fence count、required sentinels、unified diffを比較する。multiline collapse、改行や行数の大幅減少、headingの欠落や並べ替え、table delimiter欠落、unbalanced fence、大領域削除、U+FFFD / mojibake markerを拒否する。CRLFからLFだけの正規化と、構造を保持した小さなrow更新やstatus追記は受理する。
+helperはUTF-8 bodyのbyte length、SHA-256、physical line count、newline count、ordered headings、table delimiter rows、backtick / tilde code fence、required sentinels、unified diffを比較する。CRLFからLFだけの正規化と、構造を保持した小さなrow更新やstatus追記は受理する。
 
-大規模なstructural rewriteはtaskが明示承認した場合に限り、`--allow-structural-change`、空でない`--override-reason`、`--diff-output`をすべて指定する。保存したdiffとoverride reasonを最終報告へ記録する。
+### Failure classes and structural override
+
+hard failureはoverrideできない。対象はunreadable / non-UTF-8 / BOM input、empty body、multilineからone-lineへのcollapse、U+FFFD・既知mojibake・`???`などのreplacement marker、unbalancedまたはmismatched fence、無効なoverride reason、required diff evidenceの保存失敗である。一方、headingの削除・並べ替え、table変更、balanced fence削除、valid multilineを保つ大規模section置換やline/newline削減はstructural violationとして分類する。
+
+大規模なstructural rewriteはtaskが明示承認した場合に限り、`--allow-structural-change`、空でない`--override-reason`、`--diff-output`をすべて指定する。overrideはstructural violationが実在し、hard failureがなく、保存diffのexact read-backに成功した場合だけ有効になる。通常検証が通るcandidateでは`override_used=false`のままとする。imported Python APIでも`validate()`単体はoverride不能で、`apply_structural_override()`へreasonとdiff evidence pathを渡す同じgateを使用する。保存したdiffとoverride reasonを最終報告へ記録する。
+
+### Older-backup recovery reconciliation
+
+古い正常multiline backupから長期bodyを復旧するときは、そのbackupだけを採用して完了しない。damaged latest bodyは構造sourceにせずcontent evidenceとして扱い、known-good backup / damaged latest body / repair candidateをLF-normalized、whitespace-normalized token、heading、table row、ledger entryで三者比較する。damaged latest bodyだけに存在するmaterial fragmentをhistorical entry、superseded metadata、duplicated/corrupted fragment、formatting-only artifact、unresolvedへ分類し、正当な後続historyだけを構造を保って追記する。machine-readable reportとhuman-readable diffはrepository外へ保存する。
