@@ -9,11 +9,14 @@ const complete = buildEndpointPresentationState({
   endpoint_delta_requested_m: [-0.002, 0.001, 0.003], endpoint_delta_achieved_m: [-0.0018, 0.0009, 0.0027],
   actual_tip_delta_m: [-0.0017, 0.0008, 0.0026], motion_status: "scaled",
   endpoint_progress_status: "progressing", endpoint_progress_measurement_available: true,
+  source_active: true, zero_input: false, stale_reason: null,
 });
 assert.deepEqual(complete.requested.desiredEndpointM, [0.3, 0.4, 0.5]);
 assert.deepEqual(complete.resolved.worldEndpointVelocityMS, [-0.02, 0.01, 0.03]);
 assert.deepEqual(complete.predicted.achievedDeltaM, [-0.0018, 0.0009, 0.0027]);
 assert.deepEqual(complete.measured.actualTipDeltaM, [-0.0017, 0.0008, 0.0026]);
+assert.deepEqual(complete.source, { active: true, zeroInput: false, staleReason: null });
+assert.equal(complete.status.stale, false);
 
 const malformed = buildEndpointPresentationState({
   desired_endpoint_m: [0, "bad", 0] as unknown as [number, number, number],
@@ -36,8 +39,49 @@ assert.deepEqual(unavailable.status, {
 });
 assert.equal(unavailable.resolved.worldEndpointVelocityMS, null);
 
+assert.equal(buildEndpointPresentationState({ runtime_input_safety_applied: false }).status.held, null);
+assert.equal(buildEndpointPresentationState({
+  motion_status: "accepted", runtime_input_safety_applied: true,
+}).status.held, false);
+assert.equal(buildEndpointPresentationState({
+  motion_status: "held", runtime_input_safety_applied: false,
+}).status.held, true);
+assert.equal(buildEndpointPresentationState({
+  motion_status: "invalid" as unknown as "held", runtime_input_safety_applied: true,
+}).status.held, null);
+
+assert.equal(buildEndpointPresentationState({ endpoint_progress_status: "not_requested" }).status.measurementUnavailable, null);
+assert.equal(buildEndpointPresentationState({ endpoint_progress_status: "progressing" }).status.measurementUnavailable, false);
+assert.equal(buildEndpointPresentationState({
+  endpoint_progress_status: "progressing", endpoint_progress_measurement_available: false,
+}).status.measurementUnavailable, true);
+
+const inactive = buildEndpointPresentationState({ source_active: false, zero_input: true });
+assert.deepEqual(inactive.source, { active: false, zeroInput: true, staleReason: null });
+assert.equal(inactive.status.stale, false);
+assert.equal(buildEndpointPresentationState({ stale_reason: null }).status.stale, false);
+assert.equal(buildEndpointPresentationState({ stale_reason: "" }).status.stale, null);
+assert.equal(buildEndpointPresentationState({ stale_reason: 17 as unknown as string }).status.stale, null);
+
+const formatted = formatEndpointPresentationText(buildEndpointPresentationState({
+  control_frame_resolution_reason: "tip_orientation_missing",
+  source_active: false,
+  zero_input: true,
+  stale_reason: "command_timeout",
+}));
+assert.match(formatted, /resolution reason: tip_orientation_missing/);
+assert.match(formatted, /source active: false/);
+assert.match(formatted, /zero input: true/);
+assert.match(formatted, /stale reason: command_timeout/);
+
 const compatibility = buildEndpointPresentationState({ control_frame: "world", endpoint_delta_m: [0.1, 0, 0] });
 assert.equal(compatibility.requested.controlFrame, "world");
 assert.deepEqual(compatibility.predicted.requestedDeltaM, [0.1, 0, 0]);
+const canonicalWins = buildEndpointPresentationState({
+  requested_control_frame: "invalid" as unknown as "world", control_frame: "world",
+  endpoint_delta_requested_m: [0, Number.NaN, 0], endpoint_delta_m: [0.1, 0, 0],
+});
+assert.equal(canonicalWins.requested.controlFrame, null);
+assert.equal(canonicalWins.predicted.requestedDeltaM, null);
 
 console.log("endpoint presentation tests passed");

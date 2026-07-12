@@ -28,6 +28,11 @@ export interface EndpointPresentationState {
     actualTipDeltaM: Vector3 | null;
     progressStatus: EndpointProgressStatus | null;
   };
+  source: {
+    active: boolean | null;
+    zeroInput: boolean | null;
+    staleReason: string | null;
+  };
   status: {
     motion: MotionStatus | null;
     held: boolean | null;
@@ -48,6 +53,14 @@ function vector(value: unknown): Vector3 | null {
 
 function stringValue<T extends string>(value: unknown, allowed: readonly T[]): T | null {
   return typeof value === "string" && allowed.includes(value as T) ? (value as T) : null;
+}
+
+function hasOwn(metadata: TransportEndpointMetadata, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(metadata, key);
+}
+
+function optionalBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 const CONTROL_FRAMES = ["world", "tool"] as const;
@@ -75,9 +88,9 @@ const PROGRESS_STATUSES = [
 export function buildEndpointPresentationState(
   metadata: TransportEndpointMetadata,
 ): EndpointPresentationState {
-  const requestedFrame =
-    stringValue(metadata.requested_control_frame, CONTROL_FRAMES) ??
-    stringValue(metadata.control_frame, CONTROL_FRAMES);
+  const requestedFrame = hasOwn(metadata, "requested_control_frame")
+    ? stringValue(metadata.requested_control_frame, CONTROL_FRAMES)
+    : stringValue(metadata.control_frame, CONTROL_FRAMES);
   const resolutionStatus = stringValue(metadata.control_frame_resolution_status, RESOLUTION_STATUSES);
   const motion = stringValue(metadata.motion_status, MOTION_STATUSES);
   const progressStatus = stringValue(metadata.endpoint_progress_status, PROGRESS_STATUSES);
@@ -86,6 +99,29 @@ export function buildEndpointPresentationState(
     typeof metadata.endpoint_progress_measurement_available === "boolean"
       ? metadata.endpoint_progress_measurement_available
       : null;
+  const sourceActive = optionalBoolean(metadata.source_active);
+  const zeroInput = optionalBoolean(metadata.zero_input);
+  const hasStaleReason = hasOwn(metadata, "stale_reason");
+  const staleReason = typeof metadata.stale_reason === "string" && metadata.stale_reason.length > 0
+    ? metadata.stale_reason
+    : null;
+  const stale = hasStaleReason
+    ? metadata.stale_reason === null ? false : staleReason === null ? null : true
+    : sourceActive !== null || zeroInput !== null ? false : null;
+  const held = motion !== null
+    ? motion === "held"
+    : hasOwn(metadata, "motion_status")
+      ? null
+      : metadata.runtime_input_safety_applied === true ? true : null;
+  const measurementUnavailable = measurementAvailable !== null
+    ? !measurementAvailable
+    : progressStatus === "measurement_unavailable"
+      ? true
+      : progressStatus === "progressing" ||
+          progressStatus === "insufficient_progress" ||
+          progressStatus === "misaligned"
+        ? false
+        : null;
 
   return {
     requested: {
@@ -102,27 +138,29 @@ export function buildEndpointPresentationState(
         : null,
     },
     predicted: {
-      requestedDeltaM: vector(metadata.endpoint_delta_requested_m) ?? vector(metadata.endpoint_delta_m),
+      requestedDeltaM: hasOwn(metadata, "endpoint_delta_requested_m")
+        ? vector(metadata.endpoint_delta_requested_m)
+        : vector(metadata.endpoint_delta_m),
       achievedDeltaM: vector(metadata.endpoint_delta_achieved_m),
     },
     measured: {
       actualTipDeltaM: measuredDelta,
       progressStatus,
     },
+    source: {
+      active: sourceActive,
+      zeroInput,
+      staleReason,
+    },
     status: {
       motion,
-      held: motion === "held" || metadata.runtime_input_safety_applied === true
-        ? true
-        : motion !== null || metadata.runtime_input_safety_applied === false ? false : null,
+      held,
       rejected: typeof metadata.target_rejected === "boolean" ? metadata.target_rejected : null,
-      stale: typeof metadata.stale_reason === "string" ? true : null,
+      stale,
       resolutionUnavailable: resolutionStatus === null
         ? null
         : resolutionStatus === "tool_orientation_unavailable",
-      measurementUnavailable:
-        progressStatus === "measurement_unavailable" || measurementAvailable === false
-          ? true
-          : progressStatus !== null || measurementAvailable === true ? false : null,
+      measurementUnavailable,
     },
   };
 }
@@ -139,10 +177,14 @@ export function formatEndpointPresentationText(state: EndpointPresentationState)
     `resolved world velocity_m_s: ${formatVector(state.resolved.worldEndpointVelocityMS)}`,
     `resolved control frame: ${state.resolved.controlFrame ?? "unavailable"}`,
     `resolution status: ${state.resolved.status ?? "unavailable"}`,
+    `resolution reason: ${state.resolved.reason ?? "unavailable"}`,
     `predicted requested delta_m: ${formatVector(state.predicted.requestedDeltaM)}`,
     `predicted achieved delta_m: ${formatVector(state.predicted.achievedDeltaM)}`,
     `measured actual tip delta_m: ${formatVector(state.measured.actualTipDeltaM)}`,
     `measured progress status: ${state.measured.progressStatus ?? "unavailable"}`,
+    `source active: ${state.source.active === null ? "unavailable" : String(state.source.active)}`,
+    `zero input: ${state.source.zeroInput === null ? "unavailable" : String(state.source.zeroInput)}`,
+    `stale reason: ${state.source.staleReason ?? "unavailable"}`,
     `held: ${state.status.held === null ? "unavailable" : String(state.status.held)}`,
     `rejected: ${state.status.rejected === null ? "unavailable" : String(state.status.rejected)}`,
     `stale: ${state.status.stale === null ? "unavailable" : String(state.status.stale)}`,

@@ -47,6 +47,9 @@ export interface TransportEndpointMetadata {
   endpoint_progress_requested_norm_m?: number | null;
   endpoint_progress_measured_norm_m?: number | null;
   endpoint_progress_measurement_available?: boolean;
+  source_active?: boolean;
+  zero_input?: boolean;
+  stale_reason?: string | null;
   [key: string]: unknown;
 }
 
