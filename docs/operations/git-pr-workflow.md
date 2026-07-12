@@ -59,9 +59,11 @@ python scripts/validate_github_body_structure.py before.md after.md \
   --diff-output body-update.diff
 ```
 
-helperはMarkdownを1回走査し、fenced code blockの内外を追跡する。heading、table delimiter row、required sentinel headingはfence外だけから抽出し、code sample内の同一文字列を文書構造として扱わない。required sentinelはfence外のexact heading lineでなければならない。
+before / after input bodyは別のfilesystem objectでなければならない。同一path、absolute / relative alias、symlink、hardlink、Windows case aliasはdecode前のresolved / same-file gateでhard failureとして拒否する。別fileに保存された同一bytesはno-op updateとして受理できる。
 
-GFM table delimiterはleading / trailing pipeを任意とし、各cellが空白を除いてoptional leading colon、3個以上のhyphen、optional trailing colonだけで構成される場合に認識する。`---|---`、`--- | ---`、`| :--- | :---: | ---: |`などを受理し、単独horizontal rule、通常本文、fence内のdelimiter-like textは除外する。
+helperはMarkdownを1回走査し、fenced code blockの内外を追跡する。heading、table block、required sentinel headingはfence外だけから抽出し、code sample内の同一文字列を文書構造として扱わない。required sentinelはfence外のexact heading lineでなければならない。
+
+GFM tableはtop-levelのheader-plus-delimiter blockとして検証する。delimiterは直前の非blank pipe-separated headerと隣接し、effective column countが一致する場合だけ登録する。leading / trailing pipeは任意で、delimiter cellは空白を除いてoptional leading colon、3個以上のhyphen、optional trailing colonだけを許可する。ordered blockにはnearest preceding heading、column count、alignment tuple、raw header / delimiterを保持する。delimiter-like text単体、blank lineでheaderから離れたdelimiter、別位置へ移動したdelimiter、indented/fenced code、column mismatchはtableとして数えず、既存tableを壊す変更はstructural violationとして拒否する。
 
 localized updateではordered fence block structureとしてmarker typeとopening lengthを比較する。code block本文の通常編集は許可するが、block数、順序、backtick / tilde種別、opening lengthの変更はstructural violationとする。unbalanced / mismatched fenceはhard failureである。
 

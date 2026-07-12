@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 import sys
 
@@ -77,6 +78,69 @@ def override(result, tmp_path: Path, reason: str = "task explicitly authorizes t
     return MODULE.apply_structural_override(result, reason=reason, diff_evidence_path=tmp_path / "override.diff")
 
 
+def test_before_and_after_same_path_are_rejected_by_imported_api(tmp_path: Path) -> None:
+    body = tmp_path / "body.md"
+    body.write_text(BASE, encoding="utf-8")
+    with pytest.raises(MODULE.InputValidationError, match="distinct filesystem objects"):
+        MODULE.validate(body, body)
+
+
+def test_before_and_after_relative_alias_are_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    body = tmp_path / "body.md"
+    body.write_text(BASE, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(MODULE.InputValidationError, match="distinct filesystem objects"):
+        MODULE.validate(Path("body.md"), body)
+
+
+def test_before_and_after_symlink_alias_are_rejected(tmp_path: Path) -> None:
+    body = tmp_path / "body.md"
+    alias = tmp_path / "body-alias.md"
+    body.write_text(BASE, encoding="utf-8")
+    try:
+        alias.symlink_to(body)
+    except OSError as exc:
+        pytest.skip(f"symlink unavailable: {exc}")
+    with pytest.raises(MODULE.InputValidationError, match="distinct filesystem objects"):
+        MODULE.validate(body, alias)
+
+
+def test_before_and_after_hardlink_alias_are_rejected(tmp_path: Path) -> None:
+    body = tmp_path / "body.md"
+    alias = tmp_path / "body-hardlink.md"
+    body.write_text(BASE, encoding="utf-8")
+    try:
+        os.link(body, alias)
+    except OSError as exc:
+        pytest.skip(f"hardlink unavailable: {exc}")
+    with pytest.raises(MODULE.InputValidationError, match="distinct filesystem objects"):
+        MODULE.validate(body, alias)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path case semantics")
+def test_before_and_after_windows_case_alias_are_rejected(tmp_path: Path) -> None:
+    body = tmp_path / "MixedCaseBody.md"
+    body.write_text(BASE, encoding="utf-8")
+    alias = tmp_path / "mixedcasebody.md"
+    with pytest.raises(MODULE.InputValidationError, match="distinct filesystem objects"):
+        MODULE.validate(body, alias)
+
+
+def test_distinct_files_with_identical_bytes_are_accepted(tmp_path: Path) -> None:
+    before_path, after_path = paths(tmp_path, BASE)
+    result = MODULE.validate(before_path, after_path)
+    assert result.accepted
+    assert result.diff == ""
+
+
+def test_cli_and_imported_api_share_input_identity_gate(tmp_path: Path) -> None:
+    body = tmp_path / "body.md"
+    body.write_text(BASE, encoding="utf-8")
+    with pytest.raises(MODULE.InputValidationError):
+        MODULE.validate(body, body)
+    assert MODULE.main([str(body), str(body)]) == 2
+
+
 def test_multiline_body_collapsed_to_one_line_is_hard_failure(tmp_path: Path) -> None:
     result = check(tmp_path, BASE.replace("\n", " "))
     assert not result.accepted
@@ -129,7 +193,7 @@ def test_table_delimiter_inside_fence_cannot_replace_real_delimiter(tmp_path: Pa
     after = BASE.replace("|---|---|\n", "").replace("backtick block", "backtick block\n|---|---|")
     result = check(tmp_path, after)
     assert not result.accepted
-    assert "table delimiter" in structural_reasons(result)
+    assert "table block" in structural_reasons(result)
 
 
 def test_required_sentinel_inside_fence_cannot_replace_real_heading(tmp_path: Path) -> None:
@@ -148,15 +212,75 @@ def test_required_sentinel_inside_fence_cannot_replace_real_heading(tmp_path: Pa
     "| :--- | :---: | ---: |",
 ])
 def test_valid_gfm_table_delimiter_forms_are_recognized(tmp_path: Path, delimiter: str) -> None:
-    after = BASE.replace("|---|---|", delimiter)
-    result = check(tmp_path, after)
-    assert len(result.after.table_delimiter_rows) == 1
+    column_count = len(MODULE._pipe_cells(delimiter))
+    header = " | ".join(f"H{index}" for index in range(column_count))
+    body = f"## Table\n\n{header}\n{delimiter}\n" + " | ".join("value" for _ in range(column_count)) + "\n"
+    before_path, after_path = paths(tmp_path, body, body)
+    result = MODULE.validate(before_path, after_path)
+    assert result.accepted
+    assert len(result.after.table_blocks) == 1
+    assert result.after.table_blocks[0].column_count == column_count
 
 
 def test_horizontal_rule_and_fenced_delimiter_are_not_table_rows(tmp_path: Path) -> None:
     after = BASE.replace("|---|---|\n", "---\n").replace("backtick block", "backtick block\n|---|---|")
     result = check(tmp_path, after)
-    assert result.after.table_delimiter_rows == []
+    assert result.after.table_blocks == []
+
+
+def test_blank_line_between_header_and_delimiter_breaks_table(tmp_path: Path) -> None:
+    result = check(tmp_path, BASE.replace("| Slot | 状態 |\n|---|---|", "| Slot | 状態 |\n\n|---|---|"))
+    assert not result.accepted
+    assert "table block" in structural_reasons(result)
+
+
+def test_relocated_delimiter_does_not_preserve_table(tmp_path: Path) -> None:
+    after = BASE.replace("|---|---|\n", "").replace("historical line 10", "historical line 10\n|---|---|")
+    result = check(tmp_path, after)
+    assert not result.accepted
+    assert "table block" in structural_reasons(result)
+
+
+@pytest.mark.parametrize("delimiter", ["|---|---|", "---|---"])
+def test_standalone_delimiter_is_not_a_table(tmp_path: Path, delimiter: str) -> None:
+    body = f"## Section\n\nplain text\n\n{delimiter}\n"
+    before_path, after_path = paths(tmp_path, body, body)
+    result = MODULE.validate(before_path, after_path)
+    assert result.accepted
+    assert result.after.table_blocks == []
+
+
+def test_indented_code_header_delimiter_pair_is_not_a_table(tmp_path: Path) -> None:
+    body = "## Section\n\n    Header | Value\n    ---|---\n"
+    before_path, after_path = paths(tmp_path, body, body)
+    result = MODULE.validate(before_path, after_path)
+    assert result.after.table_blocks == []
+
+
+def test_fenced_header_delimiter_pair_is_not_a_table(tmp_path: Path) -> None:
+    body = "## Section\n\n```text\nHeader | Value\n---|---\n```\n"
+    before_path, after_path = paths(tmp_path, body, body)
+    result = MODULE.validate(before_path, after_path)
+    assert result.accepted
+    assert result.after.table_blocks == []
+
+
+def test_header_delimiter_column_mismatch_is_not_a_table(tmp_path: Path) -> None:
+    body = "## Section\n\nHeader | Value\n---|---|---\n"
+    before_path, after_path = paths(tmp_path, body, body)
+    result = MODULE.validate(before_path, after_path)
+    assert result.after.table_blocks == []
+
+
+def test_table_block_records_section_columns_alignment_and_rows(tmp_path: Path) -> None:
+    body = "## Ledger\n\nSlot | State | Note\n:--- | :---: | ---:\nP20 | open | draft\n"
+    before_path, after_path = paths(tmp_path, body, body)
+    block = MODULE.validate(before_path, after_path).after.table_blocks[0]
+    assert block.section_identity == "## Ledger"
+    assert block.column_count == 3
+    assert block.alignments == ("left", "center", "right")
+    assert block.header_row == "Slot | State | Note"
+    assert block.delimiter_row == ":--- | :---: | ---:"
 
 
 @pytest.mark.parametrize(
@@ -188,7 +312,7 @@ def test_required_heading_removed_is_structural(tmp_path: Path) -> None:
 def test_table_delimiter_removed_is_structural(tmp_path: Path) -> None:
     result = check(tmp_path, BASE.replace("|---|---|", "| Slot | 状態 |", 1))
     assert not result.accepted
-    assert "table delimiter" in structural_reasons(result)
+    assert "table block" in structural_reasons(result)
 
 
 def test_authorized_large_balanced_structural_rewrite_is_accepted(tmp_path: Path) -> None:

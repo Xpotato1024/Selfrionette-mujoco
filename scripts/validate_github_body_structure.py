@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 from dataclasses import asdict, dataclass, replace
 import difflib
 import hashlib
@@ -29,13 +28,22 @@ class FenceBlock:
 
 
 @dataclass(frozen=True)
+class TableBlock:
+    section_identity: str | None
+    column_count: int
+    alignments: tuple[str, ...]
+    header_row: str
+    delimiter_row: str
+
+
+@dataclass(frozen=True)
 class BodyMetrics:
     byte_length: int
     sha256: str
     physical_line_count: int
     newline_count: int
     headings: list[str]
-    table_delimiter_rows: list[str]
+    table_blocks: list[TableBlock]
     code_fence_blocks: list[FenceBlock]
 
 
@@ -76,23 +84,54 @@ def _lf(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def _is_table_delimiter(line: str) -> bool:
+def _pipe_cells(line: str) -> list[str] | None:
+    if line.startswith(("    ", "\t")):
+        return None
     stripped = line.strip()
     if "|" not in stripped:
-        return False
+        return None
     cells = stripped.split("|")
     if cells and not cells[0].strip():
         cells.pop(0)
     if cells and not cells[-1].strip():
         cells.pop()
-    return len(cells) >= 2 and all(re.fullmatch(r":?-{3,}:?", cell.strip()) for cell in cells)
+    return cells if len(cells) >= 2 else None
 
 
-def _scan_structure(lines: list[str]) -> tuple[list[str], list[str], list[FenceBlock], str | None]:
+def _parse_table_header(line: str) -> list[str] | None:
+    cells = _pipe_cells(line)
+    if cells is None or not all(cell.strip() for cell in cells):
+        return None
+    return [cell.strip() for cell in cells]
+
+
+def _parse_table_delimiter(line: str) -> tuple[str, ...] | None:
+    cells = _pipe_cells(line)
+    if cells is None:
+        return None
+    alignments: list[str] = []
+    for cell in cells:
+        value = cell.strip()
+        if not re.fullmatch(r":?-{3,}:?", value):
+            return None
+        if value.startswith(":") and value.endswith(":"):
+            alignments.append("center")
+        elif value.startswith(":"):
+            alignments.append("left")
+        elif value.endswith(":"):
+            alignments.append("right")
+        else:
+            alignments.append("none")
+    return tuple(alignments)
+
+
+def _scan_structure(lines: list[str]) -> tuple[list[str], list[TableBlock], list[FenceBlock], str | None]:
     headings: list[str] = []
-    table_delimiters: list[str] = []
+    tables: list[TableBlock] = []
     blocks: list[FenceBlock] = []
     opening: tuple[str, int] | None = None
+    nearest_heading: str | None = None
+    previous_outside_line: str | None = None
     for line in lines:
         match = FENCE_RE.fullmatch(line)
         if match:
@@ -104,33 +143,40 @@ def _scan_structure(lines: list[str]) -> tuple[list[str], list[str], list[FenceB
                     match = None
                 else:
                     opening = (marker_type, marker_length)
+                    previous_outside_line = None
                     continue
             elif marker_type == opening[0] and marker_length >= opening[1] and not rest.strip():
                 blocks.append(FenceBlock(opening[0], opening[1], True))
                 opening = None
+                previous_outside_line = None
                 continue
         if opening is not None:
+            previous_outside_line = None
             continue
         if HEADING_RE.fullmatch(line):
             headings.append(line)
-        if _is_table_delimiter(line):
-            table_delimiters.append(line)
+            nearest_heading = line
+        alignments = _parse_table_delimiter(line)
+        header = _parse_table_header(previous_outside_line) if previous_outside_line is not None else None
+        if alignments is not None and header is not None and len(header) == len(alignments):
+            tables.append(TableBlock(nearest_heading, len(header), alignments, previous_outside_line, line))
+        previous_outside_line = line
     if opening is None:
-        return headings, table_delimiters, blocks, None
-    return headings, table_delimiters, blocks, f"unbalanced {opening[0] * opening[1]} code fence"
+        return headings, tables, blocks, None
+    return headings, tables, blocks, f"unbalanced {opening[0] * opening[1]} code fence"
 
 
 def _metrics(data: bytes, text: str) -> BodyMetrics:
     normalized = _lf(text)
     lines = normalized.splitlines()
-    headings, table_delimiters, blocks, _ = _scan_structure(lines)
+    headings, tables, blocks, _ = _scan_structure(lines)
     return BodyMetrics(
         byte_length=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
         physical_line_count=len(lines),
         newline_count=normalized.count("\n"),
         headings=headings,
-        table_delimiter_rows=table_delimiters,
+        table_blocks=tables,
         code_fence_blocks=blocks,
     )
 
@@ -151,6 +197,8 @@ def validate(
     Structural overrides are intentionally unavailable here. Call
     ``apply_structural_override`` with saved diff evidence instead.
     """
+    if _paths_alias(before_path, after_path):
+        raise InputValidationError("before and after input bodies must be distinct filesystem objects")
     before_data, before_text = _decode(before_path)
     after_data, after_text = _decode(after_path)
     before_lf = _lf(before_text)
@@ -189,10 +237,8 @@ def validate(
     if not _is_ordered_subsequence(before.headings, after.headings):
         structural.append("Markdown headings are missing or reordered")
 
-    before_delimiters = Counter(before.table_delimiter_rows)
-    after_delimiters = Counter(after.table_delimiter_rows)
-    if any(after_delimiters[row] < count for row, count in before_delimiters.items()):
-        structural.append("Markdown table delimiter rows are missing")
+    if not _is_ordered_subsequence(before.table_blocks, after.table_blocks):
+        structural.append("ordered Markdown table block structure changed")
     if after.code_fence_blocks != before.code_fence_blocks:
         structural.append("ordered code-fence block structure changed")
 
