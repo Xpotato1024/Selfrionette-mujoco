@@ -135,6 +135,7 @@ GitHub Issue、PR、comment、discussionなど、非ASCII文字を含む長文�
 - structural overrideはintentionalな構造差分だけを対象とし、encoding / corruption、one-line collapse、fence balanceのhard failureを回避できない。CLI / imported APIのどちらも明示承認、理由、保存済みunified diffを必須とする。
 - before / after bodyは別filesystem objectとし、structural elementはfence外の実heading / header-plus-delimiter table blockから抽出する。diff evidence pathも両inputと同一またはaliasにしない。
 - 古い正常backupから復旧する場合は、damaged latest bodyをcontent evidenceとして照合し、後続の正当なhistorical entryが欠落していないことをwrite前に確認する。
+- numbering SoTとparent / roadmap Issueのlocalized updateでは`--profile protected-long-form`、対象固有の`--required-section`、必要な`--required-table-section`を指定する。before bodyがcollapsed、sentinel欠落、またはtable identity欠落の場合はhard failureとして通常更新を停止し、既知正常backupとの三者照合によるrecovery workflowへ切り替える。baseline health failureはstructural overrideで回避しない。
 
 Issue / PR本文を変更した最終報告では、関連する場合に限り、update method、encoding、backup source、read-back検証、rollback要否、検査したnon-ASCII phrase、最終stateを記録する。同じ恒常ルールをtask promptへ全文転記せず、このsectionを参照し、事故リスク固有の差分だけを追加する。
 
