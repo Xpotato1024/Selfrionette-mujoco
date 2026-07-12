@@ -78,8 +78,8 @@ def test_viewer_step_loop_accepts_continuous_keyboard_motion_with_small_bounded_
     assert record.motion_command.metadata["endpoint_model"] == "mujoco_model_aligned_tip_site"
     assert record.state.metadata["endpoint_model"] == "mujoco_model_aligned_tip_site"
     assert record.motion_command.metadata["endpoint_velocity_m_s"][0] > 0.0
-    assert abs(record.state.metadata["actual_tip_delta_m"][0]) < 1e-6
-    assert record.state.metadata["endpoint_progress_status"] == "insufficient_progress"
+    assert record.state.metadata["actual_tip_delta_m"][0] > 0.0
+    assert record.state.metadata["endpoint_progress_status"] == "progressing"
     assert record.state.metadata["motion_status"] == record.motion_command.metadata["motion_status"]
     post_step_tip_site_position_m = extract_fast_arm_tip_site_endpoint_from_state(record.state).position_m
     expected_actual_tip_delta_m = tuple(
@@ -126,12 +126,8 @@ def test_viewer_step_loop_world_frame_preserves_keyboard_axis_mapping(
         abs=1e-12,
     )
     assert record.motion_command.metadata["motion_status"] in {"accepted", "scaled"}
-    if expected_axis_index == 0:
-        assert abs(record.state.metadata["actual_tip_delta_m"][expected_axis_index]) < 1e-6
-        assert record.state.metadata["endpoint_progress_status"] == "insufficient_progress"
-    else:
-        assert record.state.metadata["actual_tip_delta_m"][expected_axis_index] * expected_sign > 0.0
-        assert record.state.metadata["endpoint_progress_status"] == "progressing"
+    assert record.state.metadata["actual_tip_delta_m"][expected_axis_index] * expected_sign > 0.0
+    assert record.state.metadata["endpoint_progress_status"] == "progressing"
 
 
 @pytest.mark.parametrize(
@@ -185,17 +181,24 @@ def test_viewer_step_loop_dt_scales_endpoint_delta() -> None:
     )
 
 
-def test_viewer_step_loop_holds_motion_without_repeated_keydown_until_keyup() -> None:
+@pytest.mark.parametrize("key_code", ("Space", "KeyW", "KeyA", "KeyD"))
+def test_viewer_step_loop_holds_motion_without_repeated_keydown_until_keyup(
+    key_code: str,
+) -> None:
     clock = _ClockSequence((0.0, 0.0, 0.01, 0.02, 0.03, 0.04))
     source, plan = _build_viewer_plan(clock, steps=4)
 
-    ingest_viewer_control_message(source, _keyboard_message(4.0, "KeyD"))
+    ingest_viewer_control_message(source, _keyboard_message(4.0, key_code))
     records = asyncio.run(run_runtime_input_source_step_loop(plan, steps=3, dt_s=1.0 / 60.0))
 
     assert len(records) == 3
     assert records[0].motion_command.metadata["motion_status"] in {"accepted", "scaled"}
     assert records[1].motion_command.metadata["motion_status"] in {"accepted", "scaled"}
     assert records[2].motion_command.metadata["motion_status"] in {"accepted", "scaled"}
+    assert all(
+        record.motion_command.metadata["qpos_delta_norm_rad"] <= 0.2 + 1e-12
+        for record in records
+    )
     assert records[0].state.qpos[:4] != records[1].state.qpos[:4]
     assert records[1].state.qpos[:4] != records[2].state.qpos[:4]
     assert any(abs(component) > 1e-12 for component in records[0].state.metadata["actual_tip_delta_m"])

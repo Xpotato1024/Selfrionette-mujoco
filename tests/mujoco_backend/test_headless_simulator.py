@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, TargetCommand
 
 
@@ -10,6 +11,28 @@ def test_headless_simulator_from_default_fast_arm_loads_scene() -> None:
     simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
 
     assert simulator.model_path.name == "scene.xml"
+    assert simulator.snapshot().qpos == pytest.approx(
+        tuple(simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos)
+    )
+
+
+def test_headless_simulator_reset_restores_canonical_keyframe_state() -> None:
+    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator.apply_qpos_command(
+        JointCommand(joint_angles_rad=(0.1, -0.2, 0.3, -0.4))
+    )
+    simulator.step(1.0 / 60.0)
+
+    simulator.reset()
+    state = simulator.snapshot()
+
+    assert state.qpos == pytest.approx(
+        tuple(simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos)
+    )
+    assert state.qvel == pytest.approx(tuple(0.0 for _ in state.qvel))
+    assert state.frame_index == 0
+    assert state.time_s == pytest.approx(0.0)
+    assert simulator.last_command is None
 
 
 def test_headless_simulator_keeps_command_and_advances_frame_index_with_mj_step() -> None:

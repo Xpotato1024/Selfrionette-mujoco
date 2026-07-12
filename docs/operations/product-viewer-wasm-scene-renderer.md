@@ -30,8 +30,8 @@ related:
 
 ## Startup pose source
 
-- `default qpos`: compiled MuJoCo model default qpos
-- `home` keyframe: startup では使わない
+- `home` keyframe: canonical fast_arm startup qpos。pre-payload表示はMJCFからこのqposを読む
+- compiled MuJoCo model default qpos: historical fallbackではなく、startup sourceには使わない
 - fixture qpos: default startup path では使わない
 - runtime qpos: WebSocket payload が来たら `data.qpos` に適用する
 

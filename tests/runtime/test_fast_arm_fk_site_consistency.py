@@ -8,6 +8,7 @@ import pytest
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoSiteEndpointEvaluation
+from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
 from selfrionette.runtime.endpoint_motion_sanity import (
     _build_fast_arm_fk_site_consistency_diagnostic,
     _fast_arm_fk_site_consistency_qpos_fixtures,
@@ -58,7 +59,11 @@ def test_fast_arm_fk_site_consistency_default_qpos_fixture_is_deterministic_and_
     fixtures = _fast_arm_fk_site_consistency_qpos_fixtures()
 
     assert fixtures[0][0] == "default_qpos"
-    assert fixtures[0][1] == pytest.approx((0.0, -math.pi / 2.0, 0.0, 0.0), abs=1e-12)
+    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    assert fixtures[0][1] == pytest.approx(
+        tuple(simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos),
+        abs=1e-12,
+    )
     assert any(label != "default_qpos" and qpos != fixtures[0][1] for label, qpos in fixtures)
 
     diagnostic = _build_fast_arm_fk_site_consistency_diagnostic(

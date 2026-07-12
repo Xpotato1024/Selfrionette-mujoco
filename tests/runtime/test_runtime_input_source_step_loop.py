@@ -8,6 +8,7 @@ import pytest
 import selfrionette.runtime.input_step_loop as input_step_loop
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
 from selfrionette.runtime import (
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
@@ -57,6 +58,34 @@ def _build_plan(clock: _ClockSequence):
         viewer_input_source=viewer_input_source,
     )
     return viewer_input_source, plan
+
+
+def test_runtime_first_state_payload_rebase_and_marker_share_canonical_pose() -> None:
+    clock = _ClockSequence((0.0,))
+    source = ViewerInputSource(clock=clock.monotonic)
+    publisher = RecordingPublisher()
+    plan = build_runtime_input_source_step_loop_plan(
+        select_runtime_input_source("viewer", steps=1),
+        publisher=publisher,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=source,
+    )
+    initial_state = plan.pipeline.simulator.snapshot()
+    canonical_qpos = tuple(
+        plan.pipeline.simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos
+    )
+    initial_tip = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
+
+    records = asyncio.run(
+        run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0)
+    )
+
+    assert initial_state.qpos == pytest.approx(canonical_qpos)
+    assert records[0].state.qpos == pytest.approx(canonical_qpos)
+    assert records[0].state.target_position_m == pytest.approx(initial_tip)
+    assert source.current_endpoint_m == pytest.approx(initial_tip)
+    assert publisher.states[0].qpos == pytest.approx(canonical_qpos)
+    assert publisher.states[0].target_position_m == pytest.approx(initial_tip)
 
 
 def test_runtime_step_loop_rebases_viewer_source_to_initial_tip_site_position() -> None:

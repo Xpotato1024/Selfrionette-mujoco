@@ -40,12 +40,12 @@ uv run python scripts/view_fast_arm_native_mujoco.py --key-name home
 - default `qpos0 = [0.0, -1.5707963267948966, 0.0, 0.0]`
 - keyframe は 1 個
 - keyframe 名は `home`
-- `home` の `qpos = [0.0, 0.0, 0.0, 0.0]`
+- `home` のcurrent `qpos = [0.0, -0.5235987755982989, 0.0, -1.0471975511965976]`
 
 ## native viewer / native renderer の観察結果
 
 - `qpos0` では arm は横方向に伸びた姿勢で表示された
-- `home` keyframe では arm が下に垂れた自然な姿勢で表示された
+- `home` keyframe はP22でlower / bent neutral poseへ更新された
 - body / joint / site の接続は破綻していない
 - mesh の asset path は全て解決でき、STL も 5 本ともロード対象として揃っている
 
@@ -74,4 +74,4 @@ native 側では mesh の local pose が model に含まれているが、browse
 ## remaining risks
 
 - browser 側に MuJoCo model loading を入れずに、どう mesh local pose を再現するかは follow-up が必要
-- runtime の initial pose policy が `qpos0` か `home` かは別途整理が必要
+- runtime / product viewerのinitial pose policyはP22で`home` keyframeに統一された

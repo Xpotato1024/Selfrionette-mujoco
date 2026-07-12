@@ -36,6 +36,7 @@ CANONICAL_DOCS = [
     "docs/operations/r7-c-presentation-demo-notes.md",
     "docs/operations/r7-c-completion-audit.md",
     "docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md",
+    "docs/operations/r7-e-p22-neutral-initial-pose.md",
     "docs/migration/legacy-inventory.md",
     "docs/migration/legacy-to-new-layer-map.md",
     "docs/migration/rapier-to-mujoco-migration.md",
@@ -127,3 +128,16 @@ def test_runtime_composition_documents_p19_responsibility_split() -> None:
     assert "render-only" in text
     assert "publish-before-`ViewerInputSource`-rebase ordering" in text
     assert "does not perform a broad runtime rewrite" in text
+
+
+def test_p22_neutral_pose_contract_is_registered_and_freezes_selection_order() -> None:
+    index = read("docs/README.md")
+    text = read("docs/operations/r7-e-p22-neutral-initial-pose.md")
+
+    assert "`docs/operations/r7-e-p22-neutral-initial-pose.md`" in index
+    assert "Selection contract fixed before evaluation" in text
+    assert "rank 3は必須にしない" in text
+    assert "MuJoCo native `home` keyframe" in text
+    assert "candidate count: `82`" in text
+    assert "#339 / P6: **close-ready**" in text
+    assert "#341 / P7: **close-ready with documented mechanism limitation**" in text

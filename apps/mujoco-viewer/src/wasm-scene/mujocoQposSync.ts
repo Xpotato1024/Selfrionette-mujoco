@@ -12,6 +12,7 @@ import {
 export type { QposFixture, QposFixtureFrame } from "./qposFrameTypes.js";
 
 export const DEFAULT_QPOS_FIXTURE_URL = "/fixtures/fast_arm_sweep_x_qpos.json";
+export const FAST_ARM_INITIAL_KEYFRAME_NAME = "home";
 
 export function formatQpos(values: readonly number[]): string {
   return `[${Array.from(values, (value) => Number(value).toString()).join(", ")}]`;
@@ -27,6 +28,17 @@ export function ensureQposLength(values: readonly number[], modelNq: number, lab
   }
 
   return values;
+}
+
+export function resolveInitialKeyframeQpos(
+  values: ArrayLike<number>,
+  modelNq: number,
+): readonly number[] {
+  const qpos = Array.from(values);
+  if (!qpos.every((value) => Number.isFinite(value))) {
+    throw new Error(`${FAST_ARM_INITIAL_KEYFRAME_NAME} keyframe qpos must contain only finite values`);
+  }
+  return ensureQposLength(qpos, modelNq, `${FAST_ARM_INITIAL_KEYFRAME_NAME} keyframe qpos`);
 }
 
 export function loadQposFixtureFromUrl(fixtureUrl: string, modelNq: number): Promise<QposFixture> {

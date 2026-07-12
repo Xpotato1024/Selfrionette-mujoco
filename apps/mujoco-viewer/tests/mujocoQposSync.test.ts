@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ensureQposLength, formatQpos, resolveTransportQpos } from "../src/wasm-scene/mujocoQposSync.js";
+import {
+  ensureQposLength,
+  formatQpos,
+  resolveInitialKeyframeQpos,
+  resolveTransportQpos,
+} from "../src/wasm-scene/mujocoQposSync.js";
 
 describe("mujoco qpos sync", () => {
   it("formats qpos arrays", () => {
@@ -11,6 +16,16 @@ describe("mujoco qpos sync", () => {
 
   it("accepts qpos arrays with the expected length", () => {
     assert.deepEqual(ensureQposLength([1, 2, 3, 4], 4), [1, 2, 3, 4]);
+  });
+
+  it("uses the finite MuJoCo home keyframe qpos for pre-payload startup", () => {
+    const keyframeQpos = new Float64Array([0, -Math.PI / 6, 0, -Math.PI / 3]);
+    assert.deepEqual(resolveInitialKeyframeQpos(keyframeQpos, 4), Array.from(keyframeQpos));
+  });
+
+  it("rejects malformed startup keyframe qpos", () => {
+    assert.throws(() => resolveInitialKeyframeQpos([0, Number.NaN, 0, 0], 4), /only finite values/);
+    assert.throws(() => resolveInitialKeyframeQpos([0, 0], 4), /home keyframe qpos length mismatch/);
   });
 
   it("rejects invalid qpos lengths", () => {

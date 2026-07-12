@@ -67,16 +67,22 @@ def test_z_trajectory_starts_aligned_then_degrades_under_repeated_commands() -> 
         )
     }
 
-    for label in ["+z", "-z"]:
-        records = diagnostics[label].records
-        summary = diagnostics[label].summary
-        assert records[0].status == "pass"
-        assert records[0].reason == "aligned"
-        assert summary.first_rejection_step is None
-        assert summary.first_opposite_direction_step == 3
-        assert summary.final_status == "limitation"
-        assert summary.final_reason == "opposite_direction"
-        assert summary.decision == "z_primary_but_degrades_over_repeated_commands"
+    plus_z = diagnostics["+z"]
+    assert plus_z.records[0].status == "pass"
+    assert plus_z.records[0].reason == "aligned"
+    assert plus_z.summary.first_rejection_step is None
+    assert plus_z.summary.first_opposite_direction_step == 4
+    assert plus_z.summary.final_status == "limitation"
+    assert plus_z.summary.final_reason == "opposite_direction"
+
+    minus_z = diagnostics["-z"]
+    assert minus_z.records[0].status == "limitation"
+    assert minus_z.records[0].reason == "opposite_direction"
+    assert minus_z.summary.first_rejection_step is None
+    assert minus_z.summary.first_opposite_direction_step == 1
+    assert minus_z.summary.final_status == "limitation"
+    assert minus_z.summary.final_reason == "opposite_direction"
+    assert plus_z.summary.decision == minus_z.summary.decision == "z_primary_but_degrades_over_repeated_commands"
 
 
 def test_trajectory_summary_contains_cumulative_drift_metrics() -> None:

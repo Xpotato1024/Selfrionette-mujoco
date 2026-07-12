@@ -12,6 +12,9 @@
 
 ### `#176` で確認できたこと
 
+以下のqpos値は#176時点のhistorical evidenceである。current startup policyは
+`docs/operations/r7-e-p22-neutral-initial-pose.md`を参照する。
+
 - `assets/mujoco/fast_arm/scene.xml` は MuJoCo native viewer で正常に表示できた
 - `home` keyframe は自然な下垂姿勢だった
 - body / joint / site の接続は破綻していなかった

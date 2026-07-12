@@ -363,6 +363,78 @@ def _direction_results(simulator: HeadlessMuJoCoSimulator, qpos: tuple[float, ..
     return tuple(result)
 
 
+def evaluate_fast_arm_pose_mobility(
+    simulator: HeadlessMuJoCoSimulator,
+    qpos_rad: Sequence[float],
+    *,
+    epsilon_rad: float = DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD,
+    damping: float = DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING,
+    qpos_cap_rad: float = DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD,
+    requested_delta_m: float = DEFAULT_REQUESTED_DELTA_M,
+) -> PoseDiagnostic:
+    """Evaluate one explicit fast_arm qpos with the canonical P9 metrics."""
+
+    qpos = tuple(float(value) for value in qpos_rad)
+    if len(qpos) != len(CONTROLLED_JOINT_NAMES):
+        raise ValueError(
+            "qpos_rad must contain exactly "
+            f"{len(CONTROLLED_JOINT_NAMES)} values"
+        )
+    if not all(math.isfinite(value) for value in qpos):
+        raise ValueError("qpos_rad must contain only finite values")
+    if epsilon_rad <= 0.0 or not math.isfinite(epsilon_rad):
+        raise ValueError("epsilon_rad must be finite and positive")
+    if damping < 0.0 or not math.isfinite(damping):
+        raise ValueError("damping must be finite and non-negative")
+    if qpos_cap_rad <= 0.0 or not math.isfinite(qpos_cap_rad):
+        raise ValueError("qpos_cap_rad must be finite and positive")
+    if requested_delta_m <= 0.0 or not math.isfinite(requested_delta_m):
+        raise ValueError("requested_delta_m must be finite and positive")
+
+    endpoint = FastArmMuJoCoModelForwardKinematicsSolver()
+    native, _ = _native_jacobian(simulator, qpos)
+    finite_difference = _finite_difference_jacobian(
+        qpos,
+        endpoint_kinematics=endpoint,
+        epsilon_rad=epsilon_rad,
+    )
+    discrepancy = float(np.linalg.norm(finite_difference - native))
+    native_singular_values = np.linalg.svd(native, compute_uv=False)
+    largest_native = float(native_singular_values[0]) if native_singular_values.size else 0.0
+    effective_tolerance = max(
+        DEFAULT_ABSOLUTE_RANK_TOLERANCE,
+        DEFAULT_RELATIVE_RANK_TOLERANCE * largest_native,
+        discrepancy,
+    )
+    return PoseDiagnostic(
+        label="explicit_pose",
+        qpos_rad=qpos,
+        perturbed_joint_name=None,
+        requested_perturbation_rad=None,
+        actual_perturbation_rad=None,
+        actual_perturbation_vector_rad=tuple(0.0 for _ in qpos),
+        clipped=False,
+        tip_position_m=_tuple(_tip(simulator, qpos)),
+        finite_difference=summarize_jacobian(
+            finite_difference,
+            effective_rank_tolerance=effective_tolerance,
+        ),
+        native=summarize_jacobian(
+            native,
+            effective_rank_tolerance=effective_tolerance,
+        ),
+        jacobian_difference_norm=discrepancy,
+        directions=_direction_results(
+            simulator,
+            qpos,
+            finite_difference,
+            damping=damping,
+            cap=qpos_cap_rad,
+            requested_delta_m=requested_delta_m,
+        ),
+    )
+
+
 def _three_sensitivity_values(center: float, lower_factor: float, upper_factor: float) -> tuple[float, float, float]:
     if center <= 0.0 or not math.isfinite(center):
         raise ValueError("sensitivity center must be finite and positive")
@@ -410,4 +482,4 @@ def run_fast_arm_jacobian_mobility_diagnostics(*, dt_s: float = DEFAULT_DT_S, re
     return JacobianMobilityDiagnostics("r7-e-p9-v2", "fast_arm_canonical", "tip", "MuJoCo world / scene frame", mapping, DEFAULT_ABSOLUTE_RANK_TOLERANCE, DEFAULT_RELATIVE_RANK_TOLERANCE, DEFAULT_DIRECTION_COSINE_TOLERANCE, dt_s, resolved_requested_delta_m, sensitivity_sets[0][1], sensitivity_sets[1][1], sensitivity_sets[2][1], tuple(poses), sensitivities["epsilon"], sensitivities["damping"], sensitivities["qpos_cap"])
 
 
-__all__ = ["JacobianMetrics", "DeltaMetrics", "DirectionDiagnostic", "PoseDiagnostic", "SensitivityPoint", "JacobianMobilityDiagnostics", "summarize_jacobian", "build_delta_metrics", "run_fast_arm_jacobian_mobility_diagnostics"]
+__all__ = ["JacobianMetrics", "DeltaMetrics", "DirectionDiagnostic", "PoseDiagnostic", "SensitivityPoint", "JacobianMobilityDiagnostics", "summarize_jacobian", "build_delta_metrics", "evaluate_fast_arm_pose_mobility", "run_fast_arm_jacobian_mobility_diagnostics"]
