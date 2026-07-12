@@ -337,7 +337,9 @@ function testBuildProductViewerInputOverlayStateFormatsKeyboardPayload(): void {
   const overlay = buildProductViewerInputOverlayState(payload);
 
   assertCondition(overlay !== null, "overlay should parse");
-  assert.deepEqual(overlay, {
+  const { endpointPresentation, ...legacyOverlay } = overlay;
+  assert.equal(endpointPresentation.requested.desiredEndpointM, null);
+  assert.deepEqual(legacyOverlay, {
     sourceKind: "viewer_keyboard",
     intentKind: null,
     inputContinuity: null,
@@ -391,7 +393,9 @@ function testBuildProductViewerInputOverlayStateFormatsGamepadPayloadAndFallsBac
   const overlay = buildProductViewerInputOverlayState(payload);
 
   assertCondition(overlay !== null, "overlay should parse");
-  assert.deepEqual(overlay, {
+  const { endpointPresentation, ...legacyOverlay } = overlay;
+  assert.equal(endpointPresentation.status.stale, true);
+  assert.deepEqual(legacyOverlay, {
     sourceKind: "viewer_gamepad",
     intentKind: null,
     inputContinuity: null,

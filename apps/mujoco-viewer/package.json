@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "tsc -p tsconfig.test.json && node ./dist/test/tests/importMap.test.js && node ./dist/test/tests/viteConfig.test.js && node ./dist/test/tests/websocketEndpoint.test.js && node ./dist/test/tests/websocketClient.test.js && node ./dist/test/tests/endpointEvaluation.test.js && node ./dist/test/tests/mujocoSceneTransforms.test.js && node ./dist/test/tests/mujocoQposSync.test.js && node ./dist/test/tests/productViewerEntrypoint.test.js && node ./dist/test/tests/productViewerGamepadIntegration.test.js && node ./dist/test/tests/visualStyles.test.js && node ./dist/test/tests/viewerControlMessage.test.js && node ./dist/test/tests/keyboardInput.test.js && node ./dist/test/tests/gamepadInput.test.js",
+    "test": "tsc -p tsconfig.test.json && node ./dist/test/tests/importMap.test.js && node ./dist/test/tests/viteConfig.test.js && node ./dist/test/tests/websocketEndpoint.test.js && node ./dist/test/tests/websocketClient.test.js && node ./dist/test/tests/endpointEvaluation.test.js && node ./dist/test/tests/endpointPresentation.test.js && node ./dist/test/tests/mujocoSceneTransforms.test.js && node ./dist/test/tests/mujocoQposSync.test.js && node ./dist/test/tests/productViewerEntrypoint.test.js && node ./dist/test/tests/productViewerGamepadIntegration.test.js && node ./dist/test/tests/visualStyles.test.js && node ./dist/test/tests/viewerControlMessage.test.js && node ./dist/test/tests/keyboardInput.test.js && node ./dist/test/tests/gamepadInput.test.js",
     "test:build": "tsc -p tsconfig.test.json",
     "browser:build": "vite build --outDir dist/browser",
     "typecheck": "tsc --noEmit",

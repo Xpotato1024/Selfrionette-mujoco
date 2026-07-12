@@ -1,4 +1,9 @@
 import type { TransportEndpointEvaluationPayload, TransportPayloadV0 } from "../types/transportPayload.js";
+import {
+  buildEndpointPresentationState,
+  formatEndpointPresentationText,
+  type EndpointPresentationState,
+} from "./endpointPresentation.js";
 
 export type ProductViewerConnectionStatus = "disabled" | "connecting" | "open" | "closed" | "error";
 export type ProductViewerRendererMode = "wasm-scene";
@@ -11,6 +16,7 @@ export interface ProductViewerInputOverlayButtonState {
 }
 
 export interface ProductViewerInputOverlayState {
+  endpointPresentation: EndpointPresentationState;
   sourceKind: string;
   intentKind: string | null;
   inputContinuity: string | null;
@@ -238,6 +244,7 @@ function parseInputOverlayState(
           : "endpoint_evaluation missing from payload";
 
   return {
+    endpointPresentation: buildEndpointPresentationState(metadata),
     sourceKind: typeof metadata.source_kind === "string" ? metadata.source_kind : "n/a",
     intentKind: parseOptionalString(metadata.intent_kind),
     inputContinuity: parseOptionalString(metadata.input_continuity),
@@ -376,6 +383,7 @@ export function formatInputOverlayText(inputOverlay: ProductViewerInputOverlaySt
   }
 
   return [
+    formatEndpointPresentationText(inputOverlay.endpointPresentation),
     `input source: ${inputOverlay.sourceKind}`,
     `viewer source kind: ${inputOverlay.viewerSourceKind ?? "n/a"}`,
     `intent kind: ${inputOverlay.intentKind ?? "n/a"}`,
