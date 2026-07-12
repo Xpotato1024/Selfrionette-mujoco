@@ -563,7 +563,7 @@ def test_standard_profile_does_not_apply_protected_inline_heading_health(tmp_pat
     before_path, after_path = paths(tmp_path, after, before)
     assert MODULE.validate(before_path, after_path).accepted
 
-    real_fragments = "## Current state text ## History text"
+    real_fragments = "Collapsed-looking prose ## Current state text ## History text"
     before_path, after_path = paths(tmp_path, real_fragments + " updated", real_fragments)
     assert MODULE.validate(before_path, after_path).accepted
 
