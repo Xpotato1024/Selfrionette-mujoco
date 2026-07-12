@@ -97,3 +97,28 @@ def test_docs_readme_has_source_of_truth_map() -> None:
     assert "docs/operations/r7-c-presentation-demo-notes.md" in text
     assert "docs/operations/r7-c-completion-audit.md" in text
     assert "docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md" in text
+
+
+def test_runtime_composition_documents_p19_responsibility_split() -> None:
+    text = read("docs/architecture/runtime-composition.md")
+    stages = (
+        "source planning",
+        "source lifecycle",
+        "control-frame resolution",
+        "motion policy",
+        "backend update",
+        "MuJoCo measurement",
+        "diagnostic annotation",
+        "publication",
+        "target lifecycle",
+        "experiment logging handoff",
+    )
+
+    for stage in stages:
+        assert f"| {stage} |" in text
+
+    assert "MuJoCo remains the physical source of truth" in text
+    assert "only composition root" in text
+    assert "render-only" in text
+    assert "publish-before-`ViewerInputSource`-rebase ordering" in text
+    assert "does not perform a broad runtime rewrite" in text
