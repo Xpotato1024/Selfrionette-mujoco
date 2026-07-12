@@ -41,6 +41,8 @@ def sample(index: int = 0, **changes: object) -> MotionSampleRecord:
     qpos_after = (0.01, 0.1) if index == 0 else (0.02, 0.1)
     values = dict(experiment_id="experiment-1", session_id="session-1", participant_id="pseudonym-1", configuration_id="config-1", trial_id="trial-1", sample_index=index, source_kind="keyboard", source_timestamp_s=1.0 + index * 0.1, runtime_timestamp_s=1.1 + index * 0.1, source_active=True, axis_values=(1.0, 0.0, 0.0), zero_input=False, stale_reason=None, requested_control_frame="world", local_endpoint_velocity_m_s=(0.1, 0.0, 0.0), resolved_control_frame="mujoco_world", control_frame_resolution_status="world_passthrough", control_frame_resolution_reason=None, resolved_world_endpoint_velocity_m_s=(0.1, 0.0, 0.0), endpoint_delta_requested_m=(0.001, 0.0, 0.0), endpoint_delta_achieved_m=(0.0008, 0.0, 0.0), qpos_before_rad=qpos_before, qpos_after_rad=qpos_after, candidate_qpos_rad=qpos_after, measured_tip_position_before_m=before, measured_tip_position_after_m=after, actual_tip_delta_m=delta, motion_status="accepted", motion_rejection_reason=None, target_rejected=False, target_rejection_reason=None, endpoint_progress_status="progressing", endpoint_progress_signed_m=delta[0], endpoint_progress_ratio=0.7, endpoint_progress_direction_cosine=0.99, endpoint_progress_requested_norm_m=0.001, endpoint_progress_measured_norm_m=sqrt(sum(component**2 for component in delta)), endpoint_progress_measurement_available=True, measurement_unavailable_reason=None)
     values.update(changes)
+    if "local_endpoint_velocity_m_s" in changes and "resolved_world_endpoint_velocity_m_s" not in changes:
+        values["resolved_world_endpoint_velocity_m_s"] = changes["local_endpoint_velocity_m_s"]
     return MotionSampleRecord(**values)  # type: ignore[arg-type]
 
 
@@ -155,7 +157,7 @@ def test_retry_must_preserve_protocol_context(changed: dict[str, object]) -> Non
 
 
 def test_success_referencing_unavailable_sample_is_rejected() -> None:
-    with pytest.raises(ValueError, match="unavailable"):
+    with pytest.raises(ValueError, match="complete measured"):
         validate_record_stream([configuration(dwell_interval_s=0.0), start(), unavailable_sample(), outcome(primary_outcome_sample_index=0)])
 
 
@@ -183,8 +185,8 @@ def test_unavailable_tool_resolution_requires_complete_hold_tuple() -> None:
     unavailable_sample(0),
 ])
 def test_success_rejects_any_non_success_sample_axis(bad_sample: MotionSampleRecord) -> None:
-    with pytest.raises(ValueError, match="cannot contain"):
-        validate_record_stream([configuration(dwell_interval_s=0.0), start(), bad_sample, outcome(primary_outcome_sample_index=0)])
+    with pytest.raises(ValueError, match="cannot contain|complete measured"):
+        validate_record_stream([configuration(dwell_interval_s=0.0), start(), bad_sample, outcome(primary_outcome_sample_index=0, final_measured_endpoint_error_m=sqrt(0.0003**2 + 0.0001**2))])
 
 
 def test_success_primary_sample_must_be_final() -> None:
@@ -233,6 +235,71 @@ def test_source_and_target_manifest_identity_are_enforced() -> None:
         validate_record_stream([configuration(), start(), sample(0, source_kind="gamepad")])
     with pytest.raises(ValueError, match="target_id"):
         validate_record_stream([configuration(target_id="manifest-target"), start()])
+
+
+def operator_failure(**changes: object) -> TrialOutcomeRecord:
+    values = dict(completion_status="failed", success_within_timeout=False, failure_attribution="operator", outcome_reason="timeout")
+    values.update(changes)
+    return outcome(**values)
+
+
+def test_failed_outcome_rejects_missing_sample_and_error_mismatch() -> None:
+    with pytest.raises(ValueError, match="final motion sample"):
+        validate_record_stream([configuration(), start(), sample(0), operator_failure(primary_outcome_sample_index=5)])
+    with pytest.raises(ValueError, match="disagrees"):
+        validate_record_stream([configuration(), start(), sample(0), operator_failure(primary_outcome_sample_index=0, final_measured_endpoint_error_m=0.0)])
+
+
+def test_non_success_measured_reference_fields_are_all_or_none() -> None:
+    with pytest.raises(ValueError, match="both present or both null"):
+        validate_record_stream([configuration(), start(), sample(0), operator_failure(primary_outcome_sample_index=None)])
+    with pytest.raises(ValueError, match="both present or both null"):
+        validate_record_stream([configuration(), start(), sample(0), operator_failure(final_measured_endpoint_error_m=None)])
+
+
+def test_measurement_unavailable_technical_invalid_cannot_claim_measured_error() -> None:
+    with pytest.raises(ValueError, match="complete measured sample"):
+        validate_record_stream([configuration(), start(), unavailable_sample(), invalid_outcome(primary_outcome_sample_index=0, final_measured_endpoint_error_m=0.1)])
+
+
+def test_non_success_outcome_may_explicitly_omit_final_measured_evidence() -> None:
+    validate_record_stream([configuration(), start(), unavailable_sample(), invalid_outcome()])
+    validate_record_stream([configuration(), start(), sample(0), operator_failure(primary_outcome_sample_index=None, final_measured_endpoint_error_m=None)])
+
+
+def _invalid_attempt(trial_id: str, attempt_index: int, retry_of: str | None, start_time: float) -> list[object]:
+    return [
+        start(trial_id, attempt_index=attempt_index, retry_of_trial_id=retry_of, runtime_timestamp_s=start_time),
+        unavailable_sample(0, trial_id=trial_id, source_timestamp_s=start_time + 0.1, runtime_timestamp_s=start_time + 0.1),
+        invalid_outcome(trial_id=trial_id, runtime_timestamp_s=start_time + 0.2),
+    ]
+
+
+def test_retry_sibling_duplicate_attempt_and_duplicate_initial_are_rejected() -> None:
+    original = _invalid_attempt("trial-1", 0, None, 1.0)
+    first_retry = _invalid_attempt("trial-2", 1, "trial-1", 2.0)
+    with pytest.raises(ValueError, match="unique|direct retry"):
+        validate_record_stream([configuration(), *original, *first_retry, start("trial-3", attempt_index=1, retry_of_trial_id="trial-1", runtime_timestamp_s=3.0)])
+    with pytest.raises(ValueError, match="unique"):
+        validate_record_stream([configuration(), *original, *first_retry, start("trial-3", attempt_index=1, retry_of_trial_id="trial-2", runtime_timestamp_s=3.0)])
+    with pytest.raises(ValueError, match="unique|initial attempt"):
+        validate_record_stream([configuration(), *original, start("trial-2", runtime_timestamp_s=2.0)])
+
+
+def test_valid_retry_chain_is_linear() -> None:
+    records = [configuration(), *_invalid_attempt("trial-1", 0, None, 1.0), *_invalid_attempt("trial-2", 1, "trial-1", 2.0), *_invalid_attempt("trial-3", 2, "trial-2", 3.0)]
+    validate_record_stream(records)
+
+
+@pytest.mark.parametrize("status", ["world_passthrough", "invalid_control_frame_defaulted"])
+def test_world_resolved_passthrough_velocity_must_match_local_velocity(status: str) -> None:
+    with pytest.raises(ValueError, match="passthrough velocity"):
+        sample(control_frame_resolution_status=status, control_frame_resolution_reason="invalid_default" if status == "invalid_control_frame_defaulted" else None, resolved_world_endpoint_velocity_m_s=(0.0, 0.1, 0.0))
+
+
+def test_tool_resolution_may_rotate_velocity() -> None:
+    record = sample(requested_control_frame="tool", control_frame_resolution_status="tool_orientation_resolved", resolved_world_endpoint_velocity_m_s=(0.0, 0.1, 0.0))
+    assert record.resolved_world_endpoint_velocity_m_s != record.local_endpoint_velocity_m_s
 
 
 @pytest.mark.parametrize(("config_changes", "outcome_changes", "message"), [({}, {"final_measured_endpoint_error_m": 0.0}, "disagrees"), ({"target_tolerance_m": 0.0001}, {}, "target tolerance"), ({"timeout_s": 0.15}, {}, "timeout"), ({"dwell_interval_s": 0.2}, {}, "dwell")])

@@ -112,7 +112,8 @@ motion.
 
 P12 resolution tuples are closed. `world_passthrough` and
 `invalid_control_frame_defaulted` require a world request and resolved
-`mujoco_world` velocity. `tool_orientation_resolved` requires a tool request and
+`mujoco_world` velocity equal to `local_endpoint_velocity_m_s` within `1e-12`.
+`tool_orientation_resolved` requires a tool request and
 resolved world velocity. `tool_orientation_unavailable` requires a tool
 request, null resolved frame/world velocity/requested delta, held motion with a
 rejection reason, candidate and post-step qpos equal to pre-step qpos, zero
@@ -152,6 +153,16 @@ operator failure is `failed` / `operator` / required reason; technical invalid
 is `technical_invalid` / `technical` / required reason. No other combination is
 valid.
 
+For every outcome, `primary_outcome_sample_index` and
+`final_measured_endpoint_error_m` are either both null or both present. When
+present, the index must reference the final motion sample, that sample must have
+complete measured evidence, and the stored error must equal measured tip to
+configuration target distance within `1e-12`. This applies equally to operator
+failure and technical invalidity. A measurement-unavailable technical invalid
+uses null for both fields. An operator failure may also use null for both when
+no defensible final measurement is retained; its operator classification and
+required reason remain explicit rather than being inferred from missingness.
+
 ## P17 reconstruction and P21 handoff
 
 Trial start/end are the start and outcome runtime timestamps. The primary
@@ -188,6 +199,12 @@ boolean, or null scalar values; nested arrays/objects are rejected.
 `validate_record_stream()` owns cross-record context equality, uniqueness,
 retry protocol identity, sample ordering, timestamps, lifecycle closure, and
 P17 success evidence. Neither helper performs I/O or mutates input.
+
+Within one protocol identity and repetition, attempt indices are unique and
+there is exactly one initial attempt. Each trial has at most one direct retry
+child. A retry references the immediately preceding completed
+technical-invalid attempt, producing one linear `0 -> 1 -> 2 ...` chain; sibling
+retries and duplicate attempts are invalid.
 
 It also binds each sample request frame to the trial control condition and
 binds source/target identities to configuration. The first sample qpos/tip must

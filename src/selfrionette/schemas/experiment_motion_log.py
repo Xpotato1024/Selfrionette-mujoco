@@ -318,6 +318,8 @@ class MotionSampleRecord:
                 raise ValueError("resolution status and requested frame are inconsistent")
             if self.resolved_control_frame != "mujoco_world" or self.resolved_world_endpoint_velocity_m_s is None:
                 raise ValueError("successful frame resolution requires resolved world frame and velocity")
+            if self.control_frame_resolution_status in {"world_passthrough", "invalid_control_frame_defaulted"} and not _vectors_close(self.resolved_world_endpoint_velocity_m_s, self.local_endpoint_velocity_m_s):
+                raise ValueError("world-resolved passthrough velocity must equal local requested velocity")
         if self.resolved_control_frame is None and self.resolved_world_endpoint_velocity_m_s is not None:
             raise ValueError("resolved world velocity requires resolved_control_frame")
         measured = (self.measured_tip_position_before_m, self.measured_tip_position_after_m, self.actual_tip_delta_m)
@@ -501,12 +503,31 @@ def _validate_success(configuration: ConfigurationRecord, start: TrialStartRecor
         raise ValueError("successful outcome lacks continuous measured dwell evidence")
 
 
+def _validate_outcome_evidence(configuration: ConfigurationRecord, samples: Mapping[int, MotionSampleRecord], outcome: TrialOutcomeRecord) -> None:
+    has_index = outcome.primary_outcome_sample_index is not None
+    has_error = outcome.final_measured_endpoint_error_m is not None
+    if has_index != has_error:
+        raise ValueError("final measured error and sample index must be both present or both null")
+    if not has_index:
+        return
+    if not samples or outcome.primary_outcome_sample_index != len(samples) - 1:
+        raise ValueError("outcome measured evidence must reference the final motion sample")
+    sample = samples.get(outcome.primary_outcome_sample_index)  # type: ignore[arg-type]
+    if sample is None or sample.measured_tip_position_after_m is None or not sample.endpoint_progress_measurement_available:
+        raise ValueError("outcome measured evidence must reference a complete measured sample")
+    measured_error = _distance(sample.measured_tip_position_after_m, configuration.target_world_position_m)
+    if abs(measured_error - outcome.final_measured_endpoint_error_m) > MEASURED_EVIDENCE_TOLERANCE:  # type: ignore[operator]
+        raise ValueError("outcome final measured error disagrees with referenced sample")
+
+
 def validate_record_stream(records: Iterable[ExperimentMotionLogRecord]) -> None:
     configurations: dict[tuple[str, str, str, str], ConfigurationRecord] = {}
     starts: dict[str, TrialStartRecord] = {}
     samples: dict[str, dict[int, MotionSampleRecord]] = {}
     outcomes: dict[str, TrialOutcomeRecord] = {}
     last_timestamp: dict[str, float] = {}
+    attempts_by_protocol: dict[tuple[object, ...], set[int]] = {}
+    retry_children: set[str] = set()
     for position, record in enumerate(records):
         configuration_key = (record.experiment_id, record.session_id, record.participant_id, record.configuration_id)
         if isinstance(record, ConfigurationRecord):
@@ -522,6 +543,12 @@ def validate_record_stream(records: Iterable[ExperimentMotionLogRecord]) -> None
                 raise ValueError(f"duplicate trial_id at record {position}")
             if record.target_id != configuration.target_id:
                 raise ValueError("trial target_id must match configuration manifest")
+            protocol = _retry_protocol(record)
+            attempts = attempts_by_protocol.setdefault(protocol, set())
+            if record.attempt_index in attempts:
+                raise ValueError("attempt_index must be unique within one protocol repetition")
+            if record.retry_of_trial_id is None and attempts:
+                raise ValueError("one protocol repetition can have only one initial attempt")
             if record.retry_of_trial_id is not None:
                 original = starts.get(record.retry_of_trial_id)
                 original_outcome = outcomes.get(record.retry_of_trial_id)
@@ -533,6 +560,10 @@ def validate_record_stream(records: Iterable[ExperimentMotionLogRecord]) -> None
                     raise ValueError("retry must preserve the original protocol identity")
                 if record.attempt_index != original.attempt_index + 1:
                     raise ValueError("retry attempt_index must increment by one")
+                if record.retry_of_trial_id in retry_children:
+                    raise ValueError("a trial can have at most one direct retry child")
+                retry_children.add(record.retry_of_trial_id)
+            attempts.add(record.attempt_index)
             starts[record.trial_id] = record
             samples[record.trial_id] = {}
             last_timestamp[record.trial_id] = record.runtime_timestamp_s
@@ -572,6 +603,7 @@ def validate_record_stream(records: Iterable[ExperimentMotionLogRecord]) -> None
             samples[record.trial_id][record.sample_index] = record
             last_timestamp[record.trial_id] = record.runtime_timestamp_s
         else:
+            _validate_outcome_evidence(configuration, samples[record.trial_id], record)
             _validate_success(configuration, start, samples[record.trial_id], record)
             outcomes[record.trial_id] = record
     unclosed = set(starts) - set(outcomes)
