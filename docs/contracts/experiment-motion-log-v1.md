@@ -70,8 +70,14 @@ Configuration fields are owned by the experiment manifest:
   `initial_tool_orientation_wxyz` within `1e-12` absolute norm tolerance;
 - MuJoCo-world `target_world_position_m`, `target_tolerance_m`,
   `dwell_interval_s`, and `timeout_s`;
-- `input_source_id`, `local_endpoint_speed_m_s`, `deadzone`,
+- canonical P16 `source_kind`, manifest `target_id`,
+  `local_endpoint_speed_m_s`, `deadzone`,
   `local_endpoint_max_delta_m`, and sorted scalar `comparison_parameters`.
+
+Configuration `source_kind` is the source identity expected in every sample;
+there is no separate `input_source_id` synonym in v1. Configuration `target_id`
+is the manifest identity whose world target/tolerance/timing fields are frozen;
+every `trial_start.target_id` must match it.
 
 Motion fields preserve the canonical hierarchy and exact producer vocabulary:
 
@@ -104,6 +110,14 @@ A tool-frame resolution failure has
 policy-requested world delta. It cannot serialize tool-local velocity as world
 motion.
 
+P12 resolution tuples are closed. `world_passthrough` and
+`invalid_control_frame_defaulted` require a world request and resolved
+`mujoco_world` velocity. `tool_orientation_resolved` requires a tool request and
+resolved world velocity. `tool_orientation_unavailable` requires a tool
+request, null resolved frame/world velocity/requested delta, held motion with a
+rejection reason, candidate and post-step qpos equal to pre-step qpos, zero
+policy-achieved delta, and zero measured tip delta when measurement exists.
+
 The independent axes do not overload `motion_status`. Target rejection uses
 `target_rejected` and `target_rejection_reason`. Active nonzero, active zero,
 inactive non-stale, and stale input are reconstructed from `source_active`,
@@ -127,6 +141,16 @@ tip-to-target distance must match `final_measured_endpoint_error_m` within
 sample must provide an uninterrupted inside-tolerance measured interval at
 least `dwell_interval_s` long. An outside or unavailable sample resets dwell.
 This is the deterministic P17 dwell-proof policy.
+
+Success is a whole-trial result. No sample may be held, target-rejected, stale,
+measurement-unavailable, or unresolved. `primary_outcome_sample_index` must be
+the final motion sample; dwell must remain continuously inside tolerance through
+that final sample. A prior sample cannot stand in for final evidence.
+
+Outcome classification is closed: success is `success` / `none` / null reason;
+operator failure is `failed` / `operator` / required reason; technical invalid
+is `technical_invalid` / `technical` / required reason. No other combination is
+valid.
 
 ## P17 reconstruction and P21 handoff
 
@@ -164,3 +188,16 @@ boolean, or null scalar values; nested arrays/objects are rejected.
 `validate_record_stream()` owns cross-record context equality, uniqueness,
 retry protocol identity, sample ordering, timestamps, lifecycle closure, and
 P17 success evidence. Neither helper performs I/O or mutates input.
+
+It also binds each sample request frame to the trial control condition and
+binds source/target identities to configuration. The first sample qpos/tip must
+match configuration initial qpos/tip. Adjacent qpos and, when both available,
+measured tip boundaries must be continuous. All vector identity, trajectory,
+measured-delta, target-error, velocity, and dwell comparisons use Euclidean
+absolute tolerance `1e-12` in their documented unit.
+
+P16 numeric consistency is sequence-validated: `axis_values` norm is at most
+one and `local_endpoint_velocity_m_s == configuration.local_endpoint_speed_m_s
+* axis_values` within that tolerance. A zero configured speed with nonzero axes
+therefore remains valid and produces zero requested velocity without changing
+`zero_input`.

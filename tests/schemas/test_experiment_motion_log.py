@@ -22,7 +22,7 @@ FINAL_ERROR = sqrt(0.0002**2 + 0.0001**2)
 
 
 def configuration(**changes: object) -> ConfigurationRecord:
-    values = dict(experiment_id="experiment-1", session_id="session-1", participant_id="pseudonym-1", configuration_id="config-1", software_revision="abc123", initial_qpos_rad=(0.0, 0.1), initial_measured_tip_position_m=(0.0, 0.0, 0.0), initial_tool_orientation_wxyz=(1.0, 0.0, 0.0, 0.0), target_world_position_m=(0.001, 0.0, 0.0), target_tolerance_m=0.0005, dwell_interval_s=0.1, timeout_s=5.0, input_source_id="keyboard", local_endpoint_speed_m_s=0.1, deadzone=0.05, local_endpoint_max_delta_m=0.002, comparison_parameters=(("gain", 1.0), ("schedule", "balanced")))
+    values = dict(experiment_id="experiment-1", session_id="session-1", participant_id="pseudonym-1", configuration_id="config-1", software_revision="abc123", initial_qpos_rad=(0.0, 0.1), initial_measured_tip_position_m=(0.0, 0.0, 0.0), initial_tool_orientation_wxyz=(1.0, 0.0, 0.0, 0.0), target_world_position_m=(0.001, 0.0, 0.0), target_tolerance_m=0.0005, dwell_interval_s=0.1, timeout_s=5.0, source_kind="keyboard", target_id="target-x", local_endpoint_speed_m_s=0.1, deadzone=0.05, local_endpoint_max_delta_m=0.002, comparison_parameters=(("gain", 1.0), ("schedule", "balanced")))
     values.update(changes)
     return ConfigurationRecord(**values)  # type: ignore[arg-type]
 
@@ -37,7 +37,9 @@ def sample(index: int = 0, **changes: object) -> MotionSampleRecord:
     before = (0.0, 0.0, 0.0) if index == 0 else (0.0007, 0.0001, 0.0)
     after = (0.0007, 0.0001, 0.0) if index == 0 else (0.0008, 0.0001, 0.0)
     delta = tuple(after[i] - before[i] for i in range(3))
-    values = dict(experiment_id="experiment-1", session_id="session-1", participant_id="pseudonym-1", configuration_id="config-1", trial_id="trial-1", sample_index=index, source_kind="keyboard", source_timestamp_s=1.0 + index * 0.1, runtime_timestamp_s=1.1 + index * 0.1, source_active=True, axis_values=(1.0, 0.0, 0.0), zero_input=False, stale_reason=None, requested_control_frame="world", local_endpoint_velocity_m_s=(0.1, 0.0, 0.0), resolved_control_frame="mujoco_world", control_frame_resolution_status="world_passthrough", control_frame_resolution_reason=None, resolved_world_endpoint_velocity_m_s=(0.1, 0.0, 0.0), endpoint_delta_requested_m=(0.001, 0.0, 0.0), endpoint_delta_achieved_m=(0.0008, 0.0, 0.0), qpos_before_rad=(0.0, 0.1), qpos_after_rad=(0.01, 0.1), candidate_qpos_rad=(0.01, 0.1), measured_tip_position_before_m=before, measured_tip_position_after_m=after, actual_tip_delta_m=delta, motion_status="accepted", motion_rejection_reason=None, target_rejected=False, target_rejection_reason=None, endpoint_progress_status="progressing", endpoint_progress_signed_m=delta[0], endpoint_progress_ratio=0.7, endpoint_progress_direction_cosine=0.99, endpoint_progress_requested_norm_m=0.001, endpoint_progress_measured_norm_m=sqrt(sum(component**2 for component in delta)), endpoint_progress_measurement_available=True, measurement_unavailable_reason=None)
+    qpos_before = (0.0, 0.1) if index == 0 else (0.01, 0.1)
+    qpos_after = (0.01, 0.1) if index == 0 else (0.02, 0.1)
+    values = dict(experiment_id="experiment-1", session_id="session-1", participant_id="pseudonym-1", configuration_id="config-1", trial_id="trial-1", sample_index=index, source_kind="keyboard", source_timestamp_s=1.0 + index * 0.1, runtime_timestamp_s=1.1 + index * 0.1, source_active=True, axis_values=(1.0, 0.0, 0.0), zero_input=False, stale_reason=None, requested_control_frame="world", local_endpoint_velocity_m_s=(0.1, 0.0, 0.0), resolved_control_frame="mujoco_world", control_frame_resolution_status="world_passthrough", control_frame_resolution_reason=None, resolved_world_endpoint_velocity_m_s=(0.1, 0.0, 0.0), endpoint_delta_requested_m=(0.001, 0.0, 0.0), endpoint_delta_achieved_m=(0.0008, 0.0, 0.0), qpos_before_rad=qpos_before, qpos_after_rad=qpos_after, candidate_qpos_rad=qpos_after, measured_tip_position_before_m=before, measured_tip_position_after_m=after, actual_tip_delta_m=delta, motion_status="accepted", motion_rejection_reason=None, target_rejected=False, target_rejection_reason=None, endpoint_progress_status="progressing", endpoint_progress_signed_m=delta[0], endpoint_progress_ratio=0.7, endpoint_progress_direction_cosine=0.99, endpoint_progress_requested_norm_m=0.001, endpoint_progress_measured_norm_m=sqrt(sum(component**2 for component in delta)), endpoint_progress_measurement_available=True, measurement_unavailable_reason=None)
     values.update(changes)
     return MotionSampleRecord(**values)  # type: ignore[arg-type]
 
@@ -83,7 +85,7 @@ def test_exact_canonical_names_are_serialized_without_old_aliases() -> None:
 
 
 def test_tool_resolution_unavailable_does_not_fabricate_world_motion() -> None:
-    record = sample(requested_control_frame="tool", resolved_control_frame=None, control_frame_resolution_status="tool_orientation_unavailable", control_frame_resolution_reason="tip_orientation_missing", resolved_world_endpoint_velocity_m_s=None, endpoint_delta_requested_m=None, motion_status="held", motion_rejection_reason="control_frame_resolution_failed")
+    record = sample(requested_control_frame="tool", resolved_control_frame=None, control_frame_resolution_status="tool_orientation_unavailable", control_frame_resolution_reason="tip_orientation_missing", resolved_world_endpoint_velocity_m_s=None, endpoint_delta_requested_m=None, endpoint_delta_achieved_m=(0.0, 0.0, 0.0), qpos_after_rad=(0.0, 0.1), candidate_qpos_rad=(0.0, 0.1), measured_tip_position_after_m=(0.0, 0.0, 0.0), actual_tip_delta_m=(0.0, 0.0, 0.0), motion_status="held", motion_rejection_reason="control_frame_resolution_failed")
     assert record.resolved_world_endpoint_velocity_m_s is None
     with pytest.raises(ValueError, match="resolved world motion"):
         sample(requested_control_frame="tool", resolved_control_frame=None, control_frame_resolution_status="tool_orientation_unavailable", control_frame_resolution_reason="tip_orientation_missing")
@@ -148,13 +150,89 @@ def test_retry_must_preserve_protocol_context(changed: dict[str, object]) -> Non
     if changed.get("configuration_id") == "config-2":
         records.append(configuration(configuration_id="config-2"))
     records.extend([start(), unavailable_sample(), invalid_outcome(), start("trial-2", attempt_index=1, retry_of_trial_id="trial-1", runtime_timestamp_s=3.0, **changed)])
-    with pytest.raises(ValueError, match="protocol identity"):
+    with pytest.raises(ValueError, match="protocol identity|configuration manifest"):
         validate_record_stream(records)  # type: ignore[arg-type]
 
 
 def test_success_referencing_unavailable_sample_is_rejected() -> None:
-    with pytest.raises(ValueError, match="complete measured evidence"):
+    with pytest.raises(ValueError, match="unavailable"):
         validate_record_stream([configuration(dwell_interval_s=0.0), start(), unavailable_sample(), outcome(primary_outcome_sample_index=0)])
+
+
+@pytest.mark.parametrize("changes", [
+    {"requested_control_frame": "tool", "control_frame_resolution_status": "world_passthrough"},
+    {"requested_control_frame": "world", "control_frame_resolution_status": "tool_orientation_resolved"},
+    {"requested_control_frame": "tool", "control_frame_resolution_status": "invalid_control_frame_defaulted"},
+])
+def test_resolution_status_requires_canonical_requested_frame(changes: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="requested frame"):
+        sample(**changes)
+
+
+def test_unavailable_tool_resolution_requires_complete_hold_tuple() -> None:
+    base = dict(requested_control_frame="tool", resolved_control_frame=None, control_frame_resolution_status="tool_orientation_unavailable", control_frame_resolution_reason="tip_orientation_missing", resolved_world_endpoint_velocity_m_s=None, endpoint_delta_requested_m=None, endpoint_delta_achieved_m=(0.0, 0.0, 0.0), qpos_after_rad=(0.0, 0.1), candidate_qpos_rad=(0.0, 0.1), measured_tip_position_after_m=(0.0, 0.0, 0.0), actual_tip_delta_m=(0.0, 0.0, 0.0), motion_status="held", motion_rejection_reason="resolution_failed")
+    for changed in ({"motion_status": "accepted"}, {"motion_rejection_reason": None}, {"candidate_qpos_rad": (0.01, 0.1)}, {"endpoint_delta_achieved_m": (0.1, 0.0, 0.0)}, {"qpos_after_rad": (0.01, 0.1)}, {"actual_tip_delta_m": (0.1, 0.0, 0.0), "measured_tip_position_after_m": (0.1, 0.0, 0.0)}):
+        with pytest.raises(ValueError):
+            sample(**{**base, **changed})
+
+
+@pytest.mark.parametrize("bad_sample", [
+    sample(0, motion_status="held", motion_rejection_reason="held"),
+    sample(0, target_rejected=True, target_rejection_reason="workspace"),
+    sample(0, source_active=False, stale_reason="stale"),
+    unavailable_sample(0),
+])
+def test_success_rejects_any_non_success_sample_axis(bad_sample: MotionSampleRecord) -> None:
+    with pytest.raises(ValueError, match="cannot contain"):
+        validate_record_stream([configuration(dwell_interval_s=0.0), start(), bad_sample, outcome(primary_outcome_sample_index=0)])
+
+
+def test_success_primary_sample_must_be_final() -> None:
+    with pytest.raises(ValueError, match="final motion sample"):
+        validate_record_stream([configuration(), start(), sample(0), sample(1), outcome(primary_outcome_sample_index=0, final_measured_endpoint_error_m=sqrt(0.0003**2 + 0.0001**2))])
+
+
+def test_trial_condition_must_match_sample_request_frame() -> None:
+    tool = sample(requested_control_frame="tool", control_frame_resolution_status="tool_orientation_resolved")
+    with pytest.raises(ValueError, match="control condition"):
+        validate_record_stream([configuration(), start(), tool])
+
+
+def test_initial_state_and_trajectory_continuity_are_enforced() -> None:
+    with pytest.raises(ValueError, match="initial qpos"):
+        validate_record_stream([configuration(), start(), sample(0, qpos_before_rad=(0.2, 0.1))])
+    with pytest.raises(ValueError, match="initial tip"):
+        validate_record_stream([configuration(), start(), sample(0, measured_tip_position_before_m=(0.2, 0.0, 0.0), actual_tip_delta_m=(-0.1993, 0.0001, 0.0))])
+    with pytest.raises(ValueError, match="qpos trajectory"):
+        validate_record_stream([configuration(), start(), sample(0), sample(1, qpos_before_rad=(0.5, 0.1))])
+    with pytest.raises(ValueError, match="tip trajectory"):
+        validate_record_stream([configuration(), start(), sample(0), sample(1, measured_tip_position_before_m=(0.5, 0.0, 0.0), actual_tip_delta_m=(-0.4992, 0.0001, 0.0))])
+
+
+@pytest.mark.parametrize("changes", [
+    {"completion_status": "success", "failure_attribution": "operator", "outcome_reason": "bad", "success_within_timeout": False},
+    {"completion_status": "failed", "failure_attribution": "none", "outcome_reason": None, "success_within_timeout": False},
+    {"completion_status": "failed", "failure_attribution": "technical", "outcome_reason": "bad", "success_within_timeout": False},
+    {"completion_status": "technical_invalid", "failure_attribution": "operator", "outcome_reason": "bad", "success_within_timeout": False},
+])
+def test_outcome_classification_is_closed(changes: dict[str, object]) -> None:
+    with pytest.raises(ValueError):
+        outcome(**changes)
+
+
+def test_p16_axis_norm_velocity_and_zero_speed_semantics() -> None:
+    with pytest.raises(ValueError, match="norm"):
+        validate_record_stream([configuration(), start(), sample(0, axis_values=(1.0, 1.0, 0.0), local_endpoint_velocity_m_s=(0.1, 0.1, 0.0))])
+    with pytest.raises(ValueError, match="speed times"):
+        validate_record_stream([configuration(), start(), sample(0, local_endpoint_velocity_m_s=(0.2, 0.0, 0.0))])
+    validate_record_stream([configuration(local_endpoint_speed_m_s=0.0, dwell_interval_s=0.0), start(), sample(0, local_endpoint_velocity_m_s=(0.0, 0.0, 0.0)), invalid_outcome()])
+
+
+def test_source_and_target_manifest_identity_are_enforced() -> None:
+    with pytest.raises(ValueError, match="source_kind"):
+        validate_record_stream([configuration(), start(), sample(0, source_kind="gamepad")])
+    with pytest.raises(ValueError, match="target_id"):
+        validate_record_stream([configuration(target_id="manifest-target"), start()])
 
 
 @pytest.mark.parametrize(("config_changes", "outcome_changes", "message"), [({}, {"final_measured_endpoint_error_m": 0.0}, "disagrees"), ({"target_tolerance_m": 0.0001}, {}, "target tolerance"), ({"timeout_s": 0.15}, {}, "timeout"), ({"dwell_interval_s": 0.2}, {}, "dwell")])

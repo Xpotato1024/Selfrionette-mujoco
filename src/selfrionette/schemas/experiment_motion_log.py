@@ -111,6 +111,10 @@ def _distance(left: Sequence[float], right: Sequence[float]) -> float:
     return sqrt(sum((left[index] - right[index]) ** 2 for index in range(3)))
 
 
+def _vectors_close(left: Sequence[float], right: Sequence[float]) -> bool:
+    return len(left) == len(right) and sqrt(sum((left[index] - right[index]) ** 2 for index in range(len(left)))) <= MEASURED_EVIDENCE_TOLERANCE
+
+
 @dataclass(frozen=True, slots=True)
 class ConfigurationRecord:
     experiment_id: str
@@ -125,7 +129,8 @@ class ConfigurationRecord:
     target_tolerance_m: float
     dwell_interval_s: float
     timeout_s: float
-    input_source_id: str
+    source_kind: str
+    target_id: str
     local_endpoint_speed_m_s: float
     deadzone: float
     local_endpoint_max_delta_m: float
@@ -135,7 +140,7 @@ class ConfigurationRecord:
 
     def __post_init__(self) -> None:
         _discriminants(self.schema_version, self.record_kind, "configuration")
-        for name in ("experiment_id", "session_id", "participant_id", "configuration_id", "software_revision", "input_source_id"):
+        for name in ("experiment_id", "session_id", "participant_id", "configuration_id", "software_revision", "source_kind", "target_id"):
             _identifier(name, getattr(self, name))
         object.__setattr__(self, "initial_qpos_rad", _vector("initial_qpos_rad", self.initial_qpos_rad))
         object.__setattr__(self, "initial_measured_tip_position_m", _vector("initial_measured_tip_position_m", self.initial_measured_tip_position_m, length=3))
@@ -295,12 +300,24 @@ class MotionSampleRecord:
             if value is not None:
                 object.__setattr__(self, name, _finite(name, value))
         if self.control_frame_resolution_status == "tool_orientation_unavailable":
-            if self.resolved_control_frame is not None or self.resolved_world_endpoint_velocity_m_s is not None or self.endpoint_delta_requested_m is not None:
+            if self.requested_control_frame != "tool" or self.resolved_control_frame is not None or self.resolved_world_endpoint_velocity_m_s is not None or self.endpoint_delta_requested_m is not None:
                 raise ValueError("unavailable tool resolution cannot contain resolved world motion")
             if self.control_frame_resolution_reason is None:
                 raise ValueError("unavailable tool resolution requires control_frame_resolution_reason")
-        elif self.resolved_control_frame is None or self.resolved_world_endpoint_velocity_m_s is None:
-            raise ValueError("successful frame resolution requires resolved world frame and velocity")
+            if self.motion_status != "held" or self.motion_rejection_reason is None:
+                raise ValueError("unavailable tool resolution requires held motion and rejection reason")
+            if self.candidate_qpos_rad is None or not _vectors_close(self.candidate_qpos_rad, q_before) or not _vectors_close(q_after, q_before):
+                raise ValueError("unavailable tool resolution must hold candidate and qpos")
+            if self.endpoint_delta_achieved_m is None or not _vectors_close(self.endpoint_delta_achieved_m, (0.0, 0.0, 0.0)):
+                raise ValueError("unavailable tool resolution requires zero achieved policy delta")
+            if self.actual_tip_delta_m is not None and not _vectors_close(self.actual_tip_delta_m, (0.0, 0.0, 0.0)):
+                raise ValueError("unavailable tool resolution requires zero measured tip delta")
+        else:
+            expected_request = "tool" if self.control_frame_resolution_status == "tool_orientation_resolved" else "world"
+            if self.requested_control_frame != expected_request:
+                raise ValueError("resolution status and requested frame are inconsistent")
+            if self.resolved_control_frame != "mujoco_world" or self.resolved_world_endpoint_velocity_m_s is None:
+                raise ValueError("successful frame resolution requires resolved world frame and velocity")
         if self.resolved_control_frame is None and self.resolved_world_endpoint_velocity_m_s is not None:
             raise ValueError("resolved world velocity requires resolved_control_frame")
         measured = (self.measured_tip_position_before_m, self.measured_tip_position_after_m, self.actual_tip_delta_m)
@@ -376,8 +393,13 @@ class TrialOutcomeRecord:
             raise ValueError("success completion requires success_within_timeout")
         if self.completion_status == "technical_invalid" and self.failure_attribution != "technical":
             raise ValueError("technical_invalid requires technical failure attribution")
-        if self.failure_attribution != "none" and self.outcome_reason is None:
-            raise ValueError("failed outcomes require outcome_reason")
+        valid_classification = (
+            (self.completion_status == "success" and self.failure_attribution == "none" and self.outcome_reason is None)
+            or (self.completion_status == "failed" and self.failure_attribution == "operator" and self.outcome_reason is not None)
+            or (self.completion_status == "technical_invalid" and self.failure_attribution == "technical" and self.outcome_reason is not None)
+        )
+        if not valid_classification:
+            raise ValueError("completion status, failure attribution, and outcome reason are inconsistent")
 
 
 ExperimentMotionLogRecord: TypeAlias = ConfigurationRecord | TrialStartRecord | MotionSampleRecord | TrialOutcomeRecord
@@ -448,6 +470,11 @@ def _retry_protocol(record: TrialStartRecord) -> tuple[object, ...]:
 def _validate_success(configuration: ConfigurationRecord, start: TrialStartRecord, samples: Mapping[int, MotionSampleRecord], outcome: TrialOutcomeRecord) -> None:
     if not outcome.success_within_timeout:
         return
+    if not samples or outcome.primary_outcome_sample_index != len(samples) - 1:
+        raise ValueError("successful outcome primary evidence must be the final motion sample")
+    for sample in samples.values():
+        if sample.motion_status == "held" or sample.target_rejected or sample.stale_reason is not None or not sample.endpoint_progress_measurement_available or sample.resolved_control_frame is None:
+            raise ValueError("successful outcome cannot contain held, rejected, stale, unavailable, or unresolved samples")
     primary = samples.get(outcome.primary_outcome_sample_index)  # type: ignore[arg-type]
     if primary is None or primary.measured_tip_position_after_m is None or not primary.endpoint_progress_measurement_available:
         raise ValueError("successful outcome must reference complete measured evidence")
@@ -493,6 +520,8 @@ def validate_record_stream(records: Iterable[ExperimentMotionLogRecord]) -> None
         if isinstance(record, TrialStartRecord):
             if record.trial_id in starts:
                 raise ValueError(f"duplicate trial_id at record {position}")
+            if record.target_id != configuration.target_id:
+                raise ValueError("trial target_id must match configuration manifest")
             if record.retry_of_trial_id is not None:
                 original = starts.get(record.retry_of_trial_id)
                 original_outcome = outcomes.get(record.retry_of_trial_id)
@@ -519,6 +548,27 @@ def validate_record_stream(records: Iterable[ExperimentMotionLogRecord]) -> None
             expected = len(samples[record.trial_id])
             if record.sample_index != expected:
                 raise ValueError("sample_index must be contiguous from zero")
+            if record.requested_control_frame != start.control_condition:
+                raise ValueError("sample requested frame must match trial control condition")
+            if record.source_kind != configuration.source_kind:
+                raise ValueError("sample source_kind must match configuration manifest")
+            axis_norm = sqrt(sum(component * component for component in record.axis_values))
+            if axis_norm > 1.0 + MEASURED_EVIDENCE_TOLERANCE:
+                raise ValueError("axis_values norm must not exceed one")
+            expected_velocity = tuple(configuration.local_endpoint_speed_m_s * component for component in record.axis_values)
+            if not _vectors_close(record.local_endpoint_velocity_m_s, expected_velocity):
+                raise ValueError("local endpoint velocity must equal configured speed times axis_values")
+            previous = samples[record.trial_id].get(record.sample_index - 1)
+            if previous is None:
+                if not _vectors_close(record.qpos_before_rad, configuration.initial_qpos_rad):
+                    raise ValueError("first sample qpos must match configuration initial qpos")
+                if record.measured_tip_position_before_m is not None and not _vectors_close(record.measured_tip_position_before_m, configuration.initial_measured_tip_position_m):
+                    raise ValueError("first measured tip must match configuration initial tip")
+            else:
+                if not _vectors_close(previous.qpos_after_rad, record.qpos_before_rad):
+                    raise ValueError("adjacent sample qpos trajectory is discontinuous")
+                if previous.measured_tip_position_after_m is not None and record.measured_tip_position_before_m is not None and not _vectors_close(previous.measured_tip_position_after_m, record.measured_tip_position_before_m):
+                    raise ValueError("adjacent measured tip trajectory is discontinuous")
             samples[record.trial_id][record.sample_index] = record
             last_timestamp[record.trial_id] = record.runtime_timestamp_s
         else:
