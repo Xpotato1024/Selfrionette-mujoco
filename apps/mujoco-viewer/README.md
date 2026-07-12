@@ -1,5 +1,13 @@
 # mujoco-viewer
 
+## Endpoint presentation boundary
+
+The input overlay parses existing payload-v0 endpoint metadata into typed
+requested, resolved, predicted, and measured groups. Missing or malformed
+values remain unavailable rather than becoming zero. Held, rejected, stale,
+resolution-unavailable, and measurement-unavailable are independent states.
+This is a read-only consumer: it defines no schema and performs no FK or IK.
+
 `apps/mujoco-viewer` は MuJoCo WASM scene renderer を rendering-only でホストする。
 
 ## 正本
