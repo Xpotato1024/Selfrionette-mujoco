@@ -1,0 +1,5 @@
+[
+  {"timestamp_s": 1.0, "raw_values": [512, 612, 312, 512, 512, 512, 512], "active": true, "stale_reason": null},
+  {"timestamp_s": 1.1, "raw_values": [512, 512, 512, 512, 512, 512, 512], "active": true, "stale_reason": null},
+  {"timestamp_s": 1.2, "raw_values": [900, 512, 512, 512, 512, 512, 512], "active": false, "stale_reason": "recording_stale"}
+]

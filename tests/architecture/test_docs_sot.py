@@ -85,6 +85,11 @@ def test_canonical_docs_have_valid_front_matter() -> None:
 def test_docs_readme_has_source_of_truth_map() -> None:
     text = read("docs/README.md")
     assert "Source of Truth Map" in text
+
+
+def test_analog_fixture_mapping_is_registered_in_docs_source_of_truth_map() -> None:
+    text = read("docs/README.md")
+    assert "`docs/contracts/analog-fixture-mapping.md`" in text
     assert "| Topic | Canonical document | Notes |" in text
     assert "docs/contracts/kinematics-command-contract.md" in text
     assert "docs/operations/r7-c-manual-validation-preflight.md" in text
