@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from selfrionette.input_sources.analog_fixture import (
+    AnalogFixtureMappingConfig,
+    AnalogFixtureSample,
+    map_analog_fixture_sample,
+    parse_analog_fixture_sample,
+)
 from selfrionette.input_sources.keyboard import (
     KeyboardBinding,
     KeyboardInputConfig,
@@ -24,6 +30,10 @@ from selfrionette.input_sources.continuous_endpoint_velocity import (
 from selfrionette.loadcell_serial import SerialInputSource
 
 __all__ = [
+    "AnalogFixtureMappingConfig",
+    "AnalogFixtureSample",
+    "map_analog_fixture_sample",
+    "parse_analog_fixture_sample",
     "KeyboardBinding",
     "KeyboardInputConfig",
     "build_default_keyboard_input_config",
