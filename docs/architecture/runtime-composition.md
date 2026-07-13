@@ -212,6 +212,17 @@ Viewer Profile registries; P23 does not implement those registries. Runtime
 accept/reject control flow uses `QposFeasibilityResult.accepted`; command
 metadata remains diagnostic/compatibility observability only.
 
+R7-E follow-up P24 replaces that temporary fast_arm composition seam with the
+explicit Robot Profile and Robot Runtime Plugin registries documented in
+`docs/contracts/robot-profile-runtime-viewer-profile.md`. Production entry
+points select `robot_profile_id="fast_arm"`; the runtime registry then resolves
+model/keyframe declarations, validates model/joint/dimension compatibility,
+and builds the existing IK/FK, motion policy, and P23 guard. Generic builders
+require an explicit model path and never infer fast_arm from a path, joint
+names, or profile absence. The rendering-only viewer independently resolves a
+Viewer Robot Profile and checks additive payload-v0 metadata before applying
+qpos. No arbitrary dynamic import or browser-side planning/safety is added.
+
 ## Composition-root responsibility split
 
 This section is the canonical plan for decomposing the production input step

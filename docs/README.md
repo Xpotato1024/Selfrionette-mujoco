@@ -24,6 +24,7 @@ Do not create or use `doc/`.
 | Import boundaries | `docs/architecture/dependency-boundaries.md` | import direction and test contract |
 | Data flow | `docs/architecture/data-flow.md` | input -> motion -> MuJoCo -> transport -> viewer |
 | Runtime composition | `docs/architecture/runtime-composition.md` | composition root |
+| Robot Profile / Runtime Plugin / Viewer Profile | `docs/contracts/robot-profile-runtime-viewer-profile.md` | immutable declarations, explicit registries, production/generic selection, and backend/viewer compatibility |
 | Runtime dry-run entry | `docs/operations/runtime-dry-run.md` | deterministic replay to payload v0 NDJSON |
 | WASM qpos sync PoC | `docs/operations/wasm-qpos-sync-poc.md` | qpos fixture generation and browser WASM scene viewer sync PoC |
 | Product viewer WASM scene renderer | `docs/operations/product-viewer-wasm-scene-renderer.md` | product viewer promotion of the WASM scene renderer |

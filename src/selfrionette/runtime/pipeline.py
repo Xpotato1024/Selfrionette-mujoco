@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 
 from selfrionette.input_interpreters import InputInterpreter
 from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
@@ -29,6 +30,7 @@ class RuntimePipeline:
     simulator: MuJoCoSimulator
     publisher: StatePublisher
     qpos_feasibility_guard: QposFeasibilityGuard | None = None
+    state_metadata: Mapping[str, object] | None = None
 
     async def run_once(self, dt_s: float | None = None) -> MuJoCoState:
         dt = self.config.dt_s if dt_s is None else dt_s
@@ -46,6 +48,8 @@ class RuntimePipeline:
         self.simulator.apply_command(command)
         self.simulator.step(dt)
         state = self.simulator.snapshot()
+        if self.state_metadata:
+            state = replace(state, metadata={**state.metadata, **self.state_metadata})
         if qpos_rejected:
             state = MuJoCoState(
                 frame_index=state.frame_index,

@@ -7,32 +7,22 @@ from pathlib import Path
 from time import monotonic
 
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M, ViewerInputSource
-from selfrionette.mujoco_backend import default_fast_arm_scene_path
-from selfrionette.mujoco_backend.endpoint_extraction import (
-    extract_fast_arm_base_link_position_from_state,
-    extract_fast_arm_tip_site_endpoint_from_state,
-)
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
-from selfrionette.runtime.fast_arm_joint_limits import (
-    FastArmJointLimitGuard,
-    default_fast_arm_joint_limits_path,
-    load_and_validate_fast_arm_joint_limit_config,
-)
 from selfrionette.runtime.input_step_diagnostics import (
     PostStepMeasurement,
     annotate_runtime_input_state,
-    measure_post_step_tip,
+    measure_post_step_endpoint,
 )
 from selfrionette.runtime.input_source_selection import RuntimeInputSourceSelection
 from selfrionette.runtime.input_source_state import (
     build_runtime_input_source_state_from_metadata,
 )
 from selfrionette.runtime.input_safety import build_runtime_input_safety_result
-from selfrionette.runtime.viewer_motion_policy import (
-    build_viewer_local_endpoint_motion_generator,
-    build_viewer_local_motion_metadata,
-)
+from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
+from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
+from selfrionette.runtime.robot_plugin_registry import resolve_robot_runtime_plugin
+from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
@@ -63,7 +53,9 @@ def _resolve_model_path(*, model_path: str | Path | None, config: RuntimeConfig)
         return Path(model_path)
     if config.mujoco_model_path is not None:
         return config.mujoco_model_path
-    return default_fast_arm_scene_path()
+    if config.robot_profile_id is None:
+        raise ValueError("production input step-loop requires robot_profile_id")
+    return resolve_robot_runtime_plugin(config.robot_profile_id).profile.mujoco_model_asset
 
 
 def _coerce_viewer_endpoint_m(value: object) -> tuple[float, float, float]:
@@ -77,26 +69,16 @@ def _coerce_viewer_endpoint_m(value: object) -> tuple[float, float, float]:
     return endpoint_m
 
 
-def _extract_current_tip_site_endpoint_m(pipeline: RuntimePipeline) -> tuple[float, float, float] | None:
-    try:
-        return extract_fast_arm_tip_site_endpoint_from_state(
-            pipeline.simulator.snapshot()
-        ).position_m
-    except ValueError:
-        return None
+def _extract_current_endpoint_m(
+    pipeline: RuntimePipeline, plugin: RobotRuntimePlugin
+) -> tuple[float, float, float] | None:
+    return plugin.endpoint_position_from_state(pipeline.simulator.snapshot())
 
 
-def _extract_tip_site_orientation_wxyz_from_state(state: MuJoCoState) -> tuple[float, float, float, float] | None:
-    try:
-        tip_site = extract_fast_arm_tip_site_endpoint_from_state(state)
-    except ValueError:
-        return None
-
-    for site in state.sites:
-        if site.name == tip_site.name:
-            return tuple(site.quaternion_wxyz)
-
-    return None
+def _extract_endpoint_orientation_wxyz_from_state(
+    state: MuJoCoState, plugin: RobotRuntimePlugin
+) -> tuple[float, float, float, float] | None:
+    return plugin.endpoint_orientation_from_state(state)
 
 
 def build_runtime_input_source_step_loop_plan(
@@ -108,7 +90,10 @@ def build_runtime_input_source_step_loop_plan(
     viewer_clock: Callable[[], float] | None = None,
     viewer_input_source: ViewerInputSource | None = None,
 ) -> RuntimeInputSourceStepLoopPlan:
-    runtime_config = RuntimeConfig() if config is None else config
+    runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
+    if runtime_config.robot_profile_id is None:
+        raise ValueError("production input step-loop requires robot_profile_id")
+    plugin = resolve_robot_runtime_plugin(runtime_config.robot_profile_id)
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
 
     if viewer_input_source is not None and selection.source_name != "viewer":
@@ -135,13 +120,14 @@ def build_runtime_input_source_step_loop_plan(
             model_path=resolved_model_path,
             loop=selection.loop,
             publisher=publisher,
+            initial_keyframe_name=plugin.profile.initial_keyframe_name,
+            state_metadata=robot_profile_runtime_metadata(plugin.profile),
         )
-        joint_limit_path = runtime_config.fast_arm_joint_limits_path or default_fast_arm_joint_limits_path()
-        fast_arm_limits = load_and_validate_fast_arm_joint_limit_config(
-            joint_limit_path,
+        plugin.validate_model(pipeline.simulator.model)
+        pipeline.qpos_feasibility_guard = plugin.build_qpos_feasibility_guard(
             model=pipeline.simulator.model,
+            config_path=runtime_config.joint_limit_config_path,
         )
-        pipeline.qpos_feasibility_guard = FastArmJointLimitGuard(fast_arm_limits)
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
             pipeline=pipeline,
@@ -153,7 +139,10 @@ def build_runtime_input_source_step_loop_plan(
             frame=selection.frames[0] if selection.frames else RawInputFrame(source="noop", timestamp_s=0.0),
             config=runtime_config,
             model_path=resolved_model_path,
+            initial_keyframe_name=plugin.profile.initial_keyframe_name,
+            state_metadata=robot_profile_runtime_metadata(plugin.profile),
         )
+        plugin.validate_model(pipeline.simulator.model)
         if publisher is not None:
             pipeline.publisher = publisher
 
@@ -184,8 +173,8 @@ def build_runtime_input_source_step_loop_plan(
             discontinuity_threshold_label="viewer endpoint continuity threshold",
         )
         pipeline.input_source = pipeline_input_source
-        pipeline.motion_generator = build_viewer_local_endpoint_motion_generator()
-        initial_tip_site_position_m = _extract_current_tip_site_endpoint_m(pipeline)
+        pipeline.motion_generator = plugin.build_local_endpoint_motion_generator()
+        initial_tip_site_position_m = _extract_current_endpoint_m(pipeline, plugin)
         if initial_tip_site_position_m is not None:
             _sync_viewer_input_source_endpoint(
                 pipeline.input_source,
@@ -230,7 +219,11 @@ async def run_runtime_input_source_step_loop(
     records: list[RuntimeInputSourceStepLoopRecord] = []
     last_valid_endpoint_m: tuple[float, float, float] | None = None
     if plan.selection.source_name == "viewer":
-        last_valid_endpoint_m = _extract_current_tip_site_endpoint_m(plan.pipeline)
+        profile_id = plan.pipeline.config.robot_profile_id
+        if profile_id is None:
+            raise ValueError("viewer production step-loop requires robot_profile_id")
+        plugin = resolve_robot_runtime_plugin(profile_id)
+        last_valid_endpoint_m = _extract_current_endpoint_m(plan.pipeline, plugin)
         if last_valid_endpoint_m is None:
             last_valid_endpoint_m = _coerce_viewer_endpoint_m(
                 plan.selection.initial_metadata.get("desired_endpoint_m", plan.selection.initial_metadata.get("target_position_m"))
@@ -246,7 +239,13 @@ async def run_runtime_input_source_step_loop(
         pre_step_state = plan.pipeline.simulator.snapshot()
         pre_step_tip_site_orientation_wxyz = None
         if plan.selection.source_name == "viewer":
-            pre_step_tip_site_orientation_wxyz = _extract_tip_site_orientation_wxyz_from_state(pre_step_state)
+            profile_id = plan.pipeline.config.robot_profile_id
+            if profile_id is None:
+                raise ValueError("viewer production step-loop requires robot_profile_id")
+            plugin = resolve_robot_runtime_plugin(profile_id)
+            pre_step_tip_site_orientation_wxyz = _extract_endpoint_orientation_wxyz_from_state(
+                pre_step_state, plugin
+            )
         motion_intent = intent
         if plan.selection.source_name == "viewer":
             motion_intent_metadata = {
@@ -280,9 +279,24 @@ async def run_runtime_input_source_step_loop(
         plan.pipeline.simulator.step(dt)
 
         state = plan.pipeline.simulator.snapshot()
+        if plan.pipeline.state_metadata:
+            state = replace(
+                state,
+                metadata={**state.metadata, **plan.pipeline.state_metadata},
+            )
         measurement = PostStepMeasurement(None, None, None)
         if plan.selection.source_name == "viewer":
-            measurement = measure_post_step_tip(pre_step_state, state)
+            profile_id = plan.pipeline.config.robot_profile_id
+            if profile_id is None:
+                raise ValueError("viewer production step-loop requires robot_profile_id")
+            plugin = resolve_robot_runtime_plugin(profile_id)
+            site_name = plugin.profile.endpoint.site_name
+            if site_name is not None:
+                measurement = measure_post_step_endpoint(
+                    pre_step_state,
+                    state,
+                    site_name=site_name,
+                )
         annotated_state = annotate_runtime_input_state(
             source_state=safety_result.source_state,
             frame=frame,

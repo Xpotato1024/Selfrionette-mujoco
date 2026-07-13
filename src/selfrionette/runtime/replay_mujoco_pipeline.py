@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
 from selfrionette.motion import InputIntentMotionGenerator
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.runtime.qpos_feasibility import QposFeasibilityGuard
@@ -29,7 +29,7 @@ def _resolve_model_path(*, model_path: str | Path | None, config: RuntimeConfig)
         return Path(model_path)
     if config.mujoco_model_path is not None:
         return config.mujoco_model_path
-    return default_fast_arm_scene_path()
+    raise ValueError("generic replay MuJoCo pipeline requires an explicit model_path")
 
 
 def _default_replay_frame() -> RawInputFrame:
@@ -48,12 +48,17 @@ def build_replay_mujoco_pipeline(
     loop: bool = False,
     publisher: StatePublisher | None = None,
     qpos_feasibility_guard: QposFeasibilityGuard | None = None,
+    initial_keyframe_name: str | None = None,
+    state_metadata: Mapping[str, object] | None = None,
 ) -> RuntimePipeline:
     runtime_config = RuntimeConfig() if config is None else config
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
     state_publisher = _ReplayCompatibilityStatePublisher() if publisher is None else publisher
-    simulator = HeadlessMuJoCoSimulator.from_model_path(resolved_model_path)
+    simulator = HeadlessMuJoCoSimulator.from_model_path(
+        resolved_model_path,
+        initial_keyframe_name=initial_keyframe_name,
+    )
     return RuntimePipeline(
         config=runtime_config,
         input_source=ReplayInputSource(replay_frames, loop=loop),
@@ -62,4 +67,5 @@ def build_replay_mujoco_pipeline(
         simulator=simulator,
         publisher=state_publisher,
         qpos_feasibility_guard=qpos_feasibility_guard,
+        state_metadata=state_metadata,
     )

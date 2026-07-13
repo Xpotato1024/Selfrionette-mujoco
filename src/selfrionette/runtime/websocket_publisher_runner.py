@@ -75,6 +75,7 @@ def _annotate_sweep_x_state(pipeline, state, intent, qpos_result: QposFeasibilit
     qpos_rejected = not qpos_result.accepted
     metadata = {
         **state.metadata,
+        **(pipeline.state_metadata or {}),
         **intent.metadata,
         **({} if command is None else dict(command.metadata)),
         "preset": "sweep_x",
@@ -100,7 +101,7 @@ async def _run_replay_mujoco_websocket_publisher_async(
     grace_period_s: float,
     preset: str | None,
 ) -> None:
-    runtime_config = RuntimeConfig(dt_s=dt_s)
+    runtime_config = RuntimeConfig(dt_s=dt_s, robot_profile_id="fast_arm")
 
     async with WebSocketPublisherServer(host=host, port=port) as server:
         _log(f"serving on ws://{server.host}:{server.bound_port}")

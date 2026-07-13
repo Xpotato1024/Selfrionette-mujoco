@@ -8,20 +8,18 @@ from pathlib import Path
 
 from selfrionette.mujoco_backend.model_contract import validate_fast_arm_model_name_contract
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
+from selfrionette.robots.fast_arm import FAST_ARM_JOINT_NAMES
 from selfrionette.runtime.qpos_feasibility import QposFeasibilityDiagnostic, QposFeasibilityResult
 from selfrionette.schemas import JointCommand, MotionCommand
 
 FAST_ARM_JOINT_LIMIT_SCHEMA_VERSION = 1
-FAST_ARM_JOINT_NAMES: tuple[str, ...] = (
-    "sholder_joint_1",
-    "sholder_joint_2",
-    "sholder_joint_3",
-    "elbow_joint",
-)
-
-
 def default_fast_arm_joint_limits_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "configs" / "fast_arm" / "joint_limits.toml"
+    from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
+
+    path = FAST_ARM_ROBOT_PROFILE.joint_limit_config_asset
+    if path is None:
+        raise ValueError("fast_arm profile does not declare a joint-limit config asset")
+    return path
 
 
 @dataclass(frozen=True, slots=True)

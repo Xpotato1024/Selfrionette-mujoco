@@ -65,7 +65,10 @@ def test_default_config_is_provisional_rad_and_covers_all_fast_arm_joints() -> N
 def test_missing_config_file_is_a_startup_failure(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         build_concrete_mujoco_pipeline(
-            config=RuntimeConfig(fast_arm_joint_limits_path=tmp_path / "missing.toml"),
+            config=RuntimeConfig(
+                robot_profile_id="fast_arm",
+                joint_limit_config_path=tmp_path / "missing.toml",
+            ),
             publisher=_RecordingPublisher(),
         )
 
@@ -211,7 +214,10 @@ def test_runtime_factory_accepts_a_replaced_config_and_validates_it_at_startup(t
     simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
     config = load_and_validate_fast_arm_joint_limit_config(custom_path, model=simulator.model)
     pipeline = build_concrete_mujoco_pipeline(
-        config=RuntimeConfig(fast_arm_joint_limits_path=custom_path),
+        config=RuntimeConfig(
+            robot_profile_id="fast_arm",
+            joint_limit_config_path=custom_path,
+        ),
         publisher=_RecordingPublisher(),
     )
 

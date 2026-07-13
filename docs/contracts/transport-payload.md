@@ -102,6 +102,11 @@ R6-A-P4 freezes the handoff contract for R6-B:
   `source_kind`, `source_active`, `command_age_ms`, `stale_reason`, and the
   viewer control summary used by the R6-L overlay. The viewer treats those
   fields as read-only presentation data.
+- `metadata` may carry additive robot compatibility fields
+  `robot_profile_id`, `model_contract_version`, `robot_joint_names`, and
+  `robot_qpos_dimension`. These fields do not change payload version or
+  envelope shape. A profile-aware viewer must reject incompatible or unknown
+  identity before applying qpos and must not silently select fast_arm.
 - Transport may also lift an optional `endpoint_evaluation` diagnostic object
   out of runtime metadata into the top-level payload.
 - `endpoint_evaluation` is diagnostic-only runtime/backend data. The viewer

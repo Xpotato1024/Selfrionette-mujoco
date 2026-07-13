@@ -1,4 +1,5 @@
 import type { TransportEndpointEvaluationPayload, TransportPayloadV0 } from "../types/transportPayload.js";
+import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import {
   buildEndpointPresentationState,
   formatEndpointPresentationText,
@@ -60,6 +61,8 @@ export interface ProductViewerState {
   rendererMode: ProductViewerRendererMode;
   connectionStatus: ProductViewerConnectionStatus;
   status: ProductViewerStatus;
+  robotProfileId: string | null;
+  modelContractVersion: string | null;
   modelPath: string;
   fixturePath: string;
   sourceLabel: string;
@@ -79,13 +82,15 @@ export interface ProductViewerState {
   statusText: string;
 }
 
-export function createInitialProductViewerState(): ProductViewerState {
+export function createInitialProductViewerState(profile?: ViewerRobotProfile): ProductViewerState {
   return {
     rendererMode: "wasm-scene",
     connectionStatus: "disabled",
     status: "booting",
-    modelPath: "/assets/mujoco/fast_arm/scene.xml",
-    fixturePath: "/fixtures/fast_arm_sweep_x_qpos.json",
+    robotProfileId: profile?.profileId ?? null,
+    modelContractVersion: profile?.modelContractVersion ?? null,
+    modelPath: profile?.modelUrl ?? "unavailable",
+    fixturePath: profile?.fixtureUrl ?? "unavailable",
     sourceLabel: "loading",
     qposStatus: "loading",
     qposError: null,
@@ -114,6 +119,8 @@ export function formatViewerStatusText(state: ProductViewerState): string {
 
   return [
     `renderer mode: ${state.rendererMode}`,
+    `robot profile: ${state.robotProfileId ?? "unavailable"}`,
+    `model contract: ${state.modelContractVersion ?? "unavailable"}`,
     `model path: ${state.modelPath}`,
     `debug fixture path (reference only): ${state.fixturePath}`,
     `pose source: ${state.sourceLabel}`,

@@ -208,7 +208,11 @@ def test_runtime_step_loop_holds_when_tool_orientation_is_unavailable(monkeypatc
     viewer_input_source, plan = _build_plan(clock)
     initial_state = plan.pipeline.simulator.snapshot()
 
-    monkeypatch.setattr(input_step_loop, "_extract_tip_site_orientation_wxyz_from_state", lambda state: None)
+    monkeypatch.setattr(
+        input_step_loop,
+        "_extract_endpoint_orientation_wxyz_from_state",
+        lambda state, plugin: None,
+    )
     ingest_viewer_control_message(
         viewer_input_source,
         ViewerControlMessage(
@@ -242,7 +246,11 @@ def test_runtime_step_loop_converts_scalar_tool_orientation_to_safe_hold(monkeyp
     viewer_input_source, plan = _build_plan(clock)
     initial_state = plan.pipeline.simulator.snapshot()
 
-    monkeypatch.setattr(input_step_loop, "_extract_tip_site_orientation_wxyz_from_state", lambda state: 7.0)
+    monkeypatch.setattr(
+        input_step_loop,
+        "_extract_endpoint_orientation_wxyz_from_state",
+        lambda state, plugin: 7.0,
+    )
     ingest_viewer_control_message(
         viewer_input_source,
         ViewerControlMessage(
@@ -324,7 +332,7 @@ def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monke
     viewer_input_source, plan = _build_plan(clock)
     ingest_viewer_control_message(viewer_input_source, _keyboard_message(6.0, "Space"))
 
-    original_measure = input_step_loop.measure_post_step_tip
+    original_measure = input_step_loop.measure_post_step_endpoint
     original_annotate = input_step_loop.annotate_runtime_input_state
     published_states = []
 
@@ -372,9 +380,9 @@ def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monke
             events.append("rebase")
             return viewer_input_source.rebase_current_endpoint_m(endpoint_m)
 
-    def measure(pre_state, post_state):
+    def measure(pre_state, post_state, *, site_name):
         events.append("measure")
-        return original_measure(pre_state, post_state)
+        return original_measure(pre_state, post_state, site_name=site_name)
 
     def annotate(**kwargs):
         events.append("annotate")
@@ -383,7 +391,7 @@ def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monke
     plan.pipeline.simulator = SimulatorRecorder(plan.pipeline.simulator)
     plan.pipeline.publisher = PublisherRecorder(plan.pipeline.publisher)
     plan.pipeline.input_source = InputSourceRecorder()
-    monkeypatch.setattr(input_step_loop, "measure_post_step_tip", measure)
+    monkeypatch.setattr(input_step_loop, "measure_post_step_endpoint", measure)
     monkeypatch.setattr(input_step_loop, "annotate_runtime_input_state", annotate)
 
     record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))[0]
@@ -407,8 +415,8 @@ def test_runtime_step_loop_continues_publish_when_tip_measurement_is_unavailable
     ingest_viewer_control_message(viewer_input_source, _keyboard_message(7.0, "Space"))
     monkeypatch.setattr(
         input_step_loop,
-        "measure_post_step_tip",
-        lambda pre_state, post_state: input_step_loop.PostStepMeasurement(None, None, None),
+        "measure_post_step_endpoint",
+        lambda pre_state, post_state, *, site_name: input_step_loop.PostStepMeasurement(None, None, None),
         raising=False,
     )
 

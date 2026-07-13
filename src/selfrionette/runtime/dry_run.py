@@ -70,7 +70,10 @@ async def _run_replay_mujoco_dry_run_async(
     preset: str | None,
 ) -> list[str]:
     sender = _RecordingSender()
-    runtime_config = RuntimeConfig() if dt_s is None else RuntimeConfig(dt_s=dt_s)
+    runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if dt_s is None else RuntimeConfig(
+        dt_s=dt_s,
+        robot_profile_id="fast_arm",
+    )
     dt = runtime_config.dt_s
 
     if preset == "sweep_x" and frames is None:
@@ -100,6 +103,7 @@ async def _run_replay_mujoco_dry_run_async(
             state = pipeline.simulator.snapshot()
             metadata = {
                 **state.metadata,
+                **(pipeline.state_metadata or {}),
                 **intent.metadata,
                 **command.metadata,
                 "preset": "sweep_x",

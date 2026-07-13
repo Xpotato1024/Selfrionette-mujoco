@@ -16,12 +16,23 @@ def test_default_fast_arm_scene_path_points_to_scene_xml() -> None:
 
 
 def test_load_mujoco_model_loads_default_scene() -> None:
-    bundle = load_mujoco_model(default_fast_arm_scene_path())
+    bundle = load_mujoco_model(
+        default_fast_arm_scene_path(),
+        initial_keyframe_name=FAST_ARM_INITIAL_KEYFRAME_NAME,
+    )
 
     assert bundle.model_path == default_fast_arm_scene_path().resolve()
     assert bundle.model is not None
     assert bundle.data is not None
     assert tuple(bundle.data.qpos) == pytest.approx(
+        tuple(bundle.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos)
+    )
+
+
+def test_generic_model_loader_does_not_infer_keyframe_from_model_path() -> None:
+    bundle = load_mujoco_model(default_fast_arm_scene_path())
+
+    assert tuple(bundle.data.qpos) != pytest.approx(
         tuple(bundle.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos)
     )
 

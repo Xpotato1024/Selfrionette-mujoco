@@ -21,8 +21,10 @@ import {
   formatInputOverlayText,
   type ProductViewerState,
 } from "../wasm-scene/productViewerState.js";
-import { VISUAL_LEGEND_ITEMS } from "../wasm-scene/visualStyles.js";
 import { createMujocoSceneRenderer } from "../wasm-scene/mujocoSceneRenderer.js";
+import { resolveViewerRobotProfile } from "../robot-profiles/registry.js";
+import type { ViewerRobotProfile } from "../robot-profiles/types.js";
+import { viewerVisualLegend } from "../wasm-scene/visualStyles.js";
 import "./productViewer.css";
 
 function formatNumber(value: number | null): string {
@@ -33,8 +35,11 @@ function formatNumber(value: number | null): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(6);
 }
 
-function Legend() {
-  const legendItems = useMemo(() => VISUAL_LEGEND_ITEMS, []);
+function Legend({ profile }: { profile: ViewerRobotProfile | null }) {
+  const legendItems = useMemo(
+    () => (profile === null ? [] : viewerVisualLegend(profile)),
+    [profile],
+  );
 
   return (
     <div className="viewer-legend">
@@ -114,6 +119,20 @@ function InputOverlayPanel({ state }: { state: ProductViewerState }) {
 }
 
 export function ProductViewerApp() {
+  const profileResolution = useMemo(() => {
+    const requestedProfileId =
+      typeof window === "undefined"
+        ? "fast_arm"
+        : new URLSearchParams(window.location.search).get("robotProfileId") ?? "fast_arm";
+    try {
+      return { profile: resolveViewerRobotProfile(requestedProfileId), error: null as string | null };
+    } catch (error) {
+      return {
+        profile: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }, []);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const keyboardCaptureRef = useRef(
     createViewerKeyboardCapture(
@@ -121,7 +140,9 @@ export function ProductViewerApp() {
       typeof document !== "undefined" && document.hasFocus() ? "focused" : "blurred",
     ),
   );
-  const [state, setState] = useState<ProductViewerState>(() => createInitialProductViewerState());
+  const [state, setState] = useState<ProductViewerState>(() =>
+    createInitialProductViewerState(profileResolution.profile ?? undefined),
+  );
   const endpointConfig = useMemo(() => {
     if (typeof window === "undefined") {
       return { websocketUrl: null as string | null };
@@ -135,11 +156,20 @@ export function ProductViewerApp() {
     if (canvas === null) {
       return;
     }
+    if (profileResolution.profile === null) {
+      setState((current) => ({
+        ...current,
+        status: "error",
+        qposStatus: "unavailable",
+        qposError: profileResolution.error,
+        statusText: profileResolution.error ?? "viewer robot profile unavailable",
+      }));
+      return;
+    }
 
     const renderer = createMujocoSceneRenderer({
       canvas,
-      modelPath: state.modelPath,
-      fixturePath: state.fixturePath,
+      profile: profileResolution.profile,
       websocketUrl: endpointConfig.websocketUrl,
       onStateChange: setState,
       onError(error) {
@@ -157,7 +187,7 @@ export function ProductViewerApp() {
     return () => {
       renderer.dispose();
     };
-  }, [endpointConfig.websocketUrl, state.fixturePath, state.modelPath]);
+  }, [endpointConfig.websocketUrl, profileResolution.error, profileResolution.profile]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined" || state.connectionStatus !== "open") {
@@ -407,7 +437,7 @@ export function ProductViewerApp() {
           <h2>Legend</h2>
           <div className="viewer-subtle">shared colors</div>
         </div>
-        <Legend />
+        <Legend profile={profileResolution.profile} />
       </section>
     </main>
   );

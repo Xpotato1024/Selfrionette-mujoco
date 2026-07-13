@@ -10,11 +10,8 @@ from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.runtime.endpoint_metrics import build_runtime_endpoint_evaluation_payload_from_state
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.fast_arm_joint_limits import (
-    apply_fast_arm_qpos_feasibility_guard,
-    default_fast_arm_joint_limits_path,
-    load_and_validate_fast_arm_joint_limit_config,
-)
+from selfrionette.runtime.robot_plugin_registry import resolve_robot_runtime_plugin
+from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, MuJoCoState
 from selfrionette.transport import mujoco_state_to_payload
 
@@ -122,12 +119,18 @@ def run_offline_input_runtime_stepping_smoke(
         seed_joint_angles_rad=seed_joint_angles_rad,
         qpos_joint_count=_DEFAULT_QPOS_JOINT_COUNT,
     )
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
-    runtime_config = RuntimeConfig() if config is None else config
-    joint_limit_path = runtime_config.fast_arm_joint_limits_path or default_fast_arm_joint_limits_path()
-    joint_limits = load_and_validate_fast_arm_joint_limit_config(
-        joint_limit_path,
+    runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
+    if runtime_config.robot_profile_id is None:
+        raise ValueError("production offline input smoke requires robot_profile_id")
+    plugin = resolve_robot_runtime_plugin(runtime_config.robot_profile_id)
+    simulator = HeadlessMuJoCoSimulator.from_model_path(
+        runtime_config.mujoco_model_path or plugin.profile.mujoco_model_asset,
+        initial_keyframe_name=plugin.profile.initial_keyframe_name,
+    )
+    plugin.validate_model(simulator.model)
+    qpos_guard = plugin.build_qpos_feasibility_guard(
         model=simulator.model,
+        config_path=runtime_config.joint_limit_config_path,
     )
 
     if initial_qpos_tuple is not None:
@@ -138,10 +141,9 @@ def run_offline_input_runtime_stepping_smoke(
     applied_command = runtime_motion_command
     qpos_rejected = False
     for _ in range(steps):
-        decision = apply_fast_arm_qpos_feasibility_guard(
+        decision = qpos_guard.evaluate(
             runtime_motion_command,
             current_qpos_rad=simulator.snapshot().qpos,
-            joint_limits=joint_limits,
         )
         applied_command = decision.motion_command
         qpos_rejected = qpos_rejected or not decision.accepted
@@ -152,7 +154,10 @@ def run_offline_input_runtime_stepping_smoke(
     state = replace(
         state,
         target_position_m=None if qpos_rejected else feedback_target_position_m,
-        metadata=dict(applied_command.metadata),
+        metadata={
+            **dict(applied_command.metadata),
+            **robot_profile_runtime_metadata(plugin.profile),
+        },
     )
 
     endpoint_evaluation = None

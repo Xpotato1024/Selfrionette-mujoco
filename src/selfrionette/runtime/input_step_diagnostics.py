@@ -3,9 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
-from selfrionette.mujoco_backend.endpoint_extraction import (
-    extract_fast_arm_tip_site_endpoint_from_state,
-)
 from selfrionette.runtime.desired_endpoint_resolver import (
     resolve_desired_endpoint_from_motion_command,
 )
@@ -46,19 +43,21 @@ class TargetFeedbackAnnotation:
     metadata: Mapping[str, object]
 
 
-def _extract_tip_position_m(state: MuJoCoState) -> tuple[float, float, float] | None:
-    try:
-        return extract_fast_arm_tip_site_endpoint_from_state(state).position_m
-    except ValueError:
-        return None
+def _extract_site_position_m(
+    state: MuJoCoState, site_name: str
+) -> tuple[float, float, float] | None:
+    site = next((site for site in state.sites if site.name == site_name), None)
+    return None if site is None else tuple(site.position_m)
 
 
-def measure_post_step_tip(
+def measure_post_step_endpoint(
     pre_step_state: MuJoCoState,
     post_step_state: MuJoCoState,
+    *,
+    site_name: str,
 ) -> PostStepMeasurement:
-    pre_step_tip_position_m = _extract_tip_position_m(pre_step_state)
-    post_step_tip_position_m = _extract_tip_position_m(post_step_state)
+    pre_step_tip_position_m = _extract_site_position_m(pre_step_state, site_name)
+    post_step_tip_position_m = _extract_site_position_m(post_step_state, site_name)
     actual_tip_delta_m = None
     if pre_step_tip_position_m is not None and post_step_tip_position_m is not None:
         actual_tip_delta_m = tuple(
@@ -69,6 +68,17 @@ def measure_post_step_tip(
         pre_step_tip_position_m=pre_step_tip_position_m,
         post_step_tip_position_m=post_step_tip_position_m,
         actual_tip_delta_m=actual_tip_delta_m,
+    )
+
+
+def measure_post_step_tip(
+    pre_step_state: MuJoCoState,
+    post_step_state: MuJoCoState,
+) -> PostStepMeasurement:
+    return measure_post_step_endpoint(
+        pre_step_state,
+        post_step_state,
+        site_name="tip",
     )
 
 
@@ -200,4 +210,5 @@ __all__ = [
     "annotate_target_feedback",
     "build_diagnostic_metadata",
     "measure_post_step_tip",
+    "measure_post_step_endpoint",
 ]
