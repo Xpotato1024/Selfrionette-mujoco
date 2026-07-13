@@ -10,6 +10,7 @@ from selfrionette.motion.stubs import NoOpMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.pipeline import RuntimePipeline
+from selfrionette.runtime.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport.stubs import NoOpStatePublisher
 
@@ -31,16 +32,19 @@ def build_mujoco_pipeline(
     frame: RawInputFrame | None = None,
     config: RuntimeConfig | None = None,
     model_path: str | Path | None = None,
+    qpos_feasibility_guard: QposFeasibilityGuard | None = None,
 ) -> RuntimePipeline:
     runtime_config = RuntimeConfig() if config is None else config
     raw_frame = frame if frame is not None else RawInputFrame(source="noop", timestamp_s=0.0)
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
 
+    simulator = HeadlessMuJoCoSimulator.from_model_path(resolved_model_path)
     return RuntimePipeline(
         config=runtime_config,
         input_source=StaticInputSource(raw_frame),
         input_interpreter=NoOpInputInterpreter(),
         motion_generator=NoOpMotionGenerator(),
-        simulator=HeadlessMuJoCoSimulator.from_model_path(resolved_model_path),
+        simulator=simulator,
         publisher=NoOpStatePublisher(),
+        qpos_feasibility_guard=qpos_feasibility_guard,
     )

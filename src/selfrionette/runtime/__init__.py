@@ -35,6 +35,11 @@ from selfrionette.runtime.input_safety import (
     RuntimeInputSafetyResult,
     build_runtime_input_safety_result,
 )
+from selfrionette.runtime.qpos_feasibility import (
+    QposFeasibilityDiagnostic,
+    QposFeasibilityGuard,
+    QposFeasibilityResult,
+)
 from selfrionette.runtime.desired_endpoint_resolver import (
     ResolvedDesiredEndpoint,
     resolve_desired_endpoint_from_motion_command,
@@ -110,6 +115,9 @@ __all__ = [
     "RuntimeInputSourceSelection",
     "RuntimeInputSourceState",
     "RuntimeInputSafetyResult",
+    "QposFeasibilityDiagnostic",
+    "QposFeasibilityGuard",
+    "QposFeasibilityResult",
     "RuntimeInputSourceStepLoopPlan",
     "RuntimeInputSourceStepLoopRecord",
     "DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS",

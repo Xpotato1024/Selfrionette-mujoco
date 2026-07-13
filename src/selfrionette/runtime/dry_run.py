@@ -10,6 +10,7 @@ from selfrionette.input_sources import build_sweep_x_input_source
 from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
+from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketStatePublisher
 
@@ -85,20 +86,32 @@ async def _run_replay_mujoco_dry_run_async(
             frame = pipeline.input_source.read_frame()
             intent = pipeline.input_interpreter.interpret(frame)
             command = pipeline.motion_generator.update(intent, dt)
+            pre_step_state = pipeline.simulator.snapshot()
+            qpos_guard = pipeline.qpos_feasibility_guard or NoOpQposFeasibilityGuard()
+            qpos_result = qpos_guard.evaluate(
+                command,
+                current_qpos_rad=pre_step_state.qpos,
+            )
+            command = qpos_result.motion_command
+            qpos_rejected = not qpos_result.accepted
             pipeline.simulator.apply_command(command)
             pipeline.simulator.step(dt)
 
             state = pipeline.simulator.snapshot()
+            metadata = {
+                **state.metadata,
+                **intent.metadata,
+                **command.metadata,
+                "preset": "sweep_x",
+            }
+            if qpos_rejected:
+                metadata["endpoint_evaluation"] = None
             annotated_state = snapshot_mujoco_state(
                 pipeline.simulator.model,
                 pipeline.simulator.data,
                 frame_index=state.frame_index,
-                target_position_m=tuple(intent.metadata["desired_endpoint_m"]),
-                metadata={
-                    **state.metadata,
-                    **intent.metadata,
-                    "preset": "sweep_x",
-                },
+                target_position_m=None if qpos_rejected else tuple(intent.metadata["desired_endpoint_m"]),
+                metadata=metadata,
             )
             await pipeline.publisher.publish(annotated_state)
             lines.append(sender.messages[-1])

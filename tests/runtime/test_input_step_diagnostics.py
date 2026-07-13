@@ -95,6 +95,26 @@ def test_metadata_precedence_stale_removal_and_missing_progress_are_deterministi
     assert (state_metadata, frame_metadata, intent_metadata, command.metadata) == originals
 
 
+def test_diagnostic_metadata_uses_typed_qpos_rejection_without_command_metadata() -> None:
+    result = build_diagnostic_metadata(
+        state_metadata={},
+        frame_metadata={},
+        intent_metadata={},
+        motion_command=MotionCommand(
+            timestamp_s=0.0,
+            metadata={"desired_endpoint_m": (1.0, 2.0, 3.0)},
+        ),
+        measurement=PostStepMeasurement(None, None, None),
+        should_publish_target=True,
+        target_rejected=False,
+        qpos_rejected=True,
+    )
+
+    assert result["endpoint_evaluation"] is None
+    assert "desired_endpoint_m" not in result
+    assert "qpos_feasibility_rejected" not in result
+
+
 def test_safety_hold_suppresses_target_and_source_state_has_final_precedence() -> None:
     source_state = RuntimeInputSourceState(
         source_kind="viewer_keyboard",

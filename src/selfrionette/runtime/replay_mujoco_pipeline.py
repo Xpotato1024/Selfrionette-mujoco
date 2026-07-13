@@ -9,6 +9,7 @@ from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.pipeline import RuntimePipeline
+from selfrionette.runtime.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
 
@@ -46,17 +47,19 @@ def build_replay_mujoco_pipeline(
     model_path: str | Path | None = None,
     loop: bool = False,
     publisher: StatePublisher | None = None,
+    qpos_feasibility_guard: QposFeasibilityGuard | None = None,
 ) -> RuntimePipeline:
     runtime_config = RuntimeConfig() if config is None else config
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
     state_publisher = _ReplayCompatibilityStatePublisher() if publisher is None else publisher
-
+    simulator = HeadlessMuJoCoSimulator.from_model_path(resolved_model_path)
     return RuntimePipeline(
         config=runtime_config,
         input_source=ReplayInputSource(replay_frames, loop=loop),
         input_interpreter=ReplayInputInterpreter(),
         motion_generator=InputIntentMotionGenerator(),
-        simulator=HeadlessMuJoCoSimulator.from_model_path(resolved_model_path),
+        simulator=simulator,
         publisher=state_publisher,
+        qpos_feasibility_guard=qpos_feasibility_guard,
     )

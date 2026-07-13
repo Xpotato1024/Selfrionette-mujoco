@@ -1,0 +1,21 @@
+schema_version = 1
+robot = "fast_arm"
+model = "fast_arm"
+angle_unit = "rad"
+status = "provisional"
+
+[joints.sholder_joint_1]
+lower_rad = -3.141592653589793
+upper_rad = 3.141592653589793
+
+[joints.sholder_joint_2]
+lower_rad = -3.141592653589793
+upper_rad = 3.141592653589793
+
+[joints.sholder_joint_3]
+lower_rad = -3.141592653589793
+upper_rad = 3.141592653589793
+
+[joints.elbow_joint]
+lower_rad = -3.141592653589793
+upper_rad = 3.141592653589793
