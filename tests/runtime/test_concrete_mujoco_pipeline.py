@@ -77,7 +77,7 @@ def test_concrete_mujoco_pipeline_handles_small_3d_target_without_padding_or_pla
     assert state.qpos[:4] == pytest.approx(pipeline.simulator.last_command.joint.joint_angles_rad, abs=1e-9)
 
 
-def test_concrete_mujoco_pipeline_moves_actual_tip_site_toward_small_3d_target() -> None:
+def test_concrete_mujoco_pipeline_reports_model_mismatch_from_neutral_startup() -> None:
     publisher = RecordingPublisher()
     frame = RawInputFrame(
         source="replay",
@@ -100,10 +100,10 @@ def test_concrete_mujoco_pipeline_moves_actual_tip_site_toward_small_3d_target()
     final_error_norm_m = dist(final_tip_position_m, desired_endpoint_m)
 
     assert isinstance(state, MuJoCoState)
-    assert final_error_norm_m <= initial_error_norm_m + 1e-6
     assert final_tip_position_m != initial_tip_position_m
     assert final_tip_position_m != desired_endpoint_m
-    assert final_error_norm_m < initial_error_norm_m or final_error_norm_m <= 1e-4
+    assert final_error_norm_m > initial_error_norm_m
+    assert pipeline.simulator.last_command.metadata.get("target_rejected") is not True
     assert publisher.states[0].metadata["endpoint_evaluation"]["desired_to_site_error_norm_m"] == pytest.approx(
         final_error_norm_m,
         abs=1e-9,

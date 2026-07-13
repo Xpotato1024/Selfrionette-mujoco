@@ -6,7 +6,11 @@ from pathlib import Path
 from selfrionette.mujoco_backend.command_adapter import motion_command_to_qpos_command
 from selfrionette.mujoco_backend.model_contract import validate_fast_arm_model_name_contract
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
-from selfrionette.mujoco_backend.model_loader import default_fast_arm_scene_path, load_mujoco_model
+from selfrionette.mujoco_backend.model_loader import (
+    default_fast_arm_scene_path,
+    load_mujoco_model,
+    reset_mujoco_data_to_initial_state,
+)
 from selfrionette.mujoco_backend.snapshot import snapshot_mujoco_state
 from selfrionette.schemas import JointCommand
 from selfrionette.schemas import MotionCommand, MuJoCoState
@@ -49,6 +53,17 @@ class HeadlessMuJoCoSimulator:
         """qpos command を直接受け取り、backend state に反映する。"""
 
         self._apply_joint_command(joint_command)
+
+    def reset(self) -> None:
+        reset_mujoco_data_to_initial_state(
+            self.model,
+            self.data,
+            model_path=self.model_path,
+        )
+        self._frame_index = 0
+        self._last_dt_s = None
+        self._last_command = None
+        self._pending_command = None
 
     @property
     def last_command(self) -> MotionCommand | None:

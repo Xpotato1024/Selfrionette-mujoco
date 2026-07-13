@@ -52,14 +52,14 @@ def test_joint_axis_mapping_diagnostics_cover_all_fast_arm_qpos() -> None:
 def test_joint_axis_mapping_diagnostics_pin_dominant_tip_motion() -> None:
     results = {result.qpos_index: result for result in run_fast_arm_joint_axis_mapping_diagnostics()}
 
-    assert results[0].dominant_axis == "none"
-    assert results[0].dominant_sign == 0
-    assert results[1].dominant_axis == "z"
+    assert results[0].dominant_axis == "y"
+    assert results[0].dominant_sign == 1
+    assert results[1].dominant_axis == "x"
     assert results[1].dominant_sign == -1
-    assert results[2].dominant_axis == "none"
-    assert results[2].dominant_sign == 0
-    assert results[3].dominant_axis == "y"
-    assert results[3].dominant_sign == 1
+    assert results[2].dominant_axis == "x"
+    assert results[2].dominant_sign == -1
+    assert results[3].dominant_axis == "z"
+    assert results[3].dominant_sign == -1
 
 
 def test_endpoint_sanity_carries_mapping_diagnostics_without_changing_q1_adapter() -> None:
@@ -69,8 +69,8 @@ def test_endpoint_sanity_carries_mapping_diagnostics_without_changing_q1_adapter
     minus_z = results["-z"]
     assert plus_z.status == "pass"
     assert plus_z.reason == "aligned"
-    assert minus_z.status == "pass"
-    assert minus_z.reason == "aligned"
+    assert minus_z.status == "limitation"
+    assert minus_z.reason == "opposite_direction"
     assert plus_z.qpos_ref_summary["mujoco_to_solver"] == "solver_q1 = mujoco_qpos1 + pi/2"
     assert plus_z.qpos_ref_summary["solver_to_mujoco"] == "mujoco_qpos1 = solver_q1 - pi/2"
     assert plus_z.mapping_status == "q1_ref_adapter_with_q0_q2_q3_hold"

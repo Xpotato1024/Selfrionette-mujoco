@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
 from selfrionette.runtime.jacobian_mobility_diagnostics import _pose_qpos, run_fast_arm_jacobian_mobility_diagnostics
 
 
@@ -30,13 +31,16 @@ def test_fast_arm_diagnostic_has_explicit_mapping_and_deterministic_pose_sweep()
 def test_fast_arm_default_pose_records_native_comparison_and_axis_metrics() -> None:
     result = run_fast_arm_jacobian_mobility_diagnostics()
     default = result.poses[0]
-    assert default.qpos_rad == pytest.approx((0.0, -math.pi / 2.0, 0.0, 0.0), abs=1e-12)
+    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    assert default.qpos_rad == pytest.approx(
+        tuple(simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos),
+        abs=1e-12,
+    )
     assert default.jacobian_difference_norm < 1e-3
-    assert default.finite_difference.effective_rank == 2
-    assert default.native.effective_rank == 2
+    assert default.finite_difference.effective_rank == 3
+    assert default.native.effective_rank == 3
     assert default.finite_difference.effective_rank_tolerance >= default.jacobian_difference_norm
-    assert default.finite_difference.row_norms[0] < default.finite_difference.row_norms[1]
-    assert default.finite_difference.row_norms[0] < default.finite_difference.row_norms[2]
+    assert min(default.native.row_norms) > 0.0
     assert len(default.directions) == 6
     assert default.directions[0].label == "+X"
     assert default.directions[0].delta.requested_delta_m[0] > 0.0

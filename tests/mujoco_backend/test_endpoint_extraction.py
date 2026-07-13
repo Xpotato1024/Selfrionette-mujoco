@@ -8,6 +8,7 @@ from selfrionette.mujoco_backend import default_fast_arm_scene_path, load_mujoco
 from selfrionette.mujoco_backend import endpoint_extraction as endpoint_extraction_module
 from selfrionette.mujoco_backend import model_contract as model_contract_module
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
+from selfrionette.kinematics.fast_arm_endpoint import FastArmMuJoCoModelForwardKinematicsSolver
 from selfrionette.runtime import extract_mujoco_site_endpoint as runtime_extract_mujoco_site_endpoint
 
 
@@ -41,7 +42,10 @@ def test_extract_fast_arm_tip_site_endpoint_from_model_data_returns_tip_site_wor
     assert evaluation.role == "tip"
     assert evaluation.kind == "site"
     assert evaluation.name == "tip"
-    assert evaluation.position_m == pytest.approx((0.622, 0.0, 0.7), abs=1e-9)
+    assert evaluation.position_m == pytest.approx(
+        FastArmMuJoCoModelForwardKinematicsSolver().forward(tuple(bundle.data.qpos)),
+        abs=1e-9,
+    )
     assert evaluation.unit == "meter"
     assert evaluation.coordinate_frame == "MuJoCo world / scene frame"
     assert runtime_extract_mujoco_site_endpoint is endpoint_extraction_module.extract_mujoco_site_endpoint
@@ -153,4 +157,7 @@ def test_extract_fast_arm_tip_site_endpoint_from_state_reuses_snapshot_transform
     assert evaluation.role == "tip"
     assert evaluation.kind == "site"
     assert evaluation.name == "tip"
-    assert evaluation.position_m == pytest.approx((0.622, 0.0, 0.7), abs=1e-9)
+    assert evaluation.position_m == pytest.approx(
+        FastArmMuJoCoModelForwardKinematicsSolver().forward(state.qpos),
+        abs=1e-9,
+    )

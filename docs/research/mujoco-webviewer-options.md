@@ -4,7 +4,7 @@
 
 ## 背景
 
-`#175` と `PR #176` により、`assets/mujoco/fast_arm/scene.xml` は MuJoCo native viewer 上で自然な下垂姿勢で表示され、`home` keyframe も `qpos = [0, 0, 0, 0]` であることを確認した。
+`#175` と `PR #176` により、`assets/mujoco/fast_arm/scene.xml` は MuJoCo native viewer 上で自然な下垂姿勢で表示され、当時の`home` keyframeが`qpos = [0, 0, 0, 0]`であることを確認した。この値はhistorical evidenceであり、current startup policyは`docs/operations/r7-e-p22-neutral-initial-pose.md`を正とする。
 
 一方で `PR #174` の browser Three.js viewer は、fast_arm mesh の姿勢・接続・初期姿勢の再現がまだ不自然だった。
 

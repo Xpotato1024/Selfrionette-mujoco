@@ -106,6 +106,28 @@ def test_local_endpoint_motion_generator_uses_injected_endpoint_kinematics() -> 
     assert command.metadata["current_tip_position_m"] == pytest.approx((0.0, -1.5707963267948966, 0.0), abs=1e-12)
 
 
+def test_local_endpoint_motion_generator_does_not_invent_a_pose_when_qpos_is_unavailable() -> None:
+    generator = LocalEndpointMotionGenerator(
+        endpoint_kinematics=_RecordingEndpointKinematics(),
+        endpoint_model="recording_endpoint_model",
+    )
+
+    command = generator.update(
+        _intent(
+            axis_values=(0.0, 0.0, 0.0),
+            endpoint_velocity_m_s=(0.0, 0.0, 0.0),
+            dt_s=1.0 / 60.0,
+        ),
+        dt_s=1.0 / 60.0,
+    )
+
+    assert command.joint is None
+    assert command.metadata["motion_status"] == "held"
+    assert command.metadata["motion_rejection_reason"] == "current_qpos_unavailable"
+    assert command.metadata["qpos_before_rad"] is None
+    assert command.metadata["candidate_qpos_rad"] is None
+
+
 def test_local_endpoint_motion_generator_matches_mujoco_tip_site_for_representative_qpos() -> None:
     solver = FastArmMuJoCoModelForwardKinematicsSolver()
     generator = LocalEndpointMotionGenerator(

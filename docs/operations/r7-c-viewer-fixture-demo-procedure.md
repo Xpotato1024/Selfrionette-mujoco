@@ -92,7 +92,7 @@ viewer launch または fixture demo では、少なくとも次を確認する�
 
 - `Connection` が `open`
 - `Renderer mode` が `wasm-scene`
-- `Pose source` が compiled model default qpos か received payload に応じて切り替わる
+- `Pose source` がMuJoCo `home` keyframeかreceived payloadに応じて切り替わる
 - `Qpos status` が `ready`
 - canvas に floor, axes, fast_arm mesh が見える
 - target marker が見える

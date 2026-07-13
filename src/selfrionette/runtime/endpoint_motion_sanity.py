@@ -1413,9 +1413,9 @@ def _summarize_local_jacobian_columns(
         "y": tuple(effective_by_axis["y"]),
         "z": tuple(effective_by_axis["z"]),
         "decision": (
-            "q1 contributes primarily to z near the initial pose; q3 can contribute to y "
-            "when its MuJoCo local elbow axis is active; q0/q2 remain weak or singular "
-            "in the checked local presets"
+            "the selected neutral pose has material local contributions on all world axes: "
+            "sholder_joint_2/sholder_joint_3 on x, sholder_joint_1 on y, and elbow_joint on z; "
+            "the older q1-only solver adapter remains a separate mechanism limitation"
         ),
     }
 

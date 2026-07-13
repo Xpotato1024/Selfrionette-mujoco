@@ -202,11 +202,23 @@ class LocalEndpointMotionGenerator:
 
     def update(self, intent: InputIntent, dt_s: float) -> MotionCommand:
         if self._current_qpos_rad is None:
-            return self._build_holding_command(
-                intent=intent,
-                reason="current_qpos_unavailable",
-                qpos_before_rad=(0.0, -1.5707963267948966, 0.0, 0.0),
-                endpoint_delta_requested_m=(0.0, 0.0, 0.0),
+            return MotionCommand(
+                timestamp_s=intent.timestamp_s,
+                metadata={
+                    **dict(intent.metadata),
+                    "local_motion_policy": "finite_difference_jacobian",
+                    "endpoint_model": self._endpoint_model,
+                    "motion_status": "held",
+                    "motion_rejection_reason": "current_qpos_unavailable",
+                    "qpos_before_rad": None,
+                    "candidate_qpos_rad": None,
+                    "qpos_delta_norm_rad": 0.0,
+                    "qpos_delta_cap_rad": self._max_qpos_delta_norm_rad,
+                    "dt_s": float(intent.metadata.get("dt_s", 0.0) or 0.0),
+                    "endpoint_delta_requested_m": (0.0, 0.0, 0.0),
+                    "endpoint_delta_m": (0.0, 0.0, 0.0),
+                    "endpoint_delta_achieved_m": (0.0, 0.0, 0.0),
+                },
             )
 
         current_qpos_rad = self._current_qpos_rad
