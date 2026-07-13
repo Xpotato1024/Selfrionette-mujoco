@@ -188,6 +188,17 @@ annotated as `measurement_unavailable`. Runtime remains the only multi-layer
 composition root, payload-v0 and viewer behavior are unchanged, and the larger
 composition split remains owned by P19.
 
+R7-E follow-up P23 adds a runtime-owned fast_arm qpos feasibility guard. Runtime
+composition loads `configs/fast_arm/joint_limits.toml` with `tomllib`, validates
+the configured schema/model/joint order and the canonical MuJoCo `home` qpos at
+startup, and carries the immutable validated contract into the production
+pipeline. After motion policy and before backend update, the common guard
+accepts in-range candidates, including exact boundaries, or rejects the whole
+candidate and holds the current qpos when any axis is out of range. It never
+clamps individual axes. Rejected qpos commands do not advance target lifecycle
+or viewer rebase state. The TOML remains the only joint-limit SoT; the MJCF and
+peer layers do not duplicate its values.
+
 ## Composition-root responsibility split
 
 This section is the canonical plan for decomposing the production input step

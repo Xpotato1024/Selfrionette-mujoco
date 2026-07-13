@@ -257,9 +257,10 @@ async def run_runtime_input_source_step_loop(
             motion_command,
             source_state=source_state,
             current_state=pre_step_state,
+            joint_limits=plan.pipeline.joint_limits,
         )
         step_endpoint_m = last_valid_endpoint_m
-        if not safety_result.motion_command.metadata.get("target_rejected", False):
+        if not safety_result.motion_command.metadata.get("target_rejected", False) and not safety_result.qpos_feasibility_rejected:
             desired_endpoint_m = safety_result.motion_command.metadata.get("desired_endpoint_m")
             if desired_endpoint_m is not None:
                 step_endpoint_m = _coerce_viewer_endpoint_m(desired_endpoint_m)

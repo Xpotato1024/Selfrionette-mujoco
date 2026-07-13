@@ -4,6 +4,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from selfrionette.runtime.input_source_state import RuntimeInputSourceState, runtime_input_source_state_to_metadata
+from selfrionette.runtime.fast_arm_joint_limits import (
+    FastArmJointLimitConfig,
+    FastArmJointLimitViolation,
+    apply_fast_arm_qpos_feasibility_guard,
+)
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState
 
 DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS = 250
@@ -17,6 +22,8 @@ class RuntimeInputSafetyResult:
     should_update_target_position_m: bool
     stale_reason: str | None
     command_age_ms: int | None
+    qpos_feasibility_rejected: bool = False
+    qpos_limit_violations: tuple[FastArmJointLimitViolation, ...] = ()
 
 
 def _coerce_current_qpos(current_qpos: Sequence[float] | None) -> tuple[float, ...] | None:
@@ -84,6 +91,7 @@ def build_runtime_input_safety_result(
     source_state: RuntimeInputSourceState,
     current_state: MuJoCoState | None = None,
     timeout_ms: int = DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS,
+    joint_limits: FastArmJointLimitConfig | None = None,
 ) -> RuntimeInputSafetyResult:
     if timeout_ms < 0:
         raise ValueError("timeout_ms must be non-negative")
@@ -101,6 +109,18 @@ def build_runtime_input_safety_result(
     else:
         safe_motion_command = command
 
+    qpos_rejected = False
+    qpos_violations: tuple[FastArmJointLimitViolation, ...] = ()
+    if joint_limits is not None and current_state is not None:
+        qpos_result = apply_fast_arm_qpos_feasibility_guard(
+            safe_motion_command,
+            current_qpos_rad=current_state.qpos,
+            joint_limits=joint_limits,
+        )
+        safe_motion_command = qpos_result.motion_command
+        qpos_rejected = not qpos_result.accepted
+        qpos_violations = qpos_result.violations
+
     safe_source_state = RuntimeInputSourceState(
         source_kind=source_state.source_kind,
         source_active=source_state.source_active,
@@ -112,9 +132,11 @@ def build_runtime_input_safety_result(
         motion_command=safe_motion_command,
         source_state=safe_source_state,
         is_stale=is_stale,
-        should_update_target_position_m=not is_stale,
+        should_update_target_position_m=not is_stale and not qpos_rejected,
         stale_reason=stale_reason,
         command_age_ms=source_state.command_age_ms,
+        qpos_feasibility_rejected=qpos_rejected,
+        qpos_limit_violations=qpos_violations,
     )
 
 

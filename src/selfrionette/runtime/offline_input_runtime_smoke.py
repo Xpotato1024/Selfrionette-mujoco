@@ -9,6 +9,11 @@ from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.runtime.endpoint_metrics import build_runtime_endpoint_evaluation_payload_from_state
+from selfrionette.runtime.config import RuntimeConfig
+from selfrionette.runtime.fast_arm_joint_limits import (
+    apply_fast_arm_qpos_feasibility_guard,
+    load_and_validate_fast_arm_joint_limit_config,
+)
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, MuJoCoState
 from selfrionette.transport import mujoco_state_to_payload
 
@@ -94,6 +99,7 @@ def run_offline_input_runtime_stepping_smoke(
     *,
     initial_qpos: Sequence[float] | None = None,
     steps: int = 1,
+    config: RuntimeConfig | None = None,
 ) -> OfflineInputRuntimeSmokeResult:
     if steps < 1:
         raise ValueError("steps must be a positive integer")
@@ -116,29 +122,45 @@ def run_offline_input_runtime_stepping_smoke(
         qpos_joint_count=_DEFAULT_QPOS_JOINT_COUNT,
     )
     simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    runtime_config = RuntimeConfig() if config is None else config
+    joint_limits = load_and_validate_fast_arm_joint_limit_config(
+        runtime_config.fast_arm_joint_limits_path,
+        model=simulator.model,
+    )
 
     if initial_qpos_tuple is not None:
         simulator.apply_qpos_command(JointCommand(joint_angles_rad=initial_qpos_tuple))
 
     runtime_motion_command = motion_generator.update(runtime_intent, _DEFAULT_DT_S)
 
+    applied_command = runtime_motion_command
+    qpos_rejected = False
     for _ in range(steps):
-        simulator.apply_command(runtime_motion_command)
+        decision = apply_fast_arm_qpos_feasibility_guard(
+            runtime_motion_command,
+            current_qpos_rad=simulator.snapshot().qpos,
+            joint_limits=joint_limits,
+        )
+        applied_command = decision.motion_command
+        qpos_rejected = qpos_rejected or not decision.accepted
+        simulator.apply_command(applied_command)
         simulator.step(_DEFAULT_DT_S)
 
     state = simulator.snapshot()
     state = replace(
         state,
-        target_position_m=feedback_target_position_m,
-        metadata=dict(runtime_motion_command.metadata),
+        target_position_m=None if qpos_rejected else feedback_target_position_m,
+        metadata=dict(applied_command.metadata),
     )
 
-    endpoint_evaluation = build_runtime_endpoint_evaluation_payload_from_state(
-        state=state,
-        motion_command=runtime_motion_command,
-        fk_solver=PlanarChainForwardKinematicsSolver(link_lengths_m=_DEFAULT_LINK_LENGTHS_M),
-        solver_joint_count=len(_DEFAULT_LINK_LENGTHS_M),
-    )
+    endpoint_evaluation = None
+    if not qpos_rejected:
+        endpoint_evaluation = build_runtime_endpoint_evaluation_payload_from_state(
+            state=state,
+            motion_command=applied_command,
+            fk_solver=PlanarChainForwardKinematicsSolver(link_lengths_m=_DEFAULT_LINK_LENGTHS_M),
+            solver_joint_count=len(_DEFAULT_LINK_LENGTHS_M),
+        )
 
     if endpoint_evaluation is not None:
         state = replace(state, metadata={**state.metadata, "endpoint_evaluation": endpoint_evaluation})
@@ -148,7 +170,7 @@ def run_offline_input_runtime_stepping_smoke(
         payload = dict(payload)
 
     return OfflineInputRuntimeSmokeResult(
-        motion_command=runtime_motion_command,
+        motion_command=applied_command,
         resolved_desired_endpoint_m=resolved.desired_endpoint_m,
         state=state,
         endpoint_evaluation=endpoint_evaluation,

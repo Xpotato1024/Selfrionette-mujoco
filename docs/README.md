@@ -57,6 +57,7 @@ Do not create or use `doc/`.
 | Recorded analog fixture mapping | `docs/contracts/analog-fixture-mapping.md` | P21 strict offline N-channel fixture to P16 mapping; canonical fixture is the recorded 7-channel Selfrionette shape |
 | World/tool control-frame evaluation design | `docs/evaluation/world-tool-frame-comparison-design.md` | P17 minimal within-subject free-space comparison and P20 logging requirements |
 | Experiment motion log v1 | `docs/contracts/experiment-motion-log-v1.md` | P20 versioned typed JSONL-compatible trial/configuration/sample/outcome contract and P21 handoff |
+| fast_arm joint-limit configuration | `docs/contracts/fast-arm-joint-limit-config.md` | TOML SoT, startup model/home validation, and runtime qpos feasibility hold semantics |
 | EndpointTargetGenerator contract | `docs/contracts/endpoint-target-generator.md` | input vector -> command-side `desired_endpoint_m` target generation contract |
 | R7-E-P1 EndpointTargetGenerator contract | `docs/operations/r7-e-p1-endpoint-target-generator-contract.md` | #319 follow-up; deadzone / gain / max step / workspace projection / rejection hold decision |
 | R7-D-P4 fast_arm IK / FK completion audit | `docs/operations/r7-d-completion-audit.md` | R7-D 全体の completion audit と parent #150 の close-readiness 条件を固定する |

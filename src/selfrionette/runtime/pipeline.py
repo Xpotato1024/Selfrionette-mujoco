@@ -17,6 +17,10 @@ from selfrionette.transport import StatePublisher
 from selfrionette.transport.stubs import NoOpStatePublisher
 
 from selfrionette.runtime.config import RuntimeConfig
+from selfrionette.runtime.fast_arm_joint_limits import (
+    FastArmJointLimitConfig,
+    apply_fast_arm_qpos_feasibility_guard,
+)
 
 
 @dataclass(slots=True)
@@ -27,15 +31,38 @@ class RuntimePipeline:
     motion_generator: MotionGenerator
     simulator: MuJoCoSimulator
     publisher: StatePublisher
+    joint_limits: FastArmJointLimitConfig | None = None
 
     async def run_once(self, dt_s: float | None = None) -> MuJoCoState:
         dt = self.config.dt_s if dt_s is None else dt_s
         frame = self.input_source.read_frame()
         intent = self.input_interpreter.interpret(frame)
         command = self.motion_generator.update(intent, dt)
+        pre_step_state = self.simulator.snapshot()
+        if self.joint_limits is not None:
+            command = apply_fast_arm_qpos_feasibility_guard(
+                command,
+                current_qpos_rad=pre_step_state.qpos,
+                joint_limits=self.joint_limits,
+            ).motion_command
         self.simulator.apply_command(command)
         self.simulator.step(dt)
         state = self.simulator.snapshot()
+        if command.metadata.get("qpos_feasibility_rejected"):
+            state = MuJoCoState(
+                frame_index=state.frame_index,
+                time_s=state.time_s,
+                qpos=state.qpos,
+                qvel=state.qvel,
+                bodies=state.bodies,
+                sites=state.sites,
+                target_position_m=state.target_position_m,
+                metadata={
+                    **state.metadata,
+                    **dict(command.metadata),
+                    "endpoint_evaluation": None,
+                },
+            )
         await self.publisher.publish(state)
         return state
 

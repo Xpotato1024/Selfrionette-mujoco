@@ -8,6 +8,7 @@ from selfrionette.input_sources import ReplayInputSource
 from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
 from selfrionette.runtime.config import RuntimeConfig
+from selfrionette.runtime.fast_arm_joint_limits import load_and_validate_fast_arm_joint_limit_config
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
@@ -51,12 +52,18 @@ def build_replay_mujoco_pipeline(
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)
     resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
     state_publisher = _ReplayCompatibilityStatePublisher() if publisher is None else publisher
+    simulator = HeadlessMuJoCoSimulator.from_model_path(resolved_model_path)
+    joint_limits = load_and_validate_fast_arm_joint_limit_config(
+        runtime_config.fast_arm_joint_limits_path,
+        model=simulator.model,
+    )
 
     return RuntimePipeline(
         config=runtime_config,
         input_source=ReplayInputSource(replay_frames, loop=loop),
         input_interpreter=ReplayInputInterpreter(),
         motion_generator=InputIntentMotionGenerator(),
-        simulator=HeadlessMuJoCoSimulator.from_model_path(resolved_model_path),
+        simulator=simulator,
         publisher=state_publisher,
+        joint_limits=joint_limits,
     )

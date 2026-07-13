@@ -6,6 +6,7 @@ from selfrionette.input_sources import build_sweep_x_input_source
 from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
+from selfrionette.runtime.fast_arm_joint_limits import apply_fast_arm_qpos_feasibility_guard
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketPublisherServer, WebSocketStatePublisher
 
@@ -70,16 +71,22 @@ def _log(message: str) -> None:
 
 
 def _annotate_sweep_x_state(pipeline, state, intent):
+    command = pipeline.simulator.last_command
+    qpos_rejected = bool(command is not None and command.metadata.get("qpos_feasibility_rejected", False))
+    metadata = {
+        **state.metadata,
+        **intent.metadata,
+        **({} if command is None else dict(command.metadata)),
+        "preset": "sweep_x",
+    }
+    if qpos_rejected:
+        metadata["endpoint_evaluation"] = None
     return snapshot_mujoco_state(
         pipeline.simulator.model,
         pipeline.simulator.data,
         frame_index=state.frame_index,
-        target_position_m=tuple(intent.metadata["desired_endpoint_m"]),
-        metadata={
-            **state.metadata,
-            **intent.metadata,
-            "preset": "sweep_x",
-        },
+        target_position_m=None if qpos_rejected else tuple(intent.metadata["desired_endpoint_m"]),
+        metadata=metadata,
     )
 
 
@@ -119,6 +126,13 @@ async def _run_replay_mujoco_websocket_publisher_async(
                 frame = pipeline.input_source.read_frame()
                 intent = pipeline.input_interpreter.interpret(frame)
                 command = pipeline.motion_generator.update(intent, dt_s)
+                pre_step_state = pipeline.simulator.snapshot()
+                if pipeline.joint_limits is not None:
+                    command = apply_fast_arm_qpos_feasibility_guard(
+                        command,
+                        current_qpos_rad=pre_step_state.qpos,
+                        joint_limits=pipeline.joint_limits,
+                    ).motion_command
                 pipeline.simulator.apply_command(command)
                 pipeline.simulator.step(dt_s)
 
