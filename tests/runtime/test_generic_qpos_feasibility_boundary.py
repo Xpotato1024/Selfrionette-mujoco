@@ -15,6 +15,7 @@ from selfrionette.runtime import (
 from selfrionette.runtime.fast_arm_joint_limits import FastArmJointLimitGuard
 from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
 from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
+from generic_qpos_test_doubles import RejectingGenericQposGuard
 
 
 MINIMAL_MODEL = """\
@@ -100,6 +101,22 @@ def test_generic_feasibility_contract_has_explicit_no_guard_behavior() -> None:
     assert result.diagnostics == ()
 
 
+def test_runtime_pipeline_uses_typed_rejection_without_fast_arm_metadata() -> None:
+    from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+
+    pipeline = build_concrete_mujoco_pipeline(publisher=_RecordingPublisher())
+    pipeline.qpos_feasibility_guard = RejectingGenericQposGuard()
+    initial_qpos = pipeline.simulator.snapshot().qpos
+
+    state = asyncio.run(pipeline.run_once())
+
+    assert state.qpos == initial_qpos
+    assert state.metadata["endpoint_evaluation"] is None
+    assert pipeline.simulator.last_command is not None
+    assert "qpos_feasibility_rejected" not in pipeline.simulator.last_command.metadata
+    assert "qpos_rejection_reason" not in pipeline.simulator.last_command.metadata
+
+
 def test_generic_runtime_package_root_excludes_fast_arm_implementation_details() -> None:
     import selfrionette.runtime as runtime
 
@@ -119,6 +136,18 @@ def test_generic_runtime_modules_do_not_import_fast_arm_limit_implementation() -
     ):
         source = (root / relative_path).read_text(encoding="utf-8")
         assert "fast_arm_joint_limits" not in source
+
+
+def test_runtime_reject_control_flow_does_not_read_fast_arm_rejection_metadata() -> None:
+    root = Path(__file__).resolve().parents[2] / "src" / "selfrionette" / "runtime"
+    for relative_path in (
+        "pipeline.py",
+        "dry_run.py",
+        "websocket_publisher_runner.py",
+        "input_step_diagnostics.py",
+    ):
+        source = (root / relative_path).read_text(encoding="utf-8")
+        assert 'metadata.get("qpos_feasibility_rejected"' not in source
 
 
 class _RecordingPublisher:

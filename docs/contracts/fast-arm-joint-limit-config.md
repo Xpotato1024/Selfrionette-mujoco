@@ -55,6 +55,10 @@ TOML or apply fast_arm validation. The production programmed, replay,
 keyboard/gamepad viewer, and fixture/loadcell paths all receive the same
 injected fast_arm guard.
 
+`QposFeasibilityResult.accepted` is the runtime accept/reject source of truth.
+Command metadata is retained for diagnostics and compatibility observability;
+robot-specific metadata is not a generic runtime control-flow contract.
+
 The guard accepts exact lower and upper boundaries. If one or more candidate
 qpos axes are outside the configured range, it rejects the entire candidate,
 does not clamp individual axes, and applies a hold command containing the

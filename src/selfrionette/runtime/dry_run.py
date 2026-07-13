@@ -10,6 +10,7 @@ from selfrionette.input_sources import build_sweep_x_input_source
 from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
+from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketStatePublisher
 
@@ -86,16 +87,17 @@ async def _run_replay_mujoco_dry_run_async(
             intent = pipeline.input_interpreter.interpret(frame)
             command = pipeline.motion_generator.update(intent, dt)
             pre_step_state = pipeline.simulator.snapshot()
-            if pipeline.qpos_feasibility_guard is not None:
-                command = pipeline.qpos_feasibility_guard.evaluate(
-                    command,
-                    current_qpos_rad=pre_step_state.qpos,
-                ).motion_command
+            qpos_guard = pipeline.qpos_feasibility_guard or NoOpQposFeasibilityGuard()
+            qpos_result = qpos_guard.evaluate(
+                command,
+                current_qpos_rad=pre_step_state.qpos,
+            )
+            command = qpos_result.motion_command
+            qpos_rejected = not qpos_result.accepted
             pipeline.simulator.apply_command(command)
             pipeline.simulator.step(dt)
 
             state = pipeline.simulator.snapshot()
-            qpos_rejected = bool(command.metadata.get("qpos_feasibility_rejected", False))
             metadata = {
                 **state.metadata,
                 **intent.metadata,

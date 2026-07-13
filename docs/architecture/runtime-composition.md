@@ -208,7 +208,9 @@ clamps individual axes. Rejected qpos commands do not advance target lifecycle
 or viewer rebase state. The TOML remains the only joint-limit SoT; the MJCF and
 peer layers do not duplicate its values. P24 will replace this temporary
 explicit composition seam with the planned Robot Profile / Runtime Plugin /
-Viewer Profile registries; P23 does not implement those registries.
+Viewer Profile registries; P23 does not implement those registries. Runtime
+accept/reject control flow uses `QposFeasibilityResult.accepted`; command
+metadata remains diagnostic/compatibility observability only.
 
 ## Composition-root responsibility split
 

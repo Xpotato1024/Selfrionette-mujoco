@@ -81,6 +81,7 @@ def build_diagnostic_metadata(
     measurement: PostStepMeasurement,
     should_publish_target: bool,
     target_rejected: bool,
+    qpos_rejected: bool = False,
 ) -> dict[str, object]:
     metadata = {
         **state_metadata,
@@ -92,7 +93,7 @@ def build_diagnostic_metadata(
         for stale_key in _STALE_RESOLVED_METADATA_KEYS:
             metadata.pop(stale_key, None)
 
-    if not should_publish_target or motion_command.metadata.get("qpos_feasibility_rejected", False):
+    if not should_publish_target or qpos_rejected:
         metadata.pop("desired_endpoint_m", None)
         metadata.pop("target_position_m", None)
         metadata["runtime_input_safety_applied"] = True
@@ -171,6 +172,7 @@ def annotate_runtime_input_state(
         measurement=measurement,
         should_publish_target=should_publish_target,
         target_rejected=target_rejected,
+        qpos_rejected=safety_result.qpos_feasibility_rejected,
     )
     feedback = annotate_target_feedback(
         state=state,

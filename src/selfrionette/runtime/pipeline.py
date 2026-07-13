@@ -42,10 +42,11 @@ class RuntimePipeline:
             current_qpos_rad=pre_step_state.qpos,
         )
         command = qpos_result.motion_command
+        qpos_rejected = not qpos_result.accepted
         self.simulator.apply_command(command)
         self.simulator.step(dt)
         state = self.simulator.snapshot()
-        if command.metadata.get("qpos_feasibility_rejected"):
+        if qpos_rejected:
             state = MuJoCoState(
                 frame_index=state.frame_index,
                 time_s=state.time_s,

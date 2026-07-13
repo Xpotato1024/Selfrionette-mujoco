@@ -4,8 +4,10 @@ import json
 
 import pytest
 
+import selfrionette.runtime.dry_run as dry_run_module
 from selfrionette.runtime import run_replay_mujoco_dry_run
 from selfrionette.schemas import RawInputFrame
+from generic_qpos_test_doubles import RejectingGenericQposGuard
 
 
 def _assert_endpoint_evaluation(payload: dict[str, object]) -> None:
@@ -108,6 +110,26 @@ def test_run_replay_mujoco_dry_run_sweep_x_preset_remains_visual_smoke_compatibi
     assert payload["metadata"]["desired_endpoint_m"] == payload["target_position_m"]
     assert len(payload["qpos"]) >= 4
     _assert_endpoint_evaluation(payload)
+
+
+def test_run_replay_mujoco_dry_run_uses_typed_rejection_without_fast_arm_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_builder = dry_run_module.build_concrete_mujoco_pipeline
+
+    def build_rejecting_pipeline(*args, **kwargs):  # noqa: ANN002, ANN003
+        pipeline = original_builder(*args, **kwargs)
+        pipeline.qpos_feasibility_guard = RejectingGenericQposGuard()
+        return pipeline
+
+    monkeypatch.setattr(dry_run_module, "build_concrete_mujoco_pipeline", build_rejecting_pipeline)
+
+    payload = json.loads(run_replay_mujoco_dry_run(steps=1, preset="sweep_x")[0])
+
+    assert payload["target_position_m"] is None
+    assert payload.get("endpoint_evaluation") is None
+    assert "qpos_feasibility_rejected" not in payload["metadata"]
+    assert "qpos_rejection_reason" not in payload["metadata"]
 
 
 def test_run_replay_mujoco_dry_run_rejects_unknown_preset() -> None:

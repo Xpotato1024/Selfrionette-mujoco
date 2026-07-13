@@ -9,6 +9,7 @@ import pytest
 
 import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
+from generic_qpos_test_doubles import RejectingGenericQposGuard
 
 
 class _FakeWebSocketPublisherServer:
@@ -174,6 +175,26 @@ def test_replay_mujoco_websocket_publisher_sweep_x_keeps_metadata_and_finishes_c
     assert [payload["metadata"]["preset"] for payload in payloads] == ["sweep_x", "sweep_x"]
     assert payloads[0]["metadata"]["desired_endpoint_m"] == payloads[0]["target_position_m"]
     _assert_endpoint_evaluation(payloads[0])
+
+
+def test_replay_mujoco_websocket_publisher_uses_typed_rejection_without_fast_arm_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_builder = websocket_runner_module.build_concrete_mujoco_pipeline
+
+    def build_rejecting_pipeline(*args, **kwargs):  # noqa: ANN002, ANN003
+        pipeline = original_builder(*args, **kwargs)
+        pipeline.qpos_feasibility_guard = RejectingGenericQposGuard()
+        return pipeline
+
+    monkeypatch.setattr(websocket_runner_module, "build_concrete_mujoco_pipeline", build_rejecting_pipeline)
+
+    payload = _collect_payloads(steps=1, preset="sweep_x", client_connected=True, grace_period_s=0.0)[0]
+
+    assert payload["target_position_m"] is None
+    assert payload.get("endpoint_evaluation") is None
+    assert "qpos_feasibility_rejected" not in payload["metadata"]
+    assert "qpos_rejection_reason" not in payload["metadata"]
 
 
 def test_replay_mujoco_websocket_publisher_sweep_x_payload_stays_finite_for_about_120_frames() -> None:
