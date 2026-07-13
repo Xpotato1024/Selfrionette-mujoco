@@ -12,7 +12,11 @@ from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.endpoint_metrics import build_endpoint_evaluation_state_publisher
-from selfrionette.runtime.fast_arm_joint_limits import load_and_validate_fast_arm_joint_limit_config
+from selfrionette.runtime.fast_arm_joint_limits import (
+    FastArmJointLimitGuard,
+    default_fast_arm_joint_limits_path,
+    load_and_validate_fast_arm_joint_limit_config,
+)
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
@@ -58,8 +62,9 @@ def build_concrete_mujoco_pipeline(
     ik_solver = FastArmEndpointInverseKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M)
     fk_solver = FastArmEndpointForwardKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M)
     simulator = HeadlessMuJoCoSimulator.from_model_path(resolved_model_path)
+    joint_limit_path = runtime_config.fast_arm_joint_limits_path or default_fast_arm_joint_limits_path()
     joint_limits = load_and_validate_fast_arm_joint_limit_config(
-        runtime_config.fast_arm_joint_limits_path,
+        joint_limit_path,
         model=simulator.model,
     )
 
@@ -87,7 +92,7 @@ def build_concrete_mujoco_pipeline(
             fk_solver=fk_solver,
             solver_joint_count=4,
         ),
-        joint_limits=joint_limits,
+        qpos_feasibility_guard=FastArmJointLimitGuard(joint_limits),
     )
 
 

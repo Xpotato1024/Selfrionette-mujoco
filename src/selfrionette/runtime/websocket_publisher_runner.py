@@ -6,7 +6,6 @@ from selfrionette.input_sources import build_sweep_x_input_source
 from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.fast_arm_joint_limits import apply_fast_arm_qpos_feasibility_guard
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketPublisherServer, WebSocketStatePublisher
 
@@ -127,11 +126,10 @@ async def _run_replay_mujoco_websocket_publisher_async(
                 intent = pipeline.input_interpreter.interpret(frame)
                 command = pipeline.motion_generator.update(intent, dt_s)
                 pre_step_state = pipeline.simulator.snapshot()
-                if pipeline.joint_limits is not None:
-                    command = apply_fast_arm_qpos_feasibility_guard(
+                if pipeline.qpos_feasibility_guard is not None:
+                    command = pipeline.qpos_feasibility_guard.evaluate(
                         command,
                         current_qpos_rad=pre_step_state.qpos,
-                        joint_limits=pipeline.joint_limits,
                     ).motion_command
                 pipeline.simulator.apply_command(command)
                 pipeline.simulator.step(dt_s)

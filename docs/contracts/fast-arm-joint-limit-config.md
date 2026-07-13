@@ -15,9 +15,10 @@ related:
 ## Configuration source of truth
 
 `configs/fast_arm/joint_limits.toml` is the only joint-angle limit source of
-truth. Runtime composition loads it with Python 3.11 `tomllib`; input sources,
-kinematics, viewer, transport, and the MJCF do not read or duplicate the
-limits. The schema is version `1`, identifies both `robot = "fast_arm"` and
+truth. The fast_arm production composition owns loading it with Python 3.11
+`tomllib`; input sources, kinematics, viewer, transport, generic pipelines,
+and the MJCF do not read or duplicate the limits. The schema is version `1`,
+identifies both `robot = "fast_arm"` and
 `model = "fast_arm"`, requires `angle_unit = "rad"`, and records `status` as
 `provisional` or `validated`.
 
@@ -35,8 +36,9 @@ contract and is not inferred from these independent ranges.
 
 ## Startup validation
 
-Before a fast_arm runtime pipeline starts, runtime composition parses and
-validates the TOML and checks the loaded MuJoCo model. Startup fails when the
+Before a fast_arm runtime pipeline starts, fast_arm production composition
+parses and validates the TOML and checks the loaded MuJoCo model. Startup fails
+when the
 schema version, robot/model identity, unit, required joint set, joint order,
 finite values, or `lower_rad < upper_rad` is invalid. The model joint names and
 order must match the TOML, and the canonical MuJoCo `home` keyframe qpos must be
@@ -45,11 +47,13 @@ the file is missing or invalid.
 
 ## Enforcement boundary and semantics
 
-The guard runs in runtime composition after the selected motion policy returns a
-candidate command and before `MuJoCoSimulator.apply_command()` / `step()`. It
-is shared by the runtime input step loop and the direct runtime pipeline step;
-programmed, replay, keyboard/gamepad viewer, and fixture/loadcell paths do not
-select their own limit policy.
+The generic guard contract runs after the selected motion policy returns a
+candidate command and before `MuJoCoSimulator.apply_command()` / `step()`.
+Fast_arm production composition injects the fast_arm adapter into that
+boundary. The generic and compatibility builders do not implicitly load this
+TOML or apply fast_arm validation. The production programmed, replay,
+keyboard/gamepad viewer, and fixture/loadcell paths all receive the same
+injected fast_arm guard.
 
 The guard accepts exact lower and upper boundaries. If one or more candidate
 qpos axes are outside the configured range, it rejects the entire candidate,
@@ -63,6 +67,8 @@ failure, and target rejection. It nevertheless suppresses target feedback
 advancement for that step: the active/last-valid target and viewer rebase state
 remain unchanged. The MuJoCo physical state remains the source of truth.
 
-Mesh collision, self-collision, motor-space limits, torque/current/velocity
-safety, hardware characterization, serial, OSC, and viewer config editing are
-outside this contract.
+P24 is expected to replace this explicit fast_arm composition seam with Robot
+Profile / Runtime Plugin / Viewer Profile registries. Mesh collision,
+self-collision, motor-space limits, torque/current/velocity safety, hardware
+characterization, serial, OSC, and viewer config editing are outside this
+contract.

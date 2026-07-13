@@ -17,10 +17,7 @@ from selfrionette.transport import StatePublisher
 from selfrionette.transport.stubs import NoOpStatePublisher
 
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.fast_arm_joint_limits import (
-    FastArmJointLimitConfig,
-    apply_fast_arm_qpos_feasibility_guard,
-)
+from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
 
 
 @dataclass(slots=True)
@@ -31,7 +28,7 @@ class RuntimePipeline:
     motion_generator: MotionGenerator
     simulator: MuJoCoSimulator
     publisher: StatePublisher
-    joint_limits: FastArmJointLimitConfig | None = None
+    qpos_feasibility_guard: QposFeasibilityGuard | None = None
 
     async def run_once(self, dt_s: float | None = None) -> MuJoCoState:
         dt = self.config.dt_s if dt_s is None else dt_s
@@ -39,12 +36,12 @@ class RuntimePipeline:
         intent = self.input_interpreter.interpret(frame)
         command = self.motion_generator.update(intent, dt)
         pre_step_state = self.simulator.snapshot()
-        if self.joint_limits is not None:
-            command = apply_fast_arm_qpos_feasibility_guard(
-                command,
-                current_qpos_rad=pre_step_state.qpos,
-                joint_limits=self.joint_limits,
-            ).motion_command
+        qpos_guard = self.qpos_feasibility_guard or NoOpQposFeasibilityGuard()
+        qpos_result = qpos_guard.evaluate(
+            command,
+            current_qpos_rad=pre_step_state.qpos,
+        )
+        command = qpos_result.motion_command
         self.simulator.apply_command(command)
         self.simulator.step(dt)
         state = self.simulator.snapshot()

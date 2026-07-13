@@ -4,10 +4,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from selfrionette.runtime.input_source_state import RuntimeInputSourceState, runtime_input_source_state_to_metadata
-from selfrionette.runtime.fast_arm_joint_limits import (
-    FastArmJointLimitConfig,
-    FastArmJointLimitViolation,
-    apply_fast_arm_qpos_feasibility_guard,
+from selfrionette.runtime.qpos_feasibility import (
+    NoOpQposFeasibilityGuard,
+    QposFeasibilityDiagnostic,
+    QposFeasibilityGuard,
+    QposFeasibilityResult,
 )
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState
 
@@ -23,7 +24,8 @@ class RuntimeInputSafetyResult:
     stale_reason: str | None
     command_age_ms: int | None
     qpos_feasibility_rejected: bool = False
-    qpos_limit_violations: tuple[FastArmJointLimitViolation, ...] = ()
+    qpos_diagnostics: tuple[QposFeasibilityDiagnostic, ...] = ()
+    qpos_feasibility_result: QposFeasibilityResult | None = None
 
 
 def _coerce_current_qpos(current_qpos: Sequence[float] | None) -> tuple[float, ...] | None:
@@ -91,7 +93,7 @@ def build_runtime_input_safety_result(
     source_state: RuntimeInputSourceState,
     current_state: MuJoCoState | None = None,
     timeout_ms: int = DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS,
-    joint_limits: FastArmJointLimitConfig | None = None,
+    qpos_feasibility_guard: QposFeasibilityGuard | None = None,
 ) -> RuntimeInputSafetyResult:
     if timeout_ms < 0:
         raise ValueError("timeout_ms must be non-negative")
@@ -109,17 +111,18 @@ def build_runtime_input_safety_result(
     else:
         safe_motion_command = command
 
+    qpos_result: QposFeasibilityResult | None = None
     qpos_rejected = False
-    qpos_violations: tuple[FastArmJointLimitViolation, ...] = ()
-    if joint_limits is not None and current_state is not None:
-        qpos_result = apply_fast_arm_qpos_feasibility_guard(
+    qpos_diagnostics: tuple[QposFeasibilityDiagnostic, ...] = ()
+    if current_state is not None:
+        qpos_guard = qpos_feasibility_guard or NoOpQposFeasibilityGuard()
+        qpos_result = qpos_guard.evaluate(
             safe_motion_command,
             current_qpos_rad=current_state.qpos,
-            joint_limits=joint_limits,
         )
         safe_motion_command = qpos_result.motion_command
         qpos_rejected = not qpos_result.accepted
-        qpos_violations = qpos_result.violations
+        qpos_diagnostics = qpos_result.diagnostics
 
     safe_source_state = RuntimeInputSourceState(
         source_kind=source_state.source_kind,
@@ -136,7 +139,8 @@ def build_runtime_input_safety_result(
         stale_reason=stale_reason,
         command_age_ms=source_state.command_age_ms,
         qpos_feasibility_rejected=qpos_rejected,
-        qpos_limit_violations=qpos_violations,
+        qpos_diagnostics=qpos_diagnostics,
+        qpos_feasibility_result=qpos_result,
     )
 
 

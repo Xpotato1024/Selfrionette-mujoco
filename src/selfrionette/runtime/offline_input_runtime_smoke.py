@@ -12,6 +12,7 @@ from selfrionette.runtime.endpoint_metrics import build_runtime_endpoint_evaluat
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.fast_arm_joint_limits import (
     apply_fast_arm_qpos_feasibility_guard,
+    default_fast_arm_joint_limits_path,
     load_and_validate_fast_arm_joint_limit_config,
 )
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, MuJoCoState
@@ -123,8 +124,9 @@ def run_offline_input_runtime_stepping_smoke(
     )
     simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
     runtime_config = RuntimeConfig() if config is None else config
+    joint_limit_path = runtime_config.fast_arm_joint_limits_path or default_fast_arm_joint_limits_path()
     joint_limits = load_and_validate_fast_arm_joint_limit_config(
-        runtime_config.fast_arm_joint_limits_path,
+        joint_limit_path,
         model=simulator.model,
     )
 

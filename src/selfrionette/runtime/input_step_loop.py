@@ -14,6 +14,11 @@ from selfrionette.mujoco_backend.endpoint_extraction import (
 )
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+from selfrionette.runtime.fast_arm_joint_limits import (
+    FastArmJointLimitGuard,
+    default_fast_arm_joint_limits_path,
+    load_and_validate_fast_arm_joint_limit_config,
+)
 from selfrionette.runtime.input_step_diagnostics import (
     PostStepMeasurement,
     annotate_runtime_input_state,
@@ -131,6 +136,12 @@ def build_runtime_input_source_step_loop_plan(
             loop=selection.loop,
             publisher=publisher,
         )
+        joint_limit_path = runtime_config.fast_arm_joint_limits_path or default_fast_arm_joint_limits_path()
+        fast_arm_limits = load_and_validate_fast_arm_joint_limit_config(
+            joint_limit_path,
+            model=pipeline.simulator.model,
+        )
+        pipeline.qpos_feasibility_guard = FastArmJointLimitGuard(fast_arm_limits)
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
             pipeline=pipeline,
@@ -257,7 +268,7 @@ async def run_runtime_input_source_step_loop(
             motion_command,
             source_state=source_state,
             current_state=pre_step_state,
-            joint_limits=plan.pipeline.joint_limits,
+            qpos_feasibility_guard=plan.pipeline.qpos_feasibility_guard,
         )
         step_endpoint_m = last_valid_endpoint_m
         if not safety_result.motion_command.metadata.get("target_rejected", False) and not safety_result.qpos_feasibility_rejected:

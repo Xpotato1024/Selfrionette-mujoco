@@ -9,17 +9,20 @@ import selfrionette.runtime.fast_arm_joint_limits as joint_limits_module
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
+from selfrionette.runtime.fast_arm_joint_limits import (
+    FastArmJointLimitGuard,
+    apply_fast_arm_qpos_feasibility_guard,
+    load_and_validate_fast_arm_joint_limit_config,
+    parse_fast_arm_joint_limit_config,
+    validate_fast_arm_joint_limit_config,
+)
 from selfrionette.runtime import (
     RuntimeConfig,
-    apply_fast_arm_qpos_feasibility_guard,
     build_concrete_mujoco_pipeline,
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
-    load_and_validate_fast_arm_joint_limit_config,
-    parse_fast_arm_joint_limit_config,
     run_runtime_input_source_step_loop,
     select_runtime_input_source,
-    validate_fast_arm_joint_limit_config,
 )
 from selfrionette.schemas import (
     JointCommand,
@@ -213,8 +216,8 @@ def test_runtime_factory_accepts_a_replaced_config_and_validates_it_at_startup(t
     )
 
     assert config.limit_for("sholder_joint_1").upper_rad == pytest.approx(0.25)
-    assert pipeline.joint_limits is not None
-    assert pipeline.joint_limits.limit_for("sholder_joint_1").upper_rad == pytest.approx(0.25)
+    assert isinstance(pipeline.qpos_feasibility_guard, FastArmJointLimitGuard)
+    assert pipeline.qpos_feasibility_guard.joint_limits.limit_for("sholder_joint_1").upper_rad == pytest.approx(0.25)
 
 
 class _OutOfRangeMotionGenerator:

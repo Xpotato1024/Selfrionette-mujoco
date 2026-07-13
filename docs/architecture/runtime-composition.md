@@ -188,16 +188,27 @@ annotated as `measurement_unavailable`. Runtime remains the only multi-layer
 composition root, payload-v0 and viewer behavior are unchanged, and the larger
 composition split remains owned by P19.
 
-R7-E follow-up P23 adds a runtime-owned fast_arm qpos feasibility guard. Runtime
-composition loads `configs/fast_arm/joint_limits.toml` with `tomllib`, validates
-the configured schema/model/joint order and the canonical MuJoCo `home` qpos at
-startup, and carries the immutable validated contract into the production
-pipeline. After motion policy and before backend update, the common guard
-accepts in-range candidates, including exact boundaries, or rejects the whole
+R7-E follow-up P23 adds a generic runtime qpos feasibility contract and a
+fast_arm adapter. `build_mujoco_pipeline()`,
+`build_replay_mujoco_pipeline()`, and the generic `RuntimePipeline` do not load
+fast_arm TOML or infer a robot profile. When no guard is injected, their
+explicit behavior is the no-op feasibility result; arbitrary MuJoCo models are
+not subjected to fast_arm body/site/home validation.
+
+The fast_arm production composition owns loading
+`configs/fast_arm/joint_limits.toml` with `tomllib`, validating the configured
+schema/model/joint order and canonical MuJoCo `home` qpos at startup, and
+injecting an adapter that implements the generic contract. The production
+programmed/viewer paths use the concrete fast_arm composition; the replay path
+uses the generic builder followed by explicit fast_arm composition injection.
+After motion policy and before backend update, the common guard accepts
+in-range candidates, including exact boundaries, or rejects the whole
 candidate and holds the current qpos when any axis is out of range. It never
 clamps individual axes. Rejected qpos commands do not advance target lifecycle
 or viewer rebase state. The TOML remains the only joint-limit SoT; the MJCF and
-peer layers do not duplicate its values.
+peer layers do not duplicate its values. P24 will replace this temporary
+explicit composition seam with the planned Robot Profile / Runtime Plugin /
+Viewer Profile registries; P23 does not implement those registries.
 
 ## Composition-root responsibility split
 

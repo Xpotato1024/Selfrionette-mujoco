@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from selfrionette.mujoco_backend.command_adapter import motion_command_to_qpos_command
-from selfrionette.mujoco_backend.model_contract import validate_fast_arm_model_name_contract
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
 from selfrionette.mujoco_backend.model_loader import (
     default_fast_arm_scene_path,
@@ -14,14 +13,6 @@ from selfrionette.mujoco_backend.model_loader import (
 from selfrionette.mujoco_backend.snapshot import snapshot_mujoco_state
 from selfrionette.schemas import JointCommand
 from selfrionette.schemas import MotionCommand, MuJoCoState
-
-
-_FAST_ARM_JOINT_NAMES: tuple[str, ...] = (
-    "sholder_joint_1",
-    "sholder_joint_2",
-    "sholder_joint_3",
-    "elbow_joint",
-)
 
 
 @dataclass(slots=True)
@@ -37,8 +28,6 @@ class HeadlessMuJoCoSimulator:
     @classmethod
     def from_model_path(cls, model_path: str | Path) -> "HeadlessMuJoCoSimulator":
         bundle = load_mujoco_model(model_path)
-        if bundle.model_path == default_fast_arm_scene_path().resolve():
-            validate_fast_arm_model_name_contract(bundle.model)
         return cls(model=bundle.model, data=bundle.data, model_path=bundle.model_path)
 
     @classmethod
@@ -81,11 +70,6 @@ class HeadlessMuJoCoSimulator:
     def _resolve_joint_qpos_addresses(self) -> tuple[int, ...]:
         mujoco = self._import_mujoco()
         joint_names = inspect_mujoco_model(self.model).joint_names
-        if joint_names != _FAST_ARM_JOINT_NAMES:
-            raise ValueError(
-                "unsupported fast_arm joint contract: "
-                f"expected {_FAST_ARM_JOINT_NAMES}, got {joint_names}"
-            )
 
         qpos_addresses: list[int] = []
         for joint_name in joint_names:
@@ -107,7 +91,7 @@ class HeadlessMuJoCoSimulator:
 
         if joint_angles and len(joint_angles) != len(qpos_addresses):
             raise ValueError(
-                "joint command length does not match fast_arm qpos contract: "
+                "joint command length does not match model qpos contract: "
                 f"expected {len(qpos_addresses)}, got {len(joint_angles)}"
             )
 

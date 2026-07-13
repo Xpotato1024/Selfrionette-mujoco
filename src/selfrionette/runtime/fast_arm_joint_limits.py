@@ -8,6 +8,7 @@ from pathlib import Path
 
 from selfrionette.mujoco_backend.model_contract import validate_fast_arm_model_name_contract
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
+from selfrionette.runtime.qpos_feasibility import QposFeasibilityDiagnostic, QposFeasibilityResult
 from selfrionette.schemas import JointCommand, MotionCommand
 
 FAST_ARM_JOINT_LIMIT_SCHEMA_VERSION = 1
@@ -124,6 +125,44 @@ class FastArmQposFeasibilityResult:
     action: str
     candidate_qpos_rad: tuple[float, ...] | None
     violations: tuple[FastArmJointLimitViolation, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class FastArmJointLimitGuard:
+    """Adapter from the fast_arm limit implementation to the generic guard contract."""
+
+    joint_limits: FastArmJointLimitConfig
+
+    def evaluate(
+        self,
+        motion_command: MotionCommand,
+        *,
+        current_qpos_rad: Sequence[float],
+    ) -> QposFeasibilityResult:
+        result = apply_fast_arm_qpos_feasibility_guard(
+            motion_command,
+            current_qpos_rad=current_qpos_rad,
+            joint_limits=self.joint_limits,
+        )
+        diagnostics = tuple(
+            QposFeasibilityDiagnostic.from_mapping(
+                "joint_limit_violation",
+                {
+                    "joint_name": violation.joint_name,
+                    "candidate_value_rad": _diagnostic_number(violation.candidate_value_rad),
+                    "lower_rad": violation.lower_rad,
+                    "upper_rad": violation.upper_rad,
+                },
+            )
+            for violation in result.violations
+        )
+        return QposFeasibilityResult(
+            motion_command=result.motion_command,
+            accepted=result.accepted,
+            action=result.action,
+            candidate_qpos_rad=result.candidate_qpos_rad,
+            diagnostics=diagnostics,
+        )
 
 
 def _require_mapping(value: object, *, name: str) -> Mapping[str, object]:
@@ -314,6 +353,7 @@ def _import_mujoco() -> object:
 __all__ = [
     "FAST_ARM_JOINT_LIMIT_SCHEMA_VERSION",
     "FAST_ARM_JOINT_NAMES",
+    "FastArmJointLimitGuard",
     "FastArmJointLimit",
     "FastArmJointLimitConfig",
     "FastArmJointLimitViolation",
