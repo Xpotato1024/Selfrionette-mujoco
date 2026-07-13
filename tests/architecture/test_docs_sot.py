@@ -139,5 +139,9 @@ def test_p22_neutral_pose_contract_is_registered_and_freezes_selection_order() -
     assert "rank 3は必須にしない" in text
     assert "MuJoCo native `home` keyframe" in text
     assert "candidate count: `82`" in text
-    assert "#339 / P6: **close-ready**" in text
-    assert "#341 / P7: **close-ready with documented mechanism limitation**" in text
+    assert "#339 / P6: implementation evidence complete; manual viewer smoke required" in text
+    assert (
+        "#341 / P7: local-policy evidence complete with documented workspace limitation; "
+        "manual viewer smoke required"
+    ) in text
+    assert "collision_check_available=false" in text

@@ -49,7 +49,7 @@ MuJoCo `tip` siteがphysical endpointのSoTであり、viewer側でFK/IKを再�
 
 - qposはcontrolled hinge countと一致し、boolを含まず、全値finite。
 - limited jointはrange内、normalized marginは`0.10`以上。limited jointが無い場合はN/A。
-- startup contact count `0`、`1e-9 m`を超えるpenetration count `0`。
+- relevant robot geomがcollision生成可能な場合に限り、startup contact count `0`、`1e-9 m`を超えるpenetration count `0`。
 - model-aligned FK / MuJoCo `tip` residualは`1e-9 m`以下。
 - non-baseline候補はtip heightが旧poseより`0.10 R`以上低い。
 - non-baseline候補はshoulder-to-tip extensionが旧poseより`0.10 R`以上小さい。
@@ -58,8 +58,13 @@ MuJoCo `tip` siteがphysical endpointのSoTであり、viewer側でFK/IKを再�
 - duplicate/no-opをcandidate generation時にrejectする。
 - startupはkeyframeから直接初期化し、selected qposへのruntime transitionを要求しない。
 
-arm collision geomsは現modelで`contype=0` / `conaffinity=0`だが、evaluatorは
-MuJoCo contact/penetration resultを省略せず記録する。collision semanticsは弱体化しない。
+evaluatorはrelevant robot geomの`contype` / `conaffinity`から`collision_check_available`を判定し、
+理由、MuJoCo-reported contact/penetration count、minimum contact distanceを別々に記録する。
+arm collision geomsが現modelのように全て`contype=0` / `conaffinity=0`の場合は
+`collision_check_available=false` / `robot_collision_geoms_disabled`とし、`ncon=0`を
+floor clearance、self-collision freedom、robot/body non-intersectionの証拠として扱わない。
+candidateをこのevidence limitationだけでrejectせず、tip floor clearanceはworld floor `z=0`から
+独立して評価する。collision geomsやcollision semanticsは変更しない。
 
 ### Deterministic candidate generation
 
@@ -123,7 +128,9 @@ neutral height/extension target、nearby sensitivityを含む全ranking orderで
 | tip height m | `0.700000` | `0.284308` |
 | extension m / ratio | `0.534500 / 1.000000` | `0.463194 / 0.866592` |
 | limited-joint margin | N/A | N/A |
-| contact / penetration | `0 / 0` | `0 / 0` |
+| collision check available / reason | `false / robot_collision_geoms_disabled` | `false / robot_collision_geoms_disabled` |
+| MuJoCo-reported contact / penetration | `0 / 0` | `0 / 0` |
+| tip floor clearance m | `0.700000` | `0.284308` |
 | FK/site residual m | `1.62e-16` | `1.27e-16` |
 | native numeric/effective rank | `2 / 2` | `3 / 3` |
 | singular values | `(0.622000,0.284000,0)` | `(0.592949,0.484772,0.135085)` |
@@ -175,23 +182,48 @@ target feedbackを再計算せずpresentationへ使用する。
 
 ## P6 / P7 reassessment
 
-- #339 / P6: **close-ready**。startup pose、tip rebase、Space/Shift Z mapping、first-input
-  continuity、viewer payload qposがtests/smokeで成立した。
-- #341 / P7: **close-ready with documented mechanism limitation**。selected pose近傍では
-  six-direction first/held inputがboundedかつprogressingだが、全workspaceでのrank 3や全方向
-  attainabilityは保証しない。infeasible時のhold/rejectと`0.2 rad` guardは維持する。
+- #339 / P6: implementation evidence complete; manual viewer smoke required。startup pose、tip rebase、
+  Space/Shift Z mapping、first-input continuity、viewer payload qposのautomated evidenceは成立しているが、
+  production viewerのactual visual smoke通過前はclose-readyとしない。
+- #341 / P7: local-policy evidence complete with documented workspace limitation; manual viewer smoke required。
+  selected pose近傍のsix-direction first/held inputはboundedかつprogressingだが、全workspaceでのrank 3や
+  全方向attainabilityは保証しない。infeasible時のhold/rejectと`0.2 rad` guardは維持する。
 
 #339/#341のcloseまたはbody更新はP22 workerでは行わない。
 
+### Production viewer manual-smoke gate
+
+automated coverageはnamed `home` lookup、missing/malformed/non-finite rejection、WASM wrapper cleanup、
+startup source label、first payload overrideまでを検証する。actual visual/browser smokeが実行できない環境では、
+次をmanual gateとして残し、P6/P7をclose-readyとしない。
+
+```powershell
+uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+  --host 127.0.0.1 --port 8766 --steps 18000 `
+  --dt-s 0.0166666667 --interval-s 0.0166666667 `
+  --grace-period-s 30 --input-source viewer
+
+cd apps/mujoco-viewer
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+`http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766`を開き、
+model load成功、payload前source=`MuJoCo home keyframe`、startup qpos=`(0,-pi/6,0,-pi/3)`、
+first payloadも同じqposでvisible jumpなし、target marker/readout=`(0.240000,-0.245951,0.284308) m`、
+visible floor/body/self-overlapなしを確認する。続いてSpace、ShiftLeft/ShiftRight、W、A、Dをpress/releaseし、
+overlay key state、payload qpos、tip/target/error表示がbackend stateに追従し、stuck key、large branch jump、
+false progress表示がないことを確認する。collision-disabled meshの目視結果はcollision-free evidenceとは呼ばない。
+
 ## Validation
 
-- neutral evaluator / invalid / limit / contact tests: `10 passed`
-- P9/P10/FK/site/IK-FK/viewer input/runtime/architecture focused set: `137 passed`
-- canonical full `uv run pytest`: `698 passed, 2 skipped`
+- neutral evaluator / invalid / limit / collision availability / selected-keyframe binding tests: `12 passed`
+- P9/P10/viewer input/runtime/backend/architecture focused set: `114 passed`
+- canonical full `uv run pytest`: `700 passed, 2 skipped`
 - `uv run python -m compileall src tests scripts`: pass
 - viewer `npm test`: pass
 - viewer `npm run typecheck`: pass
 - viewer `npm run build`: pass
+- production viewer actual visual/browser smoke: not run; manual gate required
 - evaluator deterministic JSON / human ranking / no-default-write smoke: pass
 - selected-pose startup/first/held/release JSON smoke: pass
 - `git diff --check`: pass
@@ -210,6 +242,6 @@ tracked 3 filesに既存BOMがある。P22では変更しない。
   full workspace guaranteeではない。
 - older global `TargetToJointMotionGenerator` / simplified solver diagnosticsはselected poseからも
   off-plane / opposite-direction limitationを示す。viewer local policyのsuccessと混同しない。
-- arm collision geomsはcurrent modelでcollision-disabledである。contact count 0はcurrent model
-  contract上のactual resultであり、hardware collision safetyの代替ではない。
+- arm collision geomsはcurrent modelでcollision-disabledであり、collision evidenceは利用不能である。
+  MuJoCo-reported contact/penetration count 0はfloor/body/self-overlapやhardware collision safetyの証拠ではない。
 - hardware initial synchronization / arming / physical clearanceはscope外で未実装。

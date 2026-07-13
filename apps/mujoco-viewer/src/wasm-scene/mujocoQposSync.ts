@@ -13,6 +13,17 @@ export type { QposFixture, QposFixtureFrame } from "./qposFrameTypes.js";
 
 export const DEFAULT_QPOS_FIXTURE_URL = "/fixtures/fast_arm_sweep_x_qpos.json";
 export const FAST_ARM_INITIAL_KEYFRAME_NAME = "home";
+export const FAST_ARM_INITIAL_POSE_SOURCE_LABEL = "MuJoCo home keyframe";
+
+export interface ModelKeyframeLike {
+  readonly qpos: ArrayLike<number>;
+  delete(): void;
+}
+
+export interface ModelWithNamedKeyframesLike {
+  readonly nq: number;
+  key(name: string): ModelKeyframeLike;
+}
 
 export function formatQpos(values: readonly number[]): string {
   return `[${Array.from(values, (value) => Number(value).toString()).join(", ")}]`;
@@ -39,6 +50,25 @@ export function resolveInitialKeyframeQpos(
     throw new Error(`${FAST_ARM_INITIAL_KEYFRAME_NAME} keyframe qpos must contain only finite values`);
   }
   return ensureQposLength(qpos, modelNq, `${FAST_ARM_INITIAL_KEYFRAME_NAME} keyframe qpos`);
+}
+
+export function resolveNamedInitialKeyframe(
+  model: ModelWithNamedKeyframesLike,
+): { qpos: readonly number[]; sourceLabel: string } {
+  let keyframe: ModelKeyframeLike;
+  try {
+    keyframe = model.key(FAST_ARM_INITIAL_KEYFRAME_NAME);
+  } catch (error) {
+    throw new Error(`missing MuJoCo ${FAST_ARM_INITIAL_KEYFRAME_NAME} keyframe`, { cause: error });
+  }
+  try {
+    return {
+      qpos: resolveInitialKeyframeQpos(keyframe.qpos, model.nq),
+      sourceLabel: FAST_ARM_INITIAL_POSE_SOURCE_LABEL,
+    };
+  } finally {
+    keyframe.delete();
+  }
 }
 
 export function loadQposFixtureFromUrl(fixtureUrl: string, modelNq: number): Promise<QposFixture> {

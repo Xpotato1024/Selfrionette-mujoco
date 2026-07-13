@@ -29,9 +29,9 @@ import { loadMujocoWasm } from "./mujocoWasmLoader.js";
 import { matrixFromMujocoGeom } from "./mujocoSceneTransforms.js";
 import {
   ensureQposLength,
-  FAST_ARM_INITIAL_KEYFRAME_NAME,
+  FAST_ARM_INITIAL_POSE_SOURCE_LABEL,
   formatQpos,
-  resolveInitialKeyframeQpos,
+  resolveNamedInitialKeyframe,
   resolveTransportQpos,
 } from "./mujocoQposSync.js";
 import { AXIS_VISUAL_STYLES, BODY_VISUAL_STYLES, resolveBodyVisualStyleKey } from "./visualStyles.js";
@@ -378,8 +378,9 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     });
   };
 
+  let startupPoseSourceLabel = FAST_ARM_INITIAL_POSE_SOURCE_LABEL;
   const applyStartupPose = (): void => {
-    applyModelPose(startupQpos, "MuJoCo home keyframe", null, null, null, null);
+    applyModelPose(startupQpos, startupPoseSourceLabel, null, null, null, null);
   };
 
   const applyTransportPayload = (payload: TransportPayloadV0): void => {
@@ -509,12 +510,9 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
       model = mujocoApi.MjModel.from_xml_string(xml, vfs);
       data = new mujocoApi.MjData(model);
-      const initialKeyframe = model.key(FAST_ARM_INITIAL_KEYFRAME_NAME);
-      try {
-        startupQpos = Array.from(resolveInitialKeyframeQpos(initialKeyframe.qpos, model.nq));
-      } finally {
-        initialKeyframe.delete();
-      }
+      const initialKeyframe = resolveNamedInitialKeyframe(model);
+      startupQpos = Array.from(initialKeyframe.qpos);
+      startupPoseSourceLabel = initialKeyframe.sourceLabel;
       const modelStat = model.stat as any;
       const modelCenter = Array.from(modelStat.center as ArrayLike<number>);
       const modelExtent = Number(modelStat.extent);

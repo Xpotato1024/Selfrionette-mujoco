@@ -4,6 +4,8 @@
 
 P9のdiagnostic implementation。production behavior、viewer behavior、endpoint contract、metadata schema、acceptance semanticsは変更しない。P9はweak world-frame Xを修正せず、P10のacceptance semanticsへ踏み込まない。
 
+P22後の注意: 下記rank 2の数値結果はqpos `(0,-pi/2,0,0)` に対するhistorical resultであり、P22はこのposeを`historical_raised_baseline`として保持する。現在の`run_fast_arm_jacobian_mobility_diagnostics()`はactive `home` keyframeから開始し、current active startup resultはP22 canonical noteに記録する。historical evidenceとcurrent startup evidenceはqpos identityを確認せず比較してはならない。
+
 ## Numbering / SoT Confirmation
 
 - Numbering SoT: Issue #293

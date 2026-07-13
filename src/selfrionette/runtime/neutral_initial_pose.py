@@ -13,7 +13,7 @@ import numpy as np
 from selfrionette.kinematics.fast_arm_endpoint import (
     FastArmMuJoCoModelForwardKinematicsSolver,
 )
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.mujoco_backend import FAST_ARM_ARM_BODY_NAMES, HeadlessMuJoCoSimulator
 from selfrionette.runtime.endpoint_progress import calculate_endpoint_progress
 from selfrionette.runtime.jacobian_mobility_diagnostics import (
     CONTROLLED_JOINT_NAMES,
@@ -21,7 +21,7 @@ from selfrionette.runtime.jacobian_mobility_diagnostics import (
     evaluate_fast_arm_pose_mobility,
 )
 
-SCHEMA_VERSION = "r7-e-p22-v1"
+SCHEMA_VERSION = "r7-e-p22-v2"
 HISTORICAL_RAISED_BASELINE_QPOS_RAD = (0.0, -math.pi / 2.0, 0.0, 0.0)
 
 # Selection contract frozen before candidate evaluation. Fractions are derived
@@ -68,6 +68,15 @@ class NearbySensitivity:
 
 
 @dataclass(frozen=True, slots=True)
+class CollisionEvidence:
+    collision_check_available: bool
+    collision_check_reason: str
+    contact_count: int
+    penetration_count: int
+    minimum_contact_distance_m: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class CandidateEvaluation:
     candidate_id: str
     category: str
@@ -79,9 +88,12 @@ class CandidateEvaluation:
     extension_ratio: float
     per_joint_normalized_limit_margin: tuple[float | None, ...]
     minimum_limited_joint_margin: float | None
+    collision_check_available: bool
+    collision_check_reason: str
     contact_count: int
     penetration_count: int
     minimum_contact_distance_m: float | None
+    tip_floor_clearance_m: float
     fk_site_residual_m: float
     jacobian_numeric_rank: int
     jacobian_effective_rank: int
@@ -315,13 +327,40 @@ def _joint_margins(
     return tuple(margins), (min(limited) if limited else None), tuple(failures)
 
 
-def _contact_metrics(
+def _collision_evidence(
     simulator: HeadlessMuJoCoSimulator,
-) -> tuple[int, int, float | None]:
+) -> CollisionEvidence:
+    mujoco = simulator._import_mujoco()
+    robot_body_ids = {
+        int(mujoco.mj_name2id(simulator.model, mujoco.mjtObj.mjOBJ_BODY, body_name))
+        for body_name in FAST_ARM_ARM_BODY_NAMES
+    }
+    robot_geom_ids = tuple(
+        geom_id
+        for geom_id in range(int(simulator.model.ngeom))
+        if int(simulator.model.geom_bodyid[geom_id]) in robot_body_ids
+    )
+    collision_check_available = any(
+        int(simulator.model.geom_contype[geom_id]) != 0
+        or int(simulator.model.geom_conaffinity[geom_id]) != 0
+        for geom_id in robot_geom_ids
+    )
     contacts = tuple(simulator.data.contact[index] for index in range(int(simulator.data.ncon)))
     distances = tuple(float(contact.dist) for contact in contacts)
     penetration_count = sum(distance < -PENETRATION_TOLERANCE_M for distance in distances)
-    return len(contacts), penetration_count, (min(distances) if distances else None)
+    if not robot_geom_ids:
+        reason = "robot_collision_geoms_missing"
+    elif not collision_check_available:
+        reason = "robot_collision_geoms_disabled"
+    else:
+        reason = "robot_collision_geoms_enabled"
+    return CollisionEvidence(
+        collision_check_available=collision_check_available,
+        collision_check_reason=reason,
+        contact_count=len(contacts),
+        penetration_count=penetration_count,
+        minimum_contact_distance_m=min(distances) if distances else None,
+    )
 
 
 def _directions(pose: PoseDiagnostic) -> tuple[DirectionResult, ...]:
@@ -454,7 +493,7 @@ def evaluate_fast_arm_neutral_initial_pose_candidates() -> NeutralPoseEvaluation
         if not math.isclose(candidate_nominal_reach, nominal_reach, rel_tol=0.0, abs_tol=1e-12):
             raise ValueError("nominal reach changed across candidate poses")
         margins, minimum_margin, margin_failures = _joint_margins(qpos, joint_metadata)
-        contact_count, penetration_count, minimum_contact_distance = _contact_metrics(simulator)
+        collision = _collision_evidence(simulator)
         fk_tip = fk.forward(qpos)
         fk_residual = math.dist(fk_tip, tip)
         directions = _directions(pose)
@@ -474,10 +513,11 @@ def evaluate_fast_arm_neutral_initial_pose_candidates() -> NeutralPoseEvaluation
                 for index in range(len(qpos))
             ):
                 failures.append("baseline_delta_too_large")
-        if contact_count != 0:
-            failures.append("startup_contact")
-        if penetration_count != 0:
-            failures.append("startup_penetration")
+        if collision.collision_check_available:
+            if collision.contact_count != 0:
+                failures.append("startup_contact")
+            if collision.penetration_count != 0:
+                failures.append("startup_penetration")
         if fk_residual > FK_SITE_TOLERANCE_M:
             failures.append("fk_site_mismatch")
         failures_tuple = tuple(sorted(set(failures)))
@@ -515,9 +555,12 @@ def evaluate_fast_arm_neutral_initial_pose_candidates() -> NeutralPoseEvaluation
                 extension_ratio=extension / nominal_reach,
                 per_joint_normalized_limit_margin=margins,
                 minimum_limited_joint_margin=minimum_margin,
-                contact_count=contact_count,
-                penetration_count=penetration_count,
-                minimum_contact_distance_m=minimum_contact_distance,
+                collision_check_available=collision.collision_check_available,
+                collision_check_reason=collision.collision_check_reason,
+                contact_count=collision.contact_count,
+                penetration_count=collision.penetration_count,
+                minimum_contact_distance_m=collision.minimum_contact_distance_m,
+                tip_floor_clearance_m=tip[2],
                 fk_site_residual_m=fk_residual,
                 jacobian_numeric_rank=pose.native.numeric_rank,
                 jacobian_effective_rank=pose.native.effective_rank,
