@@ -7,6 +7,7 @@ from time import monotonic
 
 MonotonicClock = Callable[[], float]
 AsyncSleep = Callable[[float], Awaitable[None]]
+DEADLINE_MISS_TOLERANCE_S = 1e-6
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +102,7 @@ class AbsoluteDeadlinePacer:
         clock: MonotonicClock = monotonic,
         sleep: AsyncSleep = asyncio.sleep,
         metrics: LiveRuntimeTimingMetrics | None = None,
+        deadline_miss_tolerance_s: float = DEADLINE_MISS_TOLERANCE_S,
     ) -> None:
         if period_s <= 0.0:
             raise ValueError("period_s must be positive")
@@ -108,6 +110,9 @@ class AbsoluteDeadlinePacer:
         self._clock = clock
         self._sleep = sleep
         self._metrics = metrics
+        if deadline_miss_tolerance_s < 0.0:
+            raise ValueError("deadline_miss_tolerance_s must be non-negative")
+        self._deadline_miss_tolerance_s = deadline_miss_tolerance_s
         self._next_deadline_s: float | None = None
 
     def start(self) -> None:
@@ -121,13 +126,14 @@ class AbsoluteDeadlinePacer:
 
         before_sleep_s = self._clock()
         remaining_s = self._next_deadline_s - before_sleep_s
-        missed = remaining_s <= 0.0
+        overran_before_sleep = remaining_s <= 0.0
         if remaining_s > 0.0:
             await self._sleep(remaining_s)
 
         after_sleep_s = self._clock()
         sleep_time_s = max(0.0, after_sleep_s - before_sleep_s)
         deadline_lag_s = max(0.0, after_sleep_s - self._next_deadline_s)
+        missed = deadline_lag_s > self._deadline_miss_tolerance_s
         if self._metrics is not None:
             self._metrics.record_pacing(
                 sleep_time_s=sleep_time_s,
@@ -137,7 +143,7 @@ class AbsoluteDeadlinePacer:
 
         # Do not run an unlimited catch-up loop after an overrun. One missed
         # deadline starts a fresh absolute period from the observed wall time.
-        if missed:
+        if overran_before_sleep:
             self._next_deadline_s = after_sleep_s + self.period_s
         else:
             self._next_deadline_s += self.period_s
@@ -145,6 +151,7 @@ class AbsoluteDeadlinePacer:
 
 __all__ = [
     "AbsoluteDeadlinePacer",
+    "DEADLINE_MISS_TOLERANCE_S",
     "LiveRuntimeTimingMetrics",
     "LiveRuntimeTimingSummary",
 ]

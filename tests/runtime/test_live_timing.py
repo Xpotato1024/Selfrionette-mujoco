@@ -65,6 +65,63 @@ def test_deadline_miss_does_not_sleep_or_run_an_unlimited_catch_up_loop() -> Non
     assert clock.now_s == pytest.approx(0.035)
 
 
+def test_sleep_overshoot_counts_as_deadline_miss_and_records_actual_lag() -> None:
+    clock = FakeClock()
+    metrics = LiveRuntimeTimingMetrics(clock=clock.monotonic)
+
+    async def overshooting_sleep(duration_s: float) -> None:
+        clock.sleep_calls.append(duration_s)
+        clock.advance(duration_s + 0.002)
+
+    pacer = AbsoluteDeadlinePacer(
+        0.01,
+        clock=clock.monotonic,
+        sleep=overshooting_sleep,
+        metrics=metrics,
+    )
+    pacer.start()
+
+    asyncio.run(pacer.pace())
+
+    assert metrics.deadline_miss_count == 1
+    assert metrics.deadline_lag_max_s == pytest.approx(0.002)
+
+    asyncio.run(pacer.pace())
+    assert clock.sleep_calls == pytest.approx([0.01, 0.008])
+
+
+def test_exact_deadline_and_tolerance_noise_do_not_count_as_misses() -> None:
+    exact_clock = FakeClock()
+    exact_metrics = LiveRuntimeTimingMetrics(clock=exact_clock.monotonic)
+    exact_pacer = AbsoluteDeadlinePacer(
+        0.01,
+        clock=exact_clock.monotonic,
+        sleep=exact_clock.sleep,
+        metrics=exact_metrics,
+    )
+    exact_pacer.start()
+    asyncio.run(exact_pacer.pace())
+    assert exact_metrics.deadline_miss_count == 0
+    assert exact_metrics.deadline_lag_max_s == 0.0
+
+    tolerance_clock = FakeClock()
+    tolerance_metrics = LiveRuntimeTimingMetrics(clock=tolerance_clock.monotonic)
+
+    async def noise_sleep(duration_s: float) -> None:
+        tolerance_clock.advance(duration_s + 0.5e-6)
+
+    tolerance_pacer = AbsoluteDeadlinePacer(
+        0.01,
+        clock=tolerance_clock.monotonic,
+        sleep=noise_sleep,
+        metrics=tolerance_metrics,
+    )
+    tolerance_pacer.start()
+    asyncio.run(tolerance_pacer.pace())
+    assert tolerance_metrics.deadline_miss_count == 0
+    assert tolerance_metrics.deadline_lag_max_s == pytest.approx(0.5e-6)
+
+
 def test_live_runtime_timing_summary_is_bounded_aggregate() -> None:
     clock = FakeClock()
     metrics = LiveRuntimeTimingMetrics(clock=clock.monotonic)

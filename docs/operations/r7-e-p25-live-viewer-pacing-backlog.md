@@ -46,24 +46,40 @@ Before P25, the step loop awaited compute, MuJoCo, diagnostics, serialization,
 and WebSocket publication and then slept the full `interval_s`. Both historical
 commits therefore took about 222.7 seconds to advance a nominal 120 seconds.
 P24-before/P24-after differed by at most about 0.06 seconds in these runs, so
-P24 registry/compatibility cost was not the dominant cause. The fixed-sleep
-clock drift pre-dated P24. Separately, the viewer applied every message inside
-the WebSocket callback, making burst backlog possible once production cost
-crossed the render budget.
+P24 backend registry/compatibility cost was not the dominant cause of backend
+drift. The fixed-sleep clock drift pre-dated P24. The historical comparison did
+not run a browser and therefore did not measure P24-before/P24-after browser
+processing cost, whether a browser render threshold was crossed, or whether
+the observed visual change was wholly caused by P24. Static inspection did
+confirm that the old viewer applied every message inside the WebSocket callback
+and therefore had an independent burst-backlog risk. The corrected visible
+Chrome run confirms bounded coalescing after the fix, not a historical browser
+cost delta.
 
 ## Runtime and Delivery Contracts
 
 - A positive live `interval_s` is an absolute monotonic deadline period.
 - One simulation step advances exactly `dt_s`; missed deadlines do not trigger
   negative sleep or unlimited catch-up.
+- A deadline miss means the final monotonic observation after any pacing sleep
+  exceeds the deadline by more than 1 microsecond. Scheduler overshoot is
+  therefore counted; lag within that tolerance is recorded but not counted as
+  a miss. Post-sleep overshoot does not shift the absolute cadence; only a
+  deadline already missed before sleep rebases the next period.
 - `interval_s=0` remains fast-as-possible.
 - The live publisher has one pending latest-state slot. Replacing that pending
   state increments `coalesced_frame_count`; sender errors remain observable.
+- Completion performs a best-effort final flush for at most one second. A
+  timeout cancels and awaits the sender task, discards pending/unconfirmed
+  in-flight states, and reports separate shutdown timeout/drop counts. Such an
+  in-flight state is not counted as sent because peer receipt is unconfirmed.
 - `WebSocketStatePublisher` remains the ordered/lossless publisher for replay,
   logging, and generic callers.
 - The viewer validates compatibility before retaining a candidate and applies
   only the latest pending candidate once per render cadence. Invalid payloads
-  do not mutate qpos or replace a valid scene.
+  and parse errors invalidate any older unapplied candidate. They do not mutate
+  the last applied scene pose, and the warning remains until a newer valid
+  candidate is applied.
 
 ## Comparison
 
@@ -71,34 +87,43 @@ crossed the render budget.
 |---|---:|---:|---:|---:|---:|---:|
 | no input | P24-before | 222.768 | 119.983 | +102.785 | 0.53860 | 7500 |
 | no input | P24-after | 222.709 | 119.983 | +102.726 | 0.53874 | 7500 |
-| no input | corrected | 120.011 | 119.983 | +0.028 | 0.99977 | 7433 |
+| no input | corrected follow-up | 120.031 | 119.983 | +0.048 | 0.99960 | 7356 |
 | held active zero axis | P24-before | 222.719 | 119.983 | +102.736 | 0.53872 | 7500 |
 | held active zero axis | P24-after | 222.752 | 119.983 | +102.768 | 0.53864 | 7500 |
-| held active zero axis | corrected | 120.026 | 119.983 | +0.042 | 0.99965 | 7440 |
+| held active zero axis | corrected follow-up | 120.055 | 119.983 | +0.072 | 0.99940 | 7334 |
 
-Corrected full-run (warm-up included) deadline misses were 67 no-input and 60
-held; live coalescing counts were the same 67 and 60. Enqueue/publish time was
-0.705 s no-input and 1.261 s held over 7500 completed frames. The live slot sent
-the final frame in both cases and reported zero sender errors.
+With post-sleep scheduler overshoot included, corrected full-run (warm-up
+included) deadline misses were 7499 no-input and 7500 held; maximum lag was
+0.01650 s and 0.01657 s. Live coalescing counts were 144 and 166, while
+enqueue/publish time was 0.750 s and 1.413 s over 7500 completed frames. The
+live slot sent the final frame in both cases and reported zero sender errors,
+shutdown timeouts, and shutdown drops. The high Windows miss count does not
+shift the absolute cadence; the drift and realtime factor remain within the
+acceptance thresholds.
 
 The visible Chrome no-input run ended at frame 7800 / timestamp 130.000 s with
 received/accepted/applied latest frame all 7800, frame distance 0,
-receive-to-apply age p50/p95/max 11.1/13.3/14.3 ms, parse p50/p95/max
-0.0/0.1/0.2 ms, scene apply p50/p95/max 0.1/0.2/0.4 ms, and 523 browser-side
+receive-to-apply age p50/p95/max 11.2/13.1/15.2 ms, parse p50/p95/max
+0.0/0.1/0.2 ms, scene apply p50/p95/max 0.1/0.2/0.3 ms, and 443 browser-side
 coalesced frames. The page remained `visible`; age and frame distance did not
-grow with elapsed time.
+grow with elapsed time. Compatibility-invalid and shutdown timeout/drop counts
+were zero.
 
-A synthetic 100 ms-per-send stress enqueued 1000 states in 0.00593 s. The
+A synthetic 100 ms-per-send stress enqueued 1000 states in 0.00576 s. The
 bounded slot sent only final frame 1000, counted 999 coalesced pending states,
 reported zero sender errors, and left its sender task completed after shutdown.
+A permanently blocked sender returned from a 0.02 s test flush in 0.0241 s,
+cancelled and awaited its task, reported one timeout and two unconfirmed
+shutdown drops (one in-flight and one pending), and counted neither as sent.
 
 ## Acceptance Status and Remaining Gate
 
 Backend no-input and held-active-zero-axis runs meet drift and realtime-factor
 thresholds. Visible Chrome no-input meets the viewer age and bounded-backlog
-thresholds. The 120 second visible-browser continuously-held-key run is not
-claimed: browser automation available in this environment could not preserve a
-trusted key-down state while the production keyboard publisher was active.
+thresholds. The final-head 120 second visible-browser continuously-held-key run
+is not claimed: a 125 second Chrome key-hold automation attempt left the
+production overlay at `source_active=false`, `held=false`, zero axis, and no
+active key codes, so it was not accepted as trusted input evidence.
 Run the manual held-key step in the canonical smoke procedure before promoting
 the Draft PR. Directional held-key motion also encounters an existing MuJoCo
 acceleration/time-reset instability and remains a separate motion-policy /

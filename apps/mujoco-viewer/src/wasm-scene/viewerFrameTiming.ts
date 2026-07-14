@@ -12,12 +12,14 @@ export interface ViewerPayloadCandidate {
 export interface ViewerFrameTimingSnapshot {
   receivedFrameCount: number;
   compatibilityAcceptedFrameCount: number;
+  compatibilityInvalidFrameCount: number;
   sceneAppliedFrameCount: number;
   coalescedFrameCount: number;
   parseErrorCount: number;
   latestReceivedFrameIndex: number | null;
   latestCompatibilityAcceptedFrameIndex: number | null;
   latestSceneAppliedFrameIndex: number | null;
+  latestIngressStatus: "none" | "received" | "accepted" | "compatibility_invalid" | "parse_error";
   receivedToAppliedFrameDistance: number | null;
   receiveToApplyAgeMsP50: number | null;
   receiveToApplyAgeMsP95: number | null;
@@ -35,6 +37,7 @@ export interface ViewerFrameTimingSnapshot {
 export interface ViewerFrameTiming {
   receive(payload: TransportPayloadV0, observation: ViewerWebSocketPayloadObservation): void;
   acceptLatestCandidate(payload: TransportPayloadV0, observation: ViewerWebSocketPayloadObservation): void;
+  recordCompatibilityInvalidIngress(): void;
   recordParseError(): void;
   takeLatestCandidate(): ViewerPayloadCandidate | null;
   recordSceneApplied(candidate: ViewerPayloadCandidate, sceneApplyDurationMs: number): void;
@@ -75,12 +78,14 @@ export function createViewerFrameTiming(
   let disposed = false;
   let receivedFrameCount = 0;
   let compatibilityAcceptedFrameCount = 0;
+  let compatibilityInvalidFrameCount = 0;
   let sceneAppliedFrameCount = 0;
   let coalescedFrameCount = 0;
   let parseErrorCount = 0;
   let latestReceivedFrameIndex: number | null = null;
   let latestCompatibilityAcceptedFrameIndex: number | null = null;
   let latestSceneAppliedFrameIndex: number | null = null;
+  let latestIngressStatus: ViewerFrameTimingSnapshot["latestIngressStatus"] = "none";
   let uiStateUpdateCount = 0;
 
   return {
@@ -90,6 +95,7 @@ export function createViewerFrameTiming(
       }
       receivedFrameCount += 1;
       latestReceivedFrameIndex = payload.frame_index;
+      latestIngressStatus = "received";
       appendBounded(parseDurationMs, observation.parseDurationMs);
     },
     acceptLatestCandidate(payload, observation) {
@@ -98,6 +104,7 @@ export function createViewerFrameTiming(
       }
       compatibilityAcceptedFrameCount += 1;
       latestCompatibilityAcceptedFrameIndex = payload.frame_index;
+      latestIngressStatus = "accepted";
       if (pending !== null) {
         coalescedFrameCount += 1;
       }
@@ -107,10 +114,21 @@ export function createViewerFrameTiming(
         parseDurationMs: observation.parseDurationMs,
       };
     },
-    recordParseError() {
-      if (!disposed) {
-        parseErrorCount += 1;
+    recordCompatibilityInvalidIngress() {
+      if (disposed) {
+        return;
       }
+      pending = null;
+      compatibilityInvalidFrameCount += 1;
+      latestIngressStatus = "compatibility_invalid";
+    },
+    recordParseError() {
+      if (disposed) {
+        return;
+      }
+      pending = null;
+      parseErrorCount += 1;
+      latestIngressStatus = "parse_error";
     },
     takeLatestCandidate() {
       if (disposed) {
@@ -143,12 +161,14 @@ export function createViewerFrameTiming(
       return {
         receivedFrameCount,
         compatibilityAcceptedFrameCount,
+        compatibilityInvalidFrameCount,
         sceneAppliedFrameCount,
         coalescedFrameCount,
         parseErrorCount,
         latestReceivedFrameIndex,
         latestCompatibilityAcceptedFrameIndex,
         latestSceneAppliedFrameIndex,
+        latestIngressStatus,
         receivedToAppliedFrameDistance,
         receiveToApplyAgeMsP50: percentile(receiveToApplyAgeMs, 0.5),
         receiveToApplyAgeMsP95: percentile(receiveToApplyAgeMs, 0.95),

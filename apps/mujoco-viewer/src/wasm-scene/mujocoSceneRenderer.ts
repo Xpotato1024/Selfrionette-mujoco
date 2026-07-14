@@ -479,11 +479,18 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
         frameTiming.receive(payload, observation);
         const qposResolution = resolveTransportQpos(payload, model.nq, options.profile);
         if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
+          frameTiming.recordCompatibilityInvalidIngress();
           updateStatus({
             status: "warning",
             sourceLabel: qposResolution.sourceLabel,
             qposStatus: qposResolution.status,
             qposError: qposResolution.errorMessage,
+            currentFrameIndex: qposResolution.currentFrameIndex,
+            currentTimestampS: qposResolution.currentTimestampS,
+            currentQpos: null,
+            currentQposText: "[]",
+            endpointEvaluation: payload.endpoint_evaluation ?? null,
+            inputOverlay: buildProductViewerInputOverlayState(payload),
           });
           return;
         }
@@ -495,6 +502,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
           status: "warning",
           qposStatus: "invalid",
           qposError: error.message,
+          currentQpos: null,
+          currentQposText: "[]",
         });
       },
     });

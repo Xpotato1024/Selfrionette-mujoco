@@ -155,11 +155,18 @@ R6-A-P4 freezes the handoff contract for R6-B:
   unbounded historical backlog. Replaced pending states are counted as
   coalesced. Replay, file recording, experiment logging, and direct uses of
   `WebSocketStatePublisher` remain ordered/backpressured and lossless.
+- The live slot's final flush is bounded. A timeout cancels and awaits its
+  sender task, diagnoses pending or unconfirmed in-flight shutdown drops, and
+  does not count an interrupted in-flight state as sent. This shutdown policy
+  does not alter the canonical lossless publisher.
 - The browser may likewise retain only the latest compatibility-accepted
   candidate until the next render cadence. Invalid or profile-mismatched
   payloads are rejected before that slot and never replace or mutate the last
   valid scene state. This is delivery/application policy, not a payload schema
   change.
+- A compatibility-invalid or unparsable latest ingress also invalidates any
+  older unapplied candidate. It preserves the last scene-applied valid pose and
+  warning state until a newer valid candidate reaches render cadence.
 - The Phase C completion audit does not add a new payload version, new schema,
   or browser scene mutation path.
 - `endpoint_evaluation` is optional and additive. Missing or invalid

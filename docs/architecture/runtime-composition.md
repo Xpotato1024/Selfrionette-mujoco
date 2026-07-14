@@ -234,6 +234,10 @@ advanced by one MuJoCo step. A positive `interval_s` is the live cadence period
 and is paced against absolute monotonic deadlines: processing time is deducted
 from the remaining sleep, missed deadlines never produce negative sleep, and a
 miss rebases the next deadline instead of running an unlimited catch-up loop.
+The miss decision is based on the final post-sleep monotonic observation, with
+a 1 microsecond tolerance for floating-point noise, so scheduler overshoot is
+included in deadline diagnostics. Post-sleep overshoot keeps the absolute
+deadline sequence; only pre-sleep overrun rebases the next period.
 `interval_s=0` remains the existing fast-as-possible behavior. This pacing is
 selected only by the live viewer composition; replay, dry-run, and experiment
 logging retain their deterministic/lossless contracts.
@@ -244,8 +248,11 @@ may replace that pending live display state with a newer state, and reports the
 coalesced count. The canonical `WebSocketStatePublisher` remains ordered and
 awaited for lossless callers. On the browser side, compatible payloads are
 coalesced before scene application and the latest candidate is applied once per
-render cadence. MuJoCo remains the physical-state source of truth and the viewer
-remains rendering-only.
+render cadence. Live shutdown bounds the final flush, cancels and awaits a
+blocked sender after timeout, and diagnoses unconfirmed shutdown drops. Invalid
+or unparsable ingress discards older unapplied candidates while preserving the
+last applied scene pose. MuJoCo remains the physical-state source of truth and
+the viewer remains rendering-only.
 
 ## Composition-root responsibility split
 

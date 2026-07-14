@@ -75,8 +75,12 @@ Notes:
   cadence. `interval_s=0` remains fast-as-possible.
 - Completion prints one bounded `live runtime timing summary` JSON object.
   It includes wall/simulation time, realtime factor, stage timing, sleep,
-  deadline lag/misses, frame counts, and live delivery coalescing. It does not
-  retain every frame.
+  deadline lag/misses, frame counts, live delivery coalescing, and bounded
+  shutdown timeout/drop counts. It does not retain every frame. A deadline
+  miss includes post-sleep scheduler overshoot greater than 1 microsecond.
+- Final live delivery flush is best-effort and bounded to one second. On
+  timeout the sender task is cancelled and awaited; pending or unconfirmed
+  in-flight states are counted as shutdown drops rather than sent frames.
 
 ## Viewer Startup
 
@@ -148,6 +152,10 @@ must include `websocketUrl=ws://127.0.0.1:8766`.
   parse/apply timing, coalesced frames, and UI update frequency. These are
   browser-monotonic observations and must not be directly subtracted from the
   backend monotonic clock.
+- A compatibility-invalid payload or parse error is an ingress barrier: any
+  older unapplied compatible candidate is discarded. The already-applied scene
+  pose remains unchanged, while the UI reports warning/invalid until a later
+  valid candidate is applied.
 
 ## P25 120 s Acceptance
 
@@ -240,11 +248,14 @@ simulation time s:
 wall elapsed s:
 realtime factor:
 deadline miss count:
+deadline lag max s:
 publish/enqueue time s:
+shutdown timeout/drop count:
 latest received/accepted/applied frame:
 received-to-applied frame distance:
 receive-to-apply age p50/p95/max ms:
 coalesced frame count:
+compatibility-invalid / parse-error count:
 browser visibility:
 screenshots/logs:
 failure notes:

@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
+from selfrionette.runtime.live_websocket_delivery import LiveLatestStateWebSocketPublisher
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -225,3 +226,55 @@ def test_websocket_script_viewer_path_uses_live_latest_delivery_and_interval_zer
     payloads = [json.loads(message) for message in created_servers[0].messages]
     assert payloads[-1]["frame_index"] == 2
     assert payloads[-1]["version"] == 0
+
+
+def test_websocket_script_viewer_path_has_bounded_final_flush(capsys) -> None:
+    never_released = asyncio.Event()
+
+    class BlockedWebSocketPublisherServer:
+        def __init__(self, *, host: str, port: int, on_message=None) -> None:
+            self.host = host
+            self.port = port
+            self.bound_port = port
+            self.on_message = on_message
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def wait_for_client(self, timeout_s: float | None = None) -> bool:
+            return True
+
+        async def send(self, message: str) -> None:
+            await never_released.wait()
+
+    class ShortTimeoutPublisher(LiveLatestStateWebSocketPublisher):
+        async def drain(self, *, timeout_s: float | None = 0.01) -> bool:
+            return await super().drain(timeout_s=timeout_s)
+
+        async def close(self, *, flush_timeout_s: float | None = 0.01) -> bool:
+            return await super().close(flush_timeout_s=flush_timeout_s)
+
+    with (
+        patch.object(WEBSOCKET_SCRIPT_ENTRY, "WebSocketPublisherServer", BlockedWebSocketPublisherServer),
+        patch.object(WEBSOCKET_SCRIPT_ENTRY, "LiveLatestStateWebSocketPublisher", ShortTimeoutPublisher),
+    ):
+        asyncio.run(
+            WEBSOCKET_SCRIPT_ENTRY._run_input_source_websocket_publisher_async(
+                host="127.0.0.1",
+                port=8766,
+                steps=1,
+                dt_s=1.0 / 60.0,
+                interval_s=0.0,
+                grace_period_s=0.0,
+                preset=None,
+                input_source="viewer",
+            )
+        )
+
+    output = capsys.readouterr().out
+    assert '"shutdown_timeout_count": 1' in output
+    assert '"shutdown_dropped_frame_count": 1' in output
+    assert "Completed after publishing 1 frame(s)." in output

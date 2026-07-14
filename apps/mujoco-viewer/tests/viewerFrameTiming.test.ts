@@ -53,21 +53,39 @@ assert.equal(snapshot.sceneApplyDurationMsP95, 1.5);
 timing.receive(payload(4), { receivedAtMs: 13, parseDurationMs: 0.2 });
 timing.acceptLatestCandidate(payload(4), { receivedAtMs: 13, parseDurationMs: 0.2 });
 timing.receive(payload(5), { receivedAtMs: 14, parseDurationMs: 0.2 });
-// A rejected latest candidate is counted as received but never enters the
-// compatible pending slot or mutates the last valid candidate.
-const stillValidLatest = timing.takeLatestCandidate();
-assert.equal(stillValidLatest?.payload.frame_index, 4);
+timing.recordCompatibilityInvalidIngress();
+// Invalid ingress is a barrier: the older compatible pending frame is not
+// applied on the next render cadence, while the last applied scene stays 3.
+assert.equal(timing.takeLatestCandidate(), null);
 snapshot = timing.snapshot();
 assert.equal(snapshot.latestCompatibilityAcceptedFrameIndex, 4);
 assert.equal(snapshot.latestSceneAppliedFrameIndex, 3);
 assert.equal(snapshot.receivedToAppliedFrameDistance, 2);
+assert.equal(snapshot.compatibilityInvalidFrameCount, 1);
+assert.equal(snapshot.latestIngressStatus, "compatibility_invalid");
 
-timing.recordParseError();
-assert.equal(timing.snapshot().parseErrorCount, 1);
-timing.dispose();
 timing.receive(payload(6), { receivedAtMs: 15, parseDurationMs: 0.1 });
 timing.acceptLatestCandidate(payload(6), { receivedAtMs: 15, parseDurationMs: 0.1 });
+timing.recordParseError();
+assert.equal(timing.snapshot().parseErrorCount, 1);
+assert.equal(timing.snapshot().latestIngressStatus, "parse_error");
+assert.equal(timing.takeLatestCandidate(), null, "parse errors must invalidate pending valid frames");
+
+timing.receive(payload(7), { receivedAtMs: 16, parseDurationMs: 0.1 });
+timing.acceptLatestCandidate(payload(7), { receivedAtMs: 16, parseDurationMs: 0.1 });
+const recovered = timing.takeLatestCandidate();
+assert.equal(recovered?.payload.frame_index, 7, "only a new valid ingress may recover after invalid input");
+if (recovered === null) {
+  throw new Error("recovery candidate should exist");
+}
+nowMs = 18;
+timing.recordSceneApplied(recovered, 0.5);
+assert.equal(timing.snapshot().latestSceneAppliedFrameIndex, 7);
+
+timing.dispose();
+timing.receive(payload(8), { receivedAtMs: 19, parseDurationMs: 0.1 });
+timing.acceptLatestCandidate(payload(8), { receivedAtMs: 19, parseDurationMs: 0.1 });
 assert.equal(timing.takeLatestCandidate(), null, "dispose should clear and reject pending payloads");
-assert.equal(timing.snapshot().latestReceivedFrameIndex, 5);
+assert.equal(timing.snapshot().latestReceivedFrameIndex, 7);
 
 console.log("viewer frame timing tests passed");

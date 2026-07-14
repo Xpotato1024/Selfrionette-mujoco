@@ -178,7 +178,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=_port, default=8766, help="TCP port to bind")
     parser.add_argument("--steps", type=_positive_int, default=1, help="number of replay steps to run")
     parser.add_argument("--dt-s", type=_positive_float, default=1.0 / 60.0, help="step duration in seconds")
-    parser.add_argument("--interval-s", type=_non_negative_float, default=0.0, help="delay between steps in seconds")
+    parser.add_argument(
+        "--interval-s",
+        type=_non_negative_float,
+        default=0.0,
+        help=(
+            "step interval in seconds; viewer live mode uses it as an absolute cadence period, "
+            "zero disables pacing"
+        ),
+    )
     parser.add_argument(
         "--grace-period-s",
         type=_non_negative_float,
