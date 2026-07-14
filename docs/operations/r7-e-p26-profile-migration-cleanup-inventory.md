@@ -20,8 +20,9 @@ related_prs:
   - "#379"
   - "#381"
   - "#382"
-current_main_sha: 3a431890ddbc0ffe324a823fb35d5b4055629a15
-proposal_source: PR #382 head codex/provisional-persistent-task-runtime-round
+inventory_baseline_sha: 3a431890ddbc0ffe324a823fb35d5b4055629a15
+proposal_status_at_inventory: open
+proposal_source_at_inventory: PR #382 head codex/provisional-persistent-task-runtime-round
 proposal_sha: b66411348a74ef3c8bb93ce088048a148a2f3918
 ---
 
@@ -38,10 +39,10 @@ Issue #383 の decision record として、P24 Robot Profile / Runtime Plugin / 
 ### Repository baseline
 
 - repository: `Xpotato1024/Selfrionette-mujoco`
-- current main: `3a431890ddbc0ffe324a823fb35d5b4055629a15`（PR #381 merge）
+- inventory baseline: `3a431890ddbc0ffe324a823fb35d5b4055629a15`（PR #381 merge時点のP26 inventory baseline）
 - P24: PR #379 merged as `3aa9233438d507939fe73ea9b8fd15cfde48cf49`; final head `76fc9a3a8a326fb69b345f5b0fd4b6b8eca14c2b`
 - P25: PR #381 merged as current main; final head `4fb7834d12a438bcac429485abaa41345c611a79`
-- future proposal: PR #382 は調査時点で open。proposal は main ではなく exact PR head `b66411348a74ef3c8bb93ce088048a148a2f3918` の `docs/operations/provisional-persistent-task-runtime-and-robot-output-round.md` を `git show origin/codex/provisional-persistent-task-runtime-round:...` で読んだ。P26 branch は main から独立している。
+- future proposal provenance: PR #382 はinventory実施時点で open であり、exact head `b66411348a74ef3c8bb93ce088048a148a2f3918` の `docs/operations/provisional-persistent-task-runtime-and-robot-output-round.md` を `git show origin/codex/provisional-persistent-task-runtime-round:...` で読んだ。これはinventory時点の調査証拠であり、PR #382のlive stateを永続的に主張するものではない。P26ではPR #382をbranch baseにせず、PR #382またはそのbranchを変更していない。
 
 ### Inspected sources
 
@@ -261,7 +262,8 @@ Issue は作成しない。以下は provisional title であり P27+ / future R
 | 6 | Refresh stub and compatibility architecture enforcement | RUNTIME-004, KIN-003 | tests/docs/allowlist中心。stub削除なし | stub/public/architecture tests | 2後。production default変更なし |
 | 7 | Decide WASM PoC isolation and fixture provenance | VIEWER-003, VIEWER-004 | PoC status、fixture owner/regenを固定。初回は移動/削除なし | PoC/product build、fixture hash/schema/playback | product viewer維持。PoC deletionは別Issue |
 | 8 | Audit legacy archive identity and import isolation | LEGACY-001, LEGACY-006 | static inventory/import guard。zip/directory削除なし | archive listing/hash/content diff、boundary tests | network/hardware実行なし |
-| 9 | Formalize future runtime/OSC/physical requirements | KIN-005, LEGACY-002, LEGACY-003, LEGACY-008 | requirements/safety design only | lifecycle/stop/stale scenarios、static contract review | cleanup Issue完了後。Round番号/OSC send/hardware access除外 |
+| 9 | Reconcile protected #293 / #324 long-form roadmap metadata | P26-DOCS-005 | #293 numbering SoT、#324 parent / roadmap Issue、P24–P26 allocation/completion metadata、relevant allocation/progress/completion commentsを対象に、GitHub protected long-form metadataのみをUnicode-safeなlocalized updateで narrow replacementまたはpatchする。repository source/docs-file変更、new Round番号割当、future-Round formalization、broad rewrite/reconstructionは行わない | exact current #293/#324 bodies、known-good backup、Issue #383、#324 P24–P26 comments、P24/P25 merged PR evidence、P26 execution-time stateを確認し、`scripts/validate_github_body_structure.py --profile protected-long-form`、target-specific required sections/table sections、heading count、table identity、fence balance、newline preservation、UTF-8、U+FFFD/mojibake、before/after unified diff、exact read-backを検証する。不一致時はexact backupからrollbackし、damaged baselineをstructural overrideで迂回しない | #293 numbering SoTと#324 parent/roadmapのmetadata integrityを先に回復する独立follow-up。runtime code、repository docs、Issue numbering、新Round allocation、destructive rewrite、historical entryのcollapse/summaryを除外。formal future-Round numbering/parent allocationより前に完了 |
+| 10 | Formalize future runtime/OSC/physical requirements | KIN-005, LEGACY-002, LEGACY-003, LEGACY-008 | requirements/safety design only | lifecycle/stop/stale scenarios、static contract review | P26-DOCS-005のreconciliation完了後。Round番号/OSC send/hardware access除外 |
 
 ## 9. Recommended sequence
 
@@ -272,20 +274,21 @@ Issue は作成しない。以下は provisional title であり P27+ / future R
 5. **Isolation**: PoC/legacyの非production boundaryを強化する。
 6. **Deprecation**: fast_arm convenience、compatibility exports、old launchers/query aliasをnotice period付きで扱う。
 7. **Removal**: 本 inventory は 0 件。将来も dedicated evidence/validation Issueなしに実施しない。
-8. **Future-Round deferral**: OSC/firmware/physical safety assetsは formal requirements後まで保持する。
+8. **Protected roadmap reconciliation**: P26-DOCS-005はgenericなevidence-gatheringだけではなく、#293/#324を対象とする専用のUnicode-safe localized-update follow-upで扱う。formal future-Round numberingまたはparent allocationより前に完了するが、無関係なdocs correction、internal integration、PoC/archive investigationをblockしない。reconciliation完了前は#293/#324をnew Roundのreconciled SoTとして扱わない。
+9. **Future-Round deferral**: OSC/firmware/physical safety assetsはP26-DOCS-005のreconciliationとformal requirements後まで保持する。
 
 ## 10. Relationship to #341 and PR #382
 
 #341 の local incremental endpoint motion、workspace、branch continuity、explicit diagnostics は current production requirements/evidenceとして保持する。ただし sustained task、service/container、OSC、physical robot acceptanceを #341 単独へ拡張しない。formal Round時に bounded child、rewrite、supersedeのいずれかを判断するまで open requirements source とする。
 
-PR #382 proposal は task/session lifecycle、finite/run-until-stop、supervision、health/readiness/liveness/shutdown、sustained motion、workspace/joint-limit/singularity/acceleration feasibility、OSC dry-run/schema/rate/stop/stale、physical operator gateを cleanup false-positive から保護する guardrail である。proposalは open PR headから読んだだけで変更していない。P26 branchは PR #382をbaseにしていない。
+PR #382 proposal は task/session lifecycle、finite/run-until-stop、supervision、health/readiness/liveness/shutdown、sustained motion、workspace/joint-limit/singularity/acceleration feasibility、OSC dry-run/schema/rate/stop/stale、physical operator gateを cleanup false-positive から保護する guardrail である。P26ではinventory時点のopen stateとexact head `b66411348a74ef3c8bb93ce088048a148a2f3918`を調査証拠として記録した。これはinventory-time provenanceであり、P26がPR #382をmerge、modify、canonizeするものではない。PR #382のstateが将来変わっても、P26 inventory classificationをそのstateだけを理由に再計算しない。PR #382のmaterial content changeは別途impact reviewを要する。P26 branchはPR #382をbaseにしていない。
 
 ## 11. Remaining risks and unknowns
 
 - repository外の Python import、bookmark、operator automationは検索できない。
 - stale docsの全command実行までは本 inventoryで行わない。
 - PoCとproductの完全なsemantic equivalenceはfixture hash一致だけでは証明されない。
-- #293/#324 long-form bodiesはcurrent allocation commentsと非同期で、別reconciliationが必要。
+- #293/#324 protected long-form reconciliationは提案follow-up 9、P26-DOCS-005として明示した。完了するまで#293/#324 body metadataはcurrent comments / Issuesと同期済みのSoTとして扱えず、allocation/documentation integrity riskが残る。これはruntime behavior riskではない。
 - legacy zipとexpanded treeのprovenance/content identityはunknown。
 - P23 joint limitsはsoftware boundsであり、physical joint/motor/collision feasibilityではない。
 - #341の長時間directional stabilityと physical feasibilityは未解決。
