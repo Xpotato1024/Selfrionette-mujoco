@@ -45,7 +45,7 @@ related:
 
 ## Fixture generation integrity
 
-Issue #392 initially exposed an invalid regeneration candidate
+PR #392 initially exposed an invalid regeneration candidate
 (`A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36`). The
 native simulator was applying a new joint position while retaining the
 previous step's velocity. MuJoCo then emitted BADQACC and returned a reset-like

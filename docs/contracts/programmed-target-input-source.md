@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-16
+last_verified: 2026-07-15
 canonical_for:
   - programmed target input source contract
   - RawInputFrame.metadata bridge for deterministic programmed target trajectories
@@ -65,7 +65,17 @@ input source が出力する target position。単位は meter。
 
 ### desired_endpoint_m
 
-最終的に到達したい endpoint position。単位は meter。
+現在の programmed-target sample に対する command-side の endpoint target。単位は meter。
+interpreter / runtime / IK boundary は、この値を現在の command target として消費できる。
+sampled trajectory では、通常、その frame の interpolated endpoint を入れる。
+trajectory の将来の phase endpoint や最終到達先を示すためだけに、全 frameへ先行して固定してはならない。
+
+`target_position_m` は input-source sample と compatibility feedback の field であり、
+viewer state を表すものではない。direct programmed endpoint sample では、
+`target_position_m` と `desired_endpoint_m` が同値でもよい。
+trajectory-wide destination や phase endpoint が別途必要な場合は、
+その意味を明示した別名の metadata field を追加する。`desired_endpoint_m` を viewer の
+表示状態や viewer-side の第二の姿勢SoTとして再定義しない。
 
 ### target_velocity_mps
 
@@ -117,8 +127,11 @@ programmed target の契約は interpreter 側で再定義しない。
 - phase は `initial_hold`, `move_positive_x`, `slow_or_hold_at_positive_x`,
   `return_to_initial`, `final_hold` を取る
 - `target_velocity_mps` と `phase` は `sweep_x` では必須 metadata として扱う
-- `sweep_x` の runtime wiring はこの issue では行わない
-- `dry-run` / WebSocket publisher runner への接続は `#140` に送る
+- `move_positive_x` と `return_to_initial` では、`desired_endpoint_m` は現在 frame の
+  interpolated endpoint を示す
+- `slow_or_hold_at_positive_x` と `final_hold` では、意図した held endpoint を示す
+- `desired_endpoint_m` は viewer-visible target marker feedback の別名ではなく、
+  current command target の metadata bridge である
 
 ## 10. Non-goals
 

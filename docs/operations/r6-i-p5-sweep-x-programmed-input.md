@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-16
+last_verified: 2026-07-15
 canonical_for:
   - R6-I-P5 sweep_x programmed target input
   - sweep_x deterministic programmed target trajectory
@@ -86,7 +86,20 @@ WebSocket publisher runner の wiring は行わない。
 - `loop=False` では終端 frame を保持する
 - `loop=True` では sequence が循環する
 - `target_position_m` は x 方向の sweep を示し、y / z は不要に変化させない
-- `desired_endpoint_m` は phase に応じた endpoint を示す
+- `desired_endpoint_m` は current programmed-target sample の endpoint target を示す
+
+### Current sample-level endpoint semantics
+
+- `move_positive_x` では `target_position_m` と `desired_endpoint_m` の両方が、current
+  interpolated point に従う
+- `return_to_initial` でも、両方が current interpolated return point に従う
+- phase endpoint を全 frameへ先行して固定しない。以前の phase-endpoint-fixed
+  `desired_endpoint_m` は同じ IK command を繰り返す原因となり、PR #392 で修正した
+- `slow_or_hold_at_positive_x` と `final_hold` では、held endpoint の反復を意図した挙動とする
+- `loop=False` で EOF に到達した後は、terminal `final_hold` metadata が反復されてもよい。
+  runtime の top-level `frame_index` と simulation time は別の連続した値として進行する
+- metadata の `frame_index` は input trajectory index であり、runtime payload の top-level
+  `frame_index` とは異なる
 
 ## 7. NoOpMotionGenerator 例外からの退場方針
 

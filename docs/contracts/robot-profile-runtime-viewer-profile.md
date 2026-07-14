@@ -133,7 +133,7 @@ the canonical qpos fixture is now owned by
 `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`.
 
 The fixture remains a product-owned debug/validation asset, not a startup or
-runtime state source. Issue #392 fixed the native generation path after a
+runtime state source. PR #392 fixed the native generation path after a
 stale-velocity BADQACC/time-rollback reproduction on both current `main` and
 the cleanup branch. The repaired exporter validates the complete sequence and
 atomically preserves the existing file on invalid output; the payload schema,
