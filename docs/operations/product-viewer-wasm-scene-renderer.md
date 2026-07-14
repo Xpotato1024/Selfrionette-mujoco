@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-19
+last_verified: 2026-07-15
 canonical_for:
   - product viewer wasm scene renderer operation
 related:
@@ -12,7 +12,7 @@ related:
 
 # Product Viewer WASM Scene Renderer
 
-`apps/mujoco-viewer` は `experiments/mujoco-wasm-viewer-poc` で成立した `@mujoco/mujoco` の WASM scene renderer を product viewer としてホストします。
+`apps/mujoco-viewer` は、`experiments/mujoco-wasm-viewer-poc` で成立し #185 で昇格した `@mujoco/mujoco` WASM scene renderer の現在のproduction ownerです。実行可能なPoCは #385 で退役し、現行のrenderer・tests・fixture・operator pathはこのproduct viewer側に一本化されています。
 
 ## Boundary
 
@@ -34,6 +34,14 @@ related:
 - compiled MuJoCo model default qpos: historical fallbackではなく、startup sourceには使わない
 - fixture qpos: default startup path では使わない
 - runtime qpos: WebSocket payload が来たら `data.qpos` に適用する
+
+## Canonical qpos fixture
+
+- owner: `apps/mujoco-viewer/`
+- path: `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`
+- schema owner: `apps/mujoco-viewer/src/wasm-scene/qposFrameTypes.ts`
+- regeneration: `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30`
+- fixture playback is debug/validation only; startup still uses the named `home` keyframe
 
 ## Old renderer handling
 
@@ -63,7 +71,7 @@ npm run build
 ```
 
 ```powershell
-cd D:\Xpotato-apps\Selfrionette-mujoco
+cd <repository root>
 git diff --check
 ```
 

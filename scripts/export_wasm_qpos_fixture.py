@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -15,7 +16,7 @@ from selfrionette.runtime import run_replay_mujoco_dry_run
 
 FIXTURE_MODEL_PATH = "assets/mujoco/fast_arm/scene.xml"
 FIXTURE_SOURCE = "python-native-mujoco"
-DEFAULT_OUTPUT_PATH = ROOT / "experiments" / "mujoco-wasm-viewer-poc" / "public" / "fixtures" / "fast_arm_sweep_x_qpos.json"
+DEFAULT_OUTPUT_PATH = ROOT / "apps" / "mujoco-viewer" / "public" / "fixtures" / "fast_arm_sweep_x_qpos.json"
 
 
 def _positive_int(value: str) -> int:
@@ -33,11 +34,18 @@ def _positive_float(value: str) -> float:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Export a browser-loadable qpos fixture from the native MuJoCo dry-run path.")
+    parser = argparse.ArgumentParser(
+        description="Export the product-owned browser qpos fixture from the native MuJoCo dry-run path."
+    )
     parser.add_argument("--preset", choices=("sweep_x",), default="sweep_x", help="deterministic replay preset to export")
     parser.add_argument("--steps", type=_positive_int, default=30, help="number of frames to export")
     parser.add_argument("--dt-s", type=_positive_float, default=1.0 / 60.0, help="backend step duration in seconds")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH, help="output JSON path")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT_PATH,
+        help="output JSON path; defaults to apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json",
+    )
     return parser
 
 
@@ -55,6 +63,8 @@ def _build_fixture(*, preset: str, steps: int, dt_s: float) -> dict[str, object]
             raise RuntimeError("backend payload qpos must be a non-empty list")
 
         frame_qpos = [float(value) for value in qpos]
+        if not all(math.isfinite(value) for value in frame_qpos):
+            raise RuntimeError("backend payload qpos must contain only finite numbers")
         if qpos_length is None:
             qpos_length = len(frame_qpos)
         elif len(frame_qpos) != qpos_length:
@@ -92,7 +102,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_path: Path = args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8", newline="\n") as stream:
-        stream.write(json.dumps(fixture, ensure_ascii=False, indent=2))
+        stream.write(json.dumps(fixture, ensure_ascii=False, indent=2, allow_nan=False))
         stream.write("\n")
     print(f"Wrote qpos fixture to {output_path}")
     return 0

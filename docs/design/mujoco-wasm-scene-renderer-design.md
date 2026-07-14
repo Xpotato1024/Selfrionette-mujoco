@@ -1,5 +1,9 @@
 # MuJoCo WASM Scene Renderer 設計
 
+> Status: historical design record. The executable PoC was promoted to
+> `apps/mujoco-viewer` by #185 and retired by #385; the dated history below is
+> retained to explain that promotion and the rendering-only boundary.
+
 ## 1. 背景
 
 `#174` では、既存の `apps/mujoco-viewer` 上で `fast_arm` の STL mesh を手で合わせ続ける方針が限界に達した。`#176` で MuJoCo native viewer により `assets/mujoco/fast_arm/scene.xml` の素直な表示姿勢が確認でき、`#178` で official `@mujoco/mujoco` WASM PoC が isolated app として成立することも確認できた。

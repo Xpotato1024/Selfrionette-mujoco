@@ -296,3 +296,13 @@ PR #382 proposal は task/session lifecycle、finite/run-until-stop、supervisio
 ## 12. Hardware / external side effects
 
 本 inventory では hardware validation、serial port open、Arduino upload、OSC send、robot output、container build/deployment、service installation、credential操作を行っていない。GitHub read/write と Git branch/PR操作以外のnetwork transmissionも行わない。
+
+## 13. Post-inventory disposition (Issue #385)
+
+この節はinventory時点のbaseline/classificationを書き換えず、Issue #385の実施結果だけを追記する。
+
+- **P26-VIEWER-003 (`isolate-legacy` at inventory time): retired.** production runtime、`apps/mujoco-viewer`、通常CI、npm scripts、Python scriptsはPoC packageをimport/install/buildしていなかった。product側の既存renderer、model/asset loading、home keyframe、qpos apply、`mj_forward`、scene update、compiled mesh/geom rendering、profile fail-closed pathを確認したうえで、実行可能PoC一式を削除した。
+- **P26-VIEWER-004 (`keep-validation` at inventory time): product-owned canonical fixtureへ統合。** canonical pathは `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json` とし、PoC copyは削除した。両copyは削除前にSHA-256とbyte contentが一致していた（旧hash `40319BC9F345B9F5078682923AD0F44739811E1D478AEECB57950730E5511D26`）。現行native replayで再生成したcanonical contentはSHA-256 `A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36` で、schema/model/preset/qpos dimension/frame count/finite-value contractを満たす。generation ownerは `scripts/export_wasm_qpos_fixture.py`、default commandは `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30`、schema ownerは `apps/mujoco-viewer/src/wasm-scene/qposFrameTypes.ts` である。
+- **Assertion migration:** PoC-onlyの6 assertion群（valid fixture parse、schema-version rejection、fixture/model qpos-dimension rejection、non-numeric/non-finite qpos rejection、empty-frame rejection、next/previous frame semantics）を `apps/mujoco-viewer/tests/mujocoQposSync.test.ts` へ移管した。canonical tracked fixtureのschema/model/preset/dimension/frame-count/finite-value validationを1 testとして追加した。同等以上のproduct assertionがあるhome keyframe、transport profile compatibility、MuJoCo transform mapping、product entrypoint、visual styleは重複移植していない。
+- **Historical evidence:** #178/#181/#183/#184/#185、`docs/operations/wasm-qpos-sync-poc.md`、`docs/design/mujoco-wasm-scene-renderer-design.md`、`docs/research/mujoco-webviewer-options.md`、およびcurrent product noteを残し、PoC docsにはhistorical/retired statusを明記した。
+- **Behavior preservation:** product viewer route/startup contract、payload schema、WebSocket qpos handling、Viewer Profile fail-closed compatibility、P25 pacing/coalescing、runtime/motion/IK/FK、MuJoCo native physical-state SoTに変更はない。visible viewer smokeはproduct behavior/fixture playbackを変更していないためNot Requiredとした。

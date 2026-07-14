@@ -125,7 +125,9 @@ pipeline safety boundary. The fast_arm plugin constructs the existing
 acceptance, whole-candidate hold, current-qpos preservation, target lifecycle
 suppression, and viewer rebase suppression are unchanged.
 
-Planar compatibility solvers, no-op/stub helpers, broad package exports,
-fixture inventory, and `experiments/mujoco-wasm-viewer-poc` remain temporary
-inventory for separate cleanup. This profile migration does not delete or
-redesign them.
+Planar compatibility solvers, no-op/stub helpers, and broad package exports
+remain temporary inventory for separate cleanup. The executable
+`experiments/mujoco-wasm-viewer-poc` was retired by #385 after its promoted
+renderer and useful fixture assertions were verified in the product viewer;
+the canonical qpos fixture is now owned by
+`apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`.

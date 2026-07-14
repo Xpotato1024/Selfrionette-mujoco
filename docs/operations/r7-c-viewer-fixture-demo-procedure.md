@@ -51,7 +51,7 @@ publisher は loopback の `127.0.0.1:8766` を基本にする。
 1. 端末 A で repo root から publisher を起動する
 
 ```powershell
-cd D:\Xpotato-apps\Selfrionette-mujoco
+cd <repository root>
 uv run python scripts/run_replay_mujoco_websocket_publisher.py `
   --host 127.0.0.1 `
   --port 8766 `
@@ -156,7 +156,7 @@ Endpoint evaluation が存在する場合は、overlay の次の行を読む。
 - actual WebSocket server launch は人手で行う
 - live serial, COM, hardware, OSC は含まない
 - keyboard demo は browser-side interaction ではなく offline contract smoke である
-- `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json` は reference path であり source of truth ではない
+- `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json` は product viewer が所有する canonical debug fixture である。生成は `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30` を使う
 - viewer は rendering-only のままで、FK / IK / qpos recompute をしない
 
 ## CI boundary

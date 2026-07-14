@@ -1,6 +1,8 @@
 /// <reference types="node" />
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
   ensureQposLength,
@@ -8,7 +10,13 @@ import {
   resolveInitialKeyframeQpos,
   resolveNamedInitialKeyframe,
   resolveTransportQpos,
+  stepNextFrameIndex,
+  stepPreviousFrameIndex,
 } from "../src/wasm-scene/mujocoQposSync.js";
+import {
+  parseQposFixture,
+  validateQposFixtureForModel,
+} from "../src/wasm-scene/qposFrameTypes.js";
 import { FAST_ARM_VIEWER_PROFILE } from "../src/robot-profiles/fastArm.js";
 
 const compatibleMetadata = {
@@ -17,6 +25,114 @@ const compatibleMetadata = {
   robot_joint_names: Array.from(FAST_ARM_VIEWER_PROFILE.jointNames),
   robot_qpos_dimension: FAST_ARM_VIEWER_PROFILE.qposDimension,
 };
+
+const VALID_FIXTURE = {
+  schema_version: 1,
+  source: "python-native-mujoco",
+  model_path: "assets/mujoco/fast_arm/scene.xml",
+  preset: "sweep_x",
+  qpos_length: 4,
+  frames: [
+    {
+      frame_index: 0,
+      t_s: 0.0,
+      qpos: [0.0, 0.0, 0.0, 0.0],
+      metadata: { phase: "initial_hold" },
+    },
+    {
+      frame_index: 1,
+      t_s: 0.0166666667,
+      qpos: [0.1, 0.0, 0.0, 0.0],
+      metadata: { phase: "motion" },
+    },
+  ],
+} as const;
+
+describe("canonical product qpos fixture", () => {
+  it("matches the native MuJoCo fixture contract", () => {
+    const fixturePath = resolve(process.cwd(), "public", "fixtures", "fast_arm_sweep_x_qpos.json");
+    const fixture = validateQposFixtureForModel(
+      parseQposFixture(JSON.parse(readFileSync(fixturePath, "utf8")) as unknown),
+      FAST_ARM_VIEWER_PROFILE.qposDimension,
+    );
+
+    assert.equal(fixture.schema_version, 1);
+    assert.equal(fixture.source, "python-native-mujoco");
+    assert.equal(fixture.model_path, "assets/mujoco/fast_arm/scene.xml");
+    assert.equal(fixture.preset, "sweep_x");
+    assert.equal(fixture.qpos_length, FAST_ARM_VIEWER_PROFILE.qposDimension);
+    assert.equal(fixture.frames.length, 30);
+    assert.ok(fixture.frames.every((frame) => frame.qpos.every((value) => Number.isFinite(value))));
+  });
+});
+
+describe("qpos fixture parsing", () => {
+  it("parses a valid fixture", () => {
+    const fixture = validateQposFixtureForModel(parseQposFixture(VALID_FIXTURE), 4);
+
+    assert.equal(fixture.schema_version, 1);
+    assert.equal(fixture.source, "python-native-mujoco");
+    assert.equal(fixture.model_path, "assets/mujoco/fast_arm/scene.xml");
+    assert.equal(fixture.preset, "sweep_x");
+    assert.equal(fixture.qpos_length, 4);
+    assert.equal(fixture.frames.length, 2);
+    assert.deepEqual(fixture.frames[0]?.qpos, [0, 0, 0, 0]);
+  });
+
+  it("rejects schema_version mismatch", () => {
+    assert.throws(
+      () =>
+        parseQposFixture({
+          ...VALID_FIXTURE,
+          schema_version: 2,
+        }),
+      /unsupported schema_version: expected 1, got 2/,
+    );
+  });
+
+  it("rejects fixture/model qpos dimension mismatch", () => {
+    assert.throws(() => validateQposFixtureForModel(parseQposFixture(VALID_FIXTURE), 5), /qpos_length mismatch/);
+  });
+
+  it("rejects non-numeric and non-finite qpos values", () => {
+    assert.throws(
+      () =>
+        parseQposFixture({
+          ...VALID_FIXTURE,
+          frames: [{ ...VALID_FIXTURE.frames[0], qpos: [0.0, "bad", 0.0, 0.0] }],
+        }),
+      /frame\[0\]\.qpos\[1\] must be a finite number/,
+    );
+    assert.throws(
+      () =>
+        parseQposFixture({
+          ...VALID_FIXTURE,
+          frames: [{ ...VALID_FIXTURE.frames[0], qpos: [0.0, Number.NaN, 0.0, 0.0] }],
+        }),
+      /frame\[0\]\.qpos\[1\] must be a finite number/,
+    );
+  });
+
+  it("rejects empty frames", () => {
+    assert.throws(
+      () =>
+        parseQposFixture({
+          ...VALID_FIXTURE,
+          frames: [],
+        }),
+      /frames must be a non-empty array/,
+    );
+  });
+});
+
+describe("fixture frame stepping", () => {
+  it("keeps next and previous frame indices within the sequence", () => {
+    assert.equal(stepNextFrameIndex(0, 2), 1);
+    assert.equal(stepNextFrameIndex(1, 2), 1);
+    assert.equal(stepPreviousFrameIndex(1), 0);
+    assert.equal(stepPreviousFrameIndex(0), 0);
+  });
+});
 
 describe("mujoco qpos sync", () => {
   it("formats qpos arrays", () => {

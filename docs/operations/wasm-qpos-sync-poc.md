@@ -1,15 +1,19 @@
 ---
-status: draft
+status: historical
 owner: operations
 canonical_for:
-  - wasm qpos sync PoC
+  - historical wasm qpos sync PoC evidence
 related:
   - docs/design/mujoco-wasm-scene-renderer-design.md
   - docs/research/mujoco-webviewer-options.md
-  - experiments/mujoco-wasm-viewer-poc/README.md
+  - docs/operations/product-viewer-wasm-scene-renderer.md
 ---
 
 # WASM qpos sync PoC
+
+> Status: historical. The executable PoC was promoted to `apps/mujoco-viewer`
+> by #185 and retired by #385. The current fixture owner and operator procedure
+> are documented in `docs/operations/product-viewer-wasm-scene-renderer.md`.
 
 ## 目的
 
@@ -56,10 +60,10 @@ PoC は次の JSON 形式を読む。
 ## fixture generation command
 
 ```powershell
-uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30 --output experiments/mujoco-wasm-viewer-poc/public/fixtures/fast_arm_sweep_x_qpos.json
+uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30
 ```
 
-生成された fixture は `experiments/mujoco-wasm-viewer-poc/public/fixtures/fast_arm_sweep_x_qpos.json` に置く。
+生成された fixture は `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json` に置く。下記のplayback記述はPoC時点のhistorical evidenceであり、削除されたPoCを現行手順として実行しない。
 
 ## playback smoke
 
