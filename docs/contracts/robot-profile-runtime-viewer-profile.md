@@ -97,11 +97,15 @@ Runtime adds `robot_profile_id`, `model_contract_version`,
 `robot_joint_names`, and `robot_qpos_dimension` to the existing open payload-v0
 `metadata` map. The envelope and payload version remain unchanged. The viewer
 resolves its profile before renderer construction and checks the loaded model
-dimension/joint order plus backend profile identity, model contract version
-when present, and joint order before applying qpos. Missing/unknown/mismatched
-identity produces an explicit unavailable/invalid diagnostic and qpos is not
-applied. This additive metadata boundary can later move to a session manifest
-or hello message without making the renderer own transport policy.
+dimension/joint order plus all four backend compatibility keys before applying
+qpos. A profile-aware production viewer requires `robot_profile_id`,
+`model_contract_version`, `robot_joint_names`, and `robot_qpos_dimension` to
+match the resolved Viewer Robot Profile exactly. Missing, unknown, malformed,
+or mismatched compatibility metadata produces an explicit invalid diagnostic,
+and qpos is not applied. Profile-free legacy or generic payloads do not
+silently fall back to fast_arm in this viewer. This additive metadata boundary
+can later move to a session manifest or hello message without making the
+renderer own transport policy.
 
 Those four compatibility keys are reserved and authoritative. Production
 composition keeps them separate from general state metadata and applies them
@@ -109,7 +113,9 @@ last (overwrite-protection Option A) after state, replay frame, input intent,
 motion command, and input-source metadata. Spoofed values are therefore
 replaced by the resolved profile values, including qpos-rejection paths.
 Generic pipelines without authoritative profile metadata add none of these
-keys and retain ordinary metadata behavior.
+keys and retain ordinary metadata behavior. The fields remain additive to the
+open payload-v0 metadata map, but P24 production composition makes all four
+authoritative and mandatory for profile-aware viewer compatibility.
 
 ## P23 integration and cleanup handoff
 

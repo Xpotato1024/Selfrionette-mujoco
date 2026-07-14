@@ -119,6 +119,8 @@ describe("mujoco qpos sync", () => {
     }, 4, FAST_ARM_VIEWER_PROFILE);
 
     assert.notDeepEqual(payload.qpos, startup.qpos);
+    assert.equal(payload.status, "ready");
+    assert.deepEqual(payload.qpos, [0.1, 0.2, 0.3, 0.4]);
     assert.equal(payload.sourceLabel, "transport payload");
   });
 
@@ -138,6 +140,47 @@ describe("mujoco qpos sync", () => {
     assert.equal(result.status, "invalid");
     assert.equal(result.qpos, null);
     assert.match(result.errorMessage ?? "", /backend\/viewer robot profile mismatch/);
+  });
+
+  it("rejects a missing backend model contract before qpos application", () => {
+    const { model_contract_version: _omitted, ...metadataWithoutModelContract } = compatibleMetadata;
+    const result = resolveTransportQpos({
+      version: 0,
+      frame_index: 3,
+      time_s: 0.3,
+      qpos: [0.1, 0.2, 0.3, 0.4],
+      qvel: [],
+      bodies: [],
+      sites: [],
+      target_position_m: null,
+      metadata: metadataWithoutModelContract,
+    }, 4, FAST_ARM_VIEWER_PROFILE);
+
+    assert.equal(result.status, "invalid");
+    assert.equal(result.qpos, null);
+    assert.equal(result.sourceLabel, "transport payload incompatible");
+    assert.match(result.errorMessage ?? "", /model contract mismatch/);
+    assert.match(result.errorMessage ?? "", /missing/);
+  });
+
+  it("rejects an explicitly undefined backend model contract before qpos application", () => {
+    const result = resolveTransportQpos({
+      version: 0,
+      frame_index: 3,
+      time_s: 0.3,
+      qpos: [0.1, 0.2, 0.3, 0.4],
+      qvel: [],
+      bodies: [],
+      sites: [],
+      target_position_m: null,
+      metadata: { ...compatibleMetadata, model_contract_version: undefined },
+    }, 4, FAST_ARM_VIEWER_PROFILE);
+
+    assert.equal(result.status, "invalid");
+    assert.equal(result.qpos, null);
+    assert.equal(result.sourceLabel, "transport payload incompatible");
+    assert.match(result.errorMessage ?? "", /model contract mismatch/);
+    assert.match(result.errorMessage ?? "", /missing/);
   });
 
   it("rejects backend model-contract and joint-order mismatches", () => {
@@ -163,6 +206,7 @@ describe("mujoco qpos sync", () => {
       },
     }, 4, FAST_ARM_VIEWER_PROFILE);
 
+    assert.equal(modelMismatch.status, "invalid");
     assert.equal(modelMismatch.qpos, null);
     assert.match(modelMismatch.errorMessage ?? "", /model contract mismatch/);
     assert.equal(jointMismatch.qpos, null);

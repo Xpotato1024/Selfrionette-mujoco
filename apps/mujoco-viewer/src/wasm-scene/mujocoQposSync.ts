@@ -129,14 +129,11 @@ export function resolveTransportQpos(
     };
   }
   const backendModelContractVersion = payload.metadata.model_contract_version;
-  if (
-    backendModelContractVersion !== undefined &&
-    backendModelContractVersion !== profile.modelContractVersion
-  ) {
+  if (backendModelContractVersion !== profile.modelContractVersion) {
     return {
       status: "invalid",
       qpos: null,
-      errorMessage: `backend/viewer model contract mismatch: expected ${profile.modelContractVersion}, got ${String(backendModelContractVersion)}`,
+      errorMessage: `backend/viewer model contract mismatch: expected ${profile.modelContractVersion}, got ${String(backendModelContractVersion ?? "missing")}`,
       currentFrameIndex: payload.frame_index,
       currentTimestampS: payload.time_s,
       sourceLabel: "transport payload incompatible",
