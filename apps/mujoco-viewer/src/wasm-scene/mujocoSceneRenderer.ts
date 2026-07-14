@@ -41,6 +41,10 @@ import {
   formatViewerStatusText,
   type ProductViewerState,
 } from "./productViewerState.js";
+import {
+  createViewerFrameTiming,
+  type ViewerPayloadCandidate,
+} from "./viewerFrameTiming.js";
 
 export interface MujocoSceneRendererOptions {
   canvas: HTMLCanvasElement;
@@ -140,9 +144,11 @@ function createStatePatch(
 }
 
 export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): MujocoSceneRenderer {
+  const frameTiming = createViewerFrameTiming();
   const state = createInitialProductViewerState(options.profile);
   const emitState = (patch: Partial<ProductViewerState> & { statusText?: string }): void => {
-    Object.assign(state, createStatePatch(state, patch));
+    frameTiming.recordUiStateUpdate();
+    Object.assign(state, createStatePatch(state, { ...patch, viewerTiming: frameTiming.snapshot() }));
     options.onStateChange({ ...state });
   };
 
@@ -199,7 +205,6 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   let mjvPerturb: any;
   let mjvCamera: any;
   let websocketClient: ViewerWebSocketClient | null = null;
-  let latestPayload: TransportPayloadV0 | null = null;
   let startupQpos: number[] = [];
   let hasLoaded = false;
   let disposed = false;
@@ -351,10 +356,15 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     timeS: number | null,
     endpointEvaluation: TransportPayloadV0["endpoint_evaluation"] | null,
     inputOverlay: ProductViewerState["inputOverlay"],
+    candidate: ViewerPayloadCandidate | null = null,
   ): void => {
+    const sceneApplyStartedMs = frameTiming.now();
     data.qpos.set(qpos);
     mujocoApi.mj_forward(model, data);
     syncSceneFromCurrentData();
+    if (candidate !== null) {
+      frameTiming.recordSceneApplied(candidate, frameTiming.now() - sceneApplyStartedMs);
+    }
     updateStatus({
       status: "ready",
       sourceLabel,
@@ -377,7 +387,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     applyModelPose(startupQpos, startupPoseSourceLabel, null, null, null, null);
   };
 
-  const applyTransportPayload = (payload: TransportPayloadV0): void => {
+  const applyTransportPayload = (candidate: ViewerPayloadCandidate): void => {
+    const payload = candidate.payload;
     const endpointEvaluation = payload.endpoint_evaluation ?? null;
     const inputOverlay = buildProductViewerInputOverlayState(payload);
     const qposResolution = resolveTransportQpos(payload, model.nq, options.profile);
@@ -404,12 +415,14 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       qposResolution.currentTimestampS,
       endpointEvaluation,
       inputOverlay,
+      candidate,
     );
   };
 
   const syncToLatestSource = (): void => {
-    if (latestPayload !== null) {
-      applyTransportPayload(latestPayload);
+    const candidate = frameTiming.takeLatestCandidate();
+    if (candidate !== null) {
+      applyTransportPayload(candidate);
       return;
     }
 
@@ -429,6 +442,10 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       return;
     }
 
+    const candidate = frameTiming.takeLatestCandidate();
+    if (candidate !== null) {
+      applyTransportPayload(candidate);
+    }
     controls.update();
     renderer.render(scene, camera);
     frameHandle = window.requestAnimationFrame(animate);
@@ -458,15 +475,35 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
           qposError: error instanceof Error ? error.message : "viewer WebSocket connection error",
         });
       },
-      onPayload(payload) {
-        latestPayload = payload;
-        applyTransportPayload(payload);
+      onPayload(payload, observation) {
+        frameTiming.receive(payload, observation);
+        const qposResolution = resolveTransportQpos(payload, model.nq, options.profile);
+        if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
+          frameTiming.recordCompatibilityInvalidIngress();
+          updateStatus({
+            status: "warning",
+            sourceLabel: qposResolution.sourceLabel,
+            qposStatus: qposResolution.status,
+            qposError: qposResolution.errorMessage,
+            currentFrameIndex: qposResolution.currentFrameIndex,
+            currentTimestampS: qposResolution.currentTimestampS,
+            currentQpos: null,
+            currentQposText: "[]",
+            endpointEvaluation: payload.endpoint_evaluation ?? null,
+            inputOverlay: buildProductViewerInputOverlayState(payload),
+          });
+          return;
+        }
+        frameTiming.acceptLatestCandidate(payload, observation);
       },
       onPayloadError(error) {
+        frameTiming.recordParseError();
         updateStatus({
           status: "warning",
           qposStatus: "invalid",
           qposError: error.message,
+          currentQpos: null,
+          currentQposText: "[]",
         });
       },
     });
@@ -605,6 +642,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     },
     dispose() {
       disposed = true;
+      frameTiming.dispose();
       if (frameHandle !== null) {
         window.cancelAnimationFrame(frameHandle);
         frameHandle = null;

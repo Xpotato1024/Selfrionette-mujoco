@@ -19,6 +19,7 @@ from selfrionette.runtime.input_source_state import (
     build_runtime_input_source_state_from_metadata,
 )
 from selfrionette.runtime.input_safety import build_runtime_input_safety_result
+from selfrionette.runtime.live_timing import AbsoluteDeadlinePacer, LiveRuntimeTimingMetrics
 from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
 from selfrionette.runtime.robot_plugin_registry import ResolvedRobotRuntime, resolve_robot_runtime
@@ -220,11 +221,18 @@ async def run_runtime_input_source_step_loop(
     steps: int,
     dt_s: float | None = None,
     interval_s: float = 0.0,
+    pacer: AbsoluteDeadlinePacer | None = None,
+    timing_metrics: LiveRuntimeTimingMetrics | None = None,
+    collect_records: bool = True,
 ) -> tuple[RuntimeInputSourceStepLoopRecord, ...]:
     if steps < 1:
         raise ValueError("steps must be a positive integer")
 
     dt = plan.pipeline.config.dt_s if dt_s is None else dt_s
+    if timing_metrics is not None:
+        timing_metrics.start()
+    if pacer is not None:
+        pacer.start()
     records: list[RuntimeInputSourceStepLoopRecord] = []
     last_valid_endpoint_m: tuple[float, float, float] | None = None
     if plan.selection.source_name == "viewer":
@@ -236,6 +244,7 @@ async def run_runtime_input_source_step_loop(
             )
 
     for index in range(steps):
+        compute_started_s = timing_metrics.clock() if timing_metrics is not None else 0.0
         frame = plan.pipeline.input_source.read_frame()
         intent = plan.pipeline.input_interpreter.interpret(frame)
         source_state = build_runtime_input_source_state_from_metadata(
@@ -278,10 +287,14 @@ async def run_runtime_input_source_step_loop(
             if desired_endpoint_m is not None:
                 step_endpoint_m = _coerce_viewer_endpoint_m(desired_endpoint_m)
 
+        compute_finished_s = timing_metrics.clock() if timing_metrics is not None else 0.0
+        simulation_started_s = compute_finished_s
         plan.pipeline.simulator.apply_command(safety_result.motion_command)
         plan.pipeline.simulator.step(dt)
 
         state = plan.pipeline.simulator.snapshot()
+        simulation_finished_s = timing_metrics.clock() if timing_metrics is not None else 0.0
+        annotation_started_s = simulation_finished_s
         state = replace(
             state,
             metadata=merge_runtime_metadata(
@@ -312,7 +325,10 @@ async def run_runtime_input_source_step_loop(
             safety_result=safety_result,
             authoritative_profile_metadata=plan.pipeline.robot_profile_metadata,
         )
+        annotation_finished_s = timing_metrics.clock() if timing_metrics is not None else 0.0
+        publish_started_s = annotation_finished_s
         await plan.pipeline.publisher.publish(annotated_state)
+        publish_finished_s = timing_metrics.clock() if timing_metrics is not None else 0.0
         if plan.selection.source_name == "viewer":
             if step_endpoint_m is None:
                 step_endpoint_m = annotated_state.target_position_m or last_valid_endpoint_m
@@ -322,17 +338,30 @@ async def run_runtime_input_source_step_loop(
                 plan.pipeline.input_source,
                 endpoint_m=step_endpoint_m,
             )
+        post_publish_finished_s = timing_metrics.clock() if timing_metrics is not None else 0.0
 
-        records.append(
-            RuntimeInputSourceStepLoopRecord(
-                frame=frame,
-                intent=intent,
-                motion_command=safety_result.motion_command,
-                state=annotated_state,
+        if collect_records:
+            records.append(
+                RuntimeInputSourceStepLoopRecord(
+                    frame=frame,
+                    intent=intent,
+                    motion_command=safety_result.motion_command,
+                    state=annotated_state,
+                )
             )
-        )
 
-        if interval_s > 0.0 and index + 1 < steps:
+        if timing_metrics is not None:
+            timing_metrics.record_frame(
+                compute_time_s=compute_finished_s - compute_started_s,
+                simulation_step_time_s=simulation_finished_s - simulation_started_s,
+                annotation_time_s=(annotation_finished_s - annotation_started_s)
+                + (post_publish_finished_s - publish_finished_s),
+                publish_wait_or_enqueue_time_s=publish_finished_s - publish_started_s,
+            )
+
+        if pacer is not None:
+            await pacer.pace()
+        elif interval_s > 0.0 and index + 1 < steps:
             await asyncio.sleep(interval_s)
 
     return tuple(records)

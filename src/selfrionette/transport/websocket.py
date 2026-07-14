@@ -19,8 +19,12 @@ class WebSocketStatePublisher:
         self._sender = sender
 
     async def publish(self, state: MuJoCoState) -> None:
-        payload = mujoco_state_to_payload(state)
-        await self._sender.send(json.dumps(payload))
+        await self._sender.send(serialize_mujoco_state_message(state))
 
 
-__all__ = ["WebSocketSender", "WebSocketStatePublisher"]
+def serialize_mujoco_state_message(state: MuJoCoState) -> str:
+    payload = mujoco_state_to_payload(state)
+    return json.dumps(payload)
+
+
+__all__ = ["WebSocketSender", "WebSocketStatePublisher", "serialize_mujoco_state_message"]

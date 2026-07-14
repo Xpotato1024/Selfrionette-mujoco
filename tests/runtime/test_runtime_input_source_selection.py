@@ -214,13 +214,25 @@ def test_websocket_cli_viewer_source_wires_inbound_messages_into_the_same_viewer
                 await result
             return True
 
-    async def fake_run_runtime_input_source_step_loop(plan, *, steps, dt_s, interval_s):
+    async def fake_run_runtime_input_source_step_loop(
+        plan,
+        *,
+        steps,
+        dt_s,
+        interval_s,
+        pacer=None,
+        timing_metrics=None,
+        collect_records=True,
+    ):
         step_loop_calls.append(
             {
                 "plan": plan,
                 "steps": steps,
                 "dt_s": dt_s,
                 "interval_s": interval_s,
+                "pacer": pacer,
+                "timing_metrics": timing_metrics,
+                "collect_records": collect_records,
             }
         )
         return ()
@@ -269,11 +281,12 @@ def test_websocket_cli_viewer_source_wires_inbound_messages_into_the_same_viewer
     build_plan.assert_called_once()
     _, build_plan_kwargs = build_plan.call_args
     assert build_plan_kwargs["viewer_input_source"] is viewer_input_source
-    assert step_loop_calls == [
-        {
-            "plan": build_plan.return_value,
-            "steps": 1,
-            "dt_s": 1.0 / 60.0,
-            "interval_s": 0.0,
-        }
-    ]
+    assert len(step_loop_calls) == 1
+    step_loop_call = step_loop_calls[0]
+    assert step_loop_call["plan"] is build_plan.return_value
+    assert step_loop_call["steps"] == 1
+    assert step_loop_call["dt_s"] == 1.0 / 60.0
+    assert step_loop_call["interval_s"] == 0.0
+    assert step_loop_call["pacer"] is None
+    assert step_loop_call["timing_metrics"] is not None
+    assert step_loop_call["collect_records"] is False

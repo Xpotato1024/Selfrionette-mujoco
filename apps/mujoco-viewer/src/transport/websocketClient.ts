@@ -28,11 +28,17 @@ export type ViewerWebSocketConstructorLike = new (url: string) => ViewerWebSocke
 export interface ViewerWebSocketClientOptions {
   url: string;
   WebSocketCtor?: ViewerWebSocketConstructorLike;
-  onPayload?: (payload: TransportPayloadV0) => void;
-  onPayloadError?: (error: Error) => void;
+  monotonicNow?: () => number;
+  onPayload?: (payload: TransportPayloadV0, observation: ViewerWebSocketPayloadObservation) => void;
+  onPayloadError?: (error: Error, observation: ViewerWebSocketPayloadObservation) => void;
   onConnectionError?: (error: Event | Error) => void;
   onOpen?: () => void;
   onClose?: () => void;
+}
+
+export interface ViewerWebSocketPayloadObservation {
+  receivedAtMs: number;
+  parseDurationMs: number;
 }
 
 export interface ViewerWebSocketClient {
@@ -60,22 +66,29 @@ export function createViewerWebSocketClient(
 
   let socket: ViewerWebSocketLike | null = null;
   let latestPayload: TransportPayloadV0 | null = null;
+  const monotonicNow = options.monotonicNow ?? (() => performance.now());
 
   const handleMessage = (event: ViewerWebSocketMessageEventLike): void => {
+    const receivedAtMs = monotonicNow();
     if (typeof event.data !== "string") {
-      options.onPayloadError?.(buildError("Viewer WebSocket client expects string message data"));
+      options.onPayloadError?.(
+        buildError("Viewer WebSocket client expects string message data"),
+        { receivedAtMs, parseDurationMs: monotonicNow() - receivedAtMs },
+      );
       return;
     }
 
     try {
       const payload = parseTransportPayloadV0Message(event.data);
+      const observation = { receivedAtMs, parseDurationMs: monotonicNow() - receivedAtMs };
       latestPayload = payload;
-      options.onPayload?.(payload);
+      options.onPayload?.(payload, observation);
     } catch (error) {
       options.onPayloadError?.(
         error instanceof Error
           ? error
           : buildError("Viewer WebSocket client failed to parse transport payload", error),
+        { receivedAtMs, parseDurationMs: monotonicNow() - receivedAtMs },
       );
     }
   };

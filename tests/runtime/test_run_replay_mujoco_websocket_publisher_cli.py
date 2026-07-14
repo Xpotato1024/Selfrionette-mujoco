@@ -31,6 +31,13 @@ def test_cli_help_describes_grace_period_as_viewer_connection_wait() -> None:
     assert "delay after server start before the first payload is published" not in help_text
 
 
+def test_cli_help_describes_viewer_interval_as_absolute_cadence() -> None:
+    normalized_help = " ".join(MODULE.build_parser().format_help().split())
+
+    assert "viewer live mode uses it as an absolute cadence period" in normalized_help
+    assert "zero disables pacing" in normalized_help
+
+
 def test_cli_accepts_sweep_x_and_passes_it_to_runtime() -> None:
     stdout = io.StringIO()
     with patch.object(MODULE, "run_replay_mujoco_websocket_publisher") as run_publisher:
