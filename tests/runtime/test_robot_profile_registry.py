@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
 import selfrionette.runtime.fast_arm_plugin as fast_arm_plugin_module
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
-from selfrionette.robot_profile import RobotProfile, robot_profile_runtime_metadata
+from selfrionette.robot_profile import (
+    CoordinateUnitContract,
+    EndpointReference,
+    RobotProfile,
+    robot_profile_runtime_metadata,
+)
 from selfrionette.robot_registry import (
     ImmutableRegistry,
     registered_robot_profile_ids,
@@ -14,10 +19,12 @@ from selfrionette.robot_registry import (
 )
 from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime import RuntimeConfig, build_concrete_mujoco_pipeline
-from selfrionette.runtime.fast_arm_plugin import FAST_ARM_RUNTIME_PLUGIN
+from selfrionette.runtime.fast_arm_plugin import FAST_ARM_RUNTIME_PLUGIN, FastArmRuntimePlugin
 from selfrionette.runtime.robot_plugin_registry import (
+    resolve_robot_runtime,
     registered_robot_runtime_plugin_ids,
     resolve_robot_runtime_plugin,
+    validate_robot_profile_plugin_consistency,
 )
 from selfrionette.transport import mujoco_state_to_payload
 
@@ -32,6 +39,34 @@ class _Publisher:
         _ = state
 
 
+@dataclass(frozen=True)
+class _PluginEntry:
+    profile: RobotProfile
+
+    @property
+    def profile_id(self) -> str:
+        return self.profile.profile_id
+
+
+def _dummy_profile(*, profile_id: str, joints: tuple[str, ...], nq: int, nv: int) -> RobotProfile:
+    return RobotProfile(
+        profile_id=profile_id,
+        profile_contract_version=1,
+        model_contract_version=f"{profile_id}/v1",
+        backend_kind="mujoco",
+        mujoco_model_asset=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
+        canonical_joint_names=joints,
+        qpos_dimension=nq,
+        qvel_dimension=nv,
+        initial_keyframe_name="initial",
+        endpoint=EndpointReference(site_name="endpoint", body_name=None),
+        joint_limit_config_asset=None,
+        coordinate_units=CoordinateUnitContract("meter", "rad", "world", "wxyz"),
+        viewer_profile_id=profile_id,
+        supported_capabilities=frozenset(),
+    )
+
+
 def test_fast_arm_profile_and_plugin_resolve_explicitly() -> None:
     profile = resolve_robot_profile("fast_arm")
     plugin = resolve_robot_runtime_plugin("fast_arm")
@@ -41,6 +76,10 @@ def test_fast_arm_profile_and_plugin_resolve_explicitly() -> None:
     assert plugin.profile is profile
     assert registered_robot_profile_ids() == ("fast_arm",)
     assert registered_robot_runtime_plugin_ids() == ("fast_arm",)
+
+    resolved = resolve_robot_runtime("fast_arm")
+    assert resolved.profile is profile
+    assert resolved.plugin is plugin
 
 
 def test_unknown_profile_and_plugin_ids_fail_explicitly() -> None:
@@ -61,11 +100,70 @@ def test_production_composition_requires_profile_when_config_is_supplied() -> No
 
 
 def test_production_composition_rejects_unknown_profile_at_startup() -> None:
-    with pytest.raises(ValueError, match="unknown robot runtime plugin ID"):
+    with pytest.raises(ValueError, match="unknown robot profile ID"):
         build_concrete_mujoco_pipeline(
             config=RuntimeConfig(robot_profile_id="unknown"),
             publisher=_Publisher(),
         )
+
+
+def test_cross_registry_rejects_ids_present_on_only_one_side() -> None:
+    profile = _dummy_profile(profile_id="dummy", joints=("joint",), nq=1, nv=1)
+    empty_profiles = ImmutableRegistry((), kind="robot profile")
+    profiles = ImmutableRegistry((profile,), kind="robot profile")
+    empty_plugins = ImmutableRegistry((), kind="robot runtime plugin")
+    plugins = ImmutableRegistry((_PluginEntry(profile),), kind="robot runtime plugin")
+
+    with pytest.raises(ValueError, match="registry ID mismatch"):
+        resolve_robot_runtime("dummy", profile_registry=profiles, plugin_registry=empty_plugins)
+    with pytest.raises(ValueError, match="registry ID mismatch"):
+        resolve_robot_runtime("dummy", profile_registry=empty_profiles, plugin_registry=plugins)
+
+
+def test_cross_registry_rejects_model_contract_and_profile_object_mismatches() -> None:
+    profile = _dummy_profile(profile_id="dummy", joints=("joint",), nq=1, nv=1)
+    different_model_contract = replace(profile, model_contract_version="dummy/v2")
+    equal_but_distinct_profile = replace(profile)
+
+    with pytest.raises(ValueError, match="model contract version mismatch"):
+        validate_robot_profile_plugin_consistency(
+            "dummy", profile, _PluginEntry(different_model_contract)
+        )
+    with pytest.raises(ValueError, match="registered profile object"):
+        validate_robot_profile_plugin_consistency(
+            "dummy", profile, _PluginEntry(equal_but_distinct_profile)
+        )
+
+
+@pytest.mark.parametrize(
+    ("joints", "nq", "nv"),
+    [(('ball_joint',), 4, 3), (('root',), 7, 6)],
+)
+def test_generic_profile_allows_joint_count_to_differ_from_qpos_dimension(
+    joints: tuple[str, ...], nq: int, nv: int
+) -> None:
+    assert _dummy_profile(profile_id="dummy", joints=joints, nq=nq, nv=nv).qpos_dimension == nq
+
+
+def test_generic_profile_rejects_duplicate_names_and_non_positive_dimensions() -> None:
+    with pytest.raises(ValueError, match="unique"):
+        _dummy_profile(profile_id="dummy", joints=("joint", "joint"), nq=2, nv=2)
+    with pytest.raises(ValueError, match="positive"):
+        _dummy_profile(profile_id="dummy", joints=("joint",), nq=0, nv=1)
+    with pytest.raises(ValueError, match="positive"):
+        _dummy_profile(profile_id="dummy", joints=("joint",), nq=1, nv=0)
+
+
+def test_fast_arm_plugin_retains_specific_dimension_and_order_validation() -> None:
+    model = type("Model", (), {"nq": 4, "nv": 4})()
+    with pytest.raises(ValueError, match="joint order mismatch"):
+        FastArmRuntimePlugin(
+            replace(FAST_ARM_ROBOT_PROFILE, canonical_joint_names=tuple(reversed(FAST_ARM_ROBOT_PROFILE.canonical_joint_names)))
+        ).validate_model(model)
+    with pytest.raises(ValueError, match="dimensions 4/4"):
+        FastArmRuntimePlugin(
+            replace(FAST_ARM_ROBOT_PROFILE, qpos_dimension=5, qvel_dimension=4)
+        ).validate_model(model)
 
 
 @pytest.mark.parametrize(

@@ -43,13 +43,6 @@ export const FAST_ARM_VIEWER_PROFILE: ViewerRobotProfile = Object.freeze({
     ["meshes/UpperArmLink.stl", "/assets/mujoco/fast_arm/meshes/UpperArmLink.stl"],
     ["meshes/ForeArmLink.stl", "/assets/mujoco/fast_arm/meshes/ForeArmLink.stl"],
   ]),
-  meshFallbackUrls: new Map<string, string>([
-    ["BaseLink", "/assets/mujoco/fast_arm/meshes/BaseLink.stl"],
-    ["SholderLink1", "/assets/mujoco/fast_arm/meshes/SholderLink1.stl"],
-    ["SholderLink2", "/assets/mujoco/fast_arm/meshes/SholderLink2.stl"],
-    ["UpperArmLink", "/assets/mujoco/fast_arm/meshes/UpperArmLink.stl"],
-    ["ForeArmLink", "/assets/mujoco/fast_arm/meshes/ForeArmLink.stl"],
-  ]),
   visualStyleSelection,
   bodyVisualStyles,
   axisVisualStyles: Object.freeze([

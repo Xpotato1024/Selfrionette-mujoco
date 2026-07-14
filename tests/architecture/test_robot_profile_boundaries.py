@@ -19,6 +19,8 @@ def test_generic_runtime_files_do_not_import_fast_arm_implementation() -> None:
         source = (runtime / name).read_text(encoding="utf-8")
         assert "fast_arm" not in source.lower(), name
         assert "FastArm" not in source, name
+        if name in ("mujoco_pipeline.py", "replay_mujoco_pipeline.py"):
+            assert "resolve_robot_runtime" not in source, name
 
     simulator_source = (
         ROOT / "src" / "selfrionette" / "mujoco_backend" / "simulator.py"
@@ -52,6 +54,23 @@ def test_runtime_package_root_exports_contract_not_fast_arm_plugin_class() -> No
     import selfrionette.runtime as runtime
 
     assert "RobotRuntimePlugin" in runtime.__all__
+    assert "ResolvedRobotRuntime" in runtime.__all__
+    assert "resolve_robot_runtime" in runtime.__all__
     assert "resolve_robot_runtime_plugin" in runtime.__all__
     assert "FastArmRuntimePlugin" not in runtime.__all__
     assert not hasattr(runtime, "FastArmRuntimePlugin")
+
+
+def test_viewer_profile_does_not_claim_an_unused_mesh_fallback_contract() -> None:
+    profile_sources = (
+        ROOT / "apps" / "mujoco-viewer" / "src" / "robot-profiles" / "types.ts",
+        ROOT / "apps" / "mujoco-viewer" / "src" / "robot-profiles" / "fastArm.ts",
+    )
+    for path in profile_sources:
+        assert "meshFallbackUrls" not in path.read_text(encoding="utf-8")
+
+    contract = (
+        ROOT / "docs" / "contracts" / "robot-profile-runtime-viewer-profile.md"
+    ).read_text(encoding="utf-8")
+    assert "selects Option B" in contract
+    assert "does not declare an unused fallback mapping" in contract

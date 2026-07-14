@@ -11,6 +11,7 @@ from selfrionette.runtime.input_source_state import (
     RuntimeInputSourceState,
     runtime_input_source_state_to_metadata,
 )
+from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.runtime.input_safety import RuntimeInputSafetyResult
 from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInputFrame
 
@@ -92,13 +93,15 @@ def build_diagnostic_metadata(
     should_publish_target: bool,
     target_rejected: bool,
     qpos_rejected: bool = False,
+    authoritative_profile_metadata: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    metadata = {
-        **state_metadata,
-        **frame_metadata,
-        **intent_metadata,
-        **motion_command.metadata,
-    }
+    metadata = merge_runtime_metadata(
+        state_metadata,
+        frame_metadata,
+        intent_metadata,
+        motion_command.metadata,
+        authoritative_profile_metadata=authoritative_profile_metadata,
+    )
     if metadata.get("control_frame_resolution_status") == "tool_orientation_unavailable":
         for stale_key in _STALE_RESOLVED_METADATA_KEYS:
             metadata.pop(stale_key, None)
@@ -167,6 +170,7 @@ def annotate_runtime_input_state(
     measurement: PostStepMeasurement,
     annotate_target_position_m: bool,
     safety_result: RuntimeInputSafetyResult,
+    authoritative_profile_metadata: Mapping[str, object] | None = None,
 ) -> MuJoCoState:
     target_rejected = bool(motion_command.metadata.get("target_rejected", False))
     should_publish_target = (
@@ -183,6 +187,7 @@ def annotate_runtime_input_state(
         should_publish_target=should_publish_target,
         target_rejected=target_rejected,
         qpos_rejected=safety_result.qpos_feasibility_rejected,
+        authoritative_profile_metadata=authoritative_profile_metadata,
     )
     feedback = annotate_target_feedback(
         state=state,
@@ -192,10 +197,11 @@ def annotate_runtime_input_state(
         should_publish_target=should_publish_target,
         last_valid_endpoint_m=last_valid_endpoint_m,
     )
-    final_metadata = {
-        **feedback.metadata,
-        **runtime_input_source_state_to_metadata(source_state),
-    }
+    final_metadata = merge_runtime_metadata(
+        feedback.metadata,
+        runtime_input_source_state_to_metadata(source_state),
+        authoritative_profile_metadata=authoritative_profile_metadata,
+    )
     return replace(
         state,
         target_position_m=feedback.target_position_m,

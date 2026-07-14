@@ -5,11 +5,14 @@ from math import dist
 
 import pytest
 
+import selfrionette.runtime.concrete_mujoco_pipeline as concrete_pipeline_module
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.kinematics import FastArmEndpointInverseKinematicsSolver
 from selfrionette.runtime import EndpointEvaluationStatePublisher, RuntimePipeline, build_concrete_mujoco_pipeline
 from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.schemas import JointCommand, MuJoCoState, RawInputFrame
+from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
+from generic_qpos_test_doubles import RejectingGenericQposGuard
 
 
 class RecordingPublisher:
@@ -30,6 +33,51 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_solver_path() -> None:
     assert isinstance(pipeline.publisher, EndpointEvaluationStatePublisher)
     assert pipeline.publisher.publisher is publisher
     assert pipeline.simulator.last_command is None
+
+
+def test_build_concrete_mujoco_pipeline_uses_common_profile_plugin_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    original = concrete_pipeline_module.resolve_robot_runtime
+
+    def recording_resolver(profile_id: str):  # noqa: ANN202
+        calls.append(profile_id)
+        return original(profile_id)
+
+    monkeypatch.setattr(concrete_pipeline_module, "resolve_robot_runtime", recording_resolver)
+    build_concrete_mujoco_pipeline(publisher=RecordingPublisher())
+    assert calls == ["fast_arm"]
+
+
+@pytest.mark.parametrize("reject", [False, True])
+def test_concrete_pipeline_profile_metadata_cannot_be_spoofed(reject: bool) -> None:
+    spoofed = {
+        "robot_profile_id": "spoofed",
+        "model_contract_version": "spoofed/v9",
+        "robot_joint_names": ("wrong",),
+        "robot_qpos_dimension": 999,
+    }
+    frame = RawInputFrame(
+        source="replay",
+        timestamp_s=0.0,
+        metadata={
+            **spoofed,
+            "desired_endpoint_m": (0.6, 0.0, 0.1),
+            "target_position_m": (0.6, 0.0, 0.1),
+        },
+    )
+    publisher = RecordingPublisher()
+    pipeline = build_concrete_mujoco_pipeline(frames=(frame,), publisher=publisher)
+    if reject:
+        pipeline.qpos_feasibility_guard = RejectingGenericQposGuard()
+
+    state = asyncio.run(pipeline.run_once())
+
+    assert state.metadata["robot_profile_id"] == "fast_arm"
+    assert state.metadata["model_contract_version"] == FAST_ARM_ROBOT_PROFILE.model_contract_version
+    assert state.metadata["robot_joint_names"] == FAST_ARM_ROBOT_PROFILE.canonical_joint_names
+    assert state.metadata["robot_qpos_dimension"] == 4
 
 
 def test_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_updates_qpos() -> None:

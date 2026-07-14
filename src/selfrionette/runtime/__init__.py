@@ -110,7 +110,9 @@ from selfrionette.runtime.websocket_publisher_runner import run_replay_mujoco_we
 from selfrionette.runtime.pipeline import RuntimePipeline, build_noop_pipeline
 from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
 from selfrionette.runtime.robot_plugin_registry import (
+    ResolvedRobotRuntime,
     registered_robot_runtime_plugin_ids,
+    resolve_robot_runtime,
     resolve_robot_runtime_plugin,
 )
 
@@ -118,6 +120,7 @@ __all__ = [
     "RuntimeConfig",
     "RuntimePipeline",
     "RobotRuntimePlugin",
+    "ResolvedRobotRuntime",
     "RuntimeInputSourceSelection",
     "RuntimeInputSourceState",
     "RuntimeInputSafetyResult",
@@ -196,5 +199,6 @@ __all__ = [
     "run_offline_input_runtime_stepping_smoke",
     "run_replay_mujoco_websocket_publisher",
     "registered_robot_runtime_plugin_ids",
+    "resolve_robot_runtime",
     "resolve_robot_runtime_plugin",
 ]

@@ -7,6 +7,7 @@ import pytest
 import selfrionette.runtime.dry_run as dry_run_module
 from selfrionette.runtime import run_replay_mujoco_dry_run
 from selfrionette.schemas import RawInputFrame
+from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 from generic_qpos_test_doubles import RejectingGenericQposGuard
 
 
@@ -142,3 +143,24 @@ def test_run_replay_mujoco_dry_run_rejects_preset_with_custom_frames() -> None:
 
     with pytest.raises(ValueError, match="preset and custom frames are mutually exclusive"):
         run_replay_mujoco_dry_run(steps=1, preset="sweep_x", frames=(frame,))
+
+
+def test_dry_run_profile_metadata_cannot_be_spoofed() -> None:
+    frame = RawInputFrame(
+        source="replay",
+        timestamp_s=0.0,
+        metadata={
+            "desired_endpoint_m": (0.6, 0.0, 0.1),
+            "target_position_m": (0.6, 0.0, 0.1),
+            "robot_profile_id": "spoofed",
+            "model_contract_version": "spoofed/v9",
+            "robot_joint_names": ("wrong",),
+            "robot_qpos_dimension": 999,
+        },
+    )
+    payload = json.loads(run_replay_mujoco_dry_run(steps=1, frames=(frame,))[0])
+
+    assert payload["metadata"]["robot_profile_id"] == "fast_arm"
+    assert payload["metadata"]["model_contract_version"] == FAST_ARM_ROBOT_PROFILE.model_contract_version
+    assert payload["metadata"]["robot_joint_names"] == list(FAST_ARM_ROBOT_PROFILE.canonical_joint_names)
+    assert payload["metadata"]["robot_qpos_dimension"] == 4

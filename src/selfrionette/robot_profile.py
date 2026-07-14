@@ -52,12 +52,14 @@ class RobotProfile:
             raise ValueError("model_contract_version must not be empty")
         if not self.backend_kind:
             raise ValueError("backend_kind must not be empty")
+        if not self.canonical_joint_names:
+            raise ValueError("canonical_joint_names must not be empty")
+        if any(not name for name in self.canonical_joint_names):
+            raise ValueError("canonical_joint_names must not contain empty names")
         if len(self.canonical_joint_names) != len(set(self.canonical_joint_names)):
             raise ValueError("canonical_joint_names must be unique")
         if self.qpos_dimension < 1 or self.qvel_dimension < 1:
             raise ValueError("qpos_dimension and qvel_dimension must be positive")
-        if len(self.canonical_joint_names) != self.qpos_dimension:
-            raise ValueError("canonical_joint_names must match qpos_dimension")
         if not self.initial_keyframe_name:
             raise ValueError("initial_keyframe_name must not be empty")
         if not self.viewer_profile_id:

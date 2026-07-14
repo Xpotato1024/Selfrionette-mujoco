@@ -36,6 +36,7 @@ def build_mujoco_pipeline(
     qpos_feasibility_guard: QposFeasibilityGuard | None = None,
     initial_keyframe_name: str | None = None,
     state_metadata: Mapping[str, object] | None = None,
+    robot_profile_metadata: Mapping[str, object] | None = None,
 ) -> RuntimePipeline:
     runtime_config = RuntimeConfig() if config is None else config
     raw_frame = frame if frame is not None else RawInputFrame(source="noop", timestamp_s=0.0)
@@ -54,4 +55,5 @@ def build_mujoco_pipeline(
         publisher=NoOpStatePublisher(),
         qpos_feasibility_guard=qpos_feasibility_guard,
         state_metadata=state_metadata,
+        robot_profile_metadata=robot_profile_metadata,
     )

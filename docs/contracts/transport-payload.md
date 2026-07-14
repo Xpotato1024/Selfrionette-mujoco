@@ -107,6 +107,10 @@ R6-A-P4 freezes the handoff contract for R6-B:
   `robot_qpos_dimension`. These fields do not change payload version or
   envelope shape. A profile-aware viewer must reject incompatible or unknown
   identity before applying qpos and must not silently select fast_arm.
+  Production runtime treats these four keys as reserved and applies the
+  resolved profile values last; frame, intent, command, replay, and source
+  metadata cannot replace them. Generic profile-free pipelines add no such
+  metadata.
 - Transport may also lift an optional `endpoint_evaluation` diagnostic object
   out of runtime metadata into the top-level payload.
 - `endpoint_evaluation` is diagnostic-only runtime/backend data. The viewer

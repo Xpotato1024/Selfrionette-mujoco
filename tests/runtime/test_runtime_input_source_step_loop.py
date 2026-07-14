@@ -16,6 +16,8 @@ from selfrionette.runtime import (
     select_runtime_input_source,
 )
 from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
+from selfrionette.schemas import RawInputFrame
+from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 
 
 class _ClockSequence:
@@ -324,6 +326,37 @@ def test_runtime_step_loop_does_not_fabricate_progress_for_programmed_target_pat
     assert "endpoint_progress_status" not in record.state.metadata
     assert "endpoint_progress_measurement_available" not in record.state.metadata
     assert "actual_tip_delta_m" not in record.state.metadata
+
+
+def test_replay_step_loop_uses_common_resolver_and_protects_profile_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    original = input_step_loop.resolve_robot_runtime
+
+    def recording_resolver(profile_id: str):  # noqa: ANN202
+        calls.append(profile_id)
+        return original(profile_id)
+
+    monkeypatch.setattr(input_step_loop, "resolve_robot_runtime", recording_resolver)
+    spoofed = {
+        "robot_profile_id": "spoofed",
+        "model_contract_version": "spoofed/v9",
+        "robot_joint_names": ("wrong",),
+        "robot_qpos_dimension": 999,
+    }
+    frame = RawInputFrame(source="replay", timestamp_s=0.0, metadata=spoofed)
+    plan = build_runtime_input_source_step_loop_plan(
+        select_runtime_input_source("replay", steps=1, frames=(frame,)),
+        publisher=RecordingPublisher(),
+    )
+    record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1))[0]
+
+    assert calls == ["fast_arm"]
+    assert record.state.metadata["robot_profile_id"] == "fast_arm"
+    assert record.state.metadata["model_contract_version"] == FAST_ARM_ROBOT_PROFILE.model_contract_version
+    assert record.state.metadata["robot_joint_names"] == FAST_ARM_ROBOT_PROFILE.canonical_joint_names
+    assert record.state.metadata["robot_qpos_dimension"] == 4
 
 
 def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monkeypatch: pytest.MonkeyPatch) -> None:

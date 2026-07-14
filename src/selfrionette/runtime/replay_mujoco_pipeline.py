@@ -50,6 +50,7 @@ def build_replay_mujoco_pipeline(
     qpos_feasibility_guard: QposFeasibilityGuard | None = None,
     initial_keyframe_name: str | None = None,
     state_metadata: Mapping[str, object] | None = None,
+    robot_profile_metadata: Mapping[str, object] | None = None,
 ) -> RuntimePipeline:
     runtime_config = RuntimeConfig() if config is None else config
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)
@@ -68,4 +69,5 @@ def build_replay_mujoco_pipeline(
         publisher=state_publisher,
         qpos_feasibility_guard=qpos_feasibility_guard,
         state_metadata=state_metadata,
+        robot_profile_metadata=robot_profile_metadata,
     )

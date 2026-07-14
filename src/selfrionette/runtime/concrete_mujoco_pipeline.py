@@ -9,7 +9,7 @@ from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.endpoint_metrics import build_endpoint_evaluation_state_publisher
 from selfrionette.runtime.pipeline import RuntimePipeline
-from selfrionette.runtime.robot_plugin_registry import resolve_robot_runtime_plugin
+from selfrionette.runtime.robot_plugin_registry import ResolvedRobotRuntime, resolve_robot_runtime
 from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
@@ -17,14 +17,14 @@ from selfrionette.transport import StatePublisher
 DEFAULT_CONCRETE_TARGET_POSITION_M = (0.6, 0.0, 0.1)
 
 
-def _resolve_model_path(*, model_path: str | Path | None, config: RuntimeConfig) -> Path:
+def _resolve_model_path(
+    *, model_path: str | Path | None, config: RuntimeConfig, resolved_runtime: ResolvedRobotRuntime
+) -> Path:
     if model_path is not None:
         return Path(model_path)
     if config.mujoco_model_path is not None:
         return config.mujoco_model_path
-    if config.robot_profile_id is None:
-        raise ValueError("production concrete composition requires robot_profile_id")
-    return resolve_robot_runtime_plugin(config.robot_profile_id).profile.mujoco_model_asset
+    return resolved_runtime.profile.mujoco_model_asset
 
 
 def _default_concrete_frame() -> RawInputFrame:
@@ -53,9 +53,12 @@ def build_concrete_mujoco_pipeline(
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
         raise ValueError("production concrete composition requires robot_profile_id")
-    plugin = resolve_robot_runtime_plugin(runtime_config.robot_profile_id)
+    resolved_runtime = resolve_robot_runtime(runtime_config.robot_profile_id)
+    plugin = resolved_runtime.plugin
     replay_frames = tuple(frames) if frames is not None else (_default_concrete_frame(),)
-    resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
+    resolved_model_path = _resolve_model_path(
+        model_path=model_path, config=runtime_config, resolved_runtime=resolved_runtime
+    )
     simulator = HeadlessMuJoCoSimulator.from_model_path(
         resolved_model_path,
         initial_keyframe_name=plugin.profile.initial_keyframe_name,
@@ -83,7 +86,7 @@ def build_concrete_mujoco_pipeline(
             model=simulator.model,
             config_path=runtime_config.joint_limit_config_path,
         ),
-        state_metadata=robot_profile_runtime_metadata(plugin.profile),
+        robot_profile_metadata=robot_profile_runtime_metadata(resolved_runtime.profile),
     )
 
 

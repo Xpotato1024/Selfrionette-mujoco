@@ -39,6 +39,10 @@ class FastArmRuntimePlugin:
         return self.profile.profile_id
 
     def validate_model(self, model: object) -> None:
+        if self.profile.canonical_joint_names != FAST_ARM_ROBOT_PROFILE.canonical_joint_names:
+            raise ValueError("fast_arm profile joint order mismatch")
+        if self.profile.qpos_dimension != 4 or self.profile.qvel_dimension != 4:
+            raise ValueError("fast_arm profile requires qpos/qvel dimensions 4/4")
         validate_profile_model_dimensions(self.profile, model)
         info = inspect_mujoco_model(model)
         if info.joint_names != self.profile.canonical_joint_names:

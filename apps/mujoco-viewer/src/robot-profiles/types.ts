@@ -19,7 +19,6 @@ export interface ViewerRobotProfile {
   readonly initialPoseSourceLabel: string;
   readonly fixtureUrl: string;
   readonly vfsAssets: ReadonlyMap<string, string>;
-  readonly meshFallbackUrls: ReadonlyMap<string, string>;
   readonly visualStyleSelection: ReadonlyMap<string, string>;
   readonly bodyVisualStyles: Readonly<Record<string, ViewerBodyVisualStyle>>;
   readonly axisVisualStyles: readonly ViewerAxisVisualStyle[];
