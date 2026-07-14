@@ -1,5 +1,10 @@
 # MuJoCo WebViewer OSS / WASM viewer 調査メモ
 
+> Status: historical research record. The executable PoC path described below
+> was promoted to `apps/mujoco-viewer` by #185 and retired by #385. The
+> historical commands and observations are retained as provenance; current
+> operation uses the product viewer procedure.
+
 調査日: 2026-06-19
 
 ## 背景
@@ -31,7 +36,7 @@
 PoC は production viewer とは切り離して、`experiments/mujoco-wasm-viewer-poc/` に作成した。
 
 ```powershell
-cd D:\Xpotato-apps\Selfrionette-mujoco\experiments\mujoco-wasm-viewer-poc
+cd experiments/mujoco-wasm-viewer-poc
 npm ci
 npm run dev -- --host 127.0.0.1 --port 4173
 ```

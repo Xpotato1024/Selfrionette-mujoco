@@ -296,3 +296,18 @@ PR #382 proposal は task/session lifecycle、finite/run-until-stop、supervisio
 ## 12. Hardware / external side effects
 
 本 inventory では hardware validation、serial port open、Arduino upload、OSC send、robot output、container build/deployment、service installation、credential操作を行っていない。GitHub read/write と Git branch/PR操作以外のnetwork transmissionも行わない。
+
+## 13. Post-inventory disposition (Issue #385)
+
+この節はinventory時点のbaseline/classificationを書き換えず、Issue #385の実施結果だけを追記する。
+
+### Issue #385 / PR #392 implementation result
+
+- **P26-VIEWER-003 (`isolate-legacy` at inventory time): retired.** production runtime、`apps/mujoco-viewer`、通常CI、npm scripts、Python scriptsはPoC packageをimport/install/buildしていなかった。product側の既存renderer、model/asset loading、home keyframe、qpos apply、`mj_forward`、scene update、compiled mesh/geom rendering、profile fail-closed pathを確認したうえで、実行可能PoC一式を削除した。
+- **P26-VIEWER-004 (`keep-validation` at inventory time): product-owned canonical fixtureへ統合。** 削除前のproduct/PoC copyはbyte contentとSHA-256が一致しており、旧hashは `40319BC9F345B9F5078682923AD0F44739811E1D478AEECB57950730E5511D26` だった。PoC copyを削除し、canonical pathを `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json` の1箇所に統合した。
+- 初期のcurrent-path再生成候補 `A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36` は、stale qvelを伴うdirect qpos replacementと、phase endpointに固定された `desired_endpoint_m` が原因でsimulation time rollback、BADQACC、反復qposを含んだため拒否した。これは正常なcanonical contentではない。
+- 修正済みcurrent pathから受入済みcanonical fixture `4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A` を生成した。30 frames、consecutive indices、strictly increasing time、finite qpos、qpos dimension 4、meaningful sweep、intentional final hold、BADQACCなしを満たす。exporterは全sequenceを検証し、serialize成功後にatomic replacementを行う。
+- generation ownerは `scripts/export_wasm_qpos_fixture.py`、documented commandは `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30`、schema ownerは `apps/mujoco-viewer/src/wasm-scene/qposFrameTypes.ts` である。
+- **Assertion migration:** PoC-onlyの6 assertion群（valid fixture parse、schema-version rejection、fixture/model qpos-dimension rejection、non-numeric/non-finite qpos rejection、empty-frame rejection、next/previous frame semantics）を `apps/mujoco-viewer/tests/mujocoQposSync.test.ts` へ移管し、canonical tracked fixture contract testを追加した。同等以上のproduct assertionは重複移植していない。
+- **Historical evidence:** #178/#181/#183/#184/#185、`docs/operations/wasm-qpos-sync-poc.md`、`docs/design/mujoco-wasm-scene-renderer-design.md`、`docs/research/mujoco-webviewer-options.md`、およびcurrent product noteを残し、PoC docsにはhistorical/retired statusを明記した。
+- **Behavior result:** source側の変更はdirect qpos state replacement時のstale qvel除去と、sweep_x sample-level desired endpoint補正に限定した。runtime composition、payload schema、IK/FK、Viewer Profile、WebSocket transport、P25 pacing/coalescing、model assetsとjoint orderingは保持した。visible product smokeは実施済みであり、hardware / external side effectはない。

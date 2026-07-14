@@ -194,7 +194,7 @@ def build_sweep_x_trajectory(
             ProgrammedTargetFrame(
                 t_s=float(frame_index) * dt_s,
                 target_position_m=_interpolate_vector3(initial_position_m, positive_x_target_m, fraction),
-                desired_endpoint_m=positive_x_target_m,
+                desired_endpoint_m=_interpolate_vector3(initial_position_m, positive_x_target_m, fraction),
                 target_velocity_mps=move_velocity_mps,
                 phase="move_positive_x",
             )
@@ -218,7 +218,7 @@ def build_sweep_x_trajectory(
             ProgrammedTargetFrame(
                 t_s=float(frame_index) * dt_s,
                 target_position_m=_interpolate_vector3(positive_x_target_m, initial_position_m, fraction),
-                desired_endpoint_m=initial_position_m,
+                desired_endpoint_m=_interpolate_vector3(positive_x_target_m, initial_position_m, fraction),
                 target_velocity_mps=return_velocity_mps,
                 phase="return_to_initial",
             )

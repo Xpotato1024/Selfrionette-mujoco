@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-15
+last_verified: 2026-07-15
 canonical_for:
   - R6-H-P5 runtime concrete solver wiring
   - target / command / qpos integration baseline
@@ -85,6 +85,19 @@ no-op.
 
 `MotionCommand.joint` は backend の qpos command boundary 入力として扱う。
 `target` は command-side feedback であり、qpos 境界ではない。
+
+current headless backend では `MotionCommand.joint` は position command であり、
+joint velocity command は未サポートである。direct qpos application は動的に積分される
+actuator target の設定ではなく、MuJoCo の position state を置換する。
+したがって、直前の simulation step から残った stale `qvel` を新しい qpos と組み合わせては
+ならない。backend は qpos replacement の前に `qvel` を zero 化し、`mj_forward` と次の
+`mj_step` へ進める。これにより不整合な qpos/qvel state pair と BADQACC instability を
+防ぐ。
+
+これは browser-side の FK / IK / qpos recomputation ではなく、IK/FK の ownership、
+runtime composition、payload schema も変更しない。将来 velocity command または
+torque / actuator command を扱う backend を追加する場合は、zero 化を流用せず、
+別の command contract と state-transition policy を定義する。
 
 ## Stub retirement state
 

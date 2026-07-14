@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
 
+import mujoco
 import pytest
 
 import selfrionette.runtime.dry_run as dry_run_module
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime import run_replay_mujoco_dry_run
 from selfrionette.schemas import RawInputFrame
 from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
@@ -111,6 +114,67 @@ def test_run_replay_mujoco_dry_run_sweep_x_preset_remains_visual_smoke_compatibi
     assert payload["metadata"]["desired_endpoint_m"] == payload["target_position_m"]
     assert len(payload["qpos"]) >= 4
     _assert_endpoint_evaluation(payload)
+
+
+def test_sweep_x_real_path_preserves_time_qpos_and_mujoco_warning_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_step = HeadlessMuJoCoSimulator.step
+    observations: list[dict[str, object]] = []
+    bad_qacc_warning = int(mujoco.mjtWarning.mjWARN_BADQACC)
+
+    def observe_step(simulator: HeadlessMuJoCoSimulator, dt_s: float) -> None:
+        observation = {
+            "model_id_before": id(simulator.model),
+            "data_id_before": id(simulator.data),
+            "time_before": float(simulator.data.time),
+            "warning_before": int(simulator.data.warning.number[bad_qacc_warning]),
+        }
+        original_step(simulator, dt_s)
+        observation.update(
+            {
+                "model_id_after": id(simulator.model),
+                "data_id_after": id(simulator.data),
+                "time_after": float(simulator.data.time),
+                "warning_after": int(simulator.data.warning.number[bad_qacc_warning]),
+            }
+        )
+        observations.append(observation)
+
+    monkeypatch.setattr(HeadlessMuJoCoSimulator, "step", observe_step)
+    payloads = [
+        json.loads(line)
+        for line in run_replay_mujoco_dry_run(steps=30, dt_s=1.0 / 60.0, preset="sweep_x")
+    ]
+
+    assert len(payloads) == 30
+    assert len(observations) == 30
+    assert [payload["frame_index"] for payload in payloads] == list(range(1, 31))
+    times = [payload["time_s"] for payload in payloads]
+    assert all(isinstance(time_s, (int, float)) and math.isfinite(time_s) for time_s in times)
+    assert all(previous < current for previous, current in zip(times, times[1:]))
+    assert times[-1] == pytest.approx(30.0 / 60.0)
+
+    qpos_frames = [payload["qpos"][:4] for payload in payloads]
+    assert all(len(qpos) == 4 for qpos in qpos_frames)
+    assert all(math.isfinite(value) for qpos in qpos_frames for value in qpos)
+    assert all(-math.pi <= value <= math.pi for qpos in qpos_frames for value in qpos)
+    assert len({tuple(round(value, 9) for value in qpos) for qpos in qpos_frames[3:18]}) > 3
+    assert qpos_frames[18:] == [qpos_frames[18]] * 12
+
+    metadata = [payload["metadata"] for payload in payloads]
+    assert [entry["frame_index"] for entry in metadata] == list(range(21)) + [20] * 9
+    assert [entry["phase"] for entry in metadata[3:9]] == ["move_positive_x"] * 6
+    assert [entry["phase"] for entry in metadata[12:18]] == ["return_to_initial"] * 6
+    assert qpos_frames[3] != qpos_frames[8]
+    assert qpos_frames[8] != qpos_frames[17]
+
+    assert {entry["model_id_before"] for entry in observations} == {observations[0]["model_id_before"]}
+    assert {entry["data_id_before"] for entry in observations} == {observations[0]["data_id_before"]}
+    assert all(entry["model_id_before"] == entry["model_id_after"] for entry in observations)
+    assert all(entry["data_id_before"] == entry["data_id_after"] for entry in observations)
+    assert all(entry["warning_before"] == entry["warning_after"] for entry in observations)
+    assert observations[-1]["warning_after"] == 0
 
 
 def test_run_replay_mujoco_dry_run_uses_typed_rejection_without_fast_arm_metadata(

@@ -1,5 +1,9 @@
 # MuJoCo WASM Scene Renderer 設計
 
+> Status: historical design record. The executable PoC was promoted to
+> `apps/mujoco-viewer` by #185 and retired by #385; the dated history below is
+> retained to explain that promotion and the rendering-only boundary.
+
 ## 1. 背景
 
 `#174` では、既存の `apps/mujoco-viewer` 上で `fast_arm` の STL mesh を手で合わせ続ける方針が限界に達した。`#176` で MuJoCo native viewer により `assets/mujoco/fast_arm/scene.xml` の素直な表示姿勢が確認でき、`#178` で official `@mujoco/mujoco` WASM PoC が isolated app として成立することも確認できた。
@@ -408,3 +412,6 @@ qpos を曖昧にしたまま mode 設計に進むと、表示系の責務境界
 
 `#185` で `experiments/mujoco-wasm-viewer-poc` の WASM scene renderer を `apps/mujoco-viewer` の product viewer に昇格した。以後の default route は `wasm-scene` であり、旧 Three.js 手実装 renderer は default production path から外れている。
 `#186` の follow-up で旧 viewer 専用の renderer / runtime / view model / tests は削除済みで、default product viewer からは参照されない。
+> Historical status: the executable PoC described by this design was retired by
+> #385 after promotion. Its technical outcome and chronology remain evidence;
+> current operation and fixture generation belong to `apps/mujoco-viewer`.
