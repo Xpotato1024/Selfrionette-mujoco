@@ -157,6 +157,7 @@ Endpoint evaluation が存在する場合は、overlay の次の行を読む。
 - live serial, COM, hardware, OSC は含まない
 - keyboard demo は browser-side interaction ではなく offline contract smoke である
 - `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json` は product viewer が所有する canonical debug fixture である。生成は `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30` を使う
+- fixture generation が失敗した場合、exporter は既存の canonical file を変更しない。生成後は frame index の連続性、simulation time の単調増加、qpos の有限性と dimension、sweep progression、BADQACC warning がないことを確認する。現在の canonical fixture SHA-256 は `4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A` である
 - viewer は rendering-only のままで、FK / IK / qpos recompute をしない
 
 ## CI boundary

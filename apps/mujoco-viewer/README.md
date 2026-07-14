@@ -36,10 +36,20 @@ uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30
 The default output is `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`.
 Its contract is `schema_version: 1`, model
 `assets/mujoco/fast_arm/scene.xml`, preset `sweep_x`, `qpos_length: 4`, and
-30 frames. The current regenerated content is SHA-256
+30 frames. The repaired current-path content is SHA-256
+`4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`.
+The viewer test parses the tracked file and validates its schema, source,
+model path, preset, frame count, consecutive frame indices, strictly
+increasing simulation time, qpos dimension, finite qpos values, and meaningful
+sweep progression.
+
+The rejected PR #392 regeneration candidate had SHA-256
 `A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36`.
-The viewer test parses the tracked file, validates its dimension and finite
-qpos values, and therefore also acts as the regeneration check.
+It was not promoted: direct joint-position application retained stale MuJoCo
+velocity state, which caused BADQACC recovery and time rollback. The native
+simulator now clears velocity for position commands, `sweep_x` supplies the
+per-frame desired endpoint, and the exporter validates the complete sequence
+before atomically replacing the product-owned fixture.
 
 ## 参照用の検証コマンド
 

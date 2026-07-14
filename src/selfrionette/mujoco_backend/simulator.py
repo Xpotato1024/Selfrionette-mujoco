@@ -121,6 +121,12 @@ class HeadlessMuJoCoSimulator:
         for qpos_address, angle in zip(qpos_addresses, joint_angles, strict=True):
             self.data.qpos[qpos_address] = angle
 
+        # A joint-position command replaces the position state.  Retaining the
+        # velocity from the previous MuJoCo step would integrate a stale
+        # qpos/qvel pair on the next step and can drive the model into
+        # BADQACC recovery.  This backend has no joint-velocity command
+        # contract, so a direct qpos application starts from zero velocity.
+        self.data.qvel[:] = 0.0
         self._import_mujoco().mj_forward(self.model, self.data)
 
     def step(self, dt_s: float) -> None:

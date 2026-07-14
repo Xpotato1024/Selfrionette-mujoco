@@ -43,6 +43,29 @@ related:
 - regeneration: `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30`
 - fixture playback is debug/validation only; startup still uses the named `home` keyframe
 
+## Fixture generation integrity
+
+Issue #392 initially exposed an invalid regeneration candidate
+(`A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36`). The
+native simulator was applying a new joint position while retaining the
+previous step's velocity. MuJoCo then emitted BADQACC and returned a reset-like
+time value from `mj_step`; the snapshot, payload, and exporter did not reorder
+or alter that value. The same defect reproduced on current `main` and on the
+#392 branch.
+
+The root-cause fix clears velocity when the position-command boundary writes
+qpos, and `sweep_x` now supplies its interpolated endpoint for each move and
+return frame. This preserves the existing payload schema and viewer boundary;
+it does not add browser FK/IK or qpos recomputation. The exporter validates
+the entire in-memory sequence (indices, time, metadata, qpos finiteness and
+dimension) and atomically replaces the target only after serialization
+succeeds.
+
+The repaired command produces 30 frames with strictly increasing simulation
+time, finite four-value qpos, intended move/return progression, an intentional
+terminal hold, and no BADQACC warning. The current canonical fixture SHA-256
+is `4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`.
+
 ## Old renderer handling
 
 - decision: deleted

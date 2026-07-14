@@ -62,7 +62,20 @@ describe("canonical product qpos fixture", () => {
     assert.equal(fixture.preset, "sweep_x");
     assert.equal(fixture.qpos_length, FAST_ARM_VIEWER_PROFILE.qposDimension);
     assert.equal(fixture.frames.length, 30);
+    assert.deepEqual(
+      fixture.frames.map((frame) => frame.frame_index),
+      Array.from({ length: 30 }, (_, index) => index + 1),
+    );
+    assert.ok(fixture.frames.every((frame) => frame.qpos.length === FAST_ARM_VIEWER_PROFILE.qposDimension));
     assert.ok(fixture.frames.every((frame) => frame.qpos.every((value) => Number.isFinite(value))));
+    assert.ok(
+      fixture.frames.every((frame, index) => index === 0 || fixture.frames[index - 1]!.t_s < frame.t_s),
+    );
+
+    const motionQpos = fixture.frames.slice(3, 18).map((frame) => JSON.stringify(frame.qpos));
+    assert.ok(new Set(motionQpos).size > 3, "sweep_x motion section must contain trajectory progression");
+    assert.notDeepEqual(fixture.frames[3]?.qpos, fixture.frames[8]?.qpos);
+    assert.notDeepEqual(fixture.frames[8]?.qpos, fixture.frames[17]?.qpos);
   });
 });
 

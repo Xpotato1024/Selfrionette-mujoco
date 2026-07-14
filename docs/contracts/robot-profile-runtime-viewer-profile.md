@@ -131,3 +131,12 @@ remain temporary inventory for separate cleanup. The executable
 renderer and useful fixture assertions were verified in the product viewer;
 the canonical qpos fixture is now owned by
 `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`.
+
+The fixture remains a product-owned debug/validation asset, not a startup or
+runtime state source. Issue #392 fixed the native generation path after a
+stale-velocity BADQACC/time-rollback reproduction on both current `main` and
+the cleanup branch. The repaired exporter validates the complete sequence and
+atomically preserves the existing file on invalid output; the payload schema,
+Viewer Profile compatibility boundary, and browser rendering-only ownership
+are unchanged. The current generated fixture is validated by the product test
+and has SHA-256 `4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`.

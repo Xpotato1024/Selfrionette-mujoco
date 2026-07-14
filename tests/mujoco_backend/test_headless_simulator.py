@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mujoco
 import pytest
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
@@ -64,6 +65,23 @@ def test_headless_simulator_reflects_joint_command_into_qpos() -> None:
     assert state.qpos[:4] == pytest.approx((0.1, -0.2, 0.3, -0.4))
     assert state.frame_index == 1
     assert state.time_s > 0.0
+
+
+def test_headless_simulator_position_commands_clear_stale_velocity_before_mj_step() -> None:
+    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    bad_qacc_warning = int(mujoco.mjtWarning.mjWARN_BADQACC)
+    command = MotionCommand(
+        timestamp_s=1.0,
+        joint=JointCommand(joint_angles_rad=(0.1, -0.2, 0.3, -0.4)),
+    )
+
+    simulator.apply_command(command)
+    for _ in range(7):
+        simulator.step(1.0 / 60.0)
+
+    assert int(simulator.data.warning.number[bad_qacc_warning]) == 0
+    assert simulator.data.time == pytest.approx(7.0 / 60.0)
+    assert tuple(simulator.data.qvel) == pytest.approx((0.0,) * len(simulator.data.qvel))
 
 
 def test_headless_simulator_rejects_non_positive_dt_s() -> None:

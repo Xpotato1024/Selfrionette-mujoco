@@ -44,6 +44,7 @@ def test_sweep_x_trajectory_is_deterministic_and_phase_annotated() -> None:
     assert phases[18:] == ["final_hold"] * 3
 
     x_positions = [entry["target_position_m"][0] for entry in metadata]
+    desired_x_positions = [entry["desired_endpoint_m"][0] for entry in metadata]
     y_positions = [entry["target_position_m"][1] for entry in metadata]
     z_positions = [entry["target_position_m"][2] for entry in metadata]
 
@@ -55,6 +56,7 @@ def test_sweep_x_trajectory_is_deterministic_and_phase_annotated() -> None:
     assert x_positions[18:] == [0.0, 0.0, 0.0]
     assert y_positions == [0.0] * 21
     assert z_positions == [0.0] * 21
+    assert desired_x_positions == pytest.approx(x_positions)
 
     assert metadata[0]["source_kind"] == "programmed_target"
     assert metadata[0]["trajectory_name"] == "sweep_x"
@@ -72,10 +74,10 @@ def test_sweep_x_trajectory_is_deterministic_and_phase_annotated() -> None:
 
     assert move_frame["target_position_m"] == pytest.approx((0.016666666666666666, 0.0, 0.0))
     assert move_frame["target_velocity_mps"] == (0.5, 0.0, 0.0)
-    assert move_frame["desired_endpoint_m"] == pytest.approx((0.1, 0.0, 0.0))
+    assert move_frame["desired_endpoint_m"] == pytest.approx((0.016666666666666666, 0.0, 0.0))
     assert hold_frame["target_velocity_mps"] == (0.0, 0.0, 0.0)
     assert return_frame["target_velocity_mps"] == (-0.5, 0.0, 0.0)
-    assert return_frame["desired_endpoint_m"] == pytest.approx((0.0, 0.0, 0.0))
+    assert return_frame["desired_endpoint_m"] == pytest.approx((0.08333333333333334, 0.0, 0.0))
     assert final_hold_frame["phase"] == "final_hold"
     assert final_hold_frame["target_position_m"] == pytest.approx((0.0, 0.0, 0.0))
 
