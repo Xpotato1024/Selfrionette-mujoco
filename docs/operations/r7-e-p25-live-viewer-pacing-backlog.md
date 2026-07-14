@@ -36,9 +36,8 @@ scheduled simulation span, and received frame index were used for historical
 commits. Values unavailable in historical code were not inferred.
 
 The visible-browser run used Chrome in the foreground at
-`http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766`
-for 7800 frames (130 seconds, including warm-up). Viewer metrics use the
-browser's monotonic clock only.
+`http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766`.
+Viewer metrics use the browser's monotonic clock only.
 
 ## Root Cause Evidence
 
@@ -101,13 +100,26 @@ shutdown timeouts, and shutdown drops. The high Windows miss count does not
 shift the absolute cadence; the drift and realtime factor remain within the
 acceptance thresholds.
 
-The visible Chrome no-input run ended at frame 7800 / timestamp 130.000 s with
-received/accepted/applied latest frame all 7800, frame distance 0,
-receive-to-apply age p50/p95/max 11.2/13.1/15.2 ms, parse p50/p95/max
+The corrected visible Chrome no-input run ended at frame 7800 / timestamp
+130.000 s with received/accepted/applied latest frame all 7800, frame distance
+0, receive-to-apply age p50/p95/max 11.2/13.1/15.2 ms, parse p50/p95/max
 0.0/0.1/0.2 ms, scene apply p50/p95/max 0.1/0.2/0.3 ms, and 443 browser-side
 coalesced frames. The page remained `visible`; age and frame distance did not
 grow with elapsed time. Compatibility-invalid and shutdown timeout/drop counts
 were zero.
+
+A manual foreground Chrome active-zero input run completed at frame 9000 /
+timestamp 150.000 s. The production overlay showed `source active: true`,
+`keyboard active keys: KeyA, KeyD`, focused keyboard capture, both key states
+true, zero input, and zero axis values. Latest received/accepted/applied frame
+was 9000/9000/9000 with frame distance 0. Over 8459 received frames, 5423 were
+scene-applied and 3036 were coalesced, accounting for every received frame.
+Receive-to-apply age p50/p95/max was 8.0/12.4/15.6 ms, parse timing was
+0.1/0.2/0.7 ms, scene application was 0.3/0.4/0.7 ms, and compatibility-invalid
+and parse-error counts were zero. The backend closed normally after the final
+finite frame. The exact key-down start time was not independently timestamped,
+but the operator accepted this visible active-input run as sufficient P25
+held-input evidence for merge.
 
 A synthetic 100 ms-per-send stress enqueued 1000 states in 0.00576 s. The
 bounded slot sent only final frame 1000, counted 999 coalesced pending states,
@@ -116,17 +128,15 @@ A permanently blocked sender returned from a 0.02 s test flush in 0.0241 s,
 cancelled and awaited its task, reported one timeout and two unconfirmed
 shutdown drops (one in-flight and one pending), and counted neither as sent.
 
-## Acceptance Status and Remaining Gate
+## Acceptance Status
 
 Backend no-input and held-active-zero-axis runs meet drift and realtime-factor
-thresholds. Visible Chrome no-input meets the viewer age and bounded-backlog
-thresholds. The final-head 120 second visible-browser continuously-held-key run
-is not claimed: a 125 second Chrome key-hold automation attempt left the
-production overlay at `source_active=false`, `held=false`, zero axis, and no
-active key codes, so it was not accepted as trusted input evidence.
-Run the manual held-key step in the canonical smoke procedure before promoting
-the Draft PR. Directional held-key motion also encounters an existing MuJoCo
-acceleration/time-reset instability and remains a separate motion-policy /
-physical-feasibility risk, not a P25 pacing workaround.
+thresholds. Visible Chrome no-input and manual active-zero keyboard runs meet
+the viewer age and bounded-backlog thresholds. The manual run confirmed the
+production keyboard ingress, focused visible browser state, zero-axis held
+input, latest-frame convergence, and absence of invalid/parse failures. The
+operator accepted the gate for P25 merge. Long-duration directional motion,
+workspace feasibility, and MuJoCo acceleration/time-reset instability remain a
+separate motion-policy and physical-feasibility scope outside P25.
 
 No serial port, Arduino, OSC endpoint, robot output, or hardware was accessed.
