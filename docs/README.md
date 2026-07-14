@@ -74,6 +74,7 @@ Do not create or use `doc/`.
 | R6-L viewer input overlay | `docs/operations/r6-l-viewer-input-overlay.md` | viewer read-only overlay for input source state and control summary |
 | R6-L keyboard / gamepad live viewer smoke | `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | canonical manual smoke for browser keyboard / gamepad live control with backend ingress |
 | R7-E P25 live viewer pacing and backlog | `docs/operations/r7-e-p25-live-viewer-pacing-backlog.md` | production live deadline pacing, live-only latest-state delivery, viewer coalescing, and 120 s acceptance record |
+| R7-E follow-up P26 profile-migration cleanup inventory | `docs/operations/r7-e-p26-profile-migration-cleanup-inventory.md` | behavior-preserving candidate classification, future-Round guardrails, and independently reviewable cleanup handoff |
 | R6-L completion audit | `docs/operations/r6-l-completion-audit.md` | R6-L completion audit and R6-M / R7-A handoff readiness |
 | WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0; browser diagnostic parse smoke is separate from proper 3D GUI smoke |
 | WebSocket / host / port contract | `docs/operations/websocket-host-port-contract.md` | bind host, browser-visible host, viewer page URL, and WebSocket endpoint URL contract |
