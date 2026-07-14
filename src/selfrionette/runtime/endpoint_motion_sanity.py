@@ -1941,7 +1941,7 @@ def run_fast_arm_endpoint_trajectory_diagnostics(
     if trajectory_delta_m <= 0.0:
         raise ValueError("trajectory_delta_m must be positive")
 
-    runtime_config = RuntimeConfig() if config is None else config
+    runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     return tuple(
         _run_fast_arm_endpoint_trajectory_case(
             axis=axis,
@@ -2307,7 +2307,7 @@ def run_fast_arm_endpoint_motion_sanity(
     if command_delta_m <= 0.0:
         raise ValueError("command_delta_m must be positive")
 
-    runtime_config = RuntimeConfig() if config is None else config
+    runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     explicit_base_desired_endpoint_m = (
         None
         if base_desired_endpoint_m is None

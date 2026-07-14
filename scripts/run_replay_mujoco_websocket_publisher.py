@@ -76,7 +76,7 @@ async def _run_input_source_websocket_publisher_async(
     preset: str | None,
     input_source: str,
 ) -> None:
-    runtime_config = RuntimeConfig(dt_s=dt_s)
+    runtime_config = RuntimeConfig(dt_s=dt_s, robot_profile_id="fast_arm")
 
     if input_source == "viewer":
         viewer_input_source = build_viewer_input_source()

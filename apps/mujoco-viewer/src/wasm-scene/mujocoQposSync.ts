@@ -11,9 +11,7 @@ import {
 
 export type { QposFixture, QposFixtureFrame } from "./qposFrameTypes.js";
 
-export const DEFAULT_QPOS_FIXTURE_URL = "/fixtures/fast_arm_sweep_x_qpos.json";
-export const FAST_ARM_INITIAL_KEYFRAME_NAME = "home";
-export const FAST_ARM_INITIAL_POSE_SOURCE_LABEL = "MuJoCo home keyframe";
+import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 
 export interface ModelKeyframeLike {
   readonly qpos: ArrayLike<number>;
@@ -44,27 +42,29 @@ export function ensureQposLength(values: readonly number[], modelNq: number, lab
 export function resolveInitialKeyframeQpos(
   values: ArrayLike<number>,
   modelNq: number,
+  keyframeName: string,
 ): readonly number[] {
   const qpos = Array.from(values);
   if (!qpos.every((value) => Number.isFinite(value))) {
-    throw new Error(`${FAST_ARM_INITIAL_KEYFRAME_NAME} keyframe qpos must contain only finite values`);
+    throw new Error(`${keyframeName} keyframe qpos must contain only finite values`);
   }
-  return ensureQposLength(qpos, modelNq, `${FAST_ARM_INITIAL_KEYFRAME_NAME} keyframe qpos`);
+  return ensureQposLength(qpos, modelNq, `${keyframeName} keyframe qpos`);
 }
 
 export function resolveNamedInitialKeyframe(
   model: ModelWithNamedKeyframesLike,
+  profile: ViewerRobotProfile,
 ): { qpos: readonly number[]; sourceLabel: string } {
   let keyframe: ModelKeyframeLike;
   try {
-    keyframe = model.key(FAST_ARM_INITIAL_KEYFRAME_NAME);
+    keyframe = model.key(profile.initialKeyframeName);
   } catch (error) {
-    throw new Error(`missing MuJoCo ${FAST_ARM_INITIAL_KEYFRAME_NAME} keyframe`, { cause: error });
+    throw new Error(`missing MuJoCo ${profile.initialKeyframeName} keyframe`, { cause: error });
   }
   try {
     return {
-      qpos: resolveInitialKeyframeQpos(keyframe.qpos, model.nq),
-      sourceLabel: FAST_ARM_INITIAL_POSE_SOURCE_LABEL,
+      qpos: resolveInitialKeyframeQpos(keyframe.qpos, model.nq, profile.initialKeyframeName),
+      sourceLabel: profile.initialPoseSourceLabel,
     };
   } finally {
     keyframe.delete();
@@ -94,7 +94,11 @@ export function stepPreviousFrameIndex(currentFrameIndex: number): number {
   return getPreviousFrameIndex(currentFrameIndex);
 }
 
-export function resolveTransportQpos(payload: TransportPayloadV0 | null, modelNq: number): {
+export function resolveTransportQpos(
+  payload: TransportPayloadV0 | null,
+  modelNq: number,
+  profile: ViewerRobotProfile,
+): {
   status: "unavailable" | "invalid" | "ready";
   qpos: readonly number[] | null;
   errorMessage: string | null;
@@ -110,6 +114,65 @@ export function resolveTransportQpos(payload: TransportPayloadV0 | null, modelNq
       currentFrameIndex: null,
       currentTimestampS: null,
       sourceLabel: "transport payload unavailable",
+    };
+  }
+
+  const backendProfileId = payload.metadata.robot_profile_id;
+  if (backendProfileId !== profile.profileId) {
+    return {
+      status: "invalid",
+      qpos: null,
+      errorMessage: `backend/viewer robot profile mismatch: expected ${profile.profileId}, got ${String(backendProfileId ?? "missing")}`,
+      currentFrameIndex: payload.frame_index,
+      currentTimestampS: payload.time_s,
+      sourceLabel: "transport payload incompatible",
+    };
+  }
+  const backendModelContractVersion = payload.metadata.model_contract_version;
+  if (backendModelContractVersion !== profile.modelContractVersion) {
+    return {
+      status: "invalid",
+      qpos: null,
+      errorMessage: `backend/viewer model contract mismatch: expected ${profile.modelContractVersion}, got ${String(backendModelContractVersion ?? "missing")}`,
+      currentFrameIndex: payload.frame_index,
+      currentTimestampS: payload.time_s,
+      sourceLabel: "transport payload incompatible",
+    };
+  }
+  if (modelNq !== profile.qposDimension) {
+    return {
+      status: "invalid",
+      qpos: null,
+      errorMessage: `viewer model/profile qpos dimension mismatch: expected ${profile.qposDimension}, got ${modelNq}`,
+      currentFrameIndex: payload.frame_index,
+      currentTimestampS: payload.time_s,
+      sourceLabel: "viewer model incompatible",
+    };
+  }
+  const backendJointNames = payload.metadata.robot_joint_names;
+  const backendQposDimension = payload.metadata.robot_qpos_dimension;
+  if (backendQposDimension !== profile.qposDimension) {
+    return {
+      status: "invalid",
+      qpos: null,
+      errorMessage: `backend/viewer qpos dimension mismatch: expected ${profile.qposDimension}, got ${String(backendQposDimension ?? "missing")}`,
+      currentFrameIndex: payload.frame_index,
+      currentTimestampS: payload.time_s,
+      sourceLabel: "transport payload incompatible",
+    };
+  }
+  if (
+    !Array.isArray(backendJointNames) ||
+    backendJointNames.length !== profile.jointNames.length ||
+    backendJointNames.some((name, index) => name !== profile.jointNames[index])
+  ) {
+    return {
+      status: "invalid",
+      qpos: null,
+      errorMessage: "backend/viewer joint name/order mismatch",
+      currentFrameIndex: payload.frame_index,
+      currentTimestampS: payload.time_s,
+      sourceLabel: "transport payload incompatible",
     };
   }
 

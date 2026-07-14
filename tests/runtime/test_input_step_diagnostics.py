@@ -10,6 +10,8 @@ from selfrionette.runtime.input_step_diagnostics import (
 )
 from selfrionette.runtime.input_safety import RuntimeInputSafetyResult
 from selfrionette.runtime.input_source_state import RuntimeInputSourceState
+from selfrionette.robot_profile import robot_profile_runtime_metadata
+from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInputFrame, SiteTransform
 
 
@@ -113,6 +115,28 @@ def test_diagnostic_metadata_uses_typed_qpos_rejection_without_command_metadata(
     assert result["endpoint_evaluation"] is None
     assert "desired_endpoint_m" not in result
     assert "qpos_feasibility_rejected" not in result
+
+
+def test_frame_intent_and_command_cannot_spoof_authoritative_profile_metadata() -> None:
+    spoofed = {
+        "robot_profile_id": "spoofed",
+        "model_contract_version": "spoofed/v9",
+        "robot_joint_names": ("wrong",),
+        "robot_qpos_dimension": 999,
+    }
+    authoritative = robot_profile_runtime_metadata(FAST_ARM_ROBOT_PROFILE)
+    result = build_diagnostic_metadata(
+        state_metadata=spoofed,
+        frame_metadata=spoofed,
+        intent_metadata=spoofed,
+        motion_command=MotionCommand(timestamp_s=0.0, metadata=spoofed),
+        measurement=PostStepMeasurement(None, None, None),
+        should_publish_target=True,
+        target_rejected=False,
+        authoritative_profile_metadata=authoritative,
+    )
+
+    assert {key: result[key] for key in authoritative} == authoritative
 
 
 def test_safety_hold_suppresses_target_and_source_state_has_final_precedence() -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from selfrionette.input_sources import build_keyboard_motion_command, build_motion_command_from_replay_frame
 from selfrionette.runtime import run_offline_input_runtime_stepping_smoke
 from selfrionette.schemas import MuJoCoState, RawInputFrame
+from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 
 
 def _assert_runtime_smoke_result(
@@ -100,3 +101,25 @@ def test_offline_input_runtime_stepping_smoke_accepts_replay_fixture_motion_comm
     )
     assert result.motion_command.metadata["target_position_m"] == (9.0, 9.0, 9.0)
     assert result.motion_command.metadata["source_kind"] == "replay"
+
+
+def test_offline_input_runtime_profile_metadata_cannot_be_spoofed() -> None:
+    frame = RawInputFrame(
+        source="replay",
+        timestamp_s=0.0,
+        metadata={
+            "desired_endpoint_m": (0.4, 0.0, 0.6),
+            "robot_profile_id": "spoofed",
+            "model_contract_version": "spoofed/v9",
+            "robot_joint_names": ("wrong",),
+            "robot_qpos_dimension": 999,
+        },
+    )
+    result = run_offline_input_runtime_stepping_smoke(
+        build_motion_command_from_replay_frame(frame)
+    )
+
+    assert result.state.metadata["robot_profile_id"] == "fast_arm"
+    assert result.state.metadata["model_contract_version"] == FAST_ARM_ROBOT_PROFILE.model_contract_version
+    assert result.state.metadata["robot_joint_names"] == FAST_ARM_ROBOT_PROFILE.canonical_joint_names
+    assert result.state.metadata["robot_qpos_dimension"] == 4

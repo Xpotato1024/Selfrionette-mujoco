@@ -39,7 +39,7 @@ def _write_minimal_model(tmp_path: Path) -> Path:
 
 def test_generic_pipeline_accepts_non_fast_arm_model_without_fast_arm_config(tmp_path: Path) -> None:
     model_path = _write_minimal_model(tmp_path)
-    config = RuntimeConfig(fast_arm_joint_limits_path=tmp_path / "missing-fast-arm-limits.toml")
+    config = RuntimeConfig(joint_limit_config_path=tmp_path / "missing-fast-arm-limits.toml")
 
     pipeline = build_mujoco_pipeline(model_path=model_path, config=config)
 
@@ -56,7 +56,7 @@ def test_generic_replay_pipeline_accepts_non_fast_arm_model_without_fast_arm_val
     model_path = _write_minimal_model(tmp_path)
     pipeline = build_replay_mujoco_pipeline(
         model_path=model_path,
-        config=RuntimeConfig(fast_arm_joint_limits_path=tmp_path / "missing-fast-arm-limits.toml"),
+        config=RuntimeConfig(joint_limit_config_path=tmp_path / "missing-fast-arm-limits.toml"),
         frames=(RawInputFrame(source="replay", timestamp_s=0.0),),
     )
 

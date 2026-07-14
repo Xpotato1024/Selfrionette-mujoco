@@ -71,8 +71,10 @@ failure, and target rejection. It nevertheless suppresses target feedback
 advancement for that step: the active/last-valid target and viewer rebase state
 remain unchanged. The MuJoCo physical state remains the source of truth.
 
-P24 is expected to replace this explicit fast_arm composition seam with Robot
-Profile / Runtime Plugin / Viewer Profile registries. Mesh collision,
+P24 replaces this explicit fast_arm composition seam with Robot Profile /
+Runtime Plugin / Viewer Profile registries. The fast_arm plugin resolves this
+same TOML through the profile declaration and injects the existing generic
+guard boundary; no limit values are duplicated. Mesh collision,
 self-collision, motor-space limits, torque/current/velocity safety, hardware
 characterization, serial, OSC, and viewer config editing are outside this
 contract.

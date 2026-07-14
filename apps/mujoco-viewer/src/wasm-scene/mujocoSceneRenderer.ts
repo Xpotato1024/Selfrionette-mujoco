@@ -24,17 +24,16 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { TransportPayloadV0 } from "../types/transportPayload.js";
+import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import { createViewerWebSocketClient, type ViewerWebSocketClient } from "../transport/websocketClient.js";
 import { loadMujocoWasm } from "./mujocoWasmLoader.js";
 import { matrixFromMujocoGeom } from "./mujocoSceneTransforms.js";
 import {
-  ensureQposLength,
-  FAST_ARM_INITIAL_POSE_SOURCE_LABEL,
   formatQpos,
   resolveNamedInitialKeyframe,
   resolveTransportQpos,
 } from "./mujocoQposSync.js";
-import { AXIS_VISUAL_STYLES, BODY_VISUAL_STYLES, resolveBodyVisualStyleKey } from "./visualStyles.js";
+import { resolveBodyVisualStyle } from "./visualStyles.js";
 import type { BodyVisualStyle } from "./visualStyles.js";
 import {
   createInitialProductViewerState,
@@ -45,8 +44,7 @@ import {
 
 export interface MujocoSceneRendererOptions {
   canvas: HTMLCanvasElement;
-  modelPath: string;
-  fixturePath?: string;
+  profile: ViewerRobotProfile;
   websocketUrl?: string | null;
   onStateChange: (state: ProductViewerState) => void;
   onError?: (error: Error) => void;
@@ -60,14 +58,6 @@ export interface MujocoSceneRenderer {
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 800;
 const MAX_GEOMS = 2 ** 15;
-const FAST_ARM_MESH_URLS = new Map<string, string>([
-  ["BaseLink", "/assets/mujoco/fast_arm/meshes/BaseLink.stl"],
-  ["SholderLink1", "/assets/mujoco/fast_arm/meshes/SholderLink1.stl"],
-  ["SholderLink2", "/assets/mujoco/fast_arm/meshes/SholderLink2.stl"],
-  ["UpperArmLink", "/assets/mujoco/fast_arm/meshes/UpperArmLink.stl"],
-  ["ForeArmLink", "/assets/mujoco/fast_arm/meshes/ForeArmLink.stl"],
-]);
-
 function createCheckerFloorTexture(): CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
@@ -150,7 +140,7 @@ function createStatePatch(
 }
 
 export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): MujocoSceneRenderer {
-  const state = createInitialProductViewerState();
+  const state = createInitialProductViewerState(options.profile);
   const emitState = (patch: Partial<ProductViewerState> & { statusText?: string }): void => {
     Object.assign(state, createStatePatch(state, patch));
     options.onStateChange({ ...state });
@@ -287,8 +277,12 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       return floorMaterial;
     }
 
-    const styleKey = resolveBodyVisualStyleKey(bodyName, meshName, geomName);
-    const style: BodyVisualStyle | null = styleKey === null ? null : (BODY_VISUAL_STYLES[styleKey] as BodyVisualStyle);
+    const style: BodyVisualStyle | null = resolveBodyVisualStyle(
+      options.profile,
+      bodyName,
+      meshName,
+      geomName,
+    );
     const materialColor = (() => {
       if (style !== null) {
         return style.color;
@@ -378,7 +372,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     });
   };
 
-  let startupPoseSourceLabel = FAST_ARM_INITIAL_POSE_SOURCE_LABEL;
+  let startupPoseSourceLabel = options.profile.initialPoseSourceLabel;
   const applyStartupPose = (): void => {
     applyModelPose(startupQpos, startupPoseSourceLabel, null, null, null, null);
   };
@@ -386,7 +380,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   const applyTransportPayload = (payload: TransportPayloadV0): void => {
     const endpointEvaluation = payload.endpoint_evaluation ?? null;
     const inputOverlay = buildProductViewerInputOverlayState(payload);
-    const qposResolution = resolveTransportQpos(payload, model.nq);
+    const qposResolution = resolveTransportQpos(payload, model.nq, options.profile);
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
       updateStatus({
         status: "warning",
@@ -486,31 +480,47 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
     mujocoApi = await loadMujocoWasm();
 
-    const response = await fetch(options.modelPath);
+    const response = await fetch(options.profile.modelUrl);
     if (!response.ok) {
-      throw new Error(`failed to fetch ${options.modelPath}: ${response.status} ${response.statusText}`);
+      throw new Error(`failed to fetch ${options.profile.modelUrl}: ${response.status} ${response.statusText}`);
     }
 
     const xml = await response.text();
     const vfs = new mujocoApi.MjVFS();
     try {
-      const armResponse = await fetch("/assets/mujoco/fast_arm/arm.xml");
-      if (!armResponse.ok) {
-        throw new Error(`failed to fetch /assets/mujoco/fast_arm/arm.xml: ${armResponse.status} ${armResponse.statusText}`);
-      }
-      vfs.addBuffer("arm.xml", new Uint8Array(await armResponse.arrayBuffer()));
-
-      for (const [meshName, meshUrl] of FAST_ARM_MESH_URLS.entries()) {
-        const meshResponse = await fetch(meshUrl);
-        if (!meshResponse.ok) {
-          throw new Error(`failed to fetch ${meshUrl}: ${meshResponse.status} ${meshResponse.statusText}`);
+      for (const [vfsPath, assetUrl] of options.profile.vfsAssets.entries()) {
+        const assetResponse = await fetch(assetUrl);
+        if (!assetResponse.ok) {
+          throw new Error(`failed to fetch ${assetUrl}: ${assetResponse.status} ${assetResponse.statusText}`);
         }
-        vfs.addBuffer(`meshes/${meshName}.stl`, new Uint8Array(await meshResponse.arrayBuffer()));
+        vfs.addBuffer(vfsPath, new Uint8Array(await assetResponse.arrayBuffer()));
       }
 
       model = mujocoApi.MjModel.from_xml_string(xml, vfs);
       data = new mujocoApi.MjData(model);
-      const initialKeyframe = resolveNamedInitialKeyframe(model);
+      if (model.nq !== options.profile.qposDimension) {
+        throw new Error(
+          `viewer model/profile qpos dimension mismatch: expected ${options.profile.qposDimension}, got ${model.nq}`,
+        );
+      }
+      const modelJointNames = Array.from(
+        { length: Number(model.njnt) },
+        (_, jointIndex) =>
+          mujocoApi.mj_id2name(
+            model,
+            mujocoApi.mjtObj.mjOBJ_JOINT.value,
+            jointIndex,
+          ) ?? "",
+      );
+      if (
+        modelJointNames.length !== options.profile.jointNames.length ||
+        modelJointNames.some((name, index) => name !== options.profile.jointNames[index])
+      ) {
+        throw new Error(
+          `viewer model/profile joint name/order mismatch: expected ${options.profile.jointNames.join(",")}, got ${modelJointNames.join(",")}`,
+        );
+      }
+      const initialKeyframe = resolveNamedInitialKeyframe(model, options.profile);
       startupQpos = Array.from(initialKeyframe.qpos);
       startupPoseSourceLabel = initialKeyframe.sourceLabel;
       const modelStat = model.stat as any;
@@ -539,8 +549,10 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       mjvCamera = new mujocoApi.MjvCamera();
 
       updateStatus({
-        modelPath: options.modelPath,
-        fixturePath: options.fixturePath ?? "/fixtures/fast_arm_sweep_x_qpos.json",
+        robotProfileId: options.profile.profileId,
+        modelContractVersion: options.profile.modelContractVersion,
+        modelPath: options.profile.modelUrl,
+        fixturePath: options.profile.fixtureUrl,
         modelNq: model.nq,
         modelNv: model.nv,
         modelNgeom: model.ngeom,
@@ -582,8 +594,9 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
           sceneSummaryText: message,
           statusText: [
             `renderer mode: wasm-scene`,
-            `model path: ${options.modelPath}`,
-            `fixture path: ${options.fixturePath ?? "/fixtures/fast_arm_sweep_x_qpos.json"}`,
+            `robot profile: ${options.profile.profileId}`,
+            `model path: ${options.profile.modelUrl}`,
+            `fixture path: ${options.profile.fixtureUrl}`,
             `error: ${message}`,
           ].join("\n"),
         });

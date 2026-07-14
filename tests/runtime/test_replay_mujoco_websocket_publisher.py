@@ -10,6 +10,8 @@ import pytest
 import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
 from generic_qpos_test_doubles import RejectingGenericQposGuard
+from selfrionette.schemas import RawInputFrame
+from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 
 
 class _FakeWebSocketPublisherServer:
@@ -207,6 +209,33 @@ def test_replay_mujoco_websocket_publisher_sweep_x_payload_stays_finite_for_abou
         _assert_json_values_are_finite(payload["target_position_m"])
         _assert_json_values_are_finite(payload["metadata"])
         _assert_endpoint_evaluation(payload)
+
+
+def test_websocket_publisher_profile_metadata_cannot_be_spoofed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        websocket_runner_module,
+        "_default_replay_frame",
+        lambda: RawInputFrame(
+            source="replay",
+            timestamp_s=0.0,
+            metadata={
+                "desired_endpoint_m": (0.6, 0.0, 0.1),
+                "target_position_m": (0.6, 0.0, 0.1),
+                "robot_profile_id": "spoofed",
+                "model_contract_version": "spoofed/v9",
+                "robot_joint_names": ("wrong",),
+                "robot_qpos_dimension": 999,
+            },
+        ),
+    )
+    payload = _collect_payloads(steps=1)[0]
+
+    assert payload["metadata"]["robot_profile_id"] == "fast_arm"
+    assert payload["metadata"]["model_contract_version"] == FAST_ARM_ROBOT_PROFILE.model_contract_version
+    assert payload["metadata"]["robot_joint_names"] == list(FAST_ARM_ROBOT_PROFILE.canonical_joint_names)
+    assert payload["metadata"]["robot_qpos_dimension"] == 4
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,7 @@ from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityResult
+from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketPublisherServer, WebSocketStatePublisher
 
@@ -73,14 +74,20 @@ def _log(message: str) -> None:
 def _annotate_sweep_x_state(pipeline, state, intent, qpos_result: QposFeasibilityResult):
     command = qpos_result.motion_command
     qpos_rejected = not qpos_result.accepted
-    metadata = {
-        **state.metadata,
-        **intent.metadata,
-        **({} if command is None else dict(command.metadata)),
-        "preset": "sweep_x",
-    }
+    metadata = merge_runtime_metadata(
+        state.metadata,
+        pipeline.state_metadata,
+        intent.metadata,
+        None if command is None else command.metadata,
+        {"preset": "sweep_x"},
+        authoritative_profile_metadata=pipeline.robot_profile_metadata,
+    )
     if qpos_rejected:
         metadata["endpoint_evaluation"] = None
+        metadata = merge_runtime_metadata(
+            metadata,
+            authoritative_profile_metadata=pipeline.robot_profile_metadata,
+        )
     return snapshot_mujoco_state(
         pipeline.simulator.model,
         pipeline.simulator.data,
@@ -100,7 +107,7 @@ async def _run_replay_mujoco_websocket_publisher_async(
     grace_period_s: float,
     preset: str | None,
 ) -> None:
-    runtime_config = RuntimeConfig(dt_s=dt_s)
+    runtime_config = RuntimeConfig(dt_s=dt_s, robot_profile_id="fast_arm")
 
     async with WebSocketPublisherServer(host=host, port=port) as server:
         _log(f"serving on ws://{server.host}:{server.bound_port}")

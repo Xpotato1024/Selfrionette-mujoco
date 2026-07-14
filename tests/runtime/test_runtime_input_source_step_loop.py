@@ -16,6 +16,8 @@ from selfrionette.runtime import (
     select_runtime_input_source,
 )
 from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
+from selfrionette.schemas import RawInputFrame
+from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 
 
 class _ClockSequence:
@@ -208,7 +210,11 @@ def test_runtime_step_loop_holds_when_tool_orientation_is_unavailable(monkeypatc
     viewer_input_source, plan = _build_plan(clock)
     initial_state = plan.pipeline.simulator.snapshot()
 
-    monkeypatch.setattr(input_step_loop, "_extract_tip_site_orientation_wxyz_from_state", lambda state: None)
+    monkeypatch.setattr(
+        input_step_loop,
+        "_extract_endpoint_orientation_wxyz_from_state",
+        lambda state, plugin: None,
+    )
     ingest_viewer_control_message(
         viewer_input_source,
         ViewerControlMessage(
@@ -242,7 +248,11 @@ def test_runtime_step_loop_converts_scalar_tool_orientation_to_safe_hold(monkeyp
     viewer_input_source, plan = _build_plan(clock)
     initial_state = plan.pipeline.simulator.snapshot()
 
-    monkeypatch.setattr(input_step_loop, "_extract_tip_site_orientation_wxyz_from_state", lambda state: 7.0)
+    monkeypatch.setattr(
+        input_step_loop,
+        "_extract_endpoint_orientation_wxyz_from_state",
+        lambda state, plugin: 7.0,
+    )
     ingest_viewer_control_message(
         viewer_input_source,
         ViewerControlMessage(
@@ -318,13 +328,44 @@ def test_runtime_step_loop_does_not_fabricate_progress_for_programmed_target_pat
     assert "actual_tip_delta_m" not in record.state.metadata
 
 
+def test_replay_step_loop_uses_common_resolver_and_protects_profile_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    original = input_step_loop.resolve_robot_runtime
+
+    def recording_resolver(profile_id: str):  # noqa: ANN202
+        calls.append(profile_id)
+        return original(profile_id)
+
+    monkeypatch.setattr(input_step_loop, "resolve_robot_runtime", recording_resolver)
+    spoofed = {
+        "robot_profile_id": "spoofed",
+        "model_contract_version": "spoofed/v9",
+        "robot_joint_names": ("wrong",),
+        "robot_qpos_dimension": 999,
+    }
+    frame = RawInputFrame(source="replay", timestamp_s=0.0, metadata=spoofed)
+    plan = build_runtime_input_source_step_loop_plan(
+        select_runtime_input_source("replay", steps=1, frames=(frame,)),
+        publisher=RecordingPublisher(),
+    )
+    record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1))[0]
+
+    assert calls == ["fast_arm"]
+    assert record.state.metadata["robot_profile_id"] == "fast_arm"
+    assert record.state.metadata["model_contract_version"] == FAST_ARM_ROBOT_PROFILE.model_contract_version
+    assert record.state.metadata["robot_joint_names"] == FAST_ARM_ROBOT_PROFILE.canonical_joint_names
+    assert record.state.metadata["robot_qpos_dimension"] == 4
+
+
 def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monkeypatch: pytest.MonkeyPatch) -> None:
     events: list[str] = []
     clock = _ClockSequence((0.0, 0.0))
     viewer_input_source, plan = _build_plan(clock)
     ingest_viewer_control_message(viewer_input_source, _keyboard_message(6.0, "Space"))
 
-    original_measure = input_step_loop.measure_post_step_tip
+    original_measure = input_step_loop.measure_post_step_endpoint
     original_annotate = input_step_loop.annotate_runtime_input_state
     published_states = []
 
@@ -372,9 +413,9 @@ def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monke
             events.append("rebase")
             return viewer_input_source.rebase_current_endpoint_m(endpoint_m)
 
-    def measure(pre_state, post_state):
+    def measure(pre_state, post_state, *, site_name):
         events.append("measure")
-        return original_measure(pre_state, post_state)
+        return original_measure(pre_state, post_state, site_name=site_name)
 
     def annotate(**kwargs):
         events.append("annotate")
@@ -383,7 +424,7 @@ def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monke
     plan.pipeline.simulator = SimulatorRecorder(plan.pipeline.simulator)
     plan.pipeline.publisher = PublisherRecorder(plan.pipeline.publisher)
     plan.pipeline.input_source = InputSourceRecorder()
-    monkeypatch.setattr(input_step_loop, "measure_post_step_tip", measure)
+    monkeypatch.setattr(input_step_loop, "measure_post_step_endpoint", measure)
     monkeypatch.setattr(input_step_loop, "annotate_runtime_input_state", annotate)
 
     record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))[0]
@@ -407,8 +448,8 @@ def test_runtime_step_loop_continues_publish_when_tip_measurement_is_unavailable
     ingest_viewer_control_message(viewer_input_source, _keyboard_message(7.0, "Space"))
     monkeypatch.setattr(
         input_step_loop,
-        "measure_post_step_tip",
-        lambda pre_state, post_state: input_step_loop.PostStepMeasurement(None, None, None),
+        "measure_post_step_endpoint",
+        lambda pre_state, post_state, *, site_name: input_step_loop.PostStepMeasurement(None, None, None),
         raising=False,
     )
 

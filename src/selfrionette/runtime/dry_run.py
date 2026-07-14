@@ -11,6 +11,7 @@ from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard
+from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketStatePublisher
 
@@ -70,7 +71,10 @@ async def _run_replay_mujoco_dry_run_async(
     preset: str | None,
 ) -> list[str]:
     sender = _RecordingSender()
-    runtime_config = RuntimeConfig() if dt_s is None else RuntimeConfig(dt_s=dt_s)
+    runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if dt_s is None else RuntimeConfig(
+        dt_s=dt_s,
+        robot_profile_id="fast_arm",
+    )
     dt = runtime_config.dt_s
 
     if preset == "sweep_x" and frames is None:
@@ -98,14 +102,20 @@ async def _run_replay_mujoco_dry_run_async(
             pipeline.simulator.step(dt)
 
             state = pipeline.simulator.snapshot()
-            metadata = {
-                **state.metadata,
-                **intent.metadata,
-                **command.metadata,
-                "preset": "sweep_x",
-            }
+            metadata = merge_runtime_metadata(
+                state.metadata,
+                pipeline.state_metadata,
+                intent.metadata,
+                command.metadata,
+                {"preset": "sweep_x"},
+                authoritative_profile_metadata=pipeline.robot_profile_metadata,
+            )
             if qpos_rejected:
                 metadata["endpoint_evaluation"] = None
+                metadata = merge_runtime_metadata(
+                    metadata,
+                    authoritative_profile_metadata=pipeline.robot_profile_metadata,
+                )
             annotated_state = snapshot_mujoco_state(
                 pipeline.simulator.model,
                 pipeline.simulator.data,

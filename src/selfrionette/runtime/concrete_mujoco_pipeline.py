@@ -5,32 +5,26 @@ from pathlib import Path
 
 from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
-from selfrionette.kinematics import FAST_ARM_ENDPOINT_LINK_LENGTHS_M
-from selfrionette.kinematics import FastArmEndpointForwardKinematicsSolver
-from selfrionette.kinematics import FastArmEndpointInverseKinematicsSolver
-from selfrionette.motion import TargetToJointMotionGenerator
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.endpoint_metrics import build_endpoint_evaluation_state_publisher
-from selfrionette.runtime.fast_arm_joint_limits import (
-    FastArmJointLimitGuard,
-    default_fast_arm_joint_limits_path,
-    load_and_validate_fast_arm_joint_limit_config,
-)
 from selfrionette.runtime.pipeline import RuntimePipeline
+from selfrionette.runtime.robot_plugin_registry import ResolvedRobotRuntime, resolve_robot_runtime
+from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
 
 DEFAULT_CONCRETE_TARGET_POSITION_M = (0.6, 0.0, 0.1)
-DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M = FAST_ARM_ENDPOINT_LINK_LENGTHS_M
 
 
-def _resolve_model_path(*, model_path: str | Path | None, config: RuntimeConfig) -> Path:
+def _resolve_model_path(
+    *, model_path: str | Path | None, config: RuntimeConfig, resolved_runtime: ResolvedRobotRuntime
+) -> Path:
     if model_path is not None:
         return Path(model_path)
     if config.mujoco_model_path is not None:
         return config.mujoco_model_path
-    return default_fast_arm_scene_path()
+    return resolved_runtime.profile.mujoco_model_asset
 
 
 def _default_concrete_frame() -> RawInputFrame:
@@ -56,43 +50,43 @@ def build_concrete_mujoco_pipeline(
     discontinuity_threshold_rad: float | None = None,
     discontinuity_threshold_label: str = "global safety threshold",
 ) -> RuntimePipeline:
-    runtime_config = RuntimeConfig() if config is None else config
+    runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
+    if runtime_config.robot_profile_id is None:
+        raise ValueError("production concrete composition requires robot_profile_id")
+    resolved_runtime = resolve_robot_runtime(runtime_config.robot_profile_id)
+    plugin = resolved_runtime.plugin
     replay_frames = tuple(frames) if frames is not None else (_default_concrete_frame(),)
-    resolved_model_path = _resolve_model_path(model_path=model_path, config=runtime_config)
-    ik_solver = FastArmEndpointInverseKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M)
-    fk_solver = FastArmEndpointForwardKinematicsSolver(link_lengths_m=DEFAULT_CONCRETE_FAST_ARM_LINK_LENGTHS_M)
-    simulator = HeadlessMuJoCoSimulator.from_model_path(resolved_model_path)
-    joint_limit_path = runtime_config.fast_arm_joint_limits_path or default_fast_arm_joint_limits_path()
-    joint_limits = load_and_validate_fast_arm_joint_limit_config(
-        joint_limit_path,
-        model=simulator.model,
+    resolved_model_path = _resolve_model_path(
+        model_path=model_path, config=runtime_config, resolved_runtime=resolved_runtime
     )
+    simulator = HeadlessMuJoCoSimulator.from_model_path(
+        resolved_model_path,
+        initial_keyframe_name=plugin.profile.initial_keyframe_name,
+    )
+    plugin.validate_model(simulator.model)
+    fk_solver = plugin.build_forward_kinematics()
 
     return RuntimePipeline(
         config=runtime_config,
         input_source=ReplayInputSource(replay_frames, loop=loop),
         input_interpreter=ReplayInputInterpreter(),
-        motion_generator=TargetToJointMotionGenerator(
-            ik_solver,
+        motion_generator=plugin.build_target_motion_generator(
             seed_joint_angles_rad=seed_joint_angles_rad,
-            qpos_joint_count=4,
-            **(
-                {}
-                if discontinuity_threshold_rad is None
-                else {
-                    "discontinuity_threshold_rad": discontinuity_threshold_rad,
-                    "discontinuity_threshold_label": discontinuity_threshold_label,
-                }
-            ),
+            discontinuity_threshold_rad=discontinuity_threshold_rad,
+            discontinuity_threshold_label=discontinuity_threshold_label,
         ),
         simulator=simulator,
         publisher=build_endpoint_evaluation_state_publisher(
             publisher,
             simulator=simulator,
             fk_solver=fk_solver,
-            solver_joint_count=4,
+            solver_joint_count=plugin.profile.qpos_dimension,
         ),
-        qpos_feasibility_guard=FastArmJointLimitGuard(joint_limits),
+        qpos_feasibility_guard=plugin.build_qpos_feasibility_guard(
+            model=simulator.model,
+            config_path=runtime_config.joint_limit_config_path,
+        ),
+        robot_profile_metadata=robot_profile_runtime_metadata(resolved_runtime.profile),
     )
 
 

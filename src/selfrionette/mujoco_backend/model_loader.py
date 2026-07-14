@@ -20,7 +20,9 @@ def _import_mujoco() -> object:
 
 
 def default_fast_arm_scene_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "assets" / "mujoco" / "fast_arm" / "scene.xml"
+    from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
+
+    return FAST_ARM_ROBOT_PROFILE.mujoco_model_asset
 
 
 def reset_mujoco_data_to_initial_state(
@@ -28,23 +30,23 @@ def reset_mujoco_data_to_initial_state(
     data: object,
     *,
     model_path: str | Path,
+    initial_keyframe_name: str | None = None,
 ) -> None:
-    """Reset data, applying the canonical fast_arm named initial keyframe."""
+    """Reset data, optionally applying an explicitly supplied named keyframe."""
 
     mujoco = _import_mujoco()
-    resolved_path = Path(model_path).expanduser().resolve()
-    if resolved_path == default_fast_arm_scene_path().resolve():
+    if initial_keyframe_name is not None:
         keyframe_id = int(
             mujoco.mj_name2id(
                 model,
                 mujoco.mjtObj.mjOBJ_KEY,
-                FAST_ARM_INITIAL_KEYFRAME_NAME,
+                initial_keyframe_name,
             )
         )
         if keyframe_id < 0:
             raise ValueError(
-                "canonical fast_arm initial keyframe is missing: "
-                f"{FAST_ARM_INITIAL_KEYFRAME_NAME}"
+                "configured initial keyframe is missing: "
+                f"{initial_keyframe_name}"
             )
         mujoco.mj_resetDataKeyframe(model, data, keyframe_id)
     else:
@@ -52,7 +54,11 @@ def reset_mujoco_data_to_initial_state(
     mujoco.mj_forward(model, data)
 
 
-def load_mujoco_model(model_path: str | Path) -> MuJoCoModelBundle:
+def load_mujoco_model(
+    model_path: str | Path,
+    *,
+    initial_keyframe_name: str | None = None,
+) -> MuJoCoModelBundle:
     path = Path(model_path).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -60,5 +66,10 @@ def load_mujoco_model(model_path: str | Path) -> MuJoCoModelBundle:
     mujoco = _import_mujoco()
     model = mujoco.MjModel.from_xml_path(str(path))
     data = mujoco.MjData(model)
-    reset_mujoco_data_to_initial_state(model, data, model_path=path)
+    reset_mujoco_data_to_initial_state(
+        model,
+        data,
+        model_path=path,
+        initial_keyframe_name=initial_keyframe_name,
+    )
     return MuJoCoModelBundle(model=model, data=data, model_path=path)

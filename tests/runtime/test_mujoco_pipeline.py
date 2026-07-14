@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import pytest
 
 from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
 from selfrionette.input_sources.stubs import StaticInputSource
@@ -18,7 +19,7 @@ def test_build_noop_pipeline_still_works() -> None:
 
 
 def test_build_mujoco_pipeline_returns_runtime_pipeline_and_state() -> None:
-    pipeline = build_mujoco_pipeline()
+    pipeline = build_mujoco_pipeline(model_path=default_fast_arm_scene_path())
 
     assert isinstance(pipeline, RuntimePipeline)
     assert isinstance(pipeline.input_source, StaticInputSource)
@@ -32,6 +33,11 @@ def test_build_mujoco_pipeline_returns_runtime_pipeline_and_state() -> None:
     assert isinstance(state, MuJoCoState)
     assert any(site.name == "tip" for site in state.sites)
     assert any(body.name == "base_link" for body in state.bodies)
+
+
+def test_generic_builder_does_not_infer_fast_arm_when_model_is_absent() -> None:
+    with pytest.raises(ValueError, match="requires an explicit model_path"):
+        build_mujoco_pipeline()
 
 
 def test_build_mujoco_pipeline_accepts_explicit_default_model_path() -> None:

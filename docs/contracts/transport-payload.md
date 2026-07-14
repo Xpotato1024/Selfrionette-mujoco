@@ -102,6 +102,17 @@ R6-A-P4 freezes the handoff contract for R6-B:
   `source_kind`, `source_active`, `command_age_ms`, `stale_reason`, and the
   viewer control summary used by the R6-L overlay. The viewer treats those
   fields as read-only presentation data.
+- `metadata` may carry additive robot compatibility fields
+  `robot_profile_id`, `model_contract_version`, `robot_joint_names`, and
+  `robot_qpos_dimension`. These fields do not change payload version or
+  envelope shape. P24 production runtime treats these four keys as reserved,
+  authoritative, and mandatory, and applies the resolved profile values last;
+  frame, intent, command, replay, and source metadata cannot replace them. A
+  profile-aware viewer requires all four values to match its resolved profile
+  and rejects missing, malformed, unknown, or mismatched compatibility metadata
+  before applying qpos. It does not silently select fast_arm for profile-free
+  legacy or generic payloads. Generic profile-free pipelines add no such
+  metadata.
 - Transport may also lift an optional `endpoint_evaluation` diagnostic object
   out of runtime metadata into the top-level payload.
 - `endpoint_evaluation` is diagnostic-only runtime/backend data. The viewer

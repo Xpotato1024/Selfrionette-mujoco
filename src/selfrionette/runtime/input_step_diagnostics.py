@@ -3,9 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
-from selfrionette.mujoco_backend.endpoint_extraction import (
-    extract_fast_arm_tip_site_endpoint_from_state,
-)
 from selfrionette.runtime.desired_endpoint_resolver import (
     resolve_desired_endpoint_from_motion_command,
 )
@@ -14,6 +11,7 @@ from selfrionette.runtime.input_source_state import (
     RuntimeInputSourceState,
     runtime_input_source_state_to_metadata,
 )
+from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.runtime.input_safety import RuntimeInputSafetyResult
 from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInputFrame
 
@@ -46,19 +44,21 @@ class TargetFeedbackAnnotation:
     metadata: Mapping[str, object]
 
 
-def _extract_tip_position_m(state: MuJoCoState) -> tuple[float, float, float] | None:
-    try:
-        return extract_fast_arm_tip_site_endpoint_from_state(state).position_m
-    except ValueError:
-        return None
+def _extract_site_position_m(
+    state: MuJoCoState, site_name: str
+) -> tuple[float, float, float] | None:
+    site = next((site for site in state.sites if site.name == site_name), None)
+    return None if site is None else tuple(site.position_m)
 
 
-def measure_post_step_tip(
+def measure_post_step_endpoint(
     pre_step_state: MuJoCoState,
     post_step_state: MuJoCoState,
+    *,
+    site_name: str,
 ) -> PostStepMeasurement:
-    pre_step_tip_position_m = _extract_tip_position_m(pre_step_state)
-    post_step_tip_position_m = _extract_tip_position_m(post_step_state)
+    pre_step_tip_position_m = _extract_site_position_m(pre_step_state, site_name)
+    post_step_tip_position_m = _extract_site_position_m(post_step_state, site_name)
     actual_tip_delta_m = None
     if pre_step_tip_position_m is not None and post_step_tip_position_m is not None:
         actual_tip_delta_m = tuple(
@@ -72,6 +72,17 @@ def measure_post_step_tip(
     )
 
 
+def measure_post_step_tip(
+    pre_step_state: MuJoCoState,
+    post_step_state: MuJoCoState,
+) -> PostStepMeasurement:
+    return measure_post_step_endpoint(
+        pre_step_state,
+        post_step_state,
+        site_name="tip",
+    )
+
+
 def build_diagnostic_metadata(
     *,
     state_metadata: Mapping[str, object],
@@ -82,13 +93,15 @@ def build_diagnostic_metadata(
     should_publish_target: bool,
     target_rejected: bool,
     qpos_rejected: bool = False,
+    authoritative_profile_metadata: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    metadata = {
-        **state_metadata,
-        **frame_metadata,
-        **intent_metadata,
-        **motion_command.metadata,
-    }
+    metadata = merge_runtime_metadata(
+        state_metadata,
+        frame_metadata,
+        intent_metadata,
+        motion_command.metadata,
+        authoritative_profile_metadata=authoritative_profile_metadata,
+    )
     if metadata.get("control_frame_resolution_status") == "tool_orientation_unavailable":
         for stale_key in _STALE_RESOLVED_METADATA_KEYS:
             metadata.pop(stale_key, None)
@@ -157,6 +170,7 @@ def annotate_runtime_input_state(
     measurement: PostStepMeasurement,
     annotate_target_position_m: bool,
     safety_result: RuntimeInputSafetyResult,
+    authoritative_profile_metadata: Mapping[str, object] | None = None,
 ) -> MuJoCoState:
     target_rejected = bool(motion_command.metadata.get("target_rejected", False))
     should_publish_target = (
@@ -173,6 +187,7 @@ def annotate_runtime_input_state(
         should_publish_target=should_publish_target,
         target_rejected=target_rejected,
         qpos_rejected=safety_result.qpos_feasibility_rejected,
+        authoritative_profile_metadata=authoritative_profile_metadata,
     )
     feedback = annotate_target_feedback(
         state=state,
@@ -182,10 +197,11 @@ def annotate_runtime_input_state(
         should_publish_target=should_publish_target,
         last_valid_endpoint_m=last_valid_endpoint_m,
     )
-    final_metadata = {
-        **feedback.metadata,
-        **runtime_input_source_state_to_metadata(source_state),
-    }
+    final_metadata = merge_runtime_metadata(
+        feedback.metadata,
+        runtime_input_source_state_to_metadata(source_state),
+        authoritative_profile_metadata=authoritative_profile_metadata,
+    )
     return replace(
         state,
         target_position_m=feedback.target_position_m,
@@ -200,4 +216,5 @@ __all__ = [
     "annotate_target_feedback",
     "build_diagnostic_metadata",
     "measure_post_step_tip",
+    "measure_post_step_endpoint",
 ]

@@ -3,8 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from math import isfinite, sqrt
 
-from selfrionette.kinematics.fast_arm_endpoint import FastArmMuJoCoModelForwardKinematicsSolver
-from selfrionette.motion import LocalEndpointMotionGenerator
 
 DEFAULT_VIEWER_LOCAL_ENDPOINT_SPEED_M_S = 0.1
 DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD = 0.2
@@ -86,17 +84,6 @@ def _rotate_vector_by_quaternion_wxyz(
         rot00 * vx + rot01 * vy + rot02 * vz,
         rot10 * vx + rot11 * vy + rot12 * vz,
         rot20 * vx + rot21 * vy + rot22 * vz,
-    )
-
-
-def build_viewer_local_endpoint_motion_generator() -> LocalEndpointMotionGenerator:
-    return LocalEndpointMotionGenerator(
-        endpoint_kinematics=FastArmMuJoCoModelForwardKinematicsSolver(),
-        endpoint_model=DEFAULT_VIEWER_LOCAL_ENDPOINT_MODEL,
-        fd_epsilon_rad=DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD,
-        damping=DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING,
-        max_qpos_delta_norm_rad=DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD,
-        max_endpoint_delta_per_tick_m=DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_DELTA_PER_TICK_M,
     )
 
 
@@ -281,6 +268,5 @@ __all__ = [
     "CONTROL_FRAME_RESOLUTION_TOOL_RESOLVED",
     "CONTROL_FRAME_RESOLUTION_TOOL_UNAVAILABLE",
     "CONTROL_FRAME_RESOLUTION_WORLD_PASSTHROUGH",
-    "build_viewer_local_endpoint_motion_generator",
     "build_viewer_local_motion_metadata",
 ]

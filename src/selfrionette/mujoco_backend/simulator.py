@@ -6,7 +6,6 @@ from pathlib import Path
 from selfrionette.mujoco_backend.command_adapter import motion_command_to_qpos_command
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
 from selfrionette.mujoco_backend.model_loader import (
-    default_fast_arm_scene_path,
     load_mujoco_model,
     reset_mujoco_data_to_initial_state,
 )
@@ -24,15 +23,35 @@ class HeadlessMuJoCoSimulator:
     _last_dt_s: float | None = None
     _last_command: MotionCommand | None = None
     _pending_command: MotionCommand | None = None
+    initial_keyframe_name: str | None = None
 
     @classmethod
-    def from_model_path(cls, model_path: str | Path) -> "HeadlessMuJoCoSimulator":
-        bundle = load_mujoco_model(model_path)
-        return cls(model=bundle.model, data=bundle.data, model_path=bundle.model_path)
+    def from_model_path(
+        cls,
+        model_path: str | Path,
+        *,
+        initial_keyframe_name: str | None = None,
+    ) -> "HeadlessMuJoCoSimulator":
+        bundle = load_mujoco_model(
+            model_path,
+            initial_keyframe_name=initial_keyframe_name,
+        )
+        return cls(
+            model=bundle.model,
+            data=bundle.data,
+            model_path=bundle.model_path,
+            initial_keyframe_name=initial_keyframe_name,
+        )
 
     @classmethod
     def from_default_fast_arm(cls) -> "HeadlessMuJoCoSimulator":
-        return cls.from_model_path(default_fast_arm_scene_path())
+        # Compatibility-only named helper. Generic construction uses
+        # from_model_path() and never selects this profile implicitly.
+        from selfrionette.mujoco_backend.fast_arm_compat import (
+            build_default_fast_arm_simulator,
+        )
+
+        return build_default_fast_arm_simulator(cls)
 
     def apply_command(self, command: MotionCommand) -> None:
         self._last_command = command
@@ -48,6 +67,7 @@ class HeadlessMuJoCoSimulator:
             self.model,
             self.data,
             model_path=self.model_path,
+            initial_keyframe_name=self.initial_keyframe_name,
         )
         self._frame_index = 0
         self._last_dt_s = None

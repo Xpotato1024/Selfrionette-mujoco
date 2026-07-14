@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 
 from selfrionette.input_interpreters import InputInterpreter
 from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
@@ -18,6 +19,7 @@ from selfrionette.transport.stubs import NoOpStatePublisher
 
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
+from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 
 
 @dataclass(slots=True)
@@ -29,6 +31,8 @@ class RuntimePipeline:
     simulator: MuJoCoSimulator
     publisher: StatePublisher
     qpos_feasibility_guard: QposFeasibilityGuard | None = None
+    state_metadata: Mapping[str, object] | None = None
+    robot_profile_metadata: Mapping[str, object] | None = None
 
     async def run_once(self, dt_s: float | None = None) -> MuJoCoState:
         dt = self.config.dt_s if dt_s is None else dt_s
@@ -46,6 +50,14 @@ class RuntimePipeline:
         self.simulator.apply_command(command)
         self.simulator.step(dt)
         state = self.simulator.snapshot()
+        state = replace(
+            state,
+            metadata=merge_runtime_metadata(
+                state.metadata,
+                self.state_metadata,
+                authoritative_profile_metadata=self.robot_profile_metadata,
+            ),
+        )
         if qpos_rejected:
             state = MuJoCoState(
                 frame_index=state.frame_index,
@@ -55,11 +67,12 @@ class RuntimePipeline:
                 bodies=state.bodies,
                 sites=state.sites,
                 target_position_m=state.target_position_m,
-                metadata={
-                    **state.metadata,
-                    **dict(command.metadata),
-                    "endpoint_evaluation": None,
-                },
+                metadata=merge_runtime_metadata(
+                    state.metadata,
+                    command.metadata,
+                    {"endpoint_evaluation": None},
+                    authoritative_profile_metadata=self.robot_profile_metadata,
+                ),
             )
         await self.publisher.publish(state)
         return state
