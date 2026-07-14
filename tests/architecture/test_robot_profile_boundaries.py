@@ -72,5 +72,6 @@ def test_viewer_profile_does_not_claim_an_unused_mesh_fallback_contract() -> Non
     contract = (
         ROOT / "docs" / "contracts" / "robot-profile-runtime-viewer-profile.md"
     ).read_text(encoding="utf-8")
-    assert "selects Option B" in contract
-    assert "does not declare an unused fallback mapping" in contract
+    normalized_contract = " ".join(contract.split())
+    assert "selects Option B" in normalized_contract
+    assert "does not declare an unused fallback mapping" in normalized_contract
