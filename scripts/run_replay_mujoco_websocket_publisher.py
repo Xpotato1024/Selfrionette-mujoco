@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -22,6 +23,8 @@ from selfrionette.runtime.viewer_control_ingress import (
     ingest_viewer_control_message_json,
 )
 from selfrionette.runtime.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.live_timing import AbsoluteDeadlinePacer, LiveRuntimeTimingMetrics
+from selfrionette.runtime.live_websocket_delivery import LiveLatestStateWebSocketPublisher
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
 from selfrionette.runtime.websocket_publisher_runner import SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS
 from selfrionette.transport import WebSocketPublisherServer, WebSocketStatePublisher
@@ -96,18 +99,39 @@ async def _run_input_source_websocket_publisher_async(
 
             _log("Viewer connected; publishing started.")
 
-            selection = select_runtime_input_source(input_source, steps=steps, preset=preset)
-            plan = build_runtime_input_source_step_loop_plan(
-                selection,
-                config=runtime_config,
-                publisher=WebSocketStatePublisher(server),
-                viewer_input_source=viewer_input_source,
-            )
-            await run_runtime_input_source_step_loop(
-                plan,
-                steps=steps,
-                dt_s=dt_s,
-                interval_s=interval_s,
+            timing_metrics = LiveRuntimeTimingMetrics()
+            pacer = None
+            if interval_s > 0.0:
+                pacer = AbsoluteDeadlinePacer(interval_s, metrics=timing_metrics)
+            async with LiveLatestStateWebSocketPublisher(server) as publisher:
+                selection = select_runtime_input_source(input_source, steps=steps, preset=preset)
+                plan = build_runtime_input_source_step_loop_plan(
+                    selection,
+                    config=runtime_config,
+                    publisher=publisher,
+                    viewer_input_source=viewer_input_source,
+                )
+                await run_runtime_input_source_step_loop(
+                    plan,
+                    steps=steps,
+                    dt_s=dt_s,
+                    interval_s=interval_s,
+                    pacer=pacer,
+                    timing_metrics=timing_metrics,
+                    collect_records=False,
+                )
+                await publisher.drain()
+                delivery_summary = publisher.summary().to_dict()
+
+            _log(
+                "live runtime timing summary: "
+                + json.dumps(
+                    {
+                        **timing_metrics.summary(dt_s=dt_s).to_dict(),
+                        **delivery_summary,
+                    },
+                    sort_keys=True,
+                )
             )
 
             _log(f"Completed after publishing {steps} frame(s).")

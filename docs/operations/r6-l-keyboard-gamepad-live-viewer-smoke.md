@@ -69,6 +69,14 @@ Notes:
   If the operator finishes earlier, stop the backend with `Ctrl+C`. If the
   backend completes before keyboard and gamepad checks finish, rerun the
   backend and record that as a failure note.
+- For `--input-source viewer`, positive `interval_s` uses an absolute
+  monotonic deadline. Compute, simulation, annotation, serialization, and
+  enqueue work are deducted from the remaining sleep rather than added to the
+  cadence. `interval_s=0` remains fast-as-possible.
+- Completion prints one bounded `live runtime timing summary` JSON object.
+  It includes wall/simulation time, realtime factor, stage timing, sleep,
+  deadline lag/misses, frame counts, and live delivery coalescing. It does not
+  retain every frame.
 
 ## Viewer Startup
 
@@ -135,6 +143,31 @@ must include `websocketUrl=ws://127.0.0.1:8766`.
   should say it is unavailable rather than recomputing it.
 - The procedure assumes viewer-origin WebSocket messages are being ingested by
   the backend runner.
+- The status section distinguishes received, compatibility-accepted, and
+  scene-applied frames. It also reports frame distance, receive-to-apply age,
+  parse/apply timing, coalesced frames, and UI update frequency. These are
+  browser-monotonic observations and must not be directly subtracted from the
+  backend monotonic clock.
+
+## P25 120 s Acceptance
+
+Run separate no-input and continuously-held-input evaluations. Use the same
+machine, browser, command, loopback endpoint, `dt_s=1/60`, and
+`interval_s=1/60`. Keep the browser foreground/visible and exclude a five
+second warm-up from the 120 second evaluation window.
+
+Acceptance thresholds:
+
+- absolute simulation/wall drift is at most 1.0 s;
+- realtime factor is 0.99 through 1.01;
+- viewer receive-to-apply age p95 is at most 100 ms;
+- latest received-to-applied frame distance stays bounded and does not grow
+  with elapsed time;
+- a slow sender does not block simulation enqueue or create an unbounded queue.
+
+Record unavailable measurements as `not run`; do not estimate them. The
+canonical P25 implementation and measured comparison are recorded in
+`docs/operations/r7-e-p25-live-viewer-pacing-backlog.md`.
 
 ## Expected Target / Tip / Error Behavior
 
@@ -201,6 +234,18 @@ overlay fields:
 target/tip/error observation:
 overlay result:
 backend notes:
+warm-up s:
+evaluation duration s:
+simulation time s:
+wall elapsed s:
+realtime factor:
+deadline miss count:
+publish/enqueue time s:
+latest received/accepted/applied frame:
+received-to-applied frame distance:
+receive-to-apply age p50/p95/max ms:
+coalesced frame count:
+browser visibility:
 screenshots/logs:
 failure notes:
 hardware validation: not run

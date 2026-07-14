@@ -181,3 +181,47 @@ def test_websocket_script_uses_default_replay_fallback_when_input_source_is_unse
     run_publisher.assert_called_once()
     _, kwargs = run_publisher.call_args
     assert kwargs["preset"] is None
+
+
+def test_websocket_script_viewer_path_uses_live_latest_delivery_and_interval_zero_compatibility() -> None:
+    created_servers: list[object] = []
+
+    class FakeWebSocketPublisherServer:
+        def __init__(self, *, host: str, port: int, on_message=None) -> None:
+            self.host = host
+            self.port = port
+            self.bound_port = port
+            self.on_message = on_message
+            self.messages: list[str] = []
+            created_servers.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def wait_for_client(self, timeout_s: float | None = None) -> bool:
+            return True
+
+        async def send(self, message: str) -> None:
+            self.messages.append(message)
+
+    with patch.object(WEBSOCKET_SCRIPT_ENTRY, "WebSocketPublisherServer", FakeWebSocketPublisherServer):
+        asyncio.run(
+            WEBSOCKET_SCRIPT_ENTRY._run_input_source_websocket_publisher_async(
+                host="127.0.0.1",
+                port=8766,
+                steps=2,
+                dt_s=1.0 / 60.0,
+                interval_s=0.0,
+                grace_period_s=0.0,
+                preset=None,
+                input_source="viewer",
+            )
+        )
+
+    assert len(created_servers) == 1
+    payloads = [json.loads(message) for message in created_servers[0].messages]
+    assert payloads[-1]["frame_index"] == 2
+    assert payloads[-1]["version"] == 0

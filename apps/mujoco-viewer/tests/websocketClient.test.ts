@@ -834,6 +834,40 @@ function testViewerWebSocketClientDeliversValidPayloadThroughInjectedSocket(): v
   assertCondition(activeSocket.closed, "client.stop should close the socket");
 }
 
+function testViewerWebSocketClientReportsMonotonicParseObservation(): void {
+  let socket: FakeWebSocket | null = null;
+  const observations: Array<{ receivedAtMs: number; parseDurationMs: number }> = [];
+  const times = [10, 10.4];
+
+  class InjectedFakeWebSocketCtor extends FakeWebSocket {
+    constructor(url: string) {
+      super(url);
+      socket = this;
+    }
+  }
+
+  const client = createViewerWebSocketClient({
+    url: "ws://example.test/payload",
+    WebSocketCtor: InjectedFakeWebSocketCtor,
+    monotonicNow() {
+      const value = times.shift();
+      if (value === undefined) {
+        throw new Error("unexpected monotonic clock read");
+      }
+      return value;
+    },
+    onPayload(_payload, observation) {
+      observations.push(observation);
+    },
+  });
+
+  client.start();
+  assertCondition(socket !== null, "websocket should be created");
+  (socket as FakeWebSocket).dispatchMessage(JSON.stringify(TRANSPORT_PAYLOAD_FIXTURE));
+  assert.deepEqual(observations, [{ receivedAtMs: 10, parseDurationMs: 0.40000000000000036 }]);
+  client.stop();
+}
+
 function testViewerWebSocketClientRoutesSocketErrorsToErrorCallback(): void {
   const errors: Error[] = [];
   let socket: FakeWebSocket | null = null;
@@ -893,6 +927,7 @@ testParseTransportPayloadV0MessageRejectsInvalidJson();
 testParseTransportPayloadV0MessageRejectsInvalidVersion();
 testParseTransportPayloadV0MessageRejectsMissingRequiredFields();
 testViewerWebSocketClientDeliversValidPayloadThroughInjectedSocket();
+testViewerWebSocketClientReportsMonotonicParseObservation();
 testViewerWebSocketClientRoutesMalformedMessageToErrorCallback();
 testViewerWebSocketClientRoutesSocketErrorsToErrorCallback();
 

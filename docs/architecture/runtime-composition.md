@@ -228,6 +228,25 @@ profiles do not assume one joint equals one qpos; fast_arm's 4/4 dimensions and
 joint order are plugin-owned startup checks. No arbitrary dynamic import or
 browser-side planning/safety is added.
 
+R7-E follow-up P25 gives the production `--input-source viewer` composition a
+wall-clock cadence without changing simulation time. `dt_s` remains the amount
+advanced by one MuJoCo step. A positive `interval_s` is the live cadence period
+and is paced against absolute monotonic deadlines: processing time is deducted
+from the remaining sleep, missed deadlines never produce negative sleep, and a
+miss rebases the next deadline instead of running an unlimited catch-up loop.
+`interval_s=0` remains the existing fast-as-possible behavior. This pacing is
+selected only by the live viewer composition; replay, dry-run, and experiment
+logging retain their deterministic/lossless contracts.
+
+The same live composition inserts a bounded latest-state publisher between the
+step loop and the existing WebSocket server. It holds at most one unsent state,
+may replace that pending live display state with a newer state, and reports the
+coalesced count. The canonical `WebSocketStatePublisher` remains ordered and
+awaited for lossless callers. On the browser side, compatible payloads are
+coalesced before scene application and the latest candidate is applied once per
+render cadence. MuJoCo remains the physical-state source of truth and the viewer
+remains rendering-only.
+
 ## Composition-root responsibility split
 
 This section is the canonical plan for decomposing the production input step

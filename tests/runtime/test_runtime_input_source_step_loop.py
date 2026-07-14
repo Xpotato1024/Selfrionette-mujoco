@@ -459,3 +459,81 @@ def test_runtime_step_loop_continues_publish_when_tip_measurement_is_unavailable
     assert record.state.metadata["endpoint_progress_measurement_available"] is False
     assert "actual_tip_delta_m" not in record.state.metadata
     assert plan.pipeline.publisher.publisher.states
+
+
+def test_no_input_and_continuous_held_input_use_the_same_live_pacer_contract() -> None:
+    class RecordingPacer:
+        def __init__(self) -> None:
+            self.start_count = 0
+            self.pace_count = 0
+
+        def start(self) -> None:
+            self.start_count += 1
+
+        async def pace(self) -> None:
+            self.pace_count += 1
+
+    async def run_case(*, held: bool) -> RecordingPacer:
+        source = ViewerInputSource(clock=lambda: 0.0)
+        if held:
+            ingest_viewer_control_message(source, _keyboard_message(0.0, "ShiftRight"))
+        plan = build_runtime_input_source_step_loop_plan(
+            select_runtime_input_source("viewer", steps=3),
+            publisher=RecordingPublisher(),
+            viewer_input_source=source,
+        )
+        pacer = RecordingPacer()
+        await run_runtime_input_source_step_loop(
+            plan,
+            steps=3,
+            dt_s=1.0 / 60.0,
+            interval_s=1.0 / 60.0,
+            pacer=pacer,
+            collect_records=False,
+        )
+        return pacer
+
+    no_input, held_input = asyncio.run(_run_two_cases(run_case))
+
+    assert no_input.start_count == held_input.start_count == 1
+    assert no_input.pace_count == held_input.pace_count == 3
+
+
+async def _run_two_cases(run_case):
+    return await run_case(held=False), await run_case(held=True)
+
+
+def test_publish_exception_exits_before_pacing_without_background_work() -> None:
+    class FailingPublisher:
+        async def publish(self, state) -> None:
+            raise RuntimeError("publish failed")
+
+    class RecordingPacer:
+        def __init__(self) -> None:
+            self.pace_count = 0
+
+        def start(self) -> None:
+            return None
+
+        async def pace(self) -> None:
+            self.pace_count += 1
+
+    plan = build_runtime_input_source_step_loop_plan(
+        select_runtime_input_source("viewer", steps=2),
+        publisher=FailingPublisher(),
+        viewer_input_source=ViewerInputSource(clock=lambda: 0.0),
+    )
+    pacer = RecordingPacer()
+
+    with pytest.raises(RuntimeError, match="publish failed"):
+        asyncio.run(
+            run_runtime_input_source_step_loop(
+                plan,
+                steps=2,
+                dt_s=1.0 / 60.0,
+                interval_s=1.0 / 60.0,
+                pacer=pacer,
+            )
+        )
+
+    assert pacer.pace_count == 0

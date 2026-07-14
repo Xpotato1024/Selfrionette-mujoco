@@ -1,5 +1,6 @@
 import type { TransportEndpointEvaluationPayload, TransportPayloadV0 } from "../types/transportPayload.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
+import type { ViewerFrameTimingSnapshot } from "./viewerFrameTiming.js";
 import {
   buildEndpointPresentationState,
   formatEndpointPresentationText,
@@ -74,6 +75,7 @@ export interface ProductViewerState {
   currentQposText: string;
   endpointEvaluation: TransportEndpointEvaluationPayload | null;
   inputOverlay: ProductViewerInputOverlayState | null;
+  viewerTiming: ViewerFrameTimingSnapshot | null;
   modelNq: number | null;
   modelNv: number | null;
   modelNgeom: number | null;
@@ -100,6 +102,7 @@ export function createInitialProductViewerState(profile?: ViewerRobotProfile): P
     currentQposText: "[]",
     endpointEvaluation: null,
     inputOverlay: null,
+    viewerTiming: null,
     modelNq: null,
     modelNv: null,
     modelNgeom: null,
@@ -116,6 +119,7 @@ export function formatViewerStatusText(state: ProductViewerState): string {
   const qposError = state.qposError === null ? "none" : state.qposError;
   const endpointEvaluation = state.endpointEvaluation === null ? "unavailable" : "available";
   const inputOverlay = state.inputOverlay === null ? "unavailable" : "available";
+  const viewerTiming = state.viewerTiming;
 
   return [
     `renderer mode: ${state.rendererMode}`,
@@ -132,6 +136,21 @@ export function formatViewerStatusText(state: ProductViewerState): string {
     `current qpos: ${state.currentQposText}`,
     `endpoint evaluation: ${endpointEvaluation}`,
     `input overlay: ${inputOverlay}`,
+    `latest received frame: ${viewerTiming?.latestReceivedFrameIndex ?? "n/a"}`,
+    `latest compatibility-accepted frame: ${viewerTiming?.latestCompatibilityAcceptedFrameIndex ?? "n/a"}`,
+    `latest scene-applied frame: ${viewerTiming?.latestSceneAppliedFrameIndex ?? "n/a"}`,
+    `received frames: ${viewerTiming?.receivedFrameCount ?? 0}`,
+    `compatibility-accepted frames: ${viewerTiming?.compatibilityAcceptedFrameCount ?? 0}`,
+    `scene-applied frames: ${viewerTiming?.sceneAppliedFrameCount ?? 0}`,
+    `received-to-applied frame distance: ${viewerTiming?.receivedToAppliedFrameDistance ?? "n/a"}`,
+    `receive-to-apply age p50_ms: ${viewerTiming?.receiveToApplyAgeMsP50?.toFixed(3) ?? "n/a"}`,
+    `receive-to-apply age p95_ms: ${viewerTiming?.receiveToApplyAgeMsP95?.toFixed(3) ?? "n/a"}`,
+    `receive-to-apply age max_ms: ${viewerTiming?.receiveToApplyAgeMsMax?.toFixed(3) ?? "n/a"}`,
+    `payload parse p50/p95/max_ms: ${viewerTiming === null ? "n/a" : [viewerTiming.parseDurationMsP50, viewerTiming.parseDurationMsP95, viewerTiming.parseDurationMsMax].map((value) => value?.toFixed(3) ?? "n/a").join("/")}`,
+    `scene apply p50/p95/max_ms: ${viewerTiming === null ? "n/a" : [viewerTiming.sceneApplyDurationMsP50, viewerTiming.sceneApplyDurationMsP95, viewerTiming.sceneApplyDurationMsMax].map((value) => value?.toFixed(3) ?? "n/a").join("/")}`,
+    `coalesced frames: ${viewerTiming?.coalescedFrameCount ?? 0}`,
+    `UI state updates: ${viewerTiming?.uiStateUpdateCount ?? 0}`,
+    `UI state update frequency_hz: ${viewerTiming?.uiStateUpdateFrequencyHz.toFixed(3) ?? "n/a"}`,
     `qpos error: ${qposError}`,
     "browser-side IK/FK/qpos recompute: disabled",
   ].join("\n");

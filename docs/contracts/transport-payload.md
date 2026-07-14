@@ -149,6 +149,17 @@ R6-A-P4 freezes the handoff contract for R6-B:
   new payload version.
 - The live viewer smoke path does not add a new payload version, a new
   schema, or extra transport envelope fields.
+- P25 does not change payload v0 or the generic lossless publisher contract.
+  The production live viewer composition may use a bounded latest-state slot
+  with one pending state so a slow display client cannot accumulate an
+  unbounded historical backlog. Replaced pending states are counted as
+  coalesced. Replay, file recording, experiment logging, and direct uses of
+  `WebSocketStatePublisher` remain ordered/backpressured and lossless.
+- The browser may likewise retain only the latest compatibility-accepted
+  candidate until the next render cadence. Invalid or profile-mismatched
+  payloads are rejected before that slot and never replace or mutate the last
+  valid scene state. This is delivery/application policy, not a payload schema
+  change.
 - The Phase C completion audit does not add a new payload version, new schema,
   or browser scene mutation path.
 - `endpoint_evaluation` is optional and additive. Missing or invalid
