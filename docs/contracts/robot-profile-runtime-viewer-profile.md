@@ -63,6 +63,10 @@ imports. Adding a robot requires one declarative Robot Profile, one runtime
 plugin registration when runtime behavior is supported, and one viewer
 profile registration when browser rendering is supported.
 
+Every production Robot Profile / Robot Runtime Plugin pair must also have an
+explicit test-only conformance case under `tests/`. The case is not a
+production registry entry, runtime composition dependency, or public API.
+
 `resolve_robot_runtime()` is the common production boundary. It rejects an ID
 present in only one registry, requested/registered/plugin identity mismatch,
 profile/model contract version mismatch, a differing declarative contract,
