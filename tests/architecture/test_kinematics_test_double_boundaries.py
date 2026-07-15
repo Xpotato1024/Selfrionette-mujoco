@@ -3,9 +3,15 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import selfrionette as selfrionette_package
+import selfrionette.input_interpreters as input_interpreters
+import selfrionette.input_sources as input_sources
 import selfrionette.kinematics as kinematics
 import selfrionette.motion as motion
+import selfrionette.mujoco_backend as mujoco_backend
 import selfrionette.runtime as runtime
+import selfrionette.schemas as schemas
+import selfrionette.transport as transport
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,6 +35,17 @@ DOUBLE_EXPORT_NAMES = {
     "FailingInverseKinematicsSolver",
     "SeedSensitiveInverseKinematicsSolver",
 }
+PRODUCTION_PACKAGES = (
+    selfrionette_package,
+    input_interpreters,
+    input_sources,
+    kinematics,
+    motion,
+    mujoco_backend,
+    runtime,
+    schemas,
+    transport,
+)
 
 
 def _parse(path: Path) -> ast.Module:
@@ -80,7 +97,7 @@ def test_solver_doubles_use_no_dynamic_import_or_filesystem_discovery() -> None:
 
 
 def test_solver_doubles_are_not_exported_by_production_packages() -> None:
-    for module in (kinematics, motion, runtime):
+    for module in PRODUCTION_PACKAGES:
         exported = set(getattr(module, "__all__", ()))
         assert not exported & DOUBLE_EXPORT_NAMES
         assert not any(hasattr(module, name) for name in DOUBLE_EXPORT_NAMES)

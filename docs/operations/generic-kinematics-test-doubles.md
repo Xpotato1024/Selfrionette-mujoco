@@ -64,7 +64,12 @@ Retained direct Planar implementation tests for #389:
 Retained for #388:
 
 - `src/selfrionette/runtime/offline_input_runtime_smoke.py`
-- its direct runtime smoke coverage under `tests/runtime/`
+- `src/selfrionette/runtime/live_loadcell_runtime_runner.py`, which directly
+  calls the offline smoke
+- `tests/runtime/test_r7_b_input_driven_payload_smoke.py`
+- `tests/runtime/test_r7_b_offline_input_runtime_stepping_smoke.py`
+- `tests/runtime/test_r7_b_manual_live_loadcell_runtime_runner.py`, which
+  covers the live-loadcell caller
 
 Historical implementation records remain unchanged, including the R6-H
 completion, stub inventory, concrete solver wiring, and R6-I public-surface

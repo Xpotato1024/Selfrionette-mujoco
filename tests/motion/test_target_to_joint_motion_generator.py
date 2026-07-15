@@ -229,7 +229,7 @@ def test_target_to_joint_motion_generator_prefers_four_dof_current_qpos_seed_wit
 
 
 def test_target_to_joint_motion_generator_falls_back_to_supported_seed_shape_when_needed() -> None:
-    target_position_m = (0.35, 0.0, 0.25)
+    target_position_m = (0.35, 0.17, 0.25)
     solver_result = JointCommand(joint_angles_rad=(0.3, -0.2))
     solver = SeedSensitiveInverseKinematicsSolver(
         joint_command=solver_result,
@@ -239,7 +239,7 @@ def test_target_to_joint_motion_generator_falls_back_to_supported_seed_shape_whe
     intent = InputIntent(
         source="replay",
         timestamp_s=5.0,
-        metadata={"origin": "planar", "desired_endpoint_m": target_position_m},
+        metadata={"origin": "generic-seed-fallback", "desired_endpoint_m": target_position_m},
     )
 
     command = TargetToJointMotionGenerator(
