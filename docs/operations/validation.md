@@ -8,21 +8,20 @@ related:
   - AGENTS.md
 ---
 
-# Validation
+# validation
 
-Report validation by category:
+validationをcategory別に報告する。
 
-- docs-only validation
-- unit / compile validation
-- MuJoCo model load validation
-- Web typecheck / build
-- dry-run
-- hardware validation
+- docs-only validation（文書のみ）
+- unit / compile validation（単体・compile検証）
+- MuJoCo model load validation（model load検証）
+- Web typecheck / build（Web静的検証）
+- dry-run（非hardware実行）
+- hardware validation（実機検証）
 
-Do not describe a dry-run, build, typecheck, or MuJoCo load as hardware
-validation.
+dry-run、build、typecheck、MuJoCo loadをhardware validationと呼ばない。
 
-For this skeleton lock stage, expected validation is:
+skeleton lock stageで想定するvalidation:
 
 ```bash
 uv run pytest tests/architecture
@@ -31,5 +30,5 @@ git diff --check
 git status --short --branch
 ```
 
-If a command cannot run because the project environment is not available, report
-the Not Run Reason and do not create ad hoc environments.
+project environmentを利用できずcommandを実行できない場合はNot Run Reasonを報告し、ad hoc environmentを
+作成しない。

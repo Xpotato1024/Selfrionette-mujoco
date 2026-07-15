@@ -1,3 +1,14 @@
+---
+status: canonical
+owner: operations
+last_verified: 2026-07-16
+canonical_for:
+  - R7-A-lite WebSocket and viewer smoke
+related:
+  - docs/contracts/r7-a-lite-serial-frame-contract.md
+  - docs/operations/websocket-publisher-runner.md
+---
+
 # R7-A-lite WebSocket / viewer smoke
 
 ## スコープ

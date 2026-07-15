@@ -10,20 +10,20 @@ related:
   - docs/README.md
 ---
 
-# Conventions
+# conventions
 
-## Terms
+## 用語
 
-- MuJoCo: physical source of truth.
-- Three.js: rendering only.
-- runtime: only composition root.
-- schemas: layer contract.
-- legacy: reference only.
-- assets: model assets.
+- MuJoCo: physical stateのsource of truth。
+- Three.js: renderingのみを担当する。
+- runtime: 唯一のcomposition root。
+- schemas: layer contract。
+- legacy: 参照専用。
+- assets: model asset。
 
-## Layer Names
+## layer名
 
-Use these directory names as fixed layer identifiers:
+次のdirectory名を固定layer identifierとして使用する。
 
 - `schemas`
 - `input_sources`
@@ -35,26 +35,26 @@ Use these directory names as fixed layer identifiers:
 - `runtime`
 - `apps/mujoco-viewer`
 
-## Units
+## 単位
 
-Internal units should use SI units unless a canonical contract says otherwise.
+canonical contractに別の定義がない限り、内部単位にはSI unitを使用する。
 
-- Length: meter (`m`)
-- Time: second (`s`)
-- Angle: radian (`rad`)
-- Angular velocity: radian per second (`rad/s`)
+- 長さ: meter (`m`)
+- 時間: second (`s`)
+- 角度: radian (`rad`)
+- 角速度: radian per second (`rad/s`)
 
-Degrees are allowed only for display, logs, or human-facing documentation.
+degreeは表示、log、人間向け文書に限って使用できる。
 
-## Coordinate System
+## 座標系
 
-The final model coordinate system is provisional until `docs/contracts/assets.md`
-and MuJoCo model-load validation fix the MJCF/STL axis, origin, and scale.
-Do not silently change axis, origin, or unit assumptions.
+最終的なmodel座標系は、`docs/contracts/assets.md`とMuJoCo model-load validationが
+MJCF/STLのaxis、origin、scaleを固定するまでprovisionalである。axis、origin、unitの
+前提を暗黙に変更してはならない。
 
-## Naming
+## 命名
 
-- Python modules, functions, files: `snake_case`
-- Python classes and protocols: `PascalCase`
-- Markdown files and web package files: `kebab-case`
-- Git branches: `codex/<short-purpose>` for Codex-created branches
+- Python module、function、file: `snake_case`
+- Python class、protocol: `PascalCase`
+- Markdown file、web package file: `kebab-case`
+- Git branch: Codexが作成するbranchは`codex/<short-purpose>`

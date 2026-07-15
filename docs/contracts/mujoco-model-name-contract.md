@@ -9,8 +9,8 @@ related:
   - docs/contracts/transport-payload.md
   - docs/contracts/kinematics-command-contract.md
   - src/selfrionette/mujoco_backend/model_contract.py
-  - docs/operations/r7-e-followup-joint-convention-fast-arm-model-contract.md
-  - docs/operations/r7-e-followup-viewer-backend-endpoint-separation.md
+  - docs/reports/implementation/r7-e-followup-joint-convention-fast-arm-model-contract.md
+  - docs/reports/implementation/r7-e-followup-viewer-backend-endpoint-separation.md
 ---
 
 # MuJoCo Model Name Contract

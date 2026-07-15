@@ -1,5 +1,5 @@
 ---
-status: canonical
+status: historical
 owner: runtime
 last_verified: 2026-06-23
 related:

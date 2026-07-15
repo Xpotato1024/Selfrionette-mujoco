@@ -1,12 +1,12 @@
 # mujoco-viewer
 
-## Endpoint presentation boundary
+## endpoint表示の境界
 
-The input overlay parses existing payload-v0 endpoint metadata into typed
-requested, resolved, predicted, and measured groups. Missing or malformed
-values remain unavailable rather than becoming zero. Held, rejected, stale,
-resolution-unavailable, and measurement-unavailable are independent states.
-This is a read-only consumer: it defines no schema and performs no FK or IK.
+input overlayは、既存のpayload-v0 endpoint metadataを型付きのrequested、resolved、
+predicted、measured groupとしてparseする。欠落または不正な値はzeroへ変換せず、
+unavailableのまま扱う。held、rejected、stale、resolution-unavailable、
+measurement-unavailableは互いに独立した状態である。このoverlayはread-only consumerであり、
+schemaを定義せず、FKまたはIKを実行しない。
 
 `apps/mujoco-viewer` は MuJoCo WASM scene renderer を rendering-only でホストする。
 
@@ -24,32 +24,29 @@ This is a read-only consumer: it defines no schema and performs no FK or IK.
 - endpoint evaluation overlay: read-only diagnostic
 - input overlay: read-only source state plus target rejection / hold metadata
 
-## Fixture ownership and regeneration
+## fixtureのownershipと再生成
 
-The canonical fixture is generated from the native MuJoCo replay path and is
-owned by this product viewer. From the repository root, regenerate it with:
+canonical fixtureはnative MuJoCo replay pathから生成し、このproduct viewerが所有する。
+repository rootから次のコマンドで再生成する。
 
 ```powershell
 uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30
 ```
 
-The default output is `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`.
-Its contract is `schema_version: 1`, model
-`assets/mujoco/fast_arm/scene.xml`, preset `sweep_x`, `qpos_length: 4`, and
-30 frames. The repaired current-path content is SHA-256
-`4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`.
-The viewer test parses the tracked file and validates its schema, source,
-model path, preset, frame count, consecutive frame indices, strictly
-increasing simulation time, qpos dimension, finite qpos values, and meaningful
-sweep progression.
+既定の出力先は`apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`である。
+contractは`schema_version: 1`、model `assets/mujoco/fast_arm/scene.xml`、
+preset `sweep_x`、`qpos_length: 4`、30 framesである。修復済みcurrent pathの内容は
+SHA-256 `4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`
+である。viewer testはtracked fileをparseし、schema、source、model path、preset、
+frame count、連続するframe index、単調増加するsimulation time、qpos dimension、
+finiteなqpos value、有意なsweep progressionを検証する。
 
-The rejected PR #392 regeneration candidate had SHA-256
-`A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36`.
-It was not promoted: direct joint-position application retained stale MuJoCo
-velocity state, which caused BADQACC recovery and time rollback. The native
-simulator now clears velocity for position commands, `sweep_x` supplies the
-per-frame desired endpoint, and the exporter validates the complete sequence
-before atomically replacing the product-owned fixture.
+採用しなかったPR #392の再生成候補は、SHA-256
+`A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36`
+だった。joint positionの直接適用によって古いMuJoCo velocity stateが残り、
+BADQACC recoveryとtime rollbackが発生したため採用しなかった。現在のnative simulatorは
+position command時にvelocityをclearし、`sweep_x`はframeごとのdesired endpointを供給する。
+exporterはproduct-owned fixtureをatomicに置換する前にsequence全体を検証する。
 
 ## 参照用の検証コマンド
 
@@ -67,7 +64,7 @@ cd <repository root>
 git diff --check
 ```
 
-## Live Viewer URL
+## Live ViewerのURL
 
 ```powershell
 cd apps\mujoco-viewer
@@ -78,5 +75,5 @@ npm run dev -- --host 127.0.0.1 --port 5173
 http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
-`/apps/mujoco-viewer/` alone is the disconnected viewer. The canonical live
-viewer URL is the same route with `?websocketUrl=ws://127.0.0.1:8766`.
+`/apps/mujoco-viewer/`だけを開いた場合はdisconnected viewerになる。canonical live
+viewer URLは、同じrouteへ`?websocketUrl=ws://127.0.0.1:8766`を付けたものである。

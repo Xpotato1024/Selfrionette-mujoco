@@ -51,7 +51,7 @@ def test_source_of_truth_map_targets_exist() -> None:
 
 
 def test_repository_current_markdown_governance_is_accepted() -> None:
-    result = MODULE.validate()
+    result = MODULE.validate(strict_map=True, strict_links=True)
     assert result.accepted, result.errors
 
 
@@ -123,3 +123,4 @@ def test_changed_strict_map_and_links_are_hard_failures(
     result = MODULE.validate(base_ref="base", strict_map=True, strict_links=True)
     assert any("broken relative link" in error for error in result.errors)
     assert any("Source of Truth Map duplicate" in error for error in result.errors)
+

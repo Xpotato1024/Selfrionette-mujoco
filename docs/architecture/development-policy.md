@@ -9,18 +9,19 @@ related:
   - docs/architecture/documentation-sot-policy.md
 ---
 
-# Development Policy
+# 開発方針
 
-Selfrionette-mujoco uses skeleton-first development. The first goal is not to
-make a simulator move. The first goal is to prevent responsibility drift before
-implementation starts.
+Selfrionette-mujocoの初期移行ではskeleton-first developmentを採用した。最初の目的は
+simulatorを動かすことではなく、実装開始前に責務のdriftを防ぐことだった。
 
-Past failures came from adding input, motion generation, kinematics, physics,
-communication, rendering, and documentation rules incrementally until their
-responsibilities overlapped. This repository fixes the structure first, then
-fills one layer at a time.
+過去にはinput、motion generation、kinematics、physics、communication、rendering、
+documentation ruleを順次追加した結果、責務が重複した。このrepositoryでは構造を先に固定し、
+layerごとに実装を追加した。
 
-## Required Order
+この手順は初期移行の基準であり、新しいすべてのIssueへ自動適用しない。現在のtask、Issue、
+canonical docs、既存実装から、必要な成果が調査、設計、実装、bug fix、validationのどれかを判断する。
+
+## 初期移行で用いた順序
 
 ```text
 Step 1:
@@ -39,13 +40,11 @@ Step 5:
   Freeze the parallel work contracts
 ```
 
-Step 5-0 locks the parallel work contracts that keep control, transport,
-viewer, input, and IK work from drifting apart. Do not add IK, FK, MuJoCo
-loading, WebSocket servers, device input, or Three.js rendering behavior in
-this contract-lock round.
+Step 5-0では、control、transport、viewer、input、IK作業のdriftを防ぐparallel work
+contractを固定した。このcontract-lockでは、IK、FK、MuJoCo loading、WebSocket server、
+device input、Three.js rendering behaviorを追加しない。
 
-## Responsibility Drift Guardrail
+## 責務driftのguardrail
 
-Every new implementation must fit an existing layer. If a new responsibility is
-needed, update the canonical architecture document first, then implement it in
-the documented layer.
+新しい実装は既存layerのいずれかに配置する。新しい責務が必要な場合は、先にcanonical
+architecture文書を更新し、その後で文書に定義したlayerへ実装する。

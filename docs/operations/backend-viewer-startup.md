@@ -9,7 +9,7 @@ canonical_for:
 related:
   - README.md
   - apps/mujoco-viewer/README.md
-  - docs/operations/r6-g-p1-startup-path-audit.md
+  - docs/reports/audits/r6-g-p1-startup-path-audit.md
   - docs/operations/browser-visual-smoke.md
   - docs/operations/live-viewer-smoke.md
 ---
@@ -127,7 +127,7 @@ viewer は HTTP server 経由で開く。`file:///.../index.html` の直開き�
 browser の module / CORS 制約で `dist/browser/main.js` が block されるため使わない。
 
 ```powershell
-cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+Set-Location apps/mujoco-viewer
 python -m http.server 5173
 ```
 
@@ -203,7 +203,7 @@ LAN / Tailscale / public host:
 - R6-G-P2 では起動スクリプトや npm script は追加しない。
 - R6-G-P3 では、この README / docs 導線を実行するうえで script / wrapper / npm script の不足が残るかを確認する。
 - 既存 script と説明だけで loopback 導線は成立するため、今回の結論は「不足なし」。
-- 補完判断の正本は [docs/operations/r6-g-p3-startup-script-gap-audit.md](r6-g-p3-startup-script-gap-audit.md) に固定する。
+- 補完判断の証拠は[起動script gap監査](../reports/audits/r6-g-p3-startup-script-gap-audit.md)に固定する。
 - Windows / PowerShell 向けの短い wrapper、`0.0.0.0` bind と browser URL を同時に案内する補助、public host / LAN / Tailscale 向け URL 案内補助は、R6-G-P4 以降で必要性が出た場合のみ扱う。
 - それらの案内をまとめる場合は `docs/operations/mujoco-viewer-dev-launcher.md` を正本にする。
 - host / port / public host contract の詳細は
@@ -269,7 +269,7 @@ Web viewer の正本は `file://` ではなく HTTP server 経由にする。
 Viewer:
 
 ```powershell
-cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+Set-Location apps/mujoco-viewer
 npm ci
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
@@ -277,7 +277,6 @@ npm run dev -- --host 127.0.0.1 --port 5173
 Publisher:
 
 ```powershell
-cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco
 uv run python scripts/run_replay_mujoco_websocket_publisher.py `
   --host 127.0.0.1 `
   --port 8766 `
@@ -296,7 +295,7 @@ http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 Legacy static fallback:
 
 ```powershell
-cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+Set-Location apps/mujoco-viewer
 npm ci
 npm run browser:build
 python -m http.server 5173

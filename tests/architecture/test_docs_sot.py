@@ -34,10 +34,10 @@ CANONICAL_DOCS = [
     "docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md",
     "docs/operations/r7-c-axis-sanity-check.md",
     "docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md",
-    "docs/operations/r7-c-presentation-demo-notes.md",
-    "docs/operations/r7-c-completion-audit.md",
+    "docs/reports/implementation/r7-c-presentation-demo-notes.md",
+    "docs/reports/audits/r7-c-completion-audit.md",
     "docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md",
-    "docs/operations/r7-e-p22-neutral-initial-pose.md",
+    "docs/reports/implementation/r7-e-p22-neutral-initial-pose.md",
     "docs/migration/legacy-inventory.md",
     "docs/migration/legacy-to-new-layer-map.md",
     "docs/migration/rapier-to-mujoco-migration.md",
@@ -89,21 +89,21 @@ def test_docs_readme_has_source_of_truth_map() -> None:
     assert "Source of Truth Map" in text
 
 
-def test_analog_fixture_mapping_is_registered_in_docs_source_of_truth_map() -> None:
-    text = read("docs/README.md")
-    assert "`docs/contracts/analog-fixture-mapping.md`" in text
-    assert "| Topic | Canonical document | Notes |" in text
-    assert "docs/contracts/kinematics-command-contract.md" in text
-    assert "docs/operations/r7-c-manual-validation-preflight.md" in text
-    assert "docs/operations/r7-c-viewer-fixture-demo-procedure.md" in text
-    assert "docs/operations/r7-c-keyboard-replay-demo-package.md" in text
-    assert "docs/operations/r7-c-live-loadcell-validation-log.md" in text
-    assert "docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md" in text
-    assert "docs/operations/r7-c-axis-sanity-check.md" in text
-    assert "docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md" in text
-    assert "docs/operations/r7-c-presentation-demo-notes.md" in text
-    assert "docs/operations/r7-c-completion-audit.md" in text
-    assert "docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md" in text
+def test_current_contracts_are_registered_and_evidence_is_not_in_sot_map() -> None:
+    index = read("docs/README.md")
+    operations = read("docs/operations/README.md")
+
+    assert "`docs/contracts/analog-fixture-mapping.md`" in index
+    assert "| Topic | Canonical document | Notes |" in index
+    assert "docs/contracts/kinematics-command-contract.md" in index
+    assert "`research/README.md`" in index
+    assert "r7-c-manual-validation-preflight.md" in operations
+    assert "r7-c-viewer-fixture-demo-procedure.md" in operations
+    assert "r7-c-keyboard-replay-demo-package.md" in operations
+    assert "r7-c-live-loadcell-validation-log.md" in operations
+    assert "r7-c-axis-sanity-check.md" in operations
+    assert "docs/reports/implementation/r7-c-presentation-demo-notes.md" not in index
+    assert "docs/reports/audits/r7-c-completion-audit.md" not in index
 
 
 def test_runtime_composition_documents_p19_responsibility_split() -> None:
@@ -145,16 +145,21 @@ def test_robot_profile_contract_is_canonical_and_registered() -> None:
 
 def test_p22_neutral_pose_contract_is_registered_and_freezes_selection_order() -> None:
     index = read("docs/README.md")
-    text = read("docs/operations/r7-e-p22-neutral-initial-pose.md")
+    evidence = read("docs/reports/implementation/r7-e-p22-neutral-initial-pose.md")
+    contract = read("docs/contracts/robot-profile-runtime-viewer-profile.md")
 
-    assert "`docs/operations/r7-e-p22-neutral-initial-pose.md`" in index
-    assert "Selection contract fixed before evaluation" in text
-    assert "rank 3は必須にしない" in text
-    assert "MuJoCo native `home` keyframe" in text
-    assert "candidate count: `82`" in text
-    assert "#339 / P6: implementation evidence complete; manual viewer smoke required" in text
+    assert "`docs/contracts/robot-profile-runtime-viewer-profile.md`" in index
+    assert "`docs/reports/implementation/r7-e-p22-neutral-initial-pose.md`" not in index
+    assert "(0, -0.5235987755982989, 0, -1.0471975511965976)" in contract
+    assert "tip = (0.240000, -0.245951, 0.284308) m" in contract
+    assert "collision-freeの物理証拠とは扱わない" in contract
+    assert "Selection contract fixed before evaluation" in evidence
+    assert "rank 3は必須にしない" in evidence
+    assert "MuJoCo native `home` keyframe" in evidence
+    assert "candidate count: `82`" in evidence
+    assert "#339 / P6: implementation evidence complete; manual viewer smoke required" in evidence
     assert (
         "#341 / P7: local-policy evidence complete with documented workspace limitation; "
         "manual viewer smoke required"
-    ) in text
-    assert "collision_check_available=false" in text
+    ) in evidence
+    assert "collision_check_available=false" in evidence

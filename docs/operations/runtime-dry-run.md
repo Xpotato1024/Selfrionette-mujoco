@@ -94,7 +94,7 @@ payload v0 JSON を connected client に送るものは、
 
 R6-E-P5 では、この dry-run / smoke の契約を変えずに Phase E の completion
 state を文書として固定する。詳細な handoff は
-`docs/operations/r6-e-completion-audit.md` に集約する。
+`docs/reports/audits/r6-e-completion-audit.md` に集約する。
 
 - 完了済み child issue は #75, #76, #77, #78 である
 - `target_position_m` は payload feedback のまま維持する

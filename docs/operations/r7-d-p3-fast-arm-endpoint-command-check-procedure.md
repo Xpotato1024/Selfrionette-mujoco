@@ -6,7 +6,7 @@ canonical_for:
   - R7-D-P3 fast_arm endpoint command check procedure
 related:
   - docs/README.md
-  - docs/operations/r7-d-p1-fast-arm-4dof-endpoint-ik.md
+  - docs/reports/implementation/r7-d-p1-fast-arm-4dof-endpoint-ik.md
   - docs/contracts/target-marker-desired-endpoint.md
   - docs/contracts/transport-payload.md
   - docs/architecture/data-flow.md
@@ -291,4 +291,4 @@ Notes:
 
 - 次の follow-up は #297 を想定する。
 - この手順は manual smoke を固定するだけであり、将来の feature 実装の SoT にはならない。
-- `docs/operations/r7-d-p1-fast-arm-4dof-endpoint-ik.md` と `docs/contracts/transport-payload.md` の boundary を前提に維持する。
+- `docs/reports/implementation/r7-d-p1-fast-arm-4dof-endpoint-ik.md` と `docs/contracts/transport-payload.md` の boundary を前提に維持する。

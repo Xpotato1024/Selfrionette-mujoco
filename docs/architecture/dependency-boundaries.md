@@ -8,13 +8,12 @@ related:
   - tests/architecture/test_import_boundaries.py
 ---
 
-# Dependency Boundaries
+# dependency境界
 
-This document defines import boundaries only. Data flow, runtime composition,
-and viewer/transport contracts are defined in the architecture and contract
-docs, not inferred from imports.
+この文書はimport境界だけを定義する。data flow、runtime composition、
+viewer/transport contractはarchitecture文書とcontract文書で定義し、importから推測しない。
 
-Allowed dependency direction:
+許可するdependency方向:
 
 ```text
 schemas
@@ -27,7 +26,7 @@ transport
   -> runtime
 ```
 
-Allowed examples:
+許可する例:
 
 ```text
 input_sources       -> schemas
@@ -39,7 +38,7 @@ transport           -> schemas
 runtime             -> all layers
 ```
 
-Forbidden dependencies:
+禁止するdependency:
 
 ```text
 input_sources       -> motion
@@ -81,9 +80,42 @@ transport           -> mujoco_backend
 transport           -> runtime
 ```
 
-Any change to these boundaries must update this document, the import boundary
-test, and the PR Architecture Impact.
+これらの境界を変更する場合は、この文書、import boundary test、PRのArchitecture Impactを
+同じ変更で更新する。
 
-`apps/mujoco-viewer/src` is checked by `tests/architecture/test_layer_import_boundaries.py`
-and must remain rendering-only; it must not import MuJoCo, IK/FK, or Rapier
-layers.
+`apps/mujoco-viewer/src`は`tests/architecture/test_layer_import_boundaries.py`で
+検査する。rendering-onlyを維持し、MuJoCo、IK/FK、Rapier layerをimportしてはならない。
+
+## legacy参照と移行境界
+
+`legacy/`は参照専用であり、新しい実装から直接importまたはexecuteしない。
+legacyの責務を移行する場合は、script全体をcopyせず、次のownerへ責務単位で移す。
+
+| legacyの責務 | current owner | 境界 |
+|---|---|---|
+| MuJoCo XML / STL asset | `assets/mujoco/fast_arm/` | canonical assetを参照し、legacy codeを実行しない |
+| device input読取 | `input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
+| inputの意味付けとscale | `input_interpreters/` | `RawInputFrame`を`InputIntent`へ変換する |
+| target更新とsafety limit | `motion/` | `MotionCommand`を生成する |
+| FK / IK / joint limit | `kinematics/`またはrobot-specific plugin | kinematics責務に限定する |
+| MJCF model state | `mujoco_backend/` | MuJoCoをphysical stateのsource of truthとする |
+| logging / replay / WebSocket delivery | `transport/` | motionまたはkinematics logicを所有しない |
+| application composition | `runtime/` | 唯一のcomposition rootとする |
+| visual rendering | `apps/mujoco-viewer/` | Three.js rendering-onlyとする |
+
+## public export境界
+
+package-root exportとmodule-level exportは別のpublic surfaceである。
+
+- package-root `__all__`へ公開するのはcontract、concrete implementation、または
+  canonical文書で維持理由を説明できるcompatibility helperに限定する。
+- `NoOp*`、`Zero*`、`Static*`などのstub classをpackage-rootのstable APIにしない。
+- `stubs.py`はexplicit import用namespaceとして維持し、stubを使用するcallerは
+  `.stubs`から明示的にimportする。
+- `stubs.py.__all__`にはstub classだけを含め、contract re-exportを含めない。
+  contractがmodule attributeとしてexplicit import可能であることとは区別する。
+- production default、concrete runtime、replay runtime、publisher runnerは
+  `.stubs`を直接importしない。compatibility helperからの利用は明示的なallowlistに限定する。
+
+このpublic surfaceを変更する場合は、`tests/architecture/test_public_export_policy.py`と
+該当packageの`__all__` assertionを同じ変更で更新する。

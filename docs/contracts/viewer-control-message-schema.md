@@ -10,68 +10,65 @@ related:
   - docs/architecture/runtime-composition.md
 ---
 
-# Viewer Control Message Schema
+# Viewer Control Messageのschema
 
-This document defines the canonical viewer-to-backend control message
-contract.
+この文書はviewer-to-backend control messageのcanonical contractを定義する。
 
-It is schema-only and JSON-compatible. Viewer JS may capture keyboard or
-gamepad state and serialize this envelope, but it must not use the message to
-mutate simulation state, physics state, FK / IK, qpos, or any browser-side
-source of truth.
+これはschema-onlyかつJSON-compatibleである。Viewer JSはkeyboardまたは
+gamepad stateを取得してこのenvelopeをserializeしてよいが、このmessageを使って
+simulation state、physics state、FK / IK、qpos、またはbrowser-sideの
+source of truthを変更してはならない。
 
-## Envelope
+## Envelope仕様
 
-Top-level fields:
+top-level field:
 
 - `type`: literal `viewer_control_message`
 - `timestamp_s`: number
 - `source_kind`: `keyboard` or `gamepad`
 - `sequence`: optional integer
-- `keyboard`: required when `source_kind == "keyboard"`
-- `gamepad`: required when `source_kind == "gamepad"`
+- `keyboard`: `source_kind == "keyboard"`のときrequired
+- `gamepad`: `source_kind == "gamepad"`のときrequired
 - `metadata`: optional plain object
 
-## Keyboard Payload
+## Keyboard payload仕様
 
-When `source_kind == "keyboard"`, the `keyboard` object has:
+`source_kind == "keyboard"`のとき、`keyboard` objectは次を持つ。
 
 - `active_key_codes`: string array
-- `key_state`: plain object mapping key code to boolean
-- `focus_state`: optional string, `focused` or `blurred`
+- `key_state`: key codeをbooleanへmapするplain object
+- `focus_state`: optional string。`focused`または`blurred`
 - `zero_state`: optional boolean
 
-## Gamepad Payload
+## Gamepad payload仕様
 
-When `source_kind == "gamepad"`, the `gamepad` object has:
+`source_kind == "gamepad"`のとき、`gamepad` objectは次を持つ。
 
 - `index`: optional integer
 - `id`: optional string
 - `connected`: boolean
 - `axes`: finite number array
-- `buttons`: button-state object array; each item is
+- `buttons`: button-state object array。各itemは
   `{"pressed": boolean, "value": optional finite number}`
 - `stale`: optional boolean
 - `zero_state`: optional boolean
 
-## Validation Rules
+## Validation規則
 
-- malformed JSON must be rejected
-- unknown top-level fields must be rejected
-- unknown nested fields on keyboard / gamepad / button objects must be
-  rejected
-- `source_kind` must be `keyboard` or `gamepad`
-- source-specific payload must be present for the chosen source kind
-- field type mismatches must be rejected
-- `metadata` must be a plain object
-- nested JSON-compatible `metadata` must be preserved as-is
-- `index`, `id`, and button `value` are optional and remain optional in the
-  contract
-- button `value`, when present, must be finite
+- malformed JSONはrejectする。
+- unknown top-level fieldはrejectする。
+- keyboard / gamepad / button objectのunknown nested fieldはrejectする。
+- `source_kind`は`keyboard`または`gamepad`でなければならない。
+- 選択したsource kindに対応するsource-specific payloadが必要である。
+- field type mismatchはrejectする。
+- `metadata`はplain objectでなければならない。
+- nested JSON-compatibleな`metadata`はそのまま保持する。
+- `index`、`id`、buttonの`value`はoptionalであり、contract上もoptionalのままとする。
+- buttonの`value`は、存在する場合finiteでなければならない。
 
-## Boundary
+## 責務boundary
 
-This schema only describes read-only control intent. Viewer JS may capture
-keyboard or gamepad state and serialize this message, but it must not use the
-message to mutate simulation state, physics state, FK / IK, qpos, or any
-browser-side source of truth.
+このschemaはread-only control intentだけを記述する。Viewer JSはkeyboardまたは
+gamepad stateを取得してこのmessageをserializeしてよいが、このmessageを使って
+simulation state、physics state、FK / IK、qpos、またはbrowser-sideの
+source of truthを変更してはならない。

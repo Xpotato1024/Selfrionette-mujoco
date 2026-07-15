@@ -11,93 +11,87 @@ related:
   - docs/architecture/data-flow.md
 ---
 
-# Target Marker / Desired Endpoint Contract
+# Target Marker / Desired Endpoint契約
 
-This document freezes the vocabulary and boundary for target intent and the
-viewer-visible target marker in R6-E-P1.
+この文書は、R6-E-P1におけるtarget intentとviewer-visible target markerの
+語彙とboundaryを固定する。
 
-It is a contract document only. It does not add IK, FK, qpos pose recompute,
-MotionCommand execution, or MuJoCo backend state updates.
+これはcontract documentだけであり、IK、FK、qpos pose recompute、
+`MotionCommand` execution、MuJoCo backend state updateは追加しない。
 
-## Desired Endpoint
+## Desired endpointの定義
 
-`desired endpoint` is the runtime / command-side target intent.
+`desired endpoint`はruntime / command-sideのtarget intentである。
 
-- It is defined by `current_tip_position_m + target_delta_m`.
-- It represents the intended end-effector or target point in world/model
-  coordinates that later command and IK boundaries may consume.
-- It is owned by runtime or the command-side pipeline, not by the viewer.
-- It is not computed by the viewer.
-- It is not an FK result.
-- It is not a rendered arm pose.
+- `current_tip_position_m + target_delta_m`で定義する。
+- 後続のcommand boundaryとIK boundaryが消費する可能性がある、world/model
+  coordinates上の意図したend-effectorまたはtarget pointを表す。
+- viewerではなくruntimeまたはcommand-side pipelineが所有する。
+- viewerは計算しない。
+- FK resultではない。
+- rendered arm poseではない。
 
-In this phase, `desired endpoint` is a contract term only.
+このphaseでは、`desired endpoint`はcontract termだけである。
 
-## Target Marker
+## Target markerの定義
 
-`target marker` is the viewer-visible marker representation of the target.
+`target marker`はtargetをviewer-visible markerとして表現したものである。
 
-- It is derived from payload feedback.
-- It is consumed by the viewer for rendering and marker positioning only.
-- It may be shown from payload v0 `target_position_m` when that field is
-  present.
-- It must not be used by the viewer to recompute IK, FK, qpos, arm mesh, or
-  physical state.
+- payload feedbackから導出する。
+- viewerはrenderingとmarker positioningだけに使用する。
+- payload v0の`target_position_m` fieldが存在する場合、その値から表示してよい。
+- viewerによるIK、FK、qpos、arm mesh、physical stateの再計算に使用してはならない。
 
-The current viewer/runtime path may hold the target position in runtime state
-for display, but that state remains rendering-only.
+現在のviewer/runtime pathは表示用としてtarget positionをruntime stateに保持してよいが、
+そのstateはrendering-onlyのままとする。
 
-## Payload v0 `target_position_m`
+## Payload v0 `target_position_m`の定義
 
-`payload v0 target_position_m` is the transport feedback field used to expose
-target marker position to viewer/runtime consumers.
+`payload v0 target_position_m`はtarget marker positionをviewer/runtime consumerへ
+公開するためのtransport feedback fieldである。
 
-- It is part of the existing payload v0 contract.
-- It is not a breaking schema change.
-- It is not a new transport envelope field.
-- It is not the `desired endpoint` itself.
-- It is the payload-provided position that the viewer may use to place the
-  target marker.
-- It is feedback, not a qpos command boundary.
-- Programmed target input may also keep a separate `target_position_m` sample
-  in runtime metadata. In that path, `desired_endpoint_m` is the command-side
-  endpoint term and `target_position_m` is only a compatibility / feedback
-  field.
+- 既存payload v0 contractの一部である。
+- breaking schema changeではない。
+- 新しいtransport envelope fieldではない。
+- `desired endpoint`そのものではない。
+- viewerがtarget markerを配置するために使用できるpayload-provided positionである。
+- feedbackであり、qpos command boundaryではない。
+- Programmed target inputはruntime metadata内に別の`target_position_m` sampleを
+  保持してよい。このpathでは`desired_endpoint_m`がcommand-side endpoint termであり、
+  `target_position_m`はcompatibility / feedback fieldに限る。
 
-If later phases need command-side intent, they must define that intent
-separately and then relate it to `target_position_m` through the boundary
-documented here.
+後続phaseでcommand-side intentが必要になった場合は、そのintentを別途定義し、
+この文書のboundaryを通して`target_position_m`との関係を定める。
 
-## Viewer / Runtime Boundary
+## Viewer / Runtimeのboundary
 
-The boundary is:
+boundaryは次のとおりである。
 
-- runtime and the future command pipeline own target intent and physical state
-- MuJoCo backend remains the physical / state source of truth
-- viewer remains rendering-only
-- viewer may display payload-provided target marker state
-- viewer must not import MuJoCo backend
-- viewer must not load a MuJoCo model
-- viewer must not perform IK, FK, or qpos pose recompute
+- runtimeと将来のcommand pipelineがtarget intentとphysical stateを所有する。
+- MuJoCo backendはphysical / stateのsource of truthであり続ける。
+- viewerはrendering-onlyであり続ける。
+- viewerはpayload-provided target marker stateを表示してよい。
+- viewerはMuJoCo backendをimportしてはならない。
+- viewerはMuJoCo modelをloadしてはならない。
+- viewerはIK、FK、qpos pose recomputeを実行してはならない。
 
-The viewer may keep `target_position_m` in runtime snapshot state as a
-presentation input. That does not make the viewer a source of truth for the
-endpoint itself.
+viewerはpresentation inputとして`target_position_m`をruntime snapshot stateに
+保持してよい。それによってviewerがendpoint自体のsource of truthになることはない。
 
-## Phase E Handoff
+## Phase Eへのhandoff
 
-This contract is the handoff point for the next Phase E issues:
+このcontractは後続Phase E issueへのhandoff pointである。
 
-- R6-E-P2 can treat `desired endpoint` as the command-side input boundary for
-  `InputIntent` or a simple target command to `MotionCommand`.
-- R6-E-P3 can treat the same contract as the boundary before IK output and
-  qpos command handling in the MuJoCo backend.
+- R6-E-P2では、`desired endpoint`を`InputIntent`または単純なtarget commandから
+  `MotionCommand`へ渡すcommand-side input boundaryとして扱える。
+- R6-E-P3では、同じcontractをMuJoCo backendにおけるIK outputと
+  qpos command handlingの前段boundaryとして扱える。
 
-Neither later issue should redefine the viewer contract established here.
+後続issueは、ここで確立したviewer contractを再定義しない。
 
-## Notes
+## 注記
 
-- `payload v0 target_position_m` remains the viewer-facing feedback field for
-  target marker positioning.
-- `target marker` is a rendering term, not a physics term.
-- `desired endpoint` is a command-side intent term, not a viewer-state term.
+- `payload v0 target_position_m`はtarget marker positioning用の
+  viewer-facing feedback fieldであり続ける。
+- `target marker`はrendering termであり、physics termではない。
+- `desired endpoint`はcommand-side intent termであり、viewer-state termではない。

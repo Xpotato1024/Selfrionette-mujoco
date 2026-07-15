@@ -9,70 +9,59 @@ related:
   - docs/contracts/inverse-kinematics.md
   - docs/contracts/kinematics-command-contract.md
   - docs/operations/robot-runtime-plugin-conformance-tests.md
-  - docs/operations/r7-e-p26-profile-migration-cleanup-inventory.md
+  - docs/reports/inventories/r7-e-p26-profile-migration-cleanup-inventory.md
 ---
 
-# Generic Kinematics Test Doubles
+# generic kinematics test double
 
-Generic motion and runtime tests verify solver boundaries, not one robot's
-geometry. A production Planar solver made those tests pass through incidental
-link lengths, reachable targets, and formula-specific outputs. That coupling
-made a generic contract look like a Planar contract.
+generic motion/runtime testは、特定robotのgeometryではなくsolver boundaryを検証する。production Planar solverを
+使うと、偶然のlink length、reachable target、formula-specific outputによってtestが通り、generic contractがPlanar
+contractに見えるcouplingが生じていた。
 
-## Ownership and capabilities
+## ownershipとcapability
 
-The doubles live in `tests/support/kinematics_solver_doubles.py` and are owned
-by the test suite. They implement the current FK/IK protocols structurally and
-use only schema types. Their configuration is frozen where practical; call
-records are intentionally simple mutable lists for inspection.
+doubleは`tests/support/kinematics_solver_doubles.py`に置き、test suiteが所有する。current FK/IK protocolを
+structure上実装し、schema typeだけを使う。可能な範囲でconfigurationをfreezeし、call recordはinspection用の単純な
+mutable listとする。
 
-Supported capabilities are:
+対応するcapability:
 
-- fixed FK endpoint with exact qpos call recording;
-- fixed IK `JointCommand` with exact target/seed call recording;
-- configured `ValueError` failures for FK or IK;
-- seed-sensitive IK for testing seed-shape fallback and call order.
+- exact qpos call record付きfixed FK endpoint
+- exact target/seed call record付きfixed IK `JointCommand`
+- FKまたはIK向けに設定した`ValueError` failure
+- seed-shape fallbackとcall orderを検証するseed-sensitive IK
 
-The doubles return configured literal values and do not reproduce a solver
-algorithm, normalize inputs, load MuJoCo, discover files, or use dynamic
-imports.
+doubleは設定済みliteral valueを返す。solver algorithmの再実装、input normalization、MuJoCo load、file discovery、
+dynamic importは行わない。
 
-## When to use a double
+## doubleを使う条件
 
-Use a double when the subject under test is motion generation, solver argument
-propagation, seed selection, command conversion, endpoint evaluation, metrics,
-failure conversion, discontinuity handling, metadata, or call order.
+test対象がmotion generation、solver argument propagation、seed selection、command conversion、endpoint
+evaluation、metric、failure conversion、discontinuity handling、metadata、call orderの場合にdoubleを使う。
 
-Do not use a double for robot geometry, reachability, numerical solver
-behavior, or robot/plugin conformance. Those checks use the robot-owned solver
-and plugin case.
+robot geometry、reachability、numerical solver behavior、robot/plugin conformanceには使わない。これらはrobot-owned
+solverとplugin caseで検査する。
 
 ## Issue #387 migration
 
-Migrated generic consumers:
+migrationしたgeneric consumer:
 
 - `tests/motion/test_target_to_joint_motion_generator.py`
 - `tests/runtime/test_endpoint_metrics.py`
 - `tests/runtime/test_kinematic_evaluation.py`
 
-The subsequent #388/#389 cleanup moved the offline smoke and its live-loadcell
-caller coverage to the resolved `RobotRuntimePlugin`, then removed the Planar
-implementation-specific tests, production classes, and package/module
-exports. Generic tests continue to use these test-only doubles; fast_arm
-geometry remains covered by its solver tests and plugin conformance case.
+後続#388/#389 cleanupではoffline smokeとlive-loadcell caller coverageをresolved `RobotRuntimePlugin`へ移し、
+Planar implementation固有test、production class、package/module exportを削除した。generic testは引き続きtest-only
+doubleを使い、fast_arm geometryはsolver testとplugin conformance caseでcoverする。
 
-Historical implementation records remain unchanged, including the R6-H
-completion, stub inventory, concrete solver wiring, and R6-I public-surface
-inventory notes. Current FK/IK contract documents describe robot-plugin
-ownership rather than a generic Planar baseline; they are not generic-test
-ownership documents.
+R6-H completion、stub inventory、concrete solver wiring、R6-I public-surface inventory noteを含むhistorical
+implementation recordは変更しない。current FK/IK contractはgeneric Planar baselineではなくrobot-plugin ownershipを
+記述し、generic-test ownership文書にはしない。
 
-## Handoff and boundary
+## handoffとboundary
 
-The #388/#389 shared cleanup established the handoff: selected runtime plugins
-own production IK/FK/motion/endpoint/home-seed/feasibility composition, while
-this module owns only generic test doubles.
+#388/#389 cleanupで、selected runtime pluginがproduction IK/FK/motion/endpoint/home-seed/feasibility compositionを
+所有し、このmoduleはgeneric test doubleだけを所有する境界を固定した。
 
-Production source must never import `tests.support` or this module. The doubles
-must remain under `tests/` and must not be exported from
-`selfrionette.kinematics`, another production package, or runtime composition.
+production sourceは`tests.support`またはこのmoduleをimportしてはならない。doubleは`tests/`配下に留め、
+`selfrionette.kinematics`、他production package、runtime compositionからexportしない。

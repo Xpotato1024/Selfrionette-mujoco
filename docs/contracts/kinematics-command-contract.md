@@ -9,7 +9,7 @@ canonical_for:
 related:
   - docs/contracts/forward-kinematics.md
   - docs/contracts/inverse-kinematics.md
-  - docs/operations/r6-h-p1-stub-inventory.md
+  - docs/reports/inventories/r6-h-p1-stub-inventory.md
   - docs/contracts/motion-command.md
   - docs/contracts/schemas.md
   - docs/architecture/data-flow.md

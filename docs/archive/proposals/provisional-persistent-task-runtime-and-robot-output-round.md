@@ -1,5 +1,5 @@
 ---
-status: proposal
+status: draft
 owner: runtime
 last_updated: 2026-07-14
 related:

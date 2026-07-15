@@ -5,16 +5,16 @@ last_verified: 2026-07-15
 canonical_for:
   - product viewer wasm scene renderer operation
 related:
-  - docs/design/mujoco-wasm-scene-renderer-design.md
-  - docs/research/mujoco-webviewer-options.md
-  - docs/operations/wasm-qpos-sync-poc.md
+  - docs/archive/design/mujoco-wasm-scene-renderer-design.md
+  - docs/archive/research/mujoco-webviewer-options.md
+  - docs/archive/operations/wasm-qpos-sync-poc.md
 ---
 
-# Product Viewer WASM Scene Renderer
+# product viewer WASM scene renderer
 
 `apps/mujoco-viewer` は、`experiments/mujoco-wasm-viewer-poc` で成立し #185 で昇格した `@mujoco/mujoco` WASM scene renderer の現在のproduction ownerです。実行可能なPoCは #385 で退役し、現行のrenderer・tests・fixture・operator pathはこのproduct viewer側に一本化されています。
 
-## Boundary
+## boundary
 
 - Python native MuJoCo backend / IK / FK / runtime が source of truth
 - Browser WASM MuJoCo は visual renderer only
@@ -22,57 +22,51 @@ related:
 - browser 側で qpos correction はしない
 - qpos は runtime payload を優先し、未接続時は compiled MuJoCo model default qpos を startup pose として使う
 
-## Product viewer entrypoint
+## product viewer entrypoint
 
 - `apps/mujoco-viewer/src/main.tsx`
 - default renderer mode: `wasm-scene`
 - model path: `/assets/mujoco/fast_arm/scene.xml`
 
-## Startup pose source
+## startup pose source
 
 - `home` keyframe: canonical fast_arm startup qpos。pre-payload表示はMJCFからこのqposを読む
 - compiled MuJoCo model default qpos: historical fallbackではなく、startup sourceには使わない
 - fixture qpos: default startup path では使わない
 - runtime qpos: WebSocket payload が来たら `data.qpos` に適用する
 
-## Canonical qpos fixture
+## canonical qpos fixture
 
-- owner: `apps/mujoco-viewer/`
+- owner: product viewerの`apps/mujoco-viewer/`
 - path: `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`
 - schema owner: `apps/mujoco-viewer/src/wasm-scene/qposFrameTypes.ts`
-- regeneration: `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30`
-- fixture playback is debug/validation only; startup still uses the named `home` keyframe
+- 再生成: `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30`
+- fixture playbackはdebug/validation専用であり、startupはnamed `home` keyframeを使う
 
-## Fixture generation integrity
+## fixture生成のintegrity
 
-PR #392 initially exposed an invalid regeneration candidate
-(`A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36`). The
-native simulator was applying a new joint position while retaining the
-previous step's velocity. MuJoCo then emitted BADQACC and returned a reset-like
-time value from `mj_step`; the snapshot, payload, and exporter did not reorder
-or alter that value. The same defect reproduced on current `main` and on the
-#392 branch.
+PR #392では当初、不正な再生成候補
+`A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36`が得られた。
+native simulatorが新しいjoint positionを適用するとき、前stepのvelocityを残していた。MuJoCoはBADQACCを出し、
+`mj_step`からreset-like time valueを返した。snapshot、payload、exporterはその値を並べ替えたり変更したりしていない。
+同じdefectはcurrent `main`と#392 branchの両方で再現した。
 
-The root-cause fix clears velocity when the position-command boundary writes
-qpos, and `sweep_x` now supplies its interpolated endpoint for each move and
-return frame. This preserves the existing payload schema and viewer boundary;
-it does not add browser FK/IK or qpos recomputation. The exporter validates
-the entire in-memory sequence (indices, time, metadata, qpos finiteness and
-dimension) and atomically replaces the target only after serialization
-succeeds.
+root-cause fixではposition-command boundaryがqposを書き込むときにvelocityをclearし、`sweep_x`はmove/returnの各frameへ
+interpolated endpointを供給する。既存payload schemaとviewer boundaryを維持し、browser FK/IKまたはqpos
+recomputationを追加しない。exporterはin-memory sequence全体についてindex、time、metadata、qpos finiteness、dimensionを
+validateし、serialization成功後だけtargetをatomicに置換する。
 
-The repaired command produces 30 frames with strictly increasing simulation
-time, finite four-value qpos, intended move/return progression, an intentional
-terminal hold, and no BADQACC warning. The current canonical fixture SHA-256
-is `4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`.
+修復後のcommandは、strictly increasing simulation time、finiteな4-value qpos、意図したmove/return progression、
+intentional terminal holdを持つ30 framesを生成し、BADQACC warningを出さない。current canonical fixture SHA-256は
+`4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`である。
 
-## Old renderer handling
+## 旧rendererの扱い
 
 - decision: deleted
-- default production route: no longer imports the old Three.js hand-built renderer stack
-- old viewer-specific renderer / runtime / view model / tests were removed to avoid code bloat
+- default production routeは旧Three.js hand-built renderer stackをimportしない
+- code bloatを避けるため旧viewer-specific renderer / runtime / view model / testsを削除した
 
-## Run
+## 実行
 
 ```powershell
 cd apps\mujoco-viewer
@@ -84,7 +78,7 @@ Vite dev server は起動後にブラウザを自動で開き、`/apps/mujoco-vi
 実際の port は Vite の表示に従う。`5175` は手元環境での一例。
 ポートが使用中なら Vite が次の空きポートを選ぶ。
 
-## Validation
+## validation
 
 ```powershell
 cd apps\mujoco-viewer
@@ -98,17 +92,17 @@ cd <repository root>
 git diff --check
 ```
 
-## Browser smoke
+## browser smoke
 
-- viewer loads
-- WASM loads
-- fast_arm scene loads
-- initial pose source is explicit
-- qpos sync path works, or qpos unavailable is clearly shown
-- floor / axes / legend / colors appear
-- old renderer is not on the default production path
+- viewerをloadできる
+- WASMをloadできる
+- fast_arm sceneをloadできる
+- initial pose sourceが明示される
+- qpos sync pathが動作するか、qpos unavailableを明示する
+- floor / axes / legend / colorを表示する
+- 旧rendererがdefault production pathにない
 
-## Known limitations
+## 既知の制限
 
 - fixture qpos は debug 用の参照としてのみ扱い、startup では自動適用しない
 - live WebSocket qpos availability depends on publisher payloads

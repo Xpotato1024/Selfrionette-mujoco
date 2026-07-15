@@ -1,3 +1,12 @@
+---
+status: historical
+owner: documentation
+last_verified: 2026-07-16
+canonical_for: []
+related:
+  - docs/architecture/documentation-sot-policy.md
+---
+
 # R6-I-P1 public surface inventory
 
 ## 1. 目的

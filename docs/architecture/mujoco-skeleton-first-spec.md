@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-07-16
 canonical_for:
   - skeleton structure
   - layer responsibilities
@@ -10,16 +10,15 @@ related:
   - docs/architecture/dependency-boundaries.md
 ---
 
-# MuJoCo Skeleton-First Spec
+# MuJoCo skeleton-first仕様
 
-## Source of Truth
+## source of truth
 
-MuJoCo is the physical source of truth. Three.js is rendering only. The runtime
-directory is the only composition root. Schemas define layer contracts. Legacy
-is reference only. Assets are model assets. Transport is serialization and
-delivery only.
+MuJoCoはphysical stateのsource of truthである。Three.jsはrenderingだけを担当する。`runtime/`は唯一の
+composition rootである。schemasはlayer contractを定義する。legacyは参照専用である。assetsはmodel
+assetである。transportはserializationとdeliveryだけを担当する。
 
-Correct flow:
+正しいflow:
 
 ```text
 InputSource
@@ -34,7 +33,7 @@ InputSource
   -> Three.js display
 ```
 
-Forbidden structure:
+禁止する構造:
 
 ```text
 MuJoCo
@@ -45,68 +44,59 @@ old PoseState
 any duplicate arm-pose source of truth
 ```
 
-## Layers
+## layer
 
 ### `schemas/`
 
-Defines shared data contracts such as `RawInputFrame`, `InputIntent`,
-`TargetCommand`, `JointCommand`, `MotionCommand`, `MuJoCoState`, and
-`RenderState`. It must not depend on any other layer.
+`RawInputFrame`、`InputIntent`、`TargetCommand`、`JointCommand`、`MotionCommand`、
+`MuJoCoState`、`RenderState`などのshared data contractを定義する。他のlayerへ依存してはならない。
 
 ### `input_sources/`
 
-Reads Arduino, keyboard, gamepad, replay, OSC, or mocap values and returns
-`RawInputFrame`. It must not perform IK, target updates, joint generation,
-MuJoCo operations, WebSocket sends, or Three.js transforms.
+Arduino、keyboard、gamepad、replay、OSC、mocapの値を読み、`RawInputFrame`を返す。IK、target update、
+joint generation、MuJoCo operation、WebSocket send、Three.js transformを実行してはならない。
 
 ### `input_interpreters/`
 
-Converts `RawInputFrame` to `InputIntent`, including deadzone, scaling, button
-meaning, and source-specific interpretation. It must not perform IK, target
-updates, qpos/ctrl generation, MuJoCo operations, or render transforms.
+deadzone、scaling、button meaning、source-specific interpretationを含め、`RawInputFrame`を
+`InputIntent`へ変換する。IK、target update、qpos/ctrl generation、MuJoCo operation、render transformを
+実行してはならない。
 
 ### `motion/`
 
-Converts `InputIntent` to `MotionCommand`, including target updates, workspace
-limits, speed limits, safety limits, IK calls, and command generation. It must
-not directly operate MuJoCo model/data, send WebSocket messages, generate
-Three.js transforms, or read input devices.
+target update、workspace limit、speed limit、safety limit、IK call、command generationを含め、
+`InputIntent`を`MotionCommand`へ変換する。MuJoCo model/dataを直接操作せず、WebSocket messageを送らず、
+Three.js transformを生成せず、input deviceを読まない。
 
 ### `kinematics/`
 
-Contains pure FK, IK, joint limits, joint conventions, and motor/joint-space
-conversion. It must not read devices, operate MuJoCo data, communicate over
-WebSocket, render Three.js, or depend on runtime.
+pure FK、IK、joint limit、joint convention、motor/joint-space conversionを持つ。deviceを読まず、
+MuJoCo dataを操作せず、WebSocket通信やThree.js renderingを行わず、runtimeへ依存しない。
 
 ### `mujoco_backend/`
 
-Loads MJCF/XML, manages model/data, applies qpos/ctrl, runs `mj_forward` and
-`mj_step`, extracts body/site transforms and contact data, and builds
-`MuJoCoState`. It must not read input devices, call interpreters, depend on
-runtime, render Three.js, or own a WebSocket server.
+MJCF/XMLをloadし、model/dataを管理し、qpos/ctrlを適用し、`mj_forward`と`mj_step`を実行し、
+body/site transformとcontact dataを抽出して`MuJoCoState`を構築する。input deviceを読まず、interpreterを
+呼ばず、runtimeへ依存せず、Three.js renderingやWebSocket server ownershipを持たない。
 
 ### `transport/`
 
-Serializes and sends `MuJoCoState`, logs frames, and records replay data. It
-must not perform IK, update targets, step MuJoCo, read input devices, or render.
-Transport is payload delivery only. It does not own a physics state.
+`MuJoCoState`をserializeして送信し、frame logとreplay dataを記録する。IK、target update、MuJoCo step、
+input device read、renderingを行わない。transportはpayload deliveryだけを担当し、physics stateを所有しない。
 
 ### `runtime/`
 
-The only composition root. It may load config, select input source,
-interpreter, motion generator, MuJoCo backend, transport, and manage the main
-loop. Other layers must not depend on runtime.
+唯一のcomposition rootである。config load、input source、interpreter、motion generator、MuJoCo backend、
+transportの選択とmain loop管理を行える。他のlayerはruntimeへ依存してはならない。
 
 ### `apps/mujoco-viewer/`
 
-The Three.js rendering layer. It receives `MuJoCoState` and applies body/site
-transforms to meshes, markers, and overlays. It must not implement FK, IK,
-joint generation, MuJoCo stepping, or Rapier physics.
+Three.js rendering layerである。`MuJoCoState`を受け取り、body/site transformをmesh、marker、overlayへ
+適用する。FK、IK、joint generation、MuJoCo step、Rapier physicsを実装してはならない。
 
-## Step 5-0 Parallel Work Contracts
+## Step 5-0 parallel work contract
 
-This issue locks the contracts that let the following work proceed in parallel
-without splitting source of truth:
+このIssueでは、source of truthを分裂させず次の作業を並行できるcontractを固定した。
 
 ```text
 InputSource
@@ -121,83 +111,70 @@ InputSource
   -> viewer rendering
 ```
 
-Rules:
+規則:
 
-- Data flow and import dependency are not the same thing.
-- Runtime is the only layer allowed to compose multiple layers.
-- Viewer, transport, input, and IK must not compose the MuJoCo backend
-  directly.
-- Viewer renders `MuJoCoState` or a transport payload; it does not create its
-  own physics state.
-- MotionCommand, MuJoCoState, transport payload, viewer, and input/IK contracts
-  are fixed by `docs/contracts/`.
-- This issue does not add implementation behavior.
+- data flowとimport dependencyは同じではない
+- 複数layerをcomposeできるのはruntimeだけである
+- viewer、transport、input、IKはMuJoCo backendを直接composeしない
+- viewerは`MuJoCoState`またはtransport payloadをrenderし、独自のphysics stateを作らない
+- MotionCommand、MuJoCoState、transport payload、viewer、input/IK contractは`docs/contracts/`で固定する
+- このIssueではimplementation behaviorを追加しない
 
-## Stub Policy
+## stub policy
 
-Step 2 adds schema dataclasses, layer `Protocol` definitions, and NoOp / static
-stubs in the documented layers. Stub files must stay inside the correct layer
-and must not bypass the dependency rules. Runtime composition remains out of
-scope until Step 3.
+Step 2ではschema dataclass、layer `Protocol`定義、NoOp / static stubを定義済みlayerへ追加した。stub fileは
+正しいlayer内に置き、dependency ruleを迂回してはならない。runtime compositionはStep 3までscope外だった。
 
-Step 3 connects `StaticInputSource` -> `NoOpInputInterpreter` ->
-`NoOpMotionGenerator` -> `NoOpMuJoCoSimulator` -> `NoOpStatePublisher`.
-It does not introduce real MuJoCo, WebSocket, Three.js, or device input
-behavior.
-Step 4 replaces each stub implementation individually.
+Step 3では`StaticInputSource` -> `NoOpInputInterpreter` -> `NoOpMotionGenerator` ->
+`NoOpMuJoCoSimulator` -> `NoOpStatePublisher`を接続した。実際のMuJoCo、WebSocket、Three.js、device
+input behaviorは導入しなかった。Step 4ではstub implementationを一つずつ置換した。
 
 ### Step 4-B
 
-This issue adds the first headless MuJoCo backend slice:
+このIssueでは最初のheadless MuJoCo backend sliceを追加した。
 
 - canonical model path: `assets/mujoco/fast_arm/scene.xml`
-- load the scene in `mujoco_backend` only
-- inspect joint, body, and site names only
-- do not connect the loader to runtime yet
-- do not build `MuJoCoState` snapshots here; that is reserved for #10
+- sceneは`mujoco_backend`だけでloadする
+- joint、body、site nameだけをinspectする
+- loaderをruntimeへまだ接続しない
+- `MuJoCoState` snapshotは構築しない。これは#10にreservedする
 
 ### Step 4-C
 
-This issue adds the headless `MuJoCoState` snapshot slice:
+このIssueではheadless `MuJoCoState` snapshot sliceを追加した。
 
-- build `MuJoCoState` from `MjModel` / `MjData` in `mujoco_backend` only
-- call `mj_forward` before reading data
-- do not call `mj_step`
-- map body transforms to `BodyTransform`
-- map site transforms to `SiteTransform`
-- store quaternions as `wxyz`
-- do not connect this snapshot slice to runtime yet
+- `mujoco_backend`だけで`MjModel` / `MjData`から`MuJoCoState`を構築する
+- dataを読む前に`mj_forward`を呼ぶ
+- `mj_step`は呼ばない
+- body transformを`BodyTransform`へmapする
+- site transformを`SiteTransform`へmapする
+- quaternionは`wxyz`で保存する
+- snapshot sliceはまだruntimeへ接続しない
 
 ### Step 4-D
 
-This issue adds the runtime entry for the real headless MuJoCo backend:
+このIssueでは実際のheadless MuJoCo backendを使うruntime entryを追加した。
 
-- keep `build_noop_pipeline()` for stub wiring checks
-- add `build_mujoco_pipeline()` to compose the headless backend into
-  `RuntimePipeline`
-- use `assets/mujoco/fast_arm/scene.xml` by default when no model path is
-  supplied
-- keep `apply_command()` as command retention only
-- keep `step(dt_s)` as frame index bookkeeping only
-- do not call `mj_step`
-- return `MuJoCoState` from `snapshot()`
-- defer motion-to-qpos/ctrl, transport, viewer, and hardware work to later
-  issues
+- stub wiring check用に`build_noop_pipeline()`を維持する
+- headless backendを`RuntimePipeline`へcomposeする`build_mujoco_pipeline()`を追加する
+- model pathがない場合は`assets/mujoco/fast_arm/scene.xml`を既定値にする
+- `apply_command()`はcommand retentionだけを行う
+- `step(dt_s)`はframe index bookkeepingだけを行う
+- `mj_step`は呼ばない
+- `snapshot()`から`MuJoCoState`を返す
+- motion-to-qpos/ctrl、transport、viewer、hardwareは後続Issueへdeferする
 
 ### Step 5-D
 
-This issue adds the first real command-to-simulation bridge in the headless
-backend:
+このIssueではheadless backendへ最初の実command-to-simulation bridgeを追加した。
 
-- reflect `MotionCommand.joint` directly into MuJoCo `qpos`
-- use MuJoCo model joint order and joint `qpos` addresses from the backend
-- call `mj_step` to advance `data.time` and the simulation state
-- keep actuator ctrl, PID, controller, IK, input, transport, and viewer work
-  out of scope
-- build `MuJoCoState` snapshots from the progressed backend state
+- `MotionCommand.joint`をMuJoCo `qpos`へ直接反映する
+- backendのMuJoCo model joint orderとjoint `qpos` addressを使う
+- `mj_step`を呼び、`data.time`とsimulation stateを進める
+- actuator ctrl、PID、controller、IK、input、transport、viewerはscope外に保つ
+- 進行後のbackend stateから`MuJoCoState` snapshotを構築する
 
 ### Step 5-0
 
-This issue freezes the parallel work contracts for input, motion, IK,
-transport, and viewer work. It does not add new behavior. Use the canonical
-contracts under `docs/contracts/` when implementing later steps.
+このIssueではinput、motion、IK、transport、viewer作業向けのparallel work contractを固定し、新しいbehaviorは
+追加しなかった。後続stepを実装するときは`docs/contracts/`配下のcanonical contractを使用する。

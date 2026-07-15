@@ -7,7 +7,7 @@ canonical_for:
 related:
   - docs/README.md
   - docs/contracts/r7-b-runtime-input-pipeline-contract.md
-  - docs/operations/r6-k-p3-input-source-state-payload.md
+  - docs/reports/implementation/r6-k-p3-input-source-state-payload.md
 ---
 
 # Runtime Input Source State

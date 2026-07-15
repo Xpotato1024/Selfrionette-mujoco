@@ -1,5 +1,5 @@
 ---
-status: canonical
+status: historical
 owner: operations
 canonical_for:
   - R6-L viewer input overlay display

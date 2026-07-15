@@ -5,45 +5,38 @@ canonical_for:
   - R6-L keyboard / gamepad live viewer smoke procedure
 related:
   - docs/README.md
-  - docs/operations/r6-l-keyboard-viewer-input.md
-  - docs/operations/r6-l-gamepad-viewer-input.md
-  - docs/operations/r6-l-viewer-input-overlay.md
+  - docs/reports/implementation/r6-l-keyboard-viewer-input.md
+  - docs/reports/implementation/r6-l-gamepad-viewer-input.md
+  - docs/reports/implementation/r6-l-viewer-input-overlay.md
   - docs/contracts/viewer-control-message-schema.md
   - docs/contracts/transport-payload.md
   - docs/contracts/r7-b-runtime-input-pipeline-contract.md
 ---
 
-# R6-L Keyboard / Gamepad Live Viewer Smoke
+# R6-L keyboard / gamepad live viewer smoke
 
-## Purpose
+## 目的
 
-This procedure verifies the manual keyboard and browser gamepad live viewer
-control smoke path. The viewer captures input, the backend
-`ViewerInputSource` receives viewer control messages, the existing runtime
-pipeline advances simulation, and the viewer shows read-only payload state and
-overlay state.
+manual keyboardとbrowser gamepadによるlive viewer control smoke pathを検証する。viewerがinputをcaptureし、backend
+`ViewerInputSource`がviewer control messageを受信し、既存runtime pipelineがsimulationを進め、viewerがread-only
+payload stateとoverlay stateを表示する。
 
-## Prerequisites
+## 前提条件
 
-- #253, #254, #255 / #283, and #256 / #284 are available in the local checkout
-  or merged to the base branch.
-- This procedure is stacked on PR #283 and PR #284 until those PRs land; if
-  #283 is still open, use `codex/255-backend-viewer-input-source` as the base
-  branch. If #284 is stacked on top of #283, use `codex/256-viewer-input-overlay`
-  only when that branch already contains the #283 ingress fix.
-- The backend supports viewer inbound control messages through
-  `--input-source viewer` only when the checkout is rooted at
-  `codex/255-backend-viewer-input-source` or later and includes the #283 live
-  ingress wiring. On an older base, this command is publisher-only and does not
-  satisfy live control smoke.
-- `apps/mujoco-viewer` dependencies are installed.
-- A browser with keyboard focus and, for gamepad smoke, a connected gamepad.
-- Do not open a serial device, send OSC, or access robot hardware for this
-  smoke.
+- #253、#254、#255 / #283、#256 / #284がlocal checkoutに存在するかbase branchへmerge済みである
+- PR #283とPR #284がmergeされるまでは、この手順は両PRにstackする。#283がopenなら
+  `codex/255-backend-viewer-input-source`をbase branchにする。#284が#283上へstackされている場合、#283 ingress
+  fixを既に含むときだけ`codex/256-viewer-input-overlay`を使う
+- backendが`--input-source viewer`でviewer inbound control messageをsupportするのは、checkoutが
+  `codex/255-backend-viewer-input-source`以降をrootとし、#283 live ingress wiringを含む場合だけである。古いbaseでは
+  commandはpublisher-onlyでありlive control smokeを満たさない
+- `apps/mujoco-viewer` dependencyをinstall済みである
+- keyboard focusを受けられるbrowserを使い、gamepad smokeではgamepadを接続する
+- このsmokeではserial deviceをopenせず、OSCを送信せず、robot hardwareへaccessしない
 
-## Backend Startup
+## backend起動
 
-Run the backend runtime with the viewer input source enabled:
+viewer input sourceを有効にしてbackend runtimeを実行する。
 
 ```powershell
 uv run python scripts/run_replay_mujoco_websocket_publisher.py `
@@ -56,33 +49,25 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py `
   --input-source viewer
 ```
 
-Notes:
+注記:
 
-- The backend remains the source of truth for simulation state.
-- The viewer does not mutate MuJoCo state directly.
-- Inbound WebSocket messages update `ViewerInputSource`, not the simulator
-  directly.
-- The runtime step loop advances simulation after ingesting viewer messages.
-- This backend command is only a live-control smoke path when the checkout
-  already contains the #283 ingress wiring in the base branch / stack.
-- This finite run lasts about five minutes at the documented step interval.
-  If the operator finishes earlier, stop the backend with `Ctrl+C`. If the
-  backend completes before keyboard and gamepad checks finish, rerun the
-  backend and record that as a failure note.
-- For `--input-source viewer`, positive `interval_s` uses an absolute
-  monotonic deadline. Compute, simulation, annotation, serialization, and
-  enqueue work are deducted from the remaining sleep rather than added to the
-  cadence. `interval_s=0` remains fast-as-possible.
-- Completion prints one bounded `live runtime timing summary` JSON object.
-  It includes wall/simulation time, realtime factor, stage timing, sleep,
-  deadline lag/misses, frame counts, live delivery coalescing, and bounded
-  shutdown timeout/drop counts. It does not retain every frame. A deadline
-  miss includes post-sleep scheduler overshoot greater than 1 microsecond.
-- Final live delivery flush is best-effort and bounded to one second. On
-  timeout the sender task is cancelled and awaited; pending or unconfirmed
-  in-flight states are counted as shutdown drops rather than sent frames.
+- backendがsimulation stateのsource of truthである
+- viewerはMuJoCo stateを直接mutateしない
+- inbound WebSocket messageはsimulatorではなく`ViewerInputSource`を更新する
+- runtime step loopはviewer messageをingestした後にsimulationを進める
+- checkoutのbase branch / stackが#283 ingress wiringを既に含む場合だけ、このbackend commandはlive-control smoke
+  pathになる
+- documented step intervalではfinite runが約5分続く。operatorが早く完了した場合は`Ctrl+C`でbackendを停止する。
+  keyboard/gamepad check完了前にbackendが終了した場合は再実行し、failure noteへ記録する
+- `--input-source viewer`では正の`interval_s`がabsolute monotonic deadlineを使う。compute、simulation、annotation、
+  serialization、enqueue時間はcadenceへ加算せずremaining sleepから差し引く。`interval_s=0`はfast-as-possibleのまま
+- 完了時にbounded `live runtime timing summary` JSON objectを1件出力する。wall/simulation time、realtime factor、
+  stage timing、sleep、deadline lag/miss、frame count、live delivery coalescing、bounded shutdown timeout/drop countを
+  含み、全frameは保持しない。deadline missには1 microsecondを超えるpost-sleep scheduler overshootを含む
+- final live delivery flushはbest-effortで1 secondにboundする。timeout時はsender taskをcancelしてawaitし、pendingまたは
+  unconfirmed in-flight stateをsent frameではなくshutdown dropとして数える
 
-## Viewer Startup
+## viewer起動
 
 ```powershell
 cd apps/mujoco-viewer
@@ -90,143 +75,123 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Expected URL:
+想定URL:
 
 ```text
 http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
-`/apps/mujoco-viewer/` alone is the disconnected viewer. The live smoke URL
-must include `websocketUrl=ws://127.0.0.1:8766`.
+`/apps/mujoco-viewer/`だけではdisconnected viewerになる。live smoke URLには
+`websocketUrl=ws://127.0.0.1:8766`を含める。
 
-## Keyboard Smoke Steps
+## keyboard smoke手順
 
-1. Open the viewer URL in a browser.
-1. Confirm the viewer connection reaches the open state.
-1. Focus the browser window or canvas.
-1. Press `KeyW`, `KeyA`, `KeyS`, `KeyD`, `Space`, `ShiftLeft`, and
-   `ShiftRight`.
-1. Confirm the input overlay shows the active key codes and the source kind
-   for keyboard control.
-1. Confirm the overlay updates command age and stale state without crashing.
-1. Confirm target, tip, and error display track the live command path.
-1. Release the keys and blur the window.
-1. Confirm the key state clears and the overlay reports the blurred / stale
-   state.
-1. Confirm focus regain does not leave stuck keys behind.
+1. browserでviewer URLを開く。
+1. viewer connectionがopen stateになることを確認する。
+1. browser windowまたはcanvasへfocusする。
+1. `KeyW`、`KeyA`、`KeyS`、`KeyD`、`Space`、`ShiftLeft`、`ShiftRight`を押す。
+1. input overlayがactive key codeとkeyboard controlのsource kindを表示することを確認する。
+1. crashせずcommand ageとstale stateを更新することを確認する。
+1. target、tip、error displayがlive command pathへ追従することを確認する。
+1. keyをreleaseし、windowをblurする。
+1. key stateがclearされ、overlayがblurred / stale stateをreportすることを確認する。
+1. focus regain後にstuck keyが残らないことを確認する。
 
-## Gamepad Smoke Steps
+## gamepad smoke手順
 
-1. Connect a browser-compatible gamepad.
-1. Open the viewer URL in a browser.
-1. Confirm the viewer connection reaches the open state.
-1. Move the sticks and press the buttons.
-1. Confirm the input overlay shows the normalized axes, button state, and
-   gamepad source kind.
-1. Confirm the overlay reports the connected / stale state correctly.
-1. Disconnect the gamepad.
-1. Confirm the overlay falls back to a safe zero / stale state without
-   crashing.
-1. Confirm target, tip, and error display remain consistent with the live
-   command path.
+1. browser-compatible gamepadを接続する。
+1. browserでviewer URLを開く。
+1. viewer connectionがopen stateになることを確認する。
+1. stickを動かしbuttonを押す。
+1. input overlayがnormalized axis、button state、gamepad source kindを表示することを確認する。
+1. connected / stale stateを正しくreportすることを確認する。
+1. gamepadを切断する。
+1. crashせずsafe zero / stale stateへfallbackすることを確認する。
+1. target、tip、error displayがlive command pathと整合することを確認する。
 
-## Expected Overlay Behavior
+## 想定overlay behavior
 
-- `source_kind` reflects the backend runtime input source.
-- `source_active` reflects whether the backend currently considers the input
-  source live.
-- keyboard active key codes are visible while keys are held.
-- gamepad axes and buttons are visible while a pad is connected.
-- `command_age_ms` and `stale_reason` are visible as read-only diagnostics.
-- Missing optional fields do not crash the viewer.
-- Target rejection / hold frames should make `runtime_input_safety_applied`,
-  `target_status`, `target_rejected`, `target_rejection_reason`,
-  `target_rejection_message`, `rejected_desired_endpoint_m`, and the held
-  `target_position_m` readable in the overlay.
-- If `endpoint_evaluation` is missing on a rejected or held frame, the overlay
-  should say it is unavailable rather than recomputing it.
-- The procedure assumes viewer-origin WebSocket messages are being ingested by
-  the backend runner.
-- The status section distinguishes received, compatibility-accepted, and
-  scene-applied frames. It also reports frame distance, receive-to-apply age,
-  parse/apply timing, coalesced frames, and UI update frequency. These are
-  browser-monotonic observations and must not be directly subtracted from the
-  backend monotonic clock.
-- A compatibility-invalid payload or parse error is an ingress barrier: any
-  older unapplied compatible candidate is discarded. The already-applied scene
-  pose remains unchanged, while the UI reports warning/invalid until a later
-  valid candidate is applied.
+- `source_kind`はbackend runtime input sourceを反映する
+- `source_active`はbackendがinput sourceをliveと判断しているかを反映する
+- key hold中はkeyboard active key codeを表示する
+- pad接続中はgamepad axisとbuttonを表示する
+- `command_age_ms`と`stale_reason`をread-only diagnosticとして表示する
+- optional field欠落でviewerがcrashしない
+- target rejection / hold frameでは`runtime_input_safety_applied`、`target_status`、`target_rejected`、
+  `target_rejection_reason`、`target_rejection_message`、`rejected_desired_endpoint_m`、held
+  `target_position_m`をoverlayで読める
+- rejected / held frameで`endpoint_evaluation`がない場合、再計算せずunavailableと表示する
+- viewer-origin WebSocket messageをbackend runnerがingestしていることを前提とする
+- status sectionはreceived、compatibility-accepted、scene-applied frameを区別し、frame distance、
+  receive-to-apply age、parse/apply timing、coalesced frame、UI update frequencyをreportする。これらは
+  browser-monotonic observationであり、backend monotonic clockから直接subtractしない
+- compatibility-invalid payloadまたはparse errorはingress barrierであり、古いunapplied compatible candidateをdiscardする。
+  applied済みscene poseは変えず、後続valid candidate適用までUIがwarning/invalidをreportする
 
-## P25 120 s Acceptance
+## P25 120 s acceptance
 
-Run separate no-input and continuously-held-input evaluations. Use the same
-machine, browser, command, loopback endpoint, `dt_s=1/60`, and
-`interval_s=1/60`. Keep the browser foreground/visible and exclude a five
-second warm-up from the 120 second evaluation window.
+no-inputとcontinuously-held-inputを別々に評価する。同じmachine、browser、command、loopback endpoint、
+`dt_s=1/60`、`interval_s=1/60`を使う。browserをforeground/visibleに保ち、5 second warm-upを120 second
+evaluation windowから除外する。
 
-Acceptance thresholds:
+acceptance threshold:
 
-- absolute simulation/wall drift is at most 1.0 s;
-- realtime factor is 0.99 through 1.01;
-- viewer receive-to-apply age p95 is at most 100 ms;
-- latest received-to-applied frame distance stays bounded and does not grow
-  with elapsed time;
-- a slow sender does not block simulation enqueue or create an unbounded queue.
+- absolute simulation/wall driftは最大1.0 s
+- realtime factorは0.99から1.01
+- viewer receive-to-apply age p95は最大100 ms
+- latest received-to-applied frame distanceはboundedで、elapsed timeとともに増加しない
+- slow senderがsimulation enqueueをblockせず、unbounded queueを作らない
 
-Record unavailable measurements as `not run`; do not estimate them. The
-canonical P25 implementation and measured comparison are recorded in
-`docs/operations/r7-e-p25-live-viewer-pacing-backlog.md`.
+unavailable measurementは推定せず`not run`と記録する。canonical P25 implementationとmeasured comparisonは
+`docs/reports/implementation/r7-e-p25-live-viewer-pacing-backlog.md`に記録する。
 
-## Expected Target / Tip / Error Behavior
+## 想定target / tip / error behavior
 
-- The target marker, tip marker, and error vector continue to come from the
-  backend payload.
-- The viewer does not recompute qpos, FK, IK, or MuJoCo state.
-- The backend remains responsible for the command-side target and simulation
-  step.
-- If active input changes, the target / tip / error readouts should move in
-  sync with the backend runtime path.
+- target marker、tip marker、error vectorはbackend payload由来のまま
+- viewerはqpos、FK、IK、MuJoCo stateを再計算しない
+- backendがcommand-side targetとsimulation stepを担当する
+- active input変更時はtarget / tip / error readoutがbackend runtime pathと同期して動く
 
-## Failure Checklists
+## failure checklist
 
-### Backend Disconnected
+### backend disconnected
 
-- The viewer stays up when the backend is disconnected.
-- The viewer reports that it is not connected or is stale.
-- The overlay falls back to safe unavailable or stale values.
-- The browser does not crash when no payload is received.
+- backend切断時もviewerが動作を続ける
+- viewerがnot connectedまたはstaleをreportする
+- overlayがsafe unavailable / stale valueへfallbackする
+- payload未受信でもbrowserがcrashしない
 
-### Wrong WebSocket URL
+### 誤ったWebSocket URL
 
-- The viewer does not connect when the URL is wrong.
-- The browser remains usable and does not mutate simulation state locally.
+- URLが誤っている場合viewerは接続しない
+- browserは使用可能なままで、simulation stateをlocal mutateしない
 
-### Focus / Blur / Stuck Key
+### focus / blur / stuck key
 
-- `blur` clears the keyboard state.
-- visibility loss clears the keyboard state when the browser reports it.
-- focus regain does not reintroduce stale held keys.
+- `blur`がkeyboard stateをclearする
+- browserがvisibility lossをreportした場合にkeyboard stateをclearする
+- focus regainでstale held keyを再導入しない
 
-### Gamepad Absent / Unsupported Browser
+### gamepad不在 / unsupported browser
 
-- The viewer stays usable when `navigator.getGamepads()` is unavailable.
-- The overlay reports a safe zero / stale fallback.
-- Unsupported browser behavior does not crash the viewer.
+- `navigator.getGamepads()` unavailableでもviewerを使用できる
+- overlayがsafe zero / stale fallbackをreportする
+- unsupported browser behaviorでviewerがcrashしない
 
-### Stale State
+### stale state
 
-- The overlay shows stale state after the backend timeout window.
-- The stale reason remains read-only and does not mutate simulation state.
-- Command age rises while the backend is idle or disconnected.
+- backend timeout window後にoverlayがstale stateを表示する
+- stale reasonはread-onlyでsimulation stateをmutateしない
+- backend idle / disconnected中はcommand ageが増える
 
-## Responsibility Boundary
+## 責務境界
 
-- viewer: captures keyboard / gamepad state and sends control messages.
-- backend: validates viewer control messages and updates `ViewerInputSource`.
-- runtime: updates simulation through the existing input pipeline.
-- viewer overlay: displays payload state read-only.
+- viewer: keyboard / gamepad stateをcaptureしてcontrol messageを送る
+- backend: viewer control messageをvalidateして`ViewerInputSource`を更新する
+- runtime: 既存input pipeline経由でsimulationを更新する
+- viewer overlay: payload stateをread-only表示する
 
-## Operator Notes Template
+## operator note template
 
 ```text
 date:

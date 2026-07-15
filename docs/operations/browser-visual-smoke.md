@@ -9,8 +9,8 @@ related:
   - docs/contracts/parallel-work-contracts.md
   - docs/operations/backend-viewer-startup.md
   - docs/operations/live-viewer-smoke.md
-  - docs/operations/r6-f-p5-old-web-view-reference-audit.md
-  - docs/operations/r6-f-completion-audit.md
+  - docs/reports/audits/r6-f-p5-old-web-view-reference-audit.md
+  - docs/reports/audits/r6-f-completion-audit.md
   - apps/mujoco-viewer/README.md
 ---
 
@@ -166,7 +166,7 @@ connection がある場合は body + site + arm skeleton になる。target と 
   表示できる。
 - browser smoke が証明するのは payload coordinate の直接反映までであり、
   final coordinate mapping layer ではない。
-- Phase D completion audit は `docs/operations/r6-d-completion-audit.md` に
+- Phase D completion audit は `docs/reports/audits/r6-d-completion-audit.md` に
   記録される。
 - 次の handoff は IK / command integration skeleton work であり、rendered
   arm mesh でも完成済み IK path でもない。
@@ -225,7 +225,7 @@ R6-F-P5 では、この smoke path を採用済み viewer 表示要素の観測�
 
 R6-F-P6 の completion audit は、この smoke path が成立済みであることを
 文書化し、Sweep_x visual demo と viewer 可視化 boundary の完了状態を
-`docs/operations/r6-f-completion-audit.md` に固定する。browser visual smoke は
+`docs/reports/audits/r6-f-completion-audit.md` に固定する。browser visual smoke は
 引き続き rendering-only の観測手順であり、新しい feature 追加の場ではない。
 
 

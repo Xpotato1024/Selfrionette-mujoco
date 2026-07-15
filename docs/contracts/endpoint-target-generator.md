@@ -6,8 +6,8 @@ canonical_for:
   - EndpointTargetGenerator target generation contract
 related:
   - docs/contracts/motion-command.md
-  - docs/operations/r7-e-p1-local-jacobian-dof-allocation.md
-  - docs/operations/r7-e-p1-endpoint-target-generator-contract.md
+  - docs/reports/implementation/r7-e-p1-local-jacobian-dof-allocation.md
+  - docs/reports/implementation/r7-e-p1-endpoint-target-generator-contract.md
 ---
 
 # EndpointTargetGenerator Contract

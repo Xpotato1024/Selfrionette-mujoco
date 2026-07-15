@@ -8,10 +8,9 @@ related:
   - legacy/fast_arm_control/README.md
 ---
 
-# Legacy Inventory
+# Legacy inventory
 
-This is the inventory destination for `legacy/fast_arm_control`.
+これは`legacy/fast_arm_control`のinventory配置先である。
 
-Detailed behavior has not been migrated yet. Future PRs should record source
-files, responsibilities, side effects, and target layers here before moving any
-behavior.
+詳細なbehaviorはまだ移行していない。将来のPRでは、behaviorを移す前にsource file、
+責務、side effect、移行先layerをこの文書へ記録する。

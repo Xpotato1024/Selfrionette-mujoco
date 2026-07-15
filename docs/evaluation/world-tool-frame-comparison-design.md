@@ -1,141 +1,200 @@
 ---
 status: canonical
 owner: evaluation
-last_verified: 2026-07-12
+last_verified: 2026-07-16
 canonical_for:
   - R7-E follow-up P17 world/tool control-frame comparison design
 related:
   - docs/contracts/continuous-endpoint-velocity-input.md
   - docs/contracts/endpoint-metadata-vocabulary.md
-  - docs/operations/r7-e-followup-p12-control-frame-resolution-metadata.md
-  - docs/operations/r7-e-p9-jacobian-mobility-diagnostics.md
-  - docs/operations/r7-e-p10-measured-axis-progress-semantics.md
+  - docs/archive/drafts/r7-e-followup-p12-control-frame-resolution-metadata.md
+  - docs/reports/implementation/r7-e-p9-jacobian-mobility-diagnostics.md
+  - docs/archive/drafts/r7-e-p10-measured-axis-progress-semantics.md
 ---
 
-# World/tool control-frame comparison design
+# world/tool control-frame比較design
 
-## Purpose and research question
+## 目的と研究質問
 
-This document defines the minimal reproducible evaluation required by P17 / #354 and the logging handoff to P20 / #357. It does not define a runtime, input mapping, logging schema, experiment runner, or statistical implementation.
+この文書はP17 / #354が要求する最小の再現可能な評価と、P20 / #357へのlogging handoffを定義する。
+runtime、input mapping、logging schema、experiment runner、statistical implementationは定義しない。
 
-P17 is a limited exploratory pilot design. Its research question is:
+P17はlimited exploratory pilot designである。研究質問は次のとおりである。
 
-> At one prevalidated reset pose and for the selected world-axis and initial-tool-axis target families, what differences in measured task performance are observed between `world` and `tool` control?
+> 事前検証済みの単一reset poseと、選択したworld-axis / initial-tool-axis target familyにおいて、
+> `world` controlと`tool` controlのmeasured task performanceにどのような差が観測されるか。
 
-The control-frame x task-family pattern is descriptive and exploratory. Because each task family uses a different selected physical direction at one tool orientation, task family is confounded with physical direction, Jacobian mobility, and workspace geometry. This pilot cannot identify a causal frame-task alignment effect. No frame is assumed or claimed to be universally superior.
+control-frame x task-family patternはdescriptiveかつexploratoryに扱う。各task familyは単一tool orientationで異なる
+physical directionを使うため、task familyはphysical direction、Jacobian mobility、workspace geometryと交絡する。
+このpilotからcausal frame-task alignment effectを特定できない。いずれのframeも普遍的に優れているとは仮定・主張しない。
 
-The pilot checks feasibility, event rates, metric stability, and target selection. A confirmatory comparison requires a later design revision that crosses the same physical directions with multiple tool orientations, so task alignment can be separated from direction and pose-dependent mobility.
+pilotではfeasibility、event rate、metric stability、target selectionを確認する。confirmatory comparisonには、同じphysical
+directionを複数tool orientationとcrossし、task alignmentをdirectionおよびpose-dependent mobilityから分離する後続design
+revisionが必要である。
 
-The study supports the broader position that input devices and mapping methods require a common basis recording operator intent, resolved motion, policy prediction, measured motion, task performance, system limitations, and subjective workload under consistent definitions.
+本研究は、共通定義の下でoperator intent、resolved motion、policy prediction、measured motion、task performance、system
+limitation、subjective workloadを記録する共通基盤が、input deviceとmapping methodの比較に必要だという立場を支える。
 
-## Truth hierarchy
+## truth hierarchy
 
-The following evidence classes remain distinct:
+次のevidence classを区別する。
 
-1. **requested**: operator intent, including `requested_control_frame` and `requested_endpoint_velocity`;
-2. **resolved**: runtime frame resolution, including `resolved_control_frame` and `resolved_world_endpoint_velocity_m_s`;
-3. **predicted**: motion-policy result, including `endpoint_delta_achieved_m` and candidate qpos;
-4. **measured**: MuJoCo `tip` site world-frame outcome, including `actual_tip_delta_m` and measured tip pose;
-5. **status**: accepted/scaled/held policy state, rejected command/application state, stale input, or unavailable evidence.
+1. **requested**: `requested_control_frame`と`requested_endpoint_velocity`を含むoperator intent
+2. **resolved**: `resolved_control_frame`と`resolved_world_endpoint_velocity_m_s`を含むruntime frame resolution
+3. **predicted**: `endpoint_delta_achieved_m`とcandidate qposを含むmotion-policy result
+4. **measured**: `actual_tip_delta_m`とmeasured tip poseを含むMuJoCo `tip` siteのworld-frame outcome
+5. **status**: accepted/scaled/held policy state、rejected command/application、stale input、unavailable evidence
 
-Performance conclusions use measured MuJoCo outcomes. Requested, resolved, and predicted values are diagnostic evidence and are never substituted for actual movement. `current_tip_position_m` is a provenance-dependent compatibility anchor, not automatically a measured field.
+performance conclusionにはmeasured MuJoCo outcomeを使う。requested、resolved、predicted valueはdiagnostic evidenceであり、
+actual movementの代替にしない。`current_tip_position_m`はprovenance-dependent compatibility anchorであり、自動的に
+measured fieldとはならない。
 
-## Minimal task set
+## 最小task set
 
-The predeclared target set contains four free-space point-acquisition targets from one validated initial qpos and tool orientation:
+predeclared target setは、単一のvalidated initial qposとtool orientationから開始する4つのfree-space point-acquisition
+targetで構成する。
 
-- **world-aligned family**: equal-distance targets in the positive and negative directions of one selected MuJoCo world axis;
-- **tool-aligned family**: equal-distance targets in the positive and negative directions of one selected axis of the initial tool orientation, transformed into MuJoCo world coordinates once at trial initialization.
+- **world-aligned family**: 選択した1本のMuJoCo world axisの正負方向へ同距離のtargetを置く
+- **tool-aligned family**: initial tool orientationの選択軸の正負方向へ同距離のtargetを置き、trial初期化時に1回だけ
+  MuJoCo world coordinateへtransformする
 
-The world axis and tool axis must be non-collinear at the selected initial pose and must pass the readiness checks below. The pilot target manifest records the exact initial qpos, initial tip pose, initial tool orientation, axis vectors, distance, target coordinates, tolerance, and timeout. The axes are chosen from the validated workspace; they must not be changed after data collection begins to favor either condition.
+選択するworld axisとtool axisはinitial poseでnon-collinearかつ、後述のreadiness checkを通過しなければならない。
+pilot target manifestにはexact initial qpos、initial tip pose、initial tool orientation、axis vector、distance、target
+coordinate、tolerance、timeoutを記録する。axisはvalidated workspaceから選び、data collection開始後にいずれかの
+conditionを有利にする変更を行わない。
 
-Each trial starts from the same reset qpos and tool orientation. The target is fixed in MuJoCo world coordinates for the entire trial; it does not rotate with the tool after trial start. Success means that the measured MuJoCo `tip` site enters and remains inside the target tolerance for the predeclared dwell interval before timeout. A hold, rejection, stale input, or unavailable measurement is not success.
+各trialは同じreset qposとtool orientationから開始する。targetはtrial全体を通してMuJoCo world coordinate上で固定し、
+trial開始後のtool rotationには追従しない。successはmeasured MuJoCo `tip` siteがtimeout前にtarget tolerance内へ入り、
+predeclared dwell intervalの間そこへ留まることとする。hold、rejection、stale input、unavailable measurementはsuccessではない。
 
-The two control conditions are `requested_control_frame=world` and `requested_control_frame=tool`. They use the same input source, physical or normalized input range, speed/gain, deadzone, maximum per-step delta, update cadence, target distance/tolerance/timeout, initial conditions, visual feedback, camera, and safety rules. Only the requested control frame changes.
+control conditionは`requested_control_frame=world`と`requested_control_frame=tool`である。両conditionは同じinput
+source、physicalまたはnormalized input range、speed/gain、deadzone、maximum per-step delta、update cadence、target
+distance/tolerance/timeout、initial condition、visual feedback、camera、safety ruleを使う。変更するのはrequested
+control frameだけである。
 
-Contact, grasping, collision tasks, device comparison, and changing tool orientation during the task definition are outside this design.
+contact、grasping、collision task、device comparison、task definition中のtool orientation変更は本designのscope外である。
 
-## Recorded repetitions and retries
+## 記録するrepetitionとretry
 
-For each participant and control-frame condition, all four targets receive the same number of recorded repetitions. The repetition count is not set by P17: a protocol revision must declare it before data collection, or the versioned pilot manifest must freeze it as configuration. The same frozen count applies to both conditions. Practice trials do not count as recorded repetitions.
+participantごと、control-frame conditionごとに、4 targetすべてへ同数のrecorded repetitionを割り当てる。P17では
+repetition countを決めない。data collection前のprotocol revisionで宣言するか、versioned pilot manifestでconfiguration
+として固定する。同じcountを両conditionへ適用する。practice trialはrecorded repetitionに数えない。
 
-Recorded repetition order is balanced or generated from a recorded deterministic seed under the same rule for both conditions. The pilot stopping rule and manifest-freeze condition, including the recorded repetition count, are fixed before outcome data are inspected. Participant count and effect size remain unspecified by P17.
+recorded repetition orderはbalanceするか、両conditionで同じ規則を使うrecorded deterministic seedから生成する。
+outcome dataを見る前にpilot stopping rule、manifest-freeze condition、recorded repetition countを固定する。
+participant countとeffect sizeはP17では指定しない。
 
-An operator-caused timeout, hold, rejection, or stale input is retained as a failed recorded trial and is not retried. Only a trial meeting the predeclared technical-invalid rule may be retried, and only up to a predeclared per-repetition limit. The original invalid record remains in the dataset; the retry receives a new trial identifier and links back to the original. Exhausting the retry limit leaves the repetition technically invalid rather than silently adding attempts.
+operator-caused timeout、hold、rejection、stale inputはfailed recorded trialとして保持し、retryしない。predeclared
+technical-invalid ruleを満たすtrialだけを、predeclared per-repetition limitまでretryできる。original invalid recordは
+datasetに残し、retryには新しいtrial identifierを付けてoriginalへlinkする。retry limitを使い切った場合、そのrepetitionは
+attemptを暗黙に追加せずtechnically invalidのままにする。
 
-## Outcomes
+## outcome
 
-The single primary outcome is **success within timeout**, analyzed as a binary measured task result. This retains failed trials without inventing a completion time for them and makes unavailable measurements explicit.
+単一primary outcomeはbinary measured task resultである**success within timeout**とする。failed trialへ架空のcompletion
+timeを与えず、unavailable measurementを明示できる。
 
-The single objective secondary outcome is **off-axis drift**: the maximum perpendicular distance of the measured `tip` trajectory from the straight line joining the initial measured tip position and target. It is reported in meters. It is not computed from requested, resolved, or predicted motion.
+単一objective secondary outcomeは**off-axis drift**とする。initial measured tip positionとtargetを結ぶ直線から、
+measured `tip` trajectoryが離れたperpendicular distanceの最大値をmeterで報告する。requested、resolved、predicted
+motionから計算しない。
 
-Completion time and final measured endpoint error are logged for description and diagnostic review but are not additional primary outcomes in P17. They must not be promoted after observing results without a new preregistered design revision.
+completion timeとfinal measured endpoint errorはdescriptionとdiagnostic review用にlogするが、P17の追加primary
+outcomeではない。結果を見た後に新しいpreregistered design revisionなしでprimaryへ昇格しない。
 
-## Subjective evidence
+## subjective evidence
 
-After each condition block, collect workload, ease of control, and predictability using the same scales and wording. Collect frame preference only after both conditions are completed. Responses link to the session, participant, and block identifiers.
+各condition blockの後で、同じscaleとwordingを使ってworkload、ease of control、predictabilityを収集する。frame
+preferenceは両condition完了後だけ収集する。responseをsession、participant、block identifierへlinkする。
 
-NASA-TLX may be used as the workload instrument, but subjective evidence is supplementary. It cannot replace measured task outcomes, establish universal frame superiority, or serve as the sole conclusion basis.
+workload instrumentとしてNASA-TLXを使ってよいが、subjective evidenceはsupplementaryである。measured task outcomeの
+代替、universal frame superiorityの証明、sole conclusion basisにはできない。
 
-## Study sequence and balancing
+## study sequenceとbalancing
 
-The comparison is within-subject. Participants receive equivalent instructions and an equal number of practice trials for each frame. Practice uses the same task families but is marked as practice and excluded from primary analysis.
+比較はwithin-subjectで行う。participantにはequivalent instructionと、各frameで同数のpractice trialを与える。
+practiceは同じtask familyを使うがpracticeとしてmarkし、primary analysisから除外する。
 
-Assign participants as evenly as feasible to `world-first` and `tool-first` condition orders. Within each condition, balance the starting task family and alternate or counterbalance positive/negative target directions. Use the same order schedule rules for both conditions. Record the assigned schedule rather than correcting imbalance after outcomes are known.
+participantを可能な限り均等に`world-first`と`tool-first`へ割り当てる。各condition内ではstarting task familyをbalanceし、
+positive/negative target directionをalternateまたはcounterbalanceする。両conditionで同じorder schedule ruleを使う。
+outcome後にimbalanceを補正せず、assigned scheduleを記録する。
 
-Per participant, the sequence is: standardized briefing, first-condition practice, first-condition recorded block, rest, second-condition practice, second-condition recorded block, then preference. A predeclared rest rule and identical maximum block duration limit fatigue.
+participantごとのsequenceは、standardized briefing、first-condition practice、first-condition recorded block、rest、
+second-condition practice、second-condition recorded block、preferenceの順とする。predeclared rest ruleと同じmaximum
+block durationでfatigueを制限する。
 
-## Confound handling
+## confoundの扱い
 
 | Confound | Treatment |
 |---|---|
-| Learning and condition order | controlled by equivalent practice and world-first/tool-first balancing; order is logged and included in analysis |
-| Task and direction order | controlled by balanced schedules; exact order is logged |
-| Fatigue | controlled by the same rest and block-duration rules; block/order is included in analysis |
-| Initial qpos and tool orientation | controlled by reset to the same validated values before every trial; achieved values are logged; failed resets are excluded with a reason |
-| Target direction and distance | fixed and logged by the four-target manifest, but not separated from task family in this pilot; the resulting confounding limits interpretation |
-| P6/P7 workspace and mobility limitations | excluded by the limited-pilot workspace gate; mobility evidence and selected axes are logged as configuration identity |
-| Stale input, hold, rejection, unavailable measurement | logged as statuses/reasons; trials remain failed for the primary outcome unless the predeclared technical-invalid rule applies |
-| Camera and visual feedback | controlled by identical camera pose, overlays, target appearance, and feedback latency/settings; configuration identity is logged |
+| learningとcondition order | equivalent practiceとworld-first/tool-first balancingで制御し、orderをlogしてanalysisに含める |
+| taskとdirection order | balanced scheduleで制御し、exact orderをlogする |
+| fatigue | 同じrest / block-duration ruleで制御し、block/orderをanalysisに含める |
+| initial qposとtool orientation | trial前に同じvalidated valueへresetし、achieved valueをlogする。failed resetはreason付きで除外する |
+| target directionとdistance | 4-target manifestで固定・記録するが、このpilotではtask familyから分離しない。この交絡が解釈を制限する |
+| P6/P7 workspaceとmobility limitation | limited-pilot workspace gateで除外し、mobility evidenceとselected axisをconfiguration identityとしてlogする |
+| stale input、hold、rejection、unavailable measurement | status/reasonとしてlogする。predeclared technical-invalid ruleに該当しない限りprimary outcome failureとして残す |
+| cameraとvisual feedback | 同じcamera pose、overlay、target appearance、feedback latency/settingsで制御し、configuration identityをlogする |
 
-## Readiness gate
+## readiness gate
 
-Data collection may start only when all checks pass:
+次のcheckがすべてpassするまでdata collectionを開始しない。
 
-1. P20 has implemented and validated a versioned logging schema covering the handoff below.
-2. Requested, resolved, predicted, and measured fields remain separately identifiable, with status/reason provenance.
-3. Every target in the frozen manifest is confirmed reachable from the reset pose under both control conditions using measured MuJoCo `tip` outcomes.
-4. Initial/final tip pose and per-sample measured tip motion are available; absence produces explicit unavailable evidence rather than zero.
-5. World and tool conditions demonstrably use identical input and motion settings except for `requested_control_frame`.
-6. The selected axes avoid the known weak world-X/default-pose mobility and natural-motion limitations from P6 / #339 and P7 / #341; the P9 mobility diagnostic and a measured pilot confirm adequate progress in both directions.
+1. P20が後述のhandoffを満たすversioned logging schemaを実装・検証している。
+2. requested、resolved、predicted、measured fieldをstatus/reason provenance付きで個別識別できる。
+3. frozen manifestの全targetが両control conditionでreset poseからreachableであることを、measured MuJoCo `tip`
+   outcomeで確認している。
+4. initial/final tip poseとper-sample measured tip motionを利用でき、欠落をzeroではなくexplicit unavailable evidenceにする。
+5. world/tool conditionが`requested_control_frame`以外で同一のinput / motion settingを使うことを実証している。
+6. selected axisがP6 / #339とP7 / #341で既知のweak world-X/default-pose mobilityおよびnatural-motion limitationを
+   避け、P9 mobility diagnosticとmeasured pilotで両方向のadequate progressを確認している。
 
-P17 adopts a **limited exploratory pilot outside the affected workspace**, rather than requiring universal P6/P7 completion. P6/P7 are known local mobility and natural-motion limitations, while this design asks a bounded descriptive question. Avoidance is valid only when all four frozen targets pass the same measured reachability/progress checks. If no non-collinear matched axes pass, the study is blocked until P6/P7 are resolved; targets must not be silently weakened or replaced during collection.
+P17はuniversal P6/P7 completionを必須にせず、**affected workspace外のlimited exploratory pilot**を採用する。P6/P7は
+既知のlocal mobility / natural-motion limitationであり、本designはbounded descriptive questionを扱う。avoidanceが有効
+なのは、frozen 4 targetすべてが同じmeasured reachability/progress checkをpassする場合だけである。non-collinearなmatched
+axisが一組もpassしなければ、P6/P7が解決するまでstudyをblockする。collection中にtargetを暗黙に弱めたり置換したりしない。
 
 ## P20 logging handoff
 
-P20 defines the wire/schema representation, versioning, units, nullability, and validation. At minimum, one recoverable experiment record stream must provide:
+P20はwire/schema representation、versioning、unit、nullability、validationを定義する。少なくとも一つのrecoverable
+experiment record streamが次を提供しなければならない。
 
-- software revision and configuration identity, including model, target-manifest, input/motion settings, camera/feedback settings, and schema version;
-- session, participant, block, trial, task-family, target, and practice/recorded identifiers;
-- `repetition_index`, `attempt_index`, and nullable `retry_of_trial_id`, preserving the original technically invalid trial and every bounded retry;
-- `requested_control_frame`, assigned condition order, task order, and target direction;
-- initial qpos, initial measured tip pose and tool orientation, target world position, tolerance, dwell interval, and timeout;
-- operator-requested motion, including existing `requested_endpoint_velocity` and source timing/lifecycle evidence;
-- resolved motion, including `resolved_control_frame`, `control_frame_resolution_status`, and `resolved_world_endpoint_velocity_m_s`;
-- policy-requested and predicted motion, including `endpoint_delta_requested_m`, `endpoint_delta_achieved_m`, and candidate qpos without calling either measured;
-- measured MuJoCo `tip` pose/delta over time, including `actual_tip_delta_m`, plus qpos before/after;
-- `motion_status`, endpoint progress status, application rejection, hold, stale, and measurement-unavailable states with machine-readable reasons;
-- trial start/end timing, completion status, success-within-timeout, final measured endpoint error, and the samples required to derive off-axis drift;
-- linkage from workload, ease, predictability, and preference responses to the corresponding session/participant/block.
+- model、target-manifest、input/motion setting、camera/feedback setting、schema versionを含むsoftware revisionと
+  configuration identity
+- session、participant、block、trial、task-family、target、practice/recorded identifier
+- original technically invalid trialとbounded retryを保持する`repetition_index`、`attempt_index`、nullable
+  `retry_of_trial_id`
+- `requested_control_frame`、assigned condition order、task order、target direction
+- initial qpos、initial measured tip pose / tool orientation、target world position、tolerance、dwell interval、timeout
+- existing `requested_endpoint_velocity`とsource timing/lifecycle evidenceを含むoperator-requested motion
+- `resolved_control_frame`、`control_frame_resolution_status`、`resolved_world_endpoint_velocity_m_s`を含むresolved motion
+- `endpoint_delta_requested_m`、`endpoint_delta_achieved_m`、candidate qposを含むpolicy-requested / predicted motion。
+  これらをmeasuredと呼ばない
+- `actual_tip_delta_m`を含む時系列measured MuJoCo `tip` pose/delta、およびqpos before/after
+- machine-readable reason付きの`motion_status`、endpoint progress status、application rejection、hold、stale、
+  measurement-unavailable state
+- trial start/end timing、completion status、success-within-timeout、final measured endpoint error、off-axis drift導出に
+  必要なsample
+- workload、ease、predictability、preference responseとsession/participant/blockのlink
 
-Existing canonical field names take precedence. P20 must not create a synonym merely to fit the experiment record. When no existing canonical name is available, P20 must document the new field's owner, frame, unit, lifecycle, and unavailable-value policy. Missing, held, rejected, stale, and unavailable values are not encoded as successful zero motion.
+既存canonical field nameを優先し、experiment recordへ合わせるためだけのsynonymを作らない。既存canonical nameがない場合、
+P20はnew fieldのowner、frame、unit、lifecycle、unavailable-value policyを記録する。missing、held、rejected、stale、
+unavailable valueをsuccessful zero motionとしてencodeしない。
 
-## Analysis policy
+## analysis policy
 
-Use a within-subject exploratory analysis of the control-frame x task-family pattern. Report effect sizes and uncertainty, but do not interpret this pattern as a causal frame-task alignment effect or infer universal superiority from a main effect. Physical direction, Jacobian mobility, and workspace geometry remain inseparable from task family in this design. Participant count and effect size are not specified by P17. Pilot data estimate feasibility, event rates, metric stability, variance, target suitability, and inputs for a later power analysis; pilot findings are not confirmatory evidence.
+control-frame x task-family patternをwithin-subject exploratory analysisで扱う。effect sizeとuncertaintyを報告するが、
+causal frame-task alignment effectとして解釈せず、main effectからuniversal superiorityを推論しない。本designではphysical
+direction、Jacobian mobility、workspace geometryをtask familyから分離できない。P17はparticipant countとeffect sizeを
+指定しない。pilot dataはfeasibility、event rate、metric stability、variance、target suitability、後続power analysisへの
+inputを推定するものであり、confirmatory evidenceではない。
 
-Before recorded data are inspected, declare the technical-invalid rule, retry limit, stopping rule, manifest-freeze condition, and missing-data handling. Practice trials are always excluded. A reset failure, corrupted identifier/order, or absence of required measured truth may be excluded as technically invalid with its logged reason and retained retry linkage. Operator-caused timeout, hold, rejection, or stale input remains a primary-outcome failure without retry. Report all exclusions, retries, and missingness by control frame and task family; do not replace missing measured motion with requested, resolved, predicted, or zero motion.
+recorded dataを見る前にtechnical-invalid rule、retry limit、stopping rule、manifest-freeze condition、missing-data handlingを
+宣言する。practice trialは常に除外する。reset failure、corrupted identifier/order、required measured truth欠落はlogged reasonと
+retry linkageを保持してtechnically invalidとして除外できる。operator-caused timeout、hold、rejection、stale inputはretryなしの
+primary-outcome failureとして残す。control frame / task family別にすべてのexclusion、retry、missingnessを報告する。
+missing measured motionをrequested、resolved、predicted、zero motionで置換しない。
 
-## Scope boundary
+## scope境界
 
-P17 changes documentation only. It does not change runtime behavior, input mapping, transport or logging schemas, experiment runners, statistical code, viewer behavior, the MuJoCo model, dependencies, CI, hardware, serial, Arduino, OSC, or robot output.
+P17はdocumentationだけを変更する。runtime behavior、input mapping、transport/logging schema、experiment runner、
+statistical code、viewer behavior、MuJoCo model、dependency、CI、hardware、serial、Arduino、OSC、robot outputは変更しない。

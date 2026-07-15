@@ -1,5 +1,5 @@
 ---
-status: canonical
+status: historical
 owner: operations
 last_verified: 2026-07-06
 canonical_for:

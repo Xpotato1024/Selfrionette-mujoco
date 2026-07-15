@@ -16,7 +16,7 @@ related:
   - docs/contracts/target-marker-desired-endpoint.md
   - docs/contracts/programmed-target-input-source.md
   - docs/contracts/r7-a-lite-serial-frame-contract.md
-  - docs/operations/r7-a-lite-completion-audit.md
+  - docs/reports/audits/r7-a-lite-completion-audit.md
   - docs/operations/r7-a-lite-websocket-viewer-smoke.md
 ---
 
@@ -278,5 +278,5 @@ R7-B の実装順序と後続 issue の責務は次のとおり。
 
 ## #251 audit
 
-- `docs/operations/r6-k-completion-audit.md` に R6-K の stacked PR 証跡を記録した。
+- `docs/reports/audits/r6-k-completion-audit.md` に R6-K の stacked PR 証跡を記録した。
 - `#247` から `#250` までの validation と readiness はそこで固定し、この contract surface は変えない。

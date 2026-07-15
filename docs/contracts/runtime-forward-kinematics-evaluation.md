@@ -10,11 +10,11 @@ related:
   - docs/contracts/mujoco-model-name-contract.md
   - docs/architecture/runtime-composition.md
   - src/selfrionette/runtime/evaluation.py
-  - docs/operations/r7-e-followup-joint-convention-fast-arm-model-contract.md
-  - docs/operations/r7-e-followup-viewer-backend-endpoint-separation.md
+  - docs/reports/implementation/r7-e-followup-joint-convention-fast-arm-model-contract.md
+  - docs/reports/implementation/r7-e-followup-viewer-backend-endpoint-separation.md
 ---
 
-# Runtime Forward Kinematics Evaluation Contract
+# Runtime Forward Kinematics評価契約
 
 ## 目的
 
@@ -40,28 +40,28 @@ MuJoCo site endpoint、error metric の統合は行わない。
 - この評価結果は `desired_endpoint_m` と自動的に同一視しない。
 - この評価結果は MuJoCo site endpoint と自動的に同一視しない。
 
-## Failure semantics
+## 失敗時のsemantics
 
 - 空の入力は `ValueError` とする。
 - 長さ不正な入力は `ValueError` とする。
 - `solver_joint_count <= 0` は `ValueError` とする。
 - solver の前提と長さが合わない場合は、その failure をそのまま返す。
 
-## Viewer / transport boundary
+## Viewer / transportのboundary
 
 - viewer は FK endpoint を計算しない。
 - transport payload に evaluation field はまだ追加しない。
 - dry-run JSON にもまだ出力しない。
 
-## Handoff
+## 引き継ぎ
 
-### P4 MuJoCo site endpoint extraction
+### P4 MuJoCo site endpoint抽出
 
 P4 では MuJoCo snapshot から `tip` site endpoint を抽出する。P3 の FK endpoint
 は site endpoint ではない。P4 では MuJoCo world / scene frame との差分を
 明示する。
 
-### P5 desired / qpos / FK / site / error metrics
+### P5 desired / qpos / FK / site / error metrics統合
 
 P5 では desired endpoint, qpos-like joint input, FK endpoint, MuJoCo site endpoint,
 error vector / norm を並べて扱う runtime/backend internal metrics helper を追加する。
@@ -80,36 +80,36 @@ error vector / norm を並べて扱う runtime/backend internal metrics helper �
 - P6 で dry-run / programmed input / WebSocket payload integration に接続する。
 - P7 で viewer read-only overlay に handoff する。
 
-### R7-E follow-up P5 diagnostic narrowing
+### R7-E follow-up P5 diagnosticの絞り込み
 
-The FK/site diagnostic now reports both the solver-local FK endpoint and the
-world-transformed FK endpoint after qpos adaptation and `base_link` translation.
-This narrows the comparison frame mismatch, but it does not make runtime FK a
-physical MuJoCo-model FK. Residuals above tolerance remain
-`remaining_model_axis_or_link_contract_mismatch` and must not be treated as a
-closed repair.
+FK/site diagnosticは、qpos adaptationと`base_link` translation後の
+solver-local FK endpointとworld-transformed FK endpointの両方を報告する。
+これによりcomparison frame mismatchは狭まるが、runtime FKがphysical
+MuJoCo-model FKになるわけではない。toleranceを超えるresidualは
+`remaining_model_axis_or_link_contract_mismatch`のままであり、repair完了として
+扱ってはならない。
 
-### R7-E follow-up P5 physical FK repair
+### R7-E follow-up P5 physical FK修復
 
-The P5 continuation treats `assets/mujoco/fast_arm/arm.xml` and the `tip` site
-as the physical source of truth. The FK/site consistency diagnostic now uses the
-MuJoCo-model-aligned fast_arm FK path for the runtime FK endpoint being compared
-to `mujoco_tip_site_position_m`.
+P5 continuationでは`assets/mujoco/fast_arm/arm.xml`と`tip` siteをphysical
+source of truthとして扱う。FK/site consistency diagnosticは、
+`mujoco_tip_site_position_m`と比較するruntime FK endpointに
+MuJoCo-model-aligned fast_arm FK pathを使用する。
 
-Before the repair, PR #336 measured:
+repair前にPR #336で次を計測した。
 
 - `default_qpos` FK/site residual: `0.03899999999999981` m
 - maximum fixed-fixture residual: `0.3450012998489505` m
 - IK/FK sanity maximum: about `9.739068046871986e-08` m
 
-After the repair, fixed qpos fixtures pass `fk_endpoint_matches_tip_site_within_tolerance`
-with residuals below `1e-9` m, and IK/FK sanity remains pass. The solver-local
-FK path remains separate for #327 compatibility. Viewer coordinates, input
-mapping, `desired_endpoint_m`, `target_position_m`, and `current_tip_position_m`
-semantics are unchanged. Hardware, serial, OSC, and robot output are not part of
-this validation.
+repair後は、fixed qpos fixtureがresidual `1e-9` m未満で
+`fk_endpoint_matches_tip_site_within_tolerance`をpassし、IK/FK sanityも
+passを維持する。#327 compatibilityのためsolver-local FK pathは分離したままとする。
+Viewer coordinates、input mapping、`desired_endpoint_m`、`target_position_m`、
+`current_tip_position_m`のsemanticsは変更しない。hardware、serial、OSC、
+robot outputはこのvalidationに含めない。
 
-## Scope check
+## Scope確認
 
 ```text
 viewer-side FK/IK: no

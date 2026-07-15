@@ -9,63 +9,63 @@ related:
   - docs/operations/r7-c-live-loadcell-validation-log.md
 ---
 
-# R7-C axis sanity check template
+# R7-C axis sanity check記録template
 
-## Run Metadata
+## 実行metadata
 
-- issue / PR:
+- Issue / PR:
 - operator:
-- date:
-- local time:
+- 日付:
+- local時刻:
 - branch:
 - commit:
 - input source: keyboard / replay / live loadcell
-- linked #235 log:
+- 関連#235 log:
 
-## Safety Confirmation
+## 安全確認
 
-- Codex / CI execution: no
-- serial port opened by Codex / CI: no
-- COM access by Codex / CI: no
-- OSC sent: no
+- Codex / CIによる実行: no
+- Codex / CIによるserial port open: no
+- Codex / CIによるCOM access: no
+- OSC送信: no
 - robot output: no
 - actuator command: no
 - firmware upload: no
-- firmware modified: no
-- physical axis finalization: no
-- force unit calibration finalization: no
+- firmware変更: no
+- physical axis確定: no
+- force unit calibration確定: no
 
-## Expected Observation
+## 期待する観測
 
 - input action:
-- expected axis direction:
-- expected sign:
-- expected `desired_endpoint_m` change:
-- expected payload field:
-- expected viewer observation:
+- 期待するaxis direction:
+- 期待するsign:
+- 期待する`desired_endpoint_m`変化:
+- 期待するpayload field:
+- 期待するviewer表示:
 
-## Actual Observation
+## 実観測
 
-- observed axis direction:
-- observed sign:
-- observed `desired_endpoint_m` sample:
-- observed `target_position_m` sample:
-- observed `endpoint_evaluation` status:
-- observed frame count:
+- 観測したaxis direction:
+- 観測したsign:
+- 観測した`desired_endpoint_m` sample:
+- 観測した`target_position_m` sample:
+- 観測した`endpoint_evaluation` status:
+- 観測frame数:
 - operator confidence: high / medium / low
 
-## Mismatch Notes
+## 不一致の記録
 
-- sign inversion suspected: yes / no / unknown
-- axis mismatch suspected: yes / no / unknown
-- missing metadata:
+- sign inversion疑い: yes / no / unknown
+- axis mismatch疑い: yes / no / unknown
+- 欠落metadata:
 - malformed payload:
-- live loadcell pyserial unavailable:
-- other anomaly:
+- live loadcellでpyserial利用不可:
+- その他の異常:
 
-## Decision
+## 判定
 
 - pass / caution / fail:
-- reason:
+- 理由:
 - follow-up:
-- handoff to #237:
+- #237へのhandoff:

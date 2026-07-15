@@ -8,15 +8,15 @@ related:
   - assets/mujoco/fast_arm/README.md
 ---
 
-# Asset Contract
+# asset契約
 
-This is the canonical contract for MJCF, XML, STL, scale, axis, origin, and mesh
-placement assumptions.
+この文書は、MJCF、XML、STL、scale、axis、origin、mesh配置の前提に関する
+canonical contractである。
 
-## fast_arm canonical assets
+## fast_armのcanonical asset
 
-- Canonical path: `assets/mujoco/fast_arm/`
-- Required files:
+- canonical pathは`assets/mujoco/fast_arm/`である。
+- 必須fileは次のとおり。
   - `arm.xml`
   - `scene.xml`
   - `meshes/BaseLink.stl`
@@ -24,19 +24,16 @@ placement assumptions.
   - `meshes/SholderLink2.stl`
   - `meshes/UpperArmLink.stl`
   - `meshes/ForeArmLink.stl`
-- `arm.xml` must use the canonical mesh directory contract
-  `meshdir="meshes"` and resolve mesh files from `assets/mujoco/fast_arm/meshes/`.
-- `scene.xml` must include `arm.xml` from the same directory.
-- STL filenames keep the legacy asset names, including the existing
-  `Sholder` spelling.
-- Joint, body, and site names are part of the model contract and should be
-  treated as stable identifiers.
-- Path fixes only are allowed in this adoption step; model semantics changes are
-  forbidden here.
-- Step 4-B uses `assets/mujoco/fast_arm/scene.xml` as the canonical load path
-  for the headless model loader.
-- MuJoCo imports must stay inside `src/selfrionette/mujoco_backend/`.
-- The loader and inspection helpers do not connect to runtime yet.
-- `MuJoCoState` snapshot generation is deferred to #10.
+- `arm.xml`はcanonicalなmesh directory contractである`meshdir="meshes"`を使用し、
+  `assets/mujoco/fast_arm/meshes/`からmesh fileを解決しなければならない。
+- `scene.xml`は同じdirectoryの`arm.xml`をincludeしなければならない。
+- STL filenameは、既存の`Sholder`という綴りを含め、legacy asset名を維持する。
+- joint、body、siteの名前はmodel contractの一部であり、stable identifierとして扱う。
+- このadoption stepで許可するのはpath修正だけであり、model semanticsの変更は禁止する。
+- Step 4-Bではheadless model loaderのcanonical load pathとして
+  `assets/mujoco/fast_arm/scene.xml`を使用する。
+- MuJoCoのimportは`src/selfrionette/mujoco_backend/`内に限定する。
+- loaderとinspection helperは、まだruntimeへ接続しない。
+- `MuJoCoState` snapshot生成は#10へ送る。
 
-Other documents should link here instead of restating asset rules.
+他の文書ではasset ruleを再記載せず、この文書へlinkする。

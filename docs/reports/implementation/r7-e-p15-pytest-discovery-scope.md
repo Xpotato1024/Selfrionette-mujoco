@@ -1,3 +1,12 @@
+---
+status: historical
+owner: documentation
+last_verified: 2026-07-16
+canonical_for: []
+related:
+  - docs/architecture/documentation-sot-policy.md
+---
+
 # R7-E follow-up P15: pytest discovery scope
 
 ## Status

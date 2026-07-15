@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-15
+last_verified: 2026-07-16
 canonical_for:
   - runtime composition root
 related:
@@ -9,101 +9,78 @@ related:
   - docs/contracts/parallel-work-contracts.md
 ---
 
-# Runtime Composition
+# runtime composition
 
-`runtime/` is the only composition root.
+`runtime/`は唯一のcomposition rootである（only composition root）。複数layerを接続できるのはruntimeだけであり、
+個別layerはruntimeへ依存したり、peer layerを直接instantiateしたりしてはならない。
 
-Only runtime may connect multiple layers. Individual layers must not depend on
-runtime or instantiate peer layers directly.
+viewer、transport、input、IK layerはMuJoCo backendを独自にcomposeしない。runtimeが生成したcontractを受け取り、
+それぞれの責務境界に留まる。
 
-Viewer, transport, input, and IK layers do not compose the MuJoCo backend on
-their own. They receive the contracts produced by runtime and stay limited to
-their own responsibility boundary.
+runtimeの責務:
 
-Runtime responsibilities:
+- configをloadする
+- `InputSource`を選択する
+- `InputInterpreter`を選択する
+- `MotionGenerator`を選択する
+- MuJoCo backendを作成する
+- transportを作成する
+- main loopを管理する
 
-- load config
-- select `InputSource`
-- select `InputInterpreter`
-- select `MotionGenerator`
-- create the MuJoCo backend
-- create transport
-- manage the main loop
+Step 3では既存stubを接続するNoOp runtime pipelineを追加した。`RuntimePipeline`はこれらの接続を表す
+composition objectである。runtime directoryだけがcomposition rootであり、NoOp pipelineはwiring validation用で、
+production implementationではない。
 
-Step 3 adds a NoOp runtime pipeline that connects the existing stubs.
-`RuntimePipeline` is the composition object for those connections.
-The runtime directory remains the only composition root.
-The NoOp pipeline is for wiring validation, not implementation detail.
+Step 4-Dでは実際のheadless MuJoCo backendを`RuntimePipeline`へinjectする最初のruntime entryを追加した。
+`build_noop_pipeline()`はstub wiring check用に残し、`build_mujoco_pipeline()`は`StaticInputSource`、
+`NoOpInputInterpreter`、`NoOpMotionGenerator`、`HeadlessMuJoCoSimulator`、`NoOpStatePublisher`をcomposeした。
+当時のheadless backendは`apply_command()`でcommandを保持するだけ、`step(dt_s)`でframe indexを管理するだけで、
+`mj_step`はまだ呼ばなかった。`snapshot()`はbackend model/data snapshot pathから`MuJoCoState`を返した。
 
-Step 4-D adds the first runtime entry to inject a real headless MuJoCo backend
-into `RuntimePipeline`.
-`build_noop_pipeline()` remains available for stub wiring checks, and
-`build_mujoco_pipeline()` composes `StaticInputSource` +
-`NoOpInputInterpreter` + `NoOpMotionGenerator` +
-`HeadlessMuJoCoSimulator` + `NoOpStatePublisher`.
-The headless backend keeps `apply_command()` as command retention only and
-`step(dt_s)` as frame index bookkeeping only; it does not call `mj_step` yet.
-`snapshot()` returns `MuJoCoState` from the backend model/data snapshot path.
+R6-A-P1ではdeterministic replay、motion generation、実際のheadless MuJoCo backendを接続する最初のruntime
+factoryとして`build_replay_mujoco_pipeline()`を追加した。`ReplayInputSource`、`ReplayInputInterpreter`、
+`InputIntentMotionGenerator`、`HeadlessMuJoCoSimulator`、`NoOpStatePublisher`をcomposeした。
 
-R6-A-P1 adds `build_replay_mujoco_pipeline()` as the first runtime factory that
-connects deterministic replay, motion generation, and the real headless
-MuJoCo backend. It composes `ReplayInputSource`, `ReplayInputInterpreter`,
-`InputIntentMotionGenerator`, `HeadlessMuJoCoSimulator`, and
-`NoOpStatePublisher`.
+R6-A-P2では`MuJoCoState`がtransport publisher skeletonへ到達するようpipelineを拡張した。runtimeがreplay
+pathを`StatePublisher`までcomposeし、WebSocket serverを開いたりviewerへ接続したりせず、`MuJoCoState`
+snapshotをv0 JSON payload contractへserializeできるようにした。
 
-R6-A-P2 extends that runtime pipeline so `MuJoCoState` reaches the transport
-publisher skeleton. Runtime now composes the replay path through
-`StatePublisher`, so a `MuJoCoState` snapshot can be serialized to the v0 JSON
-payload contract without opening a WebSocket server or connecting a viewer.
+R6-A-P3ではdeterministic replay entryとして`run_replay_mujoco_dry_run()`と
+`scripts/run_replay_mujoco_dry_run.py`を追加した。このentryはruntime replay pipelineを再利用し、transport
+payload v0 JSONをNDJSONとしてstdoutまたはoutput fileへ出力する。runtime composition root内に留まり、
+WebSocket、viewer、browser compositionを導入しない。
 
-R6-A-P3 adds `run_replay_mujoco_dry_run()` and
-`scripts/run_replay_mujoco_dry_run.py` as a deterministic replay entry. The
-entry reuses the runtime replay pipeline, emits transport payload v0 JSON as
-NDJSON, and can write to stdout or an output file. It stays inside the runtime
-composition root and does not introduce WebSocket, viewer, or browser
-composition.
+R6-C-P1ではlocal/dev WebSocket delivery entryとして`run_replay_mujoco_websocket_publisher()`と
+`scripts/run_replay_mujoco_websocket_publisher.py`を追加した。replay pipelineを再利用してpayload v0 JSONを
+connected clientへpublishし、既定ではloopbackを使い、production server/deployment scope外に留まる。
 
-R6-C-P1 adds `run_replay_mujoco_websocket_publisher()` and
-`scripts/run_replay_mujoco_websocket_publisher.py` as a local/dev WebSocket
-delivery entry. The entry reuses the replay pipeline, publishes payload v0
-JSON to connected clients, defaults to loopback, and stays outside production
-server/deployment scope.
+R6-C-P4ではそのdelivery skeletonをPhase C handoffとして固定した。
 
-R6-C-P4 freezes that delivery skeleton as the Phase C handoff:
+- runtime compositionはlocal/dev限定
+- browser viewerはWebSocket client経由でpayload v0を受信する
+- viewer runtime stateがbrowser-side receiver stateである
+- marker renderingはskeleton-onlyのまま
+- production server、auth、TLS、public exposureはscope外
+- MuJoCo、IK、FK、`qpos` recomputeをbrowser viewerへ移さない
 
-- the runtime composition remains local/dev only
-- the browser viewer still receives payload v0 through a WebSocket client
-- viewer runtime state remains the only browser-side receiver state
-- marker rendering remains skeleton-only
-- production server, auth, TLS, and public exposure remain out of scope
-- MuJoCo, IK, FK, and `qpos` recompute do not move into the browser viewer
+R6-A-P4ではdry-run pathを監査してPhase Aを閉じ、Phase Bへhandoffした。Phase Bはpayload v0を
+rendering-only viewer runtimeのinputとして消費する。viewerはMuJoCo、`mujoco_backend`、IK、FKをimportせず、
+browser WebSocket clientはR6-Bで初めて導入した。
 
-R6-A-P4 closes Phase A by auditing that dry-run path and documenting the
-handoff into Phase B. Phase B consumes payload v0 as input to the rendering-only
-viewer runtime. The viewer must not import MuJoCo, `mujoco_backend`, IK, or FK,
-and the browser WebSocket client is first introduced in R6-B.
+compositionは引き続き`runtime/`内だけで行う。input、motion、transport、`mujoco_backend` layerはruntimeへ
+依存しない。browser viewer connectionはR6-B、local/dev WebSocket publisher entryはR6-Cが担当した。各layerは
+runtimeがreverse dependencyなしでcomposeできるcontractを公開する。
 
-This remains composition-only inside `runtime/`; input, motion, transport, and
-`mujoco_backend` layers still do not depend on runtime. Browser viewer
-connection is deferred to R6-B, while the local/dev WebSocket publisher entry
-lands in R6-C.
+Step 5-0ではinput、motion、IK、transport、viewer作業のparallel work contractを固定した。詳細は
+`docs/contracts/`を正とする。
 
-Layer implementations must expose contracts that runtime can compose without
-creating reverse dependencies.
+runtime composition rootは`MotionCommand.joint`をbackend qpos command pathに置き、
+`MuJoCoState.target_position_m`をfeedbackとしてtransport / viewer側へ渡す。programmed target pathでは、
+`desired_endpoint_m`をcommand-side endpoint termとしてmetadataに保持し、`target_position_m`を
+compatibility / viewer feedbackとして残してよい。browser renderingはrender-onlyであり、commandまたはstateの
+source of truthにならない。
 
-Step 5-0 freezes the parallel work contracts for input, motion, IK, transport,
-and viewer work. The contract details live in `docs/contracts/`.
-
-The runtime composition root keeps `MotionCommand.joint` on the backend qpos
-command path and forwards `MuJoCoState.target_position_m` as feedback to the
-transport / viewer side. For programmed target paths, runtime may also carry
-`desired_endpoint_m` in metadata as the command-side endpoint term while
-leaving `target_position_m` as compatibility / viewer feedback. Browser
-rendering stays rendering-only and does not become a command or state source
-of truth.
-
-R6-H-P5 historically added the first concrete runtime baseline for target /
-command / qpos wiring:
+R6-H-P5ではhistoricalな最初のconcrete runtime baselineとしてtarget / command / qpos wiringを追加した。
 
 ```text
 ReplayInputSource
@@ -116,234 +93,178 @@ ReplayInputSource
   -> StatePublisher
 ```
 
-That Planar solver was a staged R6-H baseline and was retired by #389. The
-current `build_concrete_mujoco_pipeline()` and offline input smoke resolve the
-selected `RobotRuntimePlugin`; the plugin builds robot-specific IK/FK/motion,
-owns the model/profile home seed and endpoint contract, and supplies the P23
-feasibility guard. `build_concrete_mujoco_pipeline()` keeps
-`build_noop_pipeline()` as a test / placeholder helper and does not route the
-runtime default through `ZeroForwardKinematicsSolver`,
-`ZeroInverseKinematicsSolver`, `NoOpMotionGenerator`, `NoOpMuJoCoSimulator`,
-`NoOpInputInterpreter`, or `NoOpStatePublisher`.
+このPlanar solverはstaged R6-H baselineであり、#389で退役した。現在の
+`build_concrete_mujoco_pipeline()`とoffline input smokeはselected `RobotRuntimePlugin`をresolveする。pluginは
+robot-specific IK/FK/motionを構築し、model/profile home seedとendpoint contractを所有し、P23 feasibility
+guardを供給する。`build_concrete_mujoco_pipeline()`は`build_noop_pipeline()`をtest / placeholder helperとして
+維持するが、runtime defaultを`ZeroForwardKinematicsSolver`、`ZeroInverseKinematicsSolver`、
+`NoOpMotionGenerator`、`NoOpMuJoCoSimulator`、`NoOpInputInterpreter`、`NoOpStatePublisher`へrouteしない。
 
-R6-J-P5 adds a runtime / backend internal endpoint metrics helper that keeps
-`desired_endpoint_m`, qpos-like joint input, FK endpoint, MuJoCo site endpoint,
-error vectors, norms, and frame notes together for diagnostics. The helper
-stays in Python runtime/backend code and does not change payload schema or
-viewer behavior. FK uses the solver-defined frame, MuJoCo site uses the
-MuJoCo world / scene frame, and the resulting vectors remain diagnostic only
-instead of becoming transformed control truth.
+R6-J-P5では、`desired_endpoint_m`、qpos-like joint input、FK endpoint、MuJoCo site endpoint、error vector、
+norm、frame noteをまとめるruntime / backend internal endpoint metrics helperを診断用に追加した。helperはPython
+runtime/backend code内に留まり、payload schemaやviewer behaviorを変更しない。FKはsolver-defined frame、
+MuJoCo siteはMuJoCo world / scene frameを使い、vectorはtransformed control truthではなくdiagnosticに留まる。
 
-R6-J-P6 connects that diagnostic helper to runtime output. The concrete
-runtime path may lift the diagnostic object into the dry-run NDJSON stream and
-WebSocket payload as an optional `endpoint_evaluation` field. The runtime and
-backend remain the source of truth; the viewer still does not compute FK, IK,
-or qpos-derived endpoint metrics.
+R6-J-P6ではそのdiagnostic helperをruntime outputへ接続した。concrete runtime pathはdiagnostic objectをoptional
+`endpoint_evaluation` fieldとしてdry-run NDJSON streamとWebSocket payloadへ載せられる。runtimeとbackendが
+source of truthであり、viewerはFK、IK、qpos-derived endpoint metricを計算しない。
 
-The `sweep_x` dry-run preset remains a visual-smoke compatibility path.
-It may use `NoOpMotionGenerator` to preserve target-marker sweep behavior.
-This exception is not the production-like concrete runtime default.
-The concrete default path and WebSocket publisher path use
-`build_concrete_mujoco_pipeline()` without replacing the motion generator with
-no-op.
+`sweep_x` dry-run presetはvisual-smoke compatibility pathとして残る。target-marker sweep behaviorを維持するため
+`NoOpMotionGenerator`を使ってよいが、この例外はproduction-like concrete runtime defaultではない。concrete
+default pathとWebSocket publisher pathはmotion generatorをno-opへ置換せず
+`build_concrete_mujoco_pipeline()`を使う。
 
-`build_mujoco_pipeline()` remains a compatibility helper for the older no-op
-runtime wiring tests. It is not the production-like default path, and it does
-not supersede `build_concrete_mujoco_pipeline()` as the concrete baseline.
+`build_mujoco_pipeline()`は古いno-op runtime wiring test向けcompatibility helperとして残る。production-like
+defaultではなく、concrete baselineとして`build_concrete_mujoco_pipeline()`を置き換えない。
 
-R6-H completion audit is recorded in `docs/operations/r6-h-completion-audit.md`.
-R6-J-P5 hands off to P6 for dry-run / programmed input / WebSocket payload
-integration and to P7 for the read-only viewer overlay.
+R6-H completion auditは`docs/reports/audits/r6-h-completion-audit.md`に記録した。R6-J-P5はdry-run /
+programmed input / WebSocket payload integrationをP6、read-only viewer overlayをP7へhandoffした。
 
-R6-J-P6 handoff to P7:
+R6-J-P6からP7へのhandoff:
 
-- `endpoint_evaluation` is optional and backward-compatible
-- `target_position_m` remains the viewer-facing feedback field
-- `desired_endpoint_m` remains the command-side endpoint term
-- FK stays solver-defined and site stays MuJoCo world / scene frame
-- the viewer overlay is implemented in P7 as read-only presentation only
-- the viewer does not recompute FK, IK, qpos-derived endpoints, or error
-  vectors from browser-side state
-- missing `endpoint_evaluation` remains a valid payload state
-- `endpoint_evaluation` is diagnostic-only and is not a control truth source
+- `endpoint_evaluation`はoptionalかつbackward-compatible
+- `target_position_m`はviewer-facing feedback fieldのまま
+- `desired_endpoint_m`はcommand-side endpoint termのまま
+- FKはsolver-defined、siteはMuJoCo world / scene frame
+- viewer overlayはP7でread-only presentationとして実装する
+- viewerはFK、IK、qpos-derived endpoint、error vectorをbrowser-side stateから再計算しない
+- `endpoint_evaluation`欠落もvalid payload state
+- `endpoint_evaluation`はdiagnostic-onlyでcontrol truth sourceではない
 
-R6-K-P2 adds the selected input-source step loop to the local/dev runtime.
-The runtime main loop now threads `RawInputFrame -> InputIntent -> MotionCommand -> MuJoCo step -> endpoint_evaluation`.
-Programmed targets keep `desired_endpoint_m` as the command-side endpoint and `target_position_m` as the viewer / feedback field. Unselected sources remain replay fallback; live serial / OSC / hardware / browser input stay out of scope here.
+R6-K-P2ではselected input-source step loopをlocal/dev runtimeへ追加した。runtime main loopは
+`RawInputFrame -> InputIntent -> MotionCommand -> MuJoCo step -> endpoint_evaluation`を接続する。
+programmed targetは`desired_endpoint_m`をcommand-side endpoint、`target_position_m`をviewer / feedback fieldと
+して保持する。unselected sourceはreplay fallbackのままで、live serial / OSC / hardware / browser inputはscope外だった。
 
-R6-K-P4 adds deterministic stale-command safety to that loop. Runtime reads input metadata `source_active`, `command_age_ms`, and `stale_reason`. Inactive sources, timeouts, or stale ages yield a hold-current-qpos no-motion command before MuJoCo step. This safety boundary lives in runtime composition, not in R6-K / IK / viewer-side control logic. Stale input does not update `desired_endpoint_m` or `MuJoCoState.target_position_m` as the active target. `command_age_ms` is source-provided metadata in R6-K; runtime consumes it but does not compute wall-clock or browser age.
+R6-K-P4ではdeterministic stale-command safetyをloopへ追加した。runtimeはinput metadataの`source_active`、
+`command_age_ms`、`stale_reason`を読む。inactive source、timeout、stale ageはMuJoCo step前に
+hold-current-qpos no-motion commandを生成する。このsafety boundaryはruntime compositionにあり、R6-K / IK /
+viewer-side control logicにはない。stale inputは`desired_endpoint_m`または
+`MuJoCoState.target_position_m`をactive targetとして更新しない。R6-Kの`command_age_ms`はsource-provided
+metadataであり、runtimeは消費するだけでwall-clockまたはbrowser ageを計算しない。
 
-R6-K completion audit is recorded in `docs/operations/r6-k-completion-audit.md`; it documents the stacked PR evidence for `#247`-`#250` and does not alter runtime composition.
+R6-K completion auditは`docs/reports/audits/r6-k-completion-audit.md`に置き、`#247`-`#250`のstacked PR
+evidenceを記録する。runtime compositionは変更しない。
 
-R7-E follow-up P14 keeps the production input step loop as the control
-orchestrator while extracting a small pure diagnostic boundary in
-`runtime/input_step_diagnostics.py`. The boundary measures the MuJoCo `tip`
-from pre/post state snapshots, calculates `actual_tip_delta_m`, deterministically
-merges diagnostic metadata, applies P10 progress semantics and P12 stale-field
-removal, resolves target feedback annotation, and applies runtime input-source
-state metadata last. It does not step the simulator, apply commands, publish,
-read or mutate input sources, use clocks, or perform I/O.
+R7-E follow-up P14ではproduction input step loopをcontrol orchestratorとして維持しつつ、
+`runtime/input_step_diagnostics.py`へ小さなpure diagnostic boundaryを抽出した。このboundaryはpre/post state
+snapshotからMuJoCo `tip`をmeasureし、`actual_tip_delta_m`を計算し、diagnostic metadataをdeterministicにmergeし、
+P10 progress semanticsとP12 stale-field removalを適用し、target feedback annotationをresolveし、最後にruntime
+input-source state metadataを適用する。simulator step、command apply、publish、input sourceのread/mutation、clock、
+I/Oは行わない。
 
-The step loop retains safety before step, target lifecycle candidate and
-last-valid-target ownership, command apply, MuJoCo step, publish, and
-publish-before-ViewerInputSource-rebase ordering. Missing tip measurement does
-not stop the loop or synthesize `actual_tip_delta_m`; local endpoint progress is
-annotated as `measurement_unavailable`. Runtime remains the only multi-layer
-composition root, payload-v0 and viewer behavior are unchanged, and the larger
-composition split remains owned by P19.
+step loopはstep前safety、target lifecycle candidateとlast-valid-target ownership、command apply、MuJoCo step、
+publish、publish-before-`ViewerInputSource`-rebase orderingを維持する。tip measurement欠落時はloopを停止せず、
+`actual_tip_delta_m`を合成しない。local endpoint progressは`measurement_unavailable`とannotateする。runtimeは唯一の
+multi-layer composition rootであり、payload-v0とviewer behaviorは変えず、より大きなcomposition splitはP19が
+所有する。
 
-R7-E follow-up P23 adds a generic runtime qpos feasibility contract and a
-fast_arm adapter. `build_mujoco_pipeline()`,
-`build_replay_mujoco_pipeline()`, and the generic `RuntimePipeline` do not load
-fast_arm TOML or infer a robot profile. When no guard is injected, their
-explicit behavior is the no-op feasibility result; arbitrary MuJoCo models are
-not subjected to fast_arm body/site/home validation.
+R7-E follow-up P23ではgeneric runtime qpos feasibility contractとfast_arm adapterを追加した。
+`build_mujoco_pipeline()`、`build_replay_mujoco_pipeline()`、generic `RuntimePipeline`はfast_arm TOMLをloadせず、
+robot profileを推測しない。guard未inject時は明示的なno-op feasibility resultを返し、arbitrary MuJoCo modelへ
+fast_arm body/site/home validationを適用しない。
 
-The fast_arm production composition owns loading
-`configs/fast_arm/joint_limits.toml` with `tomllib`, validating the configured
-schema/model/joint order and canonical MuJoCo `home` qpos at startup, and
-injecting an adapter that implements the generic contract. The production
-programmed/viewer paths use the concrete fast_arm composition; the replay path
-uses the generic builder followed by explicit fast_arm composition injection.
-After motion policy and before backend update, the common guard accepts
-in-range candidates, including exact boundaries, or rejects the whole
-candidate and holds the current qpos when any axis is out of range. It never
-clamps individual axes. Rejected qpos commands do not advance target lifecycle
-or viewer rebase state. The TOML remains the only joint-limit SoT; the MJCF and
-peer layers do not duplicate its values. P24 will replace this temporary
-explicit composition seam with the planned Robot Profile / Runtime Plugin /
-Viewer Profile registries; P23 does not implement those registries. Runtime
-accept/reject control flow uses `QposFeasibilityResult.accepted`; command
-metadata remains diagnostic/compatibility observability only.
+fast_arm production compositionは`tomllib`で`configs/fast_arm/joint_limits.toml`をloadし、configured
+schema/model/joint orderとcanonical MuJoCo `home` qposをstartup時にvalidateし、generic contractを実装するadapterを
+injectする。production programmed/viewer pathはconcrete fast_arm compositionを使い、replay pathはgeneric builderの
+後にfast_arm compositionを明示injectする。motion policy後かつbackend update前にcommon guardがin-range candidateを
+受理する。exact boundaryも受理する。いずれかのaxisがout of rangeならcandidate全体をrejectしてcurrent qposをholdし、
+axisごとのclampはしない。rejected qpos commandはtarget lifecycleやviewer rebase stateを進めない。TOMLが唯一の
+joint-limit SoTであり、MJCFとpeer layerは値を重複保持しない。P24はtemporary explicit composition seamをRobot
+Profile / Runtime Plugin / Viewer Profile registryへ置換する予定であり、P23ではregistryを実装しない。runtime
+accept/reject control flowは`QposFeasibilityResult.accepted`を使い、command metadataはdiagnostic/compatibility
+observabilityに限定する。
 
-R7-E follow-up P24 replaces that temporary fast_arm composition seam with the
-explicit Robot Profile and Robot Runtime Plugin registries documented in
-`docs/contracts/robot-profile-runtime-viewer-profile.md`. Production entry
-points select `robot_profile_id="fast_arm"`; the common resolver consults both
-registries, validates registry-set and profile/plugin consistency, then loads
-and validates the model before building the existing IK/FK, motion policy, and
-P23 guard. Generic builders
-require an explicit model path and never infer fast_arm from a path, joint
-names, or profile absence. The rendering-only viewer independently resolves a
-Viewer Robot Profile and checks additive payload-v0 metadata before applying
-qpos. The four robot compatibility metadata keys are production-authoritative
-and applied last so frame/intent/command metadata cannot spoof them. Generic
-profiles do not assume one joint equals one qpos; fast_arm's 4/4 dimensions and
-joint order are plugin-owned startup checks. No arbitrary dynamic import or
-browser-side planning/safety is added.
+R7-E follow-up P24ではtemporary fast_arm composition seamを
+`docs/contracts/robot-profile-runtime-viewer-profile.md`の明示的なRobot Profile / Robot Runtime Plugin registryへ
+置換した。production entry pointは`robot_profile_id="fast_arm"`を選択する。common resolverは両registryを参照し、
+registry setとprofile/plugin consistencyをvalidateし、modelをload/validateしてから既存IK/FK、motion policy、P23
+guardを構築する。generic builderは明示model pathを要求し、path、joint name、profile欠落からfast_armを推測しない。
+rendering-only viewerは独立してViewer Robot Profileをresolveし、qpos適用前にadditive payload-v0 metadataを検査する。
+4つのrobot compatibility metadata keyはproduction-authoritativeであり、frame/intent/command metadataによるspoofを
+防ぐため最後に適用する。generic profileは1 joint = 1 qposを仮定せず、fast_armの4/4 dimensionとjoint orderは
+plugin-owned startup checkである。arbitrary dynamic import、browser-side planning/safetyは追加しない。
 
-R7-E follow-up P25 gives the production `--input-source viewer` composition a
-wall-clock cadence without changing simulation time. `dt_s` remains the amount
-advanced by one MuJoCo step. A positive `interval_s` is the live cadence period
-and is paced against absolute monotonic deadlines: processing time is deducted
-from the remaining sleep, missed deadlines never produce negative sleep, and a
-miss rebases the next deadline instead of running an unlimited catch-up loop.
-The miss decision is based on the final post-sleep monotonic observation, with
-a 1 microsecond tolerance for floating-point noise, so scheduler overshoot is
-included in deadline diagnostics. Post-sleep overshoot keeps the absolute
-deadline sequence; only pre-sleep overrun rebases the next period.
-`interval_s=0` remains the existing fast-as-possible behavior. This pacing is
-selected only by the live viewer composition; replay, dry-run, and experiment
-logging retain their deterministic/lossless contracts.
+R7-E follow-up P25ではproduction `--input-source viewer` compositionへwall-clock cadenceを追加し、simulation timeは
+変更しなかった。`dt_s`は1 MuJoCo stepで進める量のままである。正の`interval_s`をlive cadence periodとし、absolute
+monotonic deadlineに対してpaceする。processing timeをremaining sleepから差し引き、missed deadlineでnegative sleepを
+作らず、miss時はunlimited catch-up loopではなくnext deadlineをrebaseする。miss判定にはfinal post-sleep monotonic
+observationを使い、floating-point noise向け1 microsecond toleranceを設けてscheduler overshootをdiagnosticへ含める。
+post-sleep overshootではabsolute deadline sequenceを維持し、pre-sleep overrun時だけnext periodをrebaseする。
+`interval_s=0`は既存fast-as-possible behaviorのままである。このpacingはlive viewer compositionだけが選択し、replay、
+dry-run、experiment loggingはdeterministic/lossless contractを維持する。
 
-The same live composition inserts a bounded latest-state publisher between the
-step loop and the existing WebSocket server. It holds at most one unsent state,
-may replace that pending live display state with a newer state, and reports the
-coalesced count. The canonical `WebSocketStatePublisher` remains ordered and
-awaited for lossless callers. On the browser side, compatible payloads are
-coalesced before scene application and the latest candidate is applied once per
-render cadence. Live shutdown bounds the final flush, cancels and awaits a
-blocked sender after timeout, and diagnoses unconfirmed shutdown drops. Invalid
-or unparsable ingress discards older unapplied candidates while preserving the
-last applied scene pose. MuJoCo remains the physical-state source of truth and
-the viewer remains rendering-only.
+同じlive compositionではstep loopと既存WebSocket serverの間へbounded latest-state publisherを入れる。unsent stateは
+最大1件保持し、pending live display stateを新しいstateで置換でき、coalesced countをreportする。canonical
+`WebSocketStatePublisher`はlossless caller向けにordered / awaitedを維持する。browser側ではcompatible payloadを
+scene適用前にcoalesceし、latest candidateをrender cadenceごとに1回適用する。live shutdownはfinal flushをboundし、
+timeout後にblocked senderをcancelしてawaitし、unconfirmed shutdown dropをdiagnoseする。invalid/unparsable ingressは
+last applied scene poseを維持しつつ古いunapplied candidateをdiscardする。MuJoCo remains the physical source of truthであり、
+viewerはrendering-onlyを維持する。
 
-## Composition-root responsibility split
+## composition-rootの責務分割
 
-This section is the canonical plan for decomposing the production input step
-loop without changing its behavior. The current implementation remains the
-authority until each target boundary is introduced and validated. A target
-owner is a runtime-local coordinator or pure helper unless the table names an
-existing layer contract; it is not permission for a peer layer to compose
-other layers.
+このsectionはproduction input step loopをbehavior変更なしに分解するcanonical planである。各target boundaryが導入・
+検証されるまではcurrent implementationがauthorityである。target ownerは、表で既存layer contractを指定しない限り、
+runtime-local coordinatorまたはpure helperである。peer layerが他layerをcomposeする許可ではない。
 
 | Stage | Current owner | Target owner | Input | Output / source of truth |
 |---|---|---|---|---|
-| source planning | `build_runtime_input_source_step_loop_plan()` | runtime plan builder | source selection, config, injected publisher/model/viewer source | immutable runtime plan; configuration and explicit selection are authoritative |
-| source lifecycle | `run_runtime_input_source_step_loop()` plus the selected `InputSource` | runtime source-lifecycle coordinator using the `InputSource` contract | plan, source frame, source metadata | `RawInputFrame` and `RuntimeInputSourceState`; the source owns acquisition metadata and runtime owns lifecycle interpretation |
-| control-frame resolution | step loop plus `viewer_motion_policy` motion metadata construction | runtime control-frame resolver / policy adapter | canonical requested frame, local velocity, pre-step tool orientation, `dt_s` | P12 requested/resolved frame fields; resolver status is authoritative and unresolved values remain absent |
-| motion policy | step loop calling the selected `MotionGenerator` and runtime safety helper | selected motion policy behind `MotionGenerator`, followed by runtime safety | `InputIntent`, pre-step qpos, resolved motion metadata, `dt_s`, source state | `MotionCommand` plus hold/reject metadata; command is intent, never physical state |
-| backend update | step loop | runtime backend-update coordinator using simulator contract | safety-selected command and positive `dt_s` | applied command followed by one backend step; backend/MuJoCo owns physical evolution |
-| MuJoCo measurement | step loop calling `measure_post_step_tip()` | pure `input_step_diagnostics` measurement helper | pre-step and post-step `MuJoCoState` | `PostStepMeasurement`; MuJoCo site snapshots are the physical evidence source |
-| diagnostic annotation | `annotate_runtime_input_state()` and its pure helpers | pure `input_step_diagnostics` annotation boundary | frame, intent, selected command, source state, measurement, target decision, backend state | annotated `MuJoCoState`; producer-owned metadata keeps its canonical meaning and unavailable evidence is not synthesized |
-| publication | step loop calling `StatePublisher.publish()` | runtime publication coordinator using `StatePublisher` | fully annotated state | publication completion; the annotated runtime/backend state is authoritative and transport only serializes/delivers it |
-| target lifecycle | step-loop local `last_valid_endpoint_m`, target candidate selection, feedback annotation, and viewer rebase | runtime target-lifecycle coordinator | prior valid target, selected command, safety/rejection decision, annotated state | next valid target and compatibility feedback; rejected/stale input does not become a new active target |
-| experiment logging handoff | no automatic runtime owner; P20 provides the independent `experiment-motion-log/v1` record contract | explicit caller-owned evaluation adapter outside the production step loop | canonical P16 input intent and the completed requested/resolved/predicted/measured step evidence | immutable P20 record value; the experiment contract is the record SoT and runtime does not open files or start logging implicitly |
+| source planning | `build_runtime_input_source_step_loop_plan()` | runtime plan builder | source selection、config、injected publisher/model/viewer source | immutable runtime plan。configurationとexplicit selectionがauthoritative |
+| source lifecycle | `run_runtime_input_source_step_loop()`とselected `InputSource` | `InputSource` contractを使うruntime source-lifecycle coordinator | plan、source frame、source metadata | `RawInputFrame`と`RuntimeInputSourceState`。sourceがacquisition metadataを所有し、runtimeがlifecycleを解釈する |
+| control-frame resolution | step loopと`viewer_motion_policy` motion metadata construction | runtime control-frame resolver / policy adapter | canonical requested frame、local velocity、pre-step tool orientation、`dt_s` | P12 requested/resolved frame field。resolver statusがauthoritativeで、unresolved valueは欠落のまま |
+| motion policy | selected `MotionGenerator`とruntime safety helperを呼ぶstep loop | `MotionGenerator`背後のselected motion policyとruntime safety | `InputIntent`、pre-step qpos、resolved motion metadata、`dt_s`、source state | `MotionCommand`とhold/reject metadata。commandはintentでありphysical stateではない |
+| backend update | step loop | simulator contractを使うruntime backend-update coordinator | safety-selected commandと正の`dt_s` | command apply後の1 backend step。backend/MuJoCoがphysical evolutionを所有する |
+| MuJoCo measurement | `measure_post_step_tip()`を呼ぶstep loop | pure `input_step_diagnostics` measurement helper | pre/post-step `MuJoCoState` | `PostStepMeasurement`。MuJoCo site snapshotがphysical evidence source |
+| diagnostic annotation | `annotate_runtime_input_state()`とpure helper | pure `input_step_diagnostics` annotation boundary | frame、intent、selected command、source state、measurement、target decision、backend state | annotated `MuJoCoState`。producer-owned metadataのcanonical meaningを保ち、unavailable evidenceを合成しない |
+| publication | `StatePublisher.publish()`を呼ぶstep loop | `StatePublisher`を使うruntime publication coordinator | fully annotated state | publication completion。annotated runtime/backend stateがauthoritativeでtransportはserialize/deliverだけを行う |
+| target lifecycle | step-loop local `last_valid_endpoint_m`、target candidate selection、feedback annotation、viewer rebase | runtime target-lifecycle coordinator | prior valid target、selected command、safety/rejection decision、annotated state | next valid targetとcompatibility feedback。rejected/stale inputは新active targetにならない |
+| experiment logging handoff | automatic runtime ownerなし。P20は独立`experiment-motion-log/v1` record contractを提供 | production step loop外のexplicit caller-owned evaluation adapter | canonical P16 input intentとcompleted requested/resolved/predicted/measured step evidence | immutable P20 record value。experiment contractがrecord SoTでruntimeは暗黙にfileを開かずloggingを開始しない |
 
-### Forbidden dependencies and unavailable semantics
+### 禁止dependencyとunavailable semantics
 
-The import rules in `dependency-boundaries.md` continue to apply at every
-stage. In particular, input, interpreter, motion, kinematics, backend, and
-transport implementations must not import runtime or instantiate peer layers.
-Transport must not derive diagnostics, target state, or measurements. The
-viewer is a render-only consumer and must not plan sources, resolve control
-frames, run motion policy, recompute FK/IK, step MuJoCo, or write target
-lifecycle state. Evaluation record builders must not become a production
-runtime dependency or trigger I/O from a control step.
+`dependency-boundaries.md`のimport ruleはすべてのstageへ適用する。input、interpreter、motion、kinematics、backend、
+transport implementationはruntimeをimportしたりpeer layerをinstantiateしたりしてはならない。transportはdiagnostic、
+target state、measurementを導出しない。viewerはrender-only consumerであり、source planning、control-frame resolution、
+motion policy、FK/IK再計算、MuJoCo step、target lifecycle state書き込みを行わない。evaluation record builderは
+production runtime dependencyにならず、control stepからI/Oを起動しない。
 
-Failure is retained at the stage that owns it and is passed forward as typed
-state rather than converted to success:
+failureはowner stageに保持し、successへ変換せずtyped stateとして後段へ渡す。
 
-- missing/inactive/stale source evidence remains distinct through
-  `source_active`, `zero_input`, and `stale_reason`; it is not a successful
-  zero command;
-- unavailable tool orientation produces P12
-  `tool_orientation_unavailable`, no resolved world velocity, and a held
-  command;
-- motion hold/rejection is independent from target rejection and source
-  lifecycle;
-- a backend failure aborts publication for that step; transport must not
-  fabricate a state;
-- missing MuJoCo tip evidence produces no measured delta and is annotated as
-  `measurement_unavailable`, never as measured zero;
-- publication failure does not roll back or repeat the already performed
-  physical step inside a hidden transport retry;
-- a rejected or stale target preserves the last valid target and cannot advance
-  viewer rebase state;
-- absent experiment logging remains “not recorded”; it does not affect control
-  or publication success.
+- missing/inactive/stale source evidenceは`source_active`、`zero_input`、`stale_reason`で区別し、successful zero
+  commandにしない
+- tool orientation unavailable時はP12 `tool_orientation_unavailable`、resolved world velocityなし、held command
+- motion hold/rejectionはtarget rejectionとsource lifecycleから独立する
+- backend failure時はそのstepのpublicationをabortし、transportはstateをfabricateしない
+- MuJoCo tip evidence欠落時はmeasured deltaを生成せず`measurement_unavailable`とし、measured zeroにしない
+- publication failureはhidden transport retry内で既に実行したphysical stepをrollback/repeatしない
+- rejected/stale targetはlast valid targetを維持し、viewer rebase stateを進めない
+- experiment logging欠落は「not recorded」であり、control/publication successに影響しない
 
-### Behavior-preserving migration sequence
+### behavior-preserving migration sequence
 
-Refactoring must proceed in this order, with one boundary change per reviewable
-slice:
+refactorは次の順序で、review可能なsliceごとに1 boundaryを変更する。
 
-1. Freeze golden step-loop tests for call order, state/metadata output,
-   target hold/reject behavior, and publish-before-viewer-rebase ordering.
-2. Extract source planning, then source lifecycle, without changing selected
-   source instances, defaults, clocks, or read count.
-3. Extract control-frame resolution and motion-policy coordination while
-   preserving P12 fields, current-qpos seeding, safety precedence, and exact
-   command metadata.
-4. Extract backend update as the same `apply_command()` then `step(dt_s)` pair;
-   do not add retries, extra snapshots, or alternate physics state.
-5. Keep the existing pure MuJoCo measurement and diagnostic annotation
-   boundary, verifying metadata precedence and P10 unavailable semantics.
-6. Extract publication without changing payload-v0, publisher selection,
-   await ordering, or error propagation.
-7. Extract target lifecycle last, preserving last-valid-target updates and
-   publish-before-`ViewerInputSource`-rebase ordering.
-8. Add an explicit evaluation adapter only when a caller requests P20 records;
-   keep it pure and outside the production loop's default composition.
+1. call order、state/metadata output、target hold/reject behavior、publish-before-viewer-rebase orderingのgolden
+   step-loop testを固定する。
+2. source planning、次にsource lifecycleを抽出し、selected source instance、default、clock、read countを変えない。
+3. control-frame resolutionとmotion-policy coordinationを抽出し、P12 field、current-qpos seed、safety precedence、
+   exact command metadataを維持する。
+4. backend updateを同じ`apply_command()`から`step(dt_s)`のpairとして抽出し、retry、extra snapshot、alternate
+   physics stateを追加しない。
+5. 既存pure MuJoCo measurementとdiagnostic annotation boundaryを維持し、metadata precedenceとP10 unavailable
+   semanticsを検証する。
+6. payload-v0、publisher selection、await ordering、error propagationを変えずpublicationを抽出する。
+7. target lifecycleは最後に抽出し、last-valid-target updateとpublish-before-`ViewerInputSource`-rebase orderingを
+   維持する。
+8. callerがP20 recordを要求するときだけexplicit evaluation adapterを追加し、pureかつproduction loopのdefault
+   composition外に保つ。
 
-After every slice, run focused runtime step-loop tests, architecture/import
-boundary tests, the canonical pytest suite, and compile validation for changed
-Python. Compare emitted state, metadata keys/values, command sequence, snapshot
-count, publish count/order, target lifecycle, and failure propagation with the
-pre-refactor baseline. MuJoCo remains the physical source of truth, runtime
-remains the only composition root, and viewer output remains render-only.
+各slice後にfocused runtime step-loop test、architecture/import boundary test、canonical pytest suite、変更Pythonの
+compile validationを実行する。emitted state、metadata key/value、command sequence、snapshot count、publish
+count/order、target lifecycle、failure propagationをpre-refactor baselineと比較する。MuJoCoはphysical stateのsource
+of truth、runtimeは唯一のcomposition root、viewer outputはrender-onlyを維持する。
 
-P19 changes only this responsibility plan and its architecture guardrail. It
-does not perform a broad runtime rewrite, migrate call sites, redesign public
-APIs, change transport or viewer code, alter motion behavior, or incorporate
-P18/P21 implementation.
+P19はこのresponsibility planとarchitecture guardrailだけを変更する。broad runtime rewrite、call site migration、
+public API redesign、transport/viewer code変更、motion behavior変更、P18/P21 implementation取り込みは行わない
+（does not perform a broad runtime rewrite）。

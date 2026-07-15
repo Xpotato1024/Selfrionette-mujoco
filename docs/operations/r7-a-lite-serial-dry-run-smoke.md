@@ -1,3 +1,13 @@
+---
+status: canonical
+owner: operations
+last_verified: 2026-07-16
+canonical_for:
+  - R7-A-lite serial dry-run smoke
+related:
+  - docs/contracts/r7-a-lite-serial-frame-contract.md
+---
+
 # R7-A-lite serial dry-run smoke
 
 ## 目的

@@ -1,5 +1,5 @@
 ---
-status: canonical
+status: historical
 owner: operations
 canonical_for:
   - R7-E P25 live viewer pacing and backlog acceptance

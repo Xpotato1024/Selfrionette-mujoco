@@ -8,18 +8,17 @@ related:
   - AGENTS.md
 ---
 
-# Codex Workflow
+# Codex workflow
 
-Use `AGENTS.md` as the common rule source for Codex prompts. Individual prompts
-should include only task-specific conditions:
+Codex promptの共通ruleは`AGENTS.md`を正とする。個別promptにはtask固有の条件だけを記載する。
 
-- target Issue or PR
+- 対象IssueまたはPR
 - base branch
 - working branch
-- purpose
-- task-specific work
-- task-specific exclusions
+- 目的
+- task固有の作業
+- task固有の除外範囲
 - completion criteria
-- additional validation
+- 追加validation
 
-Do not repeat the full repository policy in every prompt.
+repository policy全体を個別promptへ繰り返さない。

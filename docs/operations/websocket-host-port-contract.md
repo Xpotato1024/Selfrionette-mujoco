@@ -10,7 +10,7 @@ related:
   - README.md
   - apps/mujoco-viewer/README.md
   - docs/operations/backend-viewer-startup.md
-  - docs/operations/r6-g-p3-startup-script-gap-audit.md
+  - docs/reports/audits/r6-g-p3-startup-script-gap-audit.md
   - docs/operations/browser-visual-smoke.md
   - docs/operations/live-viewer-smoke.md
   - docs/operations/websocket-publisher-runner.md

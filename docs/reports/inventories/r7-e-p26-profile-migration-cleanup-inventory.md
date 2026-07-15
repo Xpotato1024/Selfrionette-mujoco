@@ -1,5 +1,5 @@
 ---
-status: canonical
+status: historical
 owner: architecture
 canonical_for:
   - R7-E follow-up P26 profile-migration cleanup inventory and decision record

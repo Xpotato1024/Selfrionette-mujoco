@@ -161,7 +161,7 @@ does not silently return to a zero/no-op default.
 ## 8. P26 initial classification to final disposition
 
 The inventory-time table in
-[P26 profile-migration cleanup inventory](../../operations/r7-e-p26-profile-migration-cleanup-inventory.md)
+[P26 profile-migration cleanup inventory](../inventories/r7-e-p26-profile-migration-cleanup-inventory.md)
 remains unchanged as historical decision evidence. This audit records the
 post-cleanup outcome rather than rewriting that baseline.
 

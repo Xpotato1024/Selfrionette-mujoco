@@ -8,14 +8,14 @@ related:
   - docs/design/adr/0001-use-mujoco-as-physics-sot.md
 ---
 
-# Rapier to MuJoCo Migration
+# RapierからMuJoCoへの移行
 
-Rapier is not the physical source of truth in the new system.
+新しいsystemではRapierをphysical source of truthとしない。
 
-The migration target is MuJoCo + Three.js:
+移行先はMuJoCo + Three.jsである。
 
-- MuJoCo owns physical state.
-- Three.js renders `MuJoCoState`.
-- Legacy Rapier code remains comparison/reference material only.
-- Do not carry Rapier world, body, collider, joint, or physics-step behavior
-  into the new MuJoCo line.
+- MuJoCoがphysical stateを所有する。
+- Three.jsは`MuJoCoState`をrenderする。
+- Legacy Rapier codeは比較・参照資料としてのみ維持する。
+- Rapierのworld、body、collider、joint、physics-step behaviorを新しいMuJoCo系統へ
+  持ち込まない。

@@ -10,7 +10,7 @@ related:
   - docs/operations/backend-viewer-startup.md
   - docs/operations/websocket-publisher-runner.md
   - docs/operations/runtime-to-viewer-e2e-smoke.md
-  - docs/operations/r7-b-completion-audit.md
+  - docs/reports/audits/r7-b-completion-audit.md
   - docs/contracts/r7-b-runtime-input-pipeline-contract.md
   - docs/contracts/transport-payload.md
   - apps/mujoco-viewer/README.md
@@ -171,7 +171,7 @@ CI / tests で行うのは docs-only validation と contract smoke までであ�
 次は #234 で keyboard / replay demo operation package を整備し、
 この viewer / fixture 手順から再利用できる no-hardware demo command と
 artifact / log 命名方針を固定する。
-presentation では `docs/operations/r7-c-presentation-demo-notes.md` から本手順を参照する。
+presentation では `docs/reports/implementation/r7-c-presentation-demo-notes.md` から本手順を参照する。
 
 ## Scope Check
 
