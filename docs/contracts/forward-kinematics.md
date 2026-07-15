@@ -1,10 +1,10 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-06-15
+last_verified: 2026-07-15
 canonical_for:
   - forward kinematics contract
-  - concrete FK baseline
+  - robot-specific FK ownership
   - ZeroForwardKinematicsSolver retirement
 related:
   - docs/contracts/kinematics-command-contract.md
@@ -18,9 +18,9 @@ related:
 
 ## 目的
 
-`ForwardKinematicsSolver` に従う concrete FK baseline を固定し、runtime / test
-で使える最小の実装を用意する。`ZeroForwardKinematicsSolver` は runtime FK
-ではなく retirement candidate として扱う。
+`ForwardKinematicsSolver` の共通protocolと、productionでのrobot-specific FK
+ownershipを固定する。`ZeroForwardKinematicsSolver` はproduction FKではなく、
+明示的なnegative controlとして隔離する。
 
 ## Solver contract
 
@@ -30,29 +30,27 @@ related:
 - 同じ入力には同じ出力を返す
 - 入力角度が変われば出力も変わる
 
-## Concrete FK strategy
+## Production FK strategy
 
-R6-H-P3 では pure Python の最小 concrete baseline を採用する。
-現時点の実装は `src/selfrionette/kinematics/fk.py` の
-`PlanarChainForwardKinematicsSolver` であり、x-z 平面の planar chain と
-して積分する。
+Production runtimeはselected `RobotRuntimePlugin.build_forward_kinematics()`
+からrobot-specific FKを取得する。fast_armは
+`FastArmEndpointForwardKinematicsSolver`をsolver-local診断に使い、physical
+site整合はMuJoCo model/profile contractとconformance coverageで検証する。
 
-最小パラメータ:
-
-- `link_lengths_m`
-- `base_position_m`
+R6-H-P3で追加された`PlanarChainForwardKinematicsSolver`は当時のstaged
+baselineであり、#389でproduction implementationとpublic exportから退役した。
+generic testsはalgorithmを持たないtest-only doublesを使用する。
 
 ## Input / output
 
-- `joint_angles_rad` の要素数は `link_lengths_m` の要素数と一致しなければならない
-- `base_position_m` は 3 要素の `Vector3` である
+- 入力dimension、joint order、frameはselected robot profile/pluginが所有する
 - 出力は `(x, y, z)` の `Vector3` である
 
 ## Failure semantics
 
-- joint count が一致しない場合は `ValueError` を送出する
-- `link_lengths_m` が空の場合は `ValueError` を送出する
-- `link_lengths_m` に負値が含まれる場合は `ValueError` を送出する
+- joint count、profile/model、frame、solver固有contractの不一致は
+  robot-specific implementationが`ValueError`でfail closedする
+- runtimeはgenericなPlanar parameterを推論しない
 
 ## Stub retirement
 
@@ -66,14 +64,10 @@ R6-H-P3 では concrete FK strategy を追加するが、`ZeroForwardKinematicsS
 viewer は FK を行わない。
 viewer は backend / runtime payload を描画するだけである。
 
-## P4 IK handoff
+## Historical P4 handoff
 
-P4 では `PlanarChainForwardKinematicsSolver` を seed / validation 用の FK baseline として使い、
-`src/selfrionette/kinematics/ik.py` の `PlanarTwoLinkInverseKinematicsSolver` の検証に使う。
-
-P4 では `InverseKinematicsSolver` の concrete strategy を追加する。
-FK baseline は IK の seed / validation の前提を固定するだけで、IK 実装その
-ものは追加しない。
+R6-H-P4ではPlanar FK/IKをstaged validation baselineとして使用した。この
+記録は過去の成立順を示すもので、current production ownershipではない。
 
 ## P5 runtime wiring handoff
 
@@ -82,9 +76,9 @@ runtime default が zero / no-op stub に戻らないことを test で固定す
 
 ## P5 runtime notes
 
-- `build_concrete_mujoco_pipeline()` is the explicit concrete runtime path
-- `ZeroForwardKinematicsSolver` remains a retirement candidate
-- runtime path does not route through zero-valued FK
+- `build_concrete_mujoco_pipeline()` and the offline smoke resolve the selected plugin
+- `ZeroForwardKinematicsSolver` remains an explicit test/negative-control helper
+- production runtime does not route through zero-valued or generic Planar FK
 
 ## R7-E follow-up P5 physical fast_arm FK
 

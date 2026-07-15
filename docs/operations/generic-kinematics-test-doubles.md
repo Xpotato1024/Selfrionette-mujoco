@@ -43,11 +43,11 @@ Use a double when the subject under test is motion generation, solver argument
 propagation, seed selection, command conversion, endpoint evaluation, metrics,
 failure conversion, discontinuity handling, metadata, or call order.
 
-Do not use a double for Planar formula, reachability, link-length validation,
-numerical behavior, or robot/plugin conformance. Those tests retain the real
-implementation or the robot-owned plugin case.
+Do not use a double for robot geometry, reachability, numerical solver
+behavior, or robot/plugin conformance. Those checks use the robot-owned solver
+and plugin case.
 
-## Issue #387 disposition
+## Issue #387 migration
 
 Migrated generic consumers:
 
@@ -55,32 +55,23 @@ Migrated generic consumers:
 - `tests/runtime/test_endpoint_metrics.py`
 - `tests/runtime/test_kinematic_evaluation.py`
 
-Retained direct Planar implementation tests for #389:
-
-- `tests/kinematics/test_forward_kinematics_solver.py`
-- `tests/kinematics/test_inverse_kinematics_solver.py`
-- `src/selfrionette/kinematics/fk.py`, `ik.py`, and their public exports
-
-Retained for #388:
-
-- `src/selfrionette/runtime/offline_input_runtime_smoke.py`
-- `src/selfrionette/runtime/live_loadcell_runtime_runner.py`, which directly
-  calls the offline smoke
-- `tests/runtime/test_r7_b_input_driven_payload_smoke.py`
-- `tests/runtime/test_r7_b_offline_input_runtime_stepping_smoke.py`
-- `tests/runtime/test_r7_b_manual_live_loadcell_runtime_runner.py`, which
-  covers the live-loadcell caller
+The subsequent #388/#389 cleanup moved the offline smoke and its live-loadcell
+caller coverage to the resolved `RobotRuntimePlugin`, then removed the Planar
+implementation-specific tests, production classes, and package/module
+exports. Generic tests continue to use these test-only doubles; fast_arm
+geometry remains covered by its solver tests and plugin conformance case.
 
 Historical implementation records remain unchanged, including the R6-H
 completion, stub inventory, concrete solver wiring, and R6-I public-surface
-inventory notes. Current FK/IK contract documents also retain the Planar
-baseline until #389; they are not generic-test ownership documents.
+inventory notes. Current FK/IK contract documents describe robot-plugin
+ownership rather than a generic Planar baseline; they are not generic-test
+ownership documents.
 
 ## Handoff and boundary
 
-Issue #388 owns migration of the offline smoke to the resolved
-`RobotRuntimePlugin`. Issue #389 owns retirement of the Planar implementations
-and public exports after its entry conditions are met.
+The #388/#389 shared cleanup established the handoff: selected runtime plugins
+own production IK/FK/motion/endpoint/home-seed/feasibility composition, while
+this module owns only generic test doubles.
 
 Production source must never import `tests.support` or this module. The doubles
 must remain under `tests/` and must not be exported from

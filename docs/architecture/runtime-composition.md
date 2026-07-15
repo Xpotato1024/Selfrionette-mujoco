@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-13
+last_verified: 2026-07-15
 canonical_for:
   - runtime composition root
 related:
@@ -102,8 +102,8 @@ leaving `target_position_m` as compatibility / viewer feedback. Browser
 rendering stays rendering-only and does not become a command or state source
 of truth.
 
-R6-H-P5 adds the concrete runtime baseline for target / command / qpos
-wiring:
+R6-H-P5 historically added the first concrete runtime baseline for target /
+command / qpos wiring:
 
 ```text
 ReplayInputSource
@@ -116,7 +116,11 @@ ReplayInputSource
   -> StatePublisher
 ```
 
-`build_concrete_mujoco_pipeline()` is the explicit concrete path. It keeps
+That Planar solver was a staged R6-H baseline and was retired by #389. The
+current `build_concrete_mujoco_pipeline()` and offline input smoke resolve the
+selected `RobotRuntimePlugin`; the plugin builds robot-specific IK/FK/motion,
+owns the model/profile home seed and endpoint contract, and supplies the P23
+feasibility guard. `build_concrete_mujoco_pipeline()` keeps
 `build_noop_pipeline()` as a test / placeholder helper and does not route the
 runtime default through `ZeroForwardKinematicsSolver`,
 `ZeroInverseKinematicsSolver`, `NoOpMotionGenerator`, `NoOpMuJoCoSimulator`,

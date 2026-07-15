@@ -113,3 +113,17 @@ def test_migrated_generic_tests_have_no_planar_solver_dependency() -> None:
         assert "PlanarTwoLinkInverseKinematicsSolver" not in source
         assert "selfrionette.kinematics.fk" not in imported_modules
         assert "selfrionette.kinematics.ik" not in imported_modules
+
+
+def test_planar_solver_implementation_exports_and_production_consumers_are_retired() -> None:
+    retired_names = {
+        "PlanarChainForwardKinematicsSolver",
+        "PlanarTwoLinkInverseKinematicsSolver",
+    }
+    production_sources = tuple((ROOT / "src" / "selfrionette").rglob("*.py"))
+
+    assert not retired_names & set(kinematics.__all__)
+    assert not any(hasattr(kinematics, name) for name in retired_names)
+    for path in production_sources:
+        source = path.read_text(encoding="utf-8")
+        assert not any(name in source for name in retired_names), path

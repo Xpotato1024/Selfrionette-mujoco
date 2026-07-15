@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-14
+last_verified: 2026-07-15
 canonical_for:
   - Robot Profile contract and registry
   - Robot Runtime Plugin contract and registry
@@ -129,8 +129,12 @@ pipeline safety boundary. The fast_arm plugin constructs the existing
 acceptance, whole-candidate hold, current-qpos preservation, target lifecycle
 suppression, and viewer rebase suppression are unchanged.
 
-Planar compatibility solvers, no-op/stub helpers, and broad package exports
-remain temporary inventory for separate cleanup. The executable
+The Planar compatibility FK/IK implementations and their public exports were
+retired by #389 after generic tests moved to test-only doubles and the offline
+smoke moved to resolved plugin ownership. Robot-specific production IK/FK,
+motion, endpoint, home/seed, and feasibility behavior now resolve through the
+selected `RobotRuntimePlugin`. Explicit no-op/stub helpers remain isolated
+negative controls and are not production fallbacks. The executable
 `experiments/mujoco-wasm-viewer-poc` was retired by #385 after its promoted
 renderer and useful fixture assertions were verified in the product viewer;
 the canonical qpos fixture is now owned by

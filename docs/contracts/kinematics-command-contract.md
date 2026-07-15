@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-06-19
+last_verified: 2026-07-15
 canonical_for:
   - kinematics solver contract
   - JointCommand / MotionCommand boundary
@@ -147,15 +147,13 @@ explicit placeholder / test double / compatibility helper である。
 
 これらは R6-H-P3〜P6 で runtime path から退場させる。
 
-## Forward kinematics baseline
+## Forward kinematics ownership
 
-`PlanarChainForwardKinematicsSolver` は `ForwardKinematicsSolver` の concrete
-baseline である。
-
-- `src/selfrionette/kinematics/fk.py` に置く
-- `base.py` には実装を書かない
-- `ZeroForwardKinematicsSolver` は runtime FK として使わない
-- viewer-side FK / qpos recompute は追加しない
+`ForwardKinematicsSolver`はgeneric protocolであり、production implementation
+はselected `RobotRuntimePlugin`が構築する。generic testsはtest-only doubles、
+fast_arm geometryはrobot-specific solver/conformance coverageが所有する。
+`ZeroForwardKinematicsSolver`をproduction runtime FKとして使わず、viewer-side
+FK/qpos recomputeも追加しない。
 
 ## P3 FK handoff
 
@@ -165,13 +163,10 @@ P3 では、`ForwardKinematicsSolver` contract に従って concrete FK strategy
 
 ## P4 IK handoff
 
-Concrete IK baseline は `src/selfrionette/kinematics/ik.py` の `PlanarTwoLinkInverseKinematicsSolver` に固定される。
-
-P4 では、`InverseKinematicsSolver` contract に従って concrete IK strategy を
-追加する。
-empty `JointCommand()` を通常成功として扱わない。必要な場合のみ explicit
-placeholder / exceptional empty result として扱う。
-workspace / seed / failure semantics を明示する。
+R6-H-P4ではPlanar implementationをstaged concrete baselineとして追加した。
+これはhistorical handoffであり、#389後のcurrent production ownerではない。
+current runtimeはselected pluginがIK/motion、workspace、seed、failure semantics
+を所有し、empty `JointCommand()`を通常成功として扱わない。
 
 ## P5 runtime wiring handoff
 
@@ -183,7 +178,7 @@ runtime default が zero / no-op stub にならないことを test する。
 - `build_concrete_mujoco_pipeline()` is the explicit concrete path
 - `TargetToJointMotionGenerator` resolves `desired_endpoint_m` を優先し、
   `target_position_m` は fallback として扱う
-- `MotionCommand.joint` is padded to the backend qpos contract in runtime
+- `MotionCommand.joint` follows the selected profile qpos contract
 - `build_noop_pipeline()` stays as an explicit placeholder helper
 - runtime default does not return to zero / no-op stub
 

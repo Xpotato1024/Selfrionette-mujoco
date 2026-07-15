@@ -4,20 +4,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from math import isfinite
 
-from selfrionette.kinematics import PlanarChainForwardKinematicsSolver, PlanarTwoLinkInverseKinematicsSolver
-from selfrionette.motion import TargetToJointMotionGenerator
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, RuntimeMuJoCoSiteEndpointEvaluation
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
-from selfrionette.runtime.endpoint_metrics import build_runtime_endpoint_evaluation_payload_from_state
+from selfrionette.runtime.endpoint_metrics import build_runtime_endpoint_evaluation_payload
+from selfrionette.runtime.evaluation import evaluate_fk_endpoint_from_qpos
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.robot_plugin_registry import resolve_robot_runtime
+from selfrionette.runtime.robot_plugin_registry import ResolvedRobotRuntime, resolve_robot_runtime
 from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, MuJoCoState
 from selfrionette.transport import mujoco_state_to_payload
 
-_DEFAULT_LINK_LENGTHS_M = (0.5, 0.25)
-_DEFAULT_QPOS_JOINT_COUNT = 4
 _DEFAULT_DT_S = 1.0 / 60.0
 
 
@@ -93,6 +90,36 @@ def _build_runtime_input_intent(
     )
 
 
+def _build_plugin_site_evaluation(
+    *,
+    state: MuJoCoState,
+    resolved_runtime: ResolvedRobotRuntime,
+) -> RuntimeMuJoCoSiteEndpointEvaluation:
+    plugin = resolved_runtime.plugin
+    profile = resolved_runtime.profile
+    endpoint_position_m = plugin.endpoint_position_from_state(state)
+    if endpoint_position_m is None:
+        raise ValueError("selected robot runtime plugin did not provide an endpoint position")
+
+    endpoint = profile.endpoint
+    if endpoint.site_name is not None:
+        kind = "site"
+        name = endpoint.site_name
+    elif endpoint.body_name is not None:
+        kind = "body"
+        name = endpoint.body_name
+    else:  # pragma: no cover - RobotProfile validates this declaration
+        raise ValueError("selected robot profile does not declare an endpoint reference")
+
+    return RuntimeMuJoCoSiteEndpointEvaluation(
+        role="endpoint",
+        kind=kind,
+        name=name,
+        position_m=endpoint_position_m,
+        unit=profile.coordinate_units.position_unit,
+        coordinate_frame=profile.coordinate_units.coordinate_frame,
+    )
+
 def run_offline_input_runtime_stepping_smoke(
     command: MotionCommand,
     *,
@@ -109,17 +136,6 @@ def run_offline_input_runtime_stepping_smoke(
         resolved_desired_endpoint_m=resolved.desired_endpoint_m,
     )
 
-    initial_qpos_tuple = None if initial_qpos is None else tuple(float(value) for value in initial_qpos)
-    seed_joint_angles_rad = (
-        None
-        if initial_qpos_tuple is None
-        else initial_qpos_tuple[: len(_DEFAULT_LINK_LENGTHS_M)]
-    )
-    motion_generator = TargetToJointMotionGenerator(
-        PlanarTwoLinkInverseKinematicsSolver(link_lengths_m=_DEFAULT_LINK_LENGTHS_M),
-        seed_joint_angles_rad=seed_joint_angles_rad,
-        qpos_joint_count=_DEFAULT_QPOS_JOINT_COUNT,
-    )
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
         raise ValueError("production offline input smoke requires robot_profile_id")
@@ -135,9 +151,17 @@ def run_offline_input_runtime_stepping_smoke(
         config_path=runtime_config.joint_limit_config_path,
     )
 
+    initial_qpos_tuple = None if initial_qpos is None else tuple(float(value) for value in initial_qpos)
     if initial_qpos_tuple is not None:
         simulator.apply_qpos_command(JointCommand(joint_angles_rad=initial_qpos_tuple))
 
+    seed_joint_angles_rad = tuple(simulator.snapshot().qpos)
+    motion_generator = plugin.build_target_motion_generator(
+        seed_joint_angles_rad=seed_joint_angles_rad,
+        discontinuity_threshold_rad=None,
+        discontinuity_threshold_label="global safety threshold",
+    )
+    fk_solver = plugin.build_forward_kinematics()
     runtime_motion_command = motion_generator.update(runtime_intent, _DEFAULT_DT_S)
 
     applied_command = runtime_motion_command
@@ -164,12 +188,27 @@ def run_offline_input_runtime_stepping_smoke(
 
     endpoint_evaluation = None
     if not qpos_rejected:
-        endpoint_evaluation = build_runtime_endpoint_evaluation_payload_from_state(
-            state=state,
-            motion_command=applied_command,
-            fk_solver=PlanarChainForwardKinematicsSolver(link_lengths_m=_DEFAULT_LINK_LENGTHS_M),
-            solver_joint_count=len(_DEFAULT_LINK_LENGTHS_M),
-        )
+        try:
+            fk_evaluation = evaluate_fk_endpoint_from_qpos(
+                fk_solver,
+                applied_command.joint.joint_angles_rad if applied_command.joint is not None else (),
+                solver_joint_count=resolved_runtime.profile.qpos_dimension,
+            )
+            site_evaluation = _build_plugin_site_evaluation(
+                state=state,
+                resolved_runtime=resolved_runtime,
+            )
+        except ValueError:
+            pass
+        else:
+            endpoint_evaluation = build_runtime_endpoint_evaluation_payload(
+                desired_endpoint_m=applied_command.metadata.get("desired_endpoint_m"),
+                fk_evaluation=fk_evaluation,
+                site_evaluation=site_evaluation,
+                qpos_like_joint_angles_rad=(
+                    None if applied_command.joint is None else applied_command.joint.joint_angles_rad
+                ),
+            )
 
     if endpoint_evaluation is not None:
         state = replace(

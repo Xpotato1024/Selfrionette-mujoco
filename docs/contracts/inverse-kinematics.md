@@ -1,10 +1,10 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-06-15
+last_verified: 2026-07-15
 canonical_for:
   - inverse kinematics contract
-  - concrete IK baseline
+  - robot-specific IK ownership
   - ZeroInverseKinematicsSolver retirement
 related:
   - docs/contracts/kinematics-command-contract.md
@@ -18,9 +18,9 @@ related:
 
 ## 目的
 
-`InverseKinematicsSolver` に従う concrete IK の最小 baseline を固定する。
-ここで定義する solver は、runtime stub 退場のための concrete path であり、
-final robotics-grade IK ではない。
+`InverseKinematicsSolver` の共通protocolと、productionでのrobot-specific IK
+ownershipを固定する。runtimeはselected `RobotRuntimePlugin`からIK/motionを
+取得し、genericなgeometryを暗黙選択しない。
 
 ## Solver contract
 
@@ -29,44 +29,39 @@ final robotics-grade IK ではない。
 - `target_position_m` は command target と viewer-visible feedback の境界にある。
 - `base.py` は Protocol のまま維持し、concrete 実装は別 module に置く。
 
-## Concrete IK strategy
+## Production IK strategy
 
-R6-H-P4 の concrete baseline は `src/selfrionette/kinematics/ik.py` の
-`PlanarTwoLinkInverseKinematicsSolver` とする。
+Production runtimeはselected `RobotRuntimePlugin.build_inverse_kinematics()`
+またはplugin-owned motion generatorを使用する。profile/pluginはmodel、joint
+order、qpos dimension、home/seed、workspace/failure semanticsを一つのrobot
+contractとして所有する。
 
-- plane: x-z
-- chain: 2-link fixed baseline
-- parameters: `link_lengths_m`, `base_position_m`
-- output: non-empty `JointCommand`
+R6-H-P4の`PlanarTwoLinkInverseKinematicsSolver`は当時のstaged baselineで
+あり、#389でproduction implementationとpublic exportから退役した。
 
 ## Input / output
 
 - `target_position_m` は 3 要素の `Vector3` である。
-- `base_position_m` は 3 要素の `Vector3` である。
-- `JointCommand.joint_angles_rad` は 2 要素で返す。
+- `JointCommand.joint_angles_rad` のdimensionはselected profile/pluginに従う。
 - `MotionCommand.joint` にそのまま渡せる形を保つ。
 
 ## Seed semantics
 
-- `seed_joint_angles_rad` は branch selection 用の入力である。
-- `seed_joint_angles_rad is None` の場合は deterministic な既定 branch を使う。
-- `seed_joint_angles_rad` を与える場合、2 要素でなければ `ValueError` とする。
+- `seed_joint_angles_rad` はsolver初期値/branch selection用の入力である。
+- offline smokeはprofile-owned `home`、または明示`initial_qpos`をseedにする。
+- seed dimensionとfailure semanticsはselected pluginがfail closedで検証する。
 
 ## Workspace / reachability
 
-- target は solver plane 上になければならない。
-- x-z 平面の reachability は 2-link workspace で判定する。
+- workspace/reachabilityはrobot-specific solver contractが判定する。
 - unreachable target は `ValueError` とする。
-- empty link list は `ValueError` とする。
-- negative link lengths は `ValueError` とする。
-- unsupported joint count は `ValueError` とする。
 
 ## Failure semantics
 
 - invalid target shape は `ValueError`
 - invalid seed shape は `ValueError`
 - unreachable target は `ValueError`
-- empty / negative / unsupported link contract は `ValueError`
+- invalid robot-specific model/seed contract は `ValueError`
 
 ## Stub retirement
 
@@ -87,8 +82,8 @@ runtime default が zero / no-op stub に戻らないことを test で固定す
 
 ## P5 runtime notes
 
-- `build_concrete_mujoco_pipeline()` wires concrete IK into runtime
-- `ZeroInverseKinematicsSolver` remains a retirement candidate
+- `build_concrete_mujoco_pipeline()` and offline smoke resolve plugin-owned IK/motion
+- `ZeroInverseKinematicsSolver` remains an explicit test/negative-control helper
 - missing or unreachable target positions fail explicitly
 
 ## Non-Goals
