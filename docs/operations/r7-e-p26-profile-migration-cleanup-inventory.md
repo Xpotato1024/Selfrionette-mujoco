@@ -311,3 +311,17 @@ PR #382 proposal は task/session lifecycle、finite/run-until-stop、supervisio
 - **Assertion migration:** PoC-onlyの6 assertion群（valid fixture parse、schema-version rejection、fixture/model qpos-dimension rejection、non-numeric/non-finite qpos rejection、empty-frame rejection、next/previous frame semantics）を `apps/mujoco-viewer/tests/mujocoQposSync.test.ts` へ移管し、canonical tracked fixture contract testを追加した。同等以上のproduct assertionは重複移植していない。
 - **Historical evidence:** #178/#181/#183/#184/#185、`docs/operations/wasm-qpos-sync-poc.md`、`docs/design/mujoco-wasm-scene-renderer-design.md`、`docs/research/mujoco-webviewer-options.md`、およびcurrent product noteを残し、PoC docsにはhistorical/retired statusを明記した。
 - **Behavior result:** source側の変更はdirect qpos state replacement時のstale qvel除去と、sweep_x sample-level desired endpoint補正に限定した。runtime composition、payload schema、IK/FK、Viewer Profile、WebSocket transport、P25 pacing/coalescing、model assetsとjoint orderingは保持した。visible product smokeは実施済みであり、hardware / external side effectはない。
+
+## 14. Post-inventory disposition (Issue #387)
+
+This section records the #387 result without changing the inventory-time
+classification above.
+
+- **P26-KIN-001 (`keep-production`): unchanged.** The fast_arm FK/IK and
+  Robot Runtime Plugin ownership remain production responsibilities. No fast_arm
+  implementation, conformance case, or runtime composition was changed.
+- **P26-KIN-002 (`keep-validation`): split by consumer responsibility.** The
+  generic motion/runtime/metric consumers moved to test-only FK/IK doubles in
+  Issue #387. Direct Planar formula, reachability, link validation, and
+  numerical tests remain for #389. The offline runtime consumer remains for
+  #388. Planar implementations and public exports remain in this issue.

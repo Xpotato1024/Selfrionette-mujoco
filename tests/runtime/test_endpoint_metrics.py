@@ -4,7 +4,6 @@ import math
 
 import pytest
 
-from selfrionette.kinematics import PlanarChainForwardKinematicsSolver
 from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoSiteEndpointEvaluation
 from selfrionette.runtime import (
     RuntimeEndpointEvaluationMetrics,
@@ -18,6 +17,10 @@ from selfrionette.runtime import (
     runtime_endpoint_evaluation_metrics_to_payload,
 )
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, SiteTransform
+from tests.support.kinematics_solver_doubles import (
+    FailingForwardKinematicsSolver,
+    FixedForwardKinematicsSolver,
+)
 
 
 def test_compute_vector_error_and_norm_use_end_minus_start_semantics() -> None:
@@ -28,42 +31,36 @@ def test_compute_vector_error_and_norm_use_end_minus_start_semantics() -> None:
 
 
 def test_build_runtime_endpoint_evaluation_metrics_keeps_desired_qpos_fk_and_site_in_one_object() -> None:
-    solver = PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25))
+    solver = FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0))
     joint_command = JointCommand(joint_angles_rad=(0.3, -0.2))
     fk_evaluation = evaluate_fk_endpoint_from_joint_command(solver, joint_command)
     site_evaluation = RuntimeMuJoCoSiteEndpointEvaluation(
         role="tip",
         kind="site",
         name="tip",
-        position_m=(0.6, 0.1, 0.2),
+        position_m=(0.0, 0.0, 0.5),
     )
 
     metrics = build_runtime_endpoint_evaluation_metrics(
-        desired_endpoint_m=(0.5, 0.2, 0.1),
+        desired_endpoint_m=(0.0, 0.0, 0.0),
         fk_evaluation=fk_evaluation,
         site_evaluation=site_evaluation,
         qpos_like_joint_angles_rad=(0.3, -0.2, 0.0, 0.0),
     )
 
     assert isinstance(metrics, RuntimeEndpointEvaluationMetrics)
-    assert metrics.desired_endpoint_m == (0.5, 0.2, 0.1)
+    assert metrics.desired_endpoint_m == (0.0, 0.0, 0.0)
     assert metrics.qpos_like_joint_angles_rad == (0.3, -0.2, 0.0, 0.0)
-    assert metrics.fk_endpoint_m == fk_evaluation.endpoint_m
-    assert metrics.site_endpoint_m == (0.6, 0.1, 0.2)
+    assert metrics.fk_endpoint_m == (0.3, 0.4, 0.0)
+    assert metrics.site_endpoint_m == (0.0, 0.0, 0.5)
     assert metrics.fk_evaluation is fk_evaluation
     assert metrics.site_evaluation is site_evaluation
-    assert metrics.desired_to_fk_error_vector_m == pytest.approx(
-        compute_vector_error_m(start_m=(0.5, 0.2, 0.1), end_m=fk_evaluation.endpoint_m),
-        abs=1e-9,
-    )
-    assert metrics.desired_to_site_error_vector_m == pytest.approx((0.1, -0.1, 0.1), abs=1e-9)
-    assert metrics.fk_to_site_error_vector_m == pytest.approx(
-        compute_vector_error_m(start_m=fk_evaluation.endpoint_m, end_m=(0.6, 0.1, 0.2)),
-        abs=1e-9,
-    )
-    assert metrics.desired_to_fk_error_norm_m == pytest.approx(compute_error_norm_m(metrics.desired_to_fk_error_vector_m), abs=1e-9)
-    assert metrics.desired_to_site_error_norm_m == pytest.approx(math.sqrt(0.1**2 + 0.1**2 + 0.1**2), abs=1e-9)
-    assert metrics.fk_to_site_error_norm_m == pytest.approx(compute_error_norm_m(metrics.fk_to_site_error_vector_m), abs=1e-9)
+    assert metrics.desired_to_fk_error_vector_m == (0.3, 0.4, 0.0)
+    assert metrics.desired_to_site_error_vector_m == (0.0, 0.0, 0.5)
+    assert metrics.fk_to_site_error_vector_m == (-0.3, -0.4, 0.5)
+    assert metrics.desired_to_fk_error_norm_m == pytest.approx(0.5, abs=1e-9)
+    assert metrics.desired_to_site_error_norm_m == pytest.approx(0.5, abs=1e-9)
+    assert metrics.fk_to_site_error_norm_m == pytest.approx(math.sqrt(0.5), abs=1e-9)
     assert metrics.unit == "meter"
     assert metrics.desired_endpoint_coordinate_frame == "command-side endpoint frame"
     assert metrics.fk_endpoint_coordinate_frame == "solver-defined frame"
@@ -72,9 +69,10 @@ def test_build_runtime_endpoint_evaluation_metrics_keeps_desired_qpos_fk_and_sit
     assert not hasattr(metrics, "target_position_m")
 
     payload = runtime_endpoint_evaluation_metrics_to_payload(metrics)
-    assert payload["desired_endpoint_m"] == [0.5, 0.2, 0.1]
+    assert payload["desired_endpoint_m"] == [0.0, 0.0, 0.0]
     assert payload["qpos_like_joint_angles_rad"] == [0.3, -0.2, 0.0, 0.0]
     assert payload["unit"] == "meter"
+    assert solver.calls == [(0.3, -0.2)]
 
 
 @pytest.mark.parametrize(
@@ -233,11 +231,12 @@ def test_build_runtime_endpoint_evaluation_payload_from_state_prefers_state_meta
     payload = build_runtime_endpoint_evaluation_payload_from_state(
         state=state,
         motion_command=motion_command,
-        fk_solver=PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25)),
+        fk_solver=FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0)),
     )
 
     assert payload is not None
     assert payload["desired_endpoint_m"] == [0.1, 0.2, 0.3]
+    assert payload["qpos_like_joint_angles_rad"] == [0.0, 0.0]
 
 
 def test_build_runtime_endpoint_evaluation_payload_from_state_uses_target_position_fallback_only_when_desired_endpoint_is_missing() -> None:
@@ -264,8 +263,38 @@ def test_build_runtime_endpoint_evaluation_payload_from_state_uses_target_positi
     payload = build_runtime_endpoint_evaluation_payload_from_state(
         state=state,
         motion_command=motion_command,
-        fk_solver=PlanarChainForwardKinematicsSolver(link_lengths_m=(0.5, 0.25)),
+        fk_solver=FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0)),
     )
 
     assert payload is not None
     assert payload["desired_endpoint_m"] == [0.4, 0.5, 0.6]
+    assert payload["qpos_like_joint_angles_rad"] == [0.0, 0.0]
+
+
+def test_build_runtime_endpoint_evaluation_payload_from_state_returns_none_for_fk_failure() -> None:
+    state = MuJoCoState(
+        frame_index=1,
+        time_s=0.0,
+        sites=(
+            SiteTransform(
+                name="tip",
+                position_m=(0.5, 0.2, 0.1),
+                quaternion_wxyz=(1.0, 0.0, 0.0, 0.0),
+            ),
+        ),
+        metadata={"desired_endpoint_m": (0.1, 0.2, 0.3)},
+    )
+    motion_command = MotionCommand(
+        timestamp_s=0.0,
+        joint=JointCommand(joint_angles_rad=(0.0, 0.0)),
+    )
+    solver = FailingForwardKinematicsSolver(error_message="fk unavailable")
+
+    payload = build_runtime_endpoint_evaluation_payload_from_state(
+        state=state,
+        motion_command=motion_command,
+        fk_solver=solver,
+    )
+
+    assert payload is None
+    assert solver.calls == [(0.0, 0.0)]
