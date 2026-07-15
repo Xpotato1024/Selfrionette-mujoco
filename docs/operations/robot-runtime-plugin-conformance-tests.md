@@ -112,3 +112,8 @@ WebSocket behavior, robot assets, or hardware paths. Generic test-double
 migration is Issue #387, offline smoke remains Issue #388, public Planar
 exports remain Issue #389, and the related cleanup/supporting inventory is
 Issue #391.
+
+The later shared #388/#389 cleanup consumed that handoff: offline smoke now
+uses the resolved plugin, and Planar production implementations/exports are
+retired. This conformance suite remains the robot-specific geometry coverage;
+it was not moved into production or broadened into a generic solver algorithm.

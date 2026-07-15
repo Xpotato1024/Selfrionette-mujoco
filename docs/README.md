@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-06
+last_verified: 2026-07-15
 canonical_for:
   - documentation source of truth map
 related:
@@ -26,7 +26,7 @@ Do not create or use `doc/`.
 | Runtime composition | `docs/architecture/runtime-composition.md` | composition root |
 | Robot Profile / Runtime Plugin / Viewer Profile | `docs/contracts/robot-profile-runtime-viewer-profile.md` | immutable declarations, explicit registries, production/generic selection, and backend/viewer compatibility |
 | Robot Runtime Plugin conformance tests | `docs/operations/robot-runtime-plugin-conformance-tests.md` | test-only case model, generic suite, known-value provenance, registration, and fail-closed checks |
-| Generic kinematics test doubles | `docs/operations/generic-kinematics-test-doubles.md` | test-only FK/IK doubles, generic consumer migration, and #388/#389 handoff |
+| Generic kinematics test doubles | `docs/operations/generic-kinematics-test-doubles.md` | test-only FK/IK doubles and generic consumer ownership after Planar retirement |
 | Runtime dry-run entry | `docs/operations/runtime-dry-run.md` | deterministic replay to payload v0 NDJSON |
 | WASM qpos sync PoC | `docs/operations/wasm-qpos-sync-poc.md` | historical PoC evidence; executable PoC retired by #385 |
 | Product viewer WASM scene renderer | `docs/operations/product-viewer-wasm-scene-renderer.md` | current production owner, fixture owner, and operator path |
@@ -102,8 +102,8 @@ Do not create or use `doc/`.
 | Japanese docs guardrails | `docs/operations/japanese-doc-writing-guardrails.md` | repo-level encoding and PR body safety checks for Japanese docs |
 | Schema contracts | `docs/contracts/schemas.md` | shared contract types |
 | Kinematics / command contract | `docs/contracts/kinematics-command-contract.md` | solver / command / qpos boundary |
-| Forward kinematics contract | `docs/contracts/forward-kinematics.md` | concrete FK baseline and zero-stub retirement |
-| Inverse kinematics contract | `docs/contracts/inverse-kinematics.md` | concrete two-link IK baseline and zero-stub retirement |
+| Forward kinematics contract | `docs/contracts/forward-kinematics.md` | protocol, robot-plugin ownership, and explicit zero-stub boundary |
+| Inverse kinematics contract | `docs/contracts/inverse-kinematics.md` | protocol, robot-plugin ownership, and explicit zero-stub boundary |
 | MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
 | Runtime forward kinematics evaluation contract | `docs/contracts/runtime-forward-kinematics-evaluation.md` | runtime/backend FK endpoint evaluation contract; not viewer SoT, transport payload, site extraction, or metrics integration |
 | Parallel work contracts | `docs/contracts/parallel-work-contracts.md` | Step 5-0 contract lock |

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-15
+last_verified: 2026-07-15
 canonical_for:
   - runtime data flow
 related:
@@ -357,8 +357,8 @@ R6-B-P4 audits and freezes the viewer-side handoff:
 - WebSocket server, backend publisher server, and Three.js real scene mutation
   remain out of scope.
 
-R6-H-P5 adds the concrete runtime wiring path that turns target metadata into
-joint qpos input:
+R6-H-P5 historically added the first concrete runtime wiring path that turned
+target metadata into joint qpos input:
 
 ```text
 ReplayInputSource
@@ -378,6 +378,12 @@ The concrete path keeps `desired_endpoint_m` as the command-side target
 metadata, keeps `target_position_m` as compatibility / feedback metadata,
 keeps `MotionCommand.target` separate from the qpos boundary, and does not
 move FK / IK / qpos recompute into the viewer.
+
+The Planar step above is historical evidence, not the current production
+owner. After #388/#389, production and offline-smoke composition resolve the
+selected `RobotRuntimePlugin`, which supplies robot-specific IK/FK/motion,
+profile home/seed, endpoint access, and feasibility behavior. Generic tests
+use test-only doubles and the viewer remains rendering-only.
 - R6-F-P4 では DoF ring display を payload body transform の
   `position_m` / `quaternion_wxyz` に従う read-only overlay として追加する。
   `logicalJointLabel` と `label` は provisional であり、
