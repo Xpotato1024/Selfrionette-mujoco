@@ -233,4 +233,5 @@ def test_offline_input_runtime_preserves_plugin_target_reject_and_home_hold_meta
     assert result.motion_command.metadata["target_rejected"] is True
     assert result.motion_command.metadata["target_rejection_reason"] == "target_unreachable"
     assert result.motion_command.metadata["rejected_desired_endpoint_m"] == (10.0, 0.0, 0.0)
+    assert result.state.qpos == result.motion_command.joint.joint_angles_rad
     assert result.state.metadata["target_rejection_reason"] == "target_unreachable"
