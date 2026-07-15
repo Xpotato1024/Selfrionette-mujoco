@@ -323,5 +323,7 @@ classification above.
 - **P26-KIN-002 (`keep-validation`): split by consumer responsibility.** The
   generic motion/runtime/metric consumers moved to test-only FK/IK doubles in
   Issue #387. Direct Planar formula, reachability, link validation, and
-  numerical tests remain for #389. The offline runtime consumer remains for
-  #388. Planar implementations and public exports remain in this issue.
+  numerical tests remain for #389. Issue #387 leaves the Planar
+  implementations and public exports unchanged. Issue #388 owns offline
+  runtime migration. Issue #389 owns Planar implementation and public-export
+  retirement after its entry conditions pass.

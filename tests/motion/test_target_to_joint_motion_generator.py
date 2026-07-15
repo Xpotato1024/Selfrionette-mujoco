@@ -52,7 +52,8 @@ def test_target_to_joint_motion_generator_propagates_target_seed_and_solver_resu
     assert command.timestamp_s == 2.0
     assert command.target is None
     assert_metadata_contains(command.metadata, {"origin": "concrete-ik"})
-    assert command.joint is solver_result
+    assert command.joint is not None
+    assert command.joint == solver_result
     assert solver.calls == [(target_position_m, (0.0, -0.2))]
 
 
@@ -79,7 +80,8 @@ def test_target_to_joint_motion_generator_prefers_desired_endpoint_metadata_over
         command.metadata,
         {"origin": "concrete-ik", "target_position_m": fallback_target_position_m},
     )
-    assert command.joint is solver.joint_command
+    assert command.joint is not None
+    assert command.joint == solver.joint_command
     assert solver.calls == [(desired_endpoint_m, (0.0, -0.2))]
 
 
@@ -247,7 +249,8 @@ def test_target_to_joint_motion_generator_falls_back_to_supported_seed_shape_whe
         current_qpos_rad=(0.0, -0.2, 0.4, -0.1),
     ).update(intent, dt_s=0.016)
 
-    assert command.joint is solver_result
+    assert command.joint is not None
+    assert command.joint == solver_result
     assert solver.calls == [
         (target_position_m, (0.0, -0.2, 0.4, -0.1)),
         (target_position_m, (0.0, -0.2)),
@@ -291,7 +294,8 @@ def test_target_to_joint_motion_generator_preserves_discontinuity_boundary_and_m
         dt_s=0.016,
     )
 
-    assert accepted_command.joint is accepted_solver.joint_command
+    assert accepted_command.joint is not None
+    assert accepted_command.joint == accepted_solver.joint_command
     assert accepted_command.metadata["unrelated"] == "preserved"
     assert accepted_command.metadata["qpos_discontinuity_norm_rad"] == pytest.approx(0.5)
     assert accepted_command.metadata["target_discontinuity_threshold_rad"] == 0.5
