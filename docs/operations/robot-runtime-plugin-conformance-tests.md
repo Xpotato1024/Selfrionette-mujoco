@@ -40,8 +40,12 @@ Each case supplies:
 - the profile-owned model asset, home keyframe, endpoint site, and joint-limit
   configuration;
 - canonical joint order and qpos/qvel dimensions;
-- at least two known FK cases, two reachable IK -> FK cases, and two MuJoCo
-  endpoint consistency cases;
+- a non-empty known FK case collection, a non-empty reachable IK -> FK case
+  collection, and a non-empty MuJoCo endpoint consistency case collection;
+- the initial `fast_arm` case intentionally provides two cases in each of
+  those positive collections. Additional cases should be selected according
+  to the robot's singularities, coordinate frames, joint topology, and safety
+  risks;
 - positive finite tolerances with units and coordinate frames;
 - focused fail-closed probes for identity, model, endpoint, home, and
   configuration mismatches.
@@ -49,6 +53,12 @@ Each case supplies:
 The generic suite does not assume four joints or equate joint count with `nq`
 or `nv`. A future model with a different qpos layout supplies a case-owned
 qpos application or feasibility adapter.
+
+Registry validation is fail-fast. Nested case IDs are non-empty and unique
+within their own collection, and all known-FK qpos, IK seed-qpos, and MuJoCo
+consistency qpos values must be numeric and finite. These declarations are
+validated when the explicit test registry is loaded by the suite; the
+fail-closed probes themselves are executed later by the parametrized tests.
 
 ## Known values, frames, and tolerances
 
