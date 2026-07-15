@@ -78,7 +78,7 @@ def test_robot_specific_expected_values_are_owned_by_the_robot_case() -> None:
     assert len(case_constructors) == 6
 
 
-def test_production_source_does_not_import_test_conformance_support() -> None:
+def test_production_source_does_not_import_test_support() -> None:
     violations: list[str] = []
     for path in (ROOT / "src" / "selfrionette").rglob("*.py"):
         for module in _imported_modules(_parse(path)):
