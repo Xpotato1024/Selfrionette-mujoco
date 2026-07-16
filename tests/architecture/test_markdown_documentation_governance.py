@@ -123,4 +123,3 @@ def test_changed_strict_map_and_links_are_hard_failures(
     result = MODULE.validate(base_ref="base", strict_map=True, strict_links=True)
     assert any("broken relative link" in error for error in result.errors)
     assert any("Source of Truth Map duplicate" in error for error in result.errors)
-
