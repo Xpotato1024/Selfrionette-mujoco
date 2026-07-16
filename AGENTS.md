@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Last updated: 2026-07-11
+Last updated: 2026-07-16
 
 ## 0. Purpose
 
@@ -74,6 +74,17 @@ Last updated: 2026-07-11
 - completion audit、handoff、過去Round文書を現在仕様の正本として扱わない。
 - 新しい文書を追加する前に、既存canonical documentを更新すべきでないか確認する。
 - 文書、実装、testsの主張を一致させる。
+
+### Human-facing language policy
+
+人間が読むことを主目的とする成果物は、原則として日本語で作成する。
+
+- 対象はroot / app README、CONTRIBUTING相当文書、AGENTS.md、`docs/`、`research/`、GitHub Issue / PR本文、implementation report、review / audit report、completion / final reportとする。
+- 見出し、表、説明、受入条件、検証結果も日本語を基本とする。
+- code identifier、API / schema field、CLI command / option、repository path / filename、external formal name、error / protocol literal、出典の短い引用は必要に応じて英語を維持してよい。
+- 既存英語文書は、対象Issueのscopeに含まれる場合だけ移行する。repository-wideの既存英語負債だけを初回からhard failureにしない。
+- 変更した人間向け本文はlanguage policyのvalidation対象とし、code block、path、identifier、formal nameを単純な文字比率で誤判定しない。
+- encoding、BOM、mojibake、GitHub本文のtransport integrityは`docs/operations/japanese-doc-writing-guardrails.md`を正とする。
 
 ## 5. Scope discipline
 

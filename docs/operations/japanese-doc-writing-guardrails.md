@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-15
+last_verified: 2026-07-16
 canonical_for:
   - Japanese docs writing guardrails
   - UTF-8 / BOM / mojibake prevention
@@ -13,11 +13,13 @@ related:
   - docs/operations/backend-viewer-startup.md
 ---
 
-# Japanese Docs Writing Guardrails
+# 日本語文書の記述・encoding guardrail
 
 ## 目的
 
-日本語 docs と PR body の文字化け、BOM 混入、handoff ずれを防ぐ。
+人間向け成果物の日本語方針を安全に運用し、日本語docsとGitHub本文の文字化け、BOM混入、handoffずれを防ぐ。
+
+言語対象の正本は`AGENTS.md`、文書分類と配置の正本は`docs/architecture/documentation-sot-policy.md`である。この文書はencoding、transport、変更対象のlanguage checkを担当し、文書のcanonical roleを決めない。
 
 ## 発生した問題
 
@@ -45,6 +47,14 @@ related:
 - 日本語 docs の review では、内容だけでなく encoding / mojibake / BOM を必ず確認する
 - docs に英語文を残す場合は、CLI option / API field / code / filename / proper noun など必要な箇所に限る
 - issue / PR / docs の handoff は、実際に存在する child issue 番号・scope と一致させる
+
+## 人間向け成果物の日本語方針
+
+root / app README、CONTRIBUTING相当文書、AGENTS.md、`docs/`、`research/`、Issue / PR本文、implementation / review / audit / completion reportは日本語を基本とする。
+
+code identifier、API / schema field、CLI command / option、path / filename、formal product / library / protocol name、error literal、出典の短い引用は英語を維持してよい。既存英語文書は対象Issueのscopeで段階的に移行し、repository-wideの既存英語負債だけをhard failureにしない。
+
+changed-files checkは、code fence、inline code、Markdown link target、path、identifier、formal nameを除外した人間向け本文を対象とする。単純な日本語文字率だけで判定せず、違反箇所を特定できる結果を返す。
 
 ## 禁止事項
 
