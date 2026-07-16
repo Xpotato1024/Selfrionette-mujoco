@@ -21,6 +21,7 @@ CANONICAL_DOCS = [
     "docs/contracts/mujoco-state.md",
     "docs/contracts/transport-payload.md",
     "docs/contracts/robot-profile-runtime-viewer-profile.md",
+    "docs/contracts/experiment-plugin-composition.md",
     "docs/contracts/assets.md",
     "docs/contracts/r7-b-runtime-input-pipeline-contract.md",
     "docs/operations/git-pr-workflow.md",
@@ -147,6 +148,36 @@ def test_robot_profile_contract_is_canonical_and_registered() -> None:
     assert "arbitrary dynamic" in text
     assert "payload-v0" in text
     assert "rendering declaration" in text
+
+
+def test_experiment_plugin_composition_contract_is_canonical_and_registered() -> None:
+    index = read("docs/README.md")
+    text = read("docs/contracts/experiment-plugin-composition.md")
+
+    assert "`docs/contracts/experiment-plugin-composition.md`" in index
+    for marker in (
+        "Robot Bundle",
+        "Environment / Scene",
+        "Control / Mapping",
+        "Task",
+        "Evaluation",
+        "contact_evidence/v1",
+        "PluginParameterOwner",
+        "EvidenceProducerBinding",
+        "SemanticRoleRequirement",
+        "exact `VersionedIdentity`",
+        "ambiguous producer",
+        "requested",
+        "resolved",
+        "predicted",
+        "measured",
+        "unavailable",
+        "invalid",
+        "compose_experiment()",
+        "#405",
+        "#411",
+    ):
+        assert marker in text
 
 
 def test_p22_neutral_pose_contract_is_registered_and_freezes_selection_order() -> None:

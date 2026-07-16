@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for:
   - Robot Profile contract and registry
   - Robot Runtime Plugin contract and registry
@@ -10,6 +10,7 @@ related:
   - docs/architecture/runtime-composition.md
   - docs/contracts/transport-payload.md
   - docs/contracts/fast-arm-joint-limit-config.md
+  - docs/contracts/experiment-plugin-composition.md
 ---
 
 # Robot Profile / Runtime Plugin / Viewer Profile契約
@@ -26,6 +27,12 @@ class name、import pathは含まない。
 pluginは選択したmodelをvalidateし、既存のrobot-specific IK、FK、motion policy、
 qpos feasibility guard、endpoint accessorを構築する。fast_arm pluginは既存algorithmと
 qpos feasibility TOML guardを再利用し、複製しない。
+
+実験compositionでは、このprofile/plugin pairをadditiveな`RobotBundle`が参照し、reset、
+endpoint pose/command、qpos feasibility、semantic scene role、optional contact evidenceを
+versioned typed capability providerとして公開する。bundleは既存pairを置換せず、task lifecycle、
+evaluation metric、viewer renderingを所有しない。詳細は
+`docs/contracts/experiment-plugin-composition.md`を正とする。
 
 `ViewerRobotProfile`はbrowser-side rendering declarationである。model URL、
 named startup keyframe、debug fixture URL、VFS asset、visual style、joint order、

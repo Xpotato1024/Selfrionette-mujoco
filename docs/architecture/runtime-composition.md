@@ -1,13 +1,14 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for:
   - runtime composition root
 related:
   - docs/architecture/data-flow.md
   - docs/contracts/parallel-work-contracts.md
   - docs/contracts/robot-profile-runtime-viewer-profile.md
+  - docs/contracts/experiment-plugin-composition.md
   - docs/reports/audits/canonical-content-history-separation-2026-07-16.md
 ---
 
@@ -20,6 +21,12 @@ viewerはrender-onlyであり、runtime stateを再計算しない。
 production compositionは明示的に選択した`RobotRuntimePlugin`を解決し、model、joint order、
 startup keyframe、IK / FK、motion policy、qpos feasibility guardの整合を検証する。generic stub、
 zero solver、退役したPlanar solverへ暗黙fallbackしない。
+
+実験compositionでは、Robot Bundle、Environment / Scene、Control / Mapping、Task、Evaluationを
+versioned known-ID registryから明示解決する。`runtime/`はphysicsやrunner開始前にcapability provider、
+axis-scoped parameter owner、typed semantic role、version-aware robot/environment/task compatibility、
+evidence producer、evaluator requirementをfail-closedで検証する。詳細なtyped contractとreadiness順序は
+`docs/contracts/experiment-plugin-composition.md`を正とする。
 
 ## composition-rootの責務分割
 
@@ -35,6 +42,7 @@ zero solver、退役したPlanar solverへ暗黙fallbackしない。
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |
 | target lifecycle | runtime target resolver | pure lifecycle reducer | desired / active / measured target evidence | authoritative active targetまたはhold |
 | experiment record construction | explicit caller-owned adapter | production loop外のrecord builder | completed step evidence | immutable record。default runtimeはfileを開かない |
+| experiment plugin readiness | runtime composition | versioned plugin resolver | explicit 5-axis selectionとaxis-scoped typed parameter | resolved capability、typed role、evidence producer bindingまたはstartup failure |
 
 ## failureとordering
 

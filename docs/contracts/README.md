@@ -1,7 +1,7 @@
 ---
 status: supporting
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for: []
 related:
   - docs/README.md
@@ -25,3 +25,4 @@ canonical contract文書:
 - `docs/contracts/programmed-target-input-source.md`
 - `docs/contracts/r7-b-runtime-input-pipeline-contract.md`
 - `docs/contracts/endpoint-target-generator.md`
+- `docs/contracts/experiment-plugin-composition.md`
