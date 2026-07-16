@@ -17,6 +17,13 @@ jobs:
         uses: astral-sh/setup-uv@v5
       - name: Install dependencies
         run: uv sync --frozen --group dev
+      - name: Validate changed Markdown
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          uv run python scripts/validate_markdown_docs.py --base-ref "$BASE_SHA" --strict-map --strict-links
       - name: Run tests
         run: uv run pytest tests/architecture tests/schemas tests/stubs tests/runtime tests/assets tests/mujoco_backend tests/transport tests/input_sources tests/input_interpreters tests/motion tests/kinematics -q
       - name: Compile Python files
