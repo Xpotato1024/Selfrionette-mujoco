@@ -6,7 +6,7 @@ canonical_for:
   - R7-C completion audit
 related:
   - docs/README.md
-  - docs/operations/r7-c-manual-validation-preflight.md
+  - docs/reports/implementation/r7-c-manual-validation-preflight.md
   - docs/operations/r7-c-viewer-fixture-demo-procedure.md
   - docs/operations/r7-c-keyboard-replay-demo-package.md
   - docs/operations/r7-c-live-loadcell-validation-log.md

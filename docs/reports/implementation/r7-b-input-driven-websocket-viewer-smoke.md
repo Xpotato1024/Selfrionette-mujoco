@@ -8,9 +8,9 @@ related:
   - docs/operations/runtime-to-viewer-e2e-smoke.md
 ---
 
-# R7-B input-driven WebSocket / viewer smoke
+# R7-B Input-Driven WebSocket / Viewer Smoke
 
-## scope
+## Scope
 
 `#221` では offline runtime stepping の結果を payload v0 まで通し、
 viewer parser が input-driven payload を read-only に扱えることだけを
@@ -27,30 +27,30 @@ keyboard / replay input
 
 この smoke は offline-only であり、actual WebSocket server や actual browser は起動しない。
 
-## 確認済みboundary
+## Confirmed boundaries
 
-- `desired_endpoint_m`はcommand-side metadata
-- `target_position_m`はviewer feedback / fallbackのまま
-- `endpoint_evaluation`はoptional diagnostic
-- viewerはFK / IK / qposを再計算しない
-- viewerはread-only overlay behaviorだけを持つ
+- `desired_endpoint_m` is command-side metadata
+- `target_position_m` remains viewer feedback / fallback
+- `endpoint_evaluation` is optional diagnostic
+- viewer does not recompute FK / IK / qpos
+- viewer keeps read-only overlay behavior only
 
-## scope外
+## Out of scope
 
-- actual WebSocket server起動
-- actual browser起動
+- actual WebSocket server launch
+- actual browser launch
 - live serial access
 - COM access
-- OSC送信
-- firmware uploadまたは変更
+- OSC send
+- firmware upload or modification
 - actuator command
 - robot output
-- MuJoCo backend implementation変更
+- MuJoCo backend implementation changes
 
-## handoff
+## Handoff
 
 - `#218`: `MotionCommand.metadata["desired_endpoint_m"]` resolver
-- `#219`: keyboard / replay input sourceのsmoke
-- `#220`: offline `InputSource -> MuJoCo` runtime steppingのsmoke
-- `#221`: input-driven WebSocket / viewerのsmoke
-- `#222`: operator gate付きlive loadcell serial runtime runner
+- `#219`: keyboard / replay input source smoke
+- `#220`: offline `InputSource -> MuJoCo` runtime stepping smoke
+- `#221`: input-driven WebSocket / viewer smoke
+- `#222`: manual-gated live loadcell serial runtime runner

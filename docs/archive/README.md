@@ -22,5 +22,9 @@ historical / retired evidenceであり、current architecture、contract、opera
 - `obsolete/`: current useを終了した文書
 - `indexes/`: obsoleteな旧index本文のprovenance保存
 
+retired operation note:
+
+- [native MuJoCo fast_arm viewer check](operations/native-mujoco-fast-arm-viewer-check.md): PR #174時点の観察、判断、remaining riskを保存したdraft
+
 全Markdownのmigration dispositionは`../reports/inventories/markdown-inventory.md`から確認する。
 `indexes/docs-index.md`は旧R6-K indexの保存であり、全Markdown migration indexではない。

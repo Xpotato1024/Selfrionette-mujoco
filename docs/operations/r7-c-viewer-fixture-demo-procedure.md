@@ -6,7 +6,7 @@ canonical_for:
   - R7-C viewer fixture demo procedure
 related:
   - docs/README.md
-  - docs/operations/r7-c-manual-validation-preflight.md
+  - docs/reports/implementation/r7-c-manual-validation-preflight.md
   - docs/operations/backend-viewer-startup.md
   - docs/operations/websocket-publisher-runner.md
   - docs/operations/runtime-to-viewer-e2e-smoke.md

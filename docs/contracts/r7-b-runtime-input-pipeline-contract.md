@@ -17,7 +17,7 @@ related:
   - docs/contracts/programmed-target-input-source.md
   - docs/contracts/r7-a-lite-serial-frame-contract.md
   - docs/reports/audits/r7-a-lite-completion-audit.md
-  - docs/operations/r7-a-lite-websocket-viewer-smoke.md
+  - docs/reports/implementation/r7-a-lite-websocket-viewer-smoke.md
 ---
 
 # R7-B Runtime Input Pipeline Contract

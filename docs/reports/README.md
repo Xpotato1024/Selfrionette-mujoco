@@ -31,6 +31,9 @@ contract、反復operationのsource of truthにはしない。現在仕様は`do
   全canonical文書のcontent review、history extraction、status再分類、抽出元commitを記録する。
   追加抽出本文は[separation supplement](audits/canonical-content-history-separation-supplement-2026-07-16.md)へ
   同じpre-audit commitのprovenance付きで保存する。
+- [R7-A-lite WebSocket viewer smoke](implementation/r7-a-lite-websocket-viewer-smoke.md): #204時点のoffline smokeと完了判断。
+- [R7-B input-driven WebSocket viewer smoke](implementation/r7-b-input-driven-websocket-viewer-smoke.md): #221時点のinput-driven smokeとhandoff evidence。
+- [R7-C manual validation preflight](implementation/r7-c-manual-validation-preflight.md): #232 branch時点のmanual validation preflight evidence。
 
 Markdown migration全体のpath、role、action、destinationは上記snapshotを参照する。
 `docs/archive/indexes/docs-index.md`はobsoleteな旧`docs/index.md`の本文保存であり、

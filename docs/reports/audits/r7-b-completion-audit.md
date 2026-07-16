@@ -7,11 +7,11 @@ canonical_for:
 related:
   - docs/README.md
   - docs/contracts/r7-b-runtime-input-pipeline-contract.md
-  - docs/operations/r7-b-input-driven-websocket-viewer-smoke.md
+  - docs/reports/implementation/r7-b-input-driven-websocket-viewer-smoke.md
   - docs/operations/r7-b-manual-live-loadcell-runtime-runner.md
   - docs/operations/r7-a-lite-completion-audit.md
   - docs/operations/r7-a-lite-serial-dry-run-smoke.md
-  - docs/operations/r7-a-lite-websocket-viewer-smoke.md
+  - docs/reports/implementation/r7-a-lite-websocket-viewer-smoke.md
   - docs/operations/validation.md
   - docs/operations/hardware-safety.md
 ---
@@ -123,4 +123,3 @@ docs-only validation として以下を実施する。
 - `git diff --check`
 - `git status --short`
 - `uv run pytest tests/architecture/test_docs_sot.py`
-

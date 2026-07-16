@@ -7,7 +7,7 @@ canonical_for:
 related:
   - docs/README.md
   - docs/operations/r7-c-viewer-fixture-demo-procedure.md
-  - docs/operations/r7-c-manual-validation-preflight.md
+  - docs/reports/implementation/r7-c-manual-validation-preflight.md
   - docs/reports/audits/r7-b-completion-audit.md
   - docs/contracts/r7-b-runtime-input-pipeline-contract.md
   - docs/contracts/transport-payload.md

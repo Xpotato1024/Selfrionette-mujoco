@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-15
+last_verified: 2026-07-16
 canonical_for:
   - Robot Profile contract and registry
   - Robot Runtime Plugin contract and registry

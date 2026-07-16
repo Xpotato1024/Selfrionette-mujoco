@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-14
+last_verified: 2026-07-16
 canonical_for:
   - local/dev WebSocket publisher runner
 related:

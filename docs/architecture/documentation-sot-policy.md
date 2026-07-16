@@ -26,22 +26,20 @@ related:
 
 ## 配置と責務
 
-| 配置 | 責務 |
-|---|---|
-| `docs/architecture/` | current architecture policy、ownership、dependency boundary |
-| `docs/contracts/` | current layer / schema / runtime contract |
-| `docs/evaluation/` | current evaluation designとmeasurement contract |
-| `docs/operations/` | 反復利用する現在の操作手順・運用規則 |
-| `docs/experiment-notes/` | 個別experimentの条件、実行方法、観測結果。architecture正本にはしない |
-| `docs/design/adr/` | 設計判断時点の履歴。現在仕様はarchitecture / contractへlinkする |
-| `docs/migration/` | legacy移行のinventory、mapping、移行証拠 |
-| `docs/reports/implementation/` | Issue / PR単位のimplementation evidence |
-| `docs/reports/audits/` | completion audit、review、検証snapshot |
-| `docs/reports/inventories/` | inventoryとmigration disposition |
-| `docs/archive/` | retired、obsolete、past Round、現在運用ではない記録 |
-| `research/logs/` | 月次の実装事実、研究上の価値、未検証事項、判断、次の作業 |
+| 配置 | 許可status | 責務 |
+|---|---|---|
+| `docs/architecture/` | `canonical` / `supporting` | current architecture policy、ownership、dependency boundary |
+| `docs/contracts/` | `canonical` / `supporting` | current layer / schema / runtime contract |
+| `docs/evaluation/` | `canonical` / `supporting` | current evaluation designとmeasurement contract |
+| `docs/operations/` | `canonical` / `supporting` | 反復利用する現在の操作手順・運用規則 |
+| `docs/experiment-notes/` | `historical` / `supporting` | 個別experimentの条件、実行方法、観測結果。architecture正本にはしない |
+| `docs/design/adr/` | `historical` / `supporting` | 設計判断時点の履歴。現在仕様はarchitecture / contractへlinkする |
+| `docs/migration/` | `historical` / `supporting` / `canonical` | legacy移行のinventory、mapping、移行証拠 |
+| `docs/reports/` | 原則`historical`、directory indexだけ`supporting` | Issue / PR単位のimplementation evidence、audit、inventory、review |
+| `docs/archive/` | `historical` / `draft` / `obsolete`、directory indexだけ`supporting` | retired、obsolete、past Round、現在運用ではない記録 |
+| `research/logs/` | `historical` | 月次の実装事実、研究上の価値、未検証事項、判断、次の作業 |
 
-`docs/reports/`は成立事実を保存するevidence領域であり、`docs/operations/`は今も反復できる手順だけを持つ。Issue番号やRound名を持つだけで機械的に分類せず、本文の責務で判定する。
+`docs/reports/`は成立事実を保存するevidence領域であり、`docs/operations/`は今も反復できる手順だけを持つ。Issue番号やRound名を持つだけで機械的に分類せず、本文の責務で判定する。`docs/reports/`と`docs/archive/`で`supporting`を許可するのは、各directoryの`README.md`がcurrent navigationを担うためであり、evidence本文をcurrent supportingへ昇格する例外ではない。
 
 ## research logとexperiment notes
 

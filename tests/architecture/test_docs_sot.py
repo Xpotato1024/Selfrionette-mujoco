@@ -27,7 +27,6 @@ CANONICAL_DOCS = [
     "docs/operations/validation.md",
     "docs/operations/hardware-safety.md",
     "docs/operations/codex-workflow.md",
-    "docs/operations/r7-c-manual-validation-preflight.md",
     "docs/operations/r7-c-viewer-fixture-demo-procedure.md",
     "docs/operations/r7-c-keyboard-replay-demo-package.md",
     "docs/operations/r7-c-live-loadcell-validation-log.md",
@@ -92,18 +91,25 @@ def test_docs_readme_has_source_of_truth_map() -> None:
 def test_current_contracts_are_registered_and_evidence_is_not_in_sot_map() -> None:
     index = read("docs/README.md")
     operations = read("docs/operations/README.md")
+    reports = read("docs/reports/README.md")
+    archive = read("docs/archive/README.md")
 
     assert "`docs/contracts/analog-fixture-mapping.md`" in index
     assert "| Topic | Canonical document | Notes |" in index
     assert "docs/contracts/kinematics-command-contract.md" in index
     assert "`research/README.md`" in index
-    assert "r7-c-manual-validation-preflight.md" in operations
+    assert "r7-c-manual-validation-preflight.md" not in operations
+    assert "r7-c-manual-validation-preflight.md" in reports
+    assert "native-mujoco-fast-arm-viewer-check.md" not in operations
+    assert "native-mujoco-fast-arm-viewer-check.md" in archive
     assert "r7-c-viewer-fixture-demo-procedure.md" in operations
     assert "r7-c-keyboard-replay-demo-package.md" in operations
     assert "r7-c-live-loadcell-validation-log.md" in operations
     assert "r7-c-axis-sanity-check.md" in operations
     assert "docs/reports/implementation/r7-c-presentation-demo-notes.md" not in index
     assert "docs/reports/audits/r7-c-completion-audit.md" not in index
+    assert (ROOT / "docs/reports/implementation/r7-c-manual-validation-preflight.md").is_file()
+    assert (ROOT / "docs/archive/operations/native-mujoco-fast-arm-viewer-check.md").is_file()
 
 
 def test_runtime_composition_documents_current_responsibility_split() -> None:

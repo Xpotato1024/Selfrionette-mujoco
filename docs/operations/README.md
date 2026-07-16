@@ -31,7 +31,6 @@ related:
 - `browser-visual-smoke.md`: browser-visible scene smoke
 - `mujoco-viewer-dev-launcher.md`: one-command / AutoPort / URL案内
 - `product-viewer-wasm-scene-renderer.md`: product-owned WASM scene renderer
-- `native-mujoco-fast-arm-viewer-check.md`: native MuJoCo fast_arm viewer check
 
 ## reusable test / manual procedure
 
@@ -46,11 +45,3 @@ related:
 - `r7-c-axis-sanity-check.md`: axis sanity protocol
 - `r7-d-p3-fast-arm-endpoint-command-check-procedure.md`: no-hardware endpoint command smoke
 - `r7-e-p1-fast-arm-endpoint-motion-sanity.md`: endpoint motion sanity gate
-
-## historical path reference
-
-次は特定実装時点のevidenceであり、current procedureとして実行しない。provenance維持のためpathだけを案内する。
-
-- `r7-a-lite-websocket-viewer-smoke.md`: offline payload / viewer parser smoke evidence
-- `r7-b-input-driven-websocket-viewer-smoke.md`: input-driven WebSocket / viewer smoke evidence
-- `r7-c-manual-validation-preflight.md`: retired manual validation preflight

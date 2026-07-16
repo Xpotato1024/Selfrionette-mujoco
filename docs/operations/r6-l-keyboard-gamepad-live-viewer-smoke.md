@@ -1,6 +1,7 @@
 ---
 status: canonical
 owner: operations
+last_verified: 2026-07-16
 canonical_for:
   - R6-L keyboard / gamepad live viewer smoke procedure
 related:

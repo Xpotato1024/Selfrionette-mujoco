@@ -84,13 +84,13 @@ UTF-8のまま取得し、本auditまたはseparation supplementへ全文保存�
 | `docs/operations/product-viewer-wasm-scene-renderer.md` | `canonical` | `retain-current + extract-history` | `docs/operations/product-viewer-wasm-scene-renderer.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | supplementへ修正前本文をprovenance付きで保存 |
-| `docs/operations/r7-a-lite-websocket-viewer-smoke.md` | `historical` | `reclassify` | `docs/operations/r7-a-lite-websocket-viewer-smoke.md` | 本文保持。current SoTから分離 |
-| `docs/operations/r7-b-input-driven-websocket-viewer-smoke.md` | `historical` | `reclassify` | `docs/operations/r7-b-input-driven-websocket-viewer-smoke.md` | 本文保持。current SoTから分離 |
+| `docs/operations/r7-a-lite-websocket-viewer-smoke.md` | `historical` | `reclassify + move` | `docs/reports/implementation/r7-a-lite-websocket-viewer-smoke.md` | 本文保持。#204時点のimplementation evidenceへ分離 |
+| `docs/operations/r7-b-input-driven-websocket-viewer-smoke.md` | `historical` | `reclassify + move` | `docs/reports/implementation/r7-b-input-driven-websocket-viewer-smoke.md` | 本文保持。#221時点のimplementation evidenceへ分離 |
 | `docs/operations/r7-b-manual-live-loadcell-runtime-runner.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-b-manual-live-loadcell-runtime-runner.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/r7-c-axis-sanity-check.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-c-axis-sanity-check.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/r7-c-keyboard-replay-demo-package.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-c-keyboard-replay-demo-package.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/r7-c-live-loadcell-validation-log.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-c-live-loadcell-validation-log.md` | supplementへ修正前本文をprovenance付きで保存 |
-| `docs/operations/r7-c-manual-validation-preflight.md` | `historical` | `reclassify` | `docs/operations/r7-c-manual-validation-preflight.md` | 本文保持。current SoTから分離 |
+| `docs/operations/r7-c-manual-validation-preflight.md` | `historical` | `reclassify + move` | `docs/reports/implementation/r7-c-manual-validation-preflight.md` | 本文保持。#232 branch時点のimplementation evidenceへ分離 |
 | `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md` | supplementへ修正前本文をprovenance付きで保存 |
@@ -101,6 +101,29 @@ UTF-8のまま取得し、本auditまたはseparation supplementへ全文保存�
 | `docs/operations/websocket-publisher-runner.md` | `canonical` | `retain-current + extract-history` | `docs/operations/websocket-publisher-runner.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/README.md` | `canonical` | `retain` | `docs/README.md` | content review済み。current semanticsとして保持 |
 | `research/README.md` | `canonical` | `retain` | `research/README.md` | content review済み。current semanticsとして保持 |
+
+## 再監査follow-up: operation evidenceの分離
+
+2026-07-16の再監査で、本文の責務に基づき次の4文書をcurrent operationsから分離した。これはfrozen migration snapshotの更新ではなく、本auditに対する追加判断である。移動元本文は現行化せず、Git renameとしてprovenanceを維持する。
+
+| source path | destination | status | 理由 |
+|---|---|---|---|
+| `docs/operations/r7-a-lite-websocket-viewer-smoke.md` | `docs/reports/implementation/r7-a-lite-websocket-viewer-smoke.md` | `historical` | #204固有のoffline smokeと完了判断 |
+| `docs/operations/r7-b-input-driven-websocket-viewer-smoke.md` | `docs/reports/implementation/r7-b-input-driven-websocket-viewer-smoke.md` | `historical` | #221固有のsmokeとhandoff chronology |
+| `docs/operations/r7-c-manual-validation-preflight.md` | `docs/reports/implementation/r7-c-manual-validation-preflight.md` | `historical` | #232 branchと後続Issueを固定した時点preflight |
+| `docs/operations/native-mujoco-fast-arm-viewer-check.md` | `docs/archive/operations/native-mujoco-fast-arm-viewer-check.md` | `draft` | PR #174時点の観察・判断・remaining riskを保存するretired note |
+
+移動後のdirectory statusは、`docs/architecture/`、`docs/contracts/`、`docs/evaluation/`、`docs/operations/`が`canonical` / `supporting`だけ、`docs/reports/`が原則`historical`でindexだけ`supporting`、`docs/archive/`が`historical` / `draft` / `obsolete`でindexだけ`supporting`となる。
+
+## 再監査follow-up: last_verified
+
+pre-audit commit `c208feac7453417afd9ee01d051d28902db0223d`と本auditの`retain-current + extract-history` 48件を対象に、front matterを除外し、LFへ正規化した本文を機械比較した。48 / 48件で本文が実質変更され、48件ともcurrent statusは`canonical`だった。
+
+- 監査前の`last_verified: 2026-07-16`不一致: 3件
+- 修正: `docs/contracts/robot-profile-runtime-viewer-profile.md`、`docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md`、`docs/operations/websocket-publisher-runner.md`
+- 監査後の不一致: 0件
+
+この集計は2026-07-16のcontent reviewに対するhistorical auditであり、current registryとして維持しない。pure renameしたhistorical本文や未検証文書の日付は更新していない。
 ## 修正前canonical本文の全文保存
 
 以下は抽出元commitの本文を加工せず、tilde fence内へ保存したものである。current仕様として参照せず、
