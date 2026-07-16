@@ -23,7 +23,7 @@ runtime payload の `metadata` に載せる input source の観測用 state を�
 - `command_age_ms`: source が emit した command age の観測値
 - `stale_reason`: stale 判定理由。正常経路では省略または `null`
 
-これらの値は observability 用の入力状態であり、#250 の stale-command
+これらの値は observability 用の入力状態であり、runtime stale-command
 safety はこの metadata を読み取って別途判定する。runtime は
 `command_age_ms` を wall clock から計算しない。offline sourceはsource-provided
 metadata として扱い、offline の programmed_target / replay / noop は

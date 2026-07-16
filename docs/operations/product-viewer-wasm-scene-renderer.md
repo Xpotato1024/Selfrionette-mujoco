@@ -12,7 +12,8 @@ related:
 
 # product viewer WASM scene renderer
 
-`apps/mujoco-viewer` は、`experiments/mujoco-wasm-viewer-poc` で成立し #185 で昇格した `@mujoco/mujoco` WASM scene renderer の現在のproduction ownerです。実行可能なPoCは #385 で退役し、現行のrenderer・tests・fixture・operator pathはこのproduct viewer側に一本化されています。
+`apps/mujoco-viewer`は`@mujoco/mujoco` WASM scene rendererの現在のproduction ownerである。
+renderer、tests、fixture、operator pathはproduct viewer側に一本化する。
 
 ## boundary
 

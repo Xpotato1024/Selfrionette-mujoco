@@ -50,8 +50,7 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py `
 - viewerはMuJoCo stateを直接mutateしない
 - inbound WebSocket messageはsimulatorではなく`ViewerInputSource`を更新する
 - runtime step loopはviewer messageをingestした後にsimulationを進める
-- checkoutのbase branch / stackが#283 ingress wiringを既に含む場合だけ、このbackend commandはlive-control smoke
-  pathになる
+- current checkoutがviewer ingressをsupportすることをpreflightで確認する
 - documented step intervalではfinite runが約5分続く。operatorが早く完了した場合は`Ctrl+C`でbackendを停止する。
   keyboard/gamepad check完了前にbackendが終了した場合は再実行し、failure noteへ記録する
 - `--input-source viewer`では正の`interval_s`がabsolute monotonic deadlineを使う。compute、simulation、annotation、

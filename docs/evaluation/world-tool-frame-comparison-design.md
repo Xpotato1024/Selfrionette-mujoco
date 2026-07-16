@@ -139,7 +139,7 @@ block durationでfatigueを制限する。
 
 次のcheckがすべてpassするまでdata collectionを開始しない。
 
-1. experiment log contractが後述のhandoffを満たすversioned logging schemaを実装・検証している。
+1. experiment log contractが後述のlogging contractを満たすversioned schemaを実装・検証している。
 2. requested、resolved、predicted、measured fieldをstatus/reason provenance付きで個別識別できる。
 3. frozen manifestの全targetが両control conditionでreset poseからreachableであることを、measured MuJoCo `tip`
    outcomeで確認している。
