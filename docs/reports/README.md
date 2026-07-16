@@ -19,4 +19,4 @@ related:
 
 ## Inventory
 
-- [Markdown inventory](inventories/markdown-inventory.md): #398時点の全tracked Markdown分類と#399 migration disposition。
+- [2026-07-16 Markdown migration snapshot](inventories/markdown-inventory.md): baseline `cf17fe830645c99b591615b6ffb55a42979c0d5e`に対する#398分類と#399 migration disposition。historical evidenceであり、current registryとして更新しない。

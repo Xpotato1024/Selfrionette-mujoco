@@ -2,17 +2,23 @@
 status: historical
 owner: architecture
 last_verified: 2026-07-16
+snapshot_date: 2026-07-16
+baseline_commit: cf17fe830645c99b591615b6ffb55a42979c0d5e
+snapshot_scope: issues-398-399-migration
+frozen: true
 canonical_for: []
 related:
   - docs/architecture/documentation-sot-policy.md
   - https://github.com/Xpotato1024/Selfrionette-mujoco/issues/398
 ---
 
-# tracked Markdown inventory
+# 2026-07-16 tracked Markdown migration snapshot
 
 #398の作業treeに存在する全tracked / 追加予定Markdownを分類した。baseline mainは`cf17fe830645c99b591615b6ffb55a42979c0d5e`である。
 
 `front matter`はinventory作成時点の値、`proposed role`と`destination`は#399のmigration inputである。`merge-candidate`はcurrent factsだけをcanonicalへ統合し、元本文をevidenceとして保持する。文書は削除しない。
+
+この表は#398 / #399 migration判断のhistorical snapshotであり、current registryではない。将来のMarkdown追加時に追記せず、同じfileをgeneratorで上書きしない。別時点のsnapshotが必要な場合は、日時または対象commitを識別できる新規pathへ作成する。current validationは各実ファイルのfront matter、directory role、Source of Truth Map、relative linkを直接検査する。
 
 - Markdown件数: 174
 - role件数: `canonical` 63 / `draft` 7 / `evidence` 53 / `historical` 11 / `merge-candidate` 11 / `obsolete` 1 / `supporting` 28

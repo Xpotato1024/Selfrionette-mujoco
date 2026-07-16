@@ -50,7 +50,7 @@ related:
 - PR本文はactual diffと詳細validation evidenceを記録する。
 - 同じvalidation logをresearch logへ複製せず、research logは「何が可能になったか」「研究上どう使えるか」「まだ何を言えないか」を分離する。
 
-## front matter statusとinventory role
+## front matter statusとhistorical migration snapshot
 
 front matterの`status`は文書のlifecycleを表す。許可値は次の5つだけとする。
 
@@ -60,7 +60,7 @@ front matterの`status`は文書のlifecycleを表す。許可値は次の5つ�
 - `draft`
 - `obsolete`
 
-Markdown inventoryの`proposed role`はmigration判断を表す別軸であり、`canonical`、`supporting`、`evidence`、`historical`、`draft`、`obsolete`、`merge-candidate`を使用する。`evidence`や`merge-candidate`をfront matter statusへ追加しない。
+`docs/reports/inventories/markdown-inventory.md`の`proposed role`は#398 / #399 migration判断を表す別軸であり、`canonical`、`supporting`、`evidence`、`historical`、`draft`、`obsolete`、`merge-candidate`を使用する。`evidence`や`merge-candidate`をfront matter statusへ追加しない。
 
 互換関係は次のとおりとする。
 
@@ -76,8 +76,12 @@ Markdown inventoryの`proposed role`はmigration判断を表す別軸であり�
 
 既存front matterの欠落や旧値はinventoryへ明記し、migrationで段階的に解消する。新規または変更する`docs/`文書は許可statusを使用する。
 
+上記inventoryは`2026-07-16`時点、baseline `cf17fe830645c99b591615b6ffb55a42979c0d5e`に対するmigration dispositionのhistorical snapshotである。current registryとして扱わず、将来のMarkdown追加時に追記せず、同一pathをgeneratorで上書きしない。別時点のinventoryが必要な場合は日時または対象commitを識別できる新規snapshot pathへ作成する。
+
+current validationはsnapshotのcoverageを参照しない。tracked Markdown自身のfront matter status、配置directoryの責務、`docs/README.md`のSource of Truth Map、relative linkを直接検査する。directoryは配置責務を示すが、`docs/architecture/`または`docs/contracts/`に存在することだけでcanonicalとは判定しない。canonical statusを維持する前に本文を確認し、current invariant / ownership / failure semantics / public contractと、Issue・PR・Step・completion・handoff・測定・merge evidenceを分離する。
+
 ## 日本語とvalidation
 
 人間向け成果物の言語方針は`AGENTS.md`、encoding / BOM / mojibake / GitHub本文の安全規則は`docs/operations/japanese-doc-writing-guardrails.md`を正とする。
 
-validationはUTF-8 decode、BOM、LF、U+FFFD / known mojibake、Markdown relative link、Source of Truth Map target、canonical topic重複、inventory classification、local absolute path、変更本文の日本語方針を確認する。既存英語負債とhistorical evidence内の既知のlocal pathはreport-onlyとし、新規・変更対象へ限定した違反をhard failureにする。
+validationはUTF-8 decode、BOM、LF、U+FFFD / known mojibake、front matter status、directory role、Markdown relative link、Source of Truth Map target、canonical topic重複、local absolute path、変更本文の日本語方針を確認する。PR CIはactual base SHAを`--base-ref`へ渡し、changed `docs/` / `research/`のfront matter欠落、changed canonical / supporting本文のEnglish-only違反とlocal absolute path追加、strict map / strict linksをhard failureにする。既存英語負債とhistorical evidence内の既知local pathはreport-onlyとする。
