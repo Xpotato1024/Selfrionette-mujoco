@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: evaluation
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for:
   - world/tool control-frame comparison design
 related:
@@ -10,6 +10,7 @@ related:
   - docs/archive/drafts/r7-e-followup-p12-control-frame-resolution-metadata.md
   - docs/reports/implementation/r7-e-p9-jacobian-mobility-diagnostics.md
   - docs/archive/drafts/r7-e-p10-measured-axis-progress-semantics.md
+  - docs/contracts/evaluation-manifest-readiness.md
 ---
 
 # world/tool control-frame比較design
@@ -136,6 +137,13 @@ block durationでfatigueを制限する。
 | cameraとvisual feedback | 同じcamera pose、overlay、target appearance、feedback latency/settingsで制御し、configuration identityをlogする |
 
 ## readiness gate
+
+R7-G-P1 / #405は、data collection前にmanifestのschema、canonical bytes、requested / resolved
+identity、plugin capability / role / evidence、neutral initial-state、world/tool shared invariantsを
+software-onlyで検証するpre-run gateを追加する。このgateは`compose_experiment()`を呼ぶが、model load、
+physics step、fixture playback、measured reachability、task outcome、metric妥当性を実行・証明しない。
+したがって#405の`READY`は「runnerへ渡せる静的configuration identityがfreezeされた」ことだけを意味し、
+下記のmeasured MuJoCo reachability / progress条件の成立を意味しない。
 
 次のcheckがすべてpassするまでdata collectionを開始しない。
 

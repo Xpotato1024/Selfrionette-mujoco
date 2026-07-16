@@ -11,6 +11,7 @@ related:
   - docs/contracts/transport-payload.md
   - docs/contracts/fast-arm-joint-limit-config.md
   - docs/contracts/experiment-plugin-composition.md
+  - docs/contracts/evaluation-manifest-readiness.md
 ---
 
 # Robot Profile / Runtime Plugin / Viewer Profile契約
@@ -33,6 +34,11 @@ endpoint pose/command、qpos feasibility、semantic scene role、optional contac
 versioned typed capability providerとして公開する。bundleは既存pairを置換せず、task lifecycle、
 evaluation metric、viewer renderingを所有しない。詳細は
 `docs/contracts/experiment-plugin-composition.md`を正とする。
+
+evaluation manifestはprofile、runtime plugin、model contractのlogical versioned identityを記録する。
+asset path、module path、package location、branch名はそのidentityに含めない。したがって#423の
+package / import-direction migrationやcompatibility re-exportだけではmanifestのfreeze identityを
+変更せず、profileまたはmodel contractの意味を変更するときだけversioned identityを更新する。
 
 `ViewerRobotProfile`はbrowser-side rendering declarationである。model URL、
 named startup keyframe、debug fixture URL、VFS asset、visual style、joint order、

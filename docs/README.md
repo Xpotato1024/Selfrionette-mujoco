@@ -31,6 +31,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | asset | `docs/contracts/assets.md` | MJCF、STL、scale、axis、unit |
 | Robot Profile / Runtime Plugin / Viewer Profile | `docs/contracts/robot-profile-runtime-viewer-profile.md` | robot selectionとbackend/viewer compatibility |
 | experiment plugin composition | `docs/contracts/experiment-plugin-composition.md` | Robot、Environment、Mapping、Task、Evaluationのversioned compositionとreadiness |
+| evaluation manifest / readiness freeze | `docs/contracts/evaluation-manifest-readiness.md` | pre-run manifestのcanonical bytes、world/tool pair invariant、requested/resolved identity、software-only readiness |
 | kinematics / command境界 | `docs/contracts/kinematics-command-contract.md` | solver、command、qpos境界 |
 | forward kinematics | `docs/contracts/forward-kinematics.md` | robot-specific FK ownership |
 | inverse kinematics | `docs/contracts/inverse-kinematics.md` | robot-specific IK ownership |

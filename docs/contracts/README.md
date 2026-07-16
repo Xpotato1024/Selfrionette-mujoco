@@ -26,3 +26,4 @@ canonical contract文書:
 - `docs/contracts/r7-b-runtime-input-pipeline-contract.md`
 - `docs/contracts/endpoint-target-generator.md`
 - `docs/contracts/experiment-plugin-composition.md`
+- `docs/contracts/evaluation-manifest-readiness.md`

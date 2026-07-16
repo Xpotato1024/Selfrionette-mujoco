@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from selfrionette.runtime.experiment_contracts import (
     ControlMappingPlugin,
@@ -31,6 +32,11 @@ class PluginParameters:
     def __post_init__(self) -> None:
         if not isinstance(self.owner, PluginParameterOwner):
             raise TypeError("plugin parameter owner must use PluginParameterOwner")
+        if not isinstance(self.values, Mapping):
+            raise TypeError("plugin parameter values must use a mapping")
+        if any(not isinstance(name, str) or not name for name in self.values):
+            raise TypeError("plugin parameter names must be non-empty strings")
+        object.__setattr__(self, "values", MappingProxyType(dict(self.values)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +64,10 @@ class ExperimentPluginManifest:
     parameters: tuple[PluginParameters, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.evaluators, tuple):
+            object.__setattr__(self, "evaluators", tuple(self.evaluators))
+        if not isinstance(self.parameters, tuple):
+            object.__setattr__(self, "parameters", tuple(self.parameters))
         evaluator_ids = tuple(selection.plugin_id for selection in self.evaluators)
         if len(evaluator_ids) != len(set(evaluator_ids)):
             raise ValueError("duplicate evaluator selection")

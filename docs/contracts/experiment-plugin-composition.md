@@ -11,6 +11,7 @@ related:
   - docs/architecture/runtime-composition.md
   - docs/contracts/robot-profile-runtime-viewer-profile.md
   - docs/contracts/experiment-motion-log-v1.md
+  - docs/contracts/evaluation-manifest-readiness.md
 ---
 
 # experiment plugin composition契約
@@ -109,6 +110,8 @@ ambiguousとして拒否する。`SemanticRoleRequirement`はrole名に加えて
 
 `ControlMappingPlugin`はtyped `ControlMappingStrategy`とstrict `ParameterContract`を持つ。
 world/tool mapping、gain、deadzone、assistance等はこの軸のpluginまたはparameterとして固定する。
+world/tool pairでcontrol-frame差を許可するparameterは`ParameterField.condition_specific=True`を
+明示し、mapping plugin自身の`control_frame` declarationとrequested frameを一致させる。
 mappingはrequired Robot capabilityを宣言し、利用不能時に別mappingへfallbackしない。
 
 `TaskPlugin`は次を宣言する。
@@ -198,8 +201,10 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
 
 - #405は`ExperimentPluginManifest`、`PluginParameterOwner`、`VersionedPluginRegistry`、
   `ExperimentPluginRegistries`、`compose_experiment()`、`EvidenceProducerBinding`を使い、world/tool条件の
-  5軸selection、axis-scoped parameter、version compatibility、evidence producerをfreeze identityへ
-  固定できる。
+  5軸selection、axis-scoped parameter、version compatibility、evidence producerを
+  `EvaluationManifest` / `EvaluationReadiness` / `FreezeRecord`へ固定できる。requested selectionと
+  resolved plugin/capability/role/evidence identityを混同せず、package location変更ではlogical identityを
+  変更しない。
 - #411は`EnvironmentPlugin`、`EnvironmentRole`、`SemanticRoleRequirement`、`TaskPlugin`、
   `EvaluationPlugin`、`contact_evidence/v1` extension pointを使い、typed object/frame/unit requirementと
   cube/contact固有fieldをgeneric contractへ追加できる。

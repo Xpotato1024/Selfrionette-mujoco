@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: evaluation
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for:
   - experiment motion log v1
 related:
@@ -11,6 +11,7 @@ related:
   - docs/archive/drafts/r7-e-p10-measured-axis-progress-semantics.md
   - docs/archive/drafts/r7-e-followup-p12-control-frame-resolution-metadata.md
   - docs/reports/implementation/r7-e-followup-p14-runtime-diagnostic-boundary.md
+  - docs/contracts/evaluation-manifest-readiness.md
 ---
 
 # experiment motion log v1契約
@@ -61,7 +62,10 @@ timestampは分離したままにする。position/delta/tolerance valueはmetre
 metre/second、qposはradian、orientationはWXYZ quaternion、ordering/index valueは
 zero-based non-negative integerである。
 
-configuration fieldはexperiment manifestが所有する。
+configuration fieldはexperiment manifestが所有する。pre-runのcanonical sourceは
+`evaluation-manifest/v1`であり、#405の`EvaluationManifest`がbytes、requested identity、resolved
+readiness、freeze identityを確定する。この文書はそのmanifestを参照するrecord schemaであり、#405は
+log recordの生成、stream lifecycle、trial close、outcome計算を実装しない。
 
 - `software_revision`、`configuration_id`、experiment/session/participant ID。
 - finiteな`initial_qpos_rad`、measured MuJoCo-world

@@ -22,6 +22,7 @@ CANONICAL_DOCS = [
     "docs/contracts/transport-payload.md",
     "docs/contracts/robot-profile-runtime-viewer-profile.md",
     "docs/contracts/experiment-plugin-composition.md",
+    "docs/contracts/evaluation-manifest-readiness.md",
     "docs/contracts/assets.md",
     "docs/contracts/r7-b-runtime-input-pipeline-contract.md",
     "docs/operations/git-pr-workflow.md",
@@ -176,6 +177,29 @@ def test_experiment_plugin_composition_contract_is_canonical_and_registered() ->
         "compose_experiment()",
         "#405",
         "#411",
+    ):
+        assert marker in text
+
+
+def test_evaluation_manifest_readiness_contract_is_canonical_and_registered() -> None:
+    index = read("docs/README.md")
+    text = read("docs/contracts/evaluation-manifest-readiness.md")
+
+    assert "`docs/contracts/evaluation-manifest-readiness.md`" in index
+    for marker in (
+        "EvaluationManifest",
+        "evaluation-manifest/v1",
+        "canonical JSON",
+        "sha256",
+        "FreezeRecord",
+        "requested identity",
+        "resolved identity",
+        "world / tool condition-pair",
+        "condition_specific",
+        "software-only",
+        "#423",
+        "#406",
+        "partial success",
     ):
         assert marker in text
 

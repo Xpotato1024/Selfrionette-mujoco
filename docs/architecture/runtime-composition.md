@@ -9,6 +9,7 @@ related:
   - docs/contracts/parallel-work-contracts.md
   - docs/contracts/robot-profile-runtime-viewer-profile.md
   - docs/contracts/experiment-plugin-composition.md
+  - docs/contracts/evaluation-manifest-readiness.md
   - docs/reports/audits/canonical-content-history-separation-2026-07-16.md
 ---
 
@@ -42,7 +43,7 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |
 | target lifecycle | runtime target resolver | pure lifecycle reducer | desired / active / measured target evidence | authoritative active targetまたはhold |
 | experiment record construction | explicit caller-owned adapter | production loop外のrecord builder | completed step evidence | immutable record。default runtimeはfileを開かない |
-| experiment plugin readiness | runtime composition | versioned plugin resolver | explicit 5-axis selectionとaxis-scoped typed parameter | resolved capability、typed role、evidence producer bindingまたはstartup failure |
+| experiment plugin readiness | runtime composition | versioned plugin resolver | explicit 5-axis selectionとaxis-scoped typed parameter | resolved capability、typed role、evidence producer binding、freeze identityまたはstartup failure |
 
 ## failureとordering
 
@@ -52,6 +53,9 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 - unavailable diagnostic fieldは欠落のままとし、stale値を保持しない。
 - `publish-before-`ViewerInputSource`-rebase ordering`を維持する。
 - transport failureをphysics successへ読み替えず、viewer failureをbackend stateへ反映しない。
+- evaluation manifest readinessはrunner / log / outcomeを開始せず、canonical requested identityとresolved
+  identityをfreezeするsoftware-only gateである。world/tool pairの条件差分は
+  `docs/contracts/evaluation-manifest-readiness.md`の許可リストに限定する。
 
 この文書はcurrent responsibility boundaryを固定し、does not perform a broad runtime rewrite。
 pre-audit composition chronologyとrefactor proposalは
