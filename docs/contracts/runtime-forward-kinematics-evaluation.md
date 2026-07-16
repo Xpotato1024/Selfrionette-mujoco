@@ -55,4 +55,4 @@ FK endpoint、desired endpoint、MuJoCo site endpoint、error metricは別field�
 
 ## Current physical alignment
 
-FK endpointはsolver output、MuJoCo site endpointはpost-step physical measurementとして別々に保持する。比較時はframeとunitsを明示し、viewerはread-onlyに表示する。実装時のP番号、handoff、測定値は`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
+FK endpointはsolver output、MuJoCo site endpointはpost-step physical measurementとして別々に保持する。比較時はframeとunitsを明示し、viewerはread-onlyに表示する。pre-audit implementation chronologyと測定値は`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

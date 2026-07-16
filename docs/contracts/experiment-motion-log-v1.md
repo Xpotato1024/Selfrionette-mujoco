@@ -1,9 +1,9 @@
 ---
 status: canonical
 owner: evaluation
-last_verified: 2026-07-12
+last_verified: 2026-07-16
 canonical_for:
-  - R7-E follow-up P20 experiment motion log v1
+  - experiment motion log v1
 related:
   - docs/evaluation/world-tool-frame-comparison-design.md
   - docs/contracts/endpoint-metadata-vocabulary.md
@@ -17,10 +17,10 @@ related:
 
 ## scopeとownership
 
-これはP17 limited world/tool pilot用の、独立して再構築可能なrecord-streamの
+これはpilot design limited world/tool pilot用の、独立して再構築可能なrecord-streamの
 canonical contractである。現在のversion discriminantは
 `experiment-motion-log/v1`である。evaluation artifact schemaであり、payload-v0や
-別のtransport payloadではない。P20はruntime recorder、runner、participant workflow、
+別のtransport payloadではない。experiment log contractはruntime recorder、runner、participant workflow、
 questionnaire、analysis、dashboard、viewer、hardware、filesystem lifecycleを追加しない。
 
 全recordは`schema_version`、`record_kind`、`experiment_id`、`session_id`、
@@ -69,7 +69,7 @@ configuration fieldはexperiment manifestが所有する。
   finite unit-norm `initial_tool_orientation_wxyz`。
 - MuJoCo-worldの`target_world_position_m`、`target_tolerance_m`、
   `dwell_interval_s`、`timeout_s`。
-- canonical P16 `source_kind`、manifest `target_id`、
+- canonical input `source_kind`、manifest `target_id`、
   `local_endpoint_speed_m_s`、`deadzone`、`local_endpoint_max_delta_m`、
   sorted scalar `comparison_parameters`。
 
@@ -82,13 +82,13 @@ motion fieldはcanonical hierarchyと正確なproducer vocabularyを維持する
 
 | 事実レベル | field | owner / nullability |
 |---|---|---|
-| requested operator intent | `source_kind`、`source_timestamp_s`、`source_active`、`axis_values`、`zero_input`、`stale_reason`、`requested_control_frame`、`local_endpoint_velocity_m_s` | P16 input-owned。lifecycle fieldは常にpresent、stale reasonはoptional |
-| resolved runtime motion | `resolved_control_frame`、`control_frame_resolution_status`、`control_frame_resolution_reason`、`resolved_world_endpoint_velocity_m_s` | P12 frame resolution。unresolved時はworld fieldがnullable |
+| requested operator intent | `source_kind`、`source_timestamp_s`、`source_active`、`axis_values`、`zero_input`、`stale_reason`、`requested_control_frame`、`local_endpoint_velocity_m_s` | input-owned。lifecycle fieldは常にpresent、stale reasonはoptional |
+| resolved runtime motion | `resolved_control_frame`、`control_frame_resolution_status`、`control_frame_resolution_reason`、`resolved_world_endpoint_velocity_m_s` | frame resolution。unresolved時はworld fieldがnullable |
 | policy request/prediction | `endpoint_delta_requested_m`、`endpoint_delta_achieved_m`、`candidate_qpos_rad` | motion policy。validなresolved policy request/candidateがない場合はnullable |
-| measured MuJoCo outcome | `qpos_before_rad`、`qpos_after_rad`、measured tip before/after、`actual_tip_delta_m`、P10 metric | MuJoCo/post-step diagnostic。measured tip 3 fieldはすべてpresentまたはすべてnull |
+| measured MuJoCo outcome | `qpos_before_rad`、`qpos_after_rad`、measured tip before/after、`actual_tip_delta_m`、measured-progress metric | MuJoCo/post-step diagnostic。measured tip 3 fieldはすべてpresentまたはすべてnull |
 | policy state | `motion_status`、`motion_rejection_reason` | motion policy。statusは`accepted`、`scaled`、`held`だけ |
 | target state | `target_rejected`、`target_rejection_reason` | target acceptance/application。motion statusとは独立 |
-| measured progress | `endpoint_progress_status`、`endpoint_progress_*`、`measurement_unavailable_reason` | P10/post-step evaluation。motionとsource lifecycleから独立 |
+| measured progress | `endpoint_progress_status`、`endpoint_progress_*`、`measurement_unavailable_reason` | post-step evaluation。motionとsource lifecycleから独立 |
 
 `endpoint_delta_achieved_m`はpolicy predictionであり、measured movementではない。
 `actual_tip_delta_m`とmeasured tip positionはMuJoCo evidenceである。before/after qposは
@@ -109,7 +109,7 @@ tool-frame resolution failureでは、
 policy-requested world deltaを持つ。tool-local velocityをworld motionとして
 serializeしてはならない。
 
-P12 resolution tupleはclosedである。`world_passthrough`と
+control-frame resolution tupleはclosedである。`world_passthrough`と
 `invalid_control_frame_defaulted`にはworld requestと、
 `local_endpoint_velocity_m_s`に`1e-12`以内で等しいresolved `mujoco_world`
 velocityが必要である。`tool_orientation_resolved`にはtool requestとresolved world
@@ -121,7 +121,7 @@ measurementが存在する場合はzero measured tip deltaも必要である。
 独立したaxisは`motion_status`へoverloadしない。target rejectionには
 `target_rejected`と`target_rejection_reason`を使う。active nonzero、active zero、
 inactive non-stale、stale inputは、`source_active`、`axis_values`、導出と整合する
-`zero_input`、`stale_reason`から再構築する。measurement unavailabilityには、P10
+`zero_input`、`stale_reason`から再構築する。measurement unavailabilityには、measured progress
 `measurement_unavailable`、そのreason、null metricを使う。measured zeroを許可するのは、
 before/after measurementがzeroを生成した場合だけである。operator起因の
 timeout/hold/rejection/staleは、`failure_attribution=operator`を伴う`failed` outcomeとして
@@ -130,7 +130,7 @@ timeout/hold/rejection/staleは、`failure_attribution=operator`を伴う`failed
 
 measurementが存在する場合、`actual_tip_delta_m`はafter minus beforeにEuclidean
 tolerance `1e-12`以内で等しく、unavailable reasonを許可しない。absentの場合、
-全measured fieldとmeasurement-dependent P10 metricをnullにする。
+全measured fieldとmeasurement-dependent measured-progress metricをnullにする。
 
 `success_within_timeout=true`には、`completion_status=success`、failure attribution
 なし、同じtrialのcomplete measurementを持つprimary sampleが必要である。primary sampleは
@@ -139,7 +139,7 @@ tolerance `1e-12`以内で等しく、unavailable reasonを許可しない。abs
 `target_tolerance_m`以内でなければならない。primary sampleまでのordered sampleは、
 少なくとも`dwell_interval_s`の連続したinside-tolerance measured intervalを
 提供しなければならない。outsideまたはunavailable sampleはdwellをresetする。
-これがdeterministicなP17 dwell-proof policyである。
+これがdeterministicなpilot design dwell-proof policyである。
 
 successはwhole-trial resultである。held、target-rejected、stale、
 measurement-unavailable、unresolvedのsampleが1つでもあってはならない。
@@ -160,18 +160,18 @@ measurement-unavailable technical invalidでは両fieldをnullにする。defens
 measurementを保持していないoperator failureでも両fieldをnullにしてよいが、operator
 classificationとrequired reasonはmissingnessから推論せず、明示したままにする。
 
-## P17 reconstructionとP21 handoff
+## trajectory reconstructionとanalog fixture compatibility
 
 trial start/endはstart runtime timestampとoutcome runtime timestampである。primary
 endpoint-error outcomeはoutcomeへ保存し、そのsource sampleへlinkする。timeout内の
 successは明示し、validateする。sample内のordered measured tip positionから
 MuJoCo-world trajectoryを再構築する。各position/deltaをtask directionと直交する方向へ
-projectionすることでP17 off-axis driftを導出する。condition/order、repetition、
+projectionすることでoff-axis driftを導出する。condition/order、repetition、
 attempt、retry、practice status、failure attributionは、prespecified exclusion ruleと
 retry ruleを支える。
 
-P21は、P20 merge後にP16 contractを使ってnormalized analog fixture intentを生成し、
-これらの正確なrequested fieldを通じてlogへ記録してよい。P21はv1へraw analog
+recorded analog mappingはcontinuous endpoint velocity contractを使ってnormalized analog fixture intentを生成し、
+これらの正確なrequested fieldを通じてlogへ記録してよい。mapping layerはv1へraw analog
 mapping fieldを追加せず、このschemaを暗黙に変更してはならない。
 
 ## serializationとcompatibility
@@ -194,7 +194,7 @@ booleans-as-numbersとnumeric stringをrejectする。全enumをruntimeで確認
 nullのscalar valueだけであり、nested array/objectはrejectする。
 
 `validate_record_stream()`はcross-record context equality、uniqueness、retry
-protocol identity、sample ordering、timestamp、lifecycle closure、P17 success evidenceを
+protocol identity、sample ordering、timestamp、lifecycle closure、pilot design success evidenceを
 所有する。どちらのhelperもI/Oを実行せず、inputをmutateしない。
 
 1つのprotocol identityとrepetition内でattempt indexはuniqueであり、initial attemptは
@@ -209,7 +209,7 @@ tip boundaryはcontinuousでなければならない。vector identity、traject
 measured-delta、target-error、velocity、dwellの全比較は、記載されたunitにおける
 Euclidean absolute tolerance `1e-12`を使用する。
 
-P16 numeric consistencyはsequenceとしてvalidateする。`axis_values` normは最大1であり、
+input numeric consistencyはsequenceとしてvalidateする。`axis_values` normは最大1であり、
 `local_endpoint_velocity_m_s == configuration.local_endpoint_speed_m_s * axis_values`
 がそのtolerance内で成立しなければならない。したがって、設定speedがzeroでaxisが
 nonzeroの場合もvalidなままであり、`zero_input`を変更せずにzero requested velocityを

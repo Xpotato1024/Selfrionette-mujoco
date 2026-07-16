@@ -1,9 +1,9 @@
 ---
 status: canonical
 owner: input contract
-last_verified: 2026-07-12
+last_verified: 2026-07-16
 canonical_for:
-  - R7-E follow-up P16 evaluation-ready continuous endpoint velocity input
+  - evaluation-ready continuous endpoint velocity input
 related:
   - docs/contracts/endpoint-metadata-vocabulary.md
   - docs/archive/drafts/r7-e-p11-gamepad-publication-cadence.md
@@ -14,7 +14,7 @@ related:
 
 ## 目的とboundary
 
-P16（`#353`、parent `#324`、numbering SoT `#293`）は、keyboard、gamepad、
+current contract（`#353`、parent `control-frame contract`、numbering SoT `roadmap`）は、keyboard、gamepad、
 deterministic fixture-based analog inputに対して、typedかつimmutableなinput-side
 contractを1つ定義する。device codeはraw stateを抽出し、pure common builderは、
 すでに定義済みの3-axis inputをvalidateしてrequested continuous endpoint velocityへ
@@ -76,7 +76,7 @@ input contractは`local_endpoint_velocity_m_s`とrequested `control_frame`を所
 world requestはworld requestであり、tool requestはtool-frame requestのままである。
 input layerはMuJoCo orientationを読まず、tool velocityをworld velocityとlabelしない。
 
-P12 runtime resolutionは`requested_control_frame`、`resolved_control_frame`、
+current contract runtime resolutionは`requested_control_frame`、`resolved_control_frame`、
 `resolved_world_endpoint_velocity_m_s`、orientation-unavailableのhold/reason
 semanticsを所有する。既存のcompatibility compositionは、world requestに対して
 world-resolved aliasを出力してよい。tool requestに対してrequested valueを無条件に
@@ -94,7 +94,7 @@ world-resolved aliasを出力してよい。tool requestに対してrequested va
 - inactiveは`source_active=false`である。stale conditionがなければstale reasonなしでもよい。
 - staleはmachine-readableな`stale_reason`を伴うinactiveである。
 - blur、disconnect、gamepad stale、viewer zero-stateは、既存のinactive reasonと
-  P11 cadence/timeout behaviorを維持する。
+  current contract cadence/timeout behaviorを維持する。
 - activeとstale reasonの同時指定は矛盾としてrejectする。
 - non-finiteまたはmalformed vectorは、zeroへ変換せずrejectする。
 
@@ -118,20 +118,9 @@ aliasを維持する。
 
 `build_normalized_analog_fixture_intent()`は、すでにnormalizedかつsemantically
 definedなaxisを受け取り、hardware I/Oなしで同じcontractを生成する。これはstableな
-P21 extension pointである。load-cell calibration、channel mixing、force-to-axis
+current contract extension pointである。load-cell calibration、channel mixing、force-to-axis
 mapping、gain tuning、sensor zeroing、serial I/O、recorded-force schema、
 participant calibrationは定義しない。
-
-## compatibilityとhandoff
-
-viewer-onlyの`desired_endpoint_m`、`target_position_m`、`current_tip_position_m`は、
-common contract外のcomposition annotationのままである。frontend message schema、
-payload-v0 shape、viewer rendering、programmed/replay path、target lifecycle、
-P10 threshold、P11 liveness、P12 resolution、P14 measurement orderingは変更しない。
-
-P20はversioned experiment loggingのためにcanonical common fieldを消費してよい。
-P21は記録済みraw analog/force dataをnormalized fixture boundaryへmappingしてよい。
-P16はP17 evaluation design、P20 record、P21 raw mappingを定義しない。
 
 ## 対象外
 

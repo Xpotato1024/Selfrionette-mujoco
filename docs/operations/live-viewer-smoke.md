@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-14
+last_verified: 2026-07-16
 canonical_for:
   - live viewer smoke path
 related:
@@ -13,7 +13,7 @@ related:
 
 # live viewer smoke
 
-R6-C-P3でreplay payload v0からbrowser viewer runtimeまでのdeterministic local smoke pathを追加した。
+replay payload v0からbrowser viewer runtimeまでのdeterministic local smoke pathを確認する。
 
 ## command
 
@@ -46,15 +46,10 @@ smoke commandはlocal WebSocket server起動後、最初のpayload publish前に
 設ける。viewer WebSocket clientは現在reconnectを実装していないため、server準備前にbrowserを開くとerror stateに
 残る場合がある。grace window終了前にbrowserが接続しない場合、runnerはpayloadをdropする。
 
-R6-C-P4ではlocal/dev publisher、browser viewer、marker summary update skeletonからscopeを広げず、このsmoke
-pathをPhase C completion handoffとした。R6-D-P1ではviewer側にThree.js scene object registry skeletonを追加し、
-R6-D-P2ではbrowser viewerのrendering-only roleを変えず、payload marker coordinateをThree.js objectへ直接適用した。
-R6-D-P4のPhase D completion auditは`docs/reports/audits/r6-d-completion-audit.md`に置き、次のhandoffをrendered
-arm meshや完了済みIK pathではなくIK / command integration skeletonへ限定した。
 
 canonical backend / viewer startup guideは`docs/operations/backend-viewer-startup.md`、host / port / URL contractは
 `docs/operations/websocket-host-port-contract.md`を正とする。
-R6-G-P5 の E2E smoke / troubleshooting の本体は
+E2E smoke / troubleshootingの本体は
 `docs/operations/runtime-to-viewer-e2e-smoke.md` に置く。
 
 ## smoke pathが証明する範囲
@@ -91,11 +86,3 @@ dropする。smoke pathをdeterministicに保つにはgrace periodを使うか�
 - direct marker position assignmentを超えるThree.js real scene mutationなし
 - direct payload coordinateを超えるbody/site/target position mappingなし
 - FK / IKなし
-
-## handoff
-
-R6-D-P3ではrenderer、camera、animation loopを追加せず、browser-visible DOMとscene-object smoke stateを
-`docs/operations/browser-visual-smoke.md`へ記録した。
-
-R6-E-P0ではstale placeholderだけを削除し、empty-directory `.gitkeep` markerを維持してPhase E準備cleanupを行った。
-次のhandoffは別parent Issueで作るPhase E IK / target command integration skeletonである。

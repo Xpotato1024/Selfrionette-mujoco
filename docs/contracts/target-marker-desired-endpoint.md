@@ -65,7 +65,7 @@ IK、FK、qpos pose recompute、`MotionCommand` execution、MuJoCo backend state
 
 boundaryは次のとおりである。
 
-- runtimeと将来のcommand pipelineがtarget intentとphysical stateを所有する。
+- runtimeとcommand pipelineがtarget intentとphysical stateを所有する。
 - MuJoCo backendはphysical / stateのsource of truthであり続ける。
 - viewerはrendering-onlyであり続ける。
 - viewerはpayload-provided target marker stateを表示してよい。

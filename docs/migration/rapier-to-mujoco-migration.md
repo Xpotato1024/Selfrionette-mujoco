@@ -2,8 +2,7 @@
 status: historical
 owner: architecture
 last_verified: 2026-06-12
-canonical_for:
-  - Rapier to MuJoCo migration
+canonical_for: []
 related:
   - docs/design/adr/0001-use-mujoco-as-physics-sot.md
 ---

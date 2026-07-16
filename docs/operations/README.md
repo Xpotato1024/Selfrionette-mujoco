@@ -39,13 +39,18 @@ related:
 - `robot-runtime-plugin-conformance-tests.md`: Robot Runtime Plugin conformance suite
 - `r6-l-keyboard-gamepad-live-viewer-smoke.md`: keyboard / gamepad live viewer manual smoke
 - `r7-a-lite-serial-dry-run-smoke.md`: recorded fixtureによるserial dry-run
-- `r7-a-lite-websocket-viewer-smoke.md`: offline payloadからviewer parserまでのsmoke
-- `r7-b-input-driven-websocket-viewer-smoke.md`: input-driven WebSocket / viewer smoke
 - `r7-b-manual-live-loadcell-runtime-runner.md`: operator-gated live loadcell runner
-- `r7-c-manual-validation-preflight.md`: manual validation preflight
 - `r7-c-viewer-fixture-demo-procedure.md`: viewer fixture demo
 - `r7-c-keyboard-replay-demo-package.md`: keyboard / replay demo package
 - `r7-c-live-loadcell-validation-log.md`: live loadcell validation procedure
 - `r7-c-axis-sanity-check.md`: axis sanity protocol
 - `r7-d-p3-fast-arm-endpoint-command-check-procedure.md`: no-hardware endpoint command smoke
 - `r7-e-p1-fast-arm-endpoint-motion-sanity.md`: endpoint motion sanity gate
+
+## historical path reference
+
+次は特定実装時点のevidenceであり、current procedureとして実行しない。provenance維持のためpathだけを案内する。
+
+- `r7-a-lite-websocket-viewer-smoke.md`: offline payload / viewer parser smoke evidence
+- `r7-b-input-driven-websocket-viewer-smoke.md`: input-driven WebSocket / viewer smoke evidence
+- `r7-c-manual-validation-preflight.md`: retired manual validation preflight

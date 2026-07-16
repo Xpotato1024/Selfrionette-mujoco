@@ -1,11 +1,11 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-15
+last_verified: 2026-07-16
 canonical_for:
   - WebSocket / host / port / public host contract
   - backend publisher bind host vs browser-visible host
-  - R6-G-P4 host and URL handoff
+  - WebSocket host and URL contract
 related:
   - README.md
   - apps/mujoco-viewer/README.md
@@ -193,27 +193,6 @@ WebSocket endpoint URL:
 - `ws://` と `http://` を混同する。
 - LAN / Tailscale / public host で loopback の `127.0.0.1` をそのまま使う。
 
-## R6-G-P5 への handoff
-
-- R6-G-P5 では、この host / port / URL contract を前提に
-  `docs/operations/runtime-to-viewer-e2e-smoke.md` へ runtime-to-viewer E2E smoke と
-  troubleshooting を整理する。
-- WebSocket status が `open` にならない場合の troubleshooting を追加する。
-- browser は開くが payload が来ない場合の切り分けを追加する。
-- LAN / Tailscale から見たときに WebSocket URL が loopback のままになっているケースを troubleshooting に追加する。
-
-## R6-G-P6 への handoff
-
-- R6-G-P6 issue #113 では、runtime-to-viewer E2E smoke を実用的に再現しやすくするための dev launcher を扱う。
-- AutoPort / one-command / Tailscale WebView dev launcher の正本は
-  `docs/operations/mujoco-viewer-dev-launcher.md` に置く。
-- 旧 Selfrionette にあった AutoPort 相当の port 自動選択を、MuJoCo viewer の
-  bind host / browser-visible host contract に合わせて最小再設計する。
-- backend publisher / viewer build / browser URL 表示までを一括で案内できる one-command dev launcher を
-  整理する。
-- Tailscale / LAN / public host から browser で開くための viewer page URL と
-  WebSocket endpoint URL を出力できるようにする。
-
 ## Non-Goals
 
 - production deployment
@@ -227,33 +206,3 @@ WebSocket endpoint URL:
 - viewer visual feature 追加
 - package dependency change
 - startup script / wrapper 追加
-
-## Scope Check
-
-```text
-WebSocket URL contract documented: yes
-backend host / port documented: yes
-viewer page URL documented: yes
-browser-visible host documented: yes
-localhost / 127.0.0.1 / 0.0.0.0 distinction documented: yes
-public host / LAN / Tailscale documented: yes
-R6-G-P5 troubleshooting handoff added: yes
-startup script implemented: no
-npm script added: no
-package dependency changed: no
-new visual feature added: no
-legacy changed: no
-legacy imported/executed: no
-viewer-side FK/IK added: no
-viewer-side qpos recompute added: no
-browser-side MuJoCo model loading added: no
-payload schema breaking change: no
-transport schema breaking change: no
-production deployment added: no
-auth / TLS / reverse proxy added: no
-hardware validation included: no
-serial port opened: no
-OSC sent: no
-Closes #105 retained: yes
-PR draft retained: yes
-```

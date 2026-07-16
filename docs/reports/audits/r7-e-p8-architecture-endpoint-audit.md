@@ -2,8 +2,7 @@
 status: historical
 owner: architecture
 last_verified: 2026-07-10
-canonical_for:
-  - R7-E follow-up P8 architecture and endpoint-position audit
+canonical_for: []
 related:
   - docs/architecture/dependency-boundaries.md
   - docs/architecture/runtime-composition.md

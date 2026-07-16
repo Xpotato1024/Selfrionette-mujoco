@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-13
+last_verified: 2026-07-16
 canonical_for:
   - fast_arm TOML joint-angle limits and runtime qpos feasibility guard
 related:
@@ -65,8 +65,7 @@ qpos-limit rejectionは、stale input、control-frame resolution failure、targe
 targetとviewer rebase stateを変更しない。MuJoCo physical stateは引き続き
 source of truthである。
 
-P24は、この明示的なfast_arm composition seamをRobot Profile / Runtime Plugin /
-Viewer Profile registryへ置き換える。fast_arm pluginはprofile declarationを通じて
+current Robot Profile / Runtime Plugin / Viewer Profile registryでは、fast_arm pluginがprofile declarationを通じて
 同じTOMLをresolveし、既存のgeneric guard boundaryをinjectする。limit valueは
 複製しない。mesh collision、self-collision、motor-space limit、
 torque/current/velocity safety、hardware characterization、serial、OSC、

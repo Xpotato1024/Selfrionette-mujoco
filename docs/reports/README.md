@@ -29,6 +29,8 @@ contract、反復operationのsource of truthにはしない。現在仕様は`do
   migration時点のrole / action / destinationを記録したhistorical evidence。current registryとして更新しない。
 - [2026-07-16 canonical content / history separation audit](audits/canonical-content-history-separation-2026-07-16.md):
   全canonical文書のcontent review、history extraction、status再分類、抽出元commitを記録する。
+  追加抽出本文は[separation supplement](audits/canonical-content-history-separation-supplement-2026-07-16.md)へ
+  同じpre-audit commitのprovenance付きで保存する。
 
 Markdown migration全体のpath、role、action、destinationは上記snapshotを参照する。
 `docs/archive/indexes/docs-index.md`はobsoleteな旧`docs/index.md`の本文保存であり、

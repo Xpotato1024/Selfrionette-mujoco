@@ -189,4 +189,4 @@ serial frame lines
 
 ## Historical provenance
 
-実装時点inventory、Issue別handoff、completion updateは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
+pre-audit inventoryとimplementation chronologyは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

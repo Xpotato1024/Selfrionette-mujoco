@@ -41,5 +41,5 @@ production compositionはselected `RobotRuntimePlugin`が提供するconcrete im
 zero-valued FK / IK、generic Planar solver、NoOp motionへ暗黙fallbackしない。unsupported configurationは
 明示的に失敗させる。
 
-導入順と過去のStep別evidenceは
+pre-audit導入順とimplementation evidenceは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-15
+last_verified: 2026-07-16
 canonical_for:
   - schema contracts
 related:
@@ -34,7 +34,7 @@ related:
 - `BodyTransform`、`SiteTransform`: backendが抽出するrigid transform。
 - `MuJoCoState`: transport layerとviewer layerへ渡すbackend snapshot。
   `docs/contracts/mujoco-state.md`を参照する。
-- `RenderState`: viewer-side state handoff用のplaceholder render contract。
+- `RenderState`: viewer-side state boundary用のplaceholder render contract。
 - `ViewerControlMessage`、`ViewerControlKeyboardMessage`、
   `ViewerControlGamepadMessage`、`ViewerControlGamepadButtonMessage`: 厳密な
   viewer-to-backend control envelope。
@@ -53,8 +53,7 @@ related:
   motion semanticsを持たない。
 - motion layerは`InputIntent.target_delta_m`を
   `TargetCommand(delta_m=...)`へ変換してよい。
-- Step 5-Dでjoint commandをbackend boundaryにおけるqposの直接反映として
-  固定済みのため、Step 5-Fでは`InputIntent.joint_delta_rad`を意図的に
+- joint commandはbackend qpos boundaryで直接反映するため、`InputIntent.joint_delta_rad`を
   joint commandへnormalizeしない。
 - `desired_endpoint_m`はconcrete programmed-target pathが使用する
   command-side endpoint termである。`target_position_m`はcompatibility /

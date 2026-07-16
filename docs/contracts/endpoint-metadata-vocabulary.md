@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime / transport contract
-last_verified: 2026-07-11
+last_verified: 2026-07-16
 canonical_for:
   - endpoint metadata vocabulary and ownership
 related:
@@ -57,8 +57,8 @@ qposはradian（`rad`）を使用する。frame columnをauthoritativeとする�
 | `motion_rejection_reason` | policy detail | motion policy | N/A | optional |
 | `target_rejected` | absolute target lifecycle | target acceptance / safety | N/A | local `held`とは別 |
 | `target_rejection_reason` | absolute target detail | target acceptance / safety | N/A | target reject時 |
-| `endpoint_progress_status` | measured progress quality | P10 progress evaluator | requested world delta対measured world delta | 独立したprogress axis |
-| `endpoint_progress_*` | measured progress detail | P10 progress evaluator | requested/measured delta metric | unavailable時はabsentまたはnull |
+| `endpoint_progress_status` | measured progress quality | current contract progress evaluator | requested world delta対measured world delta | 独立したprogress axis |
+| `endpoint_progress_*` | measured progress detail | current contract progress evaluator | requested/measured delta metric | unavailable時はabsentまたはnull |
 
 上表のmetadata fieldは、同じwire nameを持つtop-level payload fieldとは別である。
 `TransportPayloadV0.target_position_m`はtop-levelの`Vector3 | null`
@@ -107,15 +107,7 @@ viewer runtime rebaseにより、最初のviewer valueがinitial MuJoCo tip site
 後続valueはcommand-side anchorのままである理由を説明できる。post-step physical
 deltaは、MuJoCo tip sampleから計算した`actual_tip_delta_m`である。将来、別途承認された
 migrationで`command_endpoint_anchor_m`や`mujoco_tip_position_m`のような別々の
-canonical nameを導入してよいが、P13ではこれらのwire fieldを追加しない。
-
-## migration順序
-
-1. このglossary、ownership map、Python/TypeScript typed subsetを確立する。
-2. producerはcanonical fieldと同期したcompatibility aliasを出力する。
-3. consumerはcanonical fieldを優先し、一時的にcompatibility fallbackを使用する。
-4. testとtelemetryで残存alias consumerを特定する。
-5. aliasは別途承認されたIssueでのみ削除する。このPRでは削除しない。
+canonical nameを導入してよいが、current contractではこれらのwire fieldを追加しない。
 
 ## nullabilityとvalidation boundary
 
@@ -134,6 +126,6 @@ truthとして扱わず無視する。
 
 ## boundary
 
-このcontractはruntime moduleを分割せず、P10 thresholdまたはP12 resolution behaviorを
+このcontractはruntime moduleを分割せず、current contract thresholdまたはcurrent contract resolution behaviorを
 変更せず、wire fieldをrenameせず、motion mappingを変更せず、viewer markerを第2の
 physical source of truthにしない。

@@ -14,7 +14,7 @@ related:
 
 # WebSocket publisher runner
 
-R6-C-P1でreplayed payload v0 JSON向けPython-side local/dev WebSocket publisher runnerを追加した。
+replayed payload v0 JSON向けPython-side local / dev WebSocket publisher runnerのcurrent手順を示す。
 
 ## 実行内容
 
@@ -36,7 +36,7 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 
 ```
 
 default pathはunit testでcoverするpayload compatibility pathのままである。以前のdefault `--steps 120` commandを
-manual browser smokeの推奨にしない。長時間MuJoCo dynamics stabilityは別Issueへdeferする。
+manual browser smokeの推奨にしない。長時間MuJoCo dynamics stabilityはこのsmokeの判定外とする。
 
 ここでのacceptance targetはpublisher / transport smokeとbrowser payload parse smokeである。proper 3D GUI
 renderingをこのPRの成果として主張しない。
@@ -83,8 +83,7 @@ browser viewerはautomatic defaultではなく明示query parameterで接続す�
 ```
 
 `?ws=ws://127.0.0.1:8766`はaliasとして受理する。endpoint queryがない場合、viewerはdisconnectedのまま
-`WebSocket: disabled`を表示する。R6-C-P2はviewer側へendpoint configurationとconnection status displayを追加し、
-Python publisher runnerは変更しない。
+`WebSocket: disabled`を表示する。viewer側のendpoint configurationとconnection status displayはpublisher runnerから分離する。
 
 viewerはHTTP server経由で開く。`file:///.../index.html`を直接開かない。browser module loadingは`file:` URLを
 unique originとして扱い、CORSにより`dist/browser/main.js`をblockする場合がある。
@@ -99,7 +98,7 @@ http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
 host / port / public host contractは`docs/operations/websocket-host-port-contract.md`で固定する。
 
-R6-C-P3ではrunnerとbrowser viewer endpoint configurationを組み合わせるsmoke handoff文書とcommandを追加した。
+runnerとbrowser viewerを組み合わせるsmokeは次を参照する。
 
 - `docs/operations/live-viewer-smoke.md`
 - `scripts/run_live_viewer_smoke.py`

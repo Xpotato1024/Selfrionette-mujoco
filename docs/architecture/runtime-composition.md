@@ -34,7 +34,7 @@ zero solver、退役したPlanar solverへ暗黙fallbackしない。
 | diagnostic annotation | runtime diagnostics | pure annotator | intent、prediction、measurement、source state | precedenceを固定したmetadata |
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |
 | target lifecycle | runtime target resolver | pure lifecycle reducer | desired / active / measured target evidence | authoritative active targetまたはhold |
-| experiment logging handoff | explicit caller-owned adapter | production loop外のrecord builder | completed step evidence | immutable record。default runtimeはfileを開かない |
+| experiment record construction | explicit caller-owned adapter | production loop外のrecord builder | completed step evidence | immutable record。default runtimeはfileを開かない |
 
 ## failureとordering
 
@@ -46,5 +46,5 @@ zero solver、退役したPlanar solverへ暗黙fallbackしない。
 - transport failureをphysics successへ読み替えず、viewer failureをbackend stateへ反映しない。
 
 この文書はcurrent responsibility boundaryを固定し、does not perform a broad runtime rewrite。
-過去のcomposition chronology、completion / handoff、future refactor sequenceは
+pre-audit composition chronologyとrefactor proposalは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

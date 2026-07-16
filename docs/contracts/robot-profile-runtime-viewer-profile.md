@@ -34,7 +34,7 @@ qpos generation、target generation、安全性は一切所有しない。現在
 MuJoCo compiled mesh geometryを消費し、独立したmesh-fallback routeを持たない。
 したがってcurrent profile contractではOption Bを選択し、未使用のfallback mappingを宣言しない。
 profile-owned VFS asset mappingをmodel-loading boundaryとして維持する。
-将来fallback routeを追加するには、別Issue、明示的なdiagnostic、cleanup behavior、
+fallback routeの追加には、別contract changeと明示的なdiagnostic、cleanup behavior、
 profile-driven testが必要である。
 
 architecture test向けのcontract sentinelとして、ここでは`selects Option B`を固定し、

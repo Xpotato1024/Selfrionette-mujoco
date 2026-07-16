@@ -2,8 +2,7 @@
 status: historical
 owner: architecture
 last_verified: 2026-06-12
-canonical_for:
-  - legacy inventory
+canonical_for: []
 related:
   - legacy/fast_arm_control/README.md
 ---

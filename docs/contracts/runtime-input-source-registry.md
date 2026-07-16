@@ -1,9 +1,9 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-23
+last_verified: 2026-07-16
 canonical_for:
-  - R6-K-P1 runtime input source registry
+  - runtime input source registry
 related:
   - docs/architecture/data-flow.md
   - docs/architecture/runtime-composition.md
@@ -14,7 +14,7 @@ related:
 # Runtime Input Source Registry
 
 ## 目的
-R6-K-P1 では、runtime input source の registry を追加する。CLI の choice と runtime の source 選択を同じ入口にそろえ、registry は pure metadata と frame factory だけを持つ。
+runtime input source registryは、CLI の choice と runtime の source 選択を同じ入口にそろえ、registry は pure metadata と frame factory だけを持つ。
 serial、OSC、browser capture、MuJoCo backend などの concrete I/O は registry に入れない。
 
 ## 対象 source
@@ -31,7 +31,7 @@ unknown source は明示的な validation error で拒否する。
 - `build_frames(...)`
 - `initial_metadata`
 
-`initial_metadata` は source ごとの初期 metadata contract を表す。現時点の contract は次のとおり。
+`initial_metadata` は source ごとの初期 metadata contract を表す。current contractは次のとおり。
 - `programmed_target`: `source_kind = programmed_target`, `trajectory_name = sweep_x`
 - `replay`: `preset = r6-h-p5-default`
 - `noop`: `preset = noop`, `source_kind = noop`

@@ -248,4 +248,4 @@ parserは次のruleに従う。
 - actuator commandを送らない。
 
 
-実装時のIssue別handoffは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
+pre-audit implementation chronologyは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

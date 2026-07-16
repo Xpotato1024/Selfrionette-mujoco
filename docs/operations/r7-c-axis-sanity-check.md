@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-22
+last_verified: 2026-07-16
 canonical_for:
   - R7-C axis sanity check protocol
 related:
@@ -131,40 +131,3 @@ Codex / CI は live serial を開かない。
 - firmware upload / modification
 - browser E2E automation
 - WebSocket server launch by Codex / CI
-
-## handoff
-
-次は #237 で presentation-ready demo notes を追加する。
-この protocol の pass / caution / fail は、
-`docs/reports/implementation/r7-c-presentation-demo-notes.md` で何を proven / intentionally unproven と説明するかの材料にする。
-
-## Scope Check
-
-この Scope Check は #236 PR で Codex / CI が実施した変更・検証範囲を示す。
-human-run replay / fixture sanity check を operator が実行する場合、
-`scripts/run_replay_mujoco_dry_run.py` は既存 runtime dry-run path として
-MuJoCo step / MuJoCoState snapshot を含む。これは本 PR で新規に追加・実行した
-runtime behavior ではない。
-
-```text
-legacy changed: no
-legacy imported/executed: no
-assets changed: no
-schema breaking change: no
-import boundary changed: no
-MuJoCo package imported: no
-MuJoCo model load included: no
-MuJoCo forward included: no
-MuJoCo step included: no
-MuJoCoState snapshot included: no
-runtime composition included: no
-Three.js FK/IK included: no
-WebSocket included: no
-serial port opened by Codex/CI: no
-OSC sent: no
-hardware validation included by Codex/CI: no
-node_modules included: no
-dist included: no
-.env.local included: no
-docs / SoT impact checked: yes
-```

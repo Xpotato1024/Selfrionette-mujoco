@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-06-28
+last_verified: 2026-07-16
 canonical_for:
   - EndpointTargetGenerator target generation contract
 related:
@@ -145,21 +145,14 @@ target_generation_held
 last_valid_target_position_m
 ```
 
-## #320 trajectory diagnostics との関係
+## trajectory stability contract
 
-#320 では、short-step の `+z` / `-z` は aligned でも、同一方向の repeated
-endpoint command では trajectory drift / degradation / rejection が出ることを確認した。
-
-そのため、この generator は以下を contract として固定する。
-
-- per-step target delta を `max_step_m` で制限する。
-- input magnitude が 1.0 を超える場合は normalize する。
-- workspace bounds 外へ target を積み続けない。
-- rejection 後は `last_valid_target_position_m` を hold する。
-- `status` / `reason` / flags を metadata として残す。
-
-これは target generation の安定化であり、x/y solver limitation や complete 3D IK
-rewrite ではない。
+- per-step target deltaを`max_step_m`で制限する。
+- input magnitudeが1.0を超える場合はnormalizeする。
+- workspace bounds外へtargetを積み続けない。
+- rejection後は`last_valid_target_position_m`をholdする。
+- `status` / `reason` / flagsをmetadataとして残す。
+- target generationの安定化を、complete 3D IKまたはsolver limitation解消と解釈しない。
 
 ## runtime integration
 

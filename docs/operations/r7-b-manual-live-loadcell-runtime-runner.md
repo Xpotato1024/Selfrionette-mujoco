@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-22
+last_verified: 2026-07-16
 canonical_for:
   - R7-B-P5 manual live loadcell runtime runner
 related:
@@ -61,7 +61,3 @@ startup banner には manual gated live serial mode と対象 `port` / `baud_rat
 - `target_position_m` は primary command ではない
 - `serial_port` と `baud_rate` は live mode の metadata に残す
 - `frame_index` と `serial_timestamp_s` を metadata に残す
-
-## 次
-
-`#223` completion audit

@@ -23,13 +23,8 @@ payload stateとoverlay stateを表示する。
 
 ## 前提条件
 
-- #253、#254、#255 / #283、#256 / #284がlocal checkoutに存在するかbase branchへmerge済みである
-- PR #283とPR #284がmergeされるまでは、この手順は両PRにstackする。#283がopenなら
-  `codex/255-backend-viewer-input-source`をbase branchにする。#284が#283上へstackされている場合、#283 ingress
-  fixを既に含むときだけ`codex/256-viewer-input-overlay`を使う
-- backendが`--input-source viewer`でviewer inbound control messageをsupportするのは、checkoutが
-  `codex/255-backend-viewer-input-source`以降をrootとし、#283 live ingress wiringを含む場合だけである。古いbaseでは
-  commandはpublisher-onlyでありlive control smokeを満たさない
+- backendが`--input-source viewer`とviewer inbound control messageをsupportするcurrent checkoutを使う
+- viewer control schema、runtime ingress、overlayのfocused validationが成功している
 - `apps/mujoco-viewer` dependencyをinstall済みである
 - keyboard focusを受けられるbrowserを使い、gamepad smokeではgamepadを接続する
 - このsmokeではserial deviceをopenせず、OSCを送信せず、robot hardwareへaccessしない
@@ -128,7 +123,7 @@ http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 - compatibility-invalid payloadまたはparse errorはingress barrierであり、古いunapplied compatible candidateをdiscardする。
   applied済みscene poseは変えず、後続valid candidate適用までUIがwarning/invalidをreportする
 
-## P25 120 s acceptance
+## 120 s acceptance
 
 no-inputとcontinuously-held-inputを別々に評価する。同じmachine、browser、command、loopback endpoint、
 `dt_s=1/60`、`interval_s=1/60`を使う。browserをforeground/visibleに保ち、5 second warm-upを120 second
@@ -142,7 +137,7 @@ acceptance threshold:
 - latest received-to-applied frame distanceはboundedで、elapsed timeとともに増加しない
 - slow senderがsimulation enqueueをblockせず、unbounded queueを作らない
 
-unavailable measurementは推定せず`not run`と記録する。canonical P25 implementationとmeasured comparisonは
+unavailable measurementは推定せず`not run`と記録する。canonical pacing implementationとmeasured comparisonは
 `docs/reports/implementation/r7-e-p25-live-viewer-pacing-backlog.md`に記録する。
 
 ## 想定target / tip / error behavior

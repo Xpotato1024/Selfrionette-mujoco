@@ -2,8 +2,7 @@
 status: historical
 owner: operations
 last_verified: 2026-06-22
-canonical_for:
-  - R7-C manual validation preflight
+canonical_for: []
 related:
   - docs/README.md
   - docs/operations/hardware-safety.md

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-23
+last_verified: 2026-07-16
 canonical_for:
   - runtime input source state payload
 related:
@@ -25,9 +25,9 @@ runtime payload の `metadata` に載せる input source の観測用 state を�
 
 これらの値は observability 用の入力状態であり、#250 の stale-command
 safety はこの metadata を読み取って別途判定する。runtime は
-`command_age_ms` を wall clock から計算しない。R6-K では source-provided
+`command_age_ms` を wall clock から計算しない。offline sourceはsource-provided
 metadata として扱い、offline の programmed_target / replay / noop は
-deterministic な `0` を emit してよい。R6-L の browser / live sources は
+deterministic な `0` を emit してよい。browser / live sourcesは
 age と stale metadata を source 側で emit する。
 
 ## overlay diagnostics

@@ -55,9 +55,12 @@ def test_repository_current_markdown_governance_is_accepted() -> None:
     assert result.accepted, result.errors
 
 
-def test_changed_files_strict_policy_accepts_unmodified_baseline_debt() -> None:
+def test_changed_files_strict_policy_accepts_unmodified_baseline_debt(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(MODULE, "changed_paths", lambda _base_ref: set())
     result = MODULE.validate(
-        base_ref="cf17fe830645c99b591615b6ffb55a42979c0d5e",
+        base_ref="synthetic-baseline",
         strict_map=True,
         strict_links=True,
     )

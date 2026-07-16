@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-15
+last_verified: 2026-07-16
 canonical_for:
   - MuJoCo viewer dev launcher
   - AutoPort startup helper
@@ -96,13 +96,6 @@ Open viewer:
   apps/mujoco-viewer/index.html?websocketUrl=ws://100.x.x.x:8766
 ```
 
-## R6-G-P7 への handoff
-
-- R6-G-P7 では、P1〜P6 の completion state を audit する。
-- AutoPort / one-command / Tailscale WebView dev launcher の completion state を確認する。
-- README / viewer README / operations docs から launcher docs に辿れることを確認する。
-- parent #101 を close できる completion audit を追加する。
-
 ## Non-Goals
 
 - production server
@@ -118,28 +111,3 @@ Open viewer:
 - viewer visual feature 追加
 - package dependency change
 - legacy import / execute / direct migration
-
-## Scope Check
-
-```text
-dev launcher added: yes
-AutoPort implemented: yes
-browser-visible host separated: yes
-viewer page URL output documented: yes
-WebSocket endpoint URL output documented: yes
-print-only mode documented: yes
-browser build documented: yes
-browser auto open: no
-production deployment added: no
-auth / TLS / reverse proxy added: no
-hardware validation included: no
-serial port opened: no
-OSC sent: no
-legacy imported/executed: no
-viewer-side FK/IK added: no
-viewer-side qpos recompute added: no
-browser-side MuJoCo model loading added: no
-package dependency changed: no
-Closes #113 retained: yes
-PR draft retained: yes
-```

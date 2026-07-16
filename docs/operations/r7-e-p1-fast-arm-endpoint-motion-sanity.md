@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-27
+last_verified: 2026-07-16
 canonical_for:
   - R7-E-P1 fast_arm endpoint motion sanity
 related:
@@ -16,17 +16,17 @@ related:
 
 ## 目的
 
-この文書は、R7-E の cube task に進む前の gate として、`fast_arm` の初期 `tip`
+この文書はcube task前のgateとして、`fast_arm` の初期 `tip`
 site 位置から `x / y / z` 方向へ small endpoint command を与えたときの動きを
 確認・記録・説明する手順を固定する。
 
-ここでは cube scene、contact metric、R7-F の比較評価には進まない。確認対象は
+ここでは cube scene、contact metric、比較評価には進まない。確認対象は
 backend / MuJoCo runtime を source of truth とする `tip` site の変化、`qpos[0:4]`、
 `desired_endpoint_m`、`target_position_m` の関係である。
 
 ## default initial-tip mode
 
-R7-E cube task 前の gate では、default mode を使う。
+cube task前のgateでは、default mode を使う。
 
 ```text
 desired_endpoint_m = initial_tip_position_m + small command delta
@@ -58,7 +58,7 @@ result では `base_endpoint_source=explicit` として記録する。
 
 ## 実行方法
 
-R7-E-P1 の標準確認:
+標準確認:
 
 ```powershell
 uv run python scripts/run_fast_arm_endpoint_motion_sanity.py
@@ -109,13 +109,6 @@ uv run python scripts/run_fast_arm_endpoint_motion_sanity.py
 - 任意の 3D target に自然に到達できる。
 - 実機 fast_arm の軸整合が完了した。
 - cube を物理的に押せることを確認した。
-
-## follow-up note
-
-PR #311 の初期版では、default が `DEFAULT_CONCRETE_TARGET_POSITION_M + delta` を使っていた。
-そのため `+x opposite_direction` や `z off_plane` などの結果は、absolute target への
-移動方向を含んでいた可能性がある。R7-E-P1 の gate としては、修正後の
-default initial-tip mode で再評価する。
 
 ## 参考実装
 

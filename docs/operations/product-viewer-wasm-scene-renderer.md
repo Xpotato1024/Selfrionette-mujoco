@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-15
+last_verified: 2026-07-16
 canonical_for:
   - product viewer wasm scene renderer operation
 related:
@@ -45,19 +45,10 @@ related:
 
 ## fixture生成のintegrity
 
-PR #392では当初、不正な再生成候補
-`A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36`が得られた。
-native simulatorが新しいjoint positionを適用するとき、前stepのvelocityを残していた。MuJoCoはBADQACCを出し、
-`mj_step`からreset-like time valueを返した。snapshot、payload、exporterはその値を並べ替えたり変更したりしていない。
-同じdefectはcurrent `main`と#392 branchの両方で再現した。
-
-root-cause fixではposition-command boundaryがqposを書き込むときにvelocityをclearし、`sweep_x`はmove/returnの各frameへ
-interpolated endpointを供給する。既存payload schemaとviewer boundaryを維持し、browser FK/IKまたはqpos
-recomputationを追加しない。exporterはin-memory sequence全体についてindex、time、metadata、qpos finiteness、dimensionを
-validateし、serialization成功後だけtargetをatomicに置換する。
-
-修復後のcommandは、strictly increasing simulation time、finiteな4-value qpos、意図したmove/return progression、
-intentional terminal holdを持つ30 framesを生成し、BADQACC warningを出さない。current canonical fixture SHA-256は
+fixture再生成はstale velocity、BADQACC、time rollback、non-finite qpos、dimension不一致をrejectする。
+exporterはin-memory sequence全体をvalidateし、serialization成功後だけtargetをatomicに置換する。
+canonical fixtureはstrictly increasing simulation time、finiteな4-value qpos、move / return progression、
+intentional terminal holdを持つ30 framesである。current SHA-256は
 `4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`である。
 
 ## 旧rendererの扱い

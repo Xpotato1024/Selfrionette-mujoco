@@ -6,6 +6,7 @@ canonical_for: []
 related:
   - docs/README.md
   - docs/reports/inventories/markdown-inventory.md
+  - docs/reports/audits/canonical-content-history-separation-supplement-2026-07-16.md
 ---
 
 # Canonical content / history separation audit (2026-07-16)
@@ -14,7 +15,8 @@ related:
 
 PR #401の独立監査に対し、pathだけではなく本文を再監査した記録である。抽出対象の修正前本文は、
 #401のpre-audit commit `c208feac7453417afd9ee01d051d28902db0223d` にある各source pathから
-UTF-8のまま取得し、後半へ全文保存した。数値、contract、過去事実は推測で書き換えていない。
+UTF-8のまま取得し、本auditまたはseparation supplementへ全文保存した。数値、contract、過去事実は
+推測で書き換えていない。
 
 検索起点は `Step`、`R6-`、`R7-`、`P<number>`、`Issue` / `#<number>`、
 `PR #`、`completion`、`handoff`、`proposal`、実装追加時点、future refactor sequence、
@@ -24,8 +26,8 @@ UTF-8のまま取得し、後半へ全文保存した。数値、contract、過�
 ## 集計
 
 - content review対象: 64 canonical文書
-- current canonicalとして保持: 44
-- current invariantへ縮約し、旧本文をこのauditへ抽出: 15
+- current canonicalとして保持: 11
+- current invariantへ縮約し、旧本文をaudit / supplementへ抽出: 48
 - migration / 実行時点evidenceへ再分類（本文保持）: 5
 - evidence deletion: 0
 
@@ -41,62 +43,62 @@ UTF-8のまま取得し、後半へ全文保存した。数値、contract、過�
 | `docs/architecture/documentation-sot-policy.md` | `canonical` | `retain` | `docs/architecture/documentation-sot-policy.md` | content review済み。current semanticsとして保持 |
 | `docs/architecture/mujoco-skeleton-first-spec.md` | `canonical` | `retain-current + extract-history` | `docs/architecture/mujoco-skeleton-first-spec.md` | 本文全体を本audit後半へprovenance付きで保存 |
 | `docs/architecture/runtime-composition.md` | `canonical` | `retain-current + extract-history` | `docs/architecture/runtime-composition.md` | 本文全体を本audit後半へprovenance付きで保存 |
-| `docs/contracts/analog-fixture-mapping.md` | `canonical` | `retain` | `docs/contracts/analog-fixture-mapping.md` | content review済み。current semanticsとして保持 |
-| `docs/contracts/assets.md` | `canonical` | `retain` | `docs/contracts/assets.md` | content review済み。current semanticsとして保持 |
-| `docs/contracts/continuous-endpoint-velocity-input.md` | `canonical` | `retain` | `docs/contracts/continuous-endpoint-velocity-input.md` | content review済み。current semanticsとして保持 |
-| `docs/contracts/endpoint-metadata-vocabulary.md` | `canonical` | `retain` | `docs/contracts/endpoint-metadata-vocabulary.md` | content review済み。current semanticsとして保持 |
-| `docs/contracts/endpoint-target-generator.md` | `canonical` | `retain` | `docs/contracts/endpoint-target-generator.md` | content review済み。current semanticsとして保持 |
-| `docs/contracts/experiment-motion-log-v1.md` | `canonical` | `retain` | `docs/contracts/experiment-motion-log-v1.md` | content review済み。current semanticsとして保持 |
-| `docs/contracts/fast-arm-joint-limit-config.md` | `canonical` | `retain` | `docs/contracts/fast-arm-joint-limit-config.md` | content review済み。current semanticsとして保持 |
+| `docs/contracts/analog-fixture-mapping.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/analog-fixture-mapping.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/contracts/assets.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/assets.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/contracts/continuous-endpoint-velocity-input.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/continuous-endpoint-velocity-input.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/contracts/endpoint-metadata-vocabulary.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/endpoint-metadata-vocabulary.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/contracts/endpoint-target-generator.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/endpoint-target-generator.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/contracts/experiment-motion-log-v1.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/experiment-motion-log-v1.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/contracts/fast-arm-joint-limit-config.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/fast-arm-joint-limit-config.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/contracts/forward-kinematics.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/forward-kinematics.md` | 本文全体を本audit後半へprovenance付きで保存 |
 | `docs/contracts/inverse-kinematics.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/inverse-kinematics.md` | 本文全体を本audit後半へprovenance付きで保存 |
 | `docs/contracts/kinematics-command-contract.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/kinematics-command-contract.md` | 本文全体を本audit後半へprovenance付きで保存 |
 | `docs/contracts/motion-command.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/motion-command.md` | 本文全体を本audit後半へprovenance付きで保存 |
 | `docs/contracts/mujoco-model-name-contract.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/mujoco-model-name-contract.md` | 本文全体を本audit後半へprovenance付きで保存 |
-| `docs/contracts/mujoco-state.md` | `canonical` | `retain` | `docs/contracts/mujoco-state.md` | content review済み。current semanticsとして保持 |
+| `docs/contracts/mujoco-state.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/mujoco-state.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/contracts/parallel-work-contracts.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/parallel-work-contracts.md` | 本文全体を本audit後半へprovenance付きで保存 |
-| `docs/contracts/programmed-target-input-source.md` | `canonical` | `retain` | `docs/contracts/programmed-target-input-source.md` | content review済み。current semanticsとして保持 |
+| `docs/contracts/programmed-target-input-source.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/programmed-target-input-source.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/r7-a-lite-serial-frame-contract.md` | 本文全体を本audit後半へprovenance付きで保存 |
 | `docs/contracts/r7-b-runtime-input-pipeline-contract.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/r7-b-runtime-input-pipeline-contract.md` | 本文全体を本audit後半へprovenance付きで保存 |
 | `docs/contracts/robot-profile-runtime-viewer-profile.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/robot-profile-runtime-viewer-profile.md` | 本文全体を本audit後半へprovenance付きで保存 |
 | `docs/contracts/runtime-forward-kinematics-evaluation.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/runtime-forward-kinematics-evaluation.md` | 本文全体を本audit後半へprovenance付きで保存 |
-| `docs/contracts/runtime-input-safety.md` | `canonical` | `retain` | `docs/contracts/runtime-input-safety.md` | content review済み。current semanticsとして保持 |
-| `docs/contracts/runtime-input-source-registry.md` | `canonical` | `retain` | `docs/contracts/runtime-input-source-registry.md` | content review済み。current semanticsとして保持 |
-| `docs/contracts/runtime-input-source-state.md` | `canonical` | `retain` | `docs/contracts/runtime-input-source-state.md` | content review済み。current semanticsとして保持 |
-| `docs/contracts/schemas.md` | `canonical` | `retain` | `docs/contracts/schemas.md` | content review済み。current semanticsとして保持 |
+| `docs/contracts/runtime-input-safety.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/runtime-input-safety.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/contracts/runtime-input-source-registry.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/runtime-input-source-registry.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/contracts/runtime-input-source-state.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/runtime-input-source-state.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/contracts/schemas.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/schemas.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/contracts/target-marker-desired-endpoint.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/target-marker-desired-endpoint.md` | 本文全体を本audit後半へprovenance付きで保存 |
-| `docs/contracts/transport-payload.md` | `canonical` | `retain` | `docs/contracts/transport-payload.md` | content review済み。current semanticsとして保持 |
+| `docs/contracts/transport-payload.md` | `canonical` | `retain-current + extract-history` | `docs/contracts/transport-payload.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/contracts/viewer-control-message-schema.md` | `canonical` | `retain` | `docs/contracts/viewer-control-message-schema.md` | content review済み。current semanticsとして保持 |
 | `docs/conventions.md` | `canonical` | `retain` | `docs/conventions.md` | content review済み。current semanticsとして保持 |
-| `docs/evaluation/world-tool-frame-comparison-design.md` | `canonical` | `retain` | `docs/evaluation/world-tool-frame-comparison-design.md` | content review済み。current semanticsとして保持 |
+| `docs/evaluation/world-tool-frame-comparison-design.md` | `canonical` | `retain-current + extract-history` | `docs/evaluation/world-tool-frame-comparison-design.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/migration/legacy-inventory.md` | `historical` | `reclassify` | `docs/migration/legacy-inventory.md` | 本文保持。current SoTから分離 |
 | `docs/migration/rapier-to-mujoco-migration.md` | `historical` | `reclassify` | `docs/migration/rapier-to-mujoco-migration.md` | 本文保持。current SoTから分離 |
-| `docs/operations/backend-viewer-startup.md` | `canonical` | `retain` | `docs/operations/backend-viewer-startup.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/browser-visual-smoke.md` | `canonical` | `retain` | `docs/operations/browser-visual-smoke.md` | content review済み。current semanticsとして保持 |
+| `docs/operations/backend-viewer-startup.md` | `canonical` | `retain-current + extract-history` | `docs/operations/backend-viewer-startup.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/browser-visual-smoke.md` | `canonical` | `retain-current + extract-history` | `docs/operations/browser-visual-smoke.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/codex-workflow.md` | `canonical` | `retain` | `docs/operations/codex-workflow.md` | content review済み。current semanticsとして保持 |
 | `docs/operations/git-pr-workflow.md` | `canonical` | `retain` | `docs/operations/git-pr-workflow.md` | content review済み。current semanticsとして保持 |
 | `docs/operations/hardware-safety.md` | `canonical` | `retain` | `docs/operations/hardware-safety.md` | content review済み。current semanticsとして保持 |
 | `docs/operations/japanese-doc-writing-guardrails.md` | `canonical` | `retain` | `docs/operations/japanese-doc-writing-guardrails.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/live-viewer-smoke.md` | `canonical` | `retain` | `docs/operations/live-viewer-smoke.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/mujoco-viewer-dev-launcher.md` | `canonical` | `retain` | `docs/operations/mujoco-viewer-dev-launcher.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/product-viewer-wasm-scene-renderer.md` | `canonical` | `retain` | `docs/operations/product-viewer-wasm-scene-renderer.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | `canonical` | `retain` | `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | `canonical` | `retain` | `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | content review済み。current semanticsとして保持 |
+| `docs/operations/live-viewer-smoke.md` | `canonical` | `retain-current + extract-history` | `docs/operations/live-viewer-smoke.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/mujoco-viewer-dev-launcher.md` | `canonical` | `retain-current + extract-history` | `docs/operations/mujoco-viewer-dev-launcher.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/product-viewer-wasm-scene-renderer.md` | `canonical` | `retain-current + extract-history` | `docs/operations/product-viewer-wasm-scene-renderer.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/r7-a-lite-websocket-viewer-smoke.md` | `historical` | `reclassify` | `docs/operations/r7-a-lite-websocket-viewer-smoke.md` | 本文保持。current SoTから分離 |
 | `docs/operations/r7-b-input-driven-websocket-viewer-smoke.md` | `historical` | `reclassify` | `docs/operations/r7-b-input-driven-websocket-viewer-smoke.md` | 本文保持。current SoTから分離 |
-| `docs/operations/r7-b-manual-live-loadcell-runtime-runner.md` | `canonical` | `retain` | `docs/operations/r7-b-manual-live-loadcell-runtime-runner.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/r7-c-axis-sanity-check.md` | `canonical` | `retain` | `docs/operations/r7-c-axis-sanity-check.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/r7-c-keyboard-replay-demo-package.md` | `canonical` | `retain` | `docs/operations/r7-c-keyboard-replay-demo-package.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/r7-c-live-loadcell-validation-log.md` | `canonical` | `retain` | `docs/operations/r7-c-live-loadcell-validation-log.md` | content review済み。current semanticsとして保持 |
+| `docs/operations/r7-b-manual-live-loadcell-runtime-runner.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-b-manual-live-loadcell-runtime-runner.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/r7-c-axis-sanity-check.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-c-axis-sanity-check.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/r7-c-keyboard-replay-demo-package.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-c-keyboard-replay-demo-package.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/r7-c-live-loadcell-validation-log.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-c-live-loadcell-validation-log.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/r7-c-manual-validation-preflight.md` | `historical` | `reclassify` | `docs/operations/r7-c-manual-validation-preflight.md` | 本文保持。current SoTから分離 |
-| `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | `canonical` | `retain` | `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | `canonical` | `retain` | `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md` | `canonical` | `retain` | `docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/runtime-dry-run.md` | `canonical` | `retain` | `docs/operations/runtime-dry-run.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/runtime-to-viewer-e2e-smoke.md` | `canonical` | `retain` | `docs/operations/runtime-to-viewer-e2e-smoke.md` | content review済み。current semanticsとして保持 |
+| `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md` | `canonical` | `retain-current + extract-history` | `docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/runtime-dry-run.md` | `canonical` | `retain-current + extract-history` | `docs/operations/runtime-dry-run.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/runtime-to-viewer-e2e-smoke.md` | `canonical` | `retain-current + extract-history` | `docs/operations/runtime-to-viewer-e2e-smoke.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/operations/validation.md` | `canonical` | `retain` | `docs/operations/validation.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/websocket-host-port-contract.md` | `canonical` | `retain` | `docs/operations/websocket-host-port-contract.md` | content review済み。current semanticsとして保持 |
-| `docs/operations/websocket-publisher-runner.md` | `canonical` | `retain` | `docs/operations/websocket-publisher-runner.md` | content review済み。current semanticsとして保持 |
+| `docs/operations/websocket-host-port-contract.md` | `canonical` | `retain-current + extract-history` | `docs/operations/websocket-host-port-contract.md` | supplementへ修正前本文をprovenance付きで保存 |
+| `docs/operations/websocket-publisher-runner.md` | `canonical` | `retain-current + extract-history` | `docs/operations/websocket-publisher-runner.md` | supplementへ修正前本文をprovenance付きで保存 |
 | `docs/README.md` | `canonical` | `retain` | `docs/README.md` | content review済み。current semanticsとして保持 |
 | `research/README.md` | `canonical` | `retain` | `research/README.md` | content review済み。current semanticsとして保持 |
 ## 修正前canonical本文の全文保存

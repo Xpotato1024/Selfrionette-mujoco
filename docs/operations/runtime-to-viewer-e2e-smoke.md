@@ -1,11 +1,11 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-15
+last_verified: 2026-07-16
 canonical_for:
   - runtime-to-viewer E2E smoke
   - browser viewer troubleshooting
-  - R6-G-P5 E2E smoke handoff
+  - runtime-to-viewer E2E smoke
 related:
   - README.md
   - apps/mujoco-viewer/README.md
@@ -22,7 +22,7 @@ related:
 
 backend / dry-run 起動から WebSocket publisher、Web viewer、browser 接続までを
 1 本の smoke として固定する。ここでは新しい viewer visual feature は追加せず、
-R6-F visual elements を起動導線込みで観測できることだけを確認する。
+current visual elementsを起動導線込みで観測できることだけを確認する。
 
 ## 前提
 
@@ -122,10 +122,10 @@ status text は `WebSocket: open` を含み、`connecting` / `closed` / `error` 
 判別できるようにする。`data-dof-ring-count` は descriptor count の互換 alias であり、
 present / absent の内訳は `data-dof-ring-present-count` と `data-dof-ring-absent-count` で読む。
 
-## R6-F visual elements
+## current visual elements
 
 - target / tip / error vector / arm skeleton / fast_arm mesh / DoF ring を smoke の観測対象にする。
-- これは既存 R6-F visual elements の観測であり、新規 visual feature ではない。
+- これはcurrent visual elementsの観測であり、新規 visual feature ではない。
 - browser pixel-level smoke の本格実装はしない。
 - scene の見た目の polish は扱わない。
 
@@ -181,16 +181,6 @@ present / absent の内訳は `data-dof-ring-present-count` と `data-dof-ring-a
 - browser-visible host は接続元から到達できる host を使う。
 - 詳細は `docs/operations/websocket-host-port-contract.md` を参照する。
 
-## R6-G-P6 への handoff
-
-- R6-G-P6 issue #113 では、runtime-to-viewer E2E smoke を実用的に再現しやすくするための dev launcher を扱う。
-- 旧 Selfrionette にあった AutoPort 相当の port 自動選択を、新 MuJoCo viewer 導線に合わせて最小設計する。
-- backend publisher / viewer build / browser URL 表示までを一括で案内できる one-command dev launcher を検討する。
-- Tailscale / LAN / public host から browser で開くための viewer page URL と WebSocket endpoint URL を出力できるようにする。
-- launcher の正本は `docs/operations/mujoco-viewer-dev-launcher.md` に置く。
-- R6-G-P6 では production deployment、auth / TLS / reverse proxy は扱わない。
-- R6-G-P7 で Phase G completion audit を行う。
-
 ## Non-Goals
 
 - 新規 viewer visual feature
@@ -204,33 +194,3 @@ present / absent の内訳は `data-dof-ring-present-count` と `data-dof-ring-a
 - hardware / serial / OSC
 - legacy import / execute
 - package dependency change
-
-## Scope Check
-
-```text
-parent issue: #101
-depends on: #102, #103, #104, #105
-phase slice: R6-G-P5
-runtime-to-viewer E2E smoke added: yes
-troubleshooting added: yes
-R6-F visual elements observation documented: yes
-root attributes / status checks documented: yes
-host / port / URL contract referenced: yes
-new visual feature added: no
-browser pixel-level smoke fully implemented: no
-package dependency changed: no
-legacy changed: no
-legacy imported/executed: no
-viewer-side FK/IK added: no
-viewer-side qpos recompute added: no
-browser-side MuJoCo model loading added: no
-payload schema breaking change: no
-transport schema breaking change: no
-production deployment added: no
-auth / TLS / reverse proxy added: no
-hardware validation included: no
-serial port opened: no
-OSC sent: no
-Closes #106 retained: yes
-PR draft retained: yes
-```

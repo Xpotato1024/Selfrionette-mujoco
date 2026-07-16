@@ -49,5 +49,5 @@ annotated stateをpublishした後にviewer input sourceのbaselineを更新す�
 operator deltaが未publish stateへrebaseされない。viewerからのcontrol messageは次のinputとして扱い、
 published payloadを遡及変更しない。
 
-過去のStep / R6別implementation chronologyは
+pre-audit implementation chronologyは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

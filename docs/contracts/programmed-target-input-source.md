@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-15
+last_verified: 2026-07-16
 canonical_for:
   - programmed target input source contract
   - RawInputFrame.metadata bridge for deterministic programmed target trajectories
@@ -147,9 +147,3 @@ programmed target の契約は interpreter 側で再定義しない。
 - OSC send
 - legacy import / execute
 - dependency change
-
-## 11. P6 handoff
-
-- `#139` では `sweep_x` の trajectory と metadata contract を固定する
-- `#140` で dry-run preset と WebSocket publisher runner を programmed input path に接続する
-- この文書は contract の正本であり、runtime wiring は追加しない

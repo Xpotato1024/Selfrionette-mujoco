@@ -3,7 +3,7 @@ status: canonical
 owner: evaluation
 last_verified: 2026-07-16
 canonical_for:
-  - R7-E follow-up P17 world/tool control-frame comparison design
+  - world/tool control-frame comparison design
 related:
   - docs/contracts/continuous-endpoint-velocity-input.md
   - docs/contracts/endpoint-metadata-vocabulary.md
@@ -16,10 +16,10 @@ related:
 
 ## 目的と研究質問
 
-この文書はP17 / #354が要求する最小の再現可能な評価と、P20 / #357へのlogging handoffを定義する。
+この文書は最小の再現可能な評価とversioned logging contractを定義する。
 runtime、input mapping、logging schema、experiment runner、statistical implementationは定義しない。
 
-P17はlimited exploratory pilot designである。研究質問は次のとおりである。
+本designはlimited exploratory pilot designである。研究質問は次のとおりである。
 
 > 事前検証済みの単一reset poseと、選択したworld-axis / initial-tool-axis target familyにおいて、
 > `world` controlと`tool` controlのmeasured task performanceにどのような差が観測されるか。
@@ -76,13 +76,13 @@ contact、grasping、collision task、device comparison、task definition中のt
 
 ## 記録するrepetitionとretry
 
-participantごと、control-frame conditionごとに、4 targetすべてへ同数のrecorded repetitionを割り当てる。P17では
+participantごと、control-frame conditionごとに、4 targetすべてへ同数のrecorded repetitionを割り当てる。本pilot designでは
 repetition countを決めない。data collection前のprotocol revisionで宣言するか、versioned pilot manifestでconfiguration
 として固定する。同じcountを両conditionへ適用する。practice trialはrecorded repetitionに数えない。
 
 recorded repetition orderはbalanceするか、両conditionで同じ規則を使うrecorded deterministic seedから生成する。
 outcome dataを見る前にpilot stopping rule、manifest-freeze condition、recorded repetition countを固定する。
-participant countとeffect sizeはP17では指定しない。
+participant countとeffect sizeは本pilot designでは指定しない。
 
 operator-caused timeout、hold、rejection、stale inputはfailed recorded trialとして保持し、retryしない。predeclared
 technical-invalid ruleを満たすtrialだけを、predeclared per-repetition limitまでretryできる。original invalid recordは
@@ -98,7 +98,7 @@ timeを与えず、unavailable measurementを明示できる。
 measured `tip` trajectoryが離れたperpendicular distanceの最大値をmeterで報告する。requested、resolved、predicted
 motionから計算しない。
 
-completion timeとfinal measured endpoint errorはdescriptionとdiagnostic review用にlogするが、P17の追加primary
+completion timeとfinal measured endpoint errorはdescriptionとdiagnostic review用にlogするが、追加primary
 outcomeではない。結果を見た後に新しいpreregistered design revisionなしでprimaryへ昇格しない。
 
 ## subjective evidence
@@ -131,7 +131,7 @@ block durationでfatigueを制限する。
 | fatigue | 同じrest / block-duration ruleで制御し、block/orderをanalysisに含める |
 | initial qposとtool orientation | trial前に同じvalidated valueへresetし、achieved valueをlogする。failed resetはreason付きで除外する |
 | target directionとdistance | 4-target manifestで固定・記録するが、このpilotではtask familyから分離しない。この交絡が解釈を制限する |
-| P6/P7 workspaceとmobility limitation | limited-pilot workspace gateで除外し、mobility evidenceとselected axisをconfiguration identityとしてlogする |
+| workspaceとmobility limitation | limited-pilot workspace gateで除外し、mobility evidenceとselected axisをconfiguration identityとしてlogする |
 | stale input、hold、rejection、unavailable measurement | status/reasonとしてlogする。predeclared technical-invalid ruleに該当しない限りprimary outcome failureとして残す |
 | cameraとvisual feedback | 同じcamera pose、overlay、target appearance、feedback latency/settingsで制御し、configuration identityをlogする |
 
@@ -139,23 +139,22 @@ block durationでfatigueを制限する。
 
 次のcheckがすべてpassするまでdata collectionを開始しない。
 
-1. P20が後述のhandoffを満たすversioned logging schemaを実装・検証している。
+1. experiment log contractが後述のhandoffを満たすversioned logging schemaを実装・検証している。
 2. requested、resolved、predicted、measured fieldをstatus/reason provenance付きで個別識別できる。
 3. frozen manifestの全targetが両control conditionでreset poseからreachableであることを、measured MuJoCo `tip`
    outcomeで確認している。
 4. initial/final tip poseとper-sample measured tip motionを利用でき、欠落をzeroではなくexplicit unavailable evidenceにする。
 5. world/tool conditionが`requested_control_frame`以外で同一のinput / motion settingを使うことを実証している。
-6. selected axisがP6 / #339とP7 / #341で既知のweak world-X/default-pose mobilityおよびnatural-motion limitationを
-   避け、P9 mobility diagnosticとmeasured pilotで両方向のadequate progressを確認している。
+6. selected axisが既知のweak world-X/default-pose mobilityおよびnatural-motion limitationを
+   避け、mobility diagnosticとmeasured pilotで両方向のadequate progressを確認している。
 
-P17はuniversal P6/P7 completionを必須にせず、**affected workspace外のlimited exploratory pilot**を採用する。P6/P7は
-既知のlocal mobility / natural-motion limitationであり、本designはbounded descriptive questionを扱う。avoidanceが有効
+本designはuniversal workspace completionを必須にせず、**affected workspace外のlimited exploratory pilot**を採用する。local mobility / natural-motion limitationであり、本designはbounded descriptive questionを扱う。avoidanceが有効
 なのは、frozen 4 targetすべてが同じmeasured reachability/progress checkをpassする場合だけである。non-collinearなmatched
-axisが一組もpassしなければ、P6/P7が解決するまでstudyをblockする。collection中にtargetを暗黙に弱めたり置換したりしない。
+axisが一組もpassしなければ、known workspace limitationが解決するまでstudyをblockする。collection中にtargetを暗黙に弱めたり置換したりしない。
 
-## P20 logging handoff
+## logging contract
 
-P20はwire/schema representation、versioning、unit、nullability、validationを定義する。少なくとも一つのrecoverable
+experiment log contractはwire/schema representation、versioning、unit、nullability、validationを定義する。少なくとも一つのrecoverable
 experiment record streamが次を提供しなければならない。
 
 - model、target-manifest、input/motion setting、camera/feedback setting、schema versionを含むsoftware revisionと
@@ -177,14 +176,14 @@ experiment record streamが次を提供しなければならない。
 - workload、ease、predictability、preference responseとsession/participant/blockのlink
 
 既存canonical field nameを優先し、experiment recordへ合わせるためだけのsynonymを作らない。既存canonical nameがない場合、
-P20はnew fieldのowner、frame、unit、lifecycle、unavailable-value policyを記録する。missing、held、rejected、stale、
+experiment log contractはnew fieldのowner、frame、unit、lifecycle、unavailable-value policyを記録する。missing、held、rejected、stale、
 unavailable valueをsuccessful zero motionとしてencodeしない。
 
 ## analysis policy
 
 control-frame x task-family patternをwithin-subject exploratory analysisで扱う。effect sizeとuncertaintyを報告するが、
 causal frame-task alignment effectとして解釈せず、main effectからuniversal superiorityを推論しない。本designではphysical
-direction、Jacobian mobility、workspace geometryをtask familyから分離できない。P17はparticipant countとeffect sizeを
+direction、Jacobian mobility、workspace geometryをtask familyから分離できない。本designはparticipant countとeffect sizeを
 指定しない。pilot dataはfeasibility、event rate、metric stability、variance、target suitability、後続power analysisへの
 inputを推定するものであり、confirmatory evidenceではない。
 
@@ -196,5 +195,5 @@ missing measured motionをrequested、resolved、predicted、zero motionで置�
 
 ## scope境界
 
-P17はdocumentationだけを変更する。runtime behavior、input mapping、transport/logging schema、experiment runner、
+本designはdocumentationだけを変更する。runtime behavior、input mapping、transport/logging schema、experiment runner、
 statistical code、viewer behavior、MuJoCo model、dependency、CI、hardware、serial、Arduino、OSC、robot outputは変更しない。

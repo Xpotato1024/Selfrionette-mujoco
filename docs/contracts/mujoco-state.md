@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-14
+last_verified: 2026-07-16
 canonical_for:
   - MuJoCoState contract
 related:
@@ -44,7 +44,7 @@ controller state、transport state、viewer stateではない。
 
 - `base_link`、`fore_arm_link`、`tip`はfast arm assetのcanonical model nameである。
 - `frame_index`はbackend stepごとに1増加する。
-- Step 5-Dでは、次のsnapshotを構築する前にbackendで`mj_step`を使用する。
+- 次のsnapshotを構築する前にbackendで`mj_step`を実行する。
 - backendは、後続の`apply_command()`が上書きするまでpending commandを保持する。
   また、snapshotをdirect qpos reflection contractと整合させるため、`mj_step`後に
   joint qposを再適用する。

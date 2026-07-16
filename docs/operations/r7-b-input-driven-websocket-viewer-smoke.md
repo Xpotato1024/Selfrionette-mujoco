@@ -2,8 +2,7 @@
 status: historical
 owner: operations
 last_verified: 2026-07-16
-canonical_for:
-  - R7-B input-driven WebSocket / viewer smoke procedure
+canonical_for: []
 related:
   - docs/contracts/r7-b-runtime-input-pipeline-contract.md
   - docs/operations/runtime-to-viewer-e2e-smoke.md

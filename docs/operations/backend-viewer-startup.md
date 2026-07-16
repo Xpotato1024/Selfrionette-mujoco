@@ -1,11 +1,11 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-15
+last_verified: 2026-07-16
 canonical_for:
   - backend / viewer startup guide
   - browser WebSocket connection guide
-  - R6-G-P2 README startup handoff
+  - backend / viewer startup procedure
 related:
   - README.md
   - apps/mujoco-viewer/README.md
@@ -19,7 +19,7 @@ related:
 ## 目的
 
 backend / dry-run / WebSocket publisher / Web viewer / browser 接続の導線を 1 か所に固定する。
-R6-G-P2 の README 拡充は、この手順への案内だけを担い、起動スクリプトの追加や viewer 機能の追加は行わない。
+READMEはこのcurrent手順への入口だけを担う。
 
 ## セットアップ
 
@@ -47,7 +47,7 @@ uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x
 - dry-run は NDJSON payload / backend path の確認用。
 - WebSocket server は起動しない。
 - browser viewer とは直接接続しない。
-- `sweep_x` は R6-F visual demo の deterministic replay fixture。
+- `sweep_x`はdeterministic replay fixture。
 
 ## WebSocket publisher
 
@@ -76,7 +76,7 @@ uv run python scripts/run_replay_mujoco_websocket_publisher.py `
 - publisher は browser page を開かない。
 - manual smoke では default `--steps 120` や `--steps 10000` のような長時間
   dynamics run を推奨しない。QACC warning が出る path は manual browser smoke
-  から外し、long-run MuJoCo stability は別 issue で扱う。
+  から外し、long-run MuJoCo stabilityはこのstartup smokeの判定外とする。
 - Publisher / transport smoke は publisher の起動、接続待ち、payload v0
   publish、no-client reason log を確認する範囲までとする。
 - Browser payload parse smoke は viewer が payload v0 を受信して diagnostic
@@ -178,7 +178,7 @@ LAN / Tailscale / public host:
 - `0.0.0.0` を browser URL に入れない。
 - port が埋まっている場合は別 port を使うか、既存プロセスを止める。
 
-## R6-F visual elements の観測
+## current visual elementsの観測
 
 - browser smoke は target / tip / error vector / arm skeleton / fast_arm mesh / DoF ring の観測入口。
 - まず status text と root attributes を確認する。
@@ -195,21 +195,8 @@ LAN / Tailscale / public host:
 - `0.0.0.0` を browser URL に入れている。
 
 詳細な切り分けは `docs/operations/browser-visual-smoke.md` と `docs/operations/live-viewer-smoke.md` を参照する。
-必要なら #106 / R6-G-P5 で troubleshooting を拡充する。
+詳細troubleshootingは`docs/operations/runtime-to-viewer-e2e-smoke.md`を参照する。
 詳細は `docs/operations/runtime-to-viewer-e2e-smoke.md` を参照する。
-
-## R6-G-P3 への handoff
-
-- R6-G-P2 では起動スクリプトや npm script は追加しない。
-- R6-G-P3 では、この README / docs 導線を実行するうえで script / wrapper / npm script の不足が残るかを確認する。
-- 既存 script と説明だけで loopback 導線は成立するため、今回の結論は「不足なし」。
-- 補完判断の証拠は[起動script gap監査](../reports/audits/r6-g-p3-startup-script-gap-audit.md)に固定する。
-- Windows / PowerShell 向けの短い wrapper、`0.0.0.0` bind と browser URL を同時に案内する補助、public host / LAN / Tailscale 向け URL 案内補助は、R6-G-P4 以降で必要性が出た場合のみ扱う。
-- それらの案内をまとめる場合は `docs/operations/mujoco-viewer-dev-launcher.md` を正本にする。
-- host / port / public host contract の詳細は
-  `docs/operations/websocket-host-port-contract.md` を参照する。
-- package dependency は追加しない。
-- viewer visual feature は追加しない。
 
 ## Non-Goals
 
@@ -231,35 +218,6 @@ LAN / Tailscale / public host:
 - transport schema breaking change
 - Rapier reintroduction
 - `@types/three` reintroduction
-
-## Scope Check
-
-```text
-parent issue: #101
-depends on: #102
-phase slice: R6-G-P2
-README startup guide added: yes
-backend / dry-run startup documented: yes
-viewer startup documented: yes
-browser connection documented: yes
-WebSocket URL documented: yes
-localhost / 0.0.0.0 / public host documented: yes
-R6-F visual smoke observation documented: yes
-startup script implemented: no
-new visual feature added: no
-legacy changed: no
-legacy imported/executed: no
-viewer-side FK/IK added: no
-viewer-side qpos recompute added: no
-browser-side MuJoCo model loading added: no
-payload schema breaking change: no
-transport schema breaking change: no
-hardware validation included: no
-serial port opened: no
-OSC sent: no
-Rapier reintroduced: no
-@types/three reintroduced: no
-```
 
 ## 3D Visual Smoke
 

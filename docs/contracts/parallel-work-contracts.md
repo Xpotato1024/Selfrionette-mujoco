@@ -39,5 +39,5 @@ parallel workはこのflowとownerを分裂させない。schema変更、composi
 未対応shape、unknown profile、unavailable measurementを暗黙fallbackで吸収しない。hardware / serial /
 deploymentは専用taskとoperator gateがない限りscope外とする。
 
-過去のStep / R6別handoff一覧は
+pre-auditのintegration chronologyは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

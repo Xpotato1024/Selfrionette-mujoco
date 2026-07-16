@@ -110,7 +110,3 @@ live serial は manual-only とし、Codex 実行・自動テスト・CI では 
 - viewer integration
 - MuJoCo backend integration
 - IK / FK implementation changes
-
-## 次段
-
-`#204` で WebSocket / viewer smoke と completion audit を進める。

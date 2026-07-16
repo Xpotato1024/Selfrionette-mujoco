@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-22
+last_verified: 2026-07-16
 canonical_for:
   - R7-C viewer fixture demo procedure
 related:
@@ -20,7 +20,7 @@ related:
 
 ## 目的
 
-この文書は、R7-C の manual validation で使う viewer launch, fixture demo, keyboard demo の手順を固定する。
+この文書はmanual validationで使う viewer launch, fixture demo, keyboard demo の手順を固定する。
 ここでいう demo は docs-only の procedure であり、CI や bot が actual browser, WebSocket server, serial, COM, hardware を触る手順ではない。
 
 ## 前提
@@ -164,30 +164,3 @@ Endpoint evaluation が存在する場合は、overlay の次の行を読む。
 
 CI はこの手順の実地部分を実行しない。
 CI / tests で行うのは docs-only validation と contract smoke までであり、actual browser, WebSocket server, serial, COM, hardware access は行わない。
-
-## handoff
-
-この procedure は #233 の手順固定で完結する。
-次は #234 で keyboard / replay demo operation package を整備し、
-この viewer / fixture 手順から再利用できる no-hardware demo command と
-artifact / log 命名方針を固定する。
-presentation では `docs/reports/implementation/r7-c-presentation-demo-notes.md` から本手順を参照する。
-
-## Scope Check
-
-```text
-viewer launch documented: yes
-fixture demo documented: yes
-keyboard demo documented: yes
-expected ui / overlay items documented: yes
-desired_endpoint_m / target_position_m / endpoint_evaluation reading documented: yes
-CI actual browser access: no
-CI actual WebSocket server access: no
-CI serial access: no
-CI COM access: no
-CI hardware access: no
-serial port opened: no
-OSC sent: no
-hardware validation included: no
-handoff to #234: yes
-```

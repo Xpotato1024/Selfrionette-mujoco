@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-07-16
 canonical_for:
   - model asset contract
 related:
@@ -29,11 +29,9 @@ canonical contractである。
 - `scene.xml`は同じdirectoryの`arm.xml`をincludeしなければならない。
 - STL filenameは、既存の`Sholder`という綴りを含め、legacy asset名を維持する。
 - joint、body、siteの名前はmodel contractの一部であり、stable identifierとして扱う。
-- このadoption stepで許可するのはpath修正だけであり、model semanticsの変更は禁止する。
-- Step 4-Bではheadless model loaderのcanonical load pathとして
-  `assets/mujoco/fast_arm/scene.xml`を使用する。
+- asset path修正とmodel semantics変更を同じ変更として暗黙に扱わない。
+- headless model loaderのcanonical load pathは`assets/mujoco/fast_arm/scene.xml`である。
 - MuJoCoのimportは`src/selfrionette/mujoco_backend/`内に限定する。
-- loaderとinspection helperは、まだruntimeへ接続しない。
-- `MuJoCoState` snapshot生成は#10へ送る。
+- state snapshotのownershipはbackend / runtime contractに従う。
 
 他の文書ではasset ruleを再記載せず、この文書へlinkする。
