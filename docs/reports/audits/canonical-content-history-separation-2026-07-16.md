@@ -13,7 +13,7 @@ related:
 ## 目的とprovenance
 
 PR #401の独立監査に対し、pathだけではなく本文を再監査した記録である。抽出対象の修正前本文は、
-#401のpre-audit commit `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d` にある各source pathから
+#401のpre-audit commit `c208feac7453417afd9ee01d051d28902db0223d` にある各source pathから
 UTF-8のまま取得し、後半へ全文保存した。数値、contract、過去事実は推測で書き換えていない。
 
 検索起点は `Step`、`R6-`、`R7-`、`P<number>`、`Issue` / `#<number>`、
@@ -106,7 +106,7 @@ provenanceとhistorical implementation evidenceの確認に使用する。
 
 ### `docs/architecture/data-flow.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -454,7 +454,7 @@ rendering-onlyを維持する。
 
 ### `docs/architecture/development-policy.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -512,7 +512,7 @@ architecture文書を更新し、その後で文書に定義したlayerへ実装
 
 ### `docs/architecture/mujoco-skeleton-first-spec.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -700,7 +700,7 @@ input behaviorは導入しなかった。Step 4ではstub implementationを一�
 
 ### `docs/architecture/runtime-composition.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -978,7 +978,7 @@ public API redesign、transport/viewer code変更、motion behavior変更、P18/
 
 ### `docs/contracts/forward-kinematics.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -1111,7 +1111,7 @@ legacy imported/executed: no
 
 ### `docs/contracts/inverse-kinematics.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -1233,7 +1233,7 @@ legacy imported/executed: no
 
 ### `docs/contracts/kinematics-command-contract.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -1463,7 +1463,7 @@ legacy imported/executed: no
 
 ### `docs/contracts/motion-command.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -1570,7 +1570,7 @@ wiring checkで使用するno-op stubはcommandを適用しないため、comman
 
 ### `docs/contracts/mujoco-model-name-contract.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -1690,7 +1690,7 @@ site / body 名の推定はこの issue で固定した helper を通す。
 
 ### `docs/contracts/parallel-work-contracts.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -1859,7 +1859,7 @@ R6-B-P4ではviewer-side contractがclose済みであることをauditする。
 
 ### `docs/contracts/r7-a-lite-serial-frame-contract.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -2169,7 +2169,7 @@ normalized input intentへ変換する。
 
 ### `docs/contracts/r7-b-runtime-input-pipeline-contract.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -2459,7 +2459,7 @@ R7-B の実装順序と後続 issue の責務は次のとおり。
 
 ### `docs/contracts/robot-profile-runtime-viewer-profile.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -2641,7 +2641,7 @@ payload schema、Viewer Profile compatibility boundary、browser rendering-only 
 
 ### `docs/contracts/runtime-forward-kinematics-evaluation.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
@@ -2769,7 +2769,7 @@ hardware validation: no
 
 ### `docs/contracts/target-marker-desired-endpoint.md`
 
-- source commit: `c208fea7ac0f5d62453bb8877a8a14ce30ec8e3d`
+- source commit: `c208feac7453417afd9ee01d051d28902db0223d`
 - extraction: 修正前canonical本文の全文copy
 
 ~~~markdown
