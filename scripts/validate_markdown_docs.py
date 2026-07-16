@@ -169,7 +169,7 @@ def parse_inventory_snapshot(
 def changed_paths(base_ref: str | None) -> set[str]:
     if not base_ref:
         return set()
-    output = git("diff", "--name-status", "-M", f"{base_ref}...HEAD")
+    output = git("diff", "--name-status", "-M", f"{base_ref}..HEAD")
     changed: set[str] = set()
     for line in output.splitlines():
         parts = line.split("\t")
@@ -184,7 +184,7 @@ def added_lines(base_ref: str | None, path: str) -> str:
     if not base_ref:
         return ""
     output = git(
-        "diff", "--unified=0", f"{base_ref}...HEAD", "--", path, check=False
+        "diff", "--unified=0", f"{base_ref}..HEAD", "--", path, check=False
     )
     return "\n".join(
         line[1:]
