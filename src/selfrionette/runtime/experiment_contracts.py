@@ -36,6 +36,33 @@ class PluginSelection:
             raise ValueError("contract_version must be positive")
 
 
+class PluginAxis(str, Enum):
+    ROBOT_BUNDLE = "robot_bundle"
+    ENVIRONMENT = "environment"
+    CONTROL_MAPPING = "control_mapping"
+    TASK = "task"
+    EVALUATION = "evaluation"
+
+
+@dataclass(frozen=True, slots=True)
+class PluginParameterOwner:
+    axis: PluginAxis
+    selection: PluginSelection
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.axis, PluginAxis):
+            raise TypeError("plugin parameter owner axis must use PluginAxis")
+        if not isinstance(self.selection, PluginSelection):
+            raise TypeError("plugin parameter owner selection must use PluginSelection")
+
+    @property
+    def canonical_id(self) -> str:
+        return (
+            f"{self.axis.value}:{self.selection.plugin_id}"
+            f"/v{self.selection.contract_version}"
+        )
+
+
 class EvidenceStatus(str, Enum):
     REQUESTED = "requested"
     RESOLVED = "resolved"
@@ -151,8 +178,40 @@ class EnvironmentRole:
     unit: str
 
     def __post_init__(self) -> None:
+        if not isinstance(self.role, SemanticRole):
+            raise TypeError("environment role must use SemanticRole")
         if not self.object_kind or not self.frame or not self.unit:
             raise ValueError("environment role kind, frame, and unit must not be empty")
+
+
+ROLE_ATTRIBUTE_WILDCARD = "*"
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class SemanticRoleRequirement:
+    role: SemanticRole
+    object_kind: str
+    frame: str
+    unit: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.role, SemanticRole):
+            raise TypeError("semantic role requirement must use SemanticRole")
+        if not self.object_kind or not self.frame or not self.unit:
+            raise ValueError(
+                "semantic role requirement kind, frame, and unit must not be empty; "
+                "use '*' as an explicit wildcard"
+            )
+
+    def matches(self, descriptor: EnvironmentRole) -> bool:
+        return self.role == descriptor.role and all(
+            required == ROLE_ATTRIBUTE_WILDCARD or required == actual
+            for required, actual in (
+                (self.object_kind, descriptor.object_kind),
+                (self.frame, descriptor.frame),
+                (self.unit, descriptor.unit),
+            )
+        )
 
 
 @runtime_checkable
@@ -233,12 +292,12 @@ class EnvironmentPlugin:
     scene_provider: EnvironmentSceneProvider
     roles: tuple[EnvironmentRole, ...]
     required_robot_capabilities: frozenset[VersionedIdentity] = field(default_factory=frozenset)
-    required_robot_roles: frozenset[SemanticRole] = field(default_factory=frozenset)
+    required_robot_roles: frozenset[SemanticRoleRequirement] = field(default_factory=frozenset)
     parameter_contract: ParameterContract = ParameterContract()
     produced_evidence: frozenset[VersionedIdentity] = field(default_factory=frozenset)
     backend_scene_owner: str = "runtime"
     viewer_presentation_reference: str | None = None
-    compatible_robot_bundle_ids: frozenset[str] = field(default_factory=frozenset)
+    compatible_robot_bundles: frozenset[VersionedIdentity] = field(default_factory=frozenset)
     compatible_backend_kinds: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
@@ -249,6 +308,20 @@ class EnvironmentPlugin:
         roles = tuple(item.role for item in self.roles)
         if len(roles) != len(set(roles)):
             raise ValueError("environment plugin roles must be unique")
+        if any(
+            not isinstance(requirement, SemanticRoleRequirement)
+            for requirement in self.required_robot_roles
+        ):
+            raise TypeError(
+                "environment required robot roles must use SemanticRoleRequirement"
+            )
+        if any(
+            not isinstance(identity, VersionedIdentity)
+            for identity in self.compatible_robot_bundles
+        ):
+            raise TypeError(
+                "environment compatible Robot Bundles must use VersionedIdentity"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,12 +342,12 @@ class TaskPlugin:
     identity: VersionedIdentity
     lifecycle: TaskLifecycleStrategy
     required_robot_capabilities: frozenset[VersionedIdentity]
-    required_environment_roles: frozenset[SemanticRole]
+    required_semantic_roles: frozenset[SemanticRoleRequirement]
     parameter_contract: ParameterContract
     task_event_identity: VersionedIdentity
     produced_evidence: frozenset[VersionedIdentity]
-    compatible_robot_bundle_ids: frozenset[str] = field(default_factory=frozenset)
-    compatible_environment_ids: frozenset[str] = field(default_factory=frozenset)
+    compatible_robot_bundles: frozenset[VersionedIdentity] = field(default_factory=frozenset)
+    compatible_environments: frozenset[VersionedIdentity] = field(default_factory=frozenset)
     compatible_backend_kinds: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
@@ -282,6 +355,21 @@ class TaskPlugin:
             raise TypeError("task plugin requires a typed lifecycle strategy")
         if self.task_event_identity not in self.produced_evidence:
             raise ValueError("task event identity must be declared as produced evidence")
+        if any(
+            not isinstance(requirement, SemanticRoleRequirement)
+            for requirement in self.required_semantic_roles
+        ):
+            raise TypeError("task required roles must use SemanticRoleRequirement")
+        if any(
+            not isinstance(identity, VersionedIdentity)
+            for identity in self.compatible_robot_bundles
+        ):
+            raise TypeError("task compatible Robot Bundles must use VersionedIdentity")
+        if any(
+            not isinstance(identity, VersionedIdentity)
+            for identity in self.compatible_environments
+        ):
+            raise TypeError("task compatible environments must use VersionedIdentity")
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,11 +445,25 @@ class EvaluationPlugin:
                     provenance=self.provenance,
                     reason=f"required evidence invalid: {identity.canonical_id}",
                 )
-        return self.metric_deriver.derive(
+        result = self.metric_deriver.derive(
             evidence,
             parameters,
             provenance=self.provenance,
         )
+        if not isinstance(result, MetricResult):
+            raise TypeError("evaluation strategy must return MetricResult")
+        if result.metric_id != self.identity:
+            raise ValueError(
+                "evaluation metric identity mismatch: "
+                f"expected {self.identity.canonical_id!r}, "
+                f"got {result.metric_id.canonical_id!r}"
+            )
+        if result.provenance != self.provenance:
+            raise ValueError(
+                "evaluation metric provenance mismatch: "
+                f"expected {self.provenance!r}, got {result.provenance!r}"
+            )
+        return result
 
 
 __all__ = [
@@ -380,8 +482,12 @@ __all__ = [
     "MetricResult",
     "ParameterContract",
     "ParameterField",
+    "PluginAxis",
+    "PluginParameterOwner",
     "PluginSelection",
+    "ROLE_ATTRIBUTE_WILDCARD",
     "SemanticRole",
+    "SemanticRoleRequirement",
     "TaskLifecycleStrategy",
     "TaskPlugin",
     "TaskTerminalClassification",

@@ -103,6 +103,9 @@ class ProfileEndpointSceneRoleProvider:
                 backend_kind=self.profile.backend_kind,
                 target_kind=target_kind,
                 target_id=target_id,
+                object_kind="robot_endpoint",
+                frame=self.profile.coordinate_units.coordinate_frame,
+                unit=self.profile.coordinate_units.position_unit,
             ),
         )
 

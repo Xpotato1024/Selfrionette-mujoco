@@ -66,6 +66,10 @@ def test_runtime_public_surface_exposes_generic_composition_not_fast_arm_bundle(
         "EvaluationPlugin",
         "ExperimentPluginManifest",
         "ExperimentPluginRegistries",
+        "PluginAxis",
+        "PluginParameterOwner",
+        "EvidenceProducerBinding",
+        "SemanticRoleRequirement",
         "compose_experiment",
         "resolve_robot_bundle",
     ):

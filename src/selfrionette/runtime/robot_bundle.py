@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 
 from selfrionette.motion.base import MotionGenerator
 from selfrionette.robot_profile import RobotProfile
 from selfrionette.runtime.experiment_contracts import (
     CanonicalEvidence,
+    ParameterContract,
     SemanticRole,
     VersionedIdentity,
 )
@@ -51,9 +54,24 @@ class SemanticRoleBinding:
     backend_kind: str
     target_kind: str
     target_id: str
+    object_kind: str
+    frame: str
+    unit: str
 
     def __post_init__(self) -> None:
-        if not self.backend_kind or not self.target_kind or not self.target_id:
+        if not isinstance(self.role, SemanticRole):
+            raise TypeError("semantic role binding must use SemanticRole")
+        if any(
+            not value
+            for value in (
+                self.backend_kind,
+                self.target_kind,
+                self.target_id,
+                self.object_kind,
+                self.frame,
+                self.unit,
+            )
+        ):
             raise ValueError("semantic role binding fields must not be empty")
 
 
@@ -114,14 +132,16 @@ class ContactEvidenceProvider(Protocol):
     ) -> tuple[CanonicalEvidence, ...]: ...
 
 
-CAPABILITY_PROVIDER_TYPES: dict[VersionedIdentity, type] = {
-    RESET_INITIAL_STATE_V1: ResetInitialStateProvider,
-    ENDPOINT_POSE_V1: EndpointPoseProvider,
-    ENDPOINT_COMMAND_V1: EndpointCommandProvider,
-    QPOS_FEASIBILITY_V1: QposFeasibilityProvider,
-    SCENE_ROLE_BINDING_V1: SceneRoleBindingProvider,
-    CONTACT_EVIDENCE_V1: ContactEvidenceProvider,
-}
+CAPABILITY_PROVIDER_TYPES: Mapping[VersionedIdentity, type] = MappingProxyType(
+    {
+        RESET_INITIAL_STATE_V1: ResetInitialStateProvider,
+        ENDPOINT_POSE_V1: EndpointPoseProvider,
+        ENDPOINT_COMMAND_V1: EndpointCommandProvider,
+        QPOS_FEASIBILITY_V1: QposFeasibilityProvider,
+        SCENE_ROLE_BINDING_V1: SceneRoleBindingProvider,
+        CONTACT_EVIDENCE_V1: ContactEvidenceProvider,
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +170,7 @@ class RobotBundle:
     profile: RobotProfile
     runtime_plugin: RobotRuntimePlugin
     capability_providers: tuple[CapabilityProviderBinding, ...]
+    parameter_contract: ParameterContract = ParameterContract()
 
     def __post_init__(self) -> None:
         validate_robot_profile_plugin_consistency(

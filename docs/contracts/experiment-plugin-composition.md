@@ -47,9 +47,12 @@ registryの登録順とID一覧はdeterministicである。
 - Control Mapping Plugin selection
 - Task Plugin selection
 - Evaluation Plugin selectionのordered tuple
-- plugin IDに紐づくtyped parameter values
+- `PluginParameterOwner(plugin axis, plugin ID, contract version)`に紐づくtyped parameter values
 
-同じevaluatorの重複選択、同じpluginへのparameter重複、未選択pluginへのparameterは拒否する。
+parameter ownerは5軸のselection identity全体を所有者とし、raw plugin IDだけでは識別しない。
+異なる軸で同じIDを選べる一方、ownerのaxis、ID、versionのいずれかがselectionと一致しない場合、
+同じownerへのparameter重複、未選択pluginへのparameterはstartup failureとして拒否する。
+同じevaluatorの重複選択も拒否する。
 R7-G-P1 / #405とR7-H-P1 / #411は、software revision、condition、canonical serializationを
 含む上位manifestを追加できるが、この5軸selectionを別の暗黙規則へ置き換えない。
 
@@ -72,7 +75,9 @@ current capability identityとtyped providerは次のとおりである。
 
 `CapabilityProviderBinding`はcapability identityごとのexpected Protocolとprovider identityを
 runtimeで照合する。一つのbundleで同じcapabilityを複数providerが宣言した場合はambiguousとして
-拒否する。未提供capabilityへのlookupは例外であり、zero、empty、no-opを返さない。
+拒否する。capability identityからexpected Protocolへのcontract mappingはimmutableであり、
+新しいcapabilityはtyped provider contractとの対応を明示登録する。未登録capabilityと未提供
+capabilityへのlookupは例外であり、zero、empty、no-opを返さない。
 
 共通処理は`NamedKeyframeInitialStateProvider`、`RuntimeEndpointPoseProvider`、
 `RuntimeEndpointCommandProvider`、`RuntimeQposFeasibilityProvider`、
@@ -89,14 +94,16 @@ semantic roleはbackend固有名と分離したidentityである。current gener
 
 - typed `EnvironmentSceneProvider`によるruntime-owned compose/reset
 - uniqueな`EnvironmentRole`（object kind、frame、unit）
-- required robot capabilityとrequired robot semantic role
+- required robot capabilityとtyped `SemanticRoleRequirement`
 - geometry、pose、mass、material、friction、contact parameter等を表すstrict `ParameterContract`
 - produced canonical evidence identity
-- compatible Robot Bundle ID / backend kind
+- compatible Robot Bundleのexact `VersionedIdentity` / backend kind
 - optional viewer presentation reference
 
 environment roleとrobot roleが同じsemantic roleを重複提供した場合は、暗黙優先順位を付けず
-ambiguousとして拒否する。role不足もstartup failureである。
+ambiguousとして拒否する。`SemanticRoleRequirement`はrole名に加えてobject kind、frame、unitを
+要求し、`EnvironmentRole`またはrobot bindingとの一致をreadinessで検証する。任意の属性を許す場合は
+省略せず明示的な`*` wildcardを指定する。missing roleと各属性の不一致はstartup failureである。
 
 ## mappingとtask
 
@@ -107,17 +114,21 @@ mappingはrequired Robot capabilityを宣言し、利用不能時に別mapping�
 `TaskPlugin`は次を宣言する。
 
 - required Robot capability
-- required semantic role
+- typed `SemanticRoleRequirement`（role、object kind、frame、unit）
 - strict parameter contract
 - typed lifecycle strategy
 - versioned canonical task event identity
 - produced evidence identity
 - `running` / `success` / `failure` / `technical_invalid`のterminal classification boundary
-- compatible Robot Bundle / Environment / backend identity
+- compatible Robot Bundle / Environmentのexact `VersionedIdentity`とbackend identity
 
 canonical task event identityは`produced_evidence`にも含める。Task production codeはfast_armの
 joint名、geom名、site名、solver classを参照せず、capability、semantic role、canonical evidenceを
 入力とする。
+
+Robot Bundle、Environment、Taskのcompatible identityが空集合の場合はgeneric/unconstrainedとして
+扱う。指定された場合はraw nameではなく`VersionedIdentity`をexact matchし、同名でもcontract
+versionが異なるselectionを拒否する。本foundationではversion rangeを導入しない。
 
 ## canonical evidenceとevaluation
 
@@ -135,24 +146,37 @@ joint名、geom名、site名、solver classを参照せず、capability、semant
 R7-G / R7-H固有fieldはこのfoundationでは固定せず、後続pluginが新しいversioned identityとして
 追加する。
 
+readinessはrobot/environment/mapping/taskの各`produced_evidence`を単なる集合和へ潰さず、
+`EvidenceProducerBinding(producer axis, producer plugin identity, evidence identity)`へ解決する。
+同じevidence identityを複数pluginが宣言した場合はambiguous producerとして拒否する。
+`ResolvedExperimentComposition`はこのbindingと互換用の`available_evidence` viewを公開し、#405は
+freeze identityへproducerを記録できる。複数producerを許すaggregation contractは本Issueに含めない。
+
 `EvaluationPlugin`はrequired evidence、strict parameter contract、missing / unavailable /
 invalidごとの`EvidencePolicy`、typed deterministic metric strategy、provenanceを宣言する。
 required evidenceのidentityがtask/environment/mapping/robot extensionのproduced evidenceに
 存在しない場合はstartup readinessで拒否する。実行時にevidenceがmissing/unavailable/invalidの
 場合はdeclared policyに従い、default値を捏造しない。metricを返せないpolicyではvalueなしの
 `unavailable`または`invalid` resultとreasonを返す。
+`EvaluationPlugin.derive_metric()`はstrategyが返した`MetricResult`について、metric identityが
+selected Evaluation Plugin identityと一致し、provenanceがplugin宣言値と一致することも検証する。
+`unavailable` / `invalid`のvalueなし・reason必須invariantは`MetricResult` constructionで維持する。
 
 ## composition readiness
 
 `compose_experiment()`は実行開始前に次の順で検証する。
 
 1. 5軸すべてをknown-ID registryからversion一致でresolveする。
-2. parameter owner、required field、unknown field、runtime typeを検証する。
+2. parameter ownerのaxis / ID / versionがselectionと完全一致することと、required field、unknown
+   field、runtime typeを検証する。
 3. environment / mapping / taskのrequired capabilityをunionし、Robot Bundleのtyped providerを解決する。
-4. robot/environment semantic roleを統合し、missingとambiguous bindingを拒否する。
-5. Robot Bundle / backend / Environment / Task compatibilityを検証する。
-6. robot/environment/mapping/taskのproduced evidenceを統合し、各evaluator requirementを検証する。
-7. resolved capability、role、available evidenceをimmutable readiness resultとして返す。
+4. robot/environment semantic roleをtyped descriptorとして統合し、missing、attribute mismatch、
+   ambiguous bindingを拒否する。
+5. Robot Bundle / Environment / Taskのexact versioned compatibilityとbackend compatibilityを検証する。
+6. robot/environment/mapping/taskのproduced evidenceをproducer bindingへ解決し、ambiguous producerと
+   evaluator requirement mismatchを拒否する。
+7. resolved capability、typed role、evidence producer binding、available evidenceをimmutable readiness
+   resultとして返す。
 
 このboundaryはrunner execution、scene spawn、physics step、task advance、metric artifact出力を行わない。
 readiness後に不足へ気付く設計や、特定robot/task/evaluatorの暗黙選択を許可しない。
@@ -172,11 +196,13 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
 
 ## 後続Issueへのpublic boundary
 
-- #405は`ExperimentPluginManifest`、`PluginSelection`、`VersionedPluginRegistry`、
-  `ExperimentPluginRegistries`、`compose_experiment()`を使い、world/tool条件の5軸selectionと
-  readiness identityを固定できる。
-- #411は`EnvironmentPlugin`、`EnvironmentRole`、`TaskPlugin`、`EvaluationPlugin`、
-  `contact_evidence/v1` extension pointを使い、cube/contact固有fieldをgeneric contractへ追加できる。
+- #405は`ExperimentPluginManifest`、`PluginParameterOwner`、`VersionedPluginRegistry`、
+  `ExperimentPluginRegistries`、`compose_experiment()`、`EvidenceProducerBinding`を使い、world/tool条件の
+  5軸selection、axis-scoped parameter、version compatibility、evidence producerをfreeze identityへ
+  固定できる。
+- #411は`EnvironmentPlugin`、`EnvironmentRole`、`SemanticRoleRequirement`、`TaskPlugin`、
+  `EvaluationPlugin`、`contact_evidence/v1` extension pointを使い、typed object/frame/unit requirementと
+  cube/contact固有fieldをgeneric contractへ追加できる。
 - どちらもTask/Evaluationへfast_arm固有nameまたはsolver classを持ち込まず、viewerへ判定を追加しない。
 
 ## non-goalsと主張範囲

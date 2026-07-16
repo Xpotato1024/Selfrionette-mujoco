@@ -8,9 +8,14 @@ from dataclasses import dataclass
 from selfrionette.runtime.experiment_contracts import (
     ControlMappingPlugin,
     EnvironmentPlugin,
+    EnvironmentRole,
     EvaluationPlugin,
+    PluginAxis,
+    PluginParameterOwner,
     PluginSelection,
+    ROLE_ATTRIBUTE_WILDCARD,
     SemanticRole,
+    SemanticRoleRequirement,
     TaskPlugin,
     VersionedIdentity,
 )
@@ -20,12 +25,27 @@ from selfrionette.runtime.robot_bundle import RobotBundle
 
 @dataclass(frozen=True, slots=True)
 class PluginParameters:
-    plugin_id: str
+    owner: PluginParameterOwner
     values: Mapping[str, object]
 
     def __post_init__(self) -> None:
-        if not self.plugin_id:
-            raise ValueError("plugin parameter owner ID must not be empty")
+        if not isinstance(self.owner, PluginParameterOwner):
+            raise TypeError("plugin parameter owner must use PluginParameterOwner")
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceProducerBinding:
+    producer_axis: PluginAxis
+    producer_identity: VersionedIdentity
+    evidence_identity: VersionedIdentity
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.producer_axis, PluginAxis):
+            raise TypeError("evidence producer axis must use PluginAxis")
+        if not isinstance(self.producer_identity, VersionedIdentity):
+            raise TypeError("evidence producer identity must use VersionedIdentity")
+        if not isinstance(self.evidence_identity, VersionedIdentity):
+            raise TypeError("evidence identity must use VersionedIdentity")
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,8 +61,8 @@ class ExperimentPluginManifest:
         evaluator_ids = tuple(selection.plugin_id for selection in self.evaluators)
         if len(evaluator_ids) != len(set(evaluator_ids)):
             raise ValueError("duplicate evaluator selection")
-        parameter_ids = tuple(item.plugin_id for item in self.parameters)
-        if len(parameter_ids) != len(set(parameter_ids)):
+        parameter_owners = tuple(item.owner for item in self.parameters)
+        if len(parameter_owners) != len(set(parameter_owners)):
             raise ValueError("duplicate plugin parameter owner")
 
 
@@ -65,13 +85,34 @@ class ResolvedExperimentComposition:
     evaluators: tuple[EvaluationPlugin, ...]
     resolved_capabilities: frozenset[VersionedIdentity]
     resolved_roles: frozenset[SemanticRole]
+    resolved_role_descriptors: tuple[EnvironmentRole, ...]
     available_evidence: frozenset[VersionedIdentity]
+    evidence_producers: tuple[EvidenceProducerBinding, ...]
+
+    def evidence_producer(
+        self, evidence_identity: VersionedIdentity
+    ) -> EvidenceProducerBinding:
+        matches = tuple(
+            binding
+            for binding in self.evidence_producers
+            if binding.evidence_identity == evidence_identity
+        )
+        if not matches:
+            raise ValueError(
+                f"no canonical evidence producer for {evidence_identity.canonical_id!r}"
+            )
+        if len(matches) != 1:
+            raise ValueError(
+                f"ambiguous canonical evidence producer for "
+                f"{evidence_identity.canonical_id!r}"
+            )
+        return matches[0]
 
 
-def _parameters_by_id(
+def _parameters_by_owner(
     manifest: ExperimentPluginManifest,
-) -> dict[str, Mapping[str, object]]:
-    return {item.plugin_id: item.values for item in manifest.parameters}
+) -> dict[PluginParameterOwner, Mapping[str, object]]:
+    return {item.owner: item.values for item in manifest.parameters}
 
 
 def _validate_compatibility(
@@ -79,11 +120,10 @@ def _validate_compatibility(
     environment: EnvironmentPlugin,
     task: TaskPlugin,
 ) -> None:
-    bundle_id = robot.identity.name
     backend_kind = robot.profile.backend_kind
     if (
-        environment.compatible_robot_bundle_ids
-        and bundle_id not in environment.compatible_robot_bundle_ids
+        environment.compatible_robot_bundles
+        and robot.identity not in environment.compatible_robot_bundles
     ):
         raise ValueError("robot/environment compatibility mismatch")
     if (
@@ -91,15 +131,75 @@ def _validate_compatibility(
         and backend_kind not in environment.compatible_backend_kinds
     ):
         raise ValueError("robot backend/environment compatibility mismatch")
-    if task.compatible_robot_bundle_ids and bundle_id not in task.compatible_robot_bundle_ids:
+    if (
+        task.compatible_robot_bundles
+        and robot.identity not in task.compatible_robot_bundles
+    ):
         raise ValueError("robot/task compatibility mismatch")
     if (
-        task.compatible_environment_ids
-        and environment.identity.name not in task.compatible_environment_ids
+        task.compatible_environments
+        and environment.identity not in task.compatible_environments
     ):
         raise ValueError("environment/task compatibility mismatch")
     if task.compatible_backend_kinds and backend_kind not in task.compatible_backend_kinds:
         raise ValueError("robot backend/task compatibility mismatch")
+
+
+def _validate_role_requirements(
+    requirements: frozenset[SemanticRoleRequirement],
+    descriptors_by_role: Mapping[SemanticRole, EnvironmentRole],
+) -> None:
+    for requirement in sorted(
+        requirements,
+        key=lambda item: (item.role.name, item.object_kind, item.frame, item.unit),
+    ):
+        descriptor = descriptors_by_role.get(requirement.role)
+        if descriptor is None:
+            raise ValueError(
+                f"semantic role binding failure: missing {requirement.role.name!r}"
+            )
+        mismatches = tuple(
+            name
+            for name, expected, actual in (
+                ("object kind", requirement.object_kind, descriptor.object_kind),
+                ("frame", requirement.frame, descriptor.frame),
+                ("unit", requirement.unit, descriptor.unit),
+            )
+            if expected != ROLE_ATTRIBUTE_WILDCARD and expected != actual
+        )
+        if mismatches:
+            raise ValueError(
+                f"semantic role compatibility mismatch for {requirement.role.name!r}: "
+                f"{', '.join(mismatches)}"
+            )
+
+
+def _build_evidence_producer_bindings(
+    producers: tuple[
+        tuple[PluginAxis, VersionedIdentity, frozenset[VersionedIdentity]], ...
+    ],
+) -> tuple[EvidenceProducerBinding, ...]:
+    by_evidence: dict[VersionedIdentity, EvidenceProducerBinding] = {}
+    bindings: list[EvidenceProducerBinding] = []
+    for axis, producer_identity, evidence_identities in producers:
+        for evidence_identity in sorted(evidence_identities):
+            binding = EvidenceProducerBinding(
+                producer_axis=axis,
+                producer_identity=producer_identity,
+                evidence_identity=evidence_identity,
+            )
+            previous = by_evidence.get(evidence_identity)
+            if previous is not None:
+                raise ValueError(
+                    "ambiguous canonical evidence producer for "
+                    f"{evidence_identity.canonical_id!r}: "
+                    f"{previous.producer_axis.value}:"
+                    f"{previous.producer_identity.canonical_id}, "
+                    f"{axis.value}:{producer_identity.canonical_id}"
+                )
+            by_evidence[evidence_identity] = binding
+            bindings.append(binding)
+    return tuple(bindings)
 
 
 def compose_experiment(
@@ -127,16 +227,41 @@ def compose_experiment(
                 f"expected {expected_type.__name__}, got {type(plugin).__name__}"
             )
 
-    parameter_values = _parameters_by_id(manifest)
-    selected_plugins = (environment, mapping, task, *evaluators)
-    selected_ids = {plugin.identity.name for plugin in selected_plugins}
-    unknown_parameter_owners = tuple(sorted(set(parameter_values) - selected_ids))
+    selected_plugins = (
+        (
+            PluginParameterOwner(PluginAxis.ROBOT_BUNDLE, manifest.robot_bundle),
+            robot,
+        ),
+        (
+            PluginParameterOwner(PluginAxis.ENVIRONMENT, manifest.environment),
+            environment,
+        ),
+        (
+            PluginParameterOwner(
+                PluginAxis.CONTROL_MAPPING, manifest.control_mapping
+            ),
+            mapping,
+        ),
+        (PluginParameterOwner(PluginAxis.TASK, manifest.task), task),
+        *(
+            (
+                PluginParameterOwner(PluginAxis.EVALUATION, selection),
+                evaluator,
+            )
+            for selection, evaluator in zip(manifest.evaluators, evaluators, strict=True)
+        ),
+    )
+    parameter_values = _parameters_by_owner(manifest)
+    selected_owners = {owner for owner, _ in selected_plugins}
+    unknown_parameter_owners = tuple(
+        sorted(owner.canonical_id for owner in set(parameter_values) - selected_owners)
+    )
     if unknown_parameter_owners:
         raise ValueError(
             f"parameters supplied for unselected plugins: {unknown_parameter_owners}"
         )
-    for plugin in selected_plugins:
-        plugin.parameter_contract.validate(parameter_values.get(plugin.identity.name, {}))
+    for owner, plugin in selected_plugins:
+        plugin.parameter_contract.validate(parameter_values.get(owner, {}))
 
     required_capabilities = (
         environment.required_robot_capabilities
@@ -147,28 +272,48 @@ def compose_experiment(
         robot.provider(capability)
 
     robot_role_bindings = robot.semantic_role_bindings()
-    robot_roles = tuple(binding.role for binding in robot_role_bindings)
+    robot_role_descriptors = tuple(
+        EnvironmentRole(
+            role=binding.role,
+            object_kind=binding.object_kind,
+            frame=binding.frame,
+            unit=binding.unit,
+        )
+        for binding in robot_role_bindings
+    )
+    robot_roles = tuple(descriptor.role for descriptor in robot_role_descriptors)
     if len(robot_roles) != len(set(robot_roles)):
         raise ValueError("ambiguous robot semantic role provider")
     environment_roles = tuple(item.role for item in environment.roles)
     combined_roles = robot_roles + environment_roles
     if len(combined_roles) != len(set(combined_roles)):
         raise ValueError("ambiguous semantic role binding across robot and environment")
-    resolved_roles = frozenset(combined_roles)
-    required_roles = environment.required_robot_roles | task.required_environment_roles
-    missing_roles = tuple(
-        sorted(role.name for role in required_roles if role not in resolved_roles)
+    resolved_role_descriptors = robot_role_descriptors + environment.roles
+    descriptors_by_role = {
+        descriptor.role: descriptor for descriptor in resolved_role_descriptors
+    }
+    resolved_roles = frozenset(descriptors_by_role)
+    _validate_role_requirements(
+        environment.required_robot_roles,
+        {descriptor.role: descriptor for descriptor in robot_role_descriptors},
     )
-    if missing_roles:
-        raise ValueError(f"semantic role binding failure: missing {missing_roles}")
+    _validate_role_requirements(
+        task.required_semantic_roles,
+        descriptors_by_role,
+    )
 
     _validate_compatibility(robot, environment, task)
 
-    available_evidence = (
-        robot.provided_evidence
-        | environment.produced_evidence
-        | mapping.produced_evidence
-        | task.produced_evidence
+    evidence_producers = _build_evidence_producer_bindings(
+        (
+            (PluginAxis.ROBOT_BUNDLE, robot.identity, robot.provided_evidence),
+            (PluginAxis.ENVIRONMENT, environment.identity, environment.produced_evidence),
+            (PluginAxis.CONTROL_MAPPING, mapping.identity, mapping.produced_evidence),
+            (PluginAxis.TASK, task.identity, task.produced_evidence),
+        )
+    )
+    available_evidence = frozenset(
+        binding.evidence_identity for binding in evidence_producers
     )
     for evaluator in evaluators:
         missing_evidence = tuple(
@@ -193,13 +338,16 @@ def compose_experiment(
         evaluators=evaluators,
         resolved_capabilities=robot.provided_capabilities,
         resolved_roles=resolved_roles,
+        resolved_role_descriptors=resolved_role_descriptors,
         available_evidence=available_evidence,
+        evidence_producers=evidence_producers,
     )
 
 
 __all__ = [
     "ExperimentPluginManifest",
     "ExperimentPluginRegistries",
+    "EvidenceProducerBinding",
     "PluginParameters",
     "ResolvedExperimentComposition",
     "compose_experiment",
