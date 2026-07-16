@@ -106,7 +106,7 @@ def test_current_contracts_are_registered_and_evidence_is_not_in_sot_map() -> No
     assert "docs/reports/audits/r7-c-completion-audit.md" not in index
 
 
-def test_runtime_composition_documents_p19_responsibility_split() -> None:
+def test_runtime_composition_documents_current_responsibility_split() -> None:
     text = read("docs/architecture/runtime-composition.md")
     stages = (
         "source planning",
@@ -118,7 +118,7 @@ def test_runtime_composition_documents_p19_responsibility_split() -> None:
         "diagnostic annotation",
         "publication",
         "target lifecycle",
-        "experiment logging handoff",
+        "experiment record construction",
     )
 
     for stage in stages:
