@@ -1,3 +1,13 @@
+---
+status: canonical
+owner: operations
+last_verified: 2026-07-16
+canonical_for:
+  - R7-A-lite serial dry-run smoke
+related:
+  - docs/contracts/r7-a-lite-serial-frame-contract.md
+---
+
 # R7-A-lite serial dry-run smoke
 
 ## 目的
@@ -100,7 +110,3 @@ live serial は manual-only とし、Codex 実行・自動テスト・CI では 
 - viewer integration
 - MuJoCo backend integration
 - IK / FK implementation changes
-
-## 次段
-
-`#204` で WebSocket / viewer smoke と completion audit を進める。

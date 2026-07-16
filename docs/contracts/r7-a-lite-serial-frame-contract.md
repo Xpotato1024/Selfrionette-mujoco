@@ -1,53 +1,73 @@
-# R7-A-lite Serial Frame Contract
+---
+status: canonical
+owner: architecture
+last_verified: 2026-07-16
+canonical_for:
+  - R7-A-lite serial frame contract
+related:
+  - docs/README.md
+---
 
-## Scope
-This document freezes the serial frame contract for the current `main` firmware target used by R7-A-lite. It treats the current firmware in `firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/` as the source of truth and uses the merged hardware bring-up notes as supporting evidence.
+# R7-A-lite Serial Frame契約
 
-This contract is docs-only. It does not change firmware, scripts, runtime, parser, or viewer behavior.
+## 対象範囲
 
-## Sources
-Primary sources:
+この文書は、R7-A-liteが使用する現在の`main` firmware targetのserial frame contractを
+固定する。`firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/`にある
+現在のfirmwareをsource of truthとし、merge済みhardware bring-up noteをsupporting evidenceとして
+使用する。
+
+このcontractはdocs-onlyである。firmware、script、runtime、parser、viewer behaviorは変更しない。
+
+## 参照元
+
+primary source:
 - `firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/platformio.ini`
 - `firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/src/main.cpp`
 
-Secondary sources:
-- `docs/operations/r7-a-lite-p0-device-inventory.md`
+secondary source:
+- `docs/reports/inventories/r7-a-lite-p0-device-inventory.md`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-bringup-summary.md`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-log.md`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-cli-monitor.md`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-plotting.md`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-data/com5-calibrated-transcript.txt`
 
-Do not use closed PR #206 as source of truth. Its useful evidence is represented here only through the merged baseline and the supporting notes above.
+PR本文をsource of truthとして使用しない。firmware sourceと上記supporting evidenceに基づくcurrent contractだけをこの文書へ反映する。
 
-## Current firmware target
+## 現在のfirmware target
 
-| Fact | Value |
+| 項目 | 値 |
 |---|---|
 | PlatformIO environment name | `pro_micro_7ch` |
 | Board | `sparkfun_promicro16` |
 | Framework | `arduino` |
 | `monitor_speed` | `115200` |
 | `Serial.begin(...)` baud | `115200` |
-| Channel count | `7` |
+| channel count | `7` |
 | DOUT pins | `4, 6, 8, 10, 19, 3, 14` |
 | SCK pins | `5, 7, 9, 18, 20, 2, 15` |
-| Sampling rate target | `80 Hz` |
-| Loop period target | `12500 us` |
+| sampling rate target | `80 Hz` |
+| loop period target | `12500 us` |
 
-## Transport
-USB serial over Pro Micro to the PC. The contract is a line-based ASCII stream.
+## Transport方式
 
-## Baud rate
+Pro MicroからPCへのUSB serialを使用する。contractはline-based ASCII streamである。
+
+## Baud rate設定
 `115200`
 
-## Sampling rate
-The firmware loop targets `80 Hz` with a `12500 us` cycle period. Actual cadence can vary if `wait_ready_timeout()`, calibration, or serial command handling delays a cycle.
+## Sampling rate設定
 
-## Line model
-One frame per line, comma-delimited ASCII, emitted through `Serial.println(...)`.
+firmware loopはcycle period `12500 us`で`80 Hz`をtargetとする。
+`wait_ready_timeout()`、calibration、serial command handlingがcycleを遅延させた場合、
+実際のcadenceは変動し得る。
 
-Expected frame shapes:
+## Line形式
+
+各lineにつき単一frameのcomma-delimited ASCIIであり、`Serial.println(...)`から出力する。
+
+想定するframe shape:
 
 ```text
 status,<message>[,<channel>,<value>]
@@ -55,13 +75,14 @@ warn,<reason>,<channel>[,<value>]
 vector,<timestamp_ms>,<ch0>,<ch1>,<ch2>,<ch3>,<ch4>,<ch5>,<ch6>
 ```
 
-## Frame prefixes
+## Frame prefix一覧
 - `status`
 - `warn`
 - `vector`
 
-## `status` frames
-Current firmware emits these status forms:
+## `status` frame仕様
+
+現在のfirmwareは次のstatus formを出力する。
 
 ```text
 status,setup_start
@@ -75,10 +96,11 @@ status,calibration_end
 status,setup_end
 ```
 
-`status` frames are diagnostics and must not be parsed as sensor records.
+`status` frameはdiagnosticであり、sensor recordとしてparseしてはならない。
 
-## `warn` frames
-Current firmware emits these warning forms:
+## `warn` frame仕様
+
+現在のfirmwareは次のwarning formを出力する。
 
 ```text
 warn,warmup_timeout,<channel>
@@ -90,160 +112,140 @@ warn,ready_timeout,<channel>
 warn,spike,<channel>,<value>
 ```
 
-`warn` frames are diagnostic events and must not be parsed as sensor samples.
+`warn` frameはdiagnostic eventであり、sensor sampleとしてparseしてはならない。
 
-## `vector` frames
-`vector` frames are the sensor records.
+## `vector` frame仕様
+
+`vector` frameはsensor recordである。
 
 ```text
 vector,<timestamp_ms>,<ch0>,<ch1>,<ch2>,<ch3>,<ch4>,<ch5>,<ch6>
 ```
 
-The frame must contain exactly 7 channel values and exactly 9 comma-separated fields in total.
+frameにはexactly 7 channel value、合計exactly 9 comma-separated fieldが必要である。
 
-## Channel count
+## Channel数
 `7`
 
-## Channel order
-The frame order is firmware order: `ch0` through `ch6`.
+## Channel順序
 
-This contract does not finalize physical sensor-to-channel mapping. That mapping is tracked separately in the hardware bring-up notes.
+frame orderはfirmware orderの`ch0`から`ch6`である。
 
-## Timestamp field
-`timestamp_ms` is the value returned by `millis()` when the frame is emitted.
+このcontractではphysical sensor-to-channel mappingを確定しない。そのmappingは
+hardware bring-up noteで別途追跡する。
 
-It is an unsigned millisecond counter since boot, formatted as ASCII decimal.
+## Timestamp field仕様
 
-## Numeric field semantics
-- `vector` channel values are signed decimal sensor readings after the firmware's zero handling and spike gating.
-- `status` numeric fields are diagnostic data such as channel indices or calibration means.
-- `warn` numeric fields are diagnostic data such as channel indices or retained values.
-- Values are emitted as plain ASCII decimal text.
-- Parser code should reject non-finite values.
+`timestamp_ms`はframe出力時に`millis()`が返す値である。
 
-## Delimiter and line ending
-- Fields are separated by commas.
-- Frames are terminated by `Serial.println(...)`.
-- Parser code should treat the stream as line-based and tolerate CRLF.
-- Quoted CSV, escaping, and multi-line frames are not part of the contract.
+bootからのunsigned millisecond counterをASCII decimal形式で表す。
 
-## Calibration / zero handling
-At startup, the firmware:
+## Numeric fieldのsemantics
 
-1. starts serial with `115200`
-2. emits `status,setup_start`
-3. initializes each sensor
-4. emits `status,sensor_init_start` and `status,sensor_init_end`
-5. runs calibration for each channel
-6. emits `status,calibration_start` and `status,calibration_end`
-7. emits `status,setup_end`
+- `vector` channel valueは、firmwareのzero handlingとspike gating後のsigned decimal
+  sensor readingである。
+- `status` numeric fieldはchannel indexやcalibration meanなどのdiagnostic dataである。
+- `warn` numeric fieldはchannel indexやretained valueなどのdiagnostic dataである。
+- valueはplain ASCII decimal textとして出力する。
+- parser codeはnon-finite valueをrejectする。
 
-Per channel, calibration behavior is:
+## Delimiterとline ending
 
-- warm up with `kCalibrationWarmupReads = 5`
-- collect `kCalibrationBatchCount = 3` batches
-- each batch collects `kCalibrationBatchSampleCount = 17` readings
-- each batch is reduced by `trimmedMean()`, dropping min and max when possible
-- if batch spread exceeds `kCalibrationBatchSpreadThreshold = 2000.0`, emit `warn,calibration_spread,<channel>,<spread>`
-- offset is `medianOfThree(batch_means[0], batch_means[1], batch_means[2])`
-- reset the previous output value to `0`
-- emit the rounded offset with `status,calibration_channel_end,<channel>,<mean>`
+- fieldはcommaで区切る。
+- frameは`Serial.println(...)`で終端する。
+- parser codeはstreamをline-basedとして扱い、CRLFを許容する。
+- quoted CSV、escaping、multi-line frameはcontractに含めない。
 
-Calibration happens at setup and can also be triggered at runtime with the `c` command.
+## Calibration / zero handling仕様
 
-## Runtime serial commands
-Supported runtime command:
+startup時にfirmwareは次を実行する。
 
-- `c`: run calibration for all channels
+1. `115200`でserialを開始する。
+2. `status,setup_start`を出力する。
+3. 各sensorをinitializeする。
+4. `status,sensor_init_start`と`status,sensor_init_end`を出力する。
+5. 各channelのcalibrationを実行する。
+6. `status,calibration_start`と`status,calibration_end`を出力する。
+7. `status,setup_end`を出力する。
 
-When `c` is received:
+channelごとのcalibration behaviorは次のとおりである。
 
-- firmware emits `status,calibration_command_received`
-- firmware calls `calibrateAllChannels()`
-- calibration status / warn frames may be emitted
-- parser must not treat command response frames as vector records
+- `kCalibrationWarmupReads = 5`でwarm upする。
+- `kCalibrationBatchCount = 3` batchを収集する。
+- 各batchで`kCalibrationBatchSampleCount = 17` readingを収集する。
+- 各batchを`trimmedMean()`でreduceし、可能な場合はminとmaxを除く。
+- batch spreadが`kCalibrationBatchSpreadThreshold = 2000.0`を超えた場合、
+  `warn,calibration_spread,<channel>,<spread>`を出力する。
+- offsetは`medianOfThree(batch_means[0], batch_means[1], batch_means[2])`とする。
+- previous output valueを`0`へresetする。
+- rounded offsetを`status,calibration_channel_end,<channel>,<mean>`で出力する。
 
-## Timeout / ready failure behavior
-- During warmup or calibration, a ready timeout emits the relevant `warn,..._timeout,...` frame.
-- If no calibration samples can be collected, the firmware emits `warn,calibration_skipped,<channel>`.
-- In runtime reads, a ready timeout emits `warn,ready_timeout,<channel>` and reuses the previous output value for that channel.
+calibrationはsetup時に実行し、runtimeでも`c` commandでtriggerできる。
 
-## Spike / abnormal value behavior
-- The runtime spike threshold is `100000.0`.
-- If the absolute change from the previous output exceeds that threshold, the firmware emits `warn,spike,<channel>,<value>`.
-- On spike, the firmware keeps the previous output value instead of publishing the new adjusted value.
-- This is output-side suppression, not a separate raw sample channel.
+## Runtime serial command仕様
 
-## Parser requirements for P2
-The P2 parser should obey these rules:
+supportするruntime command:
 
-- parse only `vector` lines into sensor records
-- require exactly 7 numeric channel values for each `vector` frame
-- preserve `timestamp_ms`
-- ignore `status` lines or surface them separately as diagnostics
-- treat `status,calibration_command_received` as a diagnostic event
-- surface `warn` lines as non-vector diagnostic events
-- treat `warn,calibration_spread,<channel>,<spread>` as a diagnostic event
-- reject malformed `vector` lines
-- reject missing channel fields
-- reject extra `vector` channel fields unless a future contract explicitly allows them
-- reject non-finite numeric values
-- do not open a serial port in parser tests
-- use small text fixtures only
-- do not require the full transcript, CSV, or PNG artifacts for parser tests
+- `c`: 全channelのcalibrationを実行する。
 
-## Explicit non-goals
-- no firmware modification in this PR
-- no parser implementation in this PR
-- no `SerialInputSource` implementation in this PR
-- no runtime/backend/viewer change in this PR
-- no WebSocket change in this PR
-- no live serial access in this PR
-- no firmware upload in this PR
-- no generated artifact import beyond this documentation
-- no physical axis mapping finalization in this PR
-- no loadcell calibration algorithm change in this PR
-- no OSC send
-- no real robot output
-- no actuator command
+`c`を受信した場合:
 
-## Handoff to #199
-`#199` should use this contract to build parser fixtures and tests that match the current firmware frame vocabulary.
+- firmwareは`status,calibration_command_received`を出力する。
+- firmwareは`calibrateAllChannels()`をcallする。
+- calibrationのstatus / warn frameを出力する場合がある。
+- parserはcommand response frameをvector recordとして扱ってはならない。
 
-Recommended next parser inputs:
-- one minimal `vector` fixture with exactly 7 channels
-- one minimal `status` fixture
-- one minimal `warn` fixture
+## Timeout / ready failure時のbehavior
 
-Recommended parser assertions:
-- timestamp is preserved
-- `vector` channel count is exact
-- malformed lines are rejected
-- diagnostics are separated from sensor records
-- the parser does not need hardware access or a serial port
+- warmupまたはcalibration中のready timeoutでは、対応する
+  `warn,..._timeout,...` frameを出力する。
+- calibration sampleを一つも収集できない場合、firmwareは
+  `warn,calibration_skipped,<channel>`を出力する。
+- runtime readのready timeoutでは`warn,ready_timeout,<channel>`を出力し、
+  そのchannelのprevious output valueを再利用する。
 
-## Handoff to #200
-`#200` should add a `SerialInputSource` skeleton that reuses `parse_serial_frame_line()` and consumes injected lines only.
+## Spike / abnormal value時のbehavior
 
-Recommended source assertions:
-- `status` / `warn` lines are retained as diagnostics and not returned as vector records
-- injected line sources stop deterministically at exhaustion
-- malformed `vector` lines surface `SerialFrameParseError`
-- no live serial port, pyserial dependency, or hardware access is introduced
-- the next layer step after this PR is raw loadcell to normalized input intent conversion
+- runtime spike thresholdは`100000.0`である。
+- previous outputからのabsolute changeがthresholdを超えた場合、firmwareは
+  `warn,spike,<channel>,<value>`を出力する。
+- spike時には新しいadjusted valueをpublishせず、previous output valueを維持する。
+- これはoutput-side suppressionであり、別のraw sample channelではない。
 
-## Handoff to #201
-`#201` should convert the raw 7ch loadcell values from `RawInputFrame` / `RawLoadcellVectorRecord` into a normalized input intent.
+## parser要件
 
-Recommended converter assertions:
-- channel order stays `ch0` through `ch6`
-- deadzone / scale / clamp are deterministic and minimal
-- invalid channel count or non-finite values are rejected
-- no desired endpoint conversion is introduced yet
+parserは次のruleに従う。
 
-## Handoff to #202
-`#202` should consume the normalized loadcell intent and turn it into `desired_endpoint_m`.
+- `vector` lineだけをsensor recordへparseする。
+- 各`vector` frameにexactly 7 numeric channel valueを要求する。
+- `timestamp_ms`を保持する。
+- `status` lineをignoreするか、diagnosticとして別途公開する。
+- `status,calibration_command_received`をdiagnostic eventとして扱う。
+- `warn` lineをnon-vector diagnostic eventとして公開する。
+- `warn,calibration_spread,<channel>,<spread>`をdiagnostic eventとして扱う。
+- malformed `vector` lineをrejectする。
+- missing channel fieldをrejectする。
+- 将来のcontractが明示的に許可しない限り、extra `vector` channel fieldをrejectする。
+- non-finite numeric valueをrejectする。
+- parser testではserial portをopenしない。
+- small text fixtureだけを使用する。
+- parser testではfull transcript、CSV、PNG artifactを要求しない。
 
-Recommended next-step assertions:
-- keep the normalized intent boundary separate from endpoint resolution
-- physical axis mapping remains deferred until the later handoff
+## 明示的なnon-goal
+
+- このPRではfirmwareを変更しない。
+- このPRではparserを実装しない。
+- このPRでは`SerialInputSource`を実装しない。
+- このPRではruntime/backend/viewerを変更しない。
+- このPRではWebSocketを変更しない。
+- このPRではlive serialへaccessしない。
+- このPRではfirmwareをuploadしない。
+- この文書以外のgenerated artifactをimportしない。
+- このPRではphysical axis mappingを確定しない。
+- このPRではloadcell calibration algorithmを変更しない。
+- OSCをsendしない。
+- real robotへoutputしない。
+- actuator commandを送らない。
+
+
+pre-audit implementation chronologyは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

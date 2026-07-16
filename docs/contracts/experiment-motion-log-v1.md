@@ -1,220 +1,216 @@
 ---
 status: canonical
 owner: evaluation
-last_verified: 2026-07-12
+last_verified: 2026-07-16
 canonical_for:
-  - R7-E follow-up P20 experiment motion log v1
+  - experiment motion log v1
 related:
   - docs/evaluation/world-tool-frame-comparison-design.md
   - docs/contracts/endpoint-metadata-vocabulary.md
   - docs/contracts/continuous-endpoint-velocity-input.md
-  - docs/operations/r7-e-p10-measured-axis-progress-semantics.md
-  - docs/operations/r7-e-followup-p12-control-frame-resolution-metadata.md
-  - docs/operations/r7-e-followup-p14-runtime-diagnostic-boundary.md
+  - docs/archive/drafts/r7-e-p10-measured-axis-progress-semantics.md
+  - docs/archive/drafts/r7-e-followup-p12-control-frame-resolution-metadata.md
+  - docs/reports/implementation/r7-e-followup-p14-runtime-diagnostic-boundary.md
 ---
 
-# Experiment motion log v1
+# experiment motion log v1契約
 
-## Scope and ownership
+## scopeとownership
 
-This is the canonical independently recoverable record-stream contract for the
-P17 limited world/tool pilot. The current version discriminant is
-`experiment-motion-log/v1`. It is an evaluation artifact schema, not payload-v0
-or another transport payload. P20 adds no runtime recorder, runner, participant
-workflow, questionnaire, analysis, dashboard, viewer, hardware, or filesystem
-lifecycle.
+これはpilot design limited world/tool pilot用の、独立して再構築可能なrecord-streamの
+canonical contractである。現在のversion discriminantは
+`experiment-motion-log/v1`である。evaluation artifact schemaであり、payload-v0や
+別のtransport payloadではない。experiment log contractはruntime recorder、runner、participant workflow、
+questionnaire、analysis、dashboard、viewer、hardware、filesystem lifecycleを追加しない。
 
-Every record carries `schema_version`, `record_kind`, `experiment_id`,
-`session_id`, `participant_id`, and `configuration_id`. Trial records also carry
-`trial_id`. Participant identity is pseudonymous; this contract does not store
-direct participant identifiers.
+全recordは`schema_version`、`record_kind`、`experiment_id`、`session_id`、
+`participant_id`、`configuration_id`を持つ。trial recordはさらに`trial_id`を持つ。
+participant identityはpseudonymousであり、このcontractはdirect participant
+identifierを保存しない。
 
-## Record model and lifecycle
+## record modelとlifecycle
 
-The stream contains four immutable typed record kinds:
+streamは次の4種類のimmutable typed recordを含む。
 
-1. `configuration` freezes software revision, initial state, target and timing,
-   input source, speed/deadzone/max-delta, and comparison-critical parameters.
-2. `trial_start` freezes protocol identity and ordering: block, task family,
-   target and direction, practice/recorded flag, condition, task/direction order,
-   `repetition_index`, `attempt_index`, and nullable `retry_of_trial_id`.
-3. `motion_sample` records one requested/resolved/predicted/measured step without
-   collapsing those truth levels.
-4. `trial_outcome` closes exactly one trial and records the primary outcome,
-   completion/failure classification, and optional subjective-response link.
+1. `configuration`はsoftware revision、initial state、targetとtiming、input source、
+   speed/deadzone/max-delta、comparison-critical parameterをfreezeする。
+2. `trial_start`はprotocol identityとorderingをfreezeする。対象はblock、task family、
+   targetとdirection、practice/recorded flag、condition、task/direction order、
+   `repetition_index`、`attempt_index`、nullableな`retry_of_trial_id`である。
+3. `motion_sample`はrequested/resolved/predicted/measuredというtruth levelを
+   collapseせず、1 stepを記録する。
+4. `trial_outcome`はちょうど1つのtrialをcloseし、primary outcome、
+   completion/failure classification、optional subjective-response linkを記録する。
 
-Required stream order is configuration before reference, trial start before
-samples, contiguous sample indices from zero, then one outcome. Runtime
-timestamps are finite and non-decreasing within a trial. Configuration and
-trial IDs are unique. All trials must close.
+必須stream orderは、参照前のconfiguration、sample前のtrial start、zeroから連続する
+sample index、最後に1つのoutcomeである。trial内のruntime timestampはfiniteかつ
+non-decreasingである。configuration IDとtrial IDはuniqueであり、全trialをcloseしなければ
+ならない。
 
-Retries are retained as new trials. Attempt zero has no retry link; a later
-attempt links to an earlier completed technical-invalid trial and increments
-`attempt_index` by exactly one. Experiment, session, participant, configuration,
-block, task family, target, practice status, condition/order, task/direction
-order, target direction, and `repetition_index` must exactly match the original.
-Only trial ID, retry link, attempt index, and timestamps differ.
+retryはnew trialとして保持する。attempt zeroにはretry linkがない。後続attemptは、
+完了済みの以前のtechnical-invalid trialへlinkし、`attempt_index`をちょうど1増やす。
+experiment、session、participant、configuration、block、task family、target、
+practice status、condition/order、task/direction order、target direction、
+`repetition_index`はoriginalと完全に一致しなければならない。異なるのはtrial ID、
+retry link、attempt index、timestampだけである。
 
-## Fields, units, frames, nullability
+## field、unit、frame、nullability
 
-All timestamps are seconds in their producer clock domain. Source and runtime
-timestamps remain separate. Position/delta/tolerance values are metres,
-velocity is metres/second, qpos is radians, orientation is a WXYZ quaternion,
-and ordering/index values are zero-based non-negative integers.
+全timestampはproducer clock domainにおけるsecondである。source timestampとruntime
+timestampは分離したままにする。position/delta/tolerance valueはmetre、velocityは
+metre/second、qposはradian、orientationはWXYZ quaternion、ordering/index valueは
+zero-based non-negative integerである。
 
-Configuration fields are owned by the experiment manifest:
+configuration fieldはexperiment manifestが所有する。
 
-- `software_revision`, `configuration_id`, experiment/session/participant IDs;
-- finite `initial_qpos_rad`, measured MuJoCo-world
-  `initial_measured_tip_position_m`, and a finite unit-norm
-  `initial_tool_orientation_wxyz` within `1e-12` absolute norm tolerance;
-- MuJoCo-world `target_world_position_m`, `target_tolerance_m`,
-  `dwell_interval_s`, and `timeout_s`;
-- canonical P16 `source_kind`, manifest `target_id`,
-  `local_endpoint_speed_m_s`, `deadzone`,
-  `local_endpoint_max_delta_m`, and sorted scalar `comparison_parameters`.
+- `software_revision`、`configuration_id`、experiment/session/participant ID。
+- finiteな`initial_qpos_rad`、measured MuJoCo-world
+  `initial_measured_tip_position_m`、absolute norm tolerance `1e-12`以内の
+  finite unit-norm `initial_tool_orientation_wxyz`。
+- MuJoCo-worldの`target_world_position_m`、`target_tolerance_m`、
+  `dwell_interval_s`、`timeout_s`。
+- canonical input `source_kind`、manifest `target_id`、
+  `local_endpoint_speed_m_s`、`deadzone`、`local_endpoint_max_delta_m`、
+  sorted scalar `comparison_parameters`。
 
-Configuration `source_kind` is the source identity expected in every sample;
-there is no separate `input_source_id` synonym in v1. Configuration `target_id`
-is the manifest identity whose world target/tolerance/timing fields are frozen;
-every `trial_start.target_id` must match it.
+configurationの`source_kind`は全sampleで期待するsource identityであり、v1に別の
+`input_source_id` synonymはない。configurationの`target_id`は、world
+target/tolerance/timing fieldをfreezeするmanifest identityである。すべての
+`trial_start.target_id`はこれと一致しなければならない。
 
-Motion fields preserve the canonical hierarchy and exact producer vocabulary:
+motion fieldはcanonical hierarchyと正確なproducer vocabularyを維持する。
 
-| Truth level | Fields | Owner / nullability |
+| 事実レベル | field | owner / nullability |
 |---|---|---|
-| requested operator intent | `source_kind`, `source_timestamp_s`, `source_active`, `axis_values`, `zero_input`, `stale_reason`, `requested_control_frame`, `local_endpoint_velocity_m_s` | P16 input-owned; lifecycle fields always present, stale reason optional |
-| resolved runtime motion | `resolved_control_frame`, `control_frame_resolution_status`, `control_frame_resolution_reason`, `resolved_world_endpoint_velocity_m_s` | P12 frame resolution; world fields nullable when unresolved |
-| policy request/prediction | `endpoint_delta_requested_m`, `endpoint_delta_achieved_m`, `candidate_qpos_rad` | motion policy; nullable when no valid resolved policy request/candidate exists |
-| measured MuJoCo outcome | `qpos_before_rad`, `qpos_after_rad`, measured tip before/after, `actual_tip_delta_m`, P10 metrics | MuJoCo/post-step diagnostic; measured tip triple is all present or all null |
-| policy state | `motion_status`, `motion_rejection_reason` | motion policy; status is only `accepted`, `scaled`, or `held` |
-| target state | `target_rejected`, `target_rejection_reason` | target acceptance/application; independent from motion status |
-| measured progress | `endpoint_progress_status`, `endpoint_progress_*`, `measurement_unavailable_reason` | P10/post-step evaluation; independent from motion and source lifecycle |
+| requested operator intent | `source_kind`、`source_timestamp_s`、`source_active`、`axis_values`、`zero_input`、`stale_reason`、`requested_control_frame`、`local_endpoint_velocity_m_s` | input-owned。lifecycle fieldは常にpresent、stale reasonはoptional |
+| resolved runtime motion | `resolved_control_frame`、`control_frame_resolution_status`、`control_frame_resolution_reason`、`resolved_world_endpoint_velocity_m_s` | frame resolution。unresolved時はworld fieldがnullable |
+| policy request/prediction | `endpoint_delta_requested_m`、`endpoint_delta_achieved_m`、`candidate_qpos_rad` | motion policy。validなresolved policy request/candidateがない場合はnullable |
+| measured MuJoCo outcome | `qpos_before_rad`、`qpos_after_rad`、measured tip before/after、`actual_tip_delta_m`、measured-progress metric | MuJoCo/post-step diagnostic。measured tip 3 fieldはすべてpresentまたはすべてnull |
+| policy state | `motion_status`、`motion_rejection_reason` | motion policy。statusは`accepted`、`scaled`、`held`だけ |
+| target state | `target_rejected`、`target_rejection_reason` | target acceptance/application。motion statusとは独立 |
+| measured progress | `endpoint_progress_status`、`endpoint_progress_*`、`measurement_unavailable_reason` | post-step evaluation。motionとsource lifecycleから独立 |
 
-`endpoint_delta_achieved_m` is the policy prediction, never measured movement.
-`actual_tip_delta_m` and measured tip positions are MuJoCo evidence. qpos before
-and after must have the same non-empty finite structure; candidate qpos, when
-available, must match it.
+`endpoint_delta_achieved_m`はpolicy predictionであり、measured movementではない。
+`actual_tip_delta_m`とmeasured tip positionはMuJoCo evidenceである。before/after qposは
+同じnon-empty finite structureを持たなければならない。candidate qposがavailableなら、
+そのstructureと一致しなければならない。
 
-## Missing values and state semantics
+## missing valueとstate semantics
 
-Missing evidence is JSON `null`, never a fabricated zero. The three measured
-tip fields are all-or-none. When absent,
-`endpoint_progress_measurement_available=false` and
-`measurement_unavailable_reason` is required. Complete measured evidence makes
-the availability flag true.
+missing evidenceはJSON `null`であり、fabricated zeroにはしない。3つのmeasured tip
+fieldはall-or-noneである。absentの場合は
+`endpoint_progress_measurement_available=false`とし、
+`measurement_unavailable_reason`を必須とする。complete measured evidenceがある場合、
+availability flagをtrueにする。
 
-A tool-frame resolution failure has
-`control_frame_resolution_status=tool_orientation_unavailable`, a required
-`control_frame_resolution_reason`, and null resolved frame, resolved world velocity, and
-policy-requested world delta. It cannot serialize tool-local velocity as world
-motion.
+tool-frame resolution failureでは、
+`control_frame_resolution_status=tool_orientation_unavailable`、必須の
+`control_frame_resolution_reason`、nullのresolved frame、resolved world velocity、
+policy-requested world deltaを持つ。tool-local velocityをworld motionとして
+serializeしてはならない。
 
-P12 resolution tuples are closed. `world_passthrough` and
-`invalid_control_frame_defaulted` require a world request and resolved
-`mujoco_world` velocity equal to `local_endpoint_velocity_m_s` within `1e-12`.
-`tool_orientation_resolved` requires a tool request and
-resolved world velocity. `tool_orientation_unavailable` requires a tool
-request, null resolved frame/world velocity/requested delta, held motion with a
-rejection reason, candidate and post-step qpos equal to pre-step qpos, zero
-policy-achieved delta, and zero measured tip delta when measurement exists.
+control-frame resolution tupleはclosedである。`world_passthrough`と
+`invalid_control_frame_defaulted`にはworld requestと、
+`local_endpoint_velocity_m_s`に`1e-12`以内で等しいresolved `mujoco_world`
+velocityが必要である。`tool_orientation_resolved`にはtool requestとresolved world
+velocityが必要である。`tool_orientation_unavailable`にはtool request、nullのresolved
+frame/world velocity/requested delta、rejection reasonを伴うheld motion、pre-step qposと
+等しいcandidateおよびpost-step qpos、zero policy-achieved deltaが必要である。
+measurementが存在する場合はzero measured tip deltaも必要である。
 
-The independent axes do not overload `motion_status`. Target rejection uses
-`target_rejected` and `target_rejection_reason`. Active nonzero, active zero,
-inactive non-stale, and stale input are reconstructed from `source_active`,
-`axis_values`, derived-consistent `zero_input`, and `stale_reason`. Measurement
-unavailability uses P10 `measurement_unavailable` plus its reason and null
-metrics. A measured zero is allowed only when before/after measurement produced
-zero. Operator-caused timeout/hold/rejection/stale is a retained `failed`
-outcome with `failure_attribution=operator`.
-Infrastructure or missing-evidence invalidity is retained as
-`technical_invalid` with `failure_attribution=technical`.
+独立したaxisは`motion_status`へoverloadしない。target rejectionには
+`target_rejected`と`target_rejection_reason`を使う。active nonzero、active zero、
+inactive non-stale、stale inputは、`source_active`、`axis_values`、導出と整合する
+`zero_input`、`stale_reason`から再構築する。measurement unavailabilityには、measured progress
+`measurement_unavailable`、そのreason、null metricを使う。measured zeroを許可するのは、
+before/after measurementがzeroを生成した場合だけである。operator起因の
+timeout/hold/rejection/staleは、`failure_attribution=operator`を伴う`failed` outcomeとして
+保持する。infrastructureまたはmissing-evidenceによるinvalidityは、
+`failure_attribution=technical`を伴う`technical_invalid`として保持する。
 
-When measurement exists, `actual_tip_delta_m` equals after minus before within
-`1e-12` Euclidean tolerance and no unavailable reason is permitted. When it is
-absent, all measured fields and measurement-dependent P10 metrics are null.
+measurementが存在する場合、`actual_tip_delta_m`はafter minus beforeにEuclidean
+tolerance `1e-12`以内で等しく、unavailable reasonを許可しない。absentの場合、
+全measured fieldとmeasurement-dependent measured-progress metricをnullにする。
 
-`success_within_timeout=true` requires `completion_status=success`, no failure
-attribution, and a primary sample from the same trial with complete measurement.
-The primary sample must occur no later than configured timeout; its measured
-tip-to-target distance must match `final_measured_endpoint_error_m` within
-`1e-12` and be within `target_tolerance_m`. Ordered samples through the primary
-sample must provide an uninterrupted inside-tolerance measured interval at
-least `dwell_interval_s` long. An outside or unavailable sample resets dwell.
-This is the deterministic P17 dwell-proof policy.
+`success_within_timeout=true`には、`completion_status=success`、failure attribution
+なし、同じtrialのcomplete measurementを持つprimary sampleが必要である。primary sampleは
+設定timeout以前に発生しなければならない。そのmeasured tip-to-target distanceは
+`final_measured_endpoint_error_m`と`1e-12`以内で一致し、かつ
+`target_tolerance_m`以内でなければならない。primary sampleまでのordered sampleは、
+少なくとも`dwell_interval_s`の連続したinside-tolerance measured intervalを
+提供しなければならない。outsideまたはunavailable sampleはdwellをresetする。
+これがdeterministicなpilot design dwell-proof policyである。
 
-Success is a whole-trial result. No sample may be held, target-rejected, stale,
-measurement-unavailable, or unresolved. `primary_outcome_sample_index` must be
-the final motion sample; dwell must remain continuously inside tolerance through
-that final sample. A prior sample cannot stand in for final evidence.
+successはwhole-trial resultである。held、target-rejected、stale、
+measurement-unavailable、unresolvedのsampleが1つでもあってはならない。
+`primary_outcome_sample_index`はfinal motion sampleでなければならず、dwellはそのfinal
+sampleまで連続してinside toleranceを維持しなければならない。以前のsampleをfinal
+evidenceの代わりにしてはならない。
 
-Outcome classification is closed: success is `success` / `none` / null reason;
-operator failure is `failed` / `operator` / required reason; technical invalid
-is `technical_invalid` / `technical` / required reason. No other combination is
-valid.
+outcome classificationはclosedである。successは`success` / `none` / null reason、
+operator failureは`failed` / `operator` / required reason、technical invalidは
+`technical_invalid` / `technical` / required reasonである。他の組み合わせはvalidではない。
 
-For every outcome, `primary_outcome_sample_index` and
-`final_measured_endpoint_error_m` are either both null or both present. When
-present, the index must reference the final motion sample, that sample must have
-complete measured evidence, and the stored error must equal measured tip to
-configuration target distance within `1e-12`. This applies equally to operator
-failure and technical invalidity. A measurement-unavailable technical invalid
-uses null for both fields. An operator failure may also use null for both when
-no defensible final measurement is retained; its operator classification and
-required reason remain explicit rather than being inferred from missingness.
+全outcomeで、`primary_outcome_sample_index`と`final_measured_endpoint_error_m`は、
+両方nullまたは両方presentである。presentの場合、indexはfinal motion sampleを参照し、
+そのsampleはcomplete measured evidenceを持ち、保存したerrorはmeasured tipから
+configuration targetまでのdistanceに`1e-12`以内で等しくなければならない。
+これはoperator failureとtechnical invalidityへ同様に適用する。
+measurement-unavailable technical invalidでは両fieldをnullにする。defensibleなfinal
+measurementを保持していないoperator failureでも両fieldをnullにしてよいが、operator
+classificationとrequired reasonはmissingnessから推論せず、明示したままにする。
 
-## P17 reconstruction and P21 handoff
+## trajectory reconstructionとanalog fixture compatibility
 
-Trial start/end are the start and outcome runtime timestamps. The primary
-endpoint-error outcome is stored in the outcome and linked to its source sample.
-Success within timeout is explicit and validated. The ordered measured tip
-positions in samples reconstruct the MuJoCo-world trajectory; projecting each
-position/delta orthogonal to the task direction derives P17 off-axis drift.
-Condition/order, repetition, attempt, retry, practice status, and failure
-attribution support the prespecified exclusion and retry rules.
+trial start/endはstart runtime timestampとoutcome runtime timestampである。primary
+endpoint-error outcomeはoutcomeへ保存し、そのsource sampleへlinkする。timeout内の
+successは明示し、validateする。sample内のordered measured tip positionから
+MuJoCo-world trajectoryを再構築する。各position/deltaをtask directionと直交する方向へ
+projectionすることでoff-axis driftを導出する。condition/order、repetition、
+attempt、retry、practice status、failure attributionは、prespecified exclusion ruleと
+retry ruleを支える。
 
-P21 may produce normalized analog fixture intent using the P16 contract and log
-it through these exact requested fields after P20 merges. P21 does not add raw
-analog mapping fields to v1 and must not change this schema implicitly.
+recorded analog mappingはcontinuous endpoint velocity contractを使ってnormalized analog fixture intentを生成し、
+これらの正確なrequested fieldを通じてlogへ記録してよい。mapping layerはv1へraw analog
+mapping fieldを追加せず、このschemaを暗黙に変更してはならない。
 
-## Serialization and compatibility
+## serializationとcompatibility
 
-`record_to_json_value()` returns only ordinary JSON objects, arrays, strings,
-booleans, finite numbers, and null. `encode_jsonl()` emits one compact object per
-line using UTF-8 text semantics, sorted keys, no NaN/Infinity, and a final
-newline. `decode_jsonl()` rejects blank lines and non-object records.
-Serialize-parse-serialize is byte-deterministic for a supported stream.
+`record_to_json_value()`は通常のJSON object、array、string、boolean、finite number、
+nullだけを返す。`encode_jsonl()`はUTF-8 text semantics、sorted key、NaN/Infinityなし、
+末尾newlineありで、1 lineに1つのcompact objectを出力する。`decode_jsonl()`はblank
+lineとnon-object recordをrejectする。supported streamのserialize-parse-serializeは
+byte-deterministicである。
 
-Parsing is strict: the exact version and one of the four record kinds are
-required; unknown fields, record kinds, and versions are rejected. Additive
-future fields therefore require a new supported schema version or an explicit
-reader update. v1 readers do not guess forward compatibility. Existing v1
-fields keep their meaning; incompatible changes require a new version.
+parseはstrictである。正確なversionと4つのrecord kindのいずれかを必須とし、unknown
+field、record kind、versionをrejectする。したがってadditiveなfuture fieldには、
+新しいsupported schema versionまたは明示的なreader updateが必要である。v1 readerは
+forward compatibilityを推測しない。既存v1 fieldは意味を維持し、incompatibleな変更には
+new versionが必要である。
 
-Record constructors require exact JSON booleans and exact finite JSON numbers;
-booleans-as-numbers and numeric strings are rejected. Every enum is checked at
-runtime. `comparison_parameters` accepts only string, integer, finite float,
-boolean, or null scalar values; nested arrays/objects are rejected.
+record constructorは正確なJSON booleanと正確なfinite JSON numberを必須とし、
+booleans-as-numbersとnumeric stringをrejectする。全enumをruntimeで確認する。
+`comparison_parameters`がacceptするのはstring、integer、finite float、boolean、
+nullのscalar valueだけであり、nested array/objectはrejectする。
 
-`validate_record_stream()` owns cross-record context equality, uniqueness,
-retry protocol identity, sample ordering, timestamps, lifecycle closure, and
-P17 success evidence. Neither helper performs I/O or mutates input.
+`validate_record_stream()`はcross-record context equality、uniqueness、retry
+protocol identity、sample ordering、timestamp、lifecycle closure、pilot design success evidenceを
+所有する。どちらのhelperもI/Oを実行せず、inputをmutateしない。
 
-Within one protocol identity and repetition, attempt indices are unique and
-there is exactly one initial attempt. Each trial has at most one direct retry
-child. A retry references the immediately preceding completed
-technical-invalid attempt, producing one linear `0 -> 1 -> 2 ...` chain; sibling
-retries and duplicate attempts are invalid.
+1つのprotocol identityとrepetition内でattempt indexはuniqueであり、initial attemptは
+ちょうど1つである。各trialが持てるdirect retry childは最大1つである。retryは直前の
+completed technical-invalid attemptを参照し、1本のlinearな`0 -> 1 -> 2 ...` chainを
+作る。sibling retryとduplicate attemptはinvalidである。
 
-It also binds each sample request frame to the trial control condition and
-binds source/target identities to configuration. The first sample qpos/tip must
-match configuration initial qpos/tip. Adjacent qpos and, when both available,
-measured tip boundaries must be continuous. All vector identity, trajectory,
-measured-delta, target-error, velocity, and dwell comparisons use Euclidean
-absolute tolerance `1e-12` in their documented unit.
+さらに、各sample request frameをtrial control conditionへbindし、source/target identityを
+configurationへbindする。最初のsample qpos/tipはconfiguration initial qpos/tipと
+一致しなければならない。隣接するqpos boundaryと、両方がavailableな場合のmeasured
+tip boundaryはcontinuousでなければならない。vector identity、trajectory、
+measured-delta、target-error、velocity、dwellの全比較は、記載されたunitにおける
+Euclidean absolute tolerance `1e-12`を使用する。
 
-P16 numeric consistency is sequence-validated: `axis_values` norm is at most
-one and `local_endpoint_velocity_m_s == configuration.local_endpoint_speed_m_s
-* axis_values` within that tolerance. A zero configured speed with nonzero axes
-therefore remains valid and produces zero requested velocity without changing
-`zero_input`.
+input numeric consistencyはsequenceとしてvalidateする。`axis_values` normは最大1であり、
+`local_endpoint_velocity_m_s == configuration.local_endpoint_speed_m_s * axis_values`
+がそのtolerance内で成立しなければならない。したがって、設定speedがzeroでaxisが
+nonzeroの場合もvalidなままであり、`zero_input`を変更せずにzero requested velocityを
+生成する。

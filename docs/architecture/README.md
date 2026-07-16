@@ -7,7 +7,7 @@ related:
   - docs/README.md
 ---
 
-# Architecture Docs
+# architecture文書
 
-Current architecture specifications live here. Use `docs/README.md` for the
-Source of Truth Map before adding a new architecture document.
+現在のarchitecture仕様をこのdirectoryに置く。新しいarchitecture文書を追加する前に、
+`docs/README.md`のSource of Truth Mapを確認する。

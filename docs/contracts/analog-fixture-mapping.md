@@ -1,52 +1,48 @@
 ---
 status: canonical
 owner: input contract
-last_verified: 2026-07-13
+last_verified: 2026-07-16
 canonical_for:
-  - R7-E follow-up P21 recorded analog fixture mapping
+  - recorded analog fixture mapping
 related:
   - docs/contracts/continuous-endpoint-velocity-input.md
   - docs/contracts/experiment-motion-log-v1.md
 ---
 
-# Recorded analog fixture mapping
+# 記録済みanalog fixture mapping
 
-P21 maps one JSON-compatible recorded sample into the existing P16
-`ContinuousEndpointVelocityIntent`. It is a pure offline boundary: it reads no
-files itself, discovers no devices, performs no serial/Arduino/OSC I/O, and is
-not connected to the runtime composition root.
+pure mappingは、JSON互換の記録済みsample 1件を既存の
+`ContinuousEndpointVelocityIntent`へmappingする。これはpureなoffline boundaryであり、
+自身ではfileを読まず、deviceを検出せず、serial/Arduino/OSC I/Oを実行せず、
+runtime composition rootにも接続しない。
 
-The sample format has exactly `timestamp_s`, numeric `raw_values`, JSON
-boolean `active`, and nullable non-empty `stale_reason`. Missing/extra fields,
-bool-as-number, numeric strings, NaN, Infinity, malformed vectors, and active
-plus stale are rejected rather than converted to zero.
+sample formatは、`timestamp_s`、数値の`raw_values`、JSON booleanの`active`、
+nullableかつ空でない`stale_reason`だけを持つ。fieldの欠落・余分なfield、
+numberとしてのbool、数値文字列、NaN、Infinity、不正なvector、activeとstaleの
+同時指定は、zeroへ変換せずrejectする。
 
-The canonical Selfrionette recorded shape is the seven-channel `ch0` through
-`ch6` vector defined by `RawLoadcellVectorRecord` and
-`docs/contracts/r7-a-lite-serial-frame-contract.md`. The pure fixture type is
-generic only so a configuration can state its channel count explicitly; the
-checked-in canonical fixture uses seven values and does not create a competing
-wire or device contract.
+canonicalなSelfrionette recorded shapeは、`RawLoadcellVectorRecord`と
+`docs/contracts/r7-a-lite-serial-frame-contract.md`で定義された、`ch0`から`ch6`までの
+7 channel vectorである。pure fixture typeがgenericなのは、configurationでchannel数を
+明示できるようにするためだけである。追跡済みのcanonical fixtureは7値を使用し、
+競合するwire contractやdevice contractを作らない。
 
-`AnalogFixtureMappingConfig` deeply and immutably freezes N centers, positive
-half ranges, an N by 3 `channel_axis_weights` matrix aligned with
-`LoadcellEndpointMappingConfig.channel_axis_weights`, signs, per-output-axis
-scales, component
-deadzone, velocity scale, max delta provenance, requested control frame, and
-source identity. Mapping order is finite-value validation, center and half-range
-normalization, component clamp to `[-1, 1]`, weighted channel-to-axis
-projection, sign, scale, then the P16 component
-deadzone and final vector norm clamp. Equal sample and config values produce an
-equal intent.
+`AnalogFixtureMappingConfig`は、N個のcenter、正のhalf range、
+`LoadcellEndpointMappingConfig.channel_axis_weights`と整合するN x 3の
+`channel_axis_weights` matrix、sign、output axisごとのscale、component deadzone、
+velocity scale、max delta provenance、requested control frame、source identityを
+deepかつimmutableにfreezeする。mapping順序は、finite-value validation、centerと
+half-rangeによるnormalization、componentの`[-1, 1]` clamp、重み付きchannel-to-axis
+projection、sign、scale、continuous endpoint velocity component deadzone、最後のvector norm clampである。
+同じsample値とconfig値からは、同じintentを生成する。
 
-Active zero, inactive non-stale, and stale inactive remain distinct through
-`source_active`, derived `zero_input`, and `stale_reason`. Raw diagnostics are
-preserved in the immutable P16 diagnostic mapping. The result exposes the exact
-P16 fields consumed by P20 motion samples, including `source_kind`,
-`source_active`, `axis_values`, `zero_input`, `stale_reason`,
-`local_endpoint_velocity_m_s`, and `control_frame`; no P16 or P20 schema is
-changed.
+active zero、inactiveかつnon-stale、stale inactiveは、`source_active`、derived
+`zero_input`、`stale_reason`によって区別したままにする。raw diagnosticはimmutableな
+continuous endpoint velocity diagnostic mappingへ保持する。結果は、`source_kind`、`source_active`、
+`axis_values`、`zero_input`、`stale_reason`、`local_endpoint_velocity_m_s`、
+`control_frame`など、experiment motion sampleが消費するcontinuous endpoint velocity fieldを正確に公開する。
+入力intentまたはexperiment log schemaは変更しない。
 
-This contract does not define hardware calibration, force estimation, sensor
-zeroing, live acquisition, automatic experiment logging, viewer behavior,
-transport, motion policy, target lifecycle, or MuJoCo behavior.
+この契約は、hardware calibration、force estimation、sensor zeroing、live acquisition、
+automatic experiment logging、viewer behavior、transport、motion policy、
+target lifecycle、MuJoCo behaviorを定義しない。

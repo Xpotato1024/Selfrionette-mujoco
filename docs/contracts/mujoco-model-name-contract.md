@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-19
+last_verified: 2026-07-16
 canonical_for:
   - fast_arm MuJoCo model name contract
 related:
@@ -9,8 +9,8 @@ related:
   - docs/contracts/transport-payload.md
   - docs/contracts/kinematics-command-contract.md
   - src/selfrionette/mujoco_backend/model_contract.py
-  - docs/operations/r7-e-followup-joint-convention-fast-arm-model-contract.md
-  - docs/operations/r7-e-followup-viewer-backend-endpoint-separation.md
+  - docs/reports/implementation/r7-e-followup-joint-convention-fast-arm-model-contract.md
+  - docs/reports/implementation/r7-e-followup-viewer-backend-endpoint-separation.md
 ---
 
 # MuJoCo Model Name Contract
@@ -86,19 +86,7 @@ strict validation では silent fallback をしない。
 この contract の source of truth は `src/selfrionette/mujoco_backend/model_contract.py` に置く。
 `apps/mujoco-viewer` はこれを推定しないし、MuJoCo を再ロードして検証しない。
 
-## Handoff
-
-### P3 FK runtime evaluation
-
-P3 では backend snapshot 上の `tip` site と arm body chain を参照して FK runtime evaluation を行う。
-この issue では evaluation 本体は実装せず、名前 contract と failure semantics だけを固定する。
-
-### P4 MuJoCo site endpoint extraction
-
-P4 では `tip` site を優先し、必要な場合のみ explicit opt-in で body fallback を使う。
-site / body 名の推定はこの issue で固定した helper を通す。
-
-## P4 site endpoint helper contract
+## site endpoint helper contract
 
 - MuJoCo site endpoint は backend / runtime の evaluation field であり、viewer SoT ではない
 - primary endpoint は model contract の `tip` site である
@@ -109,4 +97,4 @@ site / body 名の推定はこの issue で固定した helper を通す。
 - `desired_endpoint_m` / `target_position_m` とも自動的に同一視しない
 - missing site / body は `ValueError` にする
 - body fallback は `allow_body_fallback=True` のような explicit opt-in のみ許可する
-- P5 では desired / qpos / FK / site / error metrics の統合に handoff する
+- desired / qpos / FK / site / error metricsはframeとprovenanceを分けて統合する

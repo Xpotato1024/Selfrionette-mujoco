@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-14
+last_verified: 2026-07-16
 canonical_for:
   - browser visual smoke
 related:
@@ -9,14 +9,14 @@ related:
   - docs/contracts/parallel-work-contracts.md
   - docs/operations/backend-viewer-startup.md
   - docs/operations/live-viewer-smoke.md
-  - docs/operations/r6-f-p5-old-web-view-reference-audit.md
-  - docs/operations/r6-f-completion-audit.md
+  - docs/reports/audits/r6-f-p5-old-web-view-reference-audit.md
+  - docs/reports/audits/r6-f-completion-audit.md
   - apps/mujoco-viewer/README.md
 ---
 
 # Browser Visual Smoke
 
-R6-D-P3 は、browser で確認する smoke path を固定する。Three.js scene object
+この文書はbrowserで確認するsmoke pathを固定する。Three.js scene object
 mutation skeleton の動作を、runtime 状態とあわせて人手で確認する。
 
 ## Purpose
@@ -166,21 +166,6 @@ connection がある場合は body + site + arm skeleton になる。target と 
   表示できる。
 - browser smoke が証明するのは payload coordinate の直接反映までであり、
   final coordinate mapping layer ではない。
-- Phase D completion audit は `docs/operations/r6-d-completion-audit.md` に
-  記録される。
-- 次の handoff は IK / command integration skeleton work であり、rendered
-  arm mesh でも完成済み IK path でもない。
-
-## What Is Intentionally Not Visualized Yet
-
-- camera, renderer, animation loop の挙動。
-- labels / overlays を完成した visual design として扱うこと。
-- IK / FK。
-- `qpos` pose recompute。
-- payload body/site positions 以外から arm skeleton を合成すること。
-- `base_link_to_tip` line skeleton を final arm visual とすること。
-- browser での MuJoCo model loading。
-- WebSocket reconnect / retry hardening。
 
 ## Troubleshooting
 
@@ -194,11 +179,6 @@ connection がある場合は body + site + arm skeleton になる。target と 
   `target_position_m` があるか、canonical arm skeleton の body/site names
   があるかを確認する。
 
-R6-G-P5 の troubleshooting では
-`docs/operations/websocket-host-port-contract.md` を参照して host / port / URL
-の混同を切り分ける。
-R6-G-P5 の runtime-to-viewer E2E smoke 本体は
-`docs/operations/runtime-to-viewer-e2e-smoke.md` に置く。
 
 ## Non-Goals
 
@@ -218,17 +198,3 @@ R6-G-P5 の runtime-to-viewer E2E smoke 本体は
 - `data-dof-ring-count` は descriptor count の互換 alias として扱い、
   present / absent の内訳は `data-dof-ring-present-count` と
   `data-dof-ring-absent-count` で読む。
-
-R6-F-P5 では、この smoke path を採用済み viewer 表示要素の観測点としてのみ
-扱う。これは旧 Web View の full parity contract ではなく、有用な表示要素と
-除外する legacy UI を分離するための基準である。
-
-R6-F-P6 の completion audit は、この smoke path が成立済みであることを
-文書化し、Sweep_x visual demo と viewer 可視化 boundary の完了状態を
-`docs/operations/r6-f-completion-audit.md` に固定する。browser visual smoke は
-引き続き rendering-only の観測手順であり、新しい feature 追加の場ではない。
-
-
-R6-Viewer-161 以降では、viewer runtime は placeholder text だけでは完了扱いにしない。
-`viewer-scene` は canvas と scene text を持ち、payload v0 を受けると target / tip / error vector / body / site / arm skeleton / DoF ring を 3D scene に反映する。
-WebSocket close 後も last payload frame と scene は保持する。

@@ -1,3 +1,12 @@
+---
+status: historical
+owner: operations
+last_verified: 2026-07-16
+canonical_for: []
+related:
+  - docs/experiment-notes/README.md
+---
+
 # R7-A-lite CLI Monitor
 
 Arduino IDE を使わずに loadcell firmware の serial monitor を開くための最小手順。

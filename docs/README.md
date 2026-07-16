@@ -1,153 +1,94 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-15
+last_verified: 2026-07-16
 canonical_for:
   - documentation source of truth map
 related:
   - docs/architecture/documentation-sot-policy.md
 ---
 
-# Selfrionette-mujoco Docs
+# Selfrionette-mujoco文書
 
-This directory is the only documentation root for the MuJoCo migration line.
-Do not create or use `doc/`.
+`docs/`はSelfrionette-mujocoの唯一のdocumentation rootである。`doc/`は新設・使用しない。
+
+この文書のSource of Truth Mapには、現在の仕様、contract、反復利用する運用入口だけを載せる。
+completion audit、implementation report、inventory、handoff、historical recordは掲載せず、
+後述するdirectory indexから辿る。
 
 ## Source of Truth Map
 
 | Topic | Canonical document | Notes |
 |---|---|---|
-| Development policy | `docs/architecture/development-policy.md` | skeleton-first policy |
-| Skeleton spec | `docs/architecture/mujoco-skeleton-first-spec.md` | layer responsibilities and step order |
-| Documentation SoT | `docs/architecture/documentation-sot-policy.md` | canonical/supporting/historical rules |
-| Naming and units | `docs/conventions.md` | canonical naming and unit rules |
-| Import boundaries | `docs/architecture/dependency-boundaries.md` | import direction and test contract |
-| Data flow | `docs/architecture/data-flow.md` | input -> motion -> MuJoCo -> transport -> viewer |
-| Runtime composition | `docs/architecture/runtime-composition.md` | composition root |
-| Robot Profile / Runtime Plugin / Viewer Profile | `docs/contracts/robot-profile-runtime-viewer-profile.md` | immutable declarations, explicit registries, production/generic selection, and backend/viewer compatibility |
-| Robot Runtime Plugin conformance tests | `docs/operations/robot-runtime-plugin-conformance-tests.md` | test-only case model, generic suite, known-value provenance, registration, and fail-closed checks |
-| Generic kinematics test doubles | `docs/operations/generic-kinematics-test-doubles.md` | test-only FK/IK doubles and generic consumer ownership after Planar retirement |
-| Runtime dry-run entry | `docs/operations/runtime-dry-run.md` | deterministic replay to payload v0 NDJSON |
-| WASM qpos sync PoC | `docs/operations/wasm-qpos-sync-poc.md` | historical PoC evidence; executable PoC retired by #385 |
-| Product viewer WASM scene renderer | `docs/operations/product-viewer-wasm-scene-renderer.md` | current production owner, fixture owner, and operator path |
-| R6-H-P5 runtime concrete solver wiring | `docs/operations/r6-h-p5-runtime-concrete-solver-wiring.md` | concrete FK / IK runtime baseline and qpos boundary wiring |
-| R6-H-P6 runtime zero stub guardrail | `docs/operations/r6-h-p6-runtime-zero-stub-guardrail.md` | runtime default stub retirement guardrail and compatibility exception split |
-| R6-H completion audit | `docs/operations/r6-h-completion-audit.md` | concrete FK / IK / runtime wiring / stub guardrail completion evidence |
-| R6-I-P1 public surface inventory | `docs/operations/r6-i-p1-public-surface-inventory.md` | `__all__` / `__init__` / `base.py` / `stubs.py` public surface inventory |
-| R6-I-P2 public export policy | `docs/operations/r6-i-p2-public-export-policy.md` | package-root / module-level public API policy and explicit stub import guardrail |
-| R6-I-P3 remaining stubs reclassification | `docs/operations/r6-i-p3-stub-reclassification.md` | remaining stub classification, compatibility helper retirement order, and P4 handoff |
-| R6-I-P4 programmed target input contract | `docs/contracts/programmed-target-input-source.md` | programmed target input source contract and metadata bridge |
-| R6-I-P5 sweep_x programmed target input | `docs/operations/r6-i-p5-sweep-x-programmed-input.md` | sweep_x deterministic programmed target trajectory and metadata contract |
-| R6-H-P1 stub inventory | `docs/operations/r6-h-p1-stub-inventory.md` | kinematics / motion / backend / runtime stub classification and retirement planning |
-| R6-I-P6 programmed input runtime wiring | `docs/operations/r6-i-p6-programmed-input-runtime-wiring.md` | dry-run / WebSocket publisher wiring for programmed target input source; publisher / transport smoke and browser payload parse smoke only |
-| R6-I completion audit | `docs/operations/r6-i-completion-audit.md` | R6-I completion audit and parent #133 close readiness |
-| R6-J completion audit | `docs/operations/r6-j-completion-audit.md` | R6-J completion audit and parent #134 close readiness |
-| R7-D-P1 fast_arm 4DOF endpoint IK v0 note | `docs/operations/r7-d-p1-fast-arm-4dof-endpoint-ik.md` | concrete fast_arm path から 2-link planar IK + zero padding を外した最小 note |
-| R7-D-P3 fast_arm endpoint command check procedure | `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | no-hardware manual smoke for endpoint command, qpos, reject / hold / recovery, and MuJoCo warning handling |
-| R7-E-P1 fast_arm endpoint motion sanity | `docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md` | gate before cube task; x / y / z small command direction check and pass / rejected / limitation recording |
-| R7-E-P1 initial-tip workspace diagnostics | `docs/operations/r7-e-p1-initial-tip-workspace-diagnostics.md` | #311 follow-up; backend numeric diagnosis for initial tip, solver reachable workspace, qpos, and MuJoCo tip alignment before cube task |
-| R7-E-P1 solver / MuJoCo frame alignment | `docs/operations/r7-e-p1-solver-mujoco-frame-alignment.md` | #313 follow-up; selected `base_link` solver base, world-to-local target transform, partial qpos reference adapter, and updated endpoint sanity results |
-| R7-E-P1 q0/q2/q3 MuJoCo axis mapping | `docs/operations/r7-e-p1-q0-q2-q3-axis-mapping.md` | #316 follow-up; backend joint perturbation diagnostics, q1 ref adapter retention, q0/q2/q3 hold decision, and updated endpoint sanity results |
-| R7-E-P1 local Jacobian / DOF allocation | `docs/operations/r7-e-p1-local-jacobian-dof-allocation.md` | #318 follow-up; backend local Jacobian, multi-step endpoint trajectory diagnostics, and #305 proceedability decision |
-| R7-E-P1 presentation endpoint log / plot export | `docs/operations/r7-e-p1-presentation-endpoint-log.md` | #322 follow-up; trajectory diagnostics CSV export and Matplotlib PNG plot for presentation artifacts |
-| R7-E follow-up P3 joint convention / fast_arm model contract docs | `docs/operations/r7-e-followup-joint-convention-fast-arm-model-contract.md` | #328 follow-up; joint order / sign / axis / frame / model contract and next repair issue recommendation |
-| R7-E follow-up P4 viewer/backend endpoint separation note | `docs/operations/r7-e-followup-viewer-backend-endpoint-separation.md` | #329 follow-up; viewer/backend boundary, screenshot interpretation, and next repair issue recommendation |
-| R7-E follow-up P12 control-frame resolution metadata | `docs/operations/r7-e-followup-p12-control-frame-resolution-metadata.md` | #349 follow-up; requested/resolved frame, resolution status, orientation failure hold, and compatibility fields |
-| R7-E follow-up P14 runtime diagnostic boundary | `docs/operations/r7-e-followup-p14-runtime-diagnostic-boundary.md` | #351 follow-up; pure post-step measurement, diagnostic annotation, target-feedback boundary, and preserved step order |
-| R7-E follow-up P22 neutral initial pose | `docs/operations/r7-e-p22-neutral-initial-pose.md` | #374 deterministic lower/bent candidate selection, canonical keyframe ownership, startup consistency, and first-input evidence |
-| Endpoint metadata vocabulary | `docs/contracts/endpoint-metadata-vocabulary.md` | canonical field glossary, ownership, units/frames, compatibility aliases, and migration order |
-| Continuous endpoint velocity input contract | `docs/contracts/continuous-endpoint-velocity-input.md` | P16 typed keyboard/gamepad/analog-fixture requested velocity contract, lifecycle, canonical metadata, and P20/P21 handoff |
-| Recorded analog fixture mapping | `docs/contracts/analog-fixture-mapping.md` | P21 strict offline N-channel fixture to P16 mapping; canonical fixture is the recorded 7-channel Selfrionette shape |
-| World/tool control-frame evaluation design | `docs/evaluation/world-tool-frame-comparison-design.md` | P17 minimal within-subject free-space comparison and P20 logging requirements |
-| Experiment motion log v1 | `docs/contracts/experiment-motion-log-v1.md` | P20 versioned typed JSONL-compatible trial/configuration/sample/outcome contract and P21 handoff |
-| fast_arm joint-limit configuration | `docs/contracts/fast-arm-joint-limit-config.md` | TOML SoT, fast_arm-owned startup model/home validation, generic injected runtime guard, and qpos feasibility hold semantics |
-| EndpointTargetGenerator contract | `docs/contracts/endpoint-target-generator.md` | input vector -> command-side `desired_endpoint_m` target generation contract |
-| R7-E-P1 EndpointTargetGenerator contract | `docs/operations/r7-e-p1-endpoint-target-generator-contract.md` | #319 follow-up; deadzone / gain / max step / workspace projection / rejection hold decision |
-| R7-D-P4 fast_arm IK / FK completion audit | `docs/operations/r7-d-completion-audit.md` | R7-D 全体の completion audit と parent #150 の close-readiness 条件を固定する |
-| Runtime input source registry | `docs/contracts/runtime-input-source-registry.md` | runtime input source selection contract |
-| R6-K-P1 runtime input source registry | `docs/operations/r6-k-p1-runtime-input-source-registry.md` | runtime input source registry operation note |
-| Runtime input source state | `docs/contracts/runtime-input-source-state.md` | optional runtime input source state payload metadata |
-| R6-K-P3 input source state payload | `docs/operations/r6-k-p3-input-source-state-payload.md` | R6-K-P3 input source metadata / age / active state operation note |
-| Runtime input safety | `docs/contracts/runtime-input-safety.md` | runtime stale command safety contract |
-| R6-K-P4 live input stale command safety | `docs/operations/r6-k-p4-live-input-stale-command-safety.md` | R6-K-P4 stale command timeout / hold policy |
-| R6-K completion audit | `docs/operations/r6-k-completion-audit.md` | R6-K completion audit and issue #251 / parent #152 handoff readiness |
-| R6-L keyboard viewer input | `docs/operations/r6-l-keyboard-viewer-input.md` | viewer keyboard capture and backend control message smoke note |
-| R6-L gamepad viewer input | `docs/operations/r6-l-gamepad-viewer-input.md` | viewer gamepad capture and backend control message smoke note |
-| R6-L viewer input overlay | `docs/operations/r6-l-viewer-input-overlay.md` | viewer read-only overlay for input source state and control summary |
-| R6-L keyboard / gamepad live viewer smoke | `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | canonical manual smoke for browser keyboard / gamepad live control with backend ingress |
-| R7-E P25 live viewer pacing and backlog | `docs/operations/r7-e-p25-live-viewer-pacing-backlog.md` | production live deadline pacing, live-only latest-state delivery, viewer coalescing, and 120 s acceptance record |
-| R7-E follow-up P26 profile-migration cleanup inventory | `docs/operations/r7-e-p26-profile-migration-cleanup-inventory.md` | behavior-preserving candidate classification, future-Round guardrails, and independently reviewable cleanup handoff |
-| R6-L completion audit | `docs/operations/r6-l-completion-audit.md` | R6-L completion audit and R6-M / R7-A handoff readiness |
-| WebSocket publisher runner | `docs/operations/websocket-publisher-runner.md` | local/dev WebSocket delivery for payload v0; browser diagnostic parse smoke is separate from proper 3D GUI smoke |
-| WebSocket / host / port contract | `docs/operations/websocket-host-port-contract.md` | bind host, browser-visible host, viewer page URL, and WebSocket endpoint URL contract |
-| Live viewer smoke path | `docs/operations/live-viewer-smoke.md` | deterministic dry-run payload -> browser viewer smoke path for R6-C-P3 |
-| Runtime-to-viewer E2E smoke | `docs/operations/runtime-to-viewer-e2e-smoke.md` | backend / dry-run -> publisher -> viewer -> browser troubleshooting handoff for R6-G-P5 |
-| MuJoCo viewer dev launcher | `docs/operations/mujoco-viewer-dev-launcher.md` | AutoPort / one-command / Tailscale WebView dev launcher |
-| Browser visual smoke | `docs/operations/browser-visual-smoke.md` | R6-D-P3 viewer runtime / marker object operation smoke |
-| Backend / viewer startup guide | `docs/operations/backend-viewer-startup.md` | README handoff for backend / dry-run / HTTP-served viewer / browser payload parse smoke startup; proper 3D GUI smoke is separate |
-| R6-G-P3 startup script gap audit | `docs/operations/r6-g-p3-startup-script-gap-audit.md` | startup script / wrapper / npm script minimal completion decision |
-| R6-G completion audit | `docs/operations/r6-g-completion-audit.md` | Phase G completion audit and parent close handoff |
-| Japanese docs writing guardrails | `docs/operations/japanese-doc-writing-guardrails.md` | UTF-8 / BOM / mojibake prevention and PR body formatting checks |
-| R6-D completion audit | `docs/operations/r6-d-completion-audit.md` | viewer real scene mutation skeleton completion audit and IK phase handoff |
-| R6-G-P1 startup path audit | `docs/operations/r6-g-p1-startup-path-audit.md` | backend / viewer startup path inventory and README handoff |
-| R6-E completion audit | `docs/operations/r6-e-completion-audit.md` | Phase E completion audit と old Selfrionette Webview parity handoff |
-| Target marker / desired endpoint contract | `docs/contracts/target-marker-desired-endpoint.md` | runtime target intent and viewer-visible target marker boundary for Phase E |
-| MuJoCo model name contract | `docs/contracts/mujoco-model-name-contract.md` | fast_arm body / site name contract, units, frame, and missing-name semantics |
-| Phase C completion audit | `docs/operations/r6-c-completion-audit.md` | Python publisher / browser viewer live skeleton completion audit |
-| R6-F-P5 old Web View reference audit | `docs/operations/r6-f-p5-old-web-view-reference-audit.md` | old Web View の visual reference audit と boundary freeze |
-| Viewer browser runtime entry | `docs/architecture/data-flow.md` | browser mount entry for payload v0 handoff; R6-B-P2 adds the WebSocket client skeleton; R6-B-P3 connects received payloads to marker rendering; R6-C-P2 adds endpoint configuration and connection status visibility; R6-D-P1 adds the Three.js scene object registry skeleton; R6-D-P2 applies payload marker positions to Three.js objects; R6-B-P4 audits and freezes the completed Phase B handoff |
-| Startup guide handoff | `docs/operations/backend-viewer-startup.md` | canonical backend / viewer startup guide for R6-G-P2 |
-| R6-G-P3 startup gap audit | `docs/operations/r6-g-p3-startup-script-gap-audit.md` | canonical startup script gap decision for R6-G-P3 |
-| R6-G completion audit | `docs/operations/r6-g-completion-audit.md` | canonical Phase G completion audit and parent close handoff |
-| Japanese docs guardrails | `docs/operations/japanese-doc-writing-guardrails.md` | repo-level encoding and PR body safety checks for Japanese docs |
-| Schema contracts | `docs/contracts/schemas.md` | shared contract types |
-| Kinematics / command contract | `docs/contracts/kinematics-command-contract.md` | solver / command / qpos boundary |
-| Forward kinematics contract | `docs/contracts/forward-kinematics.md` | protocol, robot-plugin ownership, and explicit zero-stub boundary |
-| Inverse kinematics contract | `docs/contracts/inverse-kinematics.md` | protocol, robot-plugin ownership, and explicit zero-stub boundary |
-| MuJoCoState contract | `docs/contracts/mujoco-state.md` | backend snapshot contract |
-| Runtime forward kinematics evaluation contract | `docs/contracts/runtime-forward-kinematics-evaluation.md` | runtime/backend FK endpoint evaluation contract; not viewer SoT, transport payload, site extraction, or metrics integration |
-| Parallel work contracts | `docs/contracts/parallel-work-contracts.md` | Step 5-0 contract lock |
-| MotionCommand contract | `docs/contracts/motion-command.md` | command not state |
-| Transport payload contract | `docs/contracts/transport-payload.md` | versioned JSON-compatible payload |
-| Viewer control message schema | `docs/contracts/viewer-control-message-schema.md` | strict viewer-to-backend control intent; read-only and schema-only |
-| Asset contract | `docs/contracts/assets.md` | MJCF/STL/scale/axis rules |
-| Git and PR workflow | `docs/operations/git-pr-workflow.md` | branch / PR / diff gate |
-| Validation policy | `docs/operations/validation.md` | validation categories |
-| Hardware safety | `docs/operations/hardware-safety.md` | serial / OSC / hardware rules |
-| R7-A-lite-P0 device inventory | `docs/operations/r7-a-lite-p0-device-inventory.md` | legacy firmware reference import and confirmed hardware notes |
-| R7-A-lite hardware bring-up summary | `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-bringup-summary.md` | docs-only summary of the closed hardware bring-up evidence |
-| R7-A-lite CLI monitor note | `docs/experiment-notes/2026-06-21-r7-a-lite-cli-monitor.md` | Arduino IDE なしでの serial monitor 運用メモ |
-| R7-A-lite plotting note | `docs/experiment-notes/2026-06-21-r7-a-lite-plotting.md` | vector ログの PowerShell plotting メモ |
-| R7-A-lite hardware log | `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-log.md` | 実機確認の観測メモ |
-| R7-A-lite serial frame contract | `docs/contracts/r7-a-lite-serial-frame-contract.md` | current main firmware contract for #198 / P1 parser follow-up |
-| R7-A-lite serial dry-run smoke | `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | recorded fixture dry-run only; manual live serial is human-only |
-| R7-A-lite WebSocket / viewer smoke | `docs/operations/r7-a-lite-websocket-viewer-smoke.md` | offline dry-run -> payload v0 -> viewer parser smoke; read-only overlay only |
-| R7-A-lite completion audit | `docs/operations/r7-a-lite-completion-audit.md` | final R7-A-lite child completion audit and parent #152 close readiness |
-| R7-B runtime input pipeline contract | `docs/contracts/r7-b-runtime-input-pipeline-contract.md` | keyboard / loadcell / runtime target pipeline contract; R7-B-P0 inventory and handoff |
-| R7-B completion audit | `docs/operations/r7-b-completion-audit.md` | simulation-facing input pipeline completion audit |
-| R7-B-P5 manual live loadcell runtime runner | `docs/operations/r7-b-manual-live-loadcell-runtime-runner.md` | manual-gated live loadcell serial runtime runner; explicit `--port` live path and simulation payload only |
-| R7-C manual validation preflight | `docs/operations/r7-c-manual-validation-preflight.md` | docs-only preflight for manual validation, with child #233 handoff |
-| R7-C viewer fixture demo procedure | `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | viewer launch / replay fixture / keyboard demo procedure; handoff to #234 |
-| R7-C keyboard / replay demo package | `docs/operations/r7-c-keyboard-replay-demo-package.md` | no-hardware keyboard / replay demo package; handoff to #235 |
-| R7-C live loadcell validation log | `docs/operations/r7-c-live-loadcell-validation-log.md` | manual-gated live loadcell validation log procedure; Codex / CI does not run live serial |
-| R7-C live loadcell validation template | `docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md` | operator-filled manual live loadcell validation template |
-| R7-C axis sanity check | `docs/operations/r7-c-axis-sanity-check.md` | keyboard / replay / live loadcell axis sanity protocol; not final calibration |
-| R7-C axis sanity check template | `docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md` | operator-filled axis sanity check template |
-| R7-C presentation demo notes | `docs/operations/r7-c-presentation-demo-notes.md` | presentation-ready demo narrative, fallback plan, and proven/unproven boundary |
-| R7-C completion audit | `docs/operations/r7-c-completion-audit.md` | manual validation / demo operation completion audit and parent #231 close readiness |
-| Legacy map | `docs/migration/legacy-to-new-layer-map.md` | legacy reference only |
-| ADRs | `docs/design/adr/` | design decision history |
-| R6-F-P4 DoF ring reference audit | `docs/operations/r6-f-p4-dof-ring-reference-audit.md` | DoF ring の reference audit と viewer presentation skeleton |
-| R6-F-P5 old Web View reference audit | `docs/operations/r6-f-p5-old-web-view-reference-audit.md` | old Web View の presentation audit と boundary freeze |
-| R6-F completion audit | `docs/operations/r6-f-completion-audit.md` | Sweep_x visual demo の completion state と Phase F handoff |
+| 開発方針 | `docs/architecture/development-policy.md` | 現在のtaskに適用するlayer責務と責務driftの防止 |
+| skeleton構造とlayer責務 | `docs/architecture/mujoco-skeleton-first-spec.md` | MuJoCo SoT、Three.js rendering-only、layer ownership |
+| 文書governance | `docs/architecture/documentation-sot-policy.md` | 文書role、配置、1 topic = 1 canonical document |
+| 命名・単位・座標系 | `docs/conventions.md` | naming、SI unit、coordinate convention |
+| import境界 | `docs/architecture/dependency-boundaries.md` | layer間の許可・禁止dependency |
+| runtime data flow | `docs/architecture/data-flow.md` | inputからMuJoCo、transport、viewerまでの流れ |
+| runtime composition | `docs/architecture/runtime-composition.md` | 唯一のmulti-layer composition root |
+| schema | `docs/contracts/schemas.md` | shared contract type |
+| asset | `docs/contracts/assets.md` | MJCF、STL、scale、axis、unit |
+| Robot Profile / Runtime Plugin / Viewer Profile | `docs/contracts/robot-profile-runtime-viewer-profile.md` | robot selectionとbackend/viewer compatibility |
+| kinematics / command境界 | `docs/contracts/kinematics-command-contract.md` | solver、command、qpos境界 |
+| forward kinematics | `docs/contracts/forward-kinematics.md` | robot-specific FK ownership |
+| inverse kinematics | `docs/contracts/inverse-kinematics.md` | robot-specific IK ownership |
+| MotionCommand | `docs/contracts/motion-command.md` | commandとstateの分離 |
+| MuJoCoState | `docs/contracts/mujoco-state.md` | backend snapshot contract |
+| transport payload | `docs/contracts/transport-payload.md` | versioned JSON-compatible payload |
+| viewer control message | `docs/contracts/viewer-control-message-schema.md` | viewerからbackendへのcontrol intent |
+| target marker / desired endpoint | `docs/contracts/target-marker-desired-endpoint.md` | command intentとviewer feedbackの境界 |
+| endpoint metadata | `docs/contracts/endpoint-metadata-vocabulary.md` | field、owner、unit、frame、lifecycle |
+| EndpointTargetGenerator | `docs/contracts/endpoint-target-generator.md` | input vectorからcommand-side targetを生成する契約 |
+| programmed target input | `docs/contracts/programmed-target-input-source.md` | deterministic target trajectoryとmetadata bridge |
+| runtime input source registry | `docs/contracts/runtime-input-source-registry.md` | input source選択contract |
+| runtime input source state | `docs/contracts/runtime-input-source-state.md` | source stateのpayload metadata |
+| runtime input safety | `docs/contracts/runtime-input-safety.md` | stale commandのhold contract |
+| continuous endpoint velocity input | `docs/contracts/continuous-endpoint-velocity-input.md` | evaluation-ready velocity intent |
+| analog fixture mapping | `docs/contracts/analog-fixture-mapping.md` | recorded N-channel fixture mapping |
+| experiment motion log v1 | `docs/contracts/experiment-motion-log-v1.md` | versioned experiment record contract |
+| fast_arm joint-limit configuration | `docs/contracts/fast-arm-joint-limit-config.md` | TOML SoTとqpos feasibility guard |
+| world/tool control-frame評価 | `docs/evaluation/world-tool-frame-comparison-design.md` | limited exploratory pilot design |
+| Git / PR workflow | `docs/operations/git-pr-workflow.md` | branch、diff、PR、head一致のgate |
+| validation | `docs/operations/validation.md` | 変更層とfailure modeに応じた検証 |
+| hardware safety | `docs/operations/hardware-safety.md` | serial、OSC、実機作動のoperator gate |
+| 日本語文書guardrail | `docs/operations/japanese-doc-writing-guardrails.md` | UTF-8、BOM、mojibake、language policy |
+| runtime dry-run | `docs/operations/runtime-dry-run.md` | deterministic replayからpayload v0 NDJSONまで |
+| backend / viewer起動 | `docs/operations/backend-viewer-startup.md` | backend、publisher、viewerの起動入口 |
+| WebSocket host / port | `docs/operations/websocket-host-port-contract.md` | bind hostとbrowser-visible hostの分離 |
+| WebSocket publisher | `docs/operations/websocket-publisher-runner.md` | local/dev payload delivery |
+| runtime-to-viewer smoke | `docs/operations/runtime-to-viewer-e2e-smoke.md` | backendからbrowser viewerまでの診断入口 |
+| MuJoCo viewer dev launcher | `docs/operations/mujoco-viewer-dev-launcher.md` | one-command / AutoPort / URL案内 |
+| product viewer WASM scene renderer | `docs/operations/product-viewer-wasm-scene-renderer.md` | current product viewerのoperator path |
+| research / implementation log | `research/README.md` | monthly logの責務、entry条件、記録方法 |
 
-## Directory Roles
+## Directory index
 
-- `docs/architecture/`: current architecture policy and boundaries.
-- `docs/contracts/`: layer contract definitions.
-- `docs/design/adr/`: design decision history, not current-spec SoT.
-- `docs/operations/`: operational rules for Git, validation, Codex, and hardware safety.
-- `docs/experiment-notes/`: experiment conditions and results.
-- `docs/migration/`: legacy inventory and migration mapping.
-- `docs/reports/`: review and issue reports.
-- `docs/archive/`: obsolete or historical documents.
+Source of Truth Mapへ載せないsupporting、evidence、historical文書は、次のindexから辿る。
+
+- architecture: `docs/architecture/README.md`
+- contracts: `docs/contracts/README.md`
+- reusable operations: `docs/operations/README.md`
+- experiment conditions / observed results: `docs/experiment-notes/README.md`
+- ADR / design history: `docs/design/README.md`
+- legacy migration evidence: `docs/migration/README.md`
+- implementation report / completion audit / inventory / review: `docs/reports/README.md`
+- historical / retired文書: `docs/archive/README.md`
+- 全Markdown migration案内: `docs/reports/inventories/markdown-inventory.md`
+- research log: `research/README.md`
+
+## Directory role
+
+- `docs/architecture/`: 現在のarchitecture policyとboundary。
+- `docs/contracts/`: layer間のcurrent contract。
+- `docs/evaluation/`: 現在の評価designとmeasurement policy。
+- `docs/operations/`: 反復利用する現在の操作手順と運用規則。
+- `docs/experiment-notes/`: 実験条件と観測結果。
+- `docs/design/adr/`: design decision history。現在仕様のSoTではない。
+- `docs/migration/`: legacy inventoryとmigration evidence。
+- `docs/reports/`: implementation report、completion audit、inventory、review evidence。
+- `docs/archive/`: historical、retired、obsolete文書。
+- `research/`: 実装事実、実験的価値、未検証事項、判断を分離したmonthly log。
+
+新しい文書を追加する前に、既存canonical documentを更新できないか確認する。
+詳細なgovernanceは`docs/architecture/documentation-sot-policy.md`を正とする。

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-14
+last_verified: 2026-07-16
 canonical_for:
   - local/dev WebSocket publisher runner
 related:
@@ -12,117 +12,99 @@ related:
   - docs/operations/backend-viewer-startup.md
 ---
 
-# WebSocket Publisher Runner
+# WebSocket publisher runner
 
-R6-C-P1 adds a Python-side local/dev WebSocket publisher runner for replayed
-payload v0 JSON.
+replayed payload v0 JSON向けPython-side local / dev WebSocket publisher runnerのcurrent手順を示す。
 
-## What it does
+## 実行内容
 
-- Reuses the deterministic replay MuJoCo pipeline.
-- Converts each `MuJoCoState` into transport payload v0 JSON.
-- Publishes that JSON to connected WebSocket clients.
-- Defaults to loopback on `127.0.0.1`.
-- Does not change the payload schema.
-- Does not open the browser viewer.
-- Does not implement a production WebSocket server.
+- deterministic replay MuJoCo pipelineを再利用する
+- 各`MuJoCoState`をtransport payload v0 JSONへ変換する
+- connected WebSocket clientへJSONをpublishする
+- `127.0.0.1`のloopbackを既定値にする
+- payload schemaを変更しない
+- browser viewerを開かない
+- production WebSocket serverを実装しない
 
-## Manual Web View Smoke Command
+## manual Web View smoke command
 
-Manual browser smoke uses the short `sweep_x` programmed input path. This is
-the recommended command for checking that the HTTP-served viewer receives a
-payload without using the longer dynamics path that can print a MuJoCo QACC
-instability warning.
+manual browser smokeには短い`sweep_x` programmed input pathを使う。MuJoCo QACC instability warningを出す可能性が
+ある長いdynamics pathを使わず、HTTP-served viewerがpayloadを受信することを確認する推奨commandである。
 
 ```bash
 uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 6 --interval-s 0.033 --grace-period-s 60 --preset sweep_x
 ```
 
-The default path remains a payload compatibility path covered by unit tests.
-Do not use the previous default `--steps 120` command as the manual browser
-smoke recommendation. Longer MuJoCo dynamics stability is deferred to a
-separate issue.
+default pathはunit testでcoverするpayload compatibility pathのままである。以前のdefault `--steps 120` commandを
+manual browser smokeの推奨にしない。長時間MuJoCo dynamics stabilityはこのsmokeの判定外とする。
 
-Publisher / transport smoke and browser payload parse smoke are the current
-acceptance target here. Proper 3D GUI rendering is not claimed in this PR.
+ここでのacceptance targetはpublisher / transport smokeとbrowser payload parse smokeである。proper 3D GUI
+renderingをこのPRの成果として主張しない。
 
-## Options
+## option
 
-- `--host`: bind host, default `127.0.0.1`.
-- `--port`: bind port, default `8766`.
-- `--steps`: number of replay steps, default `1`.
-- `--dt-s`: replay step duration in seconds, default `1.0 / 60.0`.
-- `--interval-s`: delay between published frames in seconds, default `0.0`.
-- `--grace-period-s`: seconds to wait for a viewer WebSocket connection before
-  publishing, default `0.05`.
-- `--preset`: optional programmed input preset. `sweep_x` is supported.
+- `--host`: bind host。default `127.0.0.1`
+- `--port`: bind port。default `8766`
+- `--steps`: replay step数。default `1`
+- `--dt-s`: replay step duration second。default `1.0 / 60.0`
+- `--interval-s`: published frame間delay second。default `0.0`
+- `--grace-period-s`: publish前にviewer WebSocket connectionを待つsecond。default `0.05`
+- `--preset`: optional programmed input preset。`sweep_x`をsupportする
 
-## Behavior
+## behavior
 
-- On startup, the runner prints the `serving on ws://...` endpoint and waits
-  for a viewer during `--grace-period-s`.
-- If no client is connected before the grace period expires, the runner exits
-  with an explicit reason instead of returning silently.
-- After a client connects, the runner logs that payload publishing has started.
-- When publishing finishes, the runner logs the completion reason.
-- Connected clients receive each payload as a JSON string.
-- `frame_index` increments once per published step.
-- `interval_s` inserts a pause between steps.
-- `grace_period_s` gives local clients time to connect before the first
-  payload is sent.
-- Manual Web view smoke should use the short `--preset sweep_x --steps 6`
-  command above. QACC warnings from longer dynamics runs are not part of the
-  browser smoke acceptance path.
-- The browser runtime can show diagnostic payload text and parse payload v0,
-  but this is still not a proper 3D GUI visual smoke.
+- startup時に`serving on ws://...` endpointを表示し、`--grace-period-s`の間viewerを待つ
+- grace period終了前にclientが接続しなければ、silent returnせず明示reason付きでexitする
+- client接続後にpayload publish開始をlogする
+- publish完了時にcompletion reasonをlogする
+- connected clientは各payloadをJSON stringとして受信する
+- `frame_index`はpublished stepごとに1増える
+- `interval_s`はstep間へpauseを入れる
+- `grace_period_s`は最初のpayload送信前にlocal clientが接続する時間を与える
+- manual Web view smokeには上記の短い`--preset sweep_x --steps 6` commandを使う。長時間dynamics runのQACC
+  warningはbrowser smoke acceptance pathに含めない
+- browser runtimeはdiagnostic payload textを表示してpayload v0をparseできるが、proper 3D GUI visual smokeではない
 
-## Scope Limits
+## scope制限
 
-- No authentication.
-- No TLS.
-- No deployment abstraction.
-- No multi-room or multi-topic routing.
-- No hardware, serial, or OSC access.
-- No viewer changes.
+- authenticationなし
+- TLSなし
+- deployment abstractionなし
+- multi-room / multi-topic routingなし
+- hardware、serial、OSC accessなし
+- viewer変更なし
 
-## Viewer Connection
+## viewer connection
 
-The browser viewer connects by explicit query parameter, not by automatic
-default:
+browser viewerはautomatic defaultではなく明示query parameterで接続する。
 
 ```text
 ?websocketUrl=ws://127.0.0.1:8766
 ```
 
-`?ws=ws://127.0.0.1:8766` is accepted as an alias. When no endpoint query is
-present, the viewer stays disconnected and shows `WebSocket: disabled`. R6-C-P2
-adds that endpoint configuration and connection status display on the viewer
-side; the Python publisher runner remains unchanged.
+`?ws=ws://127.0.0.1:8766`はaliasとして受理する。endpoint queryがない場合、viewerはdisconnectedのまま
+`WebSocket: disabled`を表示する。viewer側のendpoint configurationとconnection status displayはpublisher runnerから分離する。
 
-Open the viewer through an HTTP server. Do not open `file:///.../index.html`
-directly; browser module loading treats `file:` URLs as unique origins and can
-block `dist/browser/main.js` with CORS.
+viewerはHTTP server経由で開く。`file:///.../index.html`を直接開かない。browser module loadingは`file:` URLを
+unique originとして扱い、CORSにより`dist/browser/main.js`をblockする場合がある。
 
 ```powershell
-cd C:\Users\miyut\Desktop\Xpotato-Apps\Selfrionette-mujoco\apps\mujoco-viewer
+Set-Location apps/mujoco-viewer
 python -m http.server 5173
 ```
 
 ```text
 http://127.0.0.1:5173/index.html?websocketUrl=ws://127.0.0.1:8766
 ```
-The host / port / public host contract is fixed in
-`docs/operations/websocket-host-port-contract.md`.
+host / port / public host contractは`docs/operations/websocket-host-port-contract.md`で固定する。
 
-R6-C-P3 adds the smoke handoff doc and command that pair this runner with the
-browser viewer endpoint configuration:
+runnerとbrowser viewerを組み合わせるsmokeは次を参照する。
 
 - `docs/operations/live-viewer-smoke.md`
 - `scripts/run_live_viewer_smoke.py`
 
-The top-level startup guide that ties dry-run, publisher, viewer, and browser
-connection together is `docs/operations/backend-viewer-startup.md`.
+dry-run、publisher、viewer、browser connectionを接続するtop-level startup guideは
+`docs/operations/backend-viewer-startup.md`である。
 
-The smoke path remains rendering-only on the browser side and stops at marker
-summary updates. It does not add Three.js real scene mutation, production
-hosting, auth, TLS, serial, OSC, or hardware access.
+smoke pathはbrowser側でrendering-onlyを維持し、marker summary updateまでで停止する。Three.js real scene mutation、
+production hosting、auth、TLS、serial、OSC、hardware accessは追加しない。

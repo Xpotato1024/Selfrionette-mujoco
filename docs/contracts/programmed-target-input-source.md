@@ -1,12 +1,12 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-15
+last_verified: 2026-07-16
 canonical_for:
   - programmed target input source contract
   - RawInputFrame.metadata bridge for deterministic programmed target trajectories
 related:
-  - docs/operations/r6-i-p3-stub-reclassification.md
+  - docs/reports/implementation/r6-i-p3-stub-reclassification.md
   - docs/contracts/schemas.md
   - docs/contracts/target-marker-desired-endpoint.md
 ---
@@ -32,6 +32,7 @@ related:
 
 `ProgrammedTargetInputSource` は test-double ではなく、programmed target input の concrete source
 である。`sweep_x` もこの concrete source から供給する。
+concrete sourceとしてpackage-rootからpublic exportし、stub namespaceへは配置しない。
 
 ## 3. RawInputFrame.metadata contract
 
@@ -146,9 +147,3 @@ programmed target の契約は interpreter 側で再定義しない。
 - OSC send
 - legacy import / execute
 - dependency change
-
-## 11. P6 handoff
-
-- `#139` では `sweep_x` の trajectory と metadata contract を固定する
-- `#140` で dry-run preset と WebSocket publisher runner を programmed input path に接続する
-- この文書は contract の正本であり、runtime wiring は追加しない

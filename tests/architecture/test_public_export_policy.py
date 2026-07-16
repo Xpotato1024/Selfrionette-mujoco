@@ -26,9 +26,10 @@ STUB_EXPORTS = {
     "selfrionette.transport.stubs": ("NoOpStatePublisher",),
 }
 
-DOC_PATH = Path(__file__).resolve().parents[2] / "docs" / "operations" / "r6-i-p2-public-export-policy.md"
+DOC_PATH = ROOT / "docs" / "reports" / "implementation" / "r6-i-p2-public-export-policy.md"
 DOCS_README_PATH = ROOT / "docs" / "README.md"
-R6_I_P3_DOC_PATH = ROOT / "docs" / "operations" / "r6-i-p3-stub-reclassification.md"
+BOUNDARY_DOC_PATH = ROOT / "docs" / "architecture" / "dependency-boundaries.md"
+R6_I_P3_DOC_PATH = ROOT / "docs" / "reports" / "implementation" / "r6-i-p3-stub-reclassification.md"
 
 
 def test_package_root_all_excludes_stub_exports() -> None:
@@ -63,7 +64,12 @@ def test_r6_i_p2_docs_record_option_a_policy() -> None:
     assert "contract-reexport" in text
 
 
-def test_docs_readme_lists_r6_i_p3_stub_reclassification() -> None:
-    text = DOCS_README_PATH.read_text(encoding="utf-8")
-    assert "R6-I-P3 remaining stubs reclassification" in text
-    assert R6_I_P3_DOC_PATH.relative_to(ROOT).as_posix() in text
+def test_public_export_policy_is_canonical_and_evidence_is_not_in_sot_map() -> None:
+    map_text = DOCS_README_PATH.read_text(encoding="utf-8")
+    boundary_text = BOUNDARY_DOC_PATH.read_text(encoding="utf-8")
+    assert "public export境界" in boundary_text
+    assert "contract re-export" in boundary_text
+    assert DOC_PATH.relative_to(ROOT).as_posix() not in map_text
+    assert R6_I_P3_DOC_PATH.relative_to(ROOT).as_posix() not in map_text
+    assert DOC_PATH.is_file()
+    assert R6_I_P3_DOC_PATH.is_file()

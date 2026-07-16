@@ -19,9 +19,9 @@
 - `src/HX711.h`
 - `docs/legacy-vscode-workflow.md`
 
-## 関連文書
+## 過去参照
 
-- [doc/design/arduino-serial-input-contract.md](../../../doc/design/arduino-serial-input-contract.md)
+- import時点では`doc/design/arduino-serial-input-contract.md`を参照していた。現在のrepositoryには存在しないため、historical pathとしてのみ保持する。
 
 ## 取り込まなかったもの
 

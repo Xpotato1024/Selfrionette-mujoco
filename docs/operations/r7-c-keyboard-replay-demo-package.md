@@ -1,14 +1,14 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-22
+last_verified: 2026-07-16
 canonical_for:
   - R7-C keyboard / replay demo package
 related:
   - docs/README.md
   - docs/operations/r7-c-viewer-fixture-demo-procedure.md
-  - docs/operations/r7-c-manual-validation-preflight.md
-  - docs/operations/r7-b-completion-audit.md
+  - docs/reports/implementation/r7-c-manual-validation-preflight.md
+  - docs/reports/audits/r7-b-completion-audit.md
   - docs/contracts/r7-b-runtime-input-pipeline-contract.md
   - docs/contracts/transport-payload.md
   - docs/operations/validation.md
@@ -18,7 +18,7 @@ related:
 
 ## 目的
 
-この文書は issue #234 の no-hardware demo package を固定する。
+この文書はno-hardware demo packageを固定する。
 ここで扱うのは keyboard demo command creation と replay fixture demo creation だけであり、
 browser, WebSocket server, serial/COM, OSC, hardware validation は含まない。
 
@@ -100,7 +100,7 @@ metadata 側では少なくとも次を期待する。
 
 ## no-hardware validation command
 
-この issue で実行する validation は docs-only に限る。
+このprocedure自体のvalidationはdocs-onlyに限る。
 
 ```powershell
 git diff --check
@@ -144,7 +144,7 @@ print("Japanese docs encoding check passed")
 ## artifact / log naming policy
 
 - `artifacts/r7-c/...` に出力する前に `artifacts/r7-c` directory を作成する
-- 生成物は round と issue 番号を先頭に含める
+- 生成物はprocedure IDを先頭に含める
 - 生成物は用途を `keyboard`, `replay`, `payload`, `log` のように明示する
 - 実行ログは再利用せず、`MUJOCO_LOG.TXT` に流し込まない
 - browser / WebSocket / serial / hardware の痕跡を artifact 名に混ぜない
@@ -155,36 +155,3 @@ print("Japanese docs encoding check passed")
 - `artifacts/r7-c/r7-c-234-keyboard-command.json`
 - `artifacts/r7-c/r7-c-234-replay-demo.ndjson`
 - `artifacts/r7-c/r7-c-234-validation.log`
-
-## handoff
-
-この package は #234 で完了させる。
-次は #235 で manual live loadcell validation log を扱い、live serial の manual-gated boundary を
-`docs/operations/r7-c-live-loadcell-validation-log.md` と
-`docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md` で固定する。
-presentation では `docs/operations/r7-c-presentation-demo-notes.md` から本 package を参照する。
-
-## Scope Check
-
-```text
-legacy changed: no
-legacy imported/executed: no
-assets changed: no
-schema breaking change: no
-import boundary changed: no
-MuJoCo package imported: no
-MuJoCo model load included: no
-MuJoCo forward included: no
-MuJoCo step included: no
-MuJoCoState snapshot included: no
-runtime composition included: no
-Three.js FK/IK included: no
-WebSocket included: no
-serial port opened: no
-OSC sent: no
-hardware validation included: no
-node_modules included: no
-dist included: no
-.env.local included: no
-docs / SoT impact checked: yes
-```

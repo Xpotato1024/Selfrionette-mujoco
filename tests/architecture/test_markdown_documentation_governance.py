@@ -34,6 +34,38 @@ def test_all_tracked_markdown_has_a_current_directory_role() -> None:
     assert all(MODULE.directory_role(path) for path in paths)
 
 
+def test_directory_role_status_matrix_is_responsibility_specific() -> None:
+    expected = {
+        "docs/architecture/example.md": ("architecture-current", {"canonical", "supporting"}),
+        "docs/contracts/example.md": ("contracts-current", {"canonical", "supporting"}),
+        "docs/evaluation/example.md": ("evaluation-current", {"canonical", "supporting"}),
+        "docs/operations/example.md": ("operations-current", {"canonical", "supporting"}),
+        "docs/reports/README.md": ("reports-index", {"supporting"}),
+        "docs/reports/implementation/example.md": ("report-evidence", {"historical"}),
+        "docs/archive/README.md": ("archive-index", {"supporting"}),
+        "docs/archive/operations/example.md": (
+            "archive-record",
+            {"historical", "draft", "obsolete"},
+        ),
+    }
+    for path, (role, statuses) in expected.items():
+        assert MODULE.directory_role(path) == role
+        assert MODULE.allowed_statuses_for_directory(path) == statuses
+
+
+def test_current_directories_contain_only_current_statuses() -> None:
+    current_roots = (
+        "docs/architecture/",
+        "docs/contracts/",
+        "docs/evaluation/",
+        "docs/operations/",
+    )
+    for path in MODULE.tracked_markdown():
+        if path.startswith(current_roots):
+            text = (MODULE.ROOT / path).read_text(encoding="utf-8")
+            assert MODULE.front_matter_status(text) in {"canonical", "supporting"}, path
+
+
 def test_current_validation_does_not_read_historical_snapshot(monkeypatch) -> None:
     def fail_if_called():
         raise AssertionError("historical snapshot must not be a current registry")
@@ -51,13 +83,16 @@ def test_source_of_truth_map_targets_exist() -> None:
 
 
 def test_repository_current_markdown_governance_is_accepted() -> None:
-    result = MODULE.validate()
+    result = MODULE.validate(strict_map=True, strict_links=True)
     assert result.accepted, result.errors
 
 
-def test_changed_files_strict_policy_accepts_unmodified_baseline_debt() -> None:
+def test_changed_files_strict_policy_accepts_unmodified_baseline_debt(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(MODULE, "changed_paths", lambda _base_ref: set())
     result = MODULE.validate(
-        base_ref="cf17fe830645c99b591615b6ffb55a42979c0d5e",
+        base_ref="synthetic-baseline",
         strict_map=True,
         strict_links=True,
     )

@@ -28,9 +28,9 @@ related:
 | path | current directory | front matter | proposed role | canonical / related | proposed destination | language | action |
 |---|---|---|---|---|---|---|---|
 | `AGENTS.md` | `.` | `missing` | `canonical` | `AGENTS.md` | `AGENTS.md` | `ja` | `update` |
-| `README.md` | `.` | `missing` | `supporting` | `docs/README.md` | `README.md` | `ja` | `retain` |
+| `README.md` | `.` | `missing` | `supporting` | `docs/README.md` | `README.md` | `ja` | `translate` |
 | `apps/mujoco-viewer/README.md` | `apps/mujoco-viewer` | `missing` | `supporting` | `docs/README.md` | `apps/mujoco-viewer/README.md` | `mixed` | `translate` |
-| `assets/mujoco/fast_arm/README.md` | `assets/mujoco/fast_arm` | `missing` | `supporting` | `docs/README.md` | `assets/mujoco/fast_arm/README.md` | `en` | `translate` |
+| `assets/mujoco/fast_arm/README.md` | `assets/mujoco/fast_arm` | `missing` | `supporting` | `docs/README.md` | `assets/mujoco/fast_arm/README.md` | `en` | `retain` |
 | `docs/README.md` | `docs` | `canonical` | `canonical` | `docs/README.md` | `docs/README.md` | `mixed` | `translate` |
 | `docs/architecture/README.md` | `docs/architecture` | `supporting` | `supporting` | `docs/README.md` | `docs/architecture/README.md` | `en` | `translate` |
 | `docs/architecture/data-flow.md` | `docs/architecture` | `canonical` | `canonical` | `docs/architecture/data-flow.md` | `docs/architecture/data-flow.md` | `mixed` | `translate` |
@@ -48,8 +48,8 @@ related:
 | `docs/contracts/endpoint-target-generator.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/endpoint-target-generator.md` | `docs/contracts/endpoint-target-generator.md` | `ja` | `retain` |
 | `docs/contracts/experiment-motion-log-v1.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/experiment-motion-log-v1.md` | `docs/contracts/experiment-motion-log-v1.md` | `en` | `translate` |
 | `docs/contracts/fast-arm-joint-limit-config.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/fast-arm-joint-limit-config.md` | `docs/contracts/fast-arm-joint-limit-config.md` | `en` | `translate` |
-| `docs/contracts/forward-kinematics.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/forward-kinematics.md` | `docs/contracts/forward-kinematics.md` | `ja` | `retain` |
-| `docs/contracts/inverse-kinematics.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/inverse-kinematics.md` | `docs/contracts/inverse-kinematics.md` | `ja` | `retain` |
+| `docs/contracts/forward-kinematics.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/forward-kinematics.md` | `docs/contracts/forward-kinematics.md` | `ja` | `translate` |
+| `docs/contracts/inverse-kinematics.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/inverse-kinematics.md` | `docs/contracts/inverse-kinematics.md` | `ja` | `translate` |
 | `docs/contracts/kinematics-command-contract.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/kinematics-command-contract.md` | `docs/contracts/kinematics-command-contract.md` | `ja` | `retain` |
 | `docs/contracts/motion-command.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/motion-command.md` | `docs/contracts/motion-command.md` | `mixed` | `translate` |
 | `docs/contracts/mujoco-model-name-contract.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/mujoco-model-name-contract.md` | `docs/contracts/mujoco-model-name-contract.md` | `ja` | `retain` |
@@ -59,7 +59,7 @@ related:
 | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `docs/contracts` | `missing` | `canonical` | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `en` | `translate` |
 | `docs/contracts/r7-b-runtime-input-pipeline-contract.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/r7-b-runtime-input-pipeline-contract.md` | `docs/contracts/r7-b-runtime-input-pipeline-contract.md` | `ja` | `retain` |
 | `docs/contracts/robot-profile-runtime-viewer-profile.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/robot-profile-runtime-viewer-profile.md` | `docs/contracts/robot-profile-runtime-viewer-profile.md` | `en` | `translate` |
-| `docs/contracts/runtime-forward-kinematics-evaluation.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/runtime-forward-kinematics-evaluation.md` | `docs/contracts/runtime-forward-kinematics-evaluation.md` | `ja` | `retain` |
+| `docs/contracts/runtime-forward-kinematics-evaluation.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/runtime-forward-kinematics-evaluation.md` | `docs/contracts/runtime-forward-kinematics-evaluation.md` | `ja` | `translate` |
 | `docs/contracts/runtime-input-safety.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/runtime-input-safety.md` | `docs/contracts/runtime-input-safety.md` | `ja` | `retain` |
 | `docs/contracts/runtime-input-source-registry.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/runtime-input-source-registry.md` | `docs/contracts/runtime-input-source-registry.md` | `ja` | `retain` |
 | `docs/contracts/runtime-input-source-state.md` | `docs/contracts` | `canonical` | `canonical` | `docs/contracts/runtime-input-source-state.md` | `docs/contracts/runtime-input-source-state.md` | `ja` | `retain` |
@@ -81,13 +81,13 @@ related:
 | `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-log.md` | `docs/experiment-notes` | `missing` | `evidence` | `docs/architecture/documentation-sot-policy.md` | `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-log.md` | `ja` | `retain` |
 | `docs/experiment-notes/2026-06-21-r7-a-lite-plotting.md` | `docs/experiment-notes` | `missing` | `evidence` | `docs/architecture/documentation-sot-policy.md` | `docs/experiment-notes/2026-06-21-r7-a-lite-plotting.md` | `ja` | `retain` |
 | `docs/experiment-notes/README.md` | `docs/experiment-notes` | `supporting` | `supporting` | `docs/architecture/documentation-sot-policy.md` | `docs/experiment-notes/README.md` | `en` | `translate` |
-| `docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md` | `docs/experiment-notes/templates` | `supporting` | `supporting` | `docs/architecture/documentation-sot-policy.md` | `docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md` | `en` | `retain` |
-| `docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md` | `docs/experiment-notes/templates` | `supporting` | `supporting` | `docs/architecture/documentation-sot-policy.md` | `docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md` | `en` | `retain` |
+| `docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md` | `docs/experiment-notes/templates` | `supporting` | `supporting` | `docs/architecture/documentation-sot-policy.md` | `docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md` | `en` | `translate` |
+| `docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md` | `docs/experiment-notes/templates` | `supporting` | `supporting` | `docs/architecture/documentation-sot-policy.md` | `docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md` | `en` | `translate` |
 | `docs/index.md` | `docs` | `missing` | `obsolete` | `docs/README.md` | `docs/archive/indexes/docs-index.md` | `mixed` | `move` |
 | `docs/migration/README.md` | `docs/migration` | `supporting` | `supporting` | `docs/architecture/dependency-boundaries.md` | `docs/migration/README.md` | `en` | `translate` |
-| `docs/migration/legacy-inventory.md` | `docs/migration` | `canonical` | `evidence` | `docs/architecture/dependency-boundaries.md` | `docs/migration/legacy-inventory.md` | `en` | `retain` |
+| `docs/migration/legacy-inventory.md` | `docs/migration` | `canonical` | `evidence` | `docs/architecture/dependency-boundaries.md` | `docs/migration/legacy-inventory.md` | `en` | `translate` |
 | `docs/migration/legacy-to-new-layer-map.md` | `docs/migration` | `canonical` | `merge-candidate` | `docs/architecture/dependency-boundaries.md` | `docs/migration/legacy-to-new-layer-map.md` | `en` | `update` |
-| `docs/migration/rapier-to-mujoco-migration.md` | `docs/migration` | `canonical` | `historical` | `docs/architecture/dependency-boundaries.md` | `docs/migration/rapier-to-mujoco-migration.md` | `en` | `retain` |
+| `docs/migration/rapier-to-mujoco-migration.md` | `docs/migration` | `canonical` | `historical` | `docs/architecture/dependency-boundaries.md` | `docs/migration/rapier-to-mujoco-migration.md` | `en` | `translate` |
 | `docs/operations/README.md` | `docs/operations` | `supporting` | `supporting` | `docs/README.md` | `docs/operations/README.md` | `en` | `translate` |
 | `docs/operations/backend-viewer-startup.md` | `docs/operations` | `canonical` | `canonical` | `docs/operations/backend-viewer-startup.md` | `docs/operations/backend-viewer-startup.md` | `ja` | `retain` |
 | `docs/operations/browser-visual-smoke.md` | `docs/operations` | `canonical` | `canonical` | `docs/operations/browser-visual-smoke.md` | `docs/operations/browser-visual-smoke.md` | `ja` | `retain` |
@@ -182,14 +182,24 @@ related:
 | `docs/reports/audits/viewer-poc-planar-kinematics-retirement.md` | `docs/reports/audits` | `historical` | `evidence` | `docs/architecture/documentation-sot-policy.md` | `docs/reports/audits/viewer-poc-planar-kinematics-retirement.md` | `en` | `retain` |
 | `docs/reports/inventories/markdown-inventory.md` | `docs/reports/inventories` | `historical` | `evidence` | `docs/architecture/documentation-sot-policy.md` | `docs/reports/inventories/markdown-inventory.md` | `ja` | `retain` |
 | `docs/research/mujoco-webviewer-options.md` | `docs/research` | `missing` | `historical` | `docs/operations/product-viewer-wasm-scene-renderer.md` | `docs/archive/research/mujoco-webviewer-options.md` | `ja` | `move` |
-| `firmware/README.md` | `firmware` | `missing` | `supporting` | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `firmware/README.md` | `en` | `translate` |
-| `firmware/arduino/README.md` | `firmware/arduino` | `missing` | `supporting` | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `firmware/arduino/README.md` | `en` | `translate` |
+| `firmware/README.md` | `firmware` | `missing` | `supporting` | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `firmware/README.md` | `en` | `retain` |
+| `firmware/arduino/README.md` | `firmware/arduino` | `missing` | `supporting` | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `firmware/arduino/README.md` | `en` | `retain` |
 | `firmware/arduino/legacy_selfrionette/README.md` | `firmware/arduino/legacy_selfrionette` | `missing` | `historical` | `docs/architecture/dependency-boundaries.md` | `firmware/arduino/legacy_selfrionette/README.md` | `en` | `retain` |
 | `firmware/arduino/legacy_selfrionette/loadcell_7ch_legacy/README.md` | `firmware/arduino/legacy_selfrionette/loadcell_7ch_legacy` | `missing` | `historical` | `docs/architecture/dependency-boundaries.md` | `firmware/arduino/legacy_selfrionette/loadcell_7ch_legacy/README.md` | `ja` | `retain` |
 | `firmware/arduino/legacy_selfrionette/loadcell_7ch_legacy/REVIEW.md` | `firmware/arduino/legacy_selfrionette/loadcell_7ch_legacy` | `missing` | `evidence` | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `firmware/arduino/legacy_selfrionette/loadcell_7ch_legacy/REVIEW.md` | `ja` | `retain` |
 | `firmware/arduino/legacy_selfrionette/loadcell_7ch_legacy/docs/legacy-vscode-workflow.md` | `firmware/arduino/legacy_selfrionette/loadcell_7ch_legacy/docs` | `missing` | `historical` | `docs/architecture/dependency-boundaries.md` | `firmware/arduino/legacy_selfrionette/loadcell_7ch_legacy/docs/legacy-vscode-workflow.md` | `ja` | `retain` |
 | `firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/README.md` | `firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro` | `missing` | `evidence` | `docs/contracts/r7-a-lite-serial-frame-contract.md` | `firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/README.md` | `ja` | `update` |
-| `legacy/fast_arm_control/README.md` | `legacy/fast_arm_control` | `missing` | `supporting` | `docs/architecture/dependency-boundaries.md` | `legacy/fast_arm_control/README.md` | `en` | `translate` |
+| `legacy/fast_arm_control/README.md` | `legacy/fast_arm_control` | `missing` | `supporting` | `docs/architecture/dependency-boundaries.md` | `legacy/fast_arm_control/README.md` | `en` | `retain` |
+
+## #399 migration実施結果
+
+- structure move / rename: 63件完了。pure move commitでは63件すべて100% rename、本文のinsert / deleteは0件。
+- merge-candidate: 11件をreviewし、5件は不足するcurrent factをcanonicalへ統合、6件はalready covered、blocked 0件。
+- active-document Japanese migration: 52件完了。対象はroot / viewer入口、`docs/README.md`、current architecture / contracts / evaluation / migration、reusable operations、directory index、operator記録template。
+- retained: historical / evidence本文、experiment observation、legacy provenance、code identifier、schema field、CLI、path、formal name、error / protocol literal。
+- deletion count: 0。
+- Source of Truth Map: 123 topicsから41 topicsへ縮約。topic / target重複0、target missing 0。
+- このtableの`proposed destination`は実際の移行先、`action`は#399で完了したdispositionを表す。sourceが移動済みの場合はdestinationが現存pathである。
 | `legacy/fast_arm_control/mocap_to_joint/README.md` | `legacy/fast_arm_control/mocap_to_joint` | `missing` | `historical` | `docs/architecture/dependency-boundaries.md` | `legacy/fast_arm_control/mocap_to_joint/README.md` | `ja` | `retain` |
 | `research/README.md` | `research` | `canonical` | `canonical` | `research/README.md` | `research/README.md` | `ja` | `retain` |
 | `research/logs/2026-07.md` | `research/logs` | `historical` | `evidence` | `research/README.md` | `research/logs/2026-07.md` | `ja` | `retain` |

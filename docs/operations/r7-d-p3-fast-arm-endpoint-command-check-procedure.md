@@ -1,12 +1,12 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-27
+last_verified: 2026-07-16
 canonical_for:
   - R7-D-P3 fast_arm endpoint command check procedure
 related:
   - docs/README.md
-  - docs/operations/r7-d-p1-fast-arm-4dof-endpoint-ik.md
+  - docs/reports/implementation/r7-d-p1-fast-arm-4dof-endpoint-ik.md
   - docs/contracts/target-marker-desired-endpoint.md
   - docs/contracts/transport-payload.md
   - docs/architecture/data-flow.md
@@ -20,11 +20,7 @@ related:
 
 ## Purpose
 
-この手順は、R7-D-P1 / R7-D-P2 で実装・安定化された fast_arm endpoint command を、
-中間発表前に no-hardware で再現確認するための操作手順を固定する。
-
-この issue の目的は、動作実装を増やすことではなく、既存の runtime / viewer / transport の
-観測点を人間が再現できる形でまとめることにある。
+この手順はfast_arm endpoint commandをno-hardwareで再現確認し、runtime / viewer / transportの観測点をoperatorが確認する方法を固定する。
 
 ## Scope
 
@@ -36,9 +32,8 @@ related:
 
 ## Preconditions
 
-- `origin/main` に #298 と #299 の merge commit が入っていること。
-- branch が `codex/r7-d-p3-fast-arm-endpoint-command-check-procedure` であること。
-- local tree が clean であること。
+- current canonical runtime / viewer implementationを含むcheckoutであること。
+- local treeがcleanであること。
 - no-hardware で実施すること。
 
 ## No-hardware policy
@@ -135,7 +130,7 @@ http://127.0.0.1:5176/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 
 ## qpos[2] / qpos[3] zero-padding regression check
 
-この issue では、`qpos[2]` / `qpos[3]` が zero padding に戻っていないことを確認する。
+このprocedureでは、`qpos[2]` / `qpos[3]` が zero padding に戻っていないことを確認する。
 
 確認方法:
 
@@ -282,13 +277,7 @@ Notes:
 
 ## Known limitations
 
-- `Nan, Inf or huge value in QACC` warning の完全解消はこの issue の主目的ではない。
+- `Nan, Inf or huge value in QACC` warning の完全解消はこのprocedureの主目的ではない。
 - no-hardware 確認なので、実機性能や物理接触は検証しない。
 - viewer は read-only であり、FK / IK / qpos recompute は行わない。
 - serial / OSC / hardware との実通信はしない。
-
-## Follow-up
-
-- 次の follow-up は #297 を想定する。
-- この手順は manual smoke を固定するだけであり、将来の feature 実装の SoT にはならない。
-- `docs/operations/r7-d-p1-fast-arm-4dof-endpoint-ik.md` と `docs/contracts/transport-payload.md` の boundary を前提に維持する。

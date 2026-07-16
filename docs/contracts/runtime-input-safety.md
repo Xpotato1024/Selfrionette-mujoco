@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-06-23
+last_verified: 2026-07-16
 canonical_for:
   - runtime input stale-command safety
 related:
@@ -34,7 +34,7 @@ runtime input の stale-command safety は、`source_active`,
 
 default timeout は `250 ms` とする。
 timeout は deterministic な境界であり、wall clock に依存しない。
-R6-K では `command_age_ms` は source-provided metadata として扱い、runtime は
+`command_age_ms`はsource-provided metadataとして扱い、runtimeは
 live な経過時間を wall clock から計算しない。
 
 ## observable fields
@@ -52,7 +52,7 @@ publisher が同じ値を参照できるようにする。`runtime_input_safety_
 ## source contract
 
 - offline の programmed_target / replay / noop は deterministic な `command_age_ms=0` を emit してよい
-- R6-L の browser / live sources は `command_age_ms` と stale metadata を source 側で emit する
+- browser / live sourcesは `command_age_ms` と stale metadata を source 側で emit する
 
 ## limitation
 

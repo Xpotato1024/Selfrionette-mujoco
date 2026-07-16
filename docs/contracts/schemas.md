@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-15
+last_verified: 2026-07-16
 canonical_for:
   - schema contracts
 related:
@@ -10,65 +10,60 @@ related:
   - docs/contracts/mujoco-state.md
 ---
 
-# Schema Contracts
+# Schema契約
 
-This is the canonical contract for shared schemas. Other documents should link
-here instead of restating field lists.
+これは共有schemaのcanonical contractである。他の文書ではfield一覧を再掲せず、
+この文書を参照する。
 
 `JointCommand` / `MotionCommand.joint` / `target_position_m` / MuJoCo `qpos`
 の command boundary は `docs/contracts/kinematics-command-contract.md` を参照する。
 
-## Schemas
+## Schema一覧
 
-- `Vector3`, `QuaternionWXYZ`, `JointVector`, `ScalarVector`: shared tuple
-  aliases for layer contracts.
-- `RawInputFrame`: raw device/replay input captured by `input_sources`.
-- `InputIntent`: interpreted replay/input-layer contract sent from
-  `input_interpreters` to the next layer; it is not a `MotionCommand`.
-- `TargetCommand`: target-space command used by motion generation.
-- `JointCommand`: solver output / joint command boundary input; see
-  `docs/contracts/kinematics-command-contract.md`.
-- `MotionCommand`: motion-layer command consumed by `mujoco_backend`; see
-  `docs/contracts/motion-command.md` and
-  `docs/contracts/kinematics-command-contract.md`.
-- `BodyTransform`, `SiteTransform`: rigid transforms extracted by the backend.
-- `MuJoCoState`: backend snapshot passed to transport and viewer layers; see
-  `docs/contracts/mujoco-state.md`.
-- `RenderState`: placeholder render contract for viewer-side state handoff.
-- `ViewerControlMessage`, `ViewerControlKeyboardMessage`,
-  `ViewerControlGamepadMessage`, `ViewerControlGamepadButtonMessage`: strict
-  viewer-to-backend control envelope; see
-  `docs/contracts/viewer-control-message-schema.md`.
+- `Vector3`、`QuaternionWXYZ`、`JointVector`、`ScalarVector`: layer contractで
+  共有するtuple alias。
+- `RawInputFrame`: `input_sources`が取得するdevice/replayのraw input。
+- `InputIntent`: `input_interpreters`から次のlayerへ渡す、解釈済みの
+  replay/input-layer contract。`MotionCommand`ではない。
+- `TargetCommand`: motion generationで使用するtarget-space command。
+- `JointCommand`: solver output / joint command boundaryの入力。
+  `docs/contracts/kinematics-command-contract.md`を参照する。
+- `MotionCommand`: `mujoco_backend`が消費するmotion-layer command。
+  `docs/contracts/motion-command.md`と
+  `docs/contracts/kinematics-command-contract.md`を参照する。
+- `BodyTransform`、`SiteTransform`: backendが抽出するrigid transform。
+- `MuJoCoState`: transport layerとviewer layerへ渡すbackend snapshot。
+  `docs/contracts/mujoco-state.md`を参照する。
+- `RenderState`: viewer-side state boundary用のplaceholder render contract。
+- `ViewerControlMessage`、`ViewerControlKeyboardMessage`、
+  `ViewerControlGamepadMessage`、`ViewerControlGamepadButtonMessage`: 厳密な
+  viewer-to-backend control envelope。
+  `docs/contracts/viewer-control-message-schema.md`を参照する。
 
-## Responsibility Notes
+## 責務に関する注記
 
-- Schemas define shared data contracts only.
-- Schemas must not import runtime composition, MuJoCo, WebSocket, or Three.js
-  behavior.
-- Schema additions should preserve the layer boundaries documented in
-  `docs/architecture/dependency-boundaries.md`.
-- `MotionCommand` is a command, not state.
-- `InputIntent` is the replay/input-layer result, not a motion command.
-- `InputIntent.values` is raw replay/input payload data and does not carry
-  motion semantics yet.
-- `InputIntent.target_delta_m` may be translated into
-  `TargetCommand(delta_m=...)` by the motion layer.
-- `InputIntent.joint_delta_rad` is intentionally not normalized into a joint
-  command in Step 5-F because Step 5-D already fixed joint commands as direct
-  qpos reflection at the backend boundary.
-- `desired_endpoint_m` is the command-side endpoint term used by the
-  concrete programmed-target path; `target_position_m` remains compatibility /
-  viewer feedback metadata.
-- `MotionCommand.target` is the target-side command bucket and is not the qpos
-  boundary.
-- `MotionCommand.joint` is the qpos command boundary input, not viewer
-  feedback.
-- `ViewerControlMessage` is schema-only control intent. It does not authorize
-  viewer-side simulation mutation, FK / IK recompute, or physics mutation.
-- `MuJoCoState.target_position_m` is viewer-visible feedback, not a command
-  source.
-- `MuJoCoState` snapshot generation lives in `mujoco_backend` and is fed by
-  `mj_forward`; `mj_step` remains part of backend stepping and is not part of
-  the snapshot contract.
-- Transport payloads are derived from `MuJoCoState` and do not change schema
-  ownership.
+- Schemaは共有data contractだけを定義する。
+- Schemaはruntime composition、MuJoCo、WebSocket、Three.jsのbehaviorを
+  importしてはならない。
+- Schema追加では`docs/architecture/dependency-boundaries.md`に記録された
+  layer boundaryを維持する。
+- `MotionCommand`はcommandであり、stateではない。
+- `InputIntent`はreplay/input-layerの結果であり、motion commandではない。
+- `InputIntent.values`はraw replay/input payload dataであり、現時点では
+  motion semanticsを持たない。
+- motion layerは`InputIntent.target_delta_m`を
+  `TargetCommand(delta_m=...)`へ変換してよい。
+- joint commandはbackend qpos boundaryで直接反映するため、`InputIntent.joint_delta_rad`を
+  joint commandへnormalizeしない。
+- `desired_endpoint_m`はconcrete programmed-target pathが使用する
+  command-side endpoint termである。`target_position_m`はcompatibility /
+  viewer feedback metadataのままとする。
+- `MotionCommand.target`はtarget-side command bucketであり、qpos boundaryではない。
+- `MotionCommand.joint`はqpos command boundaryの入力であり、viewer feedbackではない。
+- `ViewerControlMessage`はschema-onlyのcontrol intentである。viewer-sideの
+  simulation mutation、FK / IK recompute、physics mutationを許可しない。
+- `MuJoCoState.target_position_m`はviewer-visible feedbackであり、command sourceではない。
+- `MuJoCoState` snapshotの生成は`mujoco_backend`が所有し、`mj_forward`から
+  供給される。`mj_step`はbackend steppingの一部であり、snapshot contractには
+  含まれない。
+- Transport payloadは`MuJoCoState`から派生し、schema ownershipを変更しない。

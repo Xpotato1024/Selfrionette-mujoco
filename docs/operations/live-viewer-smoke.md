@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-14
+last_verified: 2026-07-16
 canonical_for:
   - live viewer smoke path
 related:
@@ -11,111 +11,78 @@ related:
   - apps/mujoco-viewer/README.md
 ---
 
-# Live Viewer Smoke
+# live viewer smoke
 
-R6-C-P3 adds the deterministic local smoke path from replay payload v0 to the
-browser viewer runtime.
+replay payload v0からbrowser viewer runtimeまでのdeterministic local smoke pathを確認する。
 
-## Command
+## command
 
 ```bash
 uv run python scripts/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --steps 3 --grace-period-s 5
 ```
 
-## Viewer URL
+## viewer URL
 
 ```text
 apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 ```
 
-The WebSocket endpoint shown by the CLI is `ws://127.0.0.1:8766`.
-The browser viewer URL shown by the CLI is `apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766`.
-The CLI prints both values so the endpoint and browser page are not mixed up.
+CLIが表示するWebSocket endpointは`ws://127.0.0.1:8766`、browser viewer URLは
+`apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766`である。endpointとbrowser pageを混同しないよう、
+CLIは両方を出力する。
 
-Opening `/apps/mujoco-viewer/` without `websocketUrl` keeps the viewer
-disconnected by design.
+`websocketUrl`なしで`/apps/mujoco-viewer/`を開くと、設計どおりdisconnectedのままになる。
+`?ws=ws://127.0.0.1:8766`はcompatibility aliasとして受理する。
 
-`?ws=ws://127.0.0.1:8766` is accepted as a compatibility alias.
+## 推奨手順
 
-## Recommended Order
+1. terminal 1でsmoke commandを起動する。
+2. CLIが表示したViewer URLをcopyする。
+3. grace period中にbrowserでViewer URLを開く。
+4. viewer statusが`WebSocket: open`へ変わることを確認する。
+5. marker summaryがpayload v0 frame updateを反映することを確認する。
 
-1. Start the smoke command in terminal 1.
-2. Copy the Viewer URL printed by the CLI.
-3. Open the Viewer URL in the browser during the grace period.
-4. Confirm the viewer status changes to `WebSocket: open`.
-5. Confirm the marker summary reflects payload v0 frame updates.
+smoke commandはlocal WebSocket server起動後、最初のpayload publish前にbrowserが接続できるようgrace periodを
+設ける。viewer WebSocket clientは現在reconnectを実装していないため、server準備前にbrowserを開くとerror stateに
+残る場合がある。grace window終了前にbrowserが接続しない場合、runnerはpayloadをdropする。
 
-The smoke command uses a grace period so the browser can connect after the
-local WebSocket server starts and before the first payload is published.
-The viewer WebSocket client does not currently implement reconnect, so opening
-the browser before the server is ready may leave the viewer in an error state.
-If the browser is not connected before the grace window expires, payloads are
-still dropped by the runner.
 
-R6-C-P4 treats this smoke path as the Phase C completion handoff and does not
-expand the scope beyond the local/dev publisher, browser viewer, and marker
-summary update skeleton.
-R6-D-P1 adds the Three.js scene object registry skeleton on the viewer side,
-and R6-D-P2 applies the payload marker coordinates directly to the Three.js
-objects without changing the browser viewer's rendering-only role.
-R6-D-P4 closes the Phase D completion audit in
-`docs/operations/r6-d-completion-audit.md` and keeps the next handoff focused
-on IK / command integration skeleton work, not on a rendered arm mesh or an
-already-completed IK path.
-
-The canonical backend / viewer startup guide is
-`docs/operations/backend-viewer-startup.md`.
-The host / port / URL contract is fixed in
-`docs/operations/websocket-host-port-contract.md`.
-R6-G-P5 の E2E smoke / troubleshooting の本体は
+canonical backend / viewer startup guideは`docs/operations/backend-viewer-startup.md`、host / port / URL contractは
+`docs/operations/websocket-host-port-contract.md`を正とする。
+E2E smoke / troubleshootingの本体は
 `docs/operations/runtime-to-viewer-e2e-smoke.md` に置く。
 
-## What the Smoke Path Proves
+## smoke pathが証明する範囲
 
-- Python replay dry-run still produces payload v0.
-- The local/dev WebSocket publisher runner can deliver payload v0 to a client.
-- The browser viewer can connect to the configured endpoint.
-- The viewer runtime keeps the received payload in state.
-- The marker rendering skeleton updates summary text, scene placeholder text,
-  and root attributes from the latest payload.
-- The viewer keeps a Three.js scene object registry alive for marker
-  skeleton objects and applies payload marker positions directly from the
-  marker scene model.
+- Python replay dry-runがpayload v0を生成する
+- local/dev WebSocket publisher runnerがclientへpayload v0をdeliveryできる
+- browser viewerがconfigured endpointへ接続できる
+- viewer runtimeが受信payloadをstateへ保持する
+- marker rendering skeletonがlatest payloadからsummary text、scene placeholder text、root attributeを更新する
+- viewerがmarker skeleton object向けThree.js scene object registryを維持し、marker scene modelからpayload
+  marker positionを直接適用する
 
-## Success Condition
+## success condition
 
-- The viewer status shows an open WebSocket connection.
-- The summary text advances to the received `frame_index`.
-- The body and site counts on the viewer root track the received payload.
-- `base_link` and `tip` remain present in the rendered marker summary.
+- viewer statusがopen WebSocket connectionを示す
+- summary textが受信`frame_index`まで進む
+- viewer rootのbody/site countが受信payloadへ追従する
+- rendered marker summaryに`base_link`と`tip`が残る
 
-## No-Client Behavior
+## client不在時のbehavior
 
-The Python publisher runner does not buffer payloads for absent clients. If no
-browser viewer is connected when a frame is published, that frame is dropped.
-Use the grace period or start the viewer first to keep the smoke path
-deterministic.
+Python publisher runnerは不在client向けpayloadをbufferしない。frame publish時にbrowser viewerが未接続なら、そのframeを
+dropする。smoke pathをdeterministicに保つにはgrace periodを使うか、viewerを先に起動する。
 
-## Scope
+## scope
 
-- No browser automation.
-- No production server.
-- No auth or TLS.
-- No reverse proxy.
-- No public network exposure.
-- No serial, OSC, or hardware access.
-- No `@types/three` or Rapier reintroduction.
-- No Three.js real scene mutation beyond direct marker position assignment.
-- No body/site/target position mapping beyond direct payload coordinates.
-- No FK or IK.
-
-## Hand-off
-
-R6-D-P3 documents the browser-visible DOM and scene-object smoke state in
-`docs/operations/browser-visual-smoke.md` without adding renderer, camera, or
-animation loop work.
-
-R6-E-P0 handles the Phase E preparation cleanup by removing only stale
-placeholders and preserving empty-directory `.gitkeep` markers. The next
-handoff is the Phase E IK / target command integration skeleton, to be
-created as a separate parent issue.
+- browser automationなし
+- production serverなし
+- auth / TLSなし
+- reverse proxyなし
+- public network exposureなし
+- serial、OSC、hardware accessなし
+- `@types/three`またはRapierの再導入なし
+- direct marker position assignmentを超えるThree.js real scene mutationなし
+- direct payload coordinateを超えるbody/site/target position mappingなし
+- FK / IKなし

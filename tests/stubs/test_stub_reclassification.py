@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC_PATH = ROOT / "docs" / "operations" / "r6-i-p3-stub-reclassification.md"
+DOC_PATH = ROOT / "docs" / "reports" / "implementation" / "r6-i-p3-stub-reclassification.md"
 
 EXPECTED_ROWS = {
     "StaticInputSource": {

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-06-22
+last_verified: 2026-07-16
 canonical_for:
   - R7-C live loadcell validation log procedure
 related:
@@ -26,7 +26,6 @@ Codex / CI は live serial、COM access、hardware validation、OSC、robot outp
 人間が実行する場合だけ、repo root から次の形で実行する。
 
 ```powershell
-cd D:\Xpotato-apps\Selfrionette-mujoco
 uv run python scripts/run_live_loadcell_runtime.py --port COM5 --baud-rate 115200 --max-frames 120
 ```
 
@@ -121,36 +120,4 @@ banner が port / baud rate / max frames を示さない場合は validation を
 
 Codex / CI はこの live serial command を実行しない。
 CI で行うのは docs-only validation と template presence の確認だけである。
-live serial の結果は人間が template に記録し、必要に応じて後続 issue で読む。
-
-## handoff
-
-次は #236 で axis sanity check protocol を追加する。
-この log template の observed / expected 欄は
-`docs/operations/r7-c-axis-sanity-check.md` の keyboard / replay / live loadcell observation と接続する。
-presentation では `docs/operations/r7-c-presentation-demo-notes.md` から manual-gated log 境界を参照する。
-
-## Scope Check
-
-```text
-legacy changed: no
-legacy imported/executed: no
-assets changed: no
-schema breaking change: no
-import boundary changed: no
-MuJoCo package imported: no
-MuJoCo model load included: no
-MuJoCo forward included: no
-MuJoCo step included: no
-MuJoCoState snapshot included: no
-runtime composition included: no
-Three.js FK/IK included: no
-WebSocket included: no
-serial port opened by Codex/CI: no
-OSC sent: no
-hardware validation included by Codex/CI: no
-node_modules included: no
-dist included: no
-.env.local included: no
-docs / SoT impact checked: yes
-```
+live serial の結果は人間が template に記録し、必要なreviewで参照する。

@@ -1,80 +1,72 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-13
+last_verified: 2026-07-16
 canonical_for:
   - fast_arm TOML joint-angle limits and runtime qpos feasibility guard
 related:
   - docs/architecture/runtime-composition.md
   - docs/contracts/runtime-input-safety.md
-  - docs/operations/r7-e-p22-neutral-initial-pose.md
+  - docs/reports/implementation/r7-e-p22-neutral-initial-pose.md
 ---
 
-# fast_arm joint-limit configuration and qpos feasibility
+# fast_arm joint-limit configurationとqpos feasibility
 
-## Configuration source of truth
+## configurationのsource of truth
 
-`configs/fast_arm/joint_limits.toml` is the only joint-angle limit source of
-truth. The fast_arm production composition owns loading it with Python 3.11
-`tomllib`; input sources, kinematics, viewer, transport, generic pipelines,
-and the MJCF do not read or duplicate the limits. The schema is version `1`,
-identifies both `robot = "fast_arm"` and
-`model = "fast_arm"`, requires `angle_unit = "rad"`, and records `status` as
-`provisional` or `validated`.
+`configs/fast_arm/joint_limits.toml`がjoint-angle limitの唯一のsource of truthである。
+Python 3.11の`tomllib`によるloadはfast_arm production compositionが所有する。
+input source、kinematics、viewer、transport、generic pipeline、MJCFはlimitを
+読み込まず、複製もしない。schema versionは`1`で、`robot = "fast_arm"`と
+`model = "fast_arm"`の両方を識別し、`angle_unit = "rad"`を必須とし、`status`には
+`provisional`または`validated`を記録する。
 
-The standard pre-identification configuration requires these joints in MuJoCo
-order:
+標準のpre-identification configurationでは、MuJoCo orderで次のjointを必須とする。
 
 `sholder_joint_1`, `sholder_joint_2`, `sholder_joint_3`, `elbow_joint`.
 
-All four standard values are `lower_rad = -pi` and `upper_rad = pi`, with
-`status = "provisional"`. They are a conservative software feasibility
-boundary before physical identification, not an authoritative mechanical
-envelope. After physical identification, the TOML values and status are
-updated; a motor-space or shoulder-coupled feasible region requires a separate
-contract and is not inferred from these independent ranges.
+4つの標準値はすべて`lower_rad = -pi`、`upper_rad = pi`、
+`status = "provisional"`である。これはphysical identification前の保守的な
+software feasibility boundaryであり、authoritativeなmechanical envelopeではない。
+physical identification後にTOMLの値とstatusを更新する。motor-spaceまたは
+shoulder-coupled feasible regionには別のcontractが必要であり、これらの独立した
+rangeから推論しない。
 
-## Startup validation
+## startup validation
 
-Before a fast_arm runtime pipeline starts, fast_arm production composition
-parses and validates the TOML and checks the loaded MuJoCo model. Startup fails
-when the
-schema version, robot/model identity, unit, required joint set, joint order,
-finite values, or `lower_rad < upper_rad` is invalid. The model joint names and
-order must match the TOML, and the canonical MuJoCo `home` keyframe qpos must be
-inside every configured range. There is no implicit `[-pi, pi]` fallback when
-the file is missing or invalid.
+fast_arm runtime pipelineの開始前に、fast_arm production compositionはTOMLをparse・
+validateし、load済みMuJoCo modelを確認する。schema version、robot/model identity、
+unit、必須joint set、joint order、finite value、`lower_rad < upper_rad`のいずれかが
+不正ならstartupは失敗する。modelのjoint nameとorderはTOMLに一致しなければならず、
+canonicalなMuJoCo `home` keyframe qposは、設定されたすべてのrange内に
+なければならない。fileが欠落または不正な場合、暗黙の`[-pi, pi]` fallbackはない。
 
-## Enforcement boundary and semantics
+## enforcement boundaryとsemantics
 
-The generic guard contract runs after the selected motion policy returns a
-candidate command and before `MuJoCoSimulator.apply_command()` / `step()`.
-Fast_arm production composition injects the fast_arm adapter into that
-boundary. The generic and compatibility builders do not implicitly load this
-TOML or apply fast_arm validation. The production programmed, replay,
-keyboard/gamepad viewer, and fixture/loadcell paths all receive the same
-injected fast_arm guard.
+generic guard contractは、selected motion policyがcandidate commandを返した後、
+`MuJoCoSimulator.apply_command()` / `step()`の前に実行する。fast_arm production
+compositionは、そのboundaryへfast_arm adapterをinjectする。generic builderと
+compatibility builderは、このTOMLを暗黙にloadせず、fast_arm validationも適用しない。
+productionのprogrammed、replay、keyboard/gamepad viewer、fixture/loadcell pathは、
+すべて同じinjected fast_arm guardを受け取る。
 
-`QposFeasibilityResult.accepted` is the runtime accept/reject source of truth.
-Command metadata is retained for diagnostics and compatibility observability;
-robot-specific metadata is not a generic runtime control-flow contract.
+`QposFeasibilityResult.accepted`がruntime accept/rejectのsource of truthである。
+command metadataはdiagnosticとcompatibility observabilityのために保持する。
+robot-specific metadataはgeneric runtime control-flow contractではない。
 
-The guard accepts exact lower and upper boundaries. If one or more candidate
-qpos axes are outside the configured range, it rejects the entire candidate,
-does not clamp individual axes, and applies a hold command containing the
-current qpos. Typed `FastArmJointLimitViolation` values and compatible command
-metadata expose the joint name, candidate value, lower/upper bounds, and
-`qpos_feasibility_action = "hold_current_qpos"`.
+guardはlower boundaryとupper boundaryのちょうどの値をacceptする。candidate qposの
+1軸以上が設定range外なら、candidate全体をrejectし、個々のaxisをclampせず、
+current qposを含むhold commandを適用する。typed `FastArmJointLimitViolation` valueと
+compatible command metadataは、joint name、candidate value、lower/upper bound、
+`qpos_feasibility_action = "hold_current_qpos"`を公開する。
 
-Qpos-limit rejection is distinct from stale input, control-frame resolution
-failure, and target rejection. It nevertheless suppresses target feedback
-advancement for that step: the active/last-valid target and viewer rebase state
-remain unchanged. The MuJoCo physical state remains the source of truth.
+qpos-limit rejectionは、stale input、control-frame resolution failure、target rejectionと
+区別する。ただし、そのstepではtarget feedbackのadvanceを抑止し、active/last-valid
+targetとviewer rebase stateを変更しない。MuJoCo physical stateは引き続き
+source of truthである。
 
-P24 replaces this explicit fast_arm composition seam with Robot Profile /
-Runtime Plugin / Viewer Profile registries. The fast_arm plugin resolves this
-same TOML through the profile declaration and injects the existing generic
-guard boundary; no limit values are duplicated. Mesh collision,
-self-collision, motor-space limits, torque/current/velocity safety, hardware
-characterization, serial, OSC, and viewer config editing are outside this
-contract.
+current Robot Profile / Runtime Plugin / Viewer Profile registryでは、fast_arm pluginがprofile declarationを通じて
+同じTOMLをresolveし、既存のgeneric guard boundaryをinjectする。limit valueは
+複製しない。mesh collision、self-collision、motor-space limit、
+torque/current/velocity safety、hardware characterization、serial、OSC、
+viewer config editingは、このcontractの対象外である。

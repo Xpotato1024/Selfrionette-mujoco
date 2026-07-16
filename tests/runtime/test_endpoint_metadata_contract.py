@@ -37,7 +37,7 @@ def test_current_tip_position_provenance_is_explicitly_overloaded_compatibility_
     assert "overloaded compatibility field" in document
     assert "stateful viewer command endpoint anchor" in document
     assert "caller-supplied endpoint anchor" in document
-    assert "not a MuJoCo physical measurement" in document
+    assert "MuJoCo physical measurementではない" in document
     assert "actual_tip_delta_m" in document
 
 

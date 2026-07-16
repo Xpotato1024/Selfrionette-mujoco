@@ -12,112 +12,113 @@ related:
 
 # R7-C live loadcell validation log template
 
-## Run Metadata
+## 実行metadata
 
-- issue / PR:
+- Issue / PR:
 - operator:
-- date:
-- local time:
+- 日付:
+- local時刻:
 - branch:
 - commit:
 - machine:
-- notes file:
+- 記録file:
 
-## Manual Gate
+## manual gate
 
-- R7-C preflight read:
-- keyboard / replay demo package read:
-- operator confirms this is manual live serial:
-- Codex / CI execution: no
-- serial port opened by Codex / CI: no
-- COM access by Codex / CI: no
-- OSC sent: no
+- R7-C preflight確認:
+- keyboard / replay demo package確認:
+- operatorがmanual live serialであることを確認:
+- Codex / CIによる実行: no
+- Codex / CIによるserial port open: no
+- Codex / CIによるCOM access: no
+- OSC送信: no
 - robot output: no
 - actuator command: no
 - firmware upload: no
-- firmware modified: no
+- firmware変更: no
 
 ## Command
 
+repo rootで実行する。
+
 ```powershell
-cd D:\Xpotato-apps\Selfrionette-mujoco
 uv run python scripts/run_live_loadcell_runtime.py --port <PORT> --baud-rate <BAUD> --max-frames <MAX_FRAMES>
 ```
 
 - port:
 - baud rate:
 - max frames:
-- pyserial available: yes / no / unknown
-- pyserial unavailable message:
+- pyserial利用可否: yes / no / unknown
+- pyserial利用不可message:
 
-## Expected Startup Banner
+## 期待するstartup banner
 
-Expected:
+期待値:
 
 ```text
 manual gated live serial mode
 port=<operator-selected-port> baud_rate=<operator-selected-baud-rate> max_frames=<finite-frame-count>
 ```
 
-Observed:
+観測値:
 
 ```text
 
 ```
 
-- startup banner matched: pass / caution / fail
+- startup banner一致: pass / caution / fail
 
-## Observed Frames
+## frame観測
 
-- observed frame count:
-- first frame timestamp:
-- last frame timestamp:
-- stop reason:
-- timeout observed:
-- parser warnings:
+- 観測frame数:
+- 最初のframe timestamp:
+- 最後のframe timestamp:
+- stop理由:
+- timeout観測:
+- parser warning:
 
-## Payload Metadata Confirmation
+## payload metadata確認
 
 - `metadata["source_kind"] == "loadcell_serial"`:
-- `metadata["desired_endpoint_m"]` observed:
+- `metadata["desired_endpoint_m"]`観測:
 - `metadata["desired_endpoint_m"]` sample:
 - `metadata["frame_index"]` sample:
 - `metadata["serial_timestamp_s"]` sample:
 - `metadata["serial_port"]` sample:
 - `metadata["baud_rate"]` sample:
-- `target_position_m` treated as primary command: no
+- `target_position_m`をprimary commandとして扱った: no
 
-## Safety Confirmation
+## 安全確認
 
-- no OSC sent:
-- no robot output:
-- no actuator command:
-- no firmware upload:
-- no firmware modification:
-- no browser E2E:
-- no WebSocket server:
-- hardware validation by Codex / CI: no
+- OSC送信なし:
+- robot outputなし:
+- actuator commandなし:
+- firmware uploadなし:
+- firmware変更なし:
+- browser E2Eなし:
+- WebSocket serverなし:
+- Codex / CIによるhardware validation: no
 
-## Failure / Anomaly Log
+## failure / anomaly log
 
-| Time | Category | Observation | Action | Result |
+| 時刻 | category | 観測 | action | 結果 |
 |---|---|---|---|---|
 | | | | | |
 
-Categories:
+category:
 
-- startup banner mismatch
-- pyserial unavailable
-- observed frame count mismatch
-- payload metadata missing
+- startup banner不一致
+- pyserial利用不可
+- 観測frame数不一致
+- payload metadata欠落
 - malformed frame
-- unexpected port / baud rate
-- safety boundary concern
-- other
+- 想定外のport / baud rate
+- safety boundary懸念
+- その他
 
-## Result
+## 結果
 
 - pass / caution / fail:
-- reason:
-- follow-up issue:
-- handoff to #236:
+- 理由:
+- follow-up Issue:
+- #236へのhandoff:

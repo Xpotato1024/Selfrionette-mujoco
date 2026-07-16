@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-14
+last_verified: 2026-07-16
 canonical_for:
   - MuJoCoState contract
 related:
@@ -11,43 +11,41 @@ related:
   - docs/contracts/parallel-work-contracts.md
 ---
 
-# MuJoCoState Contract
+# MuJoCoState契約
 
-This is the canonical contract for backend-to-viewer state snapshots.
+これはbackend-to-viewer state snapshotのcanonical contractである。
 
-`MuJoCoState` is a physical snapshot produced by the MuJoCo backend. It is not
-a controller state, transport state, or viewer state.
+`MuJoCoState`はMuJoCo backendが生成するphysical snapshotである。
+controller state、transport state、viewer stateではない。
 
-## Fields
+## field
 
-- `frame_index`: runtime/backend frame counter.
-- `time_s`: MuJoCo `data.time` after backend stepping.
-- `qpos`: MuJoCo `qpos` in model order.
-- `qvel`: MuJoCo `qvel` in model order.
-- `bodies`: body transforms derived from MuJoCo model/data.
-- `sites`: site transforms derived from MuJoCo model/data.
-- `target_position_m`: optional target marker feedback. This is diagnostic
-  context and viewer-facing presentation input, not physics state or
-  command-side desired endpoint state.
-- `metadata`: diagnostic or transport helper data only. It is not source of
-  truth.
+- `frame_index`: runtime/backendのframe counter。
+- `time_s`: backend step後のMuJoCo `data.time`。
+- `qpos`: model orderのMuJoCo `qpos`。
+- `qvel`: model orderのMuJoCo `qvel`。
+- `bodies`: MuJoCo model/dataから得たbody transform。
+- `sites`: MuJoCo model/dataから得たsite transform。
+- `target_position_m`: optionalなtarget marker feedback。diagnostic contextおよび
+  viewer-facing presentation inputであり、physics stateまたはcommand-side
+  desired endpoint stateではない。
+- `metadata`: diagnosticまたはtransport helper data専用。source of truthではない。
 
-## Transform Contract
+## transform契約
 
-- Position units are meters.
-- Quaternions are stored in `wxyz` order.
-- Body and site names come from `docs/contracts/mujoco-model-name-contract.md`.
-- Viewer code must treat these transforms as read-only inputs.
-- Viewer code may surface `target_position_m` as a target marker, but it must
-  not reinterpret it as FK, IK, qpos pose recompute, or physics state.
+- positionのunitはmeterである。
+- quaternionは`wxyz` orderで保存する。
+- bodyとsiteの名前は`docs/contracts/mujoco-model-name-contract.md`を正とする。
+- viewer codeはこれらのtransformをread-only inputとして扱わなければならない。
+- viewer codeは`target_position_m`をtarget markerとして表示してよいが、FK、IK、
+  qpos pose recompute、physics stateとして再解釈してはならない。
 
-## Notes
+## 注記
 
-- `base_link`, `fore_arm_link`, and `tip` are canonical model names for the
-  fast arm assets.
-- `frame_index` increments once per backend step.
-- Step 5-D uses `mj_step` in the backend before building the next snapshot.
-- The backend keeps the pending command until a later `apply_command()`
-  overwrites it, and it re-applies joint qpos after `mj_step` so the snapshot
-  stays aligned with the direct qpos reflection contract.
-- Other documents should link here instead of restating the field rules.
+- `base_link`、`fore_arm_link`、`tip`はfast arm assetのcanonical model nameである。
+- `frame_index`はbackend stepごとに1増加する。
+- 次のsnapshotを構築する前にbackendで`mj_step`を実行する。
+- backendは、後続の`apply_command()`が上書きするまでpending commandを保持する。
+  また、snapshotをdirect qpos reflection contractと整合させるため、`mj_step`後に
+  joint qposを再適用する。
+- 他の文書ではfield ruleを再記載せず、この文書へlinkする。

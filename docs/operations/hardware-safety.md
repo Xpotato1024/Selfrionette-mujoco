@@ -8,17 +8,16 @@ related:
   - docs/operations/validation.md
 ---
 
-# Hardware Safety
+# hardware safety
 
-Do not perform these operations unless explicitly scoped:
+明示scopeがない限り、次の操作を行わない。
 
-- open a serial port
-- send OSC
-- move hardware
-- change receiver behavior that assumes real hardware
-- implement fixed-cycle mode
-- perform hardware validation
+- serial portをopenする
+- OSCを送信する
+- hardwareを動かす
+- 実hardwareを前提とするreceiver behaviorを変更する
+- fixed-cycle modeを実装する
+- hardware validationを実施する
 
-A future hardware-validation PR must add a pre-checklist, safe dry-run steps,
-OSC compatibility checks, rollback steps, and stop steps before real hardware is
-used.
+将来のhardware-validation PRでは、実hardwareを使う前にpre-checklist、安全なdry-run手順、OSC compatibility
+check、rollback手順、stop手順を追加しなければならない。

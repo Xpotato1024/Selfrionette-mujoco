@@ -103,19 +103,23 @@ def directory_role(path: str) -> str:
     if path == "docs/reports/inventories/markdown-inventory.md":
         return "historical-snapshot"
     if path.startswith("docs/reports/"):
-        return "historical-evidence"
+        return "reports-index" if Path(path).name == "README.md" else "report-evidence"
     if path.startswith("docs/archive/"):
-        return "archive"
+        return "archive-index" if Path(path).name == "README.md" else "archive-record"
     if path.startswith("docs/design/adr/"):
         return "decision-history"
     if path.startswith("docs/experiment-notes/"):
         return "experiment-evidence"
     if path.startswith("docs/migration/"):
         return "migration-evidence"
-    if path.startswith(
-        ("docs/architecture/", "docs/contracts/", "docs/evaluation/", "docs/operations/")
-    ):
-        return "current-docs"
+    if path.startswith("docs/architecture/"):
+        return "architecture-current"
+    if path.startswith("docs/contracts/"):
+        return "contracts-current"
+    if path.startswith("docs/evaluation/"):
+        return "evaluation-current"
+    if path.startswith("docs/operations/"):
+        return "operations-current"
     if path.startswith("docs/"):
         return "docs-entry"
     if path.startswith("research/logs/"):
@@ -133,12 +137,17 @@ def allowed_statuses_for_directory(path: str) -> set[str] | None:
     role = directory_role(path)
     return {
         "historical-snapshot": {"historical"},
-        "historical-evidence": {"historical", "supporting"},
-        "archive": {"historical", "draft", "obsolete", "supporting"},
+        "reports-index": {"supporting"},
+        "report-evidence": {"historical"},
+        "archive-index": {"supporting"},
+        "archive-record": {"historical", "draft", "obsolete"},
         "decision-history": {"historical", "supporting"},
         "experiment-evidence": {"historical", "supporting"},
         "migration-evidence": {"historical", "supporting", "canonical"},
-        "current-docs": {"canonical", "supporting", "historical", "draft"},
+        "architecture-current": {"canonical", "supporting"},
+        "contracts-current": {"canonical", "supporting"},
+        "evaluation-current": {"canonical", "supporting"},
+        "operations-current": {"canonical", "supporting"},
         "docs-entry": {"canonical", "supporting", "historical", "draft", "obsolete"},
         "research-evidence": {"historical"},
         "research-current": {"canonical", "supporting"},

@@ -1,9 +1,18 @@
-# Contracts
+---
+status: supporting
+owner: architecture
+last_verified: 2026-07-16
+canonical_for: []
+related:
+  - docs/README.md
+---
 
-Layer contracts live here. Do not duplicate contract details in architecture
-overview documents; link to the canonical contract instead.
+# 契約
 
-Canonical contract docs:
+各layerの契約をここに置く。architecture概要文書へ契約の詳細を重複して
+記載せず、canonical contractへlinkする。
+
+canonical contract文書:
 
 - `docs/contracts/parallel-work-contracts.md`
 - `docs/contracts/motion-command.md`

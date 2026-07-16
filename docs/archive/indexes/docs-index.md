@@ -1,0 +1,28 @@
+---
+status: obsolete
+owner: documentation
+last_verified: 2026-07-16
+canonical_for: []
+related:
+  - docs/architecture/documentation-sot-policy.md
+---
+
+# docs/index
+
+これはobsoleteな旧`docs/index.md`（R6-K runtime input ingress向け）の本文保存であり、
+全Markdown migration indexではない。migration全体は
+`../../reports/inventories/markdown-inventory.md`を参照する。以下のhistorical本文は改稿しない。
+
+`docs/README.md` を docs 全体の SoT map として参照する。R6-K の runtime input ingress に関係する正本は次のとおり。
+
+```markdown
+- [docs/README.md](./README.md)
+- [Runtime Input Source Registry](./contracts/runtime-input-source-registry.md)
+- [R6-K-P1 Runtime Input Source Registry](./operations/r6-k-p1-runtime-input-source-registry.md)
+- [Runtime Input Source State](./contracts/runtime-input-source-state.md)
+- [R6-K-P3 Input Source State Payload](./operations/r6-k-p3-input-source-state-payload.md)
+- [Runtime Input Safety](./contracts/runtime-input-safety.md)
+- [R6-K-P4 Live Input Stale Command Safety](./operations/r6-k-p4-live-input-stale-command-safety.md)
+- [R6-K Completion Audit](./operations/r6-k-completion-audit.md)
+- [R7-B Runtime Input Pipeline Contract](./contracts/r7-b-runtime-input-pipeline-contract.md)
+```

@@ -7,18 +7,18 @@ related:
   - docs/contracts/transport-payload.md
 ---
 
-# WebSocket Contract
+# WebSocket契約
 
-This file is a channel-specific reference. The canonical payload contract lives
-in `docs/contracts/transport-payload.md`.
+このfileはchannel固有のreferenceである。canonical payload contractは
+`docs/contracts/transport-payload.md`を正とする。
 
-WebSocket is one possible delivery mechanism. It does not define the
-simulation, physics, or viewer contract.
+WebSocketは利用可能なdelivery mechanismの一つである。simulation、physics、
+viewerのcontractは定義しない。
 
-The Step 5-A transport payload serializer is intentionally independent of any
-WebSocket server/client implementation.
+Step 5-Aのtransport payload serializerは、すべてのWebSocket server/client
+implementationから意図的に独立している。
 
-Step 5-B adds a minimal WebSocket state publisher skeleton that serializes
-`MuJoCoState` through `mujoco_state_to_payload()` and forwards the JSON string
-to a sender adapter. WebSocket remains a delivery concern and does not own the
-payload contract, physics, or viewer behavior.
+Step 5-Bでは、`mujoco_state_to_payload()`を通して`MuJoCoState`をserializeし、
+JSON stringをsender adapterへ転送する最小WebSocket state publisher skeletonを
+追加する。WebSocketはdelivery concernのままであり、payload contract、physics、
+viewer behaviorを所有しない。
