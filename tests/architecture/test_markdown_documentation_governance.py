@@ -158,3 +158,41 @@ def test_changed_strict_map_and_links_are_hard_failures(
     result = MODULE.validate(base_ref="base", strict_map=True, strict_links=True)
     assert any("broken relative link" in error for error in result.errors)
     assert any("Source of Truth Map duplicate" in error for error in result.errors)
+
+
+def test_agents_requires_docs_research_and_experiment_impact_gate() -> None:
+    text = (MODULE.ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    for marker in (
+        "### Task impact gate",
+        "Documentation impact",
+        "Research log impact",
+        "Experiment evidence impact",
+        "research/README.md",
+        "docs/experiment-notes/README.md",
+        "更新不要理由",
+    ):
+        assert marker in text
+
+
+def test_research_log_policy_uses_substantive_research_impact() -> None:
+    text = (MODULE.ROOT / "research/README.md").read_text(encoding="utf-8")
+    for marker in (
+        "変更したファイルやdirectoryではなく",
+        "研究で実行または評価できる対象",
+        "AGENTS.md",
+        "documentation governance",
+        "CI、validator、repository hygiene",
+        "実質的に変える場合は更新対象",
+        "docs/experiment-notes/",
+        "更新不要理由",
+    ):
+        assert marker in text
+
+
+def test_codex_workflow_connects_all_impact_decisions() -> None:
+    text = (MODULE.ROOT / "docs/operations/codex-workflow.md").read_text(encoding="utf-8")
+    assert "Documentation impact" in text
+    assert "Research log impact" in text
+    assert "Experiment evidence impact" in text
+    assert "変更ファイルの種類で決めない" in text
+    assert "research/README.md" in text

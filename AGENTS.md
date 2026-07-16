@@ -17,6 +17,7 @@ Last updated: 2026-07-16
 3. `docs/README.md`のSource of Truth Map
 4. 関連するcanonical architecture / contract / design / operations document
 5. 関連実装とtests
+6. `research/README.md`の更新条件と、実験を扱う場合は`docs/experiment-notes/README.md`
 
 主要な入口:
 
@@ -28,6 +29,8 @@ Last updated: 2026-07-16
 - validation: `docs/operations/validation.md`
 - hardware safety: `docs/operations/hardware-safety.md`
 - 日本語docs: `docs/operations/japanese-doc-writing-guardrails.md`
+- research log: `research/README.md`
+- experiment evidence: `docs/experiment-notes/README.md`
 
 詳細な正本は`docs/README.md`を優先する。
 
@@ -74,6 +77,21 @@ Last updated: 2026-07-16
 - completion audit、handoff、過去Round文書を現在仕様の正本として扱わない。
 - 新しい文書を追加する前に、既存canonical documentを更新すべきでないか確認する。
 - 文書、実装、testsの主張を一致させる。
+
+### Task impact gate
+
+作業開始時と完了前に、変更ファイルの種類ではなくtaskの実質的な影響から、次の3項目を判定する。
+
+1. **Documentation impact**
+   - current behavior、architecture、contract、schema、model、operator procedure、evaluation design、Source of Truthが変わる場合は、関連canonical docsと必要なtestsを同じ変更で更新する。
+   - 上記が変わらない場合は、無関係なdocs更新や履歴文書の現行化を行わない。
+2. **Research log impact**
+   - 研究で実行・評価できる対象、simulation / runtime / model / contractの研究上の能力、実験条件・評価指標・比較条件、研究上の解釈・優先順位・仮説・主張範囲、または実験可能性・妥当性・再現性が変わる場合は、当月の`research/logs/YYYY-MM.md`を更新する。
+   - `AGENTS.md`、workflow、formatting、typo、metadata、documentation governance、CI / validator、repository hygiene、GitHub運用だけの変更は、上記の研究影響を持たない限り原則としてresearch log対象外とする。
+   - 更新対象外の場合は、PR本文または最終報告へ簡潔な更新不要理由を記録する。詳細な判断基準は`research/README.md`を正とする。
+3. **Experiment evidence impact**
+   - experiment condition、model / fixture、実行command、観測結果を新規取得または変更した場合は、`docs/experiment-notes/`へ記録する。
+   - unit test、CI、compile、typecheck、通常のsmokeを実行しただけでは、それ自体をresearch experimentとして扱わない。
 
 ### Human-facing language policy
 
@@ -181,12 +199,21 @@ testsを削除、skip、弱体化して変更を通さない。
 
 完了を宣言する前に、task / Issueのsuccess criteriaを実測結果で確認する。
 
+次のimpact判定を完了し、必要な更新または更新不要理由を残す。
+
+- Documentation impact: 関連canonical docs / testsを更新したか、変更不要であることを確認する。
+- Research log impact: 当月logを更新したか、`research/README.md`に基づく更新不要理由をPR本文または最終報告へ記録する。
+- Experiment evidence impact: `docs/experiment-notes/`を更新したか、experiment条件・観測結果を扱っていないことを確認する。
+
 最終報告は、関連する項目だけを簡潔に含める。
 
 ```text
 Result
 Changed scope
 Validation
+Documentation impact
+Research log impact
+Experiment evidence impact
 Remaining risks or blocked items
 PR / Issue links, when applicable
 ```
