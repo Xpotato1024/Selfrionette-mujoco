@@ -25,14 +25,14 @@ class name、import pathは含まない。
 `RobotRuntimePlugin`はruntime compositionだけが使用するtyped behavioral boundaryである。
 pluginは選択したmodelをvalidateし、既存のrobot-specific IK、FK、motion policy、
 qpos feasibility guard、endpoint accessorを構築する。fast_arm pluginは既存algorithmと
-P23 TOML guardを再利用し、複製しない。
+qpos feasibility TOML guardを再利用し、複製しない。
 
 `ViewerRobotProfile`はbrowser-side rendering declarationである。model URL、
 named startup keyframe、debug fixture URL、VFS asset、visual style、joint order、
 qpos dimension、model compatibility versionを所有する。IK、FK、planning、
 qpos generation、target generation、安全性は一切所有しない。現在のrendererは
 MuJoCo compiled mesh geometryを消費し、独立したmesh-fallback routeを持たない。
-したがってP24ではOption Bを選択し、未使用のfallback mappingを宣言しない。
+したがってcurrent profile contractではOption Bを選択し、未使用のfallback mappingを宣言しない。
 profile-owned VFS asset mappingをmodel-loading boundaryとして維持する。
 将来fallback routeを追加するには、別Issue、明示的なdiagnostic、cleanup behavior、
 profile-driven testが必要である。
@@ -79,7 +79,7 @@ rejectする。object identityに加えてsemantic comparisonも必須である�
 production fast_arm entry pointは`RuntimeConfig(robot_profile_id="fast_arm")`を
 明示的に構築するか、callerにそのIDの指定を要求する。解決済みprofile/plugin pairを通して、
 model、`home` keyframe、endpoint reference、現在のIK/FK behavior、motion policy、
-P23 qpos guardを解決する。IDのないproduction config、unknown ID、incompatible modelを
+qpos feasibility guardを解決する。IDのないproduction config、unknown ID、incompatible modelを
 与えた場合はstartupをfailする。
 
 `RuntimePipeline`、`build_mujoco_pipeline()`、`build_replay_mujoco_pipeline()`は
@@ -146,29 +146,8 @@ input-source metadataの後に最後に適用する（overwrite-protection Optio
 spoofed valueは、qpos-rejection pathを含めて解決済みprofile valueに置換される。
 authoritative profile metadataを持たないgeneric pipelineはこれらのkeyを追加せず、通常の
 metadata behaviorを維持する。fieldはopen payload-v0 metadata mapへのadditive fieldのままだが、
-P24 production compositionではprofile-aware viewer compatibilityのため四つすべてを
+profile-aware production compositionではprofile-aware viewer compatibilityのため四つすべてを
 authoritativeかつmandatoryとする。
 
-## P23 integrationとcleanup handoff
 
-`QposFeasibilityGuard`と`QposFeasibilityResult.accepted`はgeneric pipelineの
-safety boundaryであり続ける。fast_arm pluginはprofile-owned TOML referenceから既存の
-`FastArmJointLimitGuard`を構築する。exact-boundary acceptance、whole-candidate hold、
-current-qpos preservation、target lifecycle suppression、viewer rebase suppressionは変更しない。
-
-Planar compatibility FK/IK implementationとpublic exportは、generic testをtest-only doubleへ
-移し、offline smokeをresolved plugin ownershipへ移した後、#389でretireした。
-robot-specific production IK/FK、motion、endpoint、home/seed、feasibility behaviorは、
-選択した`RobotRuntimePlugin`を通して解決する。明示的なno-op/stub helperは分離された
-negative controlとして残し、production fallbackにはしない。executableな
-`experiments/mujoco-wasm-viewer-poc`は、promote済みrendererと有用なfixture assertionを
-product viewerで検証した後、#385でretireした。canonical qpos fixtureは現在
-`apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`が所有する。
-
-fixtureはproduct-owned debug/validation assetであり、startupまたはruntime state sourceではない。
-PR #392では、current `main`とcleanup branchの両方でstale-velocity
-BADQACC/time-rollbackを再現した後、native generation pathを修正した。修正済みexporterは
-complete sequenceをvalidateし、invalid output時には既存fileをatomicに保持する。
-payload schema、Viewer Profile compatibility boundary、browser rendering-only ownershipは
-変更しない。現在のgenerated fixtureはproduct testでvalidateされ、SHA-256は
-`4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`である。
+実装・cleanup・fixture hashのevidenceは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

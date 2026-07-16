@@ -9,6 +9,10 @@ related:
 
 # docs/index
 
+これはobsoleteな旧`docs/index.md`（R6-K runtime input ingress向け）の本文保存であり、
+全Markdown migration indexではない。migration全体は
+`../../reports/inventories/markdown-inventory.md`を参照する。以下のhistorical本文は改稿しない。
+
 `docs/README.md` を docs 全体の SoT map として参照する。R6-K の runtime input ingress に関係する正本は次のとおり。
 
 ```markdown

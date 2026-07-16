@@ -33,8 +33,7 @@ secondary source:
 - `docs/experiment-notes/2026-06-21-r7-a-lite-plotting.md`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-data/com5-calibrated-transcript.txt`
 
-closed PR #206をsource of truthとして使用しない。有用なevidenceは、merge済みbaselineと
-上記supporting noteを通してのみこの文書へ反映する。
+PR本文をsource of truthとして使用しない。firmware sourceと上記supporting evidenceに基づくcurrent contractだけをこの文書へ反映する。
 
 ## 現在のfirmware target
 
@@ -213,9 +212,9 @@ supportするruntime command:
 - spike時には新しいadjusted valueをpublishせず、previous output valueを維持する。
 - これはoutput-side suppressionであり、別のraw sample channelではない。
 
-## P2 parser要件
+## parser要件
 
-P2 parserは次のruleに従う。
+parserは次のruleに従う。
 
 - `vector` lineだけをsensor recordへparseする。
 - 各`vector` frameにexactly 7 numeric channel valueを要求する。
@@ -248,55 +247,5 @@ P2 parserは次のruleに従う。
 - real robotへoutputしない。
 - actuator commandを送らない。
 
-## #199へのhandoff
 
-`#199`ではこのcontractを使用し、現在のfirmware frame vocabularyに一致する
-parser fixtureとtestを構築する。
-
-推奨する次のparser input:
-
-- exactly 7 channelを持つ最小`vector` fixture
-- 最小`status` fixture
-- 最小`warn` fixture
-
-推奨するparser assertion:
-
-- timestampを保持する。
-- `vector` channel countがexactである。
-- malformed lineをrejectする。
-- diagnosticをsensor recordから分離する。
-- parserはhardware accessやserial portを必要としない。
-
-## #200へのhandoff
-
-`#200`では`parse_serial_frame_line()`を再利用し、injected lineだけを消費する
-`SerialInputSource` skeletonを追加する。
-
-推奨するsource assertion:
-
-- `status` / `warn` lineをdiagnosticとして保持し、vector recordとして返さない。
-- injected line sourceはexhaustion時にdeterministicに停止する。
-- malformed `vector` lineは`SerialFrameParseError`を公開する。
-- live serial port、pyserial dependency、hardware accessを導入しない。
-- このPR後の次のlayer stepはraw loadcellからnormalized input intentへの変換とする。
-
-## #201へのhandoff
-
-`#201`では`RawInputFrame` / `RawLoadcellVectorRecord`のraw 7ch loadcell valueを
-normalized input intentへ変換する。
-
-推奨するconverter assertion:
-
-- channel orderを`ch0`から`ch6`のまま維持する。
-- deadzone / scale / clampをdeterministicかつminimalにする。
-- invalid channel countまたはnon-finite valueをrejectする。
-- この時点ではdesired endpoint conversionを導入しない。
-
-## #202へのhandoff
-
-`#202`ではnormalized loadcell intentを消費し、`desired_endpoint_m`へ変換する。
-
-推奨するnext-step assertion:
-
-- normalized intent boundaryをendpoint resolutionから分離して維持する。
-- physical axis mappingは後続handoffまでdeferしたままとする。
+実装時のIssue別handoffは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

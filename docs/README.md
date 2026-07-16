@@ -74,7 +74,7 @@ Source of Truth Mapへ載せないsupporting、evidence、historical文書は、
 - legacy migration evidence: `docs/migration/README.md`
 - implementation report / completion audit / inventory / review: `docs/reports/README.md`
 - historical / retired文書: `docs/archive/README.md`
-- 全Markdown migration index: `docs/archive/indexes/docs-index.md`
+- 全Markdown migration案内: `docs/reports/inventories/markdown-inventory.md`
 - research log: `research/README.md`
 
 ## Directory role

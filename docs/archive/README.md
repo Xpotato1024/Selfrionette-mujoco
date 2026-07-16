@@ -20,6 +20,7 @@ historical / retired evidenceであり、current architecture、contract、opera
 - `operations/`: 現在の反復手順ではない過去のoperation note
 - `historical/`: その他のhistorical record
 - `obsolete/`: current useを終了した文書
-- `indexes/`: archive、reports、current docsを横断して過去pathと新配置を追跡するindex
+- `indexes/`: obsoleteな旧index本文のprovenance保存
 
-全Markdownのmigration後配置は`indexes/docs-index.md`から確認する。
+全Markdownのmigration dispositionは`../reports/inventories/markdown-inventory.md`から確認する。
+`indexes/docs-index.md`は旧R6-K indexの保存であり、全Markdown migration indexではない。

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-07-15
+last_verified: 2026-07-16
 canonical_for:
   - inverse kinematics contract
   - robot-specific IK ownership
@@ -36,8 +36,7 @@ Production runtimeはselected `RobotRuntimePlugin.build_inverse_kinematics()`
 order、qpos dimension、home/seed、workspace/failure semanticsを一つのrobot
 contractとして所有する。
 
-R6-H-P4の`PlanarTwoLinkInverseKinematicsSolver`は当時のstaged baselineで
-あり、#389でproduction implementationとpublic exportから退役した。
+`PlanarTwoLinkInverseKinematicsSolver`はproduction implementationまたはpublic contractではない。
 
 ## input / output
 
@@ -65,9 +64,7 @@ R6-H-P4の`PlanarTwoLinkInverseKinematicsSolver`は当時のstaged baselineで
 
 ## stubの退役
 
-`ZeroInverseKinematicsSolver` は concrete IK ではない。
-R6-H-P4 では concrete IK strategy を追加するが、`ZeroInverseKinematicsSolver` 自体の削除は P6 以降で扱う。
-runtime path では concrete IK strategy または明示的な MuJoCo-backed IK path を使う。
+`ZeroInverseKinematicsSolver`はconcrete IKではなく、明示的なtest / negative controlに限定する。runtime pathはselected pluginのconcrete IKまたは明示的なMuJoCo-backed IKを使う。
 empty `JointCommand()` を通常成功として扱わない。
 
 ## viewer boundary
@@ -75,12 +72,7 @@ empty `JointCommand()` を通常成功として扱わない。
 viewer は IK を行わない。
 viewer は backend / runtime payload を描画するだけである。
 
-## P5 runtime wiringへのhandoff
-
-P5 では concrete FK / IK strategy を runtime composition に接続する。
-runtime default が zero / no-op stub に戻らないことを test で固定する。
-
-## P5 runtime note
+## Production runtime
 
 - `build_concrete_mujoco_pipeline()`とoffline smokeはplugin-owned IK/motionをresolveする
 - `ZeroInverseKinematicsSolver`は明示的なtest/negative-control helperとして残る
@@ -88,27 +80,10 @@ runtime default が zero / no-op stub に戻らないことを test で固定す
 
 ## 対象外
 
-- 最終的なrobotics-grade IK
 - 完全なdynamics optimization
-- runtime composition への本接続
 - viewer-side FK / IK
 - viewer-side qpos再計算
 - browser-side MuJoCo model load
 - hardware / serial / OSC操作
 - legacyのimport / execute
 - package dependency変更
-
-## scope確認
-
-```text
-parent issue: #116
-depends on: #117, #118, #119
-phase slice: R6-H-P4
-concrete IK strategy added: yes
-base.py remains protocol: yes
-ZeroInverseKinematicsSolver used as runtime IK: no
-viewer-side FK/IK added: no
-browser-side MuJoCo model loading: no
-hardware / serial / OSC: no
-legacy imported/executed: no
-```

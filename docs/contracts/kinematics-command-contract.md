@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-07-15
+last_verified: 2026-07-16
 canonical_for:
   - kinematics solver contract
   - JointCommand / MotionCommand boundary
@@ -20,11 +20,8 @@ related:
 
 ## 目的
 
-stub を concrete solver に置換する前に、`JointCommand` / `MotionCommand`
+current runtimeで`JointCommand` / `MotionCommand`
 / `target_position_m` / MuJoCo `qpos` / solver 入出力の contract を固定する。
-
-この文書は docs-first / contract-only の固定点であり、concrete FK / IK
-実装や runtime wiring を追加しない。
 
 ## 前提
 
@@ -35,8 +32,7 @@ stub を concrete solver に置換する前に、`JointCommand` / `MotionCommand
 - `viewer` は rendering-only であり、FK / IK / qpos recompute を行わない。
 - 既存の wasm-scene product viewer path は MuJoCo model を描画に使うが、
   Python native backend / runtime / payload が source of truth である。
-- R6-J では browser-side の新しい MuJoCo ownership path や独立した model
-  loading source of truth を追加しない。
+- browser viewerに独立したMuJoCo ownershipまたはmodel loading SoTを追加しない。
 - MuJoCo backend / runtime が physical / command SoT を持つ。
 
 ## Source of Truth
@@ -49,8 +45,7 @@ stub を concrete solver に置換する前に、`JointCommand` / `MotionCommand
   境界を区別するための語である。
 - MuJoCo site / body name contract は
   `docs/contracts/mujoco-model-name-contract.md` に固定済みである。
-- P3 FK runtime evaluation と P4 MuJoCo site endpoint extraction は、この
-  contract を参照する。
+- FK runtime evaluationとMuJoCo site endpoint extractionはこのcontractを共有する。
 
 ## Solver interfaces
 
@@ -131,7 +126,7 @@ viewer が行わないこと:
 viewer は backend / runtime payload を受け取り、描画と観測に使う。
 既存の wasm-scene product viewer path は MuJoCo model を描画に使うが、
 Python native backend / runtime / payload が source of truth である。
-R6-J では browser-side の新しい MuJoCo ownership path を追加しない。
+browser-sideへ新しいMuJoCo ownership pathを追加しない。
 
 ## Stub boundary
 
@@ -145,7 +140,7 @@ explicit placeholder / test double / compatibility helper である。
 - `NoOpInputInterpreter` は input-to-intent 本線ではない。
 - `NoOpStatePublisher` は production transport ではない。
 
-これらは R6-H-P3〜P6 で runtime path から退場させる。
+これらをproduction runtime fallbackとして使用しない。
 
 ## Forward kinematics ownership
 
@@ -155,68 +150,10 @@ fast_arm geometryはrobot-specific solver/conformance coverageが所有する。
 `ZeroForwardKinematicsSolver`をproduction runtime FKとして使わず、viewer-side
 FK/qpos recomputeも追加しない。
 
-## P3 FK handoff
-
-P3 では、`ForwardKinematicsSolver` contract に従って concrete FK strategy を
-追加する。`base.py` に実装を書かず、別 module に concrete implementation
-を置く。`ZeroForwardKinematicsSolver` を runtime FK として扱わない。
-
-## P4 IK handoff
-
-R6-H-P4ではPlanar implementationをstaged concrete baselineとして追加した。
-これはhistorical handoffであり、#389後のcurrent production ownerではない。
-current runtimeはselected pluginがIK/motion、workspace、seed、failure semantics
-を所有し、empty `JointCommand()`を通常成功として扱わない。
-
-## P5 runtime wiring handoff
-
-P5 では、P3 / P4 の concrete strategy を runtime composition に接続する。
-runtime default が zero / no-op stub にならないことを test する。
-
-## P5 runtime notes
-
-- `build_concrete_mujoco_pipeline()` is the explicit concrete path
-- `TargetToJointMotionGenerator` resolves `desired_endpoint_m` を優先し、
-  `target_position_m` は fallback として扱う
-- `MotionCommand.joint` follows the selected profile qpos contract
-- `build_noop_pipeline()` stays as an explicit placeholder helper
-- runtime default does not return to zero / no-op stub
-
 ## Non-Goals
 
-- concrete FK / IK 実装
-- runtime composition への接続
-- stub 削除
 - schema breaking change
-- viewer-side FK / IK
-- viewer-side qpos recompute
-- browser-side MuJoCo model loading の新規 ownership 追加
-- hardware / serial / OSC
-- legacy import / execute
-- package dependency change
-
-## Scope Check
-
-```text
-parent issue: #116
-depends on: #117
-phase slice: R6-H-P2
-kinematics command contract documented: yes
-base.py remains protocol: yes
-JointCommand / MotionCommand boundary documented: yes
-target / qpos boundary documented: yes
-viewer rendering-only boundary confirmed: yes
-stub boundary documented: yes
-forward kinematics baseline documented: yes
-P3 handoff added: yes
-P4 handoff added: yes
-P5 handoff added: yes
-concrete solver added: no
-runtime wiring changed: yes
-stub deleted: no
-schema breaking change: no
-viewer-side FK/IK added: no
-browser-side MuJoCo model loading: no
-hardware / serial / OSC: no
-legacy imported/executed: no
-```
+- viewer-side FK / IKまたはqpos recompute
+- browser-sideの第二のMuJoCo ownership
+- hardware / serial / OSC操作
+- legacy import / execution

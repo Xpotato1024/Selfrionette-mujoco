@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-22
+last_verified: 2026-07-16
 canonical_for:
   - R7-B runtime input pipeline contract
 related:
@@ -24,38 +24,12 @@ related:
 
 ## 目的
 
-R7-B-P0 では実装を広げず、`InputSource -> MotionCommand -> runtime target update -> MuJoCo -> WebSocket -> viewer`
-の既存経路と境界を固定する。
-
-この issue は、keyboard input と loadcell input を同じ simulation-facing input pipeline に乗せる方針を明記し、
+この文書は`InputSource -> MotionCommand -> runtime target update -> MuJoCo -> WebSocket -> viewer`のcurrent経路と境界、およびkeyboard input と loadcell input を同じ simulation-facing input pipeline に乗せる方針を明記し、
 `desired_endpoint_m` を command-side endpoint として扱う契約を固定する。
-
-## current main inventory
-
-current main で確認できる既存構造は次のとおり。
-
-| 層 | 既存ファイル | 役割 / 観測された境界 |
-|---|---|---|
-| `schemas/` | `src/selfrionette/schemas/input_frame.py` | `RawInputFrame` は `source`, `timestamp_s`, `values`, `buttons`, `metadata` を持つ。 |
-| `schemas/` | `src/selfrionette/schemas/input_intent.py` | `InputIntent` は `target_delta_m`, `joint_delta_rad`, `metadata` を持つ。`desired_endpoint_m` は top-level field ではない。 |
-| `schemas/` | `src/selfrionette/schemas/motion_command.py` | `MotionCommand` は command object であり、`target` / `joint` / `metadata` を運ぶ。 |
-| `schemas/` | `src/selfrionette/schemas/mujoco_state.py` | `MuJoCoState.target_position_m` は viewer-facing feedback。 |
-| `input_sources/` | `src/selfrionette/input_sources/programmed_target.py` | programmed target は `RawInputFrame.metadata` に `target_position_m` と `desired_endpoint_m` を載せる。 |
-| `input_sources/` | `src/selfrionette/input_sources/replay.py` | replay は frozen `RawInputFrame` をそのまま返す。 |
-| `loadcell_serial.py` | `src/selfrionette/loadcell_serial.py` | injected-line serial dry-run で `NormalizedLoadcellInputIntent -> MotionCommand.metadata["desired_endpoint_m"]` を作る。 |
-| `runtime/` | `src/selfrionette/runtime/pipeline.py` | `RuntimePipeline.run_once()` が `InputSource -> InputInterpreter -> MotionGenerator -> MuJoCoSimulator -> StatePublisher` を結線する。 |
-| `runtime/` | `src/selfrionette/runtime/concrete_mujoco_pipeline.py` | replay ベースの concrete path が `desired_endpoint_m` を runtime / state publisher 側に引き継ぐ。 |
-| `runtime/` | `src/selfrionette/runtime/websocket_publisher_runner.py` | WebSocket publisher runner は `desired_endpoint_m` を用いて `target_position_m` を annotate する。 |
-| `transport/` | `src/selfrionette/transport/payload.py` | payload は `target_position_m` を feedback として運び、`endpoint_evaluation` を optional diagnostic として lift する。 |
-| `apps/mujoco-viewer/` | `apps/mujoco-viewer/src/transport/parseTransportPayloadV0Message.ts` | viewer parser は payload v0 と optional `endpoint_evaluation` を読むが、再計算はしない。 |
-| `apps/mujoco-viewer/` | `apps/mujoco-viewer/src/wasm-scene/productViewerState.ts` | viewer state は read-only で、`browser-side IK/FK/qpos recompute: disabled` を明示している。 |
-| `apps/mujoco-viewer/` | `apps/mujoco-viewer/src/app/ProductViewerApp.tsx` | viewer は read-only overlay を表示するだけで、物理更新を持たない。 |
-| `input_sources/` | `src/selfrionette/input_sources/keyboard.py` | current main には存在しない。R7-B-P0 では contract のみ固定する。 |
-| `configs/` | `configs/input/keyboard_default.json` | current main には存在しない。reserved contract path として固定する。 |
 
 ## canonical flow
 
-R7-B で固定する simulation-facing flow は次のとおり。
+simulation-facing flowは次のとおり。
 
 ```text
 keyboard event / key state
@@ -67,7 +41,7 @@ keyboard event / key state
 -> viewer read-only display
 ```
 
-loadcell 側は既存の R7-A-lite 経路を引き継ぐ。
+loadcell側はcanonical serial frame / normalization経路を使用する。
 
 ```text
 serial frame lines
@@ -98,7 +72,7 @@ serial frame lines
 
 ## keyboard input contract
 
-keyboard input は R7-B の simulation-facing input source として扱う。
+keyboard inputはsimulation-facing input sourceとして扱う。
 
 ### default keybind
 
@@ -114,8 +88,7 @@ default keybind は次のとおり。
 | `ShiftLeft` | `z` | `-1` | `-Z` |
 | `ShiftRight` | `z` | `-1` | `-Z` |
 
-ここでの axis 名は world-axis ラベルとして扱う。既存の world / viewer / MuJoCo coordinate convention と最終対応させる必要がある場合は、
-R7-B-P1 で runtime axis と照合する。
+ここでのaxis名はworld-axis labelであり、runtimeのworld / viewer / MuJoCo coordinate conventionと一致させる。
 
 ### keybind config contract
 
@@ -166,7 +139,7 @@ reserved path は `configs/input/keyboard_default.json` とする。
 
 ## loadcell input contract
 
-R7-A-lite で完了済みの chain を R7-B が引き継ぐ。
+loadcell inputは次のcurrent chainを使用する。
 
 ### current loadcell chain
 
@@ -180,8 +153,7 @@ serial frame lines
 
 ### contract rules
 
-- live serial は R7-B-P0 では扱わない。
-- live serial は #222 の manual-gated path として後段で扱う。
+- live serialはoperator gateを持つ専用manual pathに限定する。
 - keyboard / replay / programmed input fixtures を先に使う。
 - `target_position_m` は viewer-facing feedback / compatibility fallback に留める。
 - `target_position_m` を primary command にしない。
@@ -207,76 +179,14 @@ serial frame lines
 - transport は serialization / delivery only である。
 - transport は `target_position_m` と `metadata` を運ぶが、physics source of truth にはならない。
 
-## this issue does not add
-
-- runtime implementation changes
-- keyboard input implementation
-- live serial implementation
-- WebSocket server startup
-- viewer implementation changes
-- serial port open
-- COM access
-- pyserial dependency
-- firmware modification
-- firmware upload
-- OSC send
-- real robot output
-- actuator command
-
-## handoff
-
-R7-B の実装順序と後続 issue の責務は次のとおり。
-
-- `#218`: `MotionCommand.metadata["desired_endpoint_m"]` resolver
-- `#218` では runtime side の resolver を追加し、`desired_endpoint_m` を default required にする。
-- `target_position_m` fallback は explicit opt-in のみで許可する。
-- `#219`: keyboard / replay input source smoke
-- `#220`: offline `InputSource -> MuJoCo` runtime stepping smoke
-- `#221`: input-driven WebSocket / viewer smoke
-- `#222`: manual-gated live loadcell serial runtime runner
-- `#223`: completion audit
-
-## notes
-
-- `#152` 側に残るものは OSC / robot output であり、R7-B では後回しにする。
-- keyboard, replay, and programmed input fixtures are the preferred validation sources before live serial.
-- `target_position_m` is retained for compatibility and viewer feedback, not as the primary command.
-
 ## input source state observability
 
-- `#249` では runtime payload の `metadata` に optional な input source state を追加する。
-- 追加対象は `source_kind`, `source_active`, `command_age_ms`, `stale_reason` であり、いずれも observability 用の補助情報として扱う。
+- runtime payloadの`metadata`はoptionalなinput source stateを持てる。
+- 対象は `source_kind`, `source_active`, `command_age_ms`, `stale_reason` であり、いずれも observability 用の補助情報として扱う。
 - これは command-side endpoint の contract 変更ではなく、`desired_endpoint_m` や required payload fields の意味を変えない。
 - normal path では `source_active=true`, `command_age_ms=0`, `stale_reason` は省略または `null` を許容する。
 
-## #219 update
 
-- keyboard / replay input source smoke を追加した。
-- default keyboard keybind は WASD + Space / Shift である。
-- keybind config reserved path は `configs/input/keyboard_default.json` である。
-- keyboard / replay 由来 `MotionCommand` は `metadata["desired_endpoint_m"]` を持つ。
-- resolver で `desired_endpoint_m` を解決できる。
-- `target_position_m` は primary command にしない。
-- next: `#220` offline `InputSource -> MuJoCo runtime stepping smoke`
+## Historical provenance
 
-## #220 update
-
-- offline InputSource -> MuJoCo runtime stepping smoke を追加した。
-- keyboard command と replay/loadcell fixture command を runtime stepping path に通した。
-- `desired_endpoint_m` は command-side endpoint として resolver 経由で使う。
-- `target_position_m` は primary command にしない。
-- `endpoint_evaluation` は optional diagnostic として扱う。
-- WebSocket / viewer 本格結線は `#221`。
-## #222 update
-
-- manual-gated live loadcell serial runtime runner を追加した。
-- live serial path は explicit `--port` のみで入る。
-- generated payload は simulation-facing `payload v0` のまま維持する。
-- `desired_endpoint_m` は command-side metadata である。
-- `target_position_m` は primary command ではない。
-- next: `#223` completion audit
-
-## #251 audit
-
-- `docs/reports/audits/r6-k-completion-audit.md` に R6-K の stacked PR 証跡を記録した。
-- `#247` から `#250` までの validation と readiness はそこで固定し、この contract surface は変えない。
+実装時点inventory、Issue別handoff、completion updateは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

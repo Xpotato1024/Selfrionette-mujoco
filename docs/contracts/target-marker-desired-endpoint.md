@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-14
+last_verified: 2026-07-16
 canonical_for:
   - target marker / desired endpoint contract
 related:
@@ -13,11 +13,9 @@ related:
 
 # Target Marker / Desired Endpoint契約
 
-この文書は、R6-E-P1におけるtarget intentとviewer-visible target markerの
-語彙とboundaryを固定する。
+この文書はtarget intentとviewer-visible target markerの語彙とboundaryを固定する。
 
-これはcontract documentだけであり、IK、FK、qpos pose recompute、
-`MotionCommand` execution、MuJoCo backend state updateは追加しない。
+IK、FK、qpos pose recompute、`MotionCommand` execution、MuJoCo backend state updateは各ownerのcanonical contractに従う。
 
 ## Desired endpointの定義
 
@@ -77,17 +75,6 @@ boundaryは次のとおりである。
 
 viewerはpresentation inputとして`target_position_m`をruntime snapshot stateに
 保持してよい。それによってviewerがendpoint自体のsource of truthになることはない。
-
-## Phase Eへのhandoff
-
-このcontractは後続Phase E issueへのhandoff pointである。
-
-- R6-E-P2では、`desired endpoint`を`InputIntent`または単純なtarget commandから
-  `MotionCommand`へ渡すcommand-side input boundaryとして扱える。
-- R6-E-P3では、同じcontractをMuJoCo backendにおけるIK outputと
-  qpos command handlingの前段boundaryとして扱える。
-
-後続issueは、ここで確立したviewer contractを再定義しない。
 
 ## 注記
 
