@@ -3,9 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-FAST_ARM_INITIAL_KEYFRAME_NAME = "home"
-
-
 @dataclass(frozen=True, slots=True)
 class MuJoCoModelBundle:
     model: object
@@ -17,12 +14,6 @@ def _import_mujoco() -> object:
     import mujoco
 
     return mujoco
-
-
-def default_fast_arm_scene_path() -> Path:
-    from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
-
-    return FAST_ARM_ROBOT_PROFILE.mujoco_model_asset
 
 
 def reset_mujoco_data_to_initial_state(

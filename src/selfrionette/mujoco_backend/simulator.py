@@ -43,16 +43,6 @@ class HeadlessMuJoCoSimulator:
             initial_keyframe_name=initial_keyframe_name,
         )
 
-    @classmethod
-    def from_default_fast_arm(cls) -> "HeadlessMuJoCoSimulator":
-        # Compatibility-only named helper. Generic construction uses
-        # from_model_path() and never selects this profile implicitly.
-        from selfrionette.mujoco_backend.fast_arm_compat import (
-            build_default_fast_arm_simulator,
-        )
-
-        return build_default_fast_arm_simulator(cls)
-
     def apply_command(self, command: MotionCommand) -> None:
         self._last_command = command
         self._pending_command = command

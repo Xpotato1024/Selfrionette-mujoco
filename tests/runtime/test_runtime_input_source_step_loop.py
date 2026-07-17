@@ -7,22 +7,24 @@ import pytest
 
 import selfrionette.runtime.input_step_loop as input_step_loop
 from selfrionette.input_sources import ViewerInputSource
-from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
-from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
 from selfrionette.plugins.catalog import resolve_robot_bundle
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime import (
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
     run_runtime_input_source_step_loop,
     select_runtime_input_source,
 )
-from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
-from selfrionette.schemas import RawInputFrame
-from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
+)
+from selfrionette.schemas import (
+    RawInputFrame,
+    ViewerControlKeyboardMessage,
+    ViewerControlMessage,
 )
 
 
@@ -80,7 +82,7 @@ def test_runtime_first_state_payload_rebase_and_marker_share_canonical_pose() ->
     )
     initial_state = plan.pipeline.simulator.snapshot()
     canonical_qpos = tuple(
-        plan.pipeline.simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos
+        plan.pipeline.simulator.model.key(FAST_ARM_ROBOT_PROFILE.initial_keyframe_name).qpos
     )
     initial_tip = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
 

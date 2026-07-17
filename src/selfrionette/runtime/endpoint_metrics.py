@@ -6,9 +6,9 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from selfrionette.kinematics import ForwardKinematicsSolver
-from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoSiteEndpointEvaluation
-from selfrionette.mujoco_backend.endpoint_extraction import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoEndpointEvaluation
 from selfrionette.runtime.evaluation import RuntimeForwardKinematicsEvaluation, evaluate_fk_endpoint_from_qpos
+from selfrionette.runtime.robot_bundle import EndpointPoseObservation, EndpointPoseProvider
 from selfrionette.schemas import MotionCommand, MuJoCoState, Vector3
 from selfrionette.transport.base import StatePublisher
 
@@ -17,6 +17,8 @@ _DESIRED_ENDPOINT_COORDINATE_FRAME = "command-side endpoint frame"
 _FK_ENDPOINT_COORDINATE_FRAME = "solver-defined frame"
 _SITE_ENDPOINT_COORDINATE_FRAME = "MuJoCo world / scene frame"
 _FRAME_MISMATCH_NOTE = "diagnostic only; FK and site endpoints are not transformed or auto-aligned"
+
+_EndpointEvaluationObservation = EndpointPoseObservation | RuntimeMuJoCoEndpointEvaluation
 
 
 def _coerce_vector3(name: str, value: object) -> Vector3:
@@ -54,12 +56,14 @@ def compute_error_norm_m(vector_m: Sequence[float]) -> float:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeEndpointEvaluationMetrics:
+    """Endpoint metrics with legacy ``site_*`` payload names preserved."""
+
     desired_endpoint_m: Vector3
     qpos_like_joint_angles_rad: tuple[float, ...]
     fk_endpoint_m: Vector3
     site_endpoint_m: Vector3
     fk_evaluation: RuntimeForwardKinematicsEvaluation
-    site_evaluation: RuntimeMuJoCoSiteEndpointEvaluation
+    site_evaluation: _EndpointEvaluationObservation
     desired_to_fk_error_vector_m: Vector3
     desired_to_site_error_vector_m: Vector3
     fk_to_site_error_vector_m: Vector3
@@ -102,7 +106,7 @@ def build_runtime_endpoint_evaluation_metrics(
     *,
     desired_endpoint_m: Sequence[float] | None,
     fk_evaluation: RuntimeForwardKinematicsEvaluation | None,
-    site_evaluation: RuntimeMuJoCoSiteEndpointEvaluation | None,
+    site_evaluation: _EndpointEvaluationObservation | None,
     qpos_like_joint_angles_rad: Sequence[float] | None = None,
 ) -> RuntimeEndpointEvaluationMetrics:
     if desired_endpoint_m is None:
@@ -113,7 +117,12 @@ def build_runtime_endpoint_evaluation_metrics(
         raise ValueError("site_evaluation is required")
 
     _require_meter_unit("fk_evaluation.unit", fk_evaluation.unit)
-    _require_meter_unit("site_evaluation.unit", site_evaluation.unit)
+    _require_meter_unit(
+        "site_evaluation.unit",
+        getattr(site_evaluation, "unit", _METRICS_UNIT),
+    )
+    if site_evaluation.position_m is None:
+        raise ValueError("site_evaluation.position_m is required")
 
     desired_endpoint_vector_m = _coerce_vector3("desired_endpoint_m", desired_endpoint_m)
     fk_endpoint_vector_m = _coerce_vector3("fk_evaluation.endpoint_m", fk_evaluation.endpoint_m)
@@ -193,7 +202,7 @@ def build_runtime_endpoint_evaluation_payload(
     *,
     desired_endpoint_m: Sequence[float] | None,
     fk_evaluation: RuntimeForwardKinematicsEvaluation | None,
-    site_evaluation: RuntimeMuJoCoSiteEndpointEvaluation | None,
+    site_evaluation: _EndpointEvaluationObservation | None,
     qpos_like_joint_angles_rad: Sequence[float] | None = None,
 ) -> dict[str, object] | None:
     try:
@@ -214,6 +223,7 @@ def build_runtime_endpoint_evaluation_payload_from_state(
     state: MuJoCoState,
     motion_command: MotionCommand | None,
     fk_solver: ForwardKinematicsSolver,
+    endpoint_pose_provider: EndpointPoseProvider,
     solver_joint_count: int | None = None,
 ) -> dict[str, object] | None:
     if motion_command is None or motion_command.joint is None:
@@ -229,7 +239,7 @@ def build_runtime_endpoint_evaluation_payload_from_state(
             motion_command.joint.joint_angles_rad,
             solver_joint_count=solver_joint_count,
         )
-        site_evaluation = extract_fast_arm_tip_site_endpoint_from_state(state)
+        site_evaluation = endpoint_pose_provider.observe_endpoint_pose(state)
     except ValueError:
         return None
 
@@ -250,6 +260,7 @@ class EndpointEvaluationStatePublisher:
     publisher: StatePublisher
     simulator: _CommandSource
     fk_solver: ForwardKinematicsSolver
+    endpoint_pose_provider: EndpointPoseProvider
     solver_joint_count: int | None = None
 
     def _annotate_state(self, state: MuJoCoState) -> MuJoCoState:
@@ -260,6 +271,7 @@ class EndpointEvaluationStatePublisher:
             state=state,
             motion_command=self.simulator.last_command,
             fk_solver=self.fk_solver,
+            endpoint_pose_provider=self.endpoint_pose_provider,
             solver_joint_count=self.solver_joint_count,
         )
         if endpoint_evaluation is None:
@@ -278,14 +290,36 @@ def build_endpoint_evaluation_state_publisher(
     *,
     simulator: _CommandSource,
     fk_solver: ForwardKinematicsSolver,
+    endpoint_pose_provider: EndpointPoseProvider,
+    initial_state: MuJoCoState,
     solver_joint_count: int | None = None,
 ) -> EndpointEvaluationStatePublisher:
+    validate_endpoint_pose_provider_state(
+        endpoint_pose_provider=endpoint_pose_provider,
+        state=initial_state,
+    )
     return EndpointEvaluationStatePublisher(
         publisher=publisher,
         simulator=simulator,
         fk_solver=fk_solver,
+        endpoint_pose_provider=endpoint_pose_provider,
         solver_joint_count=solver_joint_count,
     )
+
+
+def validate_endpoint_pose_provider_state(
+    *,
+    endpoint_pose_provider: EndpointPoseProvider,
+    state: MuJoCoState,
+) -> EndpointPoseObservation:
+    try:
+        observation = endpoint_pose_provider.observe_endpoint_pose(state)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("endpoint pose provider failed to resolve the selected endpoint") from exc
+    if observation.position_m is None:
+        raise ValueError("endpoint pose provider did not resolve an endpoint position")
+    _coerce_vector3("endpoint pose provider position_m", observation.position_m)
+    return observation
 
 
 __all__ = [

@@ -35,12 +35,15 @@ onboarding schema versionをruntime selectionへ流用しない。
 `RuntimeInputSourceStepLoopPlan`は`EndpointPoseProvider`、`EndpointCommandProvider`、
 `QposFeasibilityProvider`だけを保持し、`ResolvedRobotRuntime`またはRuntime Plugin全体をexecution edgeへ
 持ち越さない。endpoint poseの観測、motion generator、qpos guardはそれぞれのtyped providerを使用する。
+concrete MuJoCo pipelineのendpoint evaluation publisherも`ENDPOINT_POSE_V1` providerを受け取り、
+site/body endpointの選択をgeneric runtime内で再構築しない。assembly時の初期stateでendpoint positionを
+解決できない場合はfail closedとする。
 Runtime Pluginを直接使用できるのはcomposition中のmodel validationとFK factoryに限定する。
 各typed providerの`ProviderAssemblyBinding`はBundle logical identityとcanonical Profile / Runtime Plugin ownerの
 object identityを固定する。custom providerを含め、stale Profile、stale Runtime Plugin、別robot、別logical versionに
 bindされたproviderをregistration / assembly時に拒否する。
-旧profile / runtime / bundle registry moduleは同じresolver objectを再公開するcompatibility facadeであり、
-新しいcomposition rootはcatalogを直接使用する。
+旧profile / runtime / bundle registry moduleは退役済みである。application compositionとruntimeのdeliberate
+package-root resolverは`plugins/catalog.py`のcanonical resolverへ直接到達し、intermediate facadeを通らない。
 
 discoveryはapplicationがcatalog resolverへ初めて到達した時点で同期的に完了し、duplicate identity、
 broken entry point、contract / capability不整合、missing / escaped resourceをpartial registryなしで拒否する。
@@ -91,5 +94,8 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
   `docs/contracts/evaluation-manifest-readiness.md`の許可リストに限定する。
 
 この文書はcurrent responsibility boundaryを固定し、does not perform a broad runtime rewrite。
+fast_arm固有diagnosticsは`plugins/robots/fast_arm/diagnostics/`が所有し、generic runtime public surfaceや
+plugin discovery entry pointからeager importしない。generic `RuntimePipeline`はtest doubleを構築せず、
+test-only wiringは`tests/support/`が所有する。
 pre-audit composition chronologyとrefactor proposalは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。

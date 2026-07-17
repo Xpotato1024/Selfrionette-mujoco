@@ -40,11 +40,11 @@ from selfrionette.runtime.experiment_contracts import (
 )
 from selfrionette.runtime.experiment_registry import VersionedPluginRegistry
 from selfrionette.runtime.robot_bundle import CONTACT_EVIDENCE_V1, InitialStateContract
-from selfrionette.runtime.robot_bundle_registry import (
+from selfrionette.plugins.catalog import (
     resolve_robot_bundle as resolve_robot_bundle_from_compatibility_facade,
 )
-from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
-from selfrionette.runtime.fast_arm_bundle import (
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.initial_state import (
     FAST_ARM_INITIAL_STATE_CONTRACT,
     FAST_ARM_INITIAL_STATE_QPOS_RAD,
     FAST_ARM_INITIAL_STATE_TIP_POSITION_M,

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from selfrionette.mujoco_backend.stubs import NoOpMuJoCoSimulator
-from selfrionette.runtime import RuntimeConfig, RuntimePipeline, build_noop_pipeline
+from tests.support.mujoco_doubles import NoOpMuJoCoSimulator
+from selfrionette.runtime import RuntimeConfig, RuntimePipeline
+from tests.support.runtime_pipeline_builders import build_noop_pipeline
 from selfrionette.schemas import MuJoCoState, RawInputFrame
 
 

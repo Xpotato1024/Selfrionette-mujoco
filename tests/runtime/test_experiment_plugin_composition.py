@@ -10,7 +10,7 @@ from selfrionette.robot_profile import (
     EndpointReference,
     RobotProfile,
 )
-from selfrionette.runtime.default_robot_providers import NamedKeyframeInitialStateProvider
+from selfrionette.runtime.robot_provider_adapters import NamedKeyframeInitialStateProvider
 from selfrionette.runtime.experiment_composition import (
     EvidenceProducerBinding,
     ExperimentPluginManifest,
@@ -42,7 +42,7 @@ from selfrionette.runtime.experiment_contracts import (
     VersionedIdentity,
 )
 from selfrionette.runtime.experiment_registry import VersionedPluginRegistry
-from selfrionette.runtime.fast_arm_plugin import FAST_ARM_RUNTIME_PLUGIN
+from selfrionette.plugins.robots.fast_arm.runtime import FAST_ARM_RUNTIME_PLUGIN
 from selfrionette.runtime.robot_bundle import (
     CAPABILITY_PROVIDER_TYPES,
     CONTACT_EVIDENCE_V1,
@@ -57,7 +57,7 @@ from selfrionette.runtime.robot_bundle import (
     CapabilityProviderBinding,
     RobotBundle,
 )
-from selfrionette.runtime.robot_bundle_registry import resolve_robot_bundle
+from selfrionette.plugins.catalog import resolve_robot_bundle
 
 
 TARGET_ROLE = SemanticRole("environment.target_object")

@@ -235,7 +235,10 @@ def validate_conformance_case_registry(
             raise AssertionError(f"{case.case_id}: model asset is not profile-owned")
         if case.home_keyframe_name != case.profile.initial_keyframe_name:
             raise AssertionError(f"{case.case_id}: home keyframe is not profile-owned")
-        if case.endpoint_site_name != (case.profile.endpoint.site_name or ""):
+        profile_endpoint_site_name = case.profile.endpoint.site_name
+        if profile_endpoint_site_name is None:
+            raise AssertionError(f"{case.case_id}: endpoint site binding is required")
+        if case.endpoint_site_name != profile_endpoint_site_name:
             raise AssertionError(f"{case.case_id}: endpoint site is not profile-owned")
         if case.joint_limit_config_asset != case.profile.joint_limit_config_asset:
             raise AssertionError(f"{case.case_id}: joint-limit config is not profile-owned")

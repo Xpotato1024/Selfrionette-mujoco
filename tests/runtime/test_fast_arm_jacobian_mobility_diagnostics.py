@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import json
 import math
 from types import SimpleNamespace
@@ -7,9 +11,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
-from selfrionette.runtime.jacobian_mobility_diagnostics import _pose_qpos, run_fast_arm_jacobian_mobility_diagnostics
+from selfrionette.plugins.robots.fast_arm.diagnostics.jacobian_mobility import _pose_qpos, run_fast_arm_jacobian_mobility_diagnostics
 
 
 def test_fast_arm_diagnostic_has_explicit_mapping_and_deterministic_pose_sweep() -> None:
@@ -31,9 +33,9 @@ def test_fast_arm_diagnostic_has_explicit_mapping_and_deterministic_pose_sweep()
 def test_fast_arm_default_pose_records_native_comparison_and_axis_metrics() -> None:
     result = run_fast_arm_jacobian_mobility_diagnostics()
     default = result.poses[0]
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     assert default.qpos_rad == pytest.approx(
-        tuple(simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos),
+        tuple(simulator.model.key(FAST_ARM_ROBOT_PROFILE.initial_keyframe_name).qpos),
         abs=1e-12,
     )
     assert default.jacobian_difference_norm < 1e-3

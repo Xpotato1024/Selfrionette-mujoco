@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from math import isfinite
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, RuntimeMuJoCoSiteEndpointEvaluation
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, RuntimeMuJoCoEndpointEvaluation
 from selfrionette.plugins.catalog import resolve_robot_bundle, resolve_robot_profile
 from selfrionette.robot_profile import RobotProfile, robot_profile_runtime_metadata
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
@@ -105,7 +105,7 @@ def _build_plugin_site_evaluation(
     state: MuJoCoState,
     endpoint_pose_provider: EndpointPoseProvider,
     profile: RobotProfile,
-) -> RuntimeMuJoCoSiteEndpointEvaluation:
+) -> RuntimeMuJoCoEndpointEvaluation:
     endpoint_position_m = endpoint_pose_provider.observe_endpoint_pose(state).position_m
     if endpoint_position_m is None:
         raise ValueError("selected robot runtime plugin did not provide an endpoint position")
@@ -120,7 +120,7 @@ def _build_plugin_site_evaluation(
     else:  # pragma: no cover - RobotProfile validates this declaration
         raise ValueError("selected robot profile does not declare an endpoint reference")
 
-    return RuntimeMuJoCoSiteEndpointEvaluation(
+    return RuntimeMuJoCoEndpointEvaluation(
         role="endpoint",
         kind=kind,
         name=name,

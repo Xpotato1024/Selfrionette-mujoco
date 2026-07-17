@@ -1,24 +1,26 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import mujoco
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, TargetCommand
 
 
 def test_headless_simulator_from_default_fast_arm_loads_scene() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
 
     assert simulator.model_path.name == "scene.xml"
     assert simulator.snapshot().qpos == pytest.approx(
-        tuple(simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos)
+        tuple(simulator.model.key(FAST_ARM_ROBOT_PROFILE.initial_keyframe_name).qpos)
     )
 
 
 def test_headless_simulator_reset_restores_canonical_keyframe_state() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     simulator.apply_qpos_command(
         JointCommand(joint_angles_rad=(0.1, -0.2, 0.3, -0.4))
     )
@@ -28,7 +30,7 @@ def test_headless_simulator_reset_restores_canonical_keyframe_state() -> None:
     state = simulator.snapshot()
 
     assert state.qpos == pytest.approx(
-        tuple(simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos)
+        tuple(simulator.model.key(FAST_ARM_ROBOT_PROFILE.initial_keyframe_name).qpos)
     )
     assert state.qvel == pytest.approx(tuple(0.0 for _ in state.qvel))
     assert state.frame_index == 0
@@ -37,7 +39,7 @@ def test_headless_simulator_reset_restores_canonical_keyframe_state() -> None:
 
 
 def test_headless_simulator_keeps_command_and_advances_frame_index_with_mj_step() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     command = MotionCommand(timestamp_s=1.0)
 
     simulator.apply_command(command)
@@ -52,7 +54,7 @@ def test_headless_simulator_keeps_command_and_advances_frame_index_with_mj_step(
 
 
 def test_headless_simulator_reflects_joint_command_into_qpos() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     command = MotionCommand(
         timestamp_s=1.0,
         joint=JointCommand(joint_angles_rad=(0.1, -0.2, 0.3, -0.4)),
@@ -68,7 +70,7 @@ def test_headless_simulator_reflects_joint_command_into_qpos() -> None:
 
 
 def test_headless_simulator_position_commands_clear_stale_velocity_before_mj_step() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     bad_qacc_warning = int(mujoco.mjtWarning.mjWARN_BADQACC)
     command = MotionCommand(
         timestamp_s=1.0,
@@ -85,7 +87,7 @@ def test_headless_simulator_position_commands_clear_stale_velocity_before_mj_ste
 
 
 def test_headless_simulator_rejects_non_positive_dt_s() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
 
     with pytest.raises(ValueError, match="dt_s must be positive"):
         simulator.step(0.0)
@@ -95,7 +97,7 @@ def test_headless_simulator_rejects_non_positive_dt_s() -> None:
 
 
 def test_headless_simulator_rejects_target_commands_explicitly() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     command = MotionCommand(timestamp_s=1.0, target=TargetCommand())
 
     simulator.apply_command(command)
@@ -105,7 +107,7 @@ def test_headless_simulator_rejects_target_commands_explicitly() -> None:
 
 
 def test_headless_simulator_rejects_unsupported_joint_velocity_shape() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     command = MotionCommand(
         timestamp_s=1.0,
         joint=JointCommand(
@@ -121,7 +123,7 @@ def test_headless_simulator_rejects_unsupported_joint_velocity_shape() -> None:
 
 
 def test_headless_simulator_retains_pending_command_after_step() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     command = MotionCommand(
         timestamp_s=1.0,
         joint=JointCommand(joint_angles_rad=(0.1, -0.2, 0.3, -0.4)),

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
-from selfrionette.input_sources.stubs import StaticInputSource
-from selfrionette.kinematics.stubs import ZeroForwardKinematicsSolver, ZeroInverseKinematicsSolver
-from selfrionette.motion.stubs import NoOpMotionGenerator
-from selfrionette.mujoco_backend.stubs import NoOpMuJoCoSimulator
+from tests.support.input_interpreter_doubles import NoOpInputInterpreter
+from tests.support.input_source_doubles import StaticInputSource
+from tests.support.kinematics_solver_doubles import ZeroForwardKinematicsSolver, ZeroInverseKinematicsSolver
+from tests.support.motion_doubles import NoOpMotionGenerator
+from tests.support.mujoco_doubles import NoOpMuJoCoSimulator
 from selfrionette.schemas import (
     InputIntent,
     JointCommand,
@@ -14,10 +14,10 @@ from selfrionette.schemas import (
     MuJoCoState,
     RawInputFrame,
 )
-from selfrionette.transport.stubs import NoOpStatePublisher
+from tests.support.transport_doubles import NoOpStatePublisher
 
 
-def test_static_input_source_returns_provided_frame() -> None:
+def test_static_input_source_double_returns_provided_frame() -> None:
     frame = RawInputFrame(source="replay", timestamp_s=3.25, values=(1.0, 2.0))
     source = StaticInputSource(frame)
 

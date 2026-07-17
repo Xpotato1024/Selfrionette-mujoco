@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.runtime import (
+from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
     run_fast_arm_endpoint_motion_sanity,
     run_fast_arm_joint_axis_mapping_diagnostics,
 )
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 
 
 def _results_by_label():
@@ -47,6 +48,15 @@ def test_joint_axis_mapping_diagnostics_cover_all_fast_arm_qpos() -> None:
             "mapped_with_ref_minus_90_adapter",
             "diagnostic_only_held_current",
         }
+
+
+def test_joint_axis_mapping_diagnostics_accept_explicit_canonical_model_path() -> None:
+    results = run_fast_arm_joint_axis_mapping_diagnostics(
+        model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset
+    )
+
+    assert len(results) == 4
+    assert [result.qpos_index for result in results] == [0, 1, 2, 3]
 
 
 def test_joint_axis_mapping_diagnostics_pin_dominant_tip_motion() -> None:

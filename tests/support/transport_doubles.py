@@ -1,9 +1,8 @@
-"""Test-double namespace for transport stubs."""
+"""Test-only transport doubles."""
 
 from __future__ import annotations
 
 from selfrionette.schemas import MuJoCoState
-from selfrionette.transport.base import StatePublisher
 
 
 class NoOpStatePublisher:
@@ -16,5 +15,4 @@ class NoOpStatePublisher:
         self.last_state = state
 
 
-# Keep the contract import available for explicit, module-local imports.
 __all__ = ["NoOpStatePublisher"]

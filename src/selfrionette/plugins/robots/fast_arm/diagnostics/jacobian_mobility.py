@@ -14,8 +14,8 @@ from typing import Sequence
 
 import numpy as np
 
-from selfrionette.kinematics.fast_arm_endpoint import FastArmMuJoCoModelForwardKinematicsSolver
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
 from selfrionette.runtime.viewer_motion_policy import (
     DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING,
     DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD,
@@ -447,7 +447,7 @@ def run_fast_arm_jacobian_mobility_diagnostics(*, dt_s: float = DEFAULT_DT_S, re
     resolved_requested_delta_m = DEFAULT_VIEWER_LOCAL_ENDPOINT_SPEED_M_S * dt_s if requested_delta_m is None else requested_delta_m
     if resolved_requested_delta_m <= 0.0 or not math.isfinite(resolved_requested_delta_m):
         raise ValueError("requested_delta_m must be finite and positive")
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     endpoint = FastArmMuJoCoModelForwardKinematicsSolver()
     poses: list[PoseDiagnostic] = []
     mapping: tuple[dict[str, object], ...] | None = None

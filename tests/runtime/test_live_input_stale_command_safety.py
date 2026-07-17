@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 from dataclasses import replace
 import asyncio
 
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime import (
     DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS,
     RuntimeInputSourceSelection,
@@ -15,7 +16,7 @@ from selfrionette.runtime import (
     select_runtime_input_source,
 )
 from selfrionette.runtime.input_source_state import build_runtime_input_source_state
-from selfrionette.schemas import MotionCommand, RawInputFrame
+from selfrionette.schemas import MotionCommand
 from selfrionette.transport import mujoco_state_to_payload
 
 
@@ -92,7 +93,7 @@ def test_fresh_runtime_input_safety_result_leaves_motion_command_unchanged() -> 
 
 
 def test_stale_runtime_input_safety_result_holds_current_qpos_deterministically() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     current_state = simulator.snapshot()
     command = MotionCommand(
         timestamp_s=1.0,

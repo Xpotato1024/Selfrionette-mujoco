@@ -10,7 +10,7 @@ import selfrionette.runtime.dry_run as dry_run_module
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime import run_replay_mujoco_dry_run
 from selfrionette.schemas import RawInputFrame
-from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from generic_qpos_test_doubles import RejectingGenericQposGuard
 
 

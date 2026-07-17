@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+
 from selfrionette.mujoco_backend import (
-    default_fast_arm_scene_path,
     load_mujoco_model,
     snapshot_mujoco_state,
 )
@@ -9,7 +10,7 @@ from selfrionette.schemas import MuJoCoState
 
 
 def test_snapshot_mujoco_state_builds_state_from_headless_model() -> None:
-    bundle = load_mujoco_model(default_fast_arm_scene_path())
+    bundle = load_mujoco_model(FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
     state = snapshot_mujoco_state(
         bundle.model,
         bundle.data,
@@ -39,7 +40,7 @@ def test_snapshot_mujoco_state_builds_state_from_headless_model() -> None:
 
 
 def test_snapshot_mujoco_state_preserves_metadata_and_target_position() -> None:
-    bundle = load_mujoco_model(default_fast_arm_scene_path())
+    bundle = load_mujoco_model(FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
     metadata = {"source": "unit-test", "step": 4}
     target_position_m = (0.1, 0.2, 0.3)
 

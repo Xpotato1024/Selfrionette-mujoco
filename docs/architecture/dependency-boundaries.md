@@ -68,8 +68,11 @@ generic schema / domain / Protocol
 - generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
   `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
-- `robots/fast_arm.py`、旧`runtime/fast_arm_*.py`、旧registry moduleはcompatibility facadeであり、
-  新規consumerのcomposition APIとして使用しない。
+- fast_arm固有implementationは`plugins/robots/fast_arm/`だけが所有する。旧`robots/fast_arm.py`、
+  `robot_registry.py`、`runtime/fast_arm_*.py`、旧registry moduleは退役済みであり、再作成しない。
+- generic `kinematics`はsolver Protocolだけ、generic `mujoco_backend`はnamed reference / site extraction、
+  model load / reset、simulation primitiveだけを公開する。fast_arm固有solver、name contract、endpoint wrapper、
+  diagnosticはplugin packageから公開する。
 - package root `selfrionette.runtime`はpublic compatibility surfaceをlazy resolveするが、package importだけで
   concrete catalogをloadしない。
 - production discoveryを起動できるgeneric moduleはcatalogだけとする。test fixtureはproduction namespaceへ
@@ -153,13 +156,11 @@ package-root exportとmodule-level exportは別のpublic surfaceである。
   module scan、transitive import、module orderingへ解決先を依存させない。generic contractの参照では
   concrete catalogをloadせず、catalog-backed resolverを参照した時点だけcompatibility facade経由でloadする。
 - 明示mappingのkey setは`__all__`と一致させ、全entryのowner object identityをarchitecture testで固定する。
-- `NoOp*`、`Zero*`、`Static*`などのstub classをpackage-rootのstable APIにしない。
-- `stubs.py`はexplicit import用namespaceとして維持し、stubを使用するcallerは
-  `.stubs`から明示的にimportする。
-- `stubs.py.__all__`にはstub classだけを含め、contract re-exportを含めない。
-  contractがmodule attributeとしてexplicit import可能であることとは区別する。
-- production default、concrete runtime、replay runtime、publisher runnerは
-  `.stubs`を直接importしない。compatibility helperからの利用は明示的なallowlistに限定する。
+- `NoOp*`、`Zero*`、`Static*`などのtest doubleをproduction packageへ置かず、package-rootのstable APIにしない。
+- test doubleは`tests/support/`だけが所有する。production sourceは`tests`をimportしない。
+- `src/selfrionette/**/stubs.py`、`build_noop_pipeline()`、stub-default builderを再導入しない。
+- replayのordered state retentionやinput-loopのlocal latest-state retentionなど、実runtime semanticsを持つ
+  private adapterはtest doubleと区別し、production ownerのmodule内へ閉じる。
 
 このpublic surfaceを変更する場合は、`tests/architecture/test_public_export_policy.py`と
 該当packageの`__all__` assertionを同じ変更で更新する。

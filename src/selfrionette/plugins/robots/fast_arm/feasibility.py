@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from math import isfinite
 from pathlib import Path
 
-from selfrionette.mujoco_backend.model_contract import validate_fast_arm_model_name_contract
+from selfrionette.plugins.robots.fast_arm.model_contract import validate_fast_arm_model_name_contract
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
 from selfrionette.plugins.robots.fast_arm.profile import (
     FAST_ARM_JOINT_NAMES,

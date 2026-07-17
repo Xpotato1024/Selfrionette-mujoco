@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import math
 
 import pytest
 
-import selfrionette.runtime.neutral_initial_pose as neutral_initial_pose
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
-from selfrionette.runtime.neutral_initial_pose import (
+import selfrionette.plugins.robots.fast_arm.diagnostics.neutral_initial_pose as neutral_initial_pose
+from selfrionette.plugins.robots.fast_arm.diagnostics.neutral_initial_pose import (
     FAST_ARM_INITIAL_STATE_QPOS_RAD,
     FAST_ARM_INITIAL_STATE_TIP_POSITION_M,
     HISTORICAL_RAISED_BASELINE_QPOS_RAD,
@@ -35,10 +37,10 @@ def test_candidate_validation_rejects_invalid_values(value: object, message: str
 
 def test_candidate_generation_is_deterministic_and_duplicate_free() -> None:
     first = generate_fast_arm_neutral_pose_candidates(
-        HeadlessMuJoCoSimulator.from_default_fast_arm()
+        build_fast_arm_simulator()
     )
     second = generate_fast_arm_neutral_pose_candidates(
-        HeadlessMuJoCoSimulator.from_default_fast_arm()
+        build_fast_arm_simulator()
     )
 
     assert first == second
@@ -168,8 +170,8 @@ def test_selected_candidate_is_the_canonical_home_startup_and_reset_qpos() -> No
         for candidate in result.candidates
         if candidate.candidate_id == result.selected_candidate_id
     )
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
-    keyframe = simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME)
+    simulator = build_fast_arm_simulator()
+    keyframe = simulator.model.key(FAST_ARM_ROBOT_PROFILE.initial_keyframe_name)
     home_qpos = tuple(float(value) for value in keyframe.qpos)
 
     assert selected.qpos_rad == pytest.approx(home_qpos, rel=0.0, abs=1e-12)

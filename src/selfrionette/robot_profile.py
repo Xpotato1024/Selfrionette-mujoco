@@ -20,6 +20,12 @@ class EndpointReference:
     def __post_init__(self) -> None:
         if self.site_name is None and self.body_name is None:
             raise ValueError("endpoint reference requires a site_name or body_name")
+        for field_name, value in (
+            ("site_name", self.site_name),
+            ("body_name", self.body_name),
+        ):
+            if value is not None and (not value or value != value.strip()):
+                raise ValueError(f"endpoint reference {field_name} must not be empty")
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,8 +1,7 @@
-"""Test-double namespace for motion stubs."""
+"""Test-only motion doubles."""
 
 from __future__ import annotations
 
-from selfrionette.motion.base import MotionGenerator
 from selfrionette.schemas import InputIntent, MotionCommand
 
 
@@ -18,5 +17,4 @@ class NoOpMotionGenerator:
         )
 
 
-# Keep the contract import available for explicit, module-local imports.
 __all__ = ["NoOpMotionGenerator"]

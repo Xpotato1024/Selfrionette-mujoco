@@ -1,3 +1,5 @@
+"""fast_arm endpoint kinematics owned by the concrete Robot Plugin."""
+
 from __future__ import annotations
 
 import math

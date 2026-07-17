@@ -11,14 +11,15 @@ from selfrionette.mujoco_backend.endpoint_extraction import extract_mujoco_site_
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.mujoco_backend.model_loader import load_mujoco_model
 from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
-from selfrionette.kinematics.fast_arm_endpoint import FastArmMuJoCoModelForwardKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.model_contract import FAST_ARM_TIP_SITE_NAME
 from selfrionette.plugins.robots.fast_arm.feasibility import (
     load_and_validate_fast_arm_joint_limit_config,
 )
 from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.plugins.robots.fast_arm.runtime import FAST_ARM_RUNTIME_PLUGIN
 from selfrionette.runtime.robot_plugin import validate_profile_model_dimensions
-from selfrionette.runtime.robot_plugin_registry import validate_robot_profile_plugin_consistency
+from selfrionette.runtime.robot_resolution import validate_robot_profile_plugin_consistency
 from selfrionette.schemas import MuJoCoState
 from tests.support.robot_runtime_plugin_conformance import (
     FailClosedCase,
@@ -148,7 +149,10 @@ def _failure_joint_order_mismatch(_tmp_path: Path) -> None:
 
 
 def _failure_missing_endpoint_site(_tmp_path: Path) -> None:
-    extract_mujoco_site_endpoint_from_state(MuJoCoState(frame_index=0, time_s=0.0))
+    extract_mujoco_site_endpoint_from_state(
+        MuJoCoState(frame_index=0, time_s=0.0),
+        site_name=FAST_ARM_TIP_SITE_NAME,
+    )
 
 
 def _failure_missing_home_keyframe(_tmp_path: Path) -> None:
@@ -246,7 +250,7 @@ FAST_ARM_ROBOT_RUNTIME_PLUGIN_CONFORMANCE_CASE = RobotRuntimePluginConformanceCa
     expected_joint_names=FAST_ARM_ROBOT_PROFILE.canonical_joint_names,
     expected_qpos_dimension=4,
     expected_qvel_dimension=4,
-    endpoint_site_name=FAST_ARM_ROBOT_PROFILE.endpoint.site_name or "",
+    endpoint_site_name=FAST_ARM_TIP_SITE_NAME,
     joint_limit_config_asset=FAST_ARM_ROBOT_PROFILE.joint_limit_config_asset,
     known_fk_cases=FAST_ARM_KNOWN_FK_CASES,
     ik_round_trip_cases=FAST_ARM_IK_ROUND_TRIP_CASES,

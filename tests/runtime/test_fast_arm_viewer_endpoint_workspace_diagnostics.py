@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, extract_fast_arm_tip_site_endpoint_from_state
-from selfrionette.runtime import sample_fast_arm_viewer_endpoint_workspace
+from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import sample_fast_arm_viewer_endpoint_workspace
 
 
 def test_fast_arm_viewer_endpoint_workspace_diagnostics_cover_required_samples() -> None:
@@ -31,7 +34,7 @@ def test_fast_arm_viewer_endpoint_workspace_diagnostics_cover_required_samples()
     }.issubset(by_label)
 
     default = by_label["default_qpos"]
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     initial_state = simulator.snapshot()
     initial_tip = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
     assert default.sample_kind == "qpos_sample"

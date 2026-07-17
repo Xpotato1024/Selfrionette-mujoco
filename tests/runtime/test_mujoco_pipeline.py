@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-import pytest
 
-from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
-from selfrionette.input_sources.stubs import StaticInputSource
-from selfrionette.motion.stubs import NoOpMotionGenerator
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
-from selfrionette.transport.stubs import NoOpStatePublisher
-from selfrionette.runtime import RuntimePipeline, build_mujoco_pipeline, build_noop_pipeline
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.runtime import RuntimePipeline
 from selfrionette.schemas import MuJoCoState
+from tests.support.input_interpreter_doubles import NoOpInputInterpreter
+from tests.support.input_source_doubles import StaticInputSource
+from tests.support.motion_doubles import NoOpMotionGenerator
+from tests.support.runtime_pipeline_builders import (
+    build_noop_pipeline,
+    build_test_mujoco_pipeline,
+)
+from tests.support.transport_doubles import NoOpStatePublisher
 
 
 def test_build_noop_pipeline_still_works() -> None:
@@ -19,7 +23,7 @@ def test_build_noop_pipeline_still_works() -> None:
 
 
 def test_build_mujoco_pipeline_returns_runtime_pipeline_and_state() -> None:
-    pipeline = build_mujoco_pipeline(model_path=default_fast_arm_scene_path())
+    pipeline = build_test_mujoco_pipeline(model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     assert isinstance(pipeline, RuntimePipeline)
     assert isinstance(pipeline.input_source, StaticInputSource)
@@ -36,12 +40,13 @@ def test_build_mujoco_pipeline_returns_runtime_pipeline_and_state() -> None:
 
 
 def test_generic_builder_does_not_infer_fast_arm_when_model_is_absent() -> None:
-    with pytest.raises(ValueError, match="requires an explicit model_path"):
-        build_mujoco_pipeline()
+    import selfrionette.runtime as runtime
+
+    assert not hasattr(runtime, "build_mujoco_pipeline")
 
 
 def test_build_mujoco_pipeline_accepts_explicit_default_model_path() -> None:
-    pipeline = build_mujoco_pipeline(model_path=default_fast_arm_scene_path())
+    pipeline = build_test_mujoco_pipeline(model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     state = asyncio.run(pipeline.run_once())
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import math
 from collections.abc import Callable
@@ -11,7 +10,7 @@ import selfrionette.runtime.websocket_publisher_runner as websocket_runner_modul
 from selfrionette.runtime import run_replay_mujoco_websocket_publisher
 from generic_qpos_test_doubles import RejectingGenericQposGuard
 from selfrionette.schemas import RawInputFrame
-from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 
 
 class _FakeWebSocketPublisherServer:

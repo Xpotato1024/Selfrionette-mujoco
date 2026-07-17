@@ -5,15 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from selfrionette.kinematics.fast_arm_endpoint import (
+from selfrionette.plugins.robots.fast_arm.kinematics import (
     FAST_ARM_ENDPOINT_LINK_LENGTHS_M,
     FastArmEndpointForwardKinematicsSolver,
     FastArmEndpointInverseKinematicsSolver,
     FastArmMuJoCoModelForwardKinematicsSolver,
 )
 from selfrionette.motion import LocalEndpointMotionGenerator, TargetToJointMotionGenerator
-from selfrionette.mujoco_backend.model_contract import validate_fast_arm_model_name_contract
+from selfrionette.plugins.robots.fast_arm.model_contract import validate_fast_arm_model_name_contract
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
+from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.feasibility import (
     FastArmJointLimitGuard,
     load_and_validate_fast_arm_joint_limit_config,
@@ -33,6 +34,12 @@ from selfrionette.schemas import MuJoCoState
 @dataclass(frozen=True, slots=True)
 class FastArmRuntimePlugin:
     profile: RobotProfile = FAST_ARM_ROBOT_PROFILE
+
+    def _endpoint_site_name(self) -> str:
+        site_name = self.profile.endpoint.site_name
+        if site_name is None:
+            raise ValueError("fast_arm Runtime Plugin requires an endpoint site binding")
+        return site_name
 
     @property
     def profile_id(self) -> str:
@@ -82,7 +89,7 @@ class FastArmRuntimePlugin:
     def build_local_endpoint_motion_generator(self) -> LocalEndpointMotionGenerator:
         return LocalEndpointMotionGenerator(
             endpoint_kinematics=FastArmMuJoCoModelForwardKinematicsSolver(
-                tip_site_name=self.profile.endpoint.site_name or ""
+                tip_site_name=self._endpoint_site_name()
             ),
             endpoint_model="mujoco_model_aligned_tip_site",
             fd_epsilon_rad=DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD,
@@ -124,4 +131,13 @@ class FastArmRuntimePlugin:
 FAST_ARM_RUNTIME_PLUGIN = FastArmRuntimePlugin()
 
 
-__all__ = ["FAST_ARM_RUNTIME_PLUGIN", "FastArmRuntimePlugin"]
+def build_fast_arm_simulator() -> HeadlessMuJoCoSimulator:
+    """Build the canonical fast_arm model through Profile-owned resources."""
+
+    return HeadlessMuJoCoSimulator.from_model_path(
+        FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
+        initial_keyframe_name=FAST_ARM_ROBOT_PROFILE.initial_keyframe_name,
+    )
+
+
+__all__ = ["FAST_ARM_RUNTIME_PLUGIN", "FastArmRuntimePlugin", "build_fast_arm_simulator"]
