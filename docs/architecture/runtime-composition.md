@@ -23,6 +23,17 @@ production compositionは明示的に選択した`RobotRuntimePlugin`を解決�
 startup keyframe、IK / FK、motion policy、qpos feasibility guardの整合を検証する。generic stub、
 zero solver、退役したPlanar solverへ暗黙fallbackしない。
 
+production concrete registrationは`selfrionette.plugins.catalog`だけが所有する。catalogは
+`RobotBundle`をknown IDでresolveし、ProfileとRuntime Plugin resolverは同じBundle objectの
+`profile` / `runtime_plugin`へprojectionする。application compositionはBundleから必要なtyped providerを
+assembly時に取得してconsumerへ渡し、処理中にBundleへ問い合わせるservice locatorにはしない。
+`RuntimeInputSourceStepLoopPlan`は`EndpointPoseProvider`、`EndpointCommandProvider`、
+`QposFeasibilityProvider`だけを保持し、`ResolvedRobotRuntime`またはRuntime Plugin全体をexecution edgeへ
+持ち越さない。endpoint poseの観測、motion generator、qpos guardはそれぞれのtyped providerを使用する。
+Runtime Pluginを直接使用できるのはcomposition中のmodel validationとFK factoryに限定する。
+旧profile / runtime / bundle registry moduleは同じresolver objectを再公開するcompatibility facadeであり、
+新しいcomposition rootはcatalogを直接使用する。
+
 実験compositionでは、Robot Bundle、Environment / Scene、Control / Mapping、Task、Evaluationを
 versioned known-ID registryから明示解決する。`runtime/`はphysicsやrunner開始前にcapability provider、
 axis-scoped parameter owner、typed semantic role、version-aware robot/environment/task compatibility、

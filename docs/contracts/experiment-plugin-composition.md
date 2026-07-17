@@ -195,10 +195,29 @@ readiness後に不足へ気付く設計や、特定robot/task/evaluatorの暗黙
 
 ## fast_arm migration
 
-production fast_armは`fast_arm/v1` Robot Bundleとして登録する。bundleは既存
-`FAST_ARM_ROBOT_PROFILE`と`FAST_ARM_RUNTIME_PLUGIN`の同一objectを参照し、providerは既存の
-model validation、endpoint IK/FK、target/local motion、qpos feasibility、endpoint state accessorへ
-委譲する。initial stateはprofileの既存`home` keyframe referenceを返す。
+production fast_armは`selfrionette.plugins.robots.fast_arm`配下でProfile、Runtime Plugin、
+feasibility adapter、canonical initial state、Robot Bundle assemblyを所有し、`fast_arm/v1` Bundleとして
+`selfrionette.plugins.catalog`だけへ登録する。bundleは同packageの
+`FAST_ARM_ROBOT_PROFILE`と`FAST_ARM_RUNTIME_PLUGIN`の同一objectを参照し、generic
+`runtime.robot_provider_adapters`を使って既存のmodel validation、endpoint IK/FK、target/local motion、
+qpos feasibility、endpoint state accessorへ委譲する。initial stateは既存`home` keyframe referenceと
+`fast_arm_initial_state/v1` contractを返す。
+
+```text
+plugins/robots/fast_arm/profile.py
+plugins/robots/fast_arm/runtime.py
+plugins/robots/fast_arm/feasibility.py
+plugins/robots/fast_arm/initial_state.py
+plugins/robots/fast_arm/bundle.py
+        -> plugins/catalog.py
+        -> application composition
+```
+
+`robots/fast_arm.py`、`runtime/fast_arm_plugin.py`、`runtime/fast_arm_bundle.py`、
+`runtime/fast_arm_joint_limits.py`、旧registry moduleは同一class / object / functionをre-exportするだけの
+compatibility facadeである。`runtime/default_robot_providers.py`も
+`runtime/robot_provider_adapters.py`の同一classをre-exportする。facadeはassembly、factory、fallback、
+registrationを所有せず、新規consumer向けAPIではない。
 
 `build_concrete_mujoco_pipeline()`は既存Robot Profile / Runtime Plugin resolverを維持したうえで、
 Robot Bundle registryとの同一性を検証し、initial state、endpoint command、qpos feasibilityを
@@ -218,6 +237,13 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
   `EvaluationPlugin`、`contact_evidence/v1` extension pointを使い、typed object/frame/unit requirementと
   cube/contact固有fieldをgeneric contractへ追加できる。
 - どちらもTask/Evaluationへfast_arm固有nameまたはsolver classを持ち込まず、viewerへ判定を追加しない。
+- #406のproduction compositionは`selfrionette.plugins.catalog`の
+  `resolve_robot_bundle()` / `resolve_robot_profile()` / `resolve_robot_runtime_plugin()` /
+  `resolve_robot_runtime()`、または既存のresolved experiment compositionを使用する。runtime consumerには
+  `RobotBundle.provider()`でassembly時に取得した`EndpointCommandProvider`、
+  `QposFeasibilityProvider`、`InitialStateContractProvider`等の必要なtyped providerだけを渡す。
+- #406は`selfrionette.plugins.robots.fast_arm.*`や旧compatibility facadeを直接importして
+  concrete objectを組み立てない。Bundleをruntime service locatorとしてstepごとに参照しない。
 
 ## non-goalsと主張範囲
 

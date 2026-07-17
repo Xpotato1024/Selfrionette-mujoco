@@ -5,12 +5,22 @@ from dataclasses import dataclass, replace
 from math import isfinite
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, RuntimeMuJoCoSiteEndpointEvaluation
+from selfrionette.plugins.catalog import resolve_robot_bundle, resolve_robot_profile
+from selfrionette.robot_profile import RobotProfile, robot_profile_runtime_metadata
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.runtime.endpoint_metrics import build_runtime_endpoint_evaluation_payload
 from selfrionette.runtime.evaluation import evaluate_fk_endpoint_from_qpos
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.robot_plugin_registry import ResolvedRobotRuntime, resolve_robot_runtime
-from selfrionette.robot_profile import robot_profile_runtime_metadata
+from selfrionette.runtime.robot_bundle import (
+    ENDPOINT_COMMAND_V1,
+    ENDPOINT_POSE_V1,
+    QPOS_FEASIBILITY_V1,
+    RESET_INITIAL_STATE_V1,
+    EndpointCommandProvider,
+    EndpointPoseProvider,
+    QposFeasibilityProvider,
+    ResetInitialStateProvider,
+)
 from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, MuJoCoState
 from selfrionette.transport import mujoco_state_to_payload
@@ -93,11 +103,10 @@ def _build_runtime_input_intent(
 def _build_plugin_site_evaluation(
     *,
     state: MuJoCoState,
-    resolved_runtime: ResolvedRobotRuntime,
+    endpoint_pose_provider: EndpointPoseProvider,
+    profile: RobotProfile,
 ) -> RuntimeMuJoCoSiteEndpointEvaluation:
-    plugin = resolved_runtime.plugin
-    profile = resolved_runtime.profile
-    endpoint_position_m = plugin.endpoint_position_from_state(state)
+    endpoint_position_m = endpoint_pose_provider.observe_endpoint_pose(state).position_m
     if endpoint_position_m is None:
         raise ValueError("selected robot runtime plugin did not provide an endpoint position")
 
@@ -139,14 +148,28 @@ def run_offline_input_runtime_stepping_smoke(
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
         raise ValueError("production offline input smoke requires robot_profile_id")
-    resolved_runtime = resolve_robot_runtime(runtime_config.robot_profile_id)
-    plugin = resolved_runtime.plugin
+    profile = resolve_robot_profile(runtime_config.robot_profile_id)
+    robot_bundle = resolve_robot_bundle(runtime_config.robot_profile_id)
+    if robot_bundle.profile is not profile:
+        raise ValueError("Robot Bundle/profile catalog consistency mismatch")
+    plugin = robot_bundle.runtime_plugin
+    initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
+    endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
+    endpoint_command_provider = robot_bundle.provider(ENDPOINT_COMMAND_V1)
+    qpos_feasibility_provider = robot_bundle.provider(QPOS_FEASIBILITY_V1)
+    assert isinstance(initial_state_provider, ResetInitialStateProvider)
+    assert isinstance(endpoint_pose_provider, EndpointPoseProvider)
+    assert isinstance(endpoint_command_provider, EndpointCommandProvider)
+    assert isinstance(qpos_feasibility_provider, QposFeasibilityProvider)
+    initial_state = initial_state_provider.resolve_initial_state()
+    if initial_state.source_kind != "named_keyframe":
+        raise ValueError("production offline input smoke requires a named-keyframe initial state")
     simulator = HeadlessMuJoCoSimulator.from_model_path(
-        runtime_config.mujoco_model_path or plugin.profile.mujoco_model_asset,
-        initial_keyframe_name=plugin.profile.initial_keyframe_name,
+        runtime_config.mujoco_model_path or profile.mujoco_model_asset,
+        initial_keyframe_name=initial_state.source_id,
     )
     plugin.validate_model(simulator.model)
-    qpos_guard = plugin.build_qpos_feasibility_guard(
+    qpos_guard = qpos_feasibility_provider.build_guard(
         model=simulator.model,
         config_path=runtime_config.joint_limit_config_path,
     )
@@ -156,7 +179,7 @@ def run_offline_input_runtime_stepping_smoke(
         simulator.apply_qpos_command(JointCommand(joint_angles_rad=initial_qpos_tuple))
 
     seed_joint_angles_rad = tuple(simulator.snapshot().qpos)
-    motion_generator = plugin.build_target_motion_generator(
+    motion_generator = endpoint_command_provider.build_target_motion_generator(
         seed_joint_angles_rad=seed_joint_angles_rad,
         discontinuity_threshold_rad=None,
         discontinuity_threshold_label="global safety threshold",
@@ -182,7 +205,7 @@ def run_offline_input_runtime_stepping_smoke(
         target_position_m=None if qpos_rejected else feedback_target_position_m,
         metadata=merge_runtime_metadata(
             applied_command.metadata,
-            authoritative_profile_metadata=robot_profile_runtime_metadata(resolved_runtime.profile),
+            authoritative_profile_metadata=robot_profile_runtime_metadata(profile),
         ),
     )
 
@@ -192,11 +215,12 @@ def run_offline_input_runtime_stepping_smoke(
             fk_evaluation = evaluate_fk_endpoint_from_qpos(
                 fk_solver,
                 applied_command.joint.joint_angles_rad if applied_command.joint is not None else (),
-                solver_joint_count=resolved_runtime.profile.qpos_dimension,
+                solver_joint_count=profile.qpos_dimension,
             )
             site_evaluation = _build_plugin_site_evaluation(
                 state=state,
-                resolved_runtime=resolved_runtime,
+                endpoint_pose_provider=endpoint_pose_provider,
+                profile=profile,
             )
         except ValueError:
             pass
@@ -216,7 +240,7 @@ def run_offline_input_runtime_stepping_smoke(
             metadata=merge_runtime_metadata(
                 state.metadata,
                 {"endpoint_evaluation": endpoint_evaluation},
-                authoritative_profile_metadata=robot_profile_runtime_metadata(resolved_runtime.profile),
+                authoritative_profile_metadata=robot_profile_runtime_metadata(profile),
             ),
         )
 

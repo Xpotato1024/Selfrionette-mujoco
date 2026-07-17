@@ -5,6 +5,9 @@ from dataclasses import replace
 
 import pytest
 
+from selfrionette.plugins.catalog import (
+    resolve_robot_bundle as resolve_robot_bundle_from_catalog,
+)
 from selfrionette.runtime.evaluation_manifest import (
     EVALUATION_MANIFEST_SCHEMA_VERSION,
     EvaluationConditionPair,
@@ -37,7 +40,9 @@ from selfrionette.runtime.experiment_contracts import (
 )
 from selfrionette.runtime.experiment_registry import VersionedPluginRegistry
 from selfrionette.runtime.robot_bundle import CONTACT_EVIDENCE_V1, InitialStateContract
-from selfrionette.runtime.robot_bundle_registry import resolve_robot_bundle
+from selfrionette.runtime.robot_bundle_registry import (
+    resolve_robot_bundle as resolve_robot_bundle_from_compatibility_facade,
+)
 from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime.fast_arm_bundle import (
     FAST_ARM_INITIAL_STATE_CONTRACT,
@@ -54,6 +59,17 @@ from tests.runtime.test_experiment_plugin_composition import (
     _mapping,
     _registries,
     _task,
+)
+
+
+BASELINE_FAST_ARM_MANIFEST_DIGEST = (
+    "sha256:5552d5c0e27ad523228c19a831666d3652f0e599742d25972c1be380f988626f"
+)
+BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST = (
+    "sha256:d43165d8d7bc2fb6b72f5e78fe96b3e0f681dbc8e7f446dea9b4be520c9aecbe"
+)
+BASELINE_FAST_ARM_FREEZE_DIGEST = (
+    "sha256:8fa9fed0906e4f7a12b437fd1ad8d35a0bc237d478107d83393781cf6000da3a"
 )
 
 
@@ -812,7 +828,11 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
     fast_evaluator = replace(
         _evaluator(identity=fast_evaluator_identity)
     )
-    bundle = resolve_robot_bundle("fast_arm")
+    bundle = resolve_robot_bundle_from_catalog("fast_arm")
+    compatibility_bundle = resolve_robot_bundle_from_compatibility_facade(
+        "fast_arm"
+    )
+    assert compatibility_bundle is bundle
     registries = _readiness_registries(
         bundle=bundle,
         environment=fast_environment,
@@ -855,9 +875,51 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
     )
 
     readiness = _build_readiness(manifest, registries)
+    compatibility_readiness = _build_readiness(
+        manifest,
+        _readiness_registries(
+            bundle=compatibility_bundle,
+            environment=fast_environment,
+            mapping=fast_mapping,
+            task=fast_task,
+            evaluator=fast_evaluator,
+        ),
+    )
+
+    # Golden values were executed at baseline main
+    # e0311688f8d9738689434a82895616c42e965c0f with test-revision:abc123.
+    for candidate in (readiness, compatibility_readiness):
+        assert candidate.freeze_record.manifest_digest == (
+            BASELINE_FAST_ARM_MANIFEST_DIGEST
+        )
+        assert candidate.resolved_identity == (
+            BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST
+        )
+        assert candidate.freeze_identity == BASELINE_FAST_ARM_FREEZE_DIGEST
 
     assert readiness.composition.robot_bundle is bundle
     assert readiness.robot_profile_identity == VersionedIdentity("fast_arm", 1)
     assert readiness.model_contract_identity == VersionedIdentity(
         "fast_arm-mujoco-model", 1
     )
+    assert readiness.freeze_record.canonical_manifest_bytes == (
+        encode_evaluation_manifest(manifest)
+    )
+    assert (
+        compatibility_readiness.freeze_record.canonical_manifest_bytes
+        == readiness.freeze_record.canonical_manifest_bytes
+    )
+    assert (
+        compatibility_readiness.freeze_record.canonical_resolved_identity_bytes
+        == readiness.freeze_record.canonical_resolved_identity_bytes
+    )
+    assert (
+        b"selfrionette.plugins"
+        not in readiness.freeze_record.canonical_resolved_identity_bytes
+    )
+    assert (
+        b"fast_arm_bundle.py"
+        not in readiness.freeze_record.canonical_resolved_identity_bytes
+    )
+    assert compatibility_readiness.resolved_identity == readiness.resolved_identity
+    assert compatibility_readiness.freeze_identity == readiness.freeze_identity

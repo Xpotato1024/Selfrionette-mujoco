@@ -82,10 +82,17 @@ viewer profile registrationが一つ必要である。
 明示的なtest-only conformance caseも必要である。このcaseはproduction registry entry、
 runtime composition dependency、public APIではない。
 
-`resolve_robot_runtime()`は共通production boundaryである。一方のregistryだけにあるID、
-requested/registered/plugin identity mismatch、profile/model contract version mismatch、
-異なるdeclarative contract、canonical registered profile objectにbindされていないpluginを
-rejectする。object identityに加えてsemantic comparisonも必須である。
+production concrete registrationのSoTは`selfrionette.plugins.catalog`である。catalogへ登録するのは
+`RobotBundle`だけであり、`resolve_robot_profile()`、`resolve_robot_runtime_plugin()`、
+`resolve_robot_runtime()`、`resolve_robot_bundle()`は同じBundleのProfile / Runtime Plugin objectへ収束する。
+Profile、Runtime Plugin、Bundleを独立したconcrete registryへ重複登録しない。旧registry moduleは
+同じresolverとprojection registryをre-exportするcompatibility facadeである。
+
+`resolve_robot_runtime()`は共通production boundaryである。test-onlyの明示registry injectionでは、
+一方のregistryだけにあるID、requested/registered/plugin identity mismatch、profile/model contract
+version mismatch、異なるdeclarative contract、canonical registered profile objectにbindされていない
+pluginをrejectする。production defaultではcatalogのBundleを一度assembly SoTとして使い、object identityに
+加えてsemantic comparisonも維持する。
 
 ## Productionとgenericの選択
 

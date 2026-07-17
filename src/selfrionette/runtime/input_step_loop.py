@@ -6,7 +6,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from time import monotonic
 
-from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M, ViewerInputSource
+from selfrionette.input_sources.viewer import (
+    DEFAULT_VIEWER_SAFE_ENDPOINT_M,
+    ViewerInputSource,
+)
+from selfrionette.plugins.catalog import resolve_robot_bundle, resolve_robot_profile
+from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.input_step_diagnostics import (
@@ -19,12 +24,23 @@ from selfrionette.runtime.input_source_state import (
     build_runtime_input_source_state_from_metadata,
 )
 from selfrionette.runtime.input_safety import build_runtime_input_safety_result
-from selfrionette.runtime.live_timing import AbsoluteDeadlinePacer, LiveRuntimeTimingMetrics
-from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
-from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
-from selfrionette.runtime.robot_plugin_registry import ResolvedRobotRuntime, resolve_robot_runtime
-from selfrionette.robot_profile import robot_profile_runtime_metadata
+from selfrionette.runtime.live_timing import (
+    AbsoluteDeadlinePacer,
+    LiveRuntimeTimingMetrics,
+)
+from selfrionette.runtime.robot_bundle import (
+    ENDPOINT_COMMAND_V1,
+    ENDPOINT_POSE_V1,
+    QPOS_FEASIBILITY_V1,
+    RESET_INITIAL_STATE_V1,
+    EndpointCommandProvider,
+    EndpointPoseProvider,
+    QposFeasibilityProvider,
+    ResetInitialStateProvider,
+    RobotBundle,
+)
 from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
+from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
@@ -40,7 +56,10 @@ class RuntimeInputSourceStepLoopPlan:
     selection: RuntimeInputSourceSelection
     pipeline: RuntimePipeline
     annotate_target_position_m: bool
-    resolved_robot_runtime: ResolvedRobotRuntime
+    endpoint_pose_provider: EndpointPoseProvider
+    endpoint_command_provider: EndpointCommandProvider
+    qpos_feasibility_provider: QposFeasibilityProvider
+    endpoint_site_name: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,13 +71,13 @@ class RuntimeInputSourceStepLoopRecord:
 
 
 def _resolve_model_path(
-    *, model_path: str | Path | None, config: RuntimeConfig, resolved_runtime: ResolvedRobotRuntime
+    *, model_path: str | Path | None, config: RuntimeConfig, robot_bundle: RobotBundle
 ) -> Path:
     if model_path is not None:
         return Path(model_path)
     if config.mujoco_model_path is not None:
         return config.mujoco_model_path
-    return resolved_runtime.profile.mujoco_model_asset
+    return robot_bundle.profile.mujoco_model_asset
 
 
 def _coerce_viewer_endpoint_m(value: object) -> tuple[float, float, float]:
@@ -73,15 +92,15 @@ def _coerce_viewer_endpoint_m(value: object) -> tuple[float, float, float]:
 
 
 def _extract_current_endpoint_m(
-    pipeline: RuntimePipeline, plugin: RobotRuntimePlugin
+    pipeline: RuntimePipeline, provider: EndpointPoseProvider
 ) -> tuple[float, float, float] | None:
-    return plugin.endpoint_position_from_state(pipeline.simulator.snapshot())
+    return provider.observe_endpoint_pose(pipeline.simulator.snapshot()).position_m
 
 
 def _extract_endpoint_orientation_wxyz_from_state(
-    state: MuJoCoState, plugin: RobotRuntimePlugin
+    state: MuJoCoState, provider: EndpointPoseProvider
 ) -> tuple[float, float, float, float] | None:
-    return plugin.endpoint_orientation_from_state(state)
+    return provider.observe_endpoint_pose(state).quaternion_wxyz
 
 
 def build_runtime_input_source_step_loop_plan(
@@ -96,14 +115,37 @@ def build_runtime_input_source_step_loop_plan(
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
         raise ValueError("production input step-loop requires robot_profile_id")
-    resolved_runtime = resolve_robot_runtime(runtime_config.robot_profile_id)
-    plugin = resolved_runtime.plugin
+    profile = resolve_robot_profile(runtime_config.robot_profile_id)
+    robot_bundle = resolve_robot_bundle(runtime_config.robot_profile_id)
+    if robot_bundle.profile is not profile:
+        raise ValueError("Robot Bundle/profile catalog consistency mismatch")
+    plugin = robot_bundle.runtime_plugin
+    endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
+    endpoint_command_provider = robot_bundle.provider(ENDPOINT_COMMAND_V1)
+    qpos_feasibility_provider = robot_bundle.provider(QPOS_FEASIBILITY_V1)
+    initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
+    assert isinstance(endpoint_pose_provider, EndpointPoseProvider)
+    assert isinstance(endpoint_command_provider, EndpointCommandProvider)
+    assert isinstance(qpos_feasibility_provider, QposFeasibilityProvider)
+    assert isinstance(initial_state_provider, ResetInitialStateProvider)
+    initial_state = initial_state_provider.resolve_initial_state()
+    if initial_state.source_kind != "named_keyframe":
+        raise ValueError("production input step-loop requires a named-keyframe initial state")
     resolved_model_path = _resolve_model_path(
-        model_path=model_path, config=runtime_config, resolved_runtime=resolved_runtime
+        model_path=model_path, config=runtime_config, robot_bundle=robot_bundle
     )
+    plan_providers = {
+        "endpoint_pose_provider": endpoint_pose_provider,
+        "endpoint_command_provider": endpoint_command_provider,
+        "qpos_feasibility_provider": qpos_feasibility_provider,
+        "endpoint_site_name": robot_bundle.profile.endpoint.site_name,
+    }
 
     if viewer_input_source is not None and selection.source_name != "viewer":
-        raise ValueError("viewer_input_source can only be supplied when selection.source_name == 'viewer'")
+        raise ValueError(
+            "viewer_input_source can only be supplied when "
+            "selection.source_name == 'viewer'"
+        )
 
     if selection.source_name == "programmed_target":
         pipeline = build_concrete_mujoco_pipeline(
@@ -117,7 +159,7 @@ def build_runtime_input_source_step_loop_plan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=True,
-            resolved_robot_runtime=resolved_runtime,
+            **plan_providers,
         )
 
     if selection.source_name == "replay":
@@ -127,11 +169,11 @@ def build_runtime_input_source_step_loop_plan(
             model_path=resolved_model_path,
             loop=selection.loop,
             publisher=publisher,
-            initial_keyframe_name=plugin.profile.initial_keyframe_name,
-            robot_profile_metadata=robot_profile_runtime_metadata(resolved_runtime.profile),
+            initial_keyframe_name=initial_state.source_id,
+            robot_profile_metadata=robot_profile_runtime_metadata(robot_bundle.profile),
         )
         plugin.validate_model(pipeline.simulator.model)
-        pipeline.qpos_feasibility_guard = plugin.build_qpos_feasibility_guard(
+        pipeline.qpos_feasibility_guard = qpos_feasibility_provider.build_guard(
             model=pipeline.simulator.model,
             config_path=runtime_config.joint_limit_config_path,
         )
@@ -139,18 +181,26 @@ def build_runtime_input_source_step_loop_plan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=False,
-            resolved_robot_runtime=resolved_runtime,
+            **plan_providers,
         )
 
     if selection.source_name == "noop":
         pipeline = build_mujoco_pipeline(
-            frame=selection.frames[0] if selection.frames else RawInputFrame(source="noop", timestamp_s=0.0),
+            frame=(
+                selection.frames[0]
+                if selection.frames
+                else RawInputFrame(source="noop", timestamp_s=0.0)
+            ),
             config=runtime_config,
             model_path=resolved_model_path,
-            initial_keyframe_name=plugin.profile.initial_keyframe_name,
-            robot_profile_metadata=robot_profile_runtime_metadata(resolved_runtime.profile),
+            initial_keyframe_name=initial_state.source_id,
+            robot_profile_metadata=robot_profile_runtime_metadata(robot_bundle.profile),
         )
         plugin.validate_model(pipeline.simulator.model)
+        pipeline.qpos_feasibility_guard = qpos_feasibility_provider.build_guard(
+            model=pipeline.simulator.model,
+            config_path=runtime_config.joint_limit_config_path,
+        )
         if publisher is not None:
             pipeline.publisher = publisher
 
@@ -158,14 +208,17 @@ def build_runtime_input_source_step_loop_plan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=False,
-            resolved_robot_runtime=resolved_runtime,
+            **plan_providers,
         )
 
     if selection.source_name == "viewer":
         pipeline_input_source = viewer_input_source
         if pipeline_input_source is None:
             initial_endpoint_m = _coerce_viewer_endpoint_m(
-                selection.initial_metadata.get("desired_endpoint_m", selection.initial_metadata.get("target_position_m"))
+                selection.initial_metadata.get(
+                    "desired_endpoint_m",
+                    selection.initial_metadata.get("target_position_m"),
+                )
             )
             pipeline_input_source = ViewerInputSource(
                 clock=viewer_clock if viewer_clock is not None else monotonic,
@@ -182,8 +235,12 @@ def build_runtime_input_source_step_loop_plan(
             discontinuity_threshold_label="viewer endpoint continuity threshold",
         )
         pipeline.input_source = pipeline_input_source
-        pipeline.motion_generator = plugin.build_local_endpoint_motion_generator()
-        initial_tip_site_position_m = _extract_current_endpoint_m(pipeline, plugin)
+        pipeline.motion_generator = (
+            endpoint_command_provider.build_local_endpoint_motion_generator()
+        )
+        initial_tip_site_position_m = _extract_current_endpoint_m(
+            pipeline, endpoint_pose_provider
+        )
         if initial_tip_site_position_m is not None:
             _sync_viewer_input_source_endpoint(
                 pipeline.input_source,
@@ -194,7 +251,7 @@ def build_runtime_input_source_step_loop_plan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=True,
-            resolved_robot_runtime=resolved_runtime,
+            **plan_providers,
         )
 
     raise ValueError(f"unsupported input source for step loop: {selection.source_name!r}")
@@ -236,11 +293,15 @@ async def run_runtime_input_source_step_loop(
     records: list[RuntimeInputSourceStepLoopRecord] = []
     last_valid_endpoint_m: tuple[float, float, float] | None = None
     if plan.selection.source_name == "viewer":
-        plugin = plan.resolved_robot_runtime.plugin
-        last_valid_endpoint_m = _extract_current_endpoint_m(plan.pipeline, plugin)
+        last_valid_endpoint_m = _extract_current_endpoint_m(
+            plan.pipeline, plan.endpoint_pose_provider
+        )
         if last_valid_endpoint_m is None:
             last_valid_endpoint_m = _coerce_viewer_endpoint_m(
-                plan.selection.initial_metadata.get("desired_endpoint_m", plan.selection.initial_metadata.get("target_position_m"))
+                plan.selection.initial_metadata.get(
+                    "desired_endpoint_m",
+                    plan.selection.initial_metadata.get("target_position_m"),
+                )
             )
 
     for index in range(steps):
@@ -254,9 +315,8 @@ async def run_runtime_input_source_step_loop(
         pre_step_state = plan.pipeline.simulator.snapshot()
         pre_step_tip_site_orientation_wxyz = None
         if plan.selection.source_name == "viewer":
-            plugin = plan.resolved_robot_runtime.plugin
             pre_step_tip_site_orientation_wxyz = _extract_endpoint_orientation_wxyz_from_state(
-                pre_step_state, plugin
+                pre_step_state, plan.endpoint_pose_provider
             )
         motion_intent = intent
         if plan.selection.source_name == "viewer":
@@ -282,7 +342,10 @@ async def run_runtime_input_source_step_loop(
             qpos_feasibility_guard=plan.pipeline.qpos_feasibility_guard,
         )
         step_endpoint_m = last_valid_endpoint_m
-        if not safety_result.motion_command.metadata.get("target_rejected", False) and not safety_result.qpos_feasibility_rejected:
+        if (
+            not safety_result.motion_command.metadata.get("target_rejected", False)
+            and not safety_result.qpos_feasibility_rejected
+        ):
             desired_endpoint_m = safety_result.motion_command.metadata.get("desired_endpoint_m")
             if desired_endpoint_m is not None:
                 step_endpoint_m = _coerce_viewer_endpoint_m(desired_endpoint_m)
@@ -304,15 +367,12 @@ async def run_runtime_input_source_step_loop(
             ),
         )
         measurement = PostStepMeasurement(None, None, None)
-        if plan.selection.source_name == "viewer":
-            plugin = plan.resolved_robot_runtime.plugin
-            site_name = plugin.profile.endpoint.site_name
-            if site_name is not None:
-                measurement = measure_post_step_endpoint(
-                    pre_step_state,
-                    state,
-                    site_name=site_name,
-                )
+        if plan.selection.source_name == "viewer" and plan.endpoint_site_name is not None:
+            measurement = measure_post_step_endpoint(
+                pre_step_state,
+                state,
+                site_name=plan.endpoint_site_name,
+            )
         annotated_state = annotate_runtime_input_state(
             source_state=safety_result.source_state,
             frame=frame,

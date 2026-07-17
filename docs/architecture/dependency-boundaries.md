@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-07-17
 canonical_for:
   - import boundaries
 related:
@@ -37,6 +37,29 @@ mujoco_backend      -> schemas
 transport           -> schemas
 runtime             -> all layers
 ```
+
+Robot plugin compositionでは、上記layer境界に加えて次の方向を固定する。
+
+```text
+generic schema / domain / Protocol
+  <- generic registry / provider adapter / Robot Bundle contract
+  <- robot-specific profile / runtime / feasibility / initial state
+  <- Robot Bundle assembly
+  <- plugins/catalog.py
+  <- application composition root
+```
+
+- `selfrionette.plugins.catalog`はproduction concrete registrationの唯一の入口であり、
+  concrete `RobotBundle`だけを登録する。
+- ProfileとRuntime Pluginのresolverは、別registryへ具体objectを重複登録せず、resolved Bundleの
+  `profile`と`runtime_plugin`を返す。
+- generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
+  `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
+- application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
+- `robots/fast_arm.py`、旧`runtime/fast_arm_*.py`、旧registry moduleはcompatibility facadeであり、
+  新規consumerのcomposition APIとして使用しない。
+- package root `selfrionette.runtime`はpublic compatibility surfaceをlazy resolveするが、package importだけで
+  concrete catalogをloadしない。
 
 禁止するdependency:
 
@@ -109,6 +132,10 @@ package-root exportとmodule-level exportは別のpublic surfaceである。
 
 - package-root `__all__`へ公開するのはcontract、concrete implementation、または
   canonical文書で維持理由を説明できるcompatibility helperに限定する。
+- `selfrionette.runtime`は各public nameをowner moduleとattribute nameの明示mappingで解決する。
+  module scan、transitive import、module orderingへ解決先を依存させない。generic contractの参照では
+  concrete catalogをloadせず、catalog-backed resolverを参照した時点だけcompatibility facade経由でloadする。
+- 明示mappingのkey setは`__all__`と一致させ、全entryのowner object identityをarchitecture testで固定する。
 - `NoOp*`、`Zero*`、`Static*`などのstub classをpackage-rootのstable APIにしない。
 - `stubs.py`はexplicit import用namespaceとして維持し、stubを使用するcallerは
   `.stubs`から明示的にimportする。

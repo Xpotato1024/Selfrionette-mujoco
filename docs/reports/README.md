@@ -27,6 +27,9 @@ contract、反復operationのsource of truthにはしない。現在仕様は`do
 - [2026-07-16 Markdown migration snapshot](inventories/markdown-inventory.md):
   baseline `cf17fe830645c99b591615b6ffb55a42979c0d5e`に対する#398分類、#399 migration disposition、
   migration時点のrole / action / destinationを記録したhistorical evidence。current registryとして更新しない。
+- [#423 fast_arm plugin boundary inventory](inventories/fast-arm-plugin-boundary-normalization.md):
+  baseline `e0311688f8d9738689434a82895616c42e965c0f`に対するproduction owner、consumer、移行action、
+  compatibility / defer判断のsnapshot。current boundaryはcanonical architecture / contract文書を正とする。
 - [2026-07-16 canonical content / history separation audit](audits/canonical-content-history-separation-2026-07-16.md):
   全canonical文書のcontent review、history extraction、status再分類、抽出元commitを記録する。
   追加抽出本文は[separation supplement](audits/canonical-content-history-separation-supplement-2026-07-16.md)へ

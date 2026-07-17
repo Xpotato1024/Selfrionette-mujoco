@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-import selfrionette.runtime.fast_arm_joint_limits as joint_limits_module
+import selfrionette.plugins.robots.fast_arm.feasibility as joint_limits_module
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
-from selfrionette.runtime.fast_arm_joint_limits import (
+from selfrionette.plugins.robots.fast_arm.feasibility import (
     FastArmJointLimitGuard,
     apply_fast_arm_qpos_feasibility_guard,
     load_and_validate_fast_arm_joint_limit_config,
