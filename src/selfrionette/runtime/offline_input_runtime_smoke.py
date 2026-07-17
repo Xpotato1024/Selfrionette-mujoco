@@ -9,7 +9,8 @@ from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpo
 from selfrionette.runtime.endpoint_metrics import build_runtime_endpoint_evaluation_payload
 from selfrionette.runtime.evaluation import evaluate_fk_endpoint_from_qpos
 from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.robot_plugin_registry import ResolvedRobotRuntime, resolve_robot_runtime
+from selfrionette.plugins.catalog import resolve_robot_runtime
+from selfrionette.runtime.robot_resolution import ResolvedRobotRuntime
 from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, MuJoCoState

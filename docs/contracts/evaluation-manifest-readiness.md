@@ -160,6 +160,11 @@ identityを変更する場合は、manifest contract versionまたは対象のve
 provider boundaryである。runnerはready resultとfreeze identityを受け取り、別のimplicit selectionや
 default補完を行わない。
 
+robot selectionが必要なcomposition rootは`selfrionette.plugins.catalog`のresolverを使用し、
+resolved Bundleから必要なtyped providerをassembly時に取得する。`plugins.robots.fast_arm`のconcrete
+moduleと旧compatibility facadeは#406のimport boundaryではない。Bundleはprovider assemblyの境界であり、
+runner処理中のservice locatorとして使用しない。
+
 runner、experiment-motion-log/v1のrecord lifecycle、participant / repetition / retry、physics execution、
 measured tip outcome、task terminal classification、metric calculation、contact outcomeは本Issueの
 public API handoffに含まれない。#406 / 後続Issueで別途実装する。

@@ -1,0 +1,1 @@
+"""Task plugin namespace."""

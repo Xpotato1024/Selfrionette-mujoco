@@ -12,9 +12,11 @@ from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.mujoco_backend.model_loader import load_mujoco_model
 from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
 from selfrionette.kinematics.fast_arm_endpoint import FastArmMuJoCoModelForwardKinematicsSolver
-from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
-from selfrionette.runtime.fast_arm_joint_limits import load_and_validate_fast_arm_joint_limit_config
-from selfrionette.runtime.fast_arm_plugin import FAST_ARM_RUNTIME_PLUGIN
+from selfrionette.plugins.robots.fast_arm.feasibility import (
+    load_and_validate_fast_arm_joint_limit_config,
+)
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.runtime import FAST_ARM_RUNTIME_PLUGIN
 from selfrionette.runtime.robot_plugin import validate_profile_model_dimensions
 from selfrionette.runtime.robot_plugin_registry import validate_robot_profile_plugin_consistency
 from selfrionette.schemas import MuJoCoState
@@ -134,8 +136,14 @@ def _failure_joint_order_mismatch(_tmp_path: Path) -> None:
     wrong_order = tuple(reversed(FAST_ARM_ROBOT_PROFILE.canonical_joint_names))
     info = MuJoCoModelInfo(joint_names=wrong_order, body_names=(), site_names=())
     model = SimpleNamespace(nq=4, nv=4)
-    with patch("selfrionette.runtime.fast_arm_plugin.inspect_mujoco_model", return_value=info):
-        with patch("selfrionette.runtime.fast_arm_plugin.validate_fast_arm_model_name_contract"):
+    with patch(
+        "selfrionette.plugins.robots.fast_arm.runtime.inspect_mujoco_model",
+        return_value=info,
+    ):
+        with patch(
+            "selfrionette.plugins.robots.fast_arm.runtime."
+            "validate_fast_arm_model_name_contract"
+        ):
             FAST_ARM_RUNTIME_PLUGIN.validate_model(model)
 
 

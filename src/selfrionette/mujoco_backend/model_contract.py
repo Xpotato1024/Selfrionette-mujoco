@@ -3,11 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo, inspect_mujoco_model
-from selfrionette.robots.fast_arm import FAST_ARM_PROFILE_ID, FAST_ARM_ROBOT_PROFILE
 
-FAST_ARM_CANONICAL_MODEL_NAME = FAST_ARM_PROFILE_ID
-FAST_ARM_END_EFFECTOR_SITE_NAME = FAST_ARM_ROBOT_PROFILE.endpoint.site_name or ""
-FAST_ARM_END_EFFECTOR_BODY_NAME = FAST_ARM_ROBOT_PROFILE.endpoint.body_name or ""
+FAST_ARM_CANONICAL_MODEL_NAME = "fast_arm"
+FAST_ARM_END_EFFECTOR_SITE_NAME = "tip"
+FAST_ARM_END_EFFECTOR_BODY_NAME = "fore_arm_link"
 FAST_ARM_WRIST_SITE_NAME: str | None = None
 FAST_ARM_WRIST_BODY_NAME = "fore_arm_link"
 FAST_ARM_TIP_SITE_NAME = "tip"

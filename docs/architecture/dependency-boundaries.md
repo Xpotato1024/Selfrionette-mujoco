@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-12
+last_verified: 2026-07-17
 canonical_for:
   - import boundaries
 related:
@@ -37,6 +37,29 @@ mujoco_backend      -> schemas
 transport           -> schemas
 runtime             -> all layers
 ```
+
+Robot plugin compositionでは、上記layer境界に加えて次の方向を固定する。
+
+```text
+generic schema / domain / Protocol
+  <- generic registry / provider adapter / Robot Bundle contract
+  <- robot-specific profile / runtime / feasibility / initial state
+  <- Robot Bundle assembly
+  <- plugins/catalog.py
+  <- application composition root
+```
+
+- `selfrionette.plugins.catalog`はproduction concrete registrationの唯一の入口であり、
+  concrete `RobotBundle`だけを登録する。
+- ProfileとRuntime Pluginのresolverは、別registryへ具体objectを重複登録せず、resolved Bundleの
+  `profile`と`runtime_plugin`を返す。
+- generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
+  `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
+- application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
+- `robots/fast_arm.py`、旧`runtime/fast_arm_*.py`、旧registry moduleはcompatibility facadeであり、
+  新規consumerのcomposition APIとして使用しない。
+- package root `selfrionette.runtime`はpublic compatibility surfaceをlazy resolveするが、package importだけで
+  concrete catalogをloadしない。
 
 禁止するdependency:
 

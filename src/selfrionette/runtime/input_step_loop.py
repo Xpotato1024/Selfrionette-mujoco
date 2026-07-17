@@ -22,7 +22,8 @@ from selfrionette.runtime.input_safety import build_runtime_input_safety_result
 from selfrionette.runtime.live_timing import AbsoluteDeadlinePacer, LiveRuntimeTimingMetrics
 from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
-from selfrionette.runtime.robot_plugin_registry import ResolvedRobotRuntime, resolve_robot_runtime
+from selfrionette.plugins.catalog import resolve_robot_runtime
+from selfrionette.runtime.robot_resolution import ResolvedRobotRuntime
 from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline

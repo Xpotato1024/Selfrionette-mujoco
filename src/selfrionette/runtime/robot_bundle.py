@@ -19,7 +19,9 @@ from selfrionette.runtime.experiment_contracts import (
 )
 from selfrionette.runtime.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
-from selfrionette.runtime.robot_plugin_registry import validate_robot_profile_plugin_consistency
+from selfrionette.runtime.robot_resolution import (
+    validate_robot_profile_plugin_consistency,
+)
 from selfrionette.schemas import MuJoCoState
 
 

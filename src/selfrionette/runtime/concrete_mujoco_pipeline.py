@@ -6,6 +6,7 @@ from pathlib import Path
 from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.plugins.catalog import resolve_robot_bundle, resolve_robot_runtime
 from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.endpoint_metrics import build_endpoint_evaluation_state_publisher
@@ -19,8 +20,6 @@ from selfrionette.runtime.robot_bundle import (
     ResetInitialStateProvider,
     RobotBundle,
 )
-from selfrionette.runtime.robot_bundle_registry import resolve_robot_bundle
-from selfrionette.runtime.robot_plugin_registry import resolve_robot_runtime
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
 
@@ -69,7 +68,9 @@ def build_concrete_mujoco_pipeline(
         robot_bundle.profile is not resolved_runtime.profile
         or robot_bundle.runtime_plugin is not resolved_runtime.plugin
     ):
-        raise ValueError("Robot Bundle/profile/runtime plugin registry consistency mismatch")
+        raise ValueError(
+            "Robot Bundle/profile/runtime plugin catalog consistency mismatch"
+        )
     plugin = robot_bundle.runtime_plugin
     initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
     endpoint_command_provider = robot_bundle.provider(ENDPOINT_COMMAND_V1)
