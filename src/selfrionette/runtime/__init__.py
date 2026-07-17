@@ -9,10 +9,10 @@ _PUBLIC_EXPORT_OWNER_GROUPS = (
     ("selfrionette.runtime.config", ("RuntimeConfig",)),
     ("selfrionette.runtime.pipeline", ("RuntimePipeline", "build_noop_pipeline")),
     ("selfrionette.runtime.robot_plugin", ("RobotRuntimePlugin",)),
+    ("selfrionette.runtime.robot_resolution", ("ResolvedRobotRuntime",)),
     (
         "selfrionette.runtime.robot_plugin_registry",
         (
-            "ResolvedRobotRuntime",
             "registered_robot_runtime_plugin_ids",
             "resolve_robot_runtime",
             "resolve_robot_runtime_plugin",
