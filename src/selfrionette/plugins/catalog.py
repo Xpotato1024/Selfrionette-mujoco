@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 from selfrionette.plugins.robot_discovery import (
     RobotPluginRegistry,
     discover_production_robot_plugins,
@@ -20,67 +22,141 @@ from selfrionette.runtime.robot_resolution import (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class RobotCatalog:
+    """Immutable resolver projection over one validated registration registry."""
+
+    registrations: RobotPluginRegistry
+    bundles: VersionedPluginRegistry[RobotBundle] = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "bundles",
+            VersionedPluginRegistry(
+                tuple(
+                    registration.bundle
+                    for registration in self.registrations.entries
+                ),
+                kind="Robot Bundle",
+            ),
+        )
+
+    @property
+    def ids(self) -> tuple[str, ...]:
+        return self.registrations.ids
+
+    def resolve_registration(
+        self, selection: PluginSelection
+    ) -> RobotPluginRegistration:
+        return self.registrations.resolve(
+            selection.plugin_id,
+            robot_logical_version=selection.contract_version,
+        )
+
+    def resolve_bundle(self, selection: PluginSelection) -> RobotBundle:
+        registration = self.resolve_registration(selection)
+        bundle = self.bundles.resolve(selection)
+        if registration.bundle is not bundle:
+            raise ValueError("Robot Plugin registration/Bundle catalog identity mismatch")
+        return bundle
+
+    def resolve_profile(self, selection: PluginSelection) -> RobotProfile:
+        self._require_id(selection.plugin_id, kind="robot profile")
+        return self.resolve_bundle(selection).profile
+
+    def resolve_runtime_plugin(
+        self, selection: PluginSelection
+    ) -> RobotRuntimePlugin:
+        self._require_id(selection.plugin_id, kind="robot runtime plugin")
+        return self.resolve_bundle(selection).runtime_plugin
+
+    def resolve_runtime(self, selection: PluginSelection) -> ResolvedRobotRuntime:
+        self._require_id(selection.plugin_id, kind="robot profile")
+        bundle = self.resolve_bundle(selection)
+        validate_robot_profile_plugin_consistency(
+            selection.plugin_id,
+            bundle.profile,
+            bundle.runtime_plugin,
+        )
+        return ResolvedRobotRuntime(
+            profile=bundle.profile,
+            plugin=bundle.runtime_plugin,
+        )
+
+    def _require_id(self, robot_id: str, *, kind: str) -> None:
+        if robot_id not in self.ids:
+            raise ValueError(
+                f"unknown {kind} ID {robot_id!r}; available: {self.ids}"
+            )
+
+
 ROBOT_PLUGIN_REGISTRY: RobotPluginRegistry = discover_production_robot_plugins()
-ROBOT_BUNDLE_REGISTRY: VersionedPluginRegistry[RobotBundle] = VersionedPluginRegistry(
-    tuple(ROBOT_PLUGIN_REGISTRY.resolve(robot_id).bundle for robot_id in ROBOT_PLUGIN_REGISTRY.ids),
-    kind="Robot Bundle",
-)
+ROBOT_CATALOG = RobotCatalog(ROBOT_PLUGIN_REGISTRY)
+ROBOT_BUNDLE_REGISTRY: VersionedPluginRegistry[RobotBundle] = ROBOT_CATALOG.bundles
+
+
+def _selection(
+    robot_id: str,
+    *,
+    robot_logical_version: int,
+    contract_version: int | None = None,
+) -> PluginSelection:
+    if contract_version is not None:
+        if robot_logical_version != 1 and robot_logical_version != contract_version:
+            raise ValueError("conflicting robot logical version arguments")
+        robot_logical_version = contract_version
+    return PluginSelection(robot_id, robot_logical_version)
 
 
 def resolve_robot_plugin_registration(
     robot_id: str, *, robot_logical_version: int = 1
 ) -> RobotPluginRegistration:
-    registration = ROBOT_PLUGIN_REGISTRY.resolve(robot_id)
-    if registration.identity.version != robot_logical_version:
-        raise ValueError(
-            f"Robot Plugin logical version mismatch for {robot_id!r}: "
-            f"requested v{robot_logical_version}, "
-            f"registered v{registration.identity.version}"
-        )
-    return registration
+    return ROBOT_CATALOG.resolve_registration(
+        PluginSelection(robot_id, robot_logical_version)
+    )
 
 
 def registered_robot_plugin_ids() -> tuple[str, ...]:
-    return ROBOT_PLUGIN_REGISTRY.ids
+    return ROBOT_CATALOG.ids
 
 
 def resolve_robot_bundle(
-    bundle_id: str, *, contract_version: int = 1
+    bundle_id: str,
+    *,
+    robot_logical_version: int = 1,
+    contract_version: int | None = None,
 ) -> RobotBundle:
-    return ROBOT_BUNDLE_REGISTRY.resolve(
-        PluginSelection(bundle_id, contract_version)
+    return ROBOT_CATALOG.resolve_bundle(
+        _selection(
+            bundle_id,
+            robot_logical_version=robot_logical_version,
+            contract_version=contract_version,
+        )
     )
 
 
 def registered_robot_bundle_ids() -> tuple[str, ...]:
-    return ROBOT_BUNDLE_REGISTRY.ids
-
-
-def _require_registered_profile_id(profile_id: str, *, kind: str) -> None:
-    if profile_id not in ROBOT_BUNDLE_REGISTRY.ids:
-        raise ValueError(
-            f"unknown {kind} ID {profile_id!r}; "
-            f"available: {ROBOT_BUNDLE_REGISTRY.ids}"
-        )
+    return ROBOT_CATALOG.ids
 
 
 class _RobotProfileProjectionRegistry:
-    """Read-only projection over the single concrete Robot Bundle catalog."""
+    """Read-only v1 projection over the single concrete Robot Bundle catalog."""
 
     @property
     def ids(self) -> tuple[str, ...]:
-        return ROBOT_BUNDLE_REGISTRY.ids
+        return ROBOT_CATALOG.ids
 
     def resolve(self, profile_id: str) -> RobotProfile:
         return resolve_robot_profile(profile_id)
 
 
 class _RobotRuntimePluginProjectionRegistry:
-    """Read-only projection over the single concrete Robot Bundle catalog."""
+    """Read-only v1 projection over the single concrete Robot Bundle catalog."""
 
     @property
     def ids(self) -> tuple[str, ...]:
-        return ROBOT_BUNDLE_REGISTRY.ids
+        return ROBOT_CATALOG.ids
 
     def resolve(self, profile_id: str) -> RobotRuntimePlugin:
         return resolve_robot_runtime_plugin(profile_id)
@@ -94,60 +170,62 @@ ROBOT_RUNTIME_PLUGIN_REGISTRY: ProfileIdRegistry[RobotRuntimePlugin] = (
 )
 
 
-def resolve_robot_profile(profile_id: str) -> RobotProfile:
-    _require_registered_profile_id(profile_id, kind="robot profile")
-    return resolve_robot_bundle(profile_id).profile
+def resolve_robot_profile(
+    profile_id: str, *, robot_logical_version: int = 1
+) -> RobotProfile:
+    return ROBOT_CATALOG.resolve_profile(
+        PluginSelection(profile_id, robot_logical_version)
+    )
 
 
 def registered_robot_profile_ids() -> tuple[str, ...]:
-    return ROBOT_BUNDLE_REGISTRY.ids
+    return ROBOT_CATALOG.ids
 
 
-def resolve_robot_runtime_plugin(profile_id: str) -> RobotRuntimePlugin:
-    _require_registered_profile_id(profile_id, kind="robot runtime plugin")
-    return resolve_robot_bundle(profile_id).runtime_plugin
+def resolve_robot_runtime_plugin(
+    profile_id: str, *, robot_logical_version: int = 1
+) -> RobotRuntimePlugin:
+    return ROBOT_CATALOG.resolve_runtime_plugin(
+        PluginSelection(profile_id, robot_logical_version)
+    )
 
 
 def registered_robot_runtime_plugin_ids() -> tuple[str, ...]:
-    return ROBOT_BUNDLE_REGISTRY.ids
+    return ROBOT_CATALOG.ids
 
 
 def resolve_robot_runtime(
     profile_id: str,
     *,
+    robot_logical_version: int = 1,
     profile_registry: ProfileIdRegistry[RobotProfile] | None = None,
     plugin_registry: ProfileIdRegistry[RobotRuntimePlugin] | None = None,
 ) -> ResolvedRobotRuntime:
     if profile_registry is None and plugin_registry is None:
-        _require_registered_profile_id(profile_id, kind="robot profile")
-        bundle = resolve_robot_bundle(profile_id)
-        validate_robot_profile_plugin_consistency(
-            profile_id, bundle.profile, bundle.runtime_plugin
-        )
-        return ResolvedRobotRuntime(
-            profile=bundle.profile,
-            plugin=bundle.runtime_plugin,
+        return ROBOT_CATALOG.resolve_runtime(
+            PluginSelection(profile_id, robot_logical_version)
         )
     return resolve_robot_runtime_from_registries(
         profile_id,
         profile_registry=(
-            ROBOT_PROFILE_REGISTRY
-            if profile_registry is None
-            else profile_registry
+            ROBOT_PROFILE_REGISTRY if profile_registry is None else profile_registry
         ),
         plugin_registry=(
             ROBOT_RUNTIME_PLUGIN_REGISTRY
             if plugin_registry is None
             else plugin_registry
         ),
+        robot_logical_version=robot_logical_version,
     )
 
 
 __all__ = [
     "ROBOT_BUNDLE_REGISTRY",
+    "ROBOT_CATALOG",
     "ROBOT_PLUGIN_REGISTRY",
     "ROBOT_PROFILE_REGISTRY",
     "ROBOT_RUNTIME_PLUGIN_REGISTRY",
+    "RobotCatalog",
     "registered_robot_bundle_ids",
     "registered_robot_plugin_ids",
     "registered_robot_profile_ids",

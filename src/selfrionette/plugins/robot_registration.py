@@ -94,12 +94,20 @@ def _resolved_resource(
     resource: RepositoryResource,
     *,
     allowed_roots: tuple[Path, ...],
+    ownership_root: Path | None = None,
+    ownership_label: str | None = None,
 ) -> Path:
     candidate = (repository_root / resource.repository_path).resolve()
     roots = tuple(root.resolve() for root in allowed_roots)
     if not any(candidate.is_relative_to(root) for root in roots):
         raise ValueError(
             "robot resource path escapes allowed repository resource roots: "
+            f"{resource.repository_path!r}"
+        )
+    if ownership_root is not None and not candidate.is_relative_to(ownership_root):
+        label = ownership_label or "robot"
+        raise ValueError(
+            f"resolved {label} resource is not owned by the selected robot: "
             f"{resource.repository_path!r}"
         )
     if not candidate.is_file():
@@ -274,6 +282,13 @@ class RobotPluginRegistration:
         configuration_roots: tuple[Path, ...],
     ) -> None:
         robot_id = self.identity.name
+        resolved_repository_root = repository_root.resolve()
+        asset_ownership_root = (
+            resolved_repository_root / "assets" / "mujoco" / robot_id
+        )
+        configuration_ownership_root = (
+            resolved_repository_root / "configs" / robot_id
+        )
         asset_resources = (
             self.resources.model,
             self.resources.viewer_declaration,
@@ -290,7 +305,11 @@ class RobotPluginRegistration:
             )
 
         model_path = _resolved_resource(
-            repository_root, self.resources.model, allowed_roots=asset_roots
+            repository_root,
+            self.resources.model,
+            allowed_roots=asset_roots,
+            ownership_root=asset_ownership_root,
+            ownership_label="asset",
         )
         if model_path != self.bundle.profile.mujoco_model_asset.resolve():
             raise ValueError("Robot Profile model asset/resource declaration mismatch")
@@ -301,6 +320,8 @@ class RobotPluginRegistration:
             repository_root,
             self.resources.viewer_declaration,
             allowed_roots=asset_roots,
+            ownership_root=asset_ownership_root,
+            ownership_label="asset",
         )
         try:
             declaration_document = json.loads(declaration_path.read_text(encoding="utf-8"))
@@ -318,6 +339,8 @@ class RobotPluginRegistration:
             repository_root,
             self.resources.viewer_fixture,
             allowed_roots=asset_roots,
+            ownership_root=asset_ownership_root,
+            ownership_label="asset",
         )
         if self.viewer.fixture_resource_path != (
             self.resources.viewer_fixture.repository_path
@@ -326,7 +349,11 @@ class RobotPluginRegistration:
 
         resolved_configurations = tuple(
             _resolved_resource(
-                repository_root, resource, allowed_roots=configuration_roots
+                repository_root,
+                resource,
+                allowed_roots=configuration_roots,
+                ownership_root=configuration_ownership_root,
+                ownership_label="configuration",
             )
             for resource in self.resources.configurations
         )
@@ -341,7 +368,13 @@ class RobotPluginRegistration:
         if declared_vfs_paths != viewer_vfs_paths:
             raise ValueError("viewer VFS/resource declaration mismatch")
         resolved_vfs_resources = tuple(
-            _resolved_resource(repository_root, resource, allowed_roots=asset_roots)
+            _resolved_resource(
+                repository_root,
+                resource,
+                allowed_roots=asset_roots,
+                ownership_root=asset_ownership_root,
+                ownership_label="asset",
+            )
             for resource in self.resources.viewer_vfs_resources
         )
         _validate_viewer_vfs_coverage(

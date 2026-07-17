@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib
+import asyncio
 import json
+import shutil
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -10,6 +12,7 @@ from types import ModuleType
 import pytest
 
 from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
+from selfrionette.plugins.catalog import RobotCatalog
 from selfrionette.plugins.robot_discovery import (
     RobotDiscoveryRoot,
     RobotPluginDiscoveryError,
@@ -22,8 +25,11 @@ from selfrionette.plugins.robot_registration import (
     _resolved_resource,
     _validate_viewer_vfs_coverage,
 )
-from selfrionette.runtime.experiment_contracts import VersionedIdentity
+from selfrionette.runtime.config import RuntimeConfig
+from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+from selfrionette.runtime.experiment_contracts import PluginSelection, VersionedIdentity
 from selfrionette.runtime.robot_bundle import (
+    CapabilityProviderBinding,
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
@@ -33,6 +39,14 @@ from selfrionette.runtime.robot_bundle import (
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "robot_plugins"
+
+
+class _RecordingPublisher:
+    def __init__(self) -> None:
+        self.states = []
+
+    async def publish(self, state) -> None:  # noqa: ANN001
+        self.states.append(state)
 
 
 def _clear_fixture_modules() -> None:
@@ -65,7 +79,7 @@ def test_second_robot_discovery_resolution_resources_and_headless_step(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     registry = _discover_fixture(monkeypatch)
-    registration = registry.resolve("fixture_bot")
+    registration = registry.resolve("fixture_bot", robot_logical_version=2)
     bundle = registration.bundle
 
     assert registry.ids == ("fixture_bot",)
@@ -82,7 +96,14 @@ def test_second_robot_discovery_resolution_resources_and_headless_step(
         QPOS_FEASIBILITY_V1,
         SCENE_ROLE_BINDING_V1,
     ):
-        assert bundle.provider(capability) is not None
+        provider = bundle.provider(capability)
+        assert provider.assembly_binding.robot_identity == VersionedIdentity(
+            "fixture_bot", 2
+        )
+        assert (
+            provider.assembly_binding.owner is bundle.profile
+            or provider.assembly_binding.owner is bundle.runtime_plugin
+        )
 
     simulator = HeadlessMuJoCoSimulator.from_model_path(
         bundle.profile.mujoco_model_asset,
@@ -95,10 +116,127 @@ def test_second_robot_discovery_resolution_resources_and_headless_step(
     assert simulator.snapshot().frame_index == 1
 
 
+def test_logical_v2_selection_reaches_public_catalog_and_runtime_composition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN as FAST_ARM
+
+    fixture_v2 = _discover_fixture(monkeypatch).resolve(
+        "fixture_bot", robot_logical_version=2
+    )
+    catalog = RobotCatalog(RobotPluginRegistry((FAST_ARM, fixture_v2)))
+    config = RuntimeConfig(robot_profile_id="fixture_bot", robot_logical_version=2)
+    selection = config.robot_selection
+    assert selection == PluginSelection("fixture_bot", 2)
+
+    assert catalog.resolve_registration(selection) is fixture_v2
+    assert catalog.resolve_bundle(selection) is fixture_v2.bundle
+    assert catalog.resolve_profile(selection) is fixture_v2.bundle.profile
+    assert catalog.resolve_runtime_plugin(selection) is fixture_v2.bundle.runtime_plugin
+    resolved_runtime = catalog.resolve_runtime(selection)
+    assert resolved_runtime.profile is fixture_v2.bundle.profile
+    assert resolved_runtime.plugin is fixture_v2.bundle.runtime_plugin
+
+    with pytest.raises(ValueError, match="logical version mismatch"):
+        catalog.resolve_registration(PluginSelection("fixture_bot", 1))
+    with pytest.raises(ValueError, match="logical version mismatch"):
+        catalog.resolve_bundle(PluginSelection("fixture_bot", 1))
+
+    publisher = _RecordingPublisher()
+    pipeline = build_concrete_mujoco_pipeline(
+        config=config,
+        publisher=publisher,
+        robot_catalog=catalog,
+    )
+    assert pipeline.config.robot_selection == selection
+    assert pipeline.robot_profile_metadata["robot_profile_id"] == "fixture_bot"
+    state = asyncio.run(pipeline.run_once())
+    assert state.frame_index == 1
+    assert len(publisher.states) == 1
+
+
+@pytest.mark.parametrize(
+    "capability",
+    (
+        RESET_INITIAL_STATE_V1,
+        ENDPOINT_POSE_V1,
+        ENDPOINT_COMMAND_V1,
+        QPOS_FEASIBILITY_V1,
+        SCENE_ROLE_BINDING_V1,
+    ),
+)
+def test_bundle_rejects_provider_bound_to_noncanonical_owner(
+    monkeypatch: pytest.MonkeyPatch,
+    capability: VersionedIdentity,
+) -> None:
+    bundle = _discover_fixture(monkeypatch).resolve(
+        "fixture_bot", robot_logical_version=2
+    ).bundle
+    original = next(
+        binding for binding in bundle.capability_providers if binding.identity == capability
+    )
+    if hasattr(original.provider, "profile"):
+        stale_provider = replace(
+            original.provider,
+            profile=replace(bundle.profile),
+            robot_identity=bundle.identity,
+        )
+    else:
+        stale_provider = replace(
+            original.provider,
+            plugin=replace(bundle.runtime_plugin),
+            robot_identity=bundle.identity,
+        )
+    bindings = tuple(
+        CapabilityProviderBinding(binding.identity, stale_provider)
+        if binding.identity == capability
+        else binding
+        for binding in bundle.capability_providers
+    )
+    with pytest.raises(ValueError, match="not bound to the canonical Profile or Runtime Plugin"):
+        replace(bundle, capability_providers=bindings)
+
+
+@pytest.mark.parametrize(
+    "capability",
+    (
+        RESET_INITIAL_STATE_V1,
+        ENDPOINT_POSE_V1,
+        ENDPOINT_COMMAND_V1,
+        QPOS_FEASIBILITY_V1,
+        SCENE_ROLE_BINDING_V1,
+    ),
+)
+def test_bundle_rejects_provider_bound_to_another_logical_version(
+    monkeypatch: pytest.MonkeyPatch,
+    capability: VersionedIdentity,
+) -> None:
+    bundle = _discover_fixture(monkeypatch).resolve(
+        "fixture_bot", robot_logical_version=2
+    ).bundle
+    original = next(
+        binding for binding in bundle.capability_providers if binding.identity == capability
+    )
+    stale_provider = replace(
+        original.provider,
+        robot_identity=VersionedIdentity("fixture_bot", 1),
+    )
+    bindings = tuple(
+        CapabilityProviderBinding(binding.identity, stale_provider)
+        if binding.identity == capability
+        else binding
+        for binding in bundle.capability_providers
+    )
+    with pytest.raises(ValueError, match="logical identity mismatch"):
+        replace(bundle, capability_providers=bindings)
+
+
 def test_removed_duplicate_and_unknown_fixture_registration_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    registration = _discover_fixture(monkeypatch).resolve("fixture_bot")
+    registration = _discover_fixture(monkeypatch).resolve(
+        "fixture_bot", robot_logical_version=2
+    )
 
     with pytest.raises(ValueError, match="unknown Robot Plugin ID"):
         RobotPluginRegistry(()).resolve("fixture_bot")
@@ -225,21 +363,23 @@ def test_registry_identity_material_is_order_independent_and_path_free() -> None
 def test_registration_rejects_viewer_and_resource_contract_mismatches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    registration = _discover_fixture(monkeypatch).resolve("fixture_bot")
+    registration = _discover_fixture(monkeypatch).resolve(
+        "fixture_bot", robot_logical_version=2
+    )
     mismatched_viewer = replace(registration.viewer, profile_id="other")
     with pytest.raises(ValueError, match="registration/viewer declaration identity mismatch"):
         replace(registration, viewer=mismatched_viewer)
     with pytest.raises(ValueError, match="unsupported Robot Plugin onboarding schema version"):
         replace(registration, onboarding_contract_version=2)
     with pytest.raises(ValueError, match="registration/Robot Bundle identity mismatch"):
-        replace(registration, identity=VersionedIdentity("fixture_bot", 2))
+        replace(registration, identity=VersionedIdentity("fixture_bot", 3))
     with pytest.raises(
         ValueError,
         match="Robot Plugin logical version/viewer profile contract version mismatch",
     ):
         replace(
             registration,
-            viewer=replace(registration.viewer, profile_contract_version=2),
+            viewer=replace(registration.viewer, profile_contract_version=3),
         )
     with pytest.raises(
         ValueError, match="robot profile/plugin profile contract version mismatch"
@@ -248,7 +388,7 @@ def test_registration_rejects_viewer_and_resource_contract_mismatches(
             registration.bundle,
             profile=replace(
                 registration.bundle.profile,
-                profile_contract_version=2,
+                profile_contract_version=3,
             ),
         )
 
@@ -281,33 +421,17 @@ def test_onboarding_schema_version_is_independent_from_robot_logical_version(
 ) -> None:
     from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN as FAST_ARM
 
-    fixture_v1 = _discover_fixture(monkeypatch).resolve("fixture_bot")
-    logical_identity_v2 = VersionedIdentity("fixture_bot", 2)
-    viewer_v2 = replace(fixture_v1.viewer, profile_contract_version=2)
-    profile_v2 = replace(
-        fixture_v1.bundle.profile,
-        profile_contract_version=2,
-        viewer_declaration=viewer_v2,
-    )
-    runtime_v2 = replace(fixture_v1.bundle.runtime_plugin, profile=profile_v2)
-    bundle_v2 = replace(
-        fixture_v1.bundle,
-        identity=logical_identity_v2,
-        profile=profile_v2,
-        runtime_plugin=runtime_v2,
-    )
-    registration_v2 = replace(
-        fixture_v1,
-        identity=logical_identity_v2,
-        bundle=bundle_v2,
-        viewer=viewer_v2,
+    registration_v2 = _discover_fixture(monkeypatch).resolve(
+        "fixture_bot", robot_logical_version=2
     )
 
     registry = RobotPluginRegistry((FAST_ARM, registration_v2))
     assert registry.resolve("fast_arm").identity == VersionedIdentity("fast_arm", 1)
-    assert registry.resolve("fixture_bot") is registration_v2
+    assert registry.resolve("fixture_bot", robot_logical_version=2) is registration_v2
     assert registration_v2.onboarding_contract_version == 1
     assert registration_v2.identity.version == 2
+    with pytest.raises(ValueError, match="logical version mismatch"):
+        registry.resolve("fixture_bot")
     with pytest.raises(ValueError, match="unsupported Robot Plugin onboarding schema version"):
         replace(registration_v2, onboarding_contract_version=2)
 
@@ -329,7 +453,9 @@ def test_robot_resource_ownership_rejects_sibling_directories(
     sibling_path: str,
     message: str,
 ) -> None:
-    registration = _discover_fixture(monkeypatch).resolve("fixture_bot")
+    registration = _discover_fixture(monkeypatch).resolve(
+        "fixture_bot", robot_logical_version=2
+    )
     if resource_field == "model":
         resources = replace(
             registration.resources,
@@ -368,10 +494,142 @@ def test_robot_resource_symlink_escape_is_rejected(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("resource_kind", "repository_path", "root_parts"),
+    (
+        (
+            "asset",
+            "assets/mujoco/fixture_bot/linked.xml",
+            ("assets", "mujoco"),
+        ),
+        (
+            "configuration",
+            "configs/fixture_bot/linked.toml",
+            ("configs",),
+        ),
+    ),
+)
+def test_robot_resource_symlink_to_sibling_robot_is_rejected(
+    tmp_path: Path,
+    resource_kind: str,
+    repository_path: str,
+    root_parts: tuple[str, ...],
+) -> None:
+    repository_root = tmp_path / "repository"
+    shared_root = repository_root.joinpath(*root_parts)
+    owned_root = shared_root / "fixture_bot"
+    sibling_root = shared_root / "sibling_bot"
+    owned_root.mkdir(parents=True)
+    sibling_root.mkdir(parents=True)
+    suffix = ".xml" if resource_kind == "asset" else ".toml"
+    sibling = sibling_root / f"resource{suffix}"
+    sibling.write_text("<mujoco/>" if suffix == ".xml" else "value = 1", encoding="utf-8")
+    link = repository_root / repository_path
+    try:
+        link.symlink_to(sibling)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    with pytest.raises(ValueError, match=f"resolved {resource_kind} resource is not owned"):
+        _resolved_resource(
+            repository_root,
+            RepositoryResource(repository_path),
+            allowed_roots=(shared_root,),
+            ownership_root=owned_root,
+            ownership_label=resource_kind,
+        )
+
+
+def test_viewer_owned_url_mapping_cannot_hide_resolved_model_ownership_violation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registration = _discover_fixture(monkeypatch).resolve(
+        "fixture_bot", robot_logical_version=2
+    )
+    repository_root = tmp_path / "repository"
+    asset_root = repository_root / "assets" / "mujoco"
+    owned_root = asset_root / "fixture_bot"
+    sibling_root = asset_root / "sibling_bot"
+    owned_root.mkdir(parents=True)
+    sibling_root.mkdir(parents=True)
+    sibling_model = sibling_root / "model.xml"
+    sibling_model.write_text("<mujoco/>", encoding="utf-8")
+    try:
+        (owned_root / "model.xml").symlink_to(sibling_model)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    assert registration.viewer.model_url == "/mujoco/fixture_bot/model.xml"
+    with pytest.raises(ValueError, match="resolved asset resource is not owned"):
+        registration.validate_resources(
+            repository_root,
+            asset_roots=(asset_root,),
+            configuration_roots=(repository_root / "configs",),
+        )
+
+
+@pytest.mark.parametrize(
+    ("resource_path", "resource_kind"),
+    (
+        ("assets/mujoco/fixture_bot/model.xml", "asset"),
+        ("assets/mujoco/fixture_bot/viewer-profile.json", "asset"),
+        ("assets/mujoco/fixture_bot/fixture.json", "asset"),
+        ("assets/mujoco/fixture_bot/robot.xml", "asset"),
+        ("configs/fixture_bot/limits.toml", "configuration"),
+    ),
+)
+def test_discovery_rejects_resolved_sibling_ownership_for_every_resource_kind(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    resource_path: str,
+    resource_kind: str,
+) -> None:
+    copied_root = tmp_path / "robot_plugins"
+    shutil.copytree(
+        FIXTURE_ROOT,
+        copied_root,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    owned_file = copied_root / resource_path
+    if resource_kind == "configuration":
+        sibling_file = copied_root / "configs" / "sibling_bot" / owned_file.name
+    else:
+        sibling_file = (
+            copied_root / "assets" / "mujoco" / "sibling_bot" / owned_file.name
+        )
+    sibling_file.parent.mkdir(parents=True)
+    sibling_file.write_bytes(owned_file.read_bytes())
+    owned_file.unlink()
+    try:
+        owned_file.symlink_to(sibling_file)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    _clear_fixture_modules()
+    monkeypatch.syspath_prepend(str(copied_root))
+    importlib.invalidate_caches()
+    namespace = importlib.import_module("test_robot_plugins")
+    with pytest.raises(
+        RobotPluginDiscoveryError,
+        match=f"resolved {resource_kind} resource is not owned",
+    ):
+        discover_robot_plugins(
+            RobotDiscoveryRoot(
+                namespace=namespace,
+                repository_root=copied_root,
+                asset_roots=(copied_root / "assets" / "mujoco",),
+                configuration_roots=(copied_root / "configs",),
+            )
+        )
+
+
 def test_viewer_resource_path_and_public_url_must_identify_the_same_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    registration = _discover_fixture(monkeypatch).resolve("fixture_bot")
+    registration = _discover_fixture(monkeypatch).resolve(
+        "fixture_bot", robot_logical_version=2
+    )
     with pytest.raises(ValueError, match="model resource path/URL mismatch"):
         replace(registration.viewer, model_url="/mujoco/fixture_bot/other.xml")
     with pytest.raises(ValueError, match="fixture resource path/URL mismatch"):

@@ -13,7 +13,7 @@ from test_robot_plugins.fixture_bot.viewer import FIXTURE_VIEWER_DECLARATION
 _RESOURCE_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_ROBOT_PROFILE = RobotProfile(
     profile_id="fixture_bot",
-    profile_contract_version=1,
+    profile_contract_version=2,
     model_contract_version="fixture-bot-model/v1",
     backend_kind="mujoco",
     mujoco_model_asset=(

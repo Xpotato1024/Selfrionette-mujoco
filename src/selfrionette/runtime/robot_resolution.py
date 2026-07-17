@@ -96,6 +96,7 @@ def resolve_robot_runtime_from_registries(
     *,
     profile_registry: ProfileIdRegistry[RobotProfile],
     plugin_registry: ProfileIdRegistry[RobotRuntimePlugin],
+    robot_logical_version: int = 1,
 ) -> ResolvedRobotRuntime:
     if frozenset(profile_registry.ids) != frozenset(plugin_registry.ids):
         raise ValueError(
@@ -104,6 +105,12 @@ def resolve_robot_runtime_from_registries(
         )
     profile = profile_registry.resolve(profile_id)
     plugin = plugin_registry.resolve(profile_id)
+    if profile.profile_contract_version != robot_logical_version:
+        raise ValueError(
+            f"Robot Profile logical version mismatch for {profile_id!r}: "
+            f"requested v{robot_logical_version}, "
+            f"registered v{profile.profile_contract_version}"
+        )
     validate_robot_profile_plugin_consistency(profile_id, profile, plugin)
     return ResolvedRobotRuntime(profile=profile, plugin=plugin)
 

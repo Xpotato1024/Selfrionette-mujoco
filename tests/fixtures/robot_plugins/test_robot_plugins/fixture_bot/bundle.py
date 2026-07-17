@@ -23,7 +23,7 @@ from test_robot_plugins.fixture_bot.runtime import FIXTURE_RUNTIME_PLUGIN
 
 
 FIXTURE_INITIAL_STATE_CONTRACT = InitialStateContract(
-    identity=VersionedIdentity("fixture_bot_initial_state", 1),
+    identity=VersionedIdentity("fixture_bot_initial_state", 2),
     source_kind="named_keyframe",
     source_id="home",
     qpos_rad=(0.25,),
@@ -36,7 +36,7 @@ FIXTURE_INITIAL_STATE_CONTRACT = InitialStateContract(
 )
 
 FIXTURE_ROBOT_BUNDLE = RobotBundle(
-    identity=VersionedIdentity("fixture_bot", 1),
+    identity=VersionedIdentity("fixture_bot", 2),
     profile=FIXTURE_ROBOT_PROFILE,
     runtime_plugin=FIXTURE_RUNTIME_PLUGIN,
     capability_providers=(

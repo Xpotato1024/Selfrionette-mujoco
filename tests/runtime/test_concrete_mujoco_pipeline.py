@@ -41,13 +41,13 @@ def test_build_concrete_mujoco_pipeline_uses_catalog_bundle_resolver(
     calls: list[str] = []
     original = concrete_pipeline_module.resolve_robot_bundle
 
-    def recording_resolver(profile_id: str):  # noqa: ANN202
-        calls.append(profile_id)
-        return original(profile_id)
+    def recording_resolver(profile_id: str, **kwargs):  # noqa: ANN202
+        calls.append(f"{profile_id}/v{kwargs['robot_logical_version']}")
+        return original(profile_id, **kwargs)
 
     monkeypatch.setattr(concrete_pipeline_module, "resolve_robot_bundle", recording_resolver)
     build_concrete_mujoco_pipeline(publisher=RecordingPublisher())
-    assert calls == ["fast_arm"]
+    assert calls == ["fast_arm/v1"]
 
 
 @pytest.mark.parametrize("reject", [False, True])

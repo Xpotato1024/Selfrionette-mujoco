@@ -148,8 +148,14 @@ def run_offline_input_runtime_stepping_smoke(
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
         raise ValueError("production offline input smoke requires robot_profile_id")
-    profile = resolve_robot_profile(runtime_config.robot_profile_id)
-    robot_bundle = resolve_robot_bundle(runtime_config.robot_profile_id)
+    profile = resolve_robot_profile(
+        runtime_config.robot_profile_id,
+        robot_logical_version=runtime_config.robot_logical_version,
+    )
+    robot_bundle = resolve_robot_bundle(
+        runtime_config.robot_profile_id,
+        robot_logical_version=runtime_config.robot_logical_version,
+    )
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
     plugin = robot_bundle.runtime_plugin

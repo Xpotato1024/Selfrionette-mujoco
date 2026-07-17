@@ -61,6 +61,10 @@ generic schema / domain / Protocol
   concrete robot package、具体robot ID、Bundle singletonを直接importまたは列挙しない。
 - ProfileとRuntime Pluginのresolverは、別registryへ具体objectを重複登録せず、resolved Bundleの
   `profile`と`runtime_plugin`を返す。
+- `RuntimeConfig.robot_selection`、catalog resolver、experiment compositionは同じ`PluginSelection`を使用し、
+  robot logical versionをapplication compositionまで保持する。onboarding schema versionはselection軸にしない。
+- Bundleのtyped providerはgeneric `ProviderAssemblyBinding`でBundle logical identityとcanonical Profile / Runtime
+  Plugin ownerへbindする。provider adapter class名ではなくbinding contractとobject identityを検査する。
 - generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
   `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
@@ -71,7 +75,8 @@ generic schema / domain / Protocol
 - production discoveryを起動できるgeneric moduleはcatalogだけとする。test fixtureはproduction namespaceへ
   置かず、明示的なtest discovery rootを使用する。
 - registration resourceは宣言identityと同じ`assets/mujoco/<robot_id>/` / `configs/<robot_id>/`へ限定し、
-  viewer public URLは検証済みasset pathからdeterministicに生成する。shared resourceは暗黙許可しない。
+  symlink解決後の実pathにも同じownershipを要求する。viewer public URLは検証済みasset pathからdeterministicに
+  生成し、resolved ownership違反を回避できない。shared resourceは暗黙許可しない。
 
 禁止するdependency:
 

@@ -51,13 +51,26 @@ class RobotPluginRegistry:
     def ids(self) -> tuple[str, ...]:
         return tuple(self._values)
 
-    def resolve(self, robot_id: str) -> RobotPluginRegistration:
+    @property
+    def entries(self) -> tuple[RobotPluginRegistration, ...]:
+        return tuple(self._values.values())
+
+    def resolve(
+        self, robot_id: str, *, robot_logical_version: int = 1
+    ) -> RobotPluginRegistration:
         try:
-            return self._values[robot_id]
+            registration = self._values[robot_id]
         except KeyError as exc:
             raise ValueError(
                 f"unknown Robot Plugin ID {robot_id!r}; available: {self.ids}"
             ) from exc
+        if registration.identity.version != robot_logical_version:
+            raise ValueError(
+                f"Robot Plugin logical version mismatch for {robot_id!r}: "
+                f"requested v{robot_logical_version}, "
+                f"registered v{registration.identity.version}"
+            )
+        return registration
 
     def canonical_identity_bytes(self) -> bytes:
         documents = [

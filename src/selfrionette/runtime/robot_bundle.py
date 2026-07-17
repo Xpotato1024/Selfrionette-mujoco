@@ -146,6 +146,7 @@ class SemanticRoleBinding:
 @runtime_checkable
 class ResetInitialStateProvider(Protocol):
     capability_identity: VersionedIdentity
+    assembly_binding: ProviderAssemblyBinding
 
     def resolve_initial_state(self) -> InitialStateReference: ...
 
@@ -153,6 +154,7 @@ class ResetInitialStateProvider(Protocol):
 @runtime_checkable
 class InitialStateContractProvider(Protocol):
     capability_identity: VersionedIdentity
+    assembly_binding: ProviderAssemblyBinding
 
     def initial_state_contract(self) -> InitialStateContract: ...
 
@@ -160,6 +162,7 @@ class InitialStateContractProvider(Protocol):
 @runtime_checkable
 class EndpointPoseProvider(Protocol):
     capability_identity: VersionedIdentity
+    assembly_binding: ProviderAssemblyBinding
 
     def observe_endpoint_pose(self, state: MuJoCoState) -> EndpointPoseObservation: ...
 
@@ -167,6 +170,7 @@ class EndpointPoseProvider(Protocol):
 @runtime_checkable
 class EndpointCommandProvider(Protocol):
     capability_identity: VersionedIdentity
+    assembly_binding: ProviderAssemblyBinding
 
     def build_target_motion_generator(
         self,
@@ -182,6 +186,7 @@ class EndpointCommandProvider(Protocol):
 @runtime_checkable
 class QposFeasibilityProvider(Protocol):
     capability_identity: VersionedIdentity
+    assembly_binding: ProviderAssemblyBinding
 
     def build_guard(
         self, *, model: object, config_path: str | Path | None
@@ -191,6 +196,7 @@ class QposFeasibilityProvider(Protocol):
 @runtime_checkable
 class SceneRoleBindingProvider(Protocol):
     capability_identity: VersionedIdentity
+    assembly_binding: ProviderAssemblyBinding
 
     def semantic_role_bindings(self) -> tuple[SemanticRoleBinding, ...]: ...
 
@@ -198,6 +204,7 @@ class SceneRoleBindingProvider(Protocol):
 @runtime_checkable
 class ContactEvidenceProvider(Protocol):
     capability_identity: VersionedIdentity
+    assembly_binding: ProviderAssemblyBinding
 
     @property
     def evidence_identities(self) -> frozenset[VersionedIdentity]: ...
@@ -220,6 +227,20 @@ CAPABILITY_PROVIDER_TYPES: Mapping[VersionedIdentity, type] = MappingProxyType(
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderAssemblyBinding:
+    """Canonical Robot Bundle identity and Profile/Runtime Plugin owner."""
+
+    robot_identity: VersionedIdentity
+    owner: object
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.robot_identity, VersionedIdentity):
+            raise TypeError("provider assembly binding must use VersionedIdentity")
+        if self.owner is None:
+            raise TypeError("provider assembly binding owner must not be None")
+
+
+@dataclass(frozen=True, slots=True)
 class CapabilityProviderBinding:
     identity: VersionedIdentity
     provider: object
@@ -236,6 +257,14 @@ class CapabilityProviderBinding:
         if getattr(self.provider, "capability_identity", None) != self.identity:
             raise ValueError(
                 f"provider capability identity mismatch for {self.identity.canonical_id!r}"
+            )
+        if not isinstance(
+            getattr(self.provider, "assembly_binding", None),
+            ProviderAssemblyBinding,
+        ):
+            raise TypeError(
+                f"provider for {self.identity.canonical_id!r} does not declare "
+                "a ProviderAssemblyBinding"
             )
 
 
@@ -254,6 +283,18 @@ class RobotBundle:
         identities = tuple(binding.identity for binding in self.capability_providers)
         if len(identities) != len(set(identities)):
             raise ValueError("ambiguous Robot Bundle capability provider registration")
+        for capability in self.capability_providers:
+            assembly = capability.provider.assembly_binding
+            if assembly.robot_identity != self.identity:
+                raise ValueError(
+                    "Robot Bundle/provider logical identity mismatch for "
+                    f"{capability.identity.canonical_id!r}"
+                )
+            if assembly.owner is not self.profile and assembly.owner is not self.runtime_plugin:
+                raise ValueError(
+                    "Robot Bundle provider is not bound to the canonical Profile or "
+                    f"Runtime Plugin for {capability.identity.canonical_id!r}"
+                )
 
     @property
     def provided_capabilities(self) -> frozenset[VersionedIdentity]:
@@ -308,6 +349,7 @@ __all__ = [
     "InitialStateReference",
     "QPOS_FEASIBILITY_V1",
     "QposFeasibilityProvider",
+    "ProviderAssemblyBinding",
     "RESET_INITIAL_STATE_V1",
     "ROBOT_TOOL_ENDPOINT_ROLE",
     "ResetInitialStateProvider",

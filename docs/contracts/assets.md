@@ -28,8 +28,11 @@ backend resource declarationが一致することを検証する。MJCFの`inclu
 宣言済みVFS mappingで解決できなければならない。absolute path、`..`によるescape、remote URL、missing
 resourceはstartup failureであり、warning skipまたはrobot ID由来pathへのfallbackを行わない。さらにregistration
 identityが`<robot_id>`ならasset resourceは`assets/mujoco/<robot_id>/`、configurationは
-`configs/<robot_id>/`の内側に限定する。sibling robot directoryとsymlink escapeを拒否する。shared resourceは
-暗黙許可せず、必要時に独立した明示contractを追加する。
+`configs/<robot_id>/`の内側に限定する。lexical declarationだけでなくsymlink解決後の実pathも同じrobot固有
+directory内に残ることを要求する。このgateはmodel、viewer declaration、viewer fixture、VFS asset、configurationの
+全resource種別へ適用し、sibling robot resourceへのdirect reference / symlinkとrepository resource root外への
+symlinkを拒否する。viewer public URLがowned pathを指していても、resolved file ownership違反を許可しない。
+shared resourceは暗黙許可せず、必要時に独立した明示contractを追加する。
 
 ## fast_armのcanonical asset
 

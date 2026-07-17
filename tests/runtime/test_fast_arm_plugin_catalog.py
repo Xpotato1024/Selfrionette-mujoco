@@ -78,6 +78,14 @@ def test_catalog_resolvers_project_one_canonical_bundle() -> None:
     assert resolve_robot_plugin_registration("fast_arm") is ROBOT_PLUGIN
     with pytest.raises(ValueError, match="Robot Plugin logical version mismatch"):
         resolve_robot_plugin_registration("fast_arm", robot_logical_version=2)
+    for resolver in (
+        resolve_robot_bundle,
+        resolve_robot_profile,
+        resolve_robot_runtime_plugin,
+        resolve_robot_runtime,
+    ):
+        with pytest.raises(ValueError, match="version mismatch"):
+            resolver("fast_arm", robot_logical_version=2)
     assert ROBOT_PLUGIN.bundle is bundle
     assert ROBOT_PLUGIN.viewer is FAST_ARM_VIEWER_DECLARATION
     assert bundle.profile.viewer_declaration is FAST_ARM_VIEWER_DECLARATION
@@ -85,6 +93,12 @@ def test_catalog_resolvers_project_one_canonical_bundle() -> None:
     assert registered_robot_bundle_ids() == ("fast_arm",)
     assert registered_robot_profile_ids() == registered_robot_bundle_ids()
     assert registered_robot_runtime_plugin_ids() == registered_robot_bundle_ids()
+    for binding in bundle.capability_providers:
+        assert binding.provider.assembly_binding.robot_identity == bundle.identity
+        assert (
+            binding.provider.assembly_binding.owner is bundle.profile
+            or binding.provider.assembly_binding.owner is bundle.runtime_plugin
+        )
 
 
 def test_profile_keeps_repository_asset_and_configuration_references() -> None:

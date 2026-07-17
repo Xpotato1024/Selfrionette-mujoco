@@ -149,6 +149,9 @@ def test_robot_profile_contract_is_canonical_and_registered() -> None:
     assert "arbitrary dynamic" in text
     assert "payload-v0" in text
     assert "rendering declaration" in text
+    assert "ProviderAssemblyBinding" in text
+    assert "RuntimeConfig.robot_selection" in text
+    assert "symlink解決後の実path" in text
 
 
 def test_experiment_plugin_composition_contract_is_canonical_and_registered() -> None:

@@ -6,7 +6,11 @@ from pathlib import Path
 from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.plugins.catalog import resolve_robot_bundle, resolve_robot_profile
+from selfrionette.plugins.catalog import (
+    RobotCatalog,
+    resolve_robot_bundle,
+    resolve_robot_profile,
+)
 from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.endpoint_metrics import build_endpoint_evaluation_state_publisher
@@ -58,12 +62,25 @@ def build_concrete_mujoco_pipeline(
     seed_joint_angles_rad: tuple[float, ...] | None = None,
     discontinuity_threshold_rad: float | None = None,
     discontinuity_threshold_label: str = "global safety threshold",
+    robot_catalog: RobotCatalog | None = None,
 ) -> RuntimePipeline:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
         raise ValueError("production concrete composition requires robot_profile_id")
-    profile = resolve_robot_profile(runtime_config.robot_profile_id)
-    robot_bundle = resolve_robot_bundle(runtime_config.robot_profile_id)
+    selection = runtime_config.robot_selection
+    assert selection is not None
+    if robot_catalog is None:
+        profile = resolve_robot_profile(
+            selection.plugin_id,
+            robot_logical_version=selection.contract_version,
+        )
+        robot_bundle = resolve_robot_bundle(
+            selection.plugin_id,
+            robot_logical_version=selection.contract_version,
+        )
+    else:
+        profile = robot_catalog.resolve_profile(selection)
+        robot_bundle = robot_catalog.resolve_bundle(selection)
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
     plugin = robot_bundle.runtime_plugin

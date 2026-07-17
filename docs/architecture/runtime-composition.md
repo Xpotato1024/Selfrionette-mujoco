@@ -28,15 +28,25 @@ discoveryから`selfrionette.plugins.catalog`へ投影する。catalogは具体r
 discovered `RobotBundle`をknown IDでresolveし、ProfileとRuntime Plugin resolverは同じBundle objectの
 `profile` / `runtime_plugin`へprojectionする。application compositionはBundleから必要なtyped providerを
 assembly時に取得してconsumerへ渡し、処理中にBundleへ問い合わせるservice locatorにはしない。
+`RuntimeConfig.robot_selection`は`robot_profile_id`と`robot_logical_version`から#405 / #406共通の
+`PluginSelection`を作り、registration、Bundle、Profile、Runtime Plugin、runtime pipelineの全resolverへ同じ値を渡す。
+version省略時のfast_arm logical v1 behaviorは維持し、requested / registered version不一致はmodel load前に拒否する。
+onboarding schema versionをruntime selectionへ流用しない。
 `RuntimeInputSourceStepLoopPlan`は`EndpointPoseProvider`、`EndpointCommandProvider`、
 `QposFeasibilityProvider`だけを保持し、`ResolvedRobotRuntime`またはRuntime Plugin全体をexecution edgeへ
 持ち越さない。endpoint poseの観測、motion generator、qpos guardはそれぞれのtyped providerを使用する。
 Runtime Pluginを直接使用できるのはcomposition中のmodel validationとFK factoryに限定する。
+各typed providerの`ProviderAssemblyBinding`はBundle logical identityとcanonical Profile / Runtime Plugin ownerの
+object identityを固定する。custom providerを含め、stale Profile、stale Runtime Plugin、別robot、別logical versionに
+bindされたproviderをregistration / assembly時に拒否する。
 旧profile / runtime / bundle registry moduleは同じresolver objectを再公開するcompatibility facadeであり、
 新しいcomposition rootはcatalogを直接使用する。
 
 discoveryはapplicationがcatalog resolverへ初めて到達した時点で同期的に完了し、duplicate identity、
 broken entry point、contract / capability不整合、missing / escaped resourceをpartial registryなしで拒否する。
+resourceはlexical declarationに加え、symlink解決後も`assets/mujoco/<robot_id>/`または
+`configs/<robot_id>/`へ閉じる。viewer URLはvalidated resourceのmappingであり、このresolved ownership gateを
+迂回できない。
 readinessはdiscovered catalogからBundleを選択した後に行い、discovery順、package path、module / class名を
 requested / resolved / freeze identityへ含めない。onboarding schema versionはdiscovery registrationのdecode軸、
 Bundle identity versionはrobot selection / logical contract軸として別々に検証し、catalog resolverで混同しない。

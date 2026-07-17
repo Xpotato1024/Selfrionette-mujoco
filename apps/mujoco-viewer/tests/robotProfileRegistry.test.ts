@@ -23,7 +23,7 @@ import {
 const FAST_ARM_DECLARATION_DIGEST =
   "sha256:0a35ec57fe704fc6bb853e53db9f449a0721c751ece19addf787dfa50cce58e6";
 const FIXTURE_DECLARATION_DIGEST =
-  "sha256:fe13ef73b12f9d5cf62559b161e62161b72f66aafd563b1ceb671474177390f4";
+  "sha256:08438401168fc3351f7e6733bbdef3dda6f207018a2c77d52cbf865798723ded";
 
 function payloadFor(
   profile: ViewerRobotProfile,
@@ -240,6 +240,7 @@ describe("viewer robot profile registry", () => {
       const reconnect = await loadViewerRobotProfileFromPayload(startupPayload, fetcher);
       assert.equal(declarationFetchCount, 2, "each connection must reacquire the declaration");
       assert.equal(firstConnection.profile.profileId, "fixture_bot");
+      assert.equal(firstConnection.profile.profileContractVersion, 2);
       assert.equal(reconnect.reference.digest, firstConnection.reference.digest);
 
       const resourceUrls = [

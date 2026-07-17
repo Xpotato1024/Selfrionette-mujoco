@@ -58,12 +58,18 @@ logical identity versionではない。onboarding schema v1はlogical v1とlogic
 登録できる。registration identityとBundle identityは一致し、Profile、Runtime Pluginが参照するProfile、
 Viewer declarationの`profile_contract_version`はrobot logical versionと一致しなければならない。
 unsupported onboarding schemaはlogical versionに関係なくfailする。Bundleは引き続きtyped provider
-assemblyだけを担い、execution中のservice locatorにはしない。
+assemblyだけを担い、execution中のservice locatorにはしない。各providerは
+`ProviderAssemblyBinding`でBundle logical identityとassembly ownerを宣言し、ownerは同じBundleのcanonical
+`RobotProfile`または`RobotRuntimePlugin` objectでなければならない。stale object、別robot、別logical versionを
+registration / Bundle assembly時にfail-closedで拒否する。この検査はadapter class名ではなくgeneric binding
+contractに対して行う。
 
 asset / configurationのlogical repository pathはregistration declarationをSoTとする。Profileの
 `Path`とviewerのdeclaration / model / fixture / VFS referenceはregistrationとstartup時に照合し、
 generic codeはrobot IDやpackage pathから実行pathを推測しない。通常resourceは宣言identityに対応する
-`assets/mujoco/<robot_id>/`または`configs/<robot_id>/`の内側だけを許可する。shared resourceは暗黙許可せず、
+`assets/mujoco/<robot_id>/`または`configs/<robot_id>/`の内側だけを許可する。symlink解決後の実pathも同じrobot
+固有directory内に残らなければならない。model、viewer declaration、viewer fixture、VFS asset、configurationの
+すべてへ同じresolved ownership gateを適用し、viewer URL mappingで回避できない。shared resourceは暗黙許可せず、
 必要になった時点で別の明示contractを定義する。registration、viewer serialization、canonical identity
 materialにはPython package、module、class名を含めない。
 
@@ -73,10 +79,11 @@ architecture test向けのcontract sentinelとして、ここでは`selects Opti
 ## Registry解決
 
 ```text
-RuntimeConfig.robot_profile_id
+RuntimeConfig.robot_selection
+  = PluginSelection(robot_profile_id, robot_logical_version)
   -> bounded first-party Robot Plugin discovery
-  -> discovered catalog / Robot Bundle registry
-  -> Robot Profile / Runtime Plugin projection
+  -> registration resolver / discovered RobotCatalog / Robot Bundle registry
+  -> same PluginSelectionによるRobot Profile / Runtime Plugin projection
   -> registry-set and profile/plugin consistency validation
   -> model load with explicit keyframe
   -> profile/model/joint/dimension validation
@@ -127,7 +134,9 @@ production concrete registrationのSoTは各robot packageの`plugin.py` / `ROBOT
 package、具体robot ID、Bundle singletonをimportしない。`resolve_robot_profile()`、`resolve_robot_runtime_plugin()`、
 `resolve_robot_runtime()`、`resolve_robot_bundle()`は同じBundleのProfile / Runtime Plugin objectへ収束する。
 Profile、Runtime Plugin、Bundleを独立したconcrete registryへ重複登録しない。旧registry moduleは
-同じresolverとprojection registryをre-exportするcompatibility facadeである。
+同じresolverとprojection registryをre-exportするcompatibility facadeである。既存のlogical v1呼出しはversion
+省略時の既定値を維持する。明示選択では`PluginSelection`または`robot_logical_version`をregistration、Bundle、
+Profile、Runtime Plugin、runtime compositionまで失わず伝播し、onboarding schema versionをselectionへ使用しない。
 
 `resolve_robot_runtime()`は共通production boundaryである。test-onlyの明示registry injectionでは、
 一方のregistryだけにあるID、requested/registered/plugin identity mismatch、profile/model contract
@@ -142,6 +151,10 @@ production fast_arm entry pointは`RuntimeConfig(robot_profile_id="fast_arm")`�
 model、`home` keyframe、endpoint reference、現在のIK/FK behavior、motion policy、
 qpos feasibility guardを解決する。IDのないproduction config、unknown ID、incompatible modelを
 与えた場合はstartupをfailする。
+
+logical v2等を選択するcallerは`RuntimeConfig(robot_profile_id=<id>, robot_logical_version=2)`を使用する。
+`RuntimeConfig.robot_selection`は#405 / #406と同じ`PluginSelection`を返し、catalog projectionとruntime compositionは
+そのselectionを共有する。requested / registered logical version不一致はmodel load前にfailする。
 
 `RuntimePipeline`、`build_mujoco_pipeline()`、`build_replay_mujoco_pipeline()`は
 genericのままとする。model pathまたはjoint nameからprofileを推論せず、profileがない場合に
@@ -238,12 +251,13 @@ new robot onboarding registryとして使用しない。WebSocket pathのgeneric
 
 ## #406 runnerへのhandoff
 
-#406はcatalog-backed resolverへ到達した時点でbounded discoveryを完了させ、discovered Bundleを既存
+#406はcatalog-backed resolverへ到達した時点でbounded discoveryを完了させ、`PluginSelection`で解決したBundleを既存
 experiment registryへ渡す。orderingは`discovery -> registration / resource validation -> Bundle resolution ->
 readiness / freeze -> runner lifecycle`であり、runner開始後にpluginを追加・再探索しない。
 
 runner execution edgeへ渡すのはassembly時に取得した`EndpointPoseProvider`、
 `EndpointCommandProvider`、`QposFeasibilityProvider`等の必要なtyped providerだけとする。
+readinessでresolveしたlogical versionと`RuntimeConfig.robot_selection`が一致しなければrunnerを開始しない。
 `plugins.robots.<robot_id>`、旧compatibility facade、viewer declarationをruntime service locatorとして直接
 使用しない。viewer deliveryはauthoritative runtime metadataが担い、readiness / freeze logical identityへ
 package / module / class pathまたはdiscovery順を追加しない。
