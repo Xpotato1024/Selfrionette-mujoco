@@ -1,5 +1,5 @@
 ---
-status: supporting
+status: historical
 owner: architecture
 last_verified: 2026-07-17
 canonical_for: []
