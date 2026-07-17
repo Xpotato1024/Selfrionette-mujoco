@@ -4,6 +4,7 @@ import ast
 import importlib
 import subprocess
 import sys
+from importlib.util import resolve_name
 from pathlib import Path
 
 import selfrionette.runtime as runtime
@@ -18,9 +19,7 @@ from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "selfrionette"
-GENERIC_PACKAGE_ROOTS = tuple(
-    SRC / name for name in ("kinematics", "motion", "mujoco_backend", "runtime")
-)
+FAST_ARM_PLUGIN_ROOT = SRC / "plugins" / "robots" / "fast_arm"
 REMOVED_MODULE_PATHS = (
     SRC / "robot_registry.py",
     SRC / "robots" / "fast_arm.py",
@@ -48,22 +47,45 @@ REMOVED_IMPORT_MODULES = frozenset(
 def _imports(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     imported: set[str] = set()
+    try:
+        relative = path.relative_to(SRC.parent).with_suffix("")
+    except ValueError:
+        package = None
+    else:
+        package_parts = relative.parts if path.name == "__init__.py" else relative.parts[:-1]
+        package = ".".join(package_parts)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            imported.add(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if node.level:
+                if package is None:
+                    continue
+                module = resolve_name(f"{'.' * node.level}{module}", package)
+            if module:
+                imported.add(module)
+                imported.update(
+                    f"{module}.{alias.name}"
+                    for alias in node.names
+                    if alias.name != "*"
+                )
     return imported
 
 
-def test_generic_packages_do_not_import_fast_arm_plugin_implementation() -> None:
-    for package_root in GENERIC_PACKAGE_ROOTS:
-        for path in package_root.rglob("*.py"):
-            assert not any(
-                name == "selfrionette.plugins.robots.fast_arm"
-                or name.startswith("selfrionette.plugins.robots.fast_arm.")
-                for name in _imports(path)
-            ), path.relative_to(ROOT)
+def test_only_fast_arm_plugin_package_imports_concrete_fast_arm_modules() -> None:
+    violations: list[str] = []
+    for path in SRC.rglob("*.py"):
+        if path.is_relative_to(FAST_ARM_PLUGIN_ROOT):
+            continue
+        for imported in sorted(_imports(path)):
+            if imported == "selfrionette.plugins.robots.fast_arm" or imported.startswith(
+                "selfrionette.plugins.robots.fast_arm."
+            ):
+                violations.append(f"{path.relative_to(ROOT)}: {imported}")
+    assert not violations, "concrete fast_arm import outside plugin owner:\n" + "\n".join(
+        violations
+    )
 
 
 def test_plugin_discovery_does_not_eagerly_load_diagnostics() -> None:
@@ -130,9 +152,25 @@ def test_public_packages_export_no_test_doubles_or_fast_arm_generic_symbols() ->
     ):
         module = importlib.import_module(module_name)
         assert not any(name.startswith(("NoOp", "Zero", "Static")) for name in module.__all__)
-    assert runtime._PUBLIC_EXPORTS.keys() == set(runtime.__all__) or set(runtime._PUBLIC_EXPORTS) == set(runtime.__all__)
+    assert set(runtime._PUBLIC_EXPORTS) == set(runtime.__all__)
     assert not any("FastArm" in name for name in importlib.import_module("selfrionette.kinematics").__all__)
     assert not any("FAST_ARM" in name for name in importlib.import_module("selfrionette.mujoco_backend").__all__)
+
+
+def test_runtime_root_retains_only_deliberate_catalog_apis() -> None:
+    retained_catalog_apis = {
+        name
+        for name, (owner, _) in runtime._PUBLIC_EXPORTS.items()
+        if owner == "selfrionette.plugins.catalog"
+    }
+    assert retained_catalog_apis == {
+        "registered_robot_bundle_ids",
+        "registered_robot_runtime_plugin_ids",
+        "resolve_robot_bundle",
+        "resolve_robot_runtime",
+        "resolve_robot_runtime_plugin",
+    }
+    assert "resolve_robot_profile" not in runtime.__all__
 
 
 def test_catalog_registration_bundle_profile_and_runtime_identity_is_unchanged() -> None:

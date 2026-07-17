@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from selfrionette.mujoco_backend.base import MuJoCoSimulator
 from selfrionette.schemas import MotionCommand, MuJoCoState
 
 
@@ -29,5 +28,4 @@ class NoOpMuJoCoSimulator:
         return MuJoCoState(frame_index=self._frame_index, time_s=self._time_s)
 
 
-# Keep the contract import available for explicit, module-local imports.
 __all__ = ["NoOpMuJoCoSimulator"]

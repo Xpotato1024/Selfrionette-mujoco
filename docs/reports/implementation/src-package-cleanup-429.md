@@ -51,8 +51,18 @@ solver parameter、payload、viewer、hardware経路は変更していない。
 - fast_arm固有APIは`selfrionette.plugins.robots.fast_arm.*`からimportする。
 - test doubleはproduction public APIではない。
 
-retained compatibility exceptionはない。runtime package-rootのgeneric resolverはdeliberate logical APIとして維持し、
+retained compatibility exceptionはない。runtime package-rootでは次のdeliberate logical APIだけを維持し、
 明示owner mappingから`plugins/catalog.py`へ直接解決する。
+
+- `registered_robot_bundle_ids`
+- `registered_robot_runtime_plugin_ids`
+- `resolve_robot_bundle`
+- `resolve_robot_runtime`
+- `resolve_robot_runtime_plugin`
+
+`resolve_robot_profile`はruntime package-root APIではなく、canonical ownerである`plugins/catalog.py`から使用する。
+MuJoCo endpoint評価型のcanonical名はsite/body共通の`RuntimeMuJoCoEndpointEvaluation`とし、
+既存public importの`RuntimeMuJoCoSiteEndpointEvaluation`は同一型を指すdocumented compatibility aliasとして維持する。
 
 ## behavior preservation
 
@@ -60,6 +70,11 @@ retained compatibility exceptionはない。runtime package-rootのgeneric resol
 joint-limit、canonical initial state、bounded discovery、offline / viewer runtimeをregression testで維持する。
 package pathはlogical experiment identityへ含まれないため、manifest identity、research claim、experiment conditionは
 変更しない。
+
+最終監査follow-upでは、diagnosticのexplicit `model_path`経路へgeneric
+`HeadlessMuJoCoSimulator` importを復旧し、実scene pathを使うregressionを追加した。
+endpoint evaluationは`ENDPOINT_POSE_V1` providerを注入するため、site/bodyの両referenceを実行でき、
+空文字endpoint IDへfallbackしない。production全体のconcrete fast_arm importはrepository-wide AST guardで監査する。
 
 ## side effect
 

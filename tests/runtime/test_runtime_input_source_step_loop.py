@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
-
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-
 import asyncio
 from math import dist
 
@@ -12,19 +8,23 @@ import pytest
 import selfrionette.runtime.input_step_loop as input_step_loop
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.plugins.catalog import resolve_robot_bundle
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime import (
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
     run_runtime_input_source_step_loop,
     select_runtime_input_source,
 )
-from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
-from selfrionette.schemas import RawInputFrame
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
+)
+from selfrionette.schemas import (
+    RawInputFrame,
+    ViewerControlKeyboardMessage,
+    ViewerControlMessage,
 )
 
 

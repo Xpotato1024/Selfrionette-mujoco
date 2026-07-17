@@ -4,13 +4,11 @@ from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_s
 
 from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
 
-import math
 
 import pytest
 
 from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
 from selfrionette.motion import LocalEndpointMotionGenerator
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.schemas import InputIntent, JointCommand
 

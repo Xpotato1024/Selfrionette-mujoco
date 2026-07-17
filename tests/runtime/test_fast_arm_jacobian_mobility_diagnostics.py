@@ -11,7 +11,6 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.diagnostics.jacobian_mobility import _pose_qpos, run_fast_arm_jacobian_mobility_diagnostics
 
 

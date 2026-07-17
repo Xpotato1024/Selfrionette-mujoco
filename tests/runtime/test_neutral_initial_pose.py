@@ -9,7 +9,6 @@ import math
 import pytest
 
 import selfrionette.plugins.robots.fast_arm.diagnostics.neutral_initial_pose as neutral_initial_pose
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.diagnostics.neutral_initial_pose import (
     FAST_ARM_INITIAL_STATE_QPOS_RAD,
     FAST_ARM_INITIAL_STATE_TIP_POSITION_M,

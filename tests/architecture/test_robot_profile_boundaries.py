@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-
 from pathlib import Path
 
 

@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
-
-from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
-
 import math
 
 import pytest
@@ -11,15 +7,11 @@ import pytest
 from selfrionette.plugins.robots.fast_arm.kinematics import (
     FAST_ARM_MUJOCO_MODEL_JOINT_REFS_RAD,
     FAST_ARM_MUJOCO_MODEL_TIP_SITE_NAME,
-    FastArmEndpointForwardKinematicsSolver,
-    FastArmEndpointInverseKinematicsSolver,
     FastArmMuJoCoModelForwardKinematicsSolver,
 )
-from selfrionette.mujoco_backend import (
-    HeadlessMuJoCoSimulator,
-)
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
 from selfrionette.schemas import JointCommand
-
 
 
 def test_fast_arm_mujoco_model_fk_matches_tip_site_for_fixed_qpos_fixtures() -> None:

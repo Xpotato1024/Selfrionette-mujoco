@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from selfrionette.input_interpreters.base import InputInterpreter
 from selfrionette.schemas import InputIntent, RawInputFrame
 
 
@@ -21,5 +20,4 @@ class NoOpInputInterpreter:
         )
 
 
-# Keep the contract import available for explicit, module-local imports.
 __all__ = ["NoOpInputInterpreter"]

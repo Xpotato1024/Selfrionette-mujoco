@@ -16,7 +16,7 @@ from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from tests.support.mujoco_doubles import NoOpMuJoCoSimulator
 from selfrionette.runtime import EndpointEvaluationStatePublisher, build_concrete_mujoco_pipeline, run_replay_mujoco_dry_run, run_replay_mujoco_websocket_publisher
-from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState
+from selfrionette.schemas import JointCommand, MuJoCoState
 from selfrionette.transport import WebSocketStatePublisher
 from tests.support.transport_doubles import NoOpStatePublisher
 

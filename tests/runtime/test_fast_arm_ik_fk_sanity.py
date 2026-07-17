@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
     FastArmIkFkSanityDiagnostic,
     _fast_arm_ik_fk_sanity_target_fixtures,

@@ -6,7 +6,6 @@ from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulato
 
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import run_fast_arm_endpoint_motion_sanity
 
 

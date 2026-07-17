@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-
 import asyncio
-import pytest
 
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.runtime import RuntimePipeline
+from selfrionette.schemas import MuJoCoState
 from tests.support.input_interpreter_doubles import NoOpInputInterpreter
 from tests.support.input_source_doubles import StaticInputSource
 from tests.support.motion_doubles import NoOpMotionGenerator
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from tests.support.runtime_pipeline_builders import (
+    build_noop_pipeline,
+    build_test_mujoco_pipeline,
+)
 from tests.support.transport_doubles import NoOpStatePublisher
-from selfrionette.runtime import RuntimePipeline
-from tests.support.runtime_pipeline_builders import build_noop_pipeline, build_test_mujoco_pipeline
-from selfrionette.schemas import MuJoCoState
 
 
 def test_build_noop_pipeline_still_works() -> None:

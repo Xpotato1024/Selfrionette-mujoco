@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from selfrionette.input_sources.base import InputSource
 from selfrionette.schemas import RawInputFrame
 
 
@@ -16,5 +15,4 @@ class StaticInputSource:
         return self._frame
 
 
-# Keep the contract import available for explicit, module-local imports.
 __all__ = ["StaticInputSource"]

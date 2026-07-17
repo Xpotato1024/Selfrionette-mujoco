@@ -7,7 +7,6 @@ import asyncio
 
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime import (
     DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS,
     RuntimeInputSourceSelection,
@@ -17,7 +16,7 @@ from selfrionette.runtime import (
     select_runtime_input_source,
 )
 from selfrionette.runtime.input_source_state import build_runtime_input_source_state
-from selfrionette.schemas import MotionCommand, RawInputFrame
+from selfrionette.schemas import MotionCommand
 from selfrionette.transport import mujoco_state_to_payload
 
 

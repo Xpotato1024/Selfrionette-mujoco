@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import Callable
 from importlib import import_module
-from importlib.util import resolve_name
 import os
 from pathlib import Path
 import subprocess
@@ -23,41 +21,6 @@ def _imports(path: Path) -> tuple[str, ...]:
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.append(node.module)
     return tuple(names)
-
-
-def _matching_imports(
-    source: str,
-    *,
-    filename: str,
-    monitored: Callable[[str], bool],
-    package: str | None = None,
-) -> frozenset[str]:
-    tree = ast.parse(source, filename=filename)
-    matches: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            matches.update(
-                alias.name for alias in node.names if monitored(alias.name)
-            )
-        elif isinstance(node, ast.ImportFrom):
-            module = node.module
-            if node.level:
-                if package is None:
-                    raise ValueError("relative import audit requires package")
-                module = resolve_name(
-                    f"{'.' * node.level}{node.module or ''}", package
-                )
-            if module is None:
-                continue
-            if monitored(module):
-                matches.add(module)
-                continue
-            matches.update(
-                candidate
-                for alias in node.names
-                if monitored(candidate := f"{module}.{alias.name}")
-            )
-    return frozenset(matches)
 
 
 def test_generic_contracts_do_not_import_catalog_or_concrete_plugins() -> None:
@@ -81,7 +44,6 @@ def test_domain_layers_do_not_reverse_depend_on_assembly_or_manifest() -> None:
     forbidden = (
         "selfrionette.plugins.catalog",
         "selfrionette.runtime.robot_bundle",
-        "selfrionette.plugins.catalog",
         "selfrionette.runtime.evaluation_manifest",
     )
     paths = tuple((SRC / "kinematics").rglob("*.py"))
@@ -136,20 +98,6 @@ def test_runtime_execution_edges_use_typed_providers_not_broad_plugins() -> None
     assert (
         "qpos_feasibility_provider: QposFeasibilityProvider" in input_loop_source
     )
-
-
-def test_removed_compatibility_facades_cannot_reappear() -> None:
-    removed_facades = (
-        "robot_registry.py",
-        "robots/fast_arm.py",
-        "runtime/default_robot_providers.py",
-        "runtime/fast_arm_bundle.py",
-        "runtime/fast_arm_joint_limits.py",
-        "runtime/fast_arm_plugin.py",
-        "runtime/robot_bundle_registry.py",
-        "runtime/robot_plugin_registry.py",
-    )
-    assert all(not (SRC / path).exists() for path in removed_facades)
 
 
 def test_catalog_and_bundle_do_not_introduce_defaults_or_dynamic_discovery() -> None:
@@ -210,20 +158,6 @@ def test_test_discovery_root_and_fixture_names_do_not_enter_production_sources()
     fixture_root = ROOT / "tests" / "fixtures" / "robot_plugins"
     assert (fixture_root / "test_robot_plugins" / "fixture_bot" / "plugin.py").is_file()
     assert not (SRC / "selfrionette_test_plugins").exists()
-
-
-def test_removed_facade_paths_are_absent() -> None:
-    removed_facades = (
-        SRC / "robots" / "fast_arm.py",
-        SRC / "robot_registry.py",
-        SRC / "runtime" / "default_robot_providers.py",
-        SRC / "runtime" / "fast_arm_plugin.py",
-        SRC / "runtime" / "fast_arm_bundle.py",
-        SRC / "runtime" / "fast_arm_joint_limits.py",
-        SRC / "runtime" / "robot_plugin_registry.py",
-        SRC / "runtime" / "robot_bundle_registry.py",
-    )
-    assert all(not path.exists() for path in removed_facades)
 
 
 def test_runtime_generic_exports_are_catalog_free_until_resolver_access() -> None:

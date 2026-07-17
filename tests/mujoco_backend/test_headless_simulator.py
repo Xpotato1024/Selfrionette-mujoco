@@ -7,7 +7,6 @@ from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulato
 import mujoco
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, TargetCommand
 
 

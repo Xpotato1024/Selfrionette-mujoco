@@ -9,7 +9,6 @@ import pytest
 
 import selfrionette.plugins.robots.fast_arm.feasibility as joint_limits_module
 from selfrionette.input_sources import ViewerInputSource
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.plugins.robots.fast_arm.feasibility import (
     FastArmJointLimitGuard,
