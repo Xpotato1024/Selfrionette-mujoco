@@ -16,6 +16,7 @@ from selfrionette.runtime.robot_bundle import (
     ROBOT_TOOL_ENDPOINT_ROLE,
     SCENE_ROLE_BINDING_V1,
     EndpointPoseObservation,
+    InitialStateContract,
     InitialStateReference,
     SemanticRoleBinding,
 )
@@ -26,6 +27,7 @@ from selfrionette.schemas import MuJoCoState
 @dataclass(frozen=True, slots=True)
 class NamedKeyframeInitialStateProvider:
     profile: RobotProfile
+    contract: InitialStateContract | None = None
     capability_identity = RESET_INITIAL_STATE_V1
 
     def resolve_initial_state(self) -> InitialStateReference:
@@ -33,6 +35,13 @@ class NamedKeyframeInitialStateProvider:
             source_kind="named_keyframe",
             source_id=self.profile.initial_keyframe_name,
         )
+
+    def initial_state_contract(self) -> InitialStateContract:
+        if self.contract is None:
+            raise ValueError(
+                "named-keyframe provider has no canonical initial-state contract"
+            )
+        return self.contract
 
 
 @dataclass(frozen=True, slots=True)

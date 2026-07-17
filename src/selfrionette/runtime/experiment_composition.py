@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from selfrionette.runtime.experiment_contracts import (
     ControlMappingPlugin,
@@ -23,6 +25,45 @@ from selfrionette.runtime.experiment_registry import VersionedPluginRegistry
 from selfrionette.runtime.robot_bundle import RobotBundle
 
 
+def freeze_parameter_value(name: str, value: object) -> object:
+    """Detach and recursively freeze one canonical JSON parameter value."""
+
+    if value is None or type(value) in (bool, int, str):
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be finite")
+        return 0.0 if value == 0.0 else value
+    if isinstance(value, (list, tuple)):
+        return tuple(
+            freeze_parameter_value(f"{name}[{index}]", item)
+            for index, item in enumerate(value)
+        )
+    if isinstance(value, Mapping):
+        frozen: dict[str, object] = {}
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError(f"{name} object keys must be strings")
+            frozen[key] = freeze_parameter_value(f"{name}.{key}", item)
+        return MappingProxyType(dict(sorted(frozen.items())))
+    raise TypeError(
+        f"{name} must be a canonical JSON value; got {type(value).__name__}"
+    )
+
+
+def parameter_value_to_document(value: object) -> object:
+    """Convert an already frozen parameter value to detached JSON values."""
+
+    if isinstance(value, Mapping):
+        return {
+            key: parameter_value_to_document(item)
+            for key, item in sorted(value.items(), key=lambda pair: pair[0])
+        }
+    if isinstance(value, tuple):
+        return [parameter_value_to_document(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class PluginParameters:
     owner: PluginParameterOwner
@@ -31,6 +72,15 @@ class PluginParameters:
     def __post_init__(self) -> None:
         if not isinstance(self.owner, PluginParameterOwner):
             raise TypeError("plugin parameter owner must use PluginParameterOwner")
+        if not isinstance(self.values, Mapping):
+            raise TypeError("plugin parameter values must use a mapping")
+        if any(not isinstance(name, str) or not name for name in self.values):
+            raise TypeError("plugin parameter names must be non-empty strings")
+        frozen = {
+            name: freeze_parameter_value(f"plugin parameter {name!r}", value)
+            for name, value in self.values.items()
+        }
+        object.__setattr__(self, "values", MappingProxyType(dict(sorted(frozen.items()))))
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +108,10 @@ class ExperimentPluginManifest:
     parameters: tuple[PluginParameters, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.evaluators, tuple):
+            object.__setattr__(self, "evaluators", tuple(self.evaluators))
+        if not isinstance(self.parameters, tuple):
+            object.__setattr__(self, "parameters", tuple(self.parameters))
         evaluator_ids = tuple(selection.plugin_id for selection in self.evaluators)
         if len(evaluator_ids) != len(set(evaluator_ids)):
             raise ValueError("duplicate evaluator selection")
@@ -349,6 +403,8 @@ __all__ = [
     "ExperimentPluginRegistries",
     "EvidenceProducerBinding",
     "PluginParameters",
+    "freeze_parameter_value",
+    "parameter_value_to_document",
     "ResolvedExperimentComposition",
     "compose_experiment",
 ]

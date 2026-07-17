@@ -12,6 +12,12 @@ from selfrionette.runtime.default_robot_providers import (
 )
 from selfrionette.runtime.experiment_contracts import VersionedIdentity
 from selfrionette.runtime.fast_arm_plugin import FAST_ARM_RUNTIME_PLUGIN
+from selfrionette.runtime.neutral_initial_pose import (
+    FAST_ARM_INITIAL_STATE_CONTRACT,
+    FAST_ARM_INITIAL_STATE_QPOS_RAD,
+    FAST_ARM_INITIAL_STATE_TIP_POSITION_M,
+    FAST_ARM_INITIAL_STATE_TOOL_ORIENTATION_WXYZ,
+)
 from selfrionette.runtime.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -30,7 +36,10 @@ FAST_ARM_ROBOT_BUNDLE = RobotBundle(
     capability_providers=(
         CapabilityProviderBinding(
             RESET_INITIAL_STATE_V1,
-            NamedKeyframeInitialStateProvider(FAST_ARM_ROBOT_PROFILE),
+            NamedKeyframeInitialStateProvider(
+                FAST_ARM_ROBOT_PROFILE,
+                FAST_ARM_INITIAL_STATE_CONTRACT,
+            ),
         ),
         CapabilityProviderBinding(
             ENDPOINT_POSE_V1,
@@ -52,4 +61,10 @@ FAST_ARM_ROBOT_BUNDLE = RobotBundle(
 )
 
 
-__all__ = ["FAST_ARM_ROBOT_BUNDLE"]
+__all__ = [
+    "FAST_ARM_INITIAL_STATE_CONTRACT",
+    "FAST_ARM_INITIAL_STATE_QPOS_RAD",
+    "FAST_ARM_INITIAL_STATE_TIP_POSITION_M",
+    "FAST_ARM_INITIAL_STATE_TOOL_ORIENTATION_WXYZ",
+    "FAST_ARM_ROBOT_BUNDLE",
+]

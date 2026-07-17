@@ -11,6 +11,7 @@ related:
   - docs/contracts/transport-payload.md
   - docs/contracts/fast-arm-joint-limit-config.md
   - docs/contracts/experiment-plugin-composition.md
+  - docs/contracts/evaluation-manifest-readiness.md
 ---
 
 # Robot Profile / Runtime Plugin / Viewer Profile契約
@@ -33,6 +34,11 @@ endpoint pose/command、qpos feasibility、semantic scene role、optional contac
 versioned typed capability providerとして公開する。bundleは既存pairを置換せず、task lifecycle、
 evaluation metric、viewer renderingを所有しない。詳細は
 `docs/contracts/experiment-plugin-composition.md`を正とする。
+
+evaluation manifestはprofile、runtime plugin、model contractのlogical versioned identityを記録する。
+asset path、module path、package location、branch名はそのidentityに含めない。したがって#423の
+package / import-direction migrationやcompatibility re-exportだけではmanifestのfreeze identityを
+変更せず、profileまたはmodel contractの意味を変更するときだけversioned identityを更新する。
 
 `ViewerRobotProfile`はbrowser-side rendering declarationである。model URL、
 named startup keyframe、debug fixture URL、VFS asset、visual style、joint order、
@@ -128,6 +134,12 @@ fast_armのactive initial qpos sourceは、`assets/mujoco/fast_arm/arm.xml`のna
 startupは同じXML keyframeを読み、runtime first state/payloadも同じqposを運ぶ。
 `ViewerInputSource`とinitial target markerは、そのposeのMuJoCo
 `tip = (0.240000, -0.245951, 0.284308) m`へrebaseする。
+R7-G-P1の`FAST_ARM_INITIAL_STATE_CONTRACT`は、このnamed keyframeを
+`fast_arm_initial_state/v1`として固定し、frame=`MuJoCo world / scene frame`、
+position unit=`meter`、orientation unit=`unit_quaternion`、quaternion order=`wxyz`、
+tool orientation WXYZ=`(0.8365163037378079, 0.1294095225512604,
+0.4829629131445341, 0.22414386804201347)`を提供する。readinessはこのprovider contractとmanifestを
+model loadなしで比較し、profile / runtime plugin / model contract identityも同時に一致させる。
 
 collision geomがdisabledでcollision checkを利用できない状態では、このstartup poseを
 collision-freeの物理証拠とは扱わない。joint range内であること、startup continuity、

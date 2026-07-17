@@ -11,6 +11,7 @@ related:
   - docs/architecture/runtime-composition.md
   - docs/contracts/robot-profile-runtime-viewer-profile.md
   - docs/contracts/experiment-motion-log-v1.md
+  - docs/contracts/evaluation-manifest-readiness.md
 ---
 
 # experiment plugin composition契約
@@ -84,6 +85,11 @@ capabilityへのlookupは例外であり、zero、empty、no-opを返さない�
 `ProfileEndpointSceneRoleProvider`のような小さなdelegating providerとして再利用する。
 巨大なdefault robot継承階層は導入しない。
 
+evaluation readinessでは`RESET_INITIAL_STATE_V1` providerが、同じprovider boundary上の
+`InitialStateContractProvider.initial_state_contract()`を実装してcanonical initial-state contractを公開する。
+このcontractはversioned identity、source、qpos、tip、tool orientation、frame、unit、quaternion orderを保持する。
+fast_armは`home` keyframe由来のprofile-owned contractを再利用し、generic bundleも同じtyped provider boundaryを使う。
+
 ## semantic roleとenvironment
 
 semantic roleはbackend固有名と分離したidentityである。current generic robot roleは
@@ -108,7 +114,13 @@ ambiguousとして拒否する。`SemanticRoleRequirement`はrole名に加えて
 ## mappingとtask
 
 `ControlMappingPlugin`はtyped `ControlMappingStrategy`とstrict `ParameterContract`を持つ。
+evaluation comparisonへ参加するmappingは、versioned `comparison_family_identity`、
+versioned `mapping_semantics_identity`、`control_frame`を明示する。family identityはframe variantを
+束ねるsemantic contractであり、strategy objectのhashやobject identityではない。strategyが宣言する
+mapping semantics identityとplugin fieldが一致しない場合はconstruction/readinessをfail-closedにする。
 world/tool mapping、gain、deadzone、assistance等はこの軸のpluginまたはparameterとして固定する。
+world/tool pairでcontrol-frame差を許可するparameterは`ParameterField.condition_specific=True`を
+明示し、mapping plugin自身の`control_frame` declarationとrequested frameを一致させる。
 mappingはrequired Robot capabilityを宣言し、利用不能時に別mappingへfallbackしない。
 
 `TaskPlugin`は次を宣言する。
@@ -198,8 +210,10 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
 
 - #405は`ExperimentPluginManifest`、`PluginParameterOwner`、`VersionedPluginRegistry`、
   `ExperimentPluginRegistries`、`compose_experiment()`、`EvidenceProducerBinding`を使い、world/tool条件の
-  5軸selection、axis-scoped parameter、version compatibility、evidence producerをfreeze identityへ
-  固定できる。
+  5軸selection、axis-scoped parameter、version compatibility、evidence producerを
+  `EvaluationManifest` / `EvaluationReadiness` / `FreezeRecord`へ固定できる。requested selectionと
+  resolved plugin/capability/role/evidence identityを混同せず、package location変更ではlogical identityを
+  変更しない。
 - #411は`EnvironmentPlugin`、`EnvironmentRole`、`SemanticRoleRequirement`、`TaskPlugin`、
   `EvaluationPlugin`、`contact_evidence/v1` extension pointを使い、typed object/frame/unit requirementと
   cube/contact固有fieldをgeneric contractへ追加できる。

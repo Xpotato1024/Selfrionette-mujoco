@@ -8,6 +8,8 @@ import selfrionette.runtime.neutral_initial_pose as neutral_initial_pose
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
 from selfrionette.runtime.neutral_initial_pose import (
+    FAST_ARM_INITIAL_STATE_QPOS_RAD,
+    FAST_ARM_INITIAL_STATE_TIP_POSITION_M,
     HISTORICAL_RAISED_BASELINE_QPOS_RAD,
     evaluate_fast_arm_neutral_initial_pose_candidates,
     format_neutral_pose_ranking,
@@ -61,6 +63,10 @@ def test_evaluator_selects_only_a_lower_bent_valid_candidate() -> None:
     assert result.candidate_count > 20
     assert result.eligible_count > 1
     assert selected.eligible
+    assert selected.qpos_rad == pytest.approx(FAST_ARM_INITIAL_STATE_QPOS_RAD)
+    assert selected.tip_world_position_m == pytest.approx(
+        FAST_ARM_INITIAL_STATE_TIP_POSITION_M
+    )
     assert selected.tip_height_m < baseline.tip_height_m
     assert selected.shoulder_to_tip_extension_m < baseline.shoulder_to_tip_extension_m
     assert selected.contact_count == 0
