@@ -44,16 +44,18 @@ REMOVED_IMPORT_MODULES = frozenset(
 )
 
 
-def _imports(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    imported: set[str] = set()
+def _package_for_path(path: Path) -> str | None:
     try:
         relative = path.relative_to(SRC.parent).with_suffix("")
     except ValueError:
-        package = None
-    else:
-        package_parts = relative.parts if path.name == "__init__.py" else relative.parts[:-1]
-        package = ".".join(package_parts)
+        return None
+    package = ".".join(relative.parent.parts)
+    return package or None
+
+
+def _imports_from_source(source: str, *, filename: str, package: str | None) -> set[str]:
+    tree = ast.parse(source, filename=filename)
+    imported: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported.update(alias.name for alias in node.names)
@@ -71,6 +73,52 @@ def _imports(path: Path) -> set[str]:
                     if alias.name != "*"
                 )
     return imported
+
+
+def _imports(path: Path) -> set[str]:
+    return _imports_from_source(
+        path.read_text(encoding="utf-8"),
+        filename=str(path),
+        package=_package_for_path(path),
+    )
+
+
+def test_package_for_path_uses_containing_package_for_modules_and_initializers() -> None:
+    assert _package_for_path(SRC / "runtime" / "foo.py") == "selfrionette.runtime"
+    assert _package_for_path(SRC / "plugins" / "robots" / "__init__.py") == (
+        "selfrionette.plugins.robots"
+    )
+
+
+def test_relative_imports_resolve_from_a_normal_module_package() -> None:
+    package = _package_for_path(SRC / "runtime" / "foo.py")
+    imported = _imports_from_source(
+        "from ..plugins.robots import fast_arm\n",
+        filename="src/selfrionette/runtime/foo.py",
+        package=package,
+    )
+    assert "selfrionette.plugins.robots.fast_arm" in imported
+
+
+def test_relative_imports_resolve_from_a_package_initializer() -> None:
+    package = _package_for_path(SRC / "plugins" / "robots" / "__init__.py")
+    imported = _imports_from_source(
+        "from . import fast_arm\n",
+        filename="src/selfrionette/plugins/robots/__init__.py",
+        package=package,
+    )
+    assert "selfrionette.plugins.robots.fast_arm" in imported
+
+
+def test_relative_removed_compatibility_import_is_detected() -> None:
+    package = _package_for_path(SRC / "runtime" / "__init__.py")
+    imported = _imports_from_source(
+        "from . import fast_arm_plugin\n",
+        filename="src/selfrionette/runtime/__init__.py",
+        package=package,
+    )
+    assert "selfrionette.runtime.fast_arm_plugin" in imported
+    assert imported & REMOVED_IMPORT_MODULES
 
 
 def test_only_fast_arm_plugin_package_imports_concrete_fast_arm_modules() -> None:
