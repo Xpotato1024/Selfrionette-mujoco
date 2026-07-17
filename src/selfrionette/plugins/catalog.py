@@ -1,8 +1,12 @@
-"""Single production catalog for concrete Robot Bundle registration."""
+"""Single production catalog projected from bounded Robot Plugin discovery."""
 
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.bundle import FAST_ARM_ROBOT_BUNDLE
+from selfrionette.plugins.robot_discovery import (
+    RobotPluginRegistry,
+    discover_production_robot_plugins,
+)
+from selfrionette.plugins.robot_registration import RobotPluginRegistration
 from selfrionette.robot_profile import RobotProfile
 from selfrionette.runtime.experiment_contracts import PluginSelection
 from selfrionette.runtime.experiment_registry import VersionedPluginRegistry
@@ -16,9 +20,27 @@ from selfrionette.runtime.robot_resolution import (
 )
 
 
-ROBOT_BUNDLE_REGISTRY: VersionedPluginRegistry[RobotBundle] = (
-    VersionedPluginRegistry((FAST_ARM_ROBOT_BUNDLE,), kind="Robot Bundle")
+ROBOT_PLUGIN_REGISTRY: RobotPluginRegistry = discover_production_robot_plugins()
+ROBOT_BUNDLE_REGISTRY: VersionedPluginRegistry[RobotBundle] = VersionedPluginRegistry(
+    tuple(ROBOT_PLUGIN_REGISTRY.resolve(robot_id).bundle for robot_id in ROBOT_PLUGIN_REGISTRY.ids),
+    kind="Robot Bundle",
 )
+
+
+def resolve_robot_plugin_registration(
+    robot_id: str, *, contract_version: int = 1
+) -> RobotPluginRegistration:
+    registration = ROBOT_PLUGIN_REGISTRY.resolve(robot_id)
+    if registration.identity.version != contract_version:
+        raise ValueError(
+            f"Robot Plugin contract version mismatch for {robot_id!r}: "
+            f"requested v{contract_version}, registered v{registration.identity.version}"
+        )
+    return registration
+
+
+def registered_robot_plugin_ids() -> tuple[str, ...]:
+    return ROBOT_PLUGIN_REGISTRY.ids
 
 
 def resolve_robot_bundle(
@@ -122,12 +144,15 @@ def resolve_robot_runtime(
 
 __all__ = [
     "ROBOT_BUNDLE_REGISTRY",
+    "ROBOT_PLUGIN_REGISTRY",
     "ROBOT_PROFILE_REGISTRY",
     "ROBOT_RUNTIME_PLUGIN_REGISTRY",
     "registered_robot_bundle_ids",
+    "registered_robot_plugin_ids",
     "registered_robot_profile_ids",
     "registered_robot_runtime_plugin_ids",
     "resolve_robot_bundle",
+    "resolve_robot_plugin_registration",
     "resolve_robot_profile",
     "resolve_robot_runtime",
     "resolve_robot_runtime_plugin",

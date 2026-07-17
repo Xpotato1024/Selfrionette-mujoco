@@ -23,6 +23,7 @@ export interface TransportEndpointMetadata {
   model_contract_version?: string;
   robot_joint_names?: string[];
   robot_qpos_dimension?: number;
+  viewer_robot_declaration?: unknown;
   desired_endpoint_m?: Vector3;
   current_tip_position_m?: Vector3;
   ik_target_endpoint_m?: Vector3;

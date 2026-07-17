@@ -23,8 +23,9 @@ production compositionは明示的に選択した`RobotRuntimePlugin`を解決�
 startup keyframe、IK / FK、motion policy、qpos feasibility guardの整合を検証する。generic stub、
 zero solver、退役したPlanar solverへ暗黙fallbackしない。
 
-production concrete registrationは`selfrionette.plugins.catalog`だけが所有する。catalogは
-`RobotBundle`をknown IDでresolveし、ProfileとRuntime Plugin resolverは同じBundle objectの
+production concrete registrationは、固定namespace直下の`plugin.py` / `ROBOT_PLUGIN`を読むbounded
+discoveryから`selfrionette.plugins.catalog`へ投影する。catalogは具体robot importや具体IDを持たず、
+discovered `RobotBundle`をknown IDでresolveし、ProfileとRuntime Plugin resolverは同じBundle objectの
 `profile` / `runtime_plugin`へprojectionする。application compositionはBundleから必要なtyped providerを
 assembly時に取得してconsumerへ渡し、処理中にBundleへ問い合わせるservice locatorにはしない。
 `RuntimeInputSourceStepLoopPlan`は`EndpointPoseProvider`、`EndpointCommandProvider`、
@@ -33,6 +34,11 @@ assembly時に取得してconsumerへ渡し、処理中にBundleへ問い合わ�
 Runtime Pluginを直接使用できるのはcomposition中のmodel validationとFK factoryに限定する。
 旧profile / runtime / bundle registry moduleは同じresolver objectを再公開するcompatibility facadeであり、
 新しいcomposition rootはcatalogを直接使用する。
+
+discoveryはapplicationがcatalog resolverへ初めて到達した時点で同期的に完了し、duplicate identity、
+broken entry point、contract / capability不整合、missing / escaped resourceをpartial registryなしで拒否する。
+readinessはdiscovered catalogからBundleを選択した後に行い、discovery順、package path、module / class名を
+requested / resolved / freeze identityへ含めない。
 
 実験compositionでは、Robot Bundle、Environment / Scene、Control / Mapping、Task、Evaluationを
 versioned known-ID registryから明示解決する。`runtime/`はphysicsやrunner開始前にcapability provider、

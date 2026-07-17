@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for:
   - transport payload v0
 related:
@@ -44,6 +44,9 @@ target lifecycleを実行しない。payload versionを保持し、別のphysica
 - `robot_profile_id`、`model_contract_version`、`robot_joint_names`、
   `robot_qpos_dimension`はprofile-aware productionでreservedかつauthoritativeである。
   resolved profile valueを最後に適用し、input / replay / command metadataによるspoofingを許さない。
+- discovered Robot Pluginでは、同じreserved metadataへ`viewer_robot_declaration`を追加する。
+  値は`viewer-robot-declaration/v1`のJSON-compatible documentであり、Python module / class / package pathを
+  含まない。runtimeは登録済みProfileが参照するdeclarationだけをauthoritativeに上書きする。
 - profile-free generic payloadからfast_armを推論しない。
 
 ## viewer boundary
@@ -51,6 +54,9 @@ target lifecycleを実行しない。payload versionを保持し、別のphysica
 viewerはpayloadをread-onlyに描画する。body/site transform、target marker、optional diagnosticから
 表示を構築してよいが、qpos、IK、FK、hidden physics stateを再計算しない。invalidまたはprofile-mismatched
 candidateはsceneへ適用せず、last valid scene stateを保持する。
+WebSocket viewerは最初のprofile-aware payloadからviewer declarationを検証してmodel loadを開始する。
+同じpayloadの四つのcompatibility keyとdeclarationが一致しない場合、またはsession中にdeclarationが
+変化した場合は、model / qposを適用しない。
 
 ## delivery policy
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { FAST_ARM_VIEWER_PROFILE } from "../src/robot-profiles/fastArm.js";
+import { FAST_ARM_VIEWER_PROFILE } from "./testViewerProfile.js";
 import { resolveBodyVisualStyle, viewerVisualLegend } from "../src/wasm-scene/visualStyles.js";
 
 describe("profile-owned visual styles", () => {

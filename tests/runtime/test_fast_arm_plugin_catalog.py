@@ -8,10 +8,12 @@ import selfrionette.runtime.fast_arm_bundle as old_bundle_module
 import selfrionette.runtime.fast_arm_joint_limits as old_feasibility
 import selfrionette.runtime.fast_arm_plugin as old_runtime_module
 from selfrionette.plugins.catalog import (
+    registered_robot_plugin_ids,
     registered_robot_bundle_ids,
     registered_robot_profile_ids,
     registered_robot_runtime_plugin_ids,
     resolve_robot_bundle,
+    resolve_robot_plugin_registration,
     resolve_robot_profile,
     resolve_robot_runtime,
     resolve_robot_runtime_plugin,
@@ -25,9 +27,12 @@ from selfrionette.plugins.robots.fast_arm.runtime import (
     FAST_ARM_RUNTIME_PLUGIN,
     FastArmRuntimePlugin,
 )
+from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN
+from selfrionette.plugins.robots.fast_arm.viewer import FAST_ARM_VIEWER_DECLARATION
 from selfrionette.robot_registry import (
     registered_robot_profile_ids as old_registered_robot_profile_ids,
 )
+from selfrionette.robot_profile import robot_profile_runtime_metadata
 from selfrionette.robot_registry import resolve_robot_profile as old_resolve_robot_profile
 from selfrionette.robots.fast_arm import (
     FAST_ARM_ROBOT_PROFILE as OLD_FAST_ARM_ROBOT_PROFILE,
@@ -63,6 +68,11 @@ def test_catalog_resolvers_project_one_canonical_bundle() -> None:
     assert resolved.plugin is bundle.runtime_plugin
     assert bundle.profile is FAST_ARM_ROBOT_PROFILE
     assert bundle.runtime_plugin is FAST_ARM_RUNTIME_PLUGIN
+    assert resolve_robot_plugin_registration("fast_arm") is ROBOT_PLUGIN
+    assert ROBOT_PLUGIN.bundle is bundle
+    assert ROBOT_PLUGIN.viewer is FAST_ARM_VIEWER_DECLARATION
+    assert bundle.profile.viewer_declaration is FAST_ARM_VIEWER_DECLARATION
+    assert registered_robot_plugin_ids() == ("fast_arm",)
     assert registered_robot_bundle_ids() == ("fast_arm",)
     assert registered_robot_profile_ids() == registered_robot_bundle_ids()
     assert registered_robot_runtime_plugin_ids() == registered_robot_bundle_ids()
@@ -76,6 +86,23 @@ def test_profile_keeps_repository_asset_and_configuration_references() -> None:
     )
     assert FAST_ARM_ROBOT_PROFILE.joint_limit_config_asset == (
         repository_root / "configs" / "fast_arm" / "joint_limits.toml"
+    )
+    assert ROBOT_PLUGIN.resources.model.repository_path == (
+        "assets/mujoco/fast_arm/scene.xml"
+    )
+    assert FAST_ARM_VIEWER_DECLARATION.model_resource_path == (
+        ROBOT_PLUGIN.resources.model.repository_path
+    )
+    assert tuple(
+        item.repository_path for item in ROBOT_PLUGIN.resources.viewer_vfs_resources
+    ) == tuple(item.resource_path for item in FAST_ARM_VIEWER_DECLARATION.vfs_assets)
+
+
+def test_runtime_metadata_delivers_the_registered_viewer_declaration() -> None:
+    metadata = robot_profile_runtime_metadata(FAST_ARM_ROBOT_PROFILE)
+
+    assert metadata["viewer_robot_declaration"] == (
+        FAST_ARM_VIEWER_DECLARATION.to_document()
     )
 
 

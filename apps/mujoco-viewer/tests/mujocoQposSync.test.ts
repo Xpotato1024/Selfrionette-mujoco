@@ -17,7 +17,7 @@ import {
   parseQposFixture,
   validateQposFixtureForModel,
 } from "../src/wasm-scene/qposFrameTypes.js";
-import { FAST_ARM_VIEWER_PROFILE } from "../src/robot-profiles/fastArm.js";
+import { FAST_ARM_VIEWER_PROFILE } from "./testViewerProfile.js";
 
 const compatibleMetadata = {
   robot_profile_id: FAST_ARM_VIEWER_PROFILE.profileId,

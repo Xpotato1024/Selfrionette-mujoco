@@ -194,8 +194,11 @@ def test_production_catalog_concrete_and_facade_imports_match_exact_allowlist() 
     # concrete implementation, catalog, compatibility facade, diagnostic, or
     # application composition root. No generic contract/consumer is implicit.
     allowed = {
-        Path("plugins/catalog.py"): frozenset(
-            {"selfrionette.plugins.robots.fast_arm.bundle"}
+        Path("plugins/robots/fast_arm/plugin.py"): frozenset(
+            {
+                "selfrionette.plugins.robots.fast_arm.bundle",
+                "selfrionette.plugins.robots.fast_arm.viewer",
+            }
         ),
         Path("plugins/robots/fast_arm/bundle.py"): frozenset(
             {
@@ -206,6 +209,9 @@ def test_production_catalog_concrete_and_facade_imports_match_exact_allowlist() 
         ),
         Path("plugins/robots/fast_arm/feasibility.py"): frozenset(
             {"selfrionette.plugins.robots.fast_arm.profile"}
+        ),
+        Path("plugins/robots/fast_arm/profile.py"): frozenset(
+            {"selfrionette.plugins.robots.fast_arm.viewer"}
         ),
         Path("plugins/robots/fast_arm/runtime.py"): frozenset(
             {
@@ -255,9 +261,10 @@ def test_production_catalog_concrete_and_facade_imports_match_exact_allowlist() 
         ),
     }
     allowed_reasons = {
-        Path("plugins/catalog.py"): "single concrete registration SoT",
+        Path("plugins/robots/fast_arm/plugin.py"): "fixed concrete discovery entry point",
         Path("plugins/robots/fast_arm/bundle.py"): "concrete Bundle assembly",
         Path("plugins/robots/fast_arm/feasibility.py"): "concrete adapter",
+        Path("plugins/robots/fast_arm/profile.py"): "concrete viewer declaration binding",
         Path("plugins/robots/fast_arm/runtime.py"): "concrete Runtime Plugin",
         Path("robot_registry.py"): "profile registry compatibility facade",
         Path("robots/fast_arm.py"): "Profile compatibility facade",
@@ -310,6 +317,44 @@ def test_catalog_and_bundle_do_not_introduce_defaults_or_dynamic_discovery() -> 
             assert marker not in source, f"{path}: {marker}"
 
 
+def test_bounded_discovery_has_one_production_owner_and_fixed_entry_point() -> None:
+    discovery = (SRC / "plugins" / "robot_discovery.py").read_text(encoding="utf-8")
+    catalog = (SRC / "plugins" / "catalog.py").read_text(encoding="utf-8")
+
+    assert 'ROBOT_PLUGIN_ENTRY_MODULE = "plugin"' in discovery
+    assert 'ROBOT_PLUGIN_ENTRY_SYMBOL = "ROBOT_PLUGIN"' in discovery
+    assert "entry_points" not in discovery
+    assert "RuntimeConfig" not in discovery
+    assert "importlib.import_module(module_name)" in discovery
+    assert "root.namespace.__name__" in discovery
+    assert "selfrionette.plugins.robots.fast_arm" not in catalog
+    assert "fast_arm" not in catalog
+
+    discovery_importers = {
+        path.relative_to(SRC)
+        for path in SRC.rglob("*.py")
+        if any(
+            imported == "selfrionette.plugins.robot_discovery"
+            for imported in _imports(path)
+        )
+    }
+    assert discovery_importers == {Path("plugins/catalog.py")}
+
+
+def test_test_discovery_root_and_fixture_names_do_not_enter_production_sources() -> None:
+    production_sources = tuple(SRC.rglob("*.py")) + tuple(
+        (ROOT / "apps" / "mujoco-viewer" / "src").rglob("*.ts")
+    ) + tuple((ROOT / "apps" / "mujoco-viewer" / "src").rglob("*.tsx"))
+    for path in production_sources:
+        source = path.read_text(encoding="utf-8")
+        assert "test_robot_plugins" not in source, path
+        assert "fixture_bot" not in source, path
+
+    fixture_root = ROOT / "tests" / "fixtures" / "robot_plugins"
+    assert (fixture_root / "test_robot_plugins" / "fixture_bot" / "plugin.py").is_file()
+    assert not (SRC / "selfrionette_test_plugins").exists()
+
+
 def test_compatibility_facades_contain_only_imports_and_public_exports() -> None:
     paths = (
         SRC / "robots" / "fast_arm.py",
@@ -340,6 +385,7 @@ def test_runtime_generic_exports_are_catalog_free_until_resolver_access() -> Non
         command = (
             "import sys; import selfrionette.runtime as runtime; "
             "assert 'selfrionette.plugins.catalog' not in sys.modules; "
+            "assert 'selfrionette.plugins.robots.fast_arm.plugin' not in sys.modules; "
             "from selfrionette.runtime.robot_resolution import "
             "ResolvedRobotRuntime as direct_runtime; "
             "from selfrionette.runtime.robot_bundle import RobotBundle as direct_bundle; "
@@ -349,8 +395,10 @@ def test_runtime_generic_exports_are_catalog_free_until_resolver_access() -> Non
             "assert runtime.RobotBundle is direct_bundle; "
             "assert runtime.VersionedIdentity is direct_identity; "
             "assert 'selfrionette.plugins.catalog' not in sys.modules; "
+            "assert 'selfrionette.plugins.robots.fast_arm.plugin' not in sys.modules; "
             f"getattr(runtime, {resolver_name!r}); "
-            "assert 'selfrionette.plugins.catalog' in sys.modules"
+            "assert 'selfrionette.plugins.catalog' in sys.modules; "
+            "assert 'selfrionette.plugins.robots.fast_arm.plugin' in sys.modules"
         )
         result = subprocess.run(
             [sys.executable, "-c", command],

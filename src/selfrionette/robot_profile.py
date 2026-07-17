@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from selfrionette.viewer_robot_declaration import ViewerRobotDeclaration
+
 
 @dataclass(frozen=True, slots=True)
 class EndpointReference:
@@ -42,6 +44,7 @@ class RobotProfile:
     coordinate_units: CoordinateUnitContract
     viewer_profile_id: str
     supported_capabilities: frozenset[str]
+    viewer_declaration: ViewerRobotDeclaration | None = None
 
     def __post_init__(self) -> None:
         if not self.profile_id:
@@ -67,12 +70,15 @@ class RobotProfile:
 
 
 def robot_profile_runtime_metadata(profile: RobotProfile) -> dict[str, object]:
-    return {
+    metadata: dict[str, object] = {
         "robot_profile_id": profile.profile_id,
         "model_contract_version": profile.model_contract_version,
         "robot_joint_names": profile.canonical_joint_names,
         "robot_qpos_dimension": profile.qpos_dimension,
     }
+    if profile.viewer_declaration is not None:
+        metadata["viewer_robot_declaration"] = profile.viewer_declaration.to_document()
+    return metadata
 
 
 __all__ = [

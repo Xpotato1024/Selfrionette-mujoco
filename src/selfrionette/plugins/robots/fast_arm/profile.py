@@ -13,6 +13,9 @@ from selfrionette.robot_profile import (
     EndpointReference,
     RobotProfile,
 )
+from selfrionette.plugins.robots.fast_arm.viewer import (
+    FAST_ARM_VIEWER_DECLARATION,
+)
 
 FAST_ARM_PROFILE_ID = "fast_arm"
 FAST_ARM_MODEL_CONTRACT_VERSION = "fast_arm-mujoco-model/v1"
@@ -60,6 +63,7 @@ FAST_ARM_ROBOT_PROFILE = RobotProfile(
             "viewer_qpos_rendering",
         }
     ),
+    viewer_declaration=FAST_ARM_VIEWER_DECLARATION,
 )
 
 

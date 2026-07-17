@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for:
   - product viewer wasm scene renderer operation
 related:
@@ -27,7 +27,9 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
 
 - `apps/mujoco-viewer/src/main.tsx`
 - default renderer mode: `wasm-scene`
-- model path: `/assets/mujoco/fast_arm/scene.xml`
+- WebSocket接続時のmodel path: 最初のprofile-aware payloadに含まれるversioned viewer declaration
+- 未接続時のcompatibility path: plugin-owned
+  `/assets/mujoco/fast_arm/viewer-profile.json`をlegacy static facade経由でloadする
 
 ## startup pose source
 
@@ -35,6 +37,17 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
 - compiled MuJoCo model default qpos: historical fallbackではなく、startup sourceには使わない
 - fixture qpos: default startup path では使わない
 - runtime qpos: WebSocket payload が来たら `data.qpos` に適用する
+
+## viewer declaration startup
+
+- generic viewer sourceはproduction robot ID registryを持たない。
+- WebSocket接続時は`viewer_robot_declaration`をstrict decodeし、local URL、resource path、VFS mapping、
+  joint order、qpos dimension、keyframe、model contractを描画前に検証する。
+- payload compatibility metadataとdeclarationが一致した場合だけmodelをloadし、qposを適用する。
+- `fastArm.ts`は未接続時の既存表示を維持するcompatibility facadeであり、宣言内容を再定義せず
+  plugin-owned JSONをloadする。新robot onboardingでこのfacadeまたはTypeScript registryを編集しない。
+- viewerはdeclarationからrendering resourceを構成するだけで、IK、FK、planning、qpos生成、安全判定を
+  行わない。
 
 ## canonical qpos fixture
 

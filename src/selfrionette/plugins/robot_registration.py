@@ -1,0 +1,299 @@
+"""Immutable first-party Robot Plugin onboarding declaration."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+from xml.etree import ElementTree
+
+from selfrionette.runtime.experiment_contracts import VersionedIdentity
+from selfrionette.runtime.robot_bundle import (
+    ENDPOINT_COMMAND_V1,
+    ENDPOINT_POSE_V1,
+    QPOS_FEASIBILITY_V1,
+    RESET_INITIAL_STATE_V1,
+    SCENE_ROLE_BINDING_V1,
+    RobotBundle,
+)
+from selfrionette.viewer_robot_declaration import ViewerRobotDeclaration
+
+
+ROBOT_ONBOARDING_CONTRACT_VERSION = 1
+REQUIRED_ROBOT_CAPABILITIES = frozenset(
+    {
+        RESET_INITIAL_STATE_V1,
+        ENDPOINT_POSE_V1,
+        ENDPOINT_COMMAND_V1,
+        QPOS_FEASIBILITY_V1,
+        SCENE_ROLE_BINDING_V1,
+    }
+)
+
+
+def _validate_relative_resource_path(value: str, *, name: str) -> None:
+    if not value or "\\" in value:
+        raise ValueError(f"{name} must be a non-empty repository-relative POSIX path")
+    path = PurePosixPath(value)
+    if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
+        raise ValueError(f"{name} must not be absolute or escape its resource root")
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryResource:
+    repository_path: str
+
+    def __post_init__(self) -> None:
+        _validate_relative_resource_path(
+            self.repository_path, name="repository resource path"
+        )
+
+    def to_document(self) -> dict[str, object]:
+        return {"repositoryPath": self.repository_path}
+
+
+@dataclass(frozen=True, slots=True)
+class RobotResourceDeclaration:
+    model: RepositoryResource
+    configurations: tuple[RepositoryResource, ...]
+    viewer_vfs_resources: tuple[RepositoryResource, ...]
+
+    def __post_init__(self) -> None:
+        if not self.configurations:
+            raise ValueError("robot resource declaration requires a configuration resource")
+        paths = (
+            self.model.repository_path,
+            *(item.repository_path for item in self.configurations),
+            *(item.repository_path for item in self.viewer_vfs_resources),
+        )
+        if len(paths) != len(set(paths)):
+            raise ValueError("robot resource declaration paths must be unique")
+
+    def to_document(self) -> dict[str, object]:
+        return {
+            "model": self.model.to_document(),
+            "configurations": [item.to_document() for item in self.configurations],
+            "viewerVfsResources": [
+                item.to_document() for item in self.viewer_vfs_resources
+            ],
+        }
+
+
+def _resolved_resource(
+    repository_root: Path,
+    resource: RepositoryResource,
+    *,
+    allowed_roots: tuple[Path, ...],
+) -> Path:
+    candidate = (repository_root / resource.repository_path).resolve()
+    roots = tuple(root.resolve() for root in allowed_roots)
+    if not any(candidate.is_relative_to(root) for root in roots):
+        raise ValueError(
+            "robot resource path escapes allowed repository resource roots: "
+            f"{resource.repository_path!r}"
+        )
+    if not candidate.is_file():
+        raise ValueError(f"missing robot resource: {resource.repository_path!r}")
+    return candidate
+
+
+def _validate_viewer_vfs_coverage(
+    model_path: Path,
+    viewer: ViewerRobotDeclaration,
+    resolved_vfs_resources: tuple[Path, ...],
+) -> None:
+    if model_path.suffix.lower() != ".xml":
+        return
+    resource_by_vfs_path = {
+        declaration.vfs_path: resolved
+        for declaration, resolved in zip(
+            viewer.vfs_assets, resolved_vfs_resources, strict=True
+        )
+    }
+    visited: set[str] = set()
+
+    def normalize(reference: str, *, parent: PurePosixPath) -> str:
+        path = parent / reference
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"viewer VFS reference escapes the virtual root: {reference!r}")
+        return path.as_posix().removeprefix("./")
+
+    def visit(xml_path: Path, logical_path: str) -> None:
+        if logical_path in visited:
+            return
+        visited.add(logical_path)
+        try:
+            root = ElementTree.parse(xml_path).getroot()
+        except ElementTree.ParseError as exc:
+            raise ValueError(f"invalid MuJoCo XML resource {logical_path!r}: {exc}") from exc
+        parent = PurePosixPath(logical_path).parent
+        compiler = root.find("compiler")
+        asset_directory = "" if compiler is None else compiler.attrib.get("assetdir", "")
+        mesh_directory = (
+            asset_directory
+            if compiler is None
+            else compiler.attrib.get("meshdir", asset_directory)
+        )
+        texture_directory = (
+            asset_directory
+            if compiler is None
+            else compiler.attrib.get("texturedir", asset_directory)
+        )
+
+        for include in root.iter("include"):
+            reference = include.attrib.get("file")
+            if not reference:
+                raise ValueError("MuJoCo include is missing its file reference")
+            required = normalize(reference, parent=parent)
+            included_path = resource_by_vfs_path.get(required)
+            if included_path is None:
+                raise ValueError(
+                    f"viewer VFS mapping is missing required include {required!r}"
+                )
+            visit(included_path, required)
+
+        for tag, directory in (
+            ("mesh", mesh_directory),
+            ("texture", texture_directory),
+            ("hfield", asset_directory),
+            ("skin", asset_directory),
+        ):
+            for asset in root.iter(tag):
+                reference = asset.attrib.get("file")
+                if not reference:
+                    continue
+                required = normalize(
+                    str(PurePosixPath(directory) / reference), parent=parent
+                )
+                if required not in resource_by_vfs_path:
+                    raise ValueError(
+                        f"viewer VFS mapping is missing required {tag} asset {required!r}"
+                    )
+
+    visit(model_path, ".")
+
+
+@dataclass(frozen=True, slots=True)
+class RobotPluginRegistration:
+    identity: VersionedIdentity
+    onboarding_contract_version: int
+    bundle: RobotBundle
+    viewer: ViewerRobotDeclaration
+    resources: RobotResourceDeclaration
+
+    def __post_init__(self) -> None:
+        robot_id = self.identity.name
+        if self.onboarding_contract_version != ROBOT_ONBOARDING_CONTRACT_VERSION:
+            raise ValueError(
+                "unsupported robot onboarding contract version: "
+                f"{self.onboarding_contract_version}"
+            )
+        if self.identity.version != self.onboarding_contract_version:
+            raise ValueError("registration identity/onboarding contract version mismatch")
+        if self.bundle.identity != self.identity:
+            raise ValueError("registration/Robot Bundle identity mismatch")
+        profile = self.bundle.profile
+        plugin = self.bundle.runtime_plugin
+        if profile.profile_id != robot_id:
+            raise ValueError("registration/Robot Profile identity mismatch")
+        if plugin.profile_id != robot_id:
+            raise ValueError("registration/Runtime Plugin identity mismatch")
+        if self.viewer.profile_id != robot_id:
+            raise ValueError("registration/viewer declaration identity mismatch")
+        if profile.profile_contract_version != self.identity.version:
+            raise ValueError("registration/Robot Profile contract version mismatch")
+        if self.viewer.profile_contract_version != self.identity.version:
+            raise ValueError("registration/viewer declaration contract version mismatch")
+        if self.viewer.model_contract_version != profile.model_contract_version:
+            raise ValueError("Robot Profile/viewer model contract version mismatch")
+        if self.viewer.joint_names != profile.canonical_joint_names:
+            raise ValueError("Robot Profile/viewer joint name/order mismatch")
+        if self.viewer.qpos_dimension != profile.qpos_dimension:
+            raise ValueError("Robot Profile/viewer qpos dimension mismatch")
+        if self.viewer.initial_keyframe_name != profile.initial_keyframe_name:
+            raise ValueError("Robot Profile/viewer initial keyframe mismatch")
+        if profile.viewer_profile_id != self.viewer.profile_id:
+            raise ValueError("Robot Profile viewer identity mismatch")
+        if profile.viewer_declaration is not self.viewer:
+            raise ValueError(
+                "Robot Profile does not reference the registered viewer declaration object"
+            )
+        missing_capabilities = REQUIRED_ROBOT_CAPABILITIES - self.bundle.provided_capabilities
+        if missing_capabilities:
+            missing = tuple(item.canonical_id for item in sorted(missing_capabilities))
+            raise ValueError(f"Robot Plugin missing required capabilities: {missing}")
+
+    def validate_resources(
+        self,
+        repository_root: Path,
+        *,
+        asset_roots: tuple[Path, ...],
+        configuration_roots: tuple[Path, ...],
+    ) -> None:
+        model_path = _resolved_resource(
+            repository_root, self.resources.model, allowed_roots=asset_roots
+        )
+        if model_path != self.bundle.profile.mujoco_model_asset.resolve():
+            raise ValueError("Robot Profile model asset/resource declaration mismatch")
+        if self.viewer.model_resource_path != self.resources.model.repository_path:
+            raise ValueError("viewer/backend model resource declaration mismatch")
+
+        resolved_configurations = tuple(
+            _resolved_resource(
+                repository_root, resource, allowed_roots=configuration_roots
+            )
+            for resource in self.resources.configurations
+        )
+        profile_config = self.bundle.profile.joint_limit_config_asset
+        if profile_config is not None and profile_config.resolve() not in resolved_configurations:
+            raise ValueError("Robot Profile configuration/resource declaration mismatch")
+
+        declared_vfs_paths = tuple(
+            item.repository_path for item in self.resources.viewer_vfs_resources
+        )
+        viewer_vfs_paths = tuple(item.resource_path for item in self.viewer.vfs_assets)
+        if declared_vfs_paths != viewer_vfs_paths:
+            raise ValueError("viewer VFS/resource declaration mismatch")
+        resolved_vfs_resources = tuple(
+            _resolved_resource(repository_root, resource, allowed_roots=asset_roots)
+            for resource in self.resources.viewer_vfs_resources
+        )
+        _validate_viewer_vfs_coverage(
+            model_path, self.viewer, resolved_vfs_resources
+        )
+
+    def canonical_identity_bytes(self) -> bytes:
+        document = {
+            "identity": {
+                "name": self.identity.name,
+                "version": self.identity.version,
+            },
+            "onboardingContractVersion": self.onboarding_contract_version,
+            "profile": {
+                "profileId": self.bundle.profile.profile_id,
+                "profileContractVersion": self.bundle.profile.profile_contract_version,
+                "modelContractVersion": self.bundle.profile.model_contract_version,
+            },
+            "viewer": self.viewer.to_document(),
+            "resources": self.resources.to_document(),
+            "capabilities": [
+                {"name": item.name, "version": item.version}
+                for item in sorted(self.bundle.provided_capabilities)
+            ],
+        }
+        return json.dumps(
+            document,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+
+__all__ = [
+    "REQUIRED_ROBOT_CAPABILITIES",
+    "ROBOT_ONBOARDING_CONTRACT_VERSION",
+    "RepositoryResource",
+    "RobotPluginRegistration",
+    "RobotResourceDeclaration",
+]
