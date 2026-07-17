@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,6 +44,71 @@ class InitialStateReference:
 
 
 @dataclass(frozen=True, slots=True)
+class InitialStateContract:
+    """Versioned, model-free canonical values for one Robot Bundle initial state."""
+
+    identity: VersionedIdentity
+    source_kind: str
+    source_id: str
+    qpos_rad: tuple[float, ...]
+    tip_position_m: tuple[float, float, float]
+    tool_orientation_wxyz: tuple[float, float, float, float]
+    frame: str
+    position_unit: str
+    orientation_unit: str
+    quaternion_order: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.identity, VersionedIdentity):
+            raise TypeError("initial state contract identity must use VersionedIdentity")
+        for name, value in (
+            ("source_kind", self.source_kind),
+            ("source_id", self.source_id),
+            ("frame", self.frame),
+            ("position_unit", self.position_unit),
+            ("orientation_unit", self.orientation_unit),
+            ("quaternion_order", self.quaternion_order),
+        ):
+            if not isinstance(value, str) or not value or value != value.strip():
+                raise ValueError(f"initial state contract {name} must not be empty")
+
+        def finite_tuple(name: str, value: object, length: int | None = None) -> tuple[float, ...]:
+            if not isinstance(value, (tuple, list)):
+                raise TypeError(f"initial state contract {name} must use a tuple")
+            if length is not None and len(value) != length:
+                raise ValueError(
+                    f"initial state contract {name} must contain exactly {length} values"
+                )
+            result: list[float] = []
+            for index, component in enumerate(value):
+                if isinstance(component, bool) or not isinstance(component, (int, float)):
+                    raise TypeError(
+                        f"initial state contract {name}[{index}] must be numeric"
+                    )
+                number = float(component)
+                if not math.isfinite(number):
+                    raise ValueError(
+                        f"initial state contract {name}[{index}] must be finite"
+                    )
+                result.append(0.0 if number == 0.0 else number)
+            if not result:
+                raise ValueError(f"initial state contract {name} must not be empty")
+            return tuple(result)
+
+        qpos = finite_tuple("qpos_rad", self.qpos_rad)
+        tip = finite_tuple("tip_position_m", self.tip_position_m, length=3)
+        orientation = finite_tuple(
+            "tool_orientation_wxyz", self.tool_orientation_wxyz, length=4
+        )
+        norm = math.sqrt(sum(component * component for component in orientation))
+        if abs(norm - 1.0) > 1e-12:
+            raise ValueError("initial state contract tool orientation must be a unit quaternion")
+        object.__setattr__(self, "qpos_rad", qpos)
+        object.__setattr__(self, "tip_position_m", tip)  # type: ignore[arg-type]
+        object.__setattr__(self, "tool_orientation_wxyz", orientation)  # type: ignore[arg-type]
+
+
+@dataclass(frozen=True, slots=True)
 class EndpointPoseObservation:
     position_m: tuple[float, float, float] | None
     quaternion_wxyz: tuple[float, float, float, float] | None
@@ -80,6 +146,13 @@ class ResetInitialStateProvider(Protocol):
     capability_identity: VersionedIdentity
 
     def resolve_initial_state(self) -> InitialStateReference: ...
+
+
+@runtime_checkable
+class InitialStateContractProvider(Protocol):
+    capability_identity: VersionedIdentity
+
+    def initial_state_contract(self) -> InitialStateContract: ...
 
 
 @runtime_checkable
@@ -228,6 +301,8 @@ __all__ = [
     "EndpointCommandProvider",
     "EndpointPoseObservation",
     "EndpointPoseProvider",
+    "InitialStateContract",
+    "InitialStateContractProvider",
     "InitialStateReference",
     "QPOS_FEASIBILITY_V1",
     "QposFeasibilityProvider",

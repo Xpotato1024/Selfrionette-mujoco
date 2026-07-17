@@ -36,9 +36,9 @@ software gateであり、model load、MuJoCo forward / step、hardware accessを
 `EvaluationManifest`は次のidentityとconfigurationを一つのcondition-level recordへ保持する。
 
 - `schema_version=evaluation-manifest/v1`とcontract version
-- repository、software revision、Robot Bundle、Robot Profile、Runtime Plugin、model contract
+- repository、software revision、Robot Bundle、Robot Profile、Runtime Plugin、model contract、canonical initial-state contract
 - Environment、Control Mapping、Task、Evaluatorの`PluginSelection`と各contract version
-- axis-scoped `PluginParameterOwner`とJSON scalar parameter values
+- axis-scoped `PluginParameterOwner`とrecursive canonical JSON parameter values
 - named initial keyframe、finite initial qpos、initial tip position / frame / unit、WXYZ unit quaternion
 - target family / identity / world position、initial-tip-to-target distance identity
 - tolerance、dwell、timeout、input source / fixture、normalized input range、gain、deadzone、cadence、
@@ -50,6 +50,15 @@ software gateであり、model load、MuJoCo forward / step、hardware accessを
 evaluator / parameter owner、schema / enum / identity / version error、non-finite number、bool-as-number、
 dimension error、invalid quaternion、invalid duration / rangeをfail-closedで拒否する。
 `initial_tip_to_target_distance_m`はmanifest内のtipとtargetから再計算した値と一致しなければならない。
+plugin parameter valuesは`null`、bool、int、finite float、string、array / tuple、string-keyed objectの
+recursive canonical JSON valueに限定する。non-string key、non-finite number、任意のPython object、set、path、
+enumのimplicit serializationは拒否し、`PluginParameters`のconstruction時にrecursive detach / freezeする。
+`target_tolerance_m < initial_tip_to_target_distance_m`、`dwell_interval_s <= timeout_s`、
+`cadence_s <= timeout_s`は意味上のcross-field invariantとしてfail-closedで検証する。
+一方、deadzoneがnormalized range全体を無効化するか、maximum per-step deltaとgain / cadenceの
+関係は、現行のevaluation design / runtime contractに定義された関係ではないためv1では追加の
+数値拘束を設けない。これらは後続のmapping contractが意味をversion化した時点で、そのcontractの
+根拠と同時に追加する。
 
 ## canonical serializationとdigest
 
@@ -63,6 +72,9 @@ forward-compatible fallbackを持たない。
 canonical outputにはabsolute local path、branch名、object repr、memory addressなどの非再現情報を
 含めない。同じsemantic contentはfield insertion order、process、呼出順序に依存せず同じbytesとdigest
 になる。
+software revisionは任意の説明文字列ではなく、`git-sha1:<40 lowercase hex>`、`git-sha256:<64 lowercase hex>`、
+またはfixture専用の`test-revision:<token>`というexplicit schemeを使用する。actual startup identityは
+`SoftwareExecutionIdentity`で受け取り、manifest記載値とexact matchしないreadinessは成立しない。
 
 ## requested identityとresolved identity
 
@@ -74,7 +86,9 @@ requested identityはmanifestのcanonical bytesと`manifest_digest`が表す。r
 - typed semantic role descriptor
 - `EvidenceProducerBinding`とevidence producer identity
 - Robot Profile / Runtime Plugin / model contract identity
-- named-keyframe neutral initial-state verification identity
+- versioned canonical initial-state contract identityとverification identity
+- actual `SoftwareExecutionIdentity`
+- resolved mapping comparison-family / mapping-semantics identityとcontrol frame
 
 requested selectionは「何を要求したか」、resolved identityは「startupで何へ解決されたか」であり、
 同一視しない。registry lookup、compatibility、required capability、semantic role、evidence producer、
@@ -86,11 +100,14 @@ evaluator evidence requirementは既存`compose_experiment()`のfail-closed cont
 mappingとrequested frame、plugin contract version、axis-scoped parameter ownership、required
 capability、semantic role、Robot / Environment / Task compatibility、evidence producer uniqueness、
 evaluator evidence、profile / runtime / model identity、named neutral home、qpos dimension / finite値、
-tip / orientationのframe・unit・quaternion、target geometry、software revisionを検証する。
+tip / orientationのframe・unit・quaternion、target geometry、manifestとactual executionのsoftware identity、
+Robot Bundle providerのcanonical initial-state contract（identity、keyframe、qpos、tip、orientation、frame、
+unit、quaternion order）、mapping comparison family / semantics identityを検証する。
 
 成功時だけ`EvaluationReadiness`を返す。resultはcanonical requested manifest identity、resolved
 identity tuple、`EvidenceProducerBinding`、initial-state identity、`ReadinessStatus.READY`、
-`FreezeRecord`をimmutableに保持する。失敗時は`EvaluationReadinessError`を送出し、partial successの
+initial-state contract identity、software execution identity、mapping comparison identity、`FreezeRecord`を
+immutableに保持する。失敗時は`EvaluationReadinessError`を送出し、partial successの
 runner-facing objectを返さない。このgateはmeasured reachability、physics feasibility、task success、
 log validityを証明しない。
 
@@ -108,6 +125,10 @@ Control Mapping Plugin selectionは対応する別selectionでなければなら
 - 対応するControl Mapping Plugin selection
 - mapping pluginの`ParameterField(condition_specific=True)`として両条件で明示されたparameter value
 
+二条件のControl Mapping Pluginは、同じversioned comparison family identityとmapping semantics identityを
+持ち、world側frameは`world`、tool側frameは`tool`でなければならない。family identityだけを流用して
+strategyが異なるsemantics identityを宣言する組合せは拒否する。
+
 software revision、Robot / Profile / Runtime Plugin / model、Environment、Task、Evaluator、initial
 state、target、input source / fixture、normalized range、gain、deadzone、cadence、maximum delta、
 tolerance、dwell、timeout、deterministic seed policy、camera / visual feedback / presentation、task order、
@@ -120,7 +141,8 @@ parameter boundaryを検証する。
 `FreezeRecord`はcanonical manifest bytes、resolved identity bytes、manifest digest、resolved digest、
 freeze digestを保持する。freeze digestはmanifestとresolved identityを`evaluation-freeze/v1`と
 明示的に結合して計算するため、manifest value、software revision、plugin version、parameter owner、
-evidence producer、semantic role descriptor、profile / model contract、initial-state identityの変更を
+evidence producer、semantic role descriptor、profile / model contract、initial-state contract identity、
+actual software execution identity、mapping comparison family / semantics identityの変更を
 検出できる。
 
 #423のpackage / import-direction migrationは、これらのlogical identityとcanonical bytesを維持する。
@@ -130,9 +152,11 @@ identityを変更する場合は、manifest contract versionまたは対象のve
 ## #406 runnerへのhandoff
 
 #406が使用できるpublic APIは、`EvaluationManifest`、`encode_evaluation_manifest()`、
-`decode_evaluation_manifest()`、`evaluation_manifest_digest()`、`build_evaluation_readiness()`、
+`decode_evaluation_manifest()`、`evaluation_manifest_digest()`、`SoftwareExecutionIdentity`、
+`InitialStateContract` / `InitialStateContractProvider`、
+`build_evaluation_readiness(manifest, registries, execution_identity=...)`、
 `EvaluationReadiness`、`FreezeRecord`、`EvaluationConditionPair`、
-`build_evaluation_condition_pair_readiness()`、既存の`compose_experiment()`とresolved composition /
+`build_evaluation_condition_pair_readiness(pair, registries, execution_identity=...)`、既存の`compose_experiment()`とresolved composition /
 provider boundaryである。runnerはready resultとfreeze identityを受け取り、別のimplicit selectionや
 default補完を行わない。
 

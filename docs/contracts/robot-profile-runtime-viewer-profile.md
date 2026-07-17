@@ -134,6 +134,12 @@ fast_armのactive initial qpos sourceは、`assets/mujoco/fast_arm/arm.xml`のna
 startupは同じXML keyframeを読み、runtime first state/payloadも同じqposを運ぶ。
 `ViewerInputSource`とinitial target markerは、そのposeのMuJoCo
 `tip = (0.240000, -0.245951, 0.284308) m`へrebaseする。
+R7-G-P1の`FAST_ARM_INITIAL_STATE_CONTRACT`は、このnamed keyframeを
+`fast_arm_initial_state/v1`として固定し、frame=`MuJoCo world / scene frame`、
+position unit=`meter`、orientation unit=`unit_quaternion`、quaternion order=`wxyz`、
+tool orientation WXYZ=`(0.8365163037378079, 0.1294095225512604,
+0.4829629131445341, 0.22414386804201347)`を提供する。readinessはこのprovider contractとmanifestを
+model loadなしで比較し、profile / runtime plugin / model contract identityも同時に一致させる。
 
 collision geomがdisabledでcollision checkを利用できない状態では、このstartup poseを
 collision-freeの物理証拠とは扱わない。joint range内であること、startup continuity、

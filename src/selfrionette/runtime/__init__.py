@@ -161,6 +161,7 @@ from selfrionette.runtime.evaluation_manifest import (
     FreezeRecord,
     ReadinessStatus,
     ReadinessResult,
+    SoftwareExecutionIdentity,
     WorldToolConditionPair,
     assert_freeze_identity,
     build_evaluation_condition_pair_readiness,
@@ -184,6 +185,8 @@ from selfrionette.runtime.robot_bundle import (
     ROBOT_TOOL_ENDPOINT_ROLE,
     SCENE_ROLE_BINDING_V1,
     CapabilityProviderBinding,
+    InitialStateContract,
+    InitialStateContractProvider,
     RobotBundle,
 )
 from selfrionette.runtime.robot_bundle_registry import (
@@ -198,6 +201,8 @@ __all__ = [
     "ResolvedRobotRuntime",
     "RobotBundle",
     "CapabilityProviderBinding",
+    "InitialStateContract",
+    "InitialStateContractProvider",
     "VersionedIdentity",
     "PluginSelection",
     "PluginAxis",
@@ -247,6 +252,7 @@ __all__ = [
     "FreezeRecord",
     "ReadinessStatus",
     "ReadinessResult",
+    "SoftwareExecutionIdentity",
     "encode_evaluation_manifest",
     "decode_evaluation_manifest",
     "evaluation_manifest_digest",

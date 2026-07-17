@@ -23,6 +23,8 @@ from selfrionette.runtime.experiment_composition import (
     PluginParameters,
     ResolvedExperimentComposition,
     compose_experiment,
+    freeze_parameter_value,
+    parameter_value_to_document,
 )
 from selfrionette.runtime.experiment_contracts import (
     EnvironmentRole,
@@ -32,6 +34,8 @@ from selfrionette.runtime.experiment_contracts import (
     VersionedIdentity,
 )
 from selfrionette.runtime.robot_bundle import (
+    InitialStateContract,
+    InitialStateContractProvider,
     InitialStateReference,
     RESET_INITIAL_STATE_V1,
     ResetInitialStateProvider,
@@ -46,6 +50,9 @@ _CONTROL_FRAMES = frozenset({"world", "tool"})
 _QUATERNION_ORDER = "wxyz"
 _QUATERNION_UNIT = "unit_quaternion"
 _FLOAT_TOLERANCE = 1e-12
+_GIT_SHA1_REVISION = re.compile(r"git-sha1:[0-9a-f]{40}\Z")
+_GIT_SHA256_REVISION = re.compile(r"git-sha256:[0-9a-f]{64}\Z")
+_TEST_REVISION = re.compile(r"test-revision:[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 
 
 class ReadinessStatus(str, Enum):
@@ -77,6 +84,32 @@ def _stable_identity(name: str, value: object) -> str:
     if result.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:[\\/]", result):
         raise EvaluationManifestError(f"{name} must not be a local path")
     return result
+
+
+def _software_revision_identity(value: object) -> str:
+    result = _stable_identity("software_revision_identity", value)
+    if not (
+        _GIT_SHA1_REVISION.fullmatch(result)
+        or _GIT_SHA256_REVISION.fullmatch(result)
+        or _TEST_REVISION.fullmatch(result)
+    ):
+        raise EvaluationManifestError(
+            "software_revision_identity must use an explicit stable scheme "
+            "(git-sha1, git-sha256, or test-revision)"
+        )
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class SoftwareExecutionIdentity:
+    """Actual repository/software identity observed by the startup caller."""
+
+    repository_identity: str
+    software_revision_identity: str
+
+    def __post_init__(self) -> None:
+        _stable_identity("execution repository_identity", self.repository_identity)
+        _software_revision_identity(self.software_revision_identity)
 
 
 def _enum(name: str, value: object, choices: frozenset[str]) -> str:
@@ -159,25 +192,16 @@ def _identity(name: str, value: object) -> VersionedIdentity:
     return value
 
 
-def _json_scalar(name: str, value: object) -> object:
-    if value is None or type(value) is bool or type(value) is int:
-        return value
-    if type(value) is float:
-        if not math.isfinite(value):
-            raise EvaluationManifestError(f"{name} must be finite")
-        return 0.0 if value == 0.0 else value
-    if type(value) is str:
-        return value
-    raise EvaluationManifestError(f"{name} must be a JSON scalar")
-
-
 def _parameter_values(item: PluginParameters) -> Mapping[str, object]:
     values = item.values
     if not isinstance(values, Mapping):
         raise EvaluationManifestError("plugin parameter values must use a mapping")
     for name, value in values.items():
         _identifier("plugin parameter name", name)
-        _json_scalar(f"plugin parameter {name!r}", value)
+        try:
+            freeze_parameter_value(f"plugin parameter {name!r}", value)
+        except (TypeError, ValueError) as exc:
+            raise EvaluationManifestError(str(exc)) from exc
     return values
 
 
@@ -351,7 +375,10 @@ def _document_parameter_values(value: object, name: str) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, item in document.items():
         _identifier(f"{name} field", key)
-        result[key] = _json_scalar(f"{name}.{key}", item)
+        try:
+            result[key] = freeze_parameter_value(f"{name}.{key}", item)
+        except (TypeError, ValueError) as exc:
+            raise EvaluationManifestDecodeError(str(exc)) from exc
     return result
 
 
@@ -377,6 +404,7 @@ class EvaluationManifest:
     robot_profile_identity: VersionedIdentity
     runtime_plugin_identity: VersionedIdentity
     model_contract_identity: VersionedIdentity
+    initial_state_contract_identity: VersionedIdentity
     environment: PluginSelection
     control_mapping: PluginSelection
     task: PluginSelection
@@ -427,7 +455,7 @@ class EvaluationManifest:
                 f"unsupported evaluation manifest contract version: {self.contract_version!r}"
             )
         _stable_identity("repository_identity", self.repository_identity)
-        _stable_identity("software_revision_identity", self.software_revision_identity)
+        _software_revision_identity(self.software_revision_identity)
         for name in (
             "robot_bundle",
             "environment",
@@ -438,6 +466,7 @@ class EvaluationManifest:
         _identity("robot_profile_identity", self.robot_profile_identity)
         _identity("runtime_plugin_identity", self.runtime_plugin_identity)
         _identity("model_contract_identity", self.model_contract_identity)
+        _identity("initial_state_contract_identity", self.initial_state_contract_identity)
 
         evaluators = tuple(self.evaluators)
         if any(not isinstance(item, PluginSelection) for item in evaluators):
@@ -539,6 +568,14 @@ class EvaluationManifest:
                 name,
                 _finite_float(name, getattr(self, name), positive=True),
             )
+        if self.target_tolerance_m >= declared_distance:
+            raise EvaluationManifestError(
+                "target tolerance must be smaller than initial-tip target distance"
+            )
+        if self.dwell_interval_s > self.timeout_s:
+            raise EvaluationManifestError("dwell interval must not exceed timeout")
+        if self.cadence_s > self.timeout_s:
+            raise EvaluationManifestError("cadence must not exceed timeout")
         deadzone = _finite_float("deadzone", self.deadzone, non_negative=True)
         if deadzone > 1.0:
             raise EvaluationManifestError("deadzone must be within [0.0, 1.0]")
@@ -627,6 +664,9 @@ class EvaluationManifest:
             "robot_profile_identity": _identity_document(self.robot_profile_identity),
             "runtime_plugin_identity": _identity_document(self.runtime_plugin_identity),
             "model_contract_identity": _identity_document(self.model_contract_identity),
+            "initial_state_contract_identity": _identity_document(
+                self.initial_state_contract_identity
+            ),
             "environment": _selection_document(self.environment),
             "control_mapping": _selection_document(self.control_mapping),
             "task": _selection_document(self.task),
@@ -635,7 +675,7 @@ class EvaluationManifest:
                 {
                     "owner": _parameter_owner_document(item.owner),
                     "values": {
-                        key: value
+                        key: parameter_value_to_document(value)
                         for key, value in sorted(item.values.items(), key=lambda pair: pair[0])
                     },
                 }
@@ -746,6 +786,13 @@ def decode_evaluation_manifest(
             _require_object(root["model_contract_identity"], "model_contract_identity"),
             "model_contract_identity",
         ),
+        initial_state_contract_identity=_document_identity(
+            _require_object(
+                root["initial_state_contract_identity"],
+                "initial_state_contract_identity",
+            ),
+            "initial_state_contract_identity",
+        ),
         environment=_document_selection(
             _require_object(root["environment"], "environment"), "environment"
         ),
@@ -844,30 +891,47 @@ def _parameter_item_for_owner(
     return next((item for item in manifest.parameters if item.owner == expected), None)
 
 
-def _initial_state_verification_identity(manifest: EvaluationManifest) -> str:
+def _initial_state_contract_document(contract: InitialStateContract) -> dict[str, object]:
+    return {
+        "identity": _identity_document(contract.identity),
+        "source_kind": contract.source_kind,
+        "source_id": contract.source_id,
+        "qpos_rad": list(contract.qpos_rad),
+        "tip_position_m": list(contract.tip_position_m),
+        "tool_orientation_wxyz": list(contract.tool_orientation_wxyz),
+        "frame": contract.frame,
+        "position_unit": contract.position_unit,
+        "orientation_unit": contract.orientation_unit,
+        "quaternion_order": contract.quaternion_order,
+    }
+
+
+def _initial_state_verification_identity(
+    contract: InitialStateContract,
+) -> str:
     return _digest(
-        _canonical_json_bytes(
-            {
-                "initial_keyframe_name": manifest.initial_keyframe_name,
-                "initial_qpos_rad": list(manifest.initial_qpos_rad),
-                "initial_tip_position_m": list(manifest.initial_tip_position_m),
-                "initial_tip_frame": manifest.initial_tip_frame,
-                "initial_tip_unit": manifest.initial_tip_unit,
-                "initial_tool_orientation_wxyz": list(
-                    manifest.initial_tool_orientation_wxyz
-                ),
-                "initial_tool_orientation_frame": manifest.initial_tool_orientation_frame,
-                "initial_tool_orientation_unit": manifest.initial_tool_orientation_unit,
-                "initial_tool_orientation_order": manifest.initial_tool_orientation_order,
-            }
-        )
+        _canonical_json_bytes(_initial_state_contract_document(contract))
     )
+
+
+def _require_initial_state_values_match(
+    name: str,
+    declared: Sequence[float],
+    canonical: Sequence[float],
+) -> None:
+    if len(declared) != len(canonical) or any(
+        not math.isclose(left, right, rel_tol=0.0, abs_tol=_FLOAT_TOLERANCE)
+        for left, right in zip(declared, canonical, strict=False)
+    ):
+        raise EvaluationReadinessError(
+            f"{name} mismatch with resolved canonical initial-state contract"
+        )
 
 
 def _validate_initial_state(
     manifest: EvaluationManifest,
     composition: ResolvedExperimentComposition,
-) -> str:
+) -> tuple[str, VersionedIdentity]:
     profile = composition.robot_bundle.profile
     if manifest.robot_profile_identity != VersionedIdentity(
         profile.profile_id, profile.profile_contract_version
@@ -907,26 +971,73 @@ def _validate_initial_state(
         raise EvaluationReadinessError(
             "initial keyframe mismatch between manifest and resolved provider"
         )
+    if not isinstance(provider, InitialStateContractProvider):
+        raise EvaluationReadinessError(
+            "reset initial-state provider has no canonical initial-state contract"
+        )
+    contract = provider.initial_state_contract()
+    if not isinstance(contract, InitialStateContract):
+        raise EvaluationReadinessError(
+            "reset initial-state provider returned an invalid canonical contract"
+        )
+    if manifest.initial_state_contract_identity != contract.identity:
+        raise EvaluationReadinessError(
+            "initial-state contract identity mismatch between manifest and resolved provider"
+        )
+    if contract.source_kind != reference.source_kind or contract.source_id != reference.source_id:
+        raise EvaluationReadinessError(
+            "initial-state contract source mismatch with resolved provider"
+        )
+    if contract.source_kind != "named_keyframe":
+        raise EvaluationReadinessError(
+            "evaluation readiness requires a named-keyframe canonical initial state"
+        )
+    if len(contract.qpos_rad) != profile.qpos_dimension:
+        raise EvaluationReadinessError(
+            "canonical initial-state qpos dimension mismatch: "
+            f"expected {profile.qpos_dimension}, got {len(contract.qpos_rad)}"
+        )
     if len(manifest.initial_qpos_rad) != profile.qpos_dimension:
         raise EvaluationReadinessError(
             "initial qpos dimension mismatch: "
             f"expected {profile.qpos_dimension}, got {len(manifest.initial_qpos_rad)}"
         )
-    if manifest.initial_tip_frame != profile.coordinate_units.coordinate_frame:
+    _require_initial_state_values_match(
+        "initial qpos", manifest.initial_qpos_rad, contract.qpos_rad
+    )
+    _require_initial_state_values_match(
+        "initial tip position", manifest.initial_tip_position_m, contract.tip_position_m
+    )
+    _require_initial_state_values_match(
+        "initial tool orientation",
+        manifest.initial_tool_orientation_wxyz,
+        contract.tool_orientation_wxyz,
+    )
+    if manifest.initial_tip_frame != contract.frame:
         raise EvaluationReadinessError("initial tip coordinate frame mismatch")
-    if manifest.initial_tool_orientation_frame != profile.coordinate_units.coordinate_frame:
+    if manifest.initial_tool_orientation_frame != contract.frame:
         raise EvaluationReadinessError("initial tool orientation coordinate frame mismatch")
-    if manifest.initial_tip_unit != profile.coordinate_units.position_unit:
+    if manifest.initial_tip_unit != contract.position_unit:
         raise EvaluationReadinessError("initial tip position unit mismatch")
-    if manifest.initial_tool_orientation_order != profile.coordinate_units.quaternion_order:
+    if manifest.initial_tool_orientation_unit != contract.orientation_unit:
+        raise EvaluationReadinessError("initial tool orientation unit mismatch")
+    if manifest.initial_tool_orientation_order != contract.quaternion_order:
         raise EvaluationReadinessError("initial tool orientation quaternion order mismatch")
-    return _initial_state_verification_identity(manifest)
+    if contract.frame != profile.coordinate_units.coordinate_frame:
+        raise EvaluationReadinessError("canonical initial-state frame/profile mismatch")
+    if contract.position_unit != profile.coordinate_units.position_unit:
+        raise EvaluationReadinessError("canonical initial-state unit/profile mismatch")
+    if contract.quaternion_order != profile.coordinate_units.quaternion_order:
+        raise EvaluationReadinessError(
+            "canonical initial-state quaternion order/profile mismatch"
+        )
+    return _initial_state_verification_identity(contract), contract.identity
 
 
 def _validate_control_mapping(
     manifest: EvaluationManifest,
     composition: ResolvedExperimentComposition,
-) -> None:
+) -> tuple[VersionedIdentity, VersionedIdentity]:
     declared_frame = composition.control_mapping.control_frame
     if declared_frame is None:
         raise EvaluationReadinessError(
@@ -937,6 +1048,26 @@ def _validate_control_mapping(
             "mapping plugin/requested control frame mismatch: "
             f"mapping={declared_frame!r}, requested={manifest.requested_control_frame!r}"
         )
+    family_identity = composition.control_mapping.comparison_family_identity
+    if family_identity is None:
+        raise EvaluationReadinessError(
+            "mapping plugin must declare comparison family identity for evaluation readiness"
+        )
+    semantics_identity = composition.control_mapping.mapping_semantics_identity
+    if semantics_identity is None:
+        raise EvaluationReadinessError(
+            "mapping plugin must declare mapping semantics identity for evaluation readiness"
+        )
+    _identity("mapping comparison family identity", family_identity)
+    _identity("mapping semantics identity", semantics_identity)
+    strategy_identity = getattr(
+        composition.control_mapping.strategy, "mapping_semantics_identity", None
+    )
+    if strategy_identity != semantics_identity:
+        raise EvaluationReadinessError(
+            "mapping strategy semantic identity mismatch"
+        )
+    return family_identity, semantics_identity
 
 
 def _resolved_identity_document(
@@ -951,6 +1082,10 @@ def _resolved_identity_document(
     runtime_plugin_identity: VersionedIdentity,
     model_contract_identity: VersionedIdentity,
     initial_state_identity: str,
+    initial_state_contract_identity: VersionedIdentity,
+    execution_identity: SoftwareExecutionIdentity,
+    mapping_family_identity: VersionedIdentity,
+    mapping_semantics_identity: VersionedIdentity,
 ) -> dict[str, object]:
     return {
         "freeze_schema_version": EVALUATION_FREEZE_SCHEMA_VERSION,
@@ -972,6 +1107,15 @@ def _resolved_identity_document(
             ],
         },
         "resolved_control_frame": composition.control_mapping.control_frame,
+        "resolved_mapping_comparison": {
+            "family_identity": _identity_document(mapping_family_identity),
+            "mapping_semantics_identity": _identity_document(mapping_semantics_identity),
+            "control_frame": composition.control_mapping.control_frame,
+        },
+        "software_execution_identity": {
+            "repository_identity": execution_identity.repository_identity,
+            "software_revision_identity": execution_identity.software_revision_identity,
+        },
         "resolved_compatibility_identity": {
             "robot_bundle": _identity_document(composition.robot_bundle.identity),
             "environment": _identity_document(composition.environment.identity),
@@ -1018,6 +1162,9 @@ def _resolved_identity_document(
         "robot_profile_identity": _identity_document(robot_profile_identity),
         "runtime_plugin_identity": _identity_document(runtime_plugin_identity),
         "model_contract_identity": _identity_document(model_contract_identity),
+        "initial_state_contract_identity": _identity_document(
+            initial_state_contract_identity
+        ),
         "initial_state_verification_identity": initial_state_identity,
     }
 
@@ -1074,7 +1221,11 @@ class EvaluationReadiness:
     robot_profile_identity: VersionedIdentity
     runtime_plugin_identity: VersionedIdentity
     model_contract_identity: VersionedIdentity
+    initial_state_contract_identity: VersionedIdentity
     initial_state_verification_identity: str
+    software_execution_identity: SoftwareExecutionIdentity
+    mapping_comparison_family_identity: VersionedIdentity
+    mapping_semantics_identity: VersionedIdentity
     readiness_status: ReadinessStatus
     resolved_identity_digest: str
     freeze_record: FreezeRecord
@@ -1127,6 +1278,22 @@ class EvaluationReadiness:
         _identity("readiness robot profile identity", self.robot_profile_identity)
         _identity("readiness runtime plugin identity", self.runtime_plugin_identity)
         _identity("readiness model contract identity", self.model_contract_identity)
+        _identity(
+            "readiness initial-state contract identity",
+            self.initial_state_contract_identity,
+        )
+        if not isinstance(self.software_execution_identity, SoftwareExecutionIdentity):
+            raise EvaluationManifestError(
+                "readiness software execution identity must use SoftwareExecutionIdentity"
+            )
+        _identity(
+            "readiness mapping comparison family identity",
+            self.mapping_comparison_family_identity,
+        )
+        _identity(
+            "readiness mapping semantics identity",
+            self.mapping_semantics_identity,
+        )
 
     @property
     def canonical_requested_manifest_identity(self) -> str:
@@ -1148,14 +1315,31 @@ class EvaluationReadiness:
 def _readiness_from_composition(
     manifest: EvaluationManifest,
     composition: ResolvedExperimentComposition,
+    execution_identity: SoftwareExecutionIdentity,
 ) -> EvaluationReadiness:
     try:
+        if not isinstance(execution_identity, SoftwareExecutionIdentity):
+            raise EvaluationReadinessError(
+                "readiness requires SoftwareExecutionIdentity for actual execution"
+            )
+        expected_execution_identity = SoftwareExecutionIdentity(
+            manifest.repository_identity,
+            manifest.software_revision_identity,
+        )
+        if execution_identity != expected_execution_identity:
+            raise EvaluationReadinessError(
+                "manifest software identity does not match actual execution identity"
+            )
         if composition.manifest != manifest.plugin_manifest:
             raise EvaluationReadinessError(
                 "resolved composition manifest does not match requested manifest"
             )
-        _validate_control_mapping(manifest, composition)
-        initial_state_identity = _validate_initial_state(manifest, composition)
+        mapping_family_identity, mapping_semantics_identity = _validate_control_mapping(
+            manifest, composition
+        )
+        initial_state_identity, initial_state_contract_identity = _validate_initial_state(
+            manifest, composition
+        )
         if len(composition.evidence_producers) != len(
             {item.evidence_identity for item in composition.evidence_producers}
         ):
@@ -1208,6 +1392,10 @@ def _readiness_from_composition(
             runtime_plugin_identity=runtime_identity,
             model_contract_identity=model_identity,
             initial_state_identity=initial_state_identity,
+            initial_state_contract_identity=initial_state_contract_identity,
+            execution_identity=execution_identity,
+            mapping_family_identity=mapping_family_identity,
+            mapping_semantics_identity=mapping_semantics_identity,
         )
         resolved_bytes = _canonical_json_bytes(resolved_document)
         resolved_identity = _digest(resolved_bytes)
@@ -1235,7 +1423,11 @@ def _readiness_from_composition(
             robot_profile_identity=profile_identity,
             runtime_plugin_identity=runtime_identity,
             model_contract_identity=model_identity,
+            initial_state_contract_identity=initial_state_contract_identity,
             initial_state_verification_identity=initial_state_identity,
+            software_execution_identity=execution_identity,
+            mapping_comparison_family_identity=mapping_family_identity,
+            mapping_semantics_identity=mapping_semantics_identity,
             readiness_status=ReadinessStatus.READY,
             resolved_identity_digest=resolved_identity,
             freeze_record=freeze_record,
@@ -1249,6 +1441,8 @@ def _readiness_from_composition(
 def build_evaluation_readiness(
     manifest: EvaluationManifest,
     registries: ExperimentPluginRegistries,
+    *,
+    execution_identity: SoftwareExecutionIdentity,
 ) -> EvaluationReadiness:
     """Compose and validate one condition before any runner starts."""
 
@@ -1258,7 +1452,7 @@ def build_evaluation_readiness(
         composition = compose_experiment(manifest.plugin_manifest, registries)
     except (TypeError, ValueError) as exc:
         raise EvaluationReadinessError(str(exc)) from exc
-    return _readiness_from_composition(manifest, composition)
+    return _readiness_from_composition(manifest, composition, execution_identity)
 
 
 def verify_freeze_identity(
@@ -1288,6 +1482,10 @@ def verify_freeze_identity(
         runtime_plugin_identity=readiness.runtime_plugin_identity,
         model_contract_identity=readiness.model_contract_identity,
         initial_state_identity=readiness.initial_state_verification_identity,
+        initial_state_contract_identity=readiness.initial_state_contract_identity,
+        execution_identity=readiness.software_execution_identity,
+        mapping_family_identity=readiness.mapping_comparison_family_identity,
+        mapping_semantics_identity=readiness.mapping_semantics_identity,
     )
     current_resolved_bytes = _canonical_json_bytes(current_resolved_document)
     if _digest(current_resolved_bytes) != record.resolved_identity_digest:
@@ -1415,6 +1613,30 @@ def _validate_condition_pair_compositions(
     world_composition: ResolvedExperimentComposition,
     tool_composition: ResolvedExperimentComposition,
 ) -> None:
+    family_identities = (
+        world_composition.control_mapping.comparison_family_identity,
+        tool_composition.control_mapping.comparison_family_identity,
+    )
+    if any(identity is None for identity in family_identities):
+        raise EvaluationReadinessError(
+            "world/tool mappings must declare comparison family identity"
+        )
+    if family_identities[0] != family_identities[1]:
+        raise EvaluationReadinessError(
+            "world/tool mappings must use the same comparison family identity"
+        )
+    semantics_identities = (
+        world_composition.control_mapping.mapping_semantics_identity,
+        tool_composition.control_mapping.mapping_semantics_identity,
+    )
+    if any(identity is None for identity in semantics_identities):
+        raise EvaluationReadinessError(
+            "world/tool mappings must declare mapping semantics identity"
+        )
+    if semantics_identities[0] != semantics_identities[1]:
+        raise EvaluationReadinessError(
+            "world/tool mappings must use the same mapping semantics identity"
+        )
     for label, manifest, composition in (
         ("world", pair.world, world_composition),
         ("tool", pair.tool, tool_composition),
@@ -1460,6 +1682,8 @@ class EvaluationConditionPairReadiness:
 def build_evaluation_condition_pair_readiness(
     pair: EvaluationConditionPair,
     registries: ExperimentPluginRegistries,
+    *,
+    execution_identity: SoftwareExecutionIdentity,
 ) -> EvaluationConditionPairReadiness:
     """Resolve both conditions and return a pair only if both are ready."""
 
@@ -1469,8 +1693,12 @@ def build_evaluation_condition_pair_readiness(
         world_composition = compose_experiment(pair.world.plugin_manifest, registries)
         tool_composition = compose_experiment(pair.tool.plugin_manifest, registries)
         _validate_condition_pair_compositions(pair, world_composition, tool_composition)
-        world = _readiness_from_composition(pair.world, world_composition)
-        tool = _readiness_from_composition(pair.tool, tool_composition)
+        world = _readiness_from_composition(
+            pair.world, world_composition, execution_identity
+        )
+        tool = _readiness_from_composition(
+            pair.tool, tool_composition, execution_identity
+        )
         pair_bytes = _canonical_json_bytes(
             {
                 "schema_version": EVALUATION_FREEZE_SCHEMA_VERSION,
@@ -1492,8 +1720,12 @@ def build_evaluation_condition_pair_readiness(
 def validate_world_tool_condition_pair(
     pair: EvaluationConditionPair,
     registries: ExperimentPluginRegistries,
+    *,
+    execution_identity: SoftwareExecutionIdentity,
 ) -> EvaluationConditionPairReadiness:
-    return build_evaluation_condition_pair_readiness(pair, registries)
+    return build_evaluation_condition_pair_readiness(
+        pair, registries, execution_identity=execution_identity
+    )
 
 
 def assert_freeze_identity(
@@ -1527,6 +1759,7 @@ __all__ = [
     "FreezeRecord",
     "ReadinessResult",
     "ReadinessStatus",
+    "SoftwareExecutionIdentity",
     "WorldToolConditionPair",
     "assert_freeze_identity",
     "build_evaluation_condition_pair_readiness",

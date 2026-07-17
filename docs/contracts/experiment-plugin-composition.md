@@ -85,6 +85,11 @@ capabilityへのlookupは例外であり、zero、empty、no-opを返さない�
 `ProfileEndpointSceneRoleProvider`のような小さなdelegating providerとして再利用する。
 巨大なdefault robot継承階層は導入しない。
 
+evaluation readinessでは`RESET_INITIAL_STATE_V1` providerが、同じprovider boundary上の
+`InitialStateContractProvider.initial_state_contract()`を実装してcanonical initial-state contractを公開する。
+このcontractはversioned identity、source、qpos、tip、tool orientation、frame、unit、quaternion orderを保持する。
+fast_armは`home` keyframe由来のprofile-owned contractを再利用し、generic bundleも同じtyped provider boundaryを使う。
+
 ## semantic roleとenvironment
 
 semantic roleはbackend固有名と分離したidentityである。current generic robot roleは
@@ -109,6 +114,10 @@ ambiguousとして拒否する。`SemanticRoleRequirement`はrole名に加えて
 ## mappingとtask
 
 `ControlMappingPlugin`はtyped `ControlMappingStrategy`とstrict `ParameterContract`を持つ。
+evaluation comparisonへ参加するmappingは、versioned `comparison_family_identity`、
+versioned `mapping_semantics_identity`、`control_frame`を明示する。family identityはframe variantを
+束ねるsemantic contractであり、strategy objectのhashやobject identityではない。strategyが宣言する
+mapping semantics identityとplugin fieldが一致しない場合はconstruction/readinessをfail-closedにする。
 world/tool mapping、gain、deadzone、assistance等はこの軸のpluginまたはparameterとして固定する。
 world/tool pairでcontrol-frame差を許可するparameterは`ParameterField.condition_specific=True`を
 明示し、mapping plugin自身の`control_frame` declarationとrequested frameを一致させる。

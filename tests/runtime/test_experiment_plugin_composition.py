@@ -48,6 +48,7 @@ from selfrionette.runtime.robot_bundle import (
     CONTACT_EVIDENCE_V1,
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
+    InitialStateContract,
     QPOS_FEASIBILITY_V1,
     RESET_INITIAL_STATE_V1,
     ROBOT_TOOL_ENDPOINT_ROLE,
@@ -161,6 +162,8 @@ class _SceneProvider:
 
 
 class _MappingStrategy:
+    mapping_semantics_identity = VersionedIdentity("dummy_mapping_semantics", 1)
+
     def map_input(self, input_intent, parameters):
         return (input_intent, dict(parameters))
 
@@ -218,13 +221,26 @@ def _dummy_bundle(
     include_endpoint_pose: bool = True,
     duplicate_endpoint_pose: bool = False,
     parameter_contract: ParameterContract = ParameterContract(),
+    initial_state_contract: InitialStateContract | None = None,
 ) -> RobotBundle:
     profile = _dummy_profile()
     plugin = _DummyRuntimePlugin(profile)
+    contract = initial_state_contract or InitialStateContract(
+        identity=VersionedIdentity("dummy_initial_state", 1),
+        source_kind="named_keyframe",
+        source_id=profile.initial_keyframe_name,
+        qpos_rad=(0.0,),
+        tip_position_m=(0.0, 0.0, 0.0),
+        tool_orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+        frame=profile.coordinate_units.coordinate_frame,
+        position_unit=profile.coordinate_units.position_unit,
+        orientation_unit="unit_quaternion",
+        quaternion_order=profile.coordinate_units.quaternion_order,
+    )
     providers = [
         CapabilityProviderBinding(
             RESET_INITIAL_STATE_V1,
-            NamedKeyframeInitialStateProvider(profile),
+            NamedKeyframeInitialStateProvider(profile, contract),
         ),
         CapabilityProviderBinding(ENDPOINT_COMMAND_V1, _EndpointCommandProvider()),
         CapabilityProviderBinding(QPOS_FEASIBILITY_V1, _QposFeasibilityProvider()),
@@ -286,6 +302,8 @@ def _mapping(
         strategy=_MappingStrategy(),
         required_robot_capabilities=frozenset({ENDPOINT_COMMAND_V1}),
         produced_evidence=produced_evidence,
+        comparison_family_identity=VersionedIdentity("dummy_mapping_family", 1),
+        mapping_semantics_identity=VersionedIdentity("dummy_mapping_semantics", 1),
     )
 
 

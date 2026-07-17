@@ -68,7 +68,9 @@ conditionを有利にする変更を行わない。
 trial開始後のtool rotationには追従しない。successはmeasured MuJoCo `tip` siteがtimeout前にtarget tolerance内へ入り、
 predeclared dwell intervalの間そこへ留まることとする。hold、rejection、stale input、unavailable measurementはsuccessではない。
 
-control conditionは`requested_control_frame=world`と`requested_control_frame=tool`である。両conditionは同じinput
+control conditionは`requested_control_frame=world`と`requested_control_frame=tool`である。各conditionのControl Mapping Pluginは
+explicitなversioned comparison family identityとmapping semantics identityを持ち、family identityだけを一致させた
+unrelated strategyの組合せは許可しない。両conditionは同じinput
 source、physicalまたはnormalized input range、speed/gain、deadzone、maximum per-step delta、update cadence、target
 distance/tolerance/timeout、initial condition、visual feedback、camera、safety ruleを使う。変更するのはrequested
 control frameだけである。
@@ -142,6 +144,9 @@ R7-G-P1 / #405は、data collection前にmanifestのschema、canonical bytes、r
 identity、plugin capability / role / evidence、neutral initial-state、world/tool shared invariantsを
 software-onlyで検証するpre-run gateを追加する。このgateは`compose_experiment()`を呼ぶが、model load、
 physics step、fixture playback、measured reachability、task outcome、metric妥当性を実行・証明しない。
+manifestのsoftware revisionはactual startup `SoftwareExecutionIdentity`とexact matchし、Robot Bundleの
+versioned canonical initial-state contract（identity、keyframe、qpos、tip、orientation、frame、unit、quaternion order）とも
+一致しなければならない。
 したがって#405の`READY`は「runnerへ渡せる静的configuration identityがfreezeされた」ことだけを意味し、
 下記のmeasured MuJoCo reachability / progress条件の成立を意味しない。
 

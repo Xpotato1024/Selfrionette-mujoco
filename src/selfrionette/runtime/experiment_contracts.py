@@ -166,7 +166,7 @@ class ParameterContract:
                     f"plugin parameter {name!r} must be {expected.__name__}, "
                     "not bool"
                 )
-            if not isinstance(value, expected):
+            if not _parameter_value_matches(expected, value):
                 raise ValueError(
                     f"plugin parameter {name!r} must be {expected.__name__}, "
                     f"got {type(value).__name__}"
@@ -177,6 +177,20 @@ class ParameterContract:
         return frozenset(
             field.name for field in self.fields if field.condition_specific
         )
+
+
+def _parameter_value_matches(expected: type, value: object) -> bool:
+    """Match frozen recursive JSON values against the generic parameter contract."""
+
+    if expected is list:
+        return isinstance(value, tuple)
+    if expected is tuple:
+        return isinstance(value, tuple)
+    if expected is dict:
+        return isinstance(value, Mapping)
+    if expected is Mapping:
+        return isinstance(value, Mapping)
+    return isinstance(value, expected)
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -350,12 +364,27 @@ class ControlMappingPlugin:
     parameter_contract: ParameterContract = ParameterContract()
     produced_evidence: frozenset[VersionedIdentity] = field(default_factory=frozenset)
     control_frame: str | None = None
+    comparison_family_identity: VersionedIdentity | None = None
+    mapping_semantics_identity: VersionedIdentity | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.strategy, ControlMappingStrategy):
             raise TypeError("control mapping plugin requires a typed mapping strategy")
         if self.control_frame is not None and self.control_frame not in {"world", "tool"}:
             raise ValueError("control mapping control_frame must be 'world' or 'tool'")
+        for name, identity in (
+            ("comparison_family_identity", self.comparison_family_identity),
+            ("mapping_semantics_identity", self.mapping_semantics_identity),
+        ):
+            if identity is not None and not isinstance(identity, VersionedIdentity):
+                raise TypeError(f"{name} must use VersionedIdentity")
+        if self.mapping_semantics_identity is not None:
+            strategy_identity = getattr(self.strategy, "mapping_semantics_identity", None)
+            if strategy_identity != self.mapping_semantics_identity:
+                raise ValueError(
+                    "mapping strategy semantic identity mismatch: "
+                    "strategy and plugin must declare the same VersionedIdentity"
+                )
 
 
 @dataclass(frozen=True, slots=True)
