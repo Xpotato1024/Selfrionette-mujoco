@@ -7,12 +7,12 @@ from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime import (
     RuntimeConfig,
     RuntimePipeline,
-    build_mujoco_pipeline,
     build_replay_mujoco_pipeline,
     build_runtime_input_source_step_loop_plan,
     select_runtime_input_source,
 )
-from selfrionette.runtime.fast_arm_joint_limits import FastArmJointLimitGuard
+from tests.support.runtime_pipeline_builders import build_test_mujoco_pipeline
+from selfrionette.plugins.robots.fast_arm.feasibility import FastArmJointLimitGuard
 from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
 from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
 from generic_qpos_test_doubles import RejectingGenericQposGuard
@@ -41,7 +41,7 @@ def test_generic_pipeline_accepts_non_fast_arm_model_without_fast_arm_config(tmp
     model_path = _write_minimal_model(tmp_path)
     config = RuntimeConfig(joint_limit_config_path=tmp_path / "missing-fast-arm-limits.toml")
 
-    pipeline = build_mujoco_pipeline(model_path=model_path, config=config)
+    pipeline = build_test_mujoco_pipeline(model_path=model_path, config=config)
 
     assert isinstance(pipeline, RuntimePipeline)
     assert isinstance(pipeline.simulator, HeadlessMuJoCoSimulator)
@@ -131,7 +131,6 @@ def test_generic_runtime_modules_do_not_import_fast_arm_limit_implementation() -
     for relative_path in (
         "pipeline.py",
         "input_safety.py",
-        "mujoco_pipeline.py",
         "replay_mujoco_pipeline.py",
     ):
         source = (root / relative_path).read_text(encoding="utf-8")

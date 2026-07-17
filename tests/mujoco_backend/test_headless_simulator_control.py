@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import pytest
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.mujoco_backend.stubs import NoOpMuJoCoSimulator
+from tests.support.mujoco_doubles import NoOpMuJoCoSimulator
 from selfrionette.schemas import JointCommand, MotionCommand
 
 
 def test_headless_simulator_reports_generic_model_joint_contract_mismatch() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     command = MotionCommand(timestamp_s=1.0, joint=JointCommand(joint_angles_rad=(0.1, 0.2, 0.3)))
 
     simulator.apply_command(command)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+
 from pathlib import Path
 
 
@@ -11,7 +13,6 @@ def test_generic_runtime_files_do_not_import_fast_arm_implementation() -> None:
     for name in (
         "config.py",
         "pipeline.py",
-        "mujoco_pipeline.py",
         "replay_mujoco_pipeline.py",
         "qpos_feasibility.py",
         "robot_plugin.py",
@@ -25,9 +26,9 @@ def test_generic_runtime_files_do_not_import_fast_arm_implementation() -> None:
     simulator_source = (
         ROOT / "src" / "selfrionette" / "mujoco_backend" / "simulator.py"
     ).read_text(encoding="utf-8")
-    assert "selfrionette.robots.fast_arm" not in simulator_source
+    assert "selfrionette.plugins.robots.fast_arm.profile" not in simulator_source
     assert "default_fast_arm_scene_path" not in simulator_source
-    assert "FAST_ARM_INITIAL_KEYFRAME_NAME" not in simulator_source
+    assert "FAST_ARM_ROBOT_PROFILE.initial_keyframe_name" not in simulator_source
 
 
 def test_generic_viewer_renderer_and_qpos_sync_do_not_embed_fast_arm() -> None:
@@ -39,9 +40,7 @@ def test_generic_viewer_renderer_and_qpos_sync_do_not_embed_fast_arm() -> None:
 
 def test_profile_registries_do_not_use_arbitrary_dynamic_imports() -> None:
     paths = (
-        ROOT / "src" / "selfrionette" / "robot_registry.py",
         ROOT / "src" / "selfrionette" / "plugins" / "catalog.py",
-        ROOT / "src" / "selfrionette" / "runtime" / "robot_plugin_registry.py",
         ROOT / "apps" / "mujoco-viewer" / "src" / "robot-profiles" / "registry.ts",
     )
     for path in paths:

@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+
 import asyncio
 import pytest
 
 from selfrionette.motion import InputIntentMotionGenerator
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, default_fast_arm_scene_path
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime import RuntimePipeline, build_replay_mujoco_pipeline
 from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
 
 
 def test_build_replay_mujoco_pipeline_returns_runtime_pipeline() -> None:
-    pipeline = build_replay_mujoco_pipeline(model_path=default_fast_arm_scene_path())
+    pipeline = build_replay_mujoco_pipeline(model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     assert isinstance(pipeline, RuntimePipeline)
     assert isinstance(pipeline.motion_generator, InputIntentMotionGenerator)
@@ -24,7 +26,7 @@ def test_run_once_replays_frame_into_mujoco_state() -> None:
         timestamp_s=3.5,
         metadata={"case": "R6-A-P1"},
     )
-    pipeline = build_replay_mujoco_pipeline(frames=(frame,), model_path=default_fast_arm_scene_path())
+    pipeline = build_replay_mujoco_pipeline(frames=(frame,), model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     state = asyncio.run(pipeline.run_once())
 
@@ -38,7 +40,7 @@ def test_run_once_replays_frame_into_mujoco_state() -> None:
 
 def test_motion_command_reaches_simulator() -> None:
     frame = RawInputFrame(source="replay", timestamp_s=7.25)
-    pipeline = build_replay_mujoco_pipeline(frames=(frame,), model_path=default_fast_arm_scene_path())
+    pipeline = build_replay_mujoco_pipeline(frames=(frame,), model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     asyncio.run(pipeline.run_once())
 
@@ -48,7 +50,7 @@ def test_motion_command_reaches_simulator() -> None:
 
 def test_replay_eof_raises_stop_iteration_without_looping() -> None:
     frame = RawInputFrame(source="replay", timestamp_s=1.0)
-    pipeline = build_replay_mujoco_pipeline(frames=(frame,), loop=False, model_path=default_fast_arm_scene_path())
+    pipeline = build_replay_mujoco_pipeline(frames=(frame,), loop=False, model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     asyncio.run(pipeline.run_once())
 
@@ -65,7 +67,7 @@ def test_replay_eof_raises_stop_iteration_without_looping() -> None:
 
 def test_custom_dt_s_is_forwarded_to_simulator() -> None:
     frame = RawInputFrame(source="replay", timestamp_s=2.0)
-    pipeline = build_replay_mujoco_pipeline(frames=(frame,), model_path=default_fast_arm_scene_path())
+    pipeline = build_replay_mujoco_pipeline(frames=(frame,), model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     asyncio.run(pipeline.run_once(dt_s=0.125))
 

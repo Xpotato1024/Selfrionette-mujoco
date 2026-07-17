@@ -12,8 +12,7 @@ from selfrionette.robot_profile import (
     RobotProfile,
     robot_profile_runtime_metadata,
 )
-from selfrionette.robot_registry import (
-    ImmutableRegistry,
+from selfrionette.plugins.catalog import (
     registered_robot_profile_ids,
     resolve_robot_profile,
 )
@@ -23,10 +22,13 @@ from selfrionette.plugins.robots.fast_arm.runtime import (
     FastArmRuntimePlugin,
 )
 from selfrionette.runtime import RuntimeConfig, build_concrete_mujoco_pipeline
-from selfrionette.runtime.robot_plugin_registry import (
+from selfrionette.plugins.catalog import (
     resolve_robot_runtime,
     registered_robot_runtime_plugin_ids,
     resolve_robot_runtime_plugin,
+)
+from selfrionette.runtime.robot_resolution import (
+    ImmutableRegistry,
     validate_robot_profile_plugin_consistency,
 )
 from selfrionette.transport import mujoco_state_to_payload

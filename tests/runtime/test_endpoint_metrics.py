@@ -232,6 +232,7 @@ def test_build_runtime_endpoint_evaluation_payload_from_state_prefers_state_meta
         state=state,
         motion_command=motion_command,
         fk_solver=FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0)),
+        endpoint_site_name="tip",
     )
 
     assert payload is not None
@@ -264,6 +265,7 @@ def test_build_runtime_endpoint_evaluation_payload_from_state_uses_target_positi
         state=state,
         motion_command=motion_command,
         fk_solver=FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0)),
+        endpoint_site_name="tip",
     )
 
     assert payload is not None
@@ -294,6 +296,7 @@ def test_build_runtime_endpoint_evaluation_payload_from_state_returns_none_for_f
         state=state,
         motion_command=motion_command,
         fk_solver=solver,
+        endpoint_site_name="tip",
     )
 
     assert payload is None

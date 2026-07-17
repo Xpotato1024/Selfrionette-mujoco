@@ -7,7 +7,7 @@ from typing import Protocol
 
 from selfrionette.kinematics import ForwardKinematicsSolver
 from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoSiteEndpointEvaluation
-from selfrionette.mujoco_backend.endpoint_extraction import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.mujoco_backend.endpoint_extraction import extract_mujoco_site_endpoint_from_state
 from selfrionette.runtime.evaluation import RuntimeForwardKinematicsEvaluation, evaluate_fk_endpoint_from_qpos
 from selfrionette.schemas import MotionCommand, MuJoCoState, Vector3
 from selfrionette.transport.base import StatePublisher
@@ -214,6 +214,7 @@ def build_runtime_endpoint_evaluation_payload_from_state(
     state: MuJoCoState,
     motion_command: MotionCommand | None,
     fk_solver: ForwardKinematicsSolver,
+    endpoint_site_name: str,
     solver_joint_count: int | None = None,
 ) -> dict[str, object] | None:
     if motion_command is None or motion_command.joint is None:
@@ -229,7 +230,11 @@ def build_runtime_endpoint_evaluation_payload_from_state(
             motion_command.joint.joint_angles_rad,
             solver_joint_count=solver_joint_count,
         )
-        site_evaluation = extract_fast_arm_tip_site_endpoint_from_state(state)
+        site_evaluation = extract_mujoco_site_endpoint_from_state(
+            state,
+            site_name=endpoint_site_name,
+            role="endpoint",
+        )
     except ValueError:
         return None
 
@@ -250,6 +255,7 @@ class EndpointEvaluationStatePublisher:
     publisher: StatePublisher
     simulator: _CommandSource
     fk_solver: ForwardKinematicsSolver
+    endpoint_site_name: str
     solver_joint_count: int | None = None
 
     def _annotate_state(self, state: MuJoCoState) -> MuJoCoState:
@@ -260,6 +266,7 @@ class EndpointEvaluationStatePublisher:
             state=state,
             motion_command=self.simulator.last_command,
             fk_solver=self.fk_solver,
+            endpoint_site_name=self.endpoint_site_name,
             solver_joint_count=self.solver_joint_count,
         )
         if endpoint_evaluation is None:
@@ -278,12 +285,14 @@ def build_endpoint_evaluation_state_publisher(
     *,
     simulator: _CommandSource,
     fk_solver: ForwardKinematicsSolver,
+    endpoint_site_name: str,
     solver_joint_count: int | None = None,
 ) -> EndpointEvaluationStatePublisher:
     return EndpointEvaluationStatePublisher(
         publisher=publisher,
         simulator=simulator,
         fk_solver=fk_solver,
+        endpoint_site_name=endpoint_site_name,
         solver_joint_count=solver_joint_count,
     )
 

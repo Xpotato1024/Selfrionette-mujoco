@@ -7,6 +7,24 @@ from dataclasses import dataclass, field
 from selfrionette.schemas import JointCommand, Vector3
 
 
+class ZeroForwardKinematicsSolver:
+    """Return a zero endpoint for explicit negative-control tests."""
+
+    def forward(self, joint_angles_rad: tuple[float, ...]) -> Vector3:
+        return (0.0, 0.0, 0.0)
+
+
+class ZeroInverseKinematicsSolver:
+    """Return an empty command for explicit negative-control tests."""
+
+    def solve(
+        self,
+        target_position_m: Vector3,
+        seed_joint_angles_rad: tuple[float, ...] | None = None,
+    ) -> JointCommand:
+        return JointCommand()
+
+
 @dataclass(frozen=True, slots=True)
 class FixedForwardKinematicsSolver:
     """Return one configured endpoint and record every exact qpos input."""
@@ -104,4 +122,6 @@ __all__ = [
     "FixedForwardKinematicsSolver",
     "FixedInverseKinematicsSolver",
     "SeedSensitiveInverseKinematicsSolver",
+    "ZeroForwardKinematicsSolver",
+    "ZeroInverseKinematicsSolver",
 ]

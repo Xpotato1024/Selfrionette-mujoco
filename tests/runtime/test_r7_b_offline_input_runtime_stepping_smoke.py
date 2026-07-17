@@ -19,7 +19,7 @@ from selfrionette.runtime.robot_provider_adapters import (
     RuntimeQposFeasibilityProvider,
 )
 from selfrionette.schemas import MuJoCoState, RawInputFrame
-from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 
 
 @dataclass

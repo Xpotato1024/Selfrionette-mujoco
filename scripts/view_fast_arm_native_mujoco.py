@@ -13,7 +13,8 @@ if str(SRC_DIR) not in sys.path:
 import mujoco
 import mujoco.viewer
 
-from selfrionette.mujoco_backend import default_fast_arm_scene_path, load_mujoco_model
+from selfrionette.mujoco_backend import load_mujoco_model
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 
 
 def _positive_index(value: str) -> int:
@@ -35,7 +36,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         type=_model_path,
-        default=default_fast_arm_scene_path(),
+        default=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
         help="path to the MuJoCo XML scene to load",
     )
     parser.add_argument("--key-index", type=_positive_index, default=None, help="optional keyframe index to apply")

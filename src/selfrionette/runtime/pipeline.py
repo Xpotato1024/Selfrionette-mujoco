@@ -1,4 +1,4 @@
-"""Runtime composition module with a compatibility noop builder."""
+"""Generic RuntimePipeline composition contract."""
 
 from __future__ import annotations
 
@@ -6,16 +6,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from selfrionette.input_interpreters import InputInterpreter
-from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
 from selfrionette.input_sources import InputSource
-from selfrionette.input_sources.stubs import StaticInputSource
 from selfrionette.motion import MotionGenerator
-from selfrionette.motion.stubs import NoOpMotionGenerator
 from selfrionette.mujoco_backend import MuJoCoSimulator
-from selfrionette.mujoco_backend.stubs import NoOpMuJoCoSimulator
-from selfrionette.schemas import MuJoCoState, RawInputFrame
+from selfrionette.schemas import MuJoCoState
 from selfrionette.transport import StatePublisher
-from selfrionette.transport.stubs import NoOpStatePublisher
 
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
@@ -76,20 +71,3 @@ class RuntimePipeline:
             )
         await self.publisher.publish(state)
         return state
-
-
-def build_noop_pipeline(
-    frame: RawInputFrame | None = None,
-    config: RuntimeConfig | None = None,
-) -> RuntimePipeline:
-    runtime_config = RuntimeConfig() if config is None else config
-    raw_frame = frame if frame is not None else RawInputFrame(source="noop", timestamp_s=0.0)
-
-    return RuntimePipeline(
-        config=runtime_config,
-        input_source=StaticInputSource(raw_frame),
-        input_interpreter=NoOpInputInterpreter(),
-        motion_generator=NoOpMotionGenerator(),
-        simulator=NoOpMuJoCoSimulator(),
-        publisher=NoOpStatePublisher(),
-    )

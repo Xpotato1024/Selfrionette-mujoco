@@ -13,7 +13,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from selfrionette.input_sources import ViewerInputSource
-from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.runtime import (
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
@@ -22,7 +22,6 @@ from selfrionette.runtime import (
 )
 from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
 from selfrionette.transport.payload import mujoco_state_to_payload
-from selfrionette.transport.stubs import NoOpStatePublisher
 
 
 def _message(timestamp_s: float, *keys: str, zero: bool = False) -> ViewerControlMessage:
@@ -43,7 +42,6 @@ def _build_plan(steps: int) -> tuple[ViewerInputSource, object, tuple[float, ...
     source = ViewerInputSource(clock=lambda: 0.0)
     plan = build_runtime_input_source_step_loop_plan(
         select_runtime_input_source("viewer", steps=steps),
-        publisher=NoOpStatePublisher(),
         viewer_clock=lambda: 0.0,
         viewer_input_source=source,
     )

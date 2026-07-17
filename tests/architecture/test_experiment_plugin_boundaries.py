@@ -14,7 +14,7 @@ def test_generic_experiment_contracts_do_not_import_robot_specific_implementatio
         "experiment_registry.py",
         "experiment_composition.py",
         "robot_bundle.py",
-        "default_robot_providers.py",
+        "robot_provider_adapters.py",
     )
     forbidden = (
         "fast_arm",

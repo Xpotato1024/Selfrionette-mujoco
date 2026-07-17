@@ -24,7 +24,7 @@ MIGRATED_GENERIC_TESTS = (
 FORBIDDEN_DOUBLE_IMPORTS = {
     "selfrionette.kinematics.fk",
     "selfrionette.kinematics.ik",
-    "selfrionette.kinematics.fast_arm_endpoint",
+    "selfrionette.plugins.robots.fast_arm.kinematics",
     "selfrionette.mujoco_backend",
     "selfrionette.runtime",
 }

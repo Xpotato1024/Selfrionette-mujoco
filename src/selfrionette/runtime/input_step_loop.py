@@ -41,14 +41,22 @@ from selfrionette.runtime.robot_bundle import (
 )
 from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
-from selfrionette.runtime.mujoco_pipeline import build_mujoco_pipeline
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.runtime.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInputFrame
 from selfrionette.transport import StatePublisher
-from selfrionette.transport.stubs import NoOpStatePublisher
 
 VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD = 0.2
+
+
+class _InputLoopStatePublisher:
+    """Retain the latest local state when no external publisher is configured."""
+
+    def __init__(self) -> None:
+        self.last_state: MuJoCoState | None = None
+
+    async def publish(self, state: MuJoCoState) -> None:
+        self.last_state = state
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,7 +167,7 @@ def build_runtime_input_source_step_loop_plan(
             config=runtime_config,
             model_path=resolved_model_path,
             loop=selection.loop,
-            publisher=publisher if publisher is not None else NoOpStatePublisher(),
+            publisher=publisher if publisher is not None else _InputLoopStatePublisher(),
         )
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
@@ -191,14 +199,16 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if selection.source_name == "noop":
-        pipeline = build_mujoco_pipeline(
-            frame=(
-                selection.frames[0]
+        pipeline = build_replay_mujoco_pipeline(
+            frames=(
+                selection.frames
                 if selection.frames
-                else RawInputFrame(source="noop", timestamp_s=0.0)
+                else (RawInputFrame(source="noop", timestamp_s=0.0),)
             ),
             config=runtime_config,
             model_path=resolved_model_path,
+            loop=True,
+            publisher=publisher,
             initial_keyframe_name=initial_state.source_id,
             robot_profile_metadata=robot_profile_runtime_metadata(robot_bundle.profile),
         )
@@ -207,9 +217,6 @@ def build_runtime_input_source_step_loop_plan(
             model=pipeline.simulator.model,
             config_path=runtime_config.joint_limit_config_path,
         )
-        if publisher is not None:
-            pipeline.publisher = publisher
-
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
             pipeline=pipeline,
@@ -236,7 +243,7 @@ def build_runtime_input_source_step_loop_plan(
             config=runtime_config,
             model_path=resolved_model_path,
             loop=selection.loop,
-            publisher=publisher if publisher is not None else NoOpStatePublisher(),
+            publisher=publisher if publisher is not None else _InputLoopStatePublisher(),
             discontinuity_threshold_rad=VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
             discontinuity_threshold_label="viewer endpoint continuity threshold",
         )

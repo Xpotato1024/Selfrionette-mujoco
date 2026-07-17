@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.runtime import run_fast_arm_endpoint_motion_sanity
+from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import run_fast_arm_endpoint_motion_sanity
 
 
 def _result_by_label():

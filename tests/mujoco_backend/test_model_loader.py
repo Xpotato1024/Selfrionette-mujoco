@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+
 from pathlib import Path
 
 import pytest
 
-from selfrionette.mujoco_backend import default_fast_arm_scene_path, load_mujoco_model
-from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
+from selfrionette.mujoco_backend import load_mujoco_model
 
 
-def test_default_fast_arm_scene_path_points_to_scene_xml() -> None:
-    path = default_fast_arm_scene_path()
+def test_fast_arm_profile_model_resource_points_to_scene_xml() -> None:
+    path = FAST_ARM_ROBOT_PROFILE.mujoco_model_asset
 
     assert path.name == "scene.xml"
     assert path.is_file()
@@ -17,23 +18,23 @@ def test_default_fast_arm_scene_path_points_to_scene_xml() -> None:
 
 def test_load_mujoco_model_loads_default_scene() -> None:
     bundle = load_mujoco_model(
-        default_fast_arm_scene_path(),
-        initial_keyframe_name=FAST_ARM_INITIAL_KEYFRAME_NAME,
+        FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
+        initial_keyframe_name=FAST_ARM_ROBOT_PROFILE.initial_keyframe_name,
     )
 
-    assert bundle.model_path == default_fast_arm_scene_path().resolve()
+    assert bundle.model_path == FAST_ARM_ROBOT_PROFILE.mujoco_model_asset.resolve()
     assert bundle.model is not None
     assert bundle.data is not None
     assert tuple(bundle.data.qpos) == pytest.approx(
-        tuple(bundle.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos)
+        tuple(bundle.model.key(FAST_ARM_ROBOT_PROFILE.initial_keyframe_name).qpos)
     )
 
 
 def test_generic_model_loader_does_not_infer_keyframe_from_model_path() -> None:
-    bundle = load_mujoco_model(default_fast_arm_scene_path())
+    bundle = load_mujoco_model(FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     assert tuple(bundle.data.qpos) != pytest.approx(
-        tuple(bundle.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos)
+        tuple(bundle.model.key(FAST_ARM_ROBOT_PROFILE.initial_keyframe_name).qpos)
     )
 
 

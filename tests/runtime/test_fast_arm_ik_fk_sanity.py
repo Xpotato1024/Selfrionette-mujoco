@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import json
 from pathlib import Path
 
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, extract_fast_arm_tip_site_endpoint_from_state
-from selfrionette.runtime.endpoint_motion_sanity import (
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
     FastArmIkFkSanityDiagnostic,
     _fast_arm_ik_fk_sanity_target_fixtures,
     _ik_fk_error_vector_m,
@@ -58,7 +62,7 @@ def test_fast_arm_ik_fk_sanity_records_include_target_endpoint_ik_input_fk_outpu
 
 
 def test_fast_arm_ik_fk_sanity_target_fixture_helper_uses_default_tip_position_and_is_deterministic() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     default_tip_position_m = extract_fast_arm_tip_site_endpoint_from_state(simulator.snapshot()).position_m
 
     fixtures = _fast_arm_ik_fk_sanity_target_fixtures()

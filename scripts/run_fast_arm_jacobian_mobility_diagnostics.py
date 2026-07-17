@@ -10,7 +10,7 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from selfrionette.runtime.jacobian_mobility_diagnostics import run_fast_arm_jacobian_mobility_diagnostics
+from selfrionette.plugins.robots.fast_arm.diagnostics.jacobian_mobility import run_fast_arm_jacobian_mobility_diagnostics
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import pytest
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
@@ -36,7 +38,7 @@ def test_motion_command_target_position_feedback_is_also_not_qpos_boundary() -> 
 
 
 def test_headless_simulator_apply_qpos_command_updates_snapshot() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
 
     simulator.apply_qpos_command(JointCommand(joint_angles_rad=(0.1, -0.2, 0.3, -0.4)))
     state = simulator.snapshot()

@@ -7,31 +7,22 @@ from pathlib import Path
 
 import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
 from selfrionette.input_interpreters import ReplayInputInterpreter
-from selfrionette.input_interpreters.stubs import NoOpInputInterpreter
+from tests.support.input_interpreter_doubles import NoOpInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
-from selfrionette.input_sources.stubs import StaticInputSource
-from selfrionette.kinematics import FastArmEndpointInverseKinematicsSolver
-from selfrionette.kinematics.stubs import ZeroInverseKinematicsSolver
+from tests.support.input_source_doubles import StaticInputSource
+from selfrionette.plugins.robots.fast_arm.kinematics import FastArmEndpointInverseKinematicsSolver
+from tests.support.kinematics_solver_doubles import ZeroInverseKinematicsSolver
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.mujoco_backend.stubs import NoOpMuJoCoSimulator
+from tests.support.mujoco_doubles import NoOpMuJoCoSimulator
 from selfrionette.runtime import EndpointEvaluationStatePublisher, build_concrete_mujoco_pipeline, run_replay_mujoco_dry_run, run_replay_mujoco_websocket_publisher
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState
 from selfrionette.transport import WebSocketStatePublisher
-from selfrionette.transport.stubs import NoOpStatePublisher
+from tests.support.transport_doubles import NoOpStatePublisher
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PRODUCTION_LIKE_RUNTIME_MODULES = (
-    ROOT / "src" / "selfrionette" / "runtime" / "concrete_mujoco_pipeline.py",
-    ROOT / "src" / "selfrionette" / "runtime" / "replay_mujoco_pipeline.py",
-    ROOT / "src" / "selfrionette" / "runtime" / "dry_run.py",
-    ROOT / "src" / "selfrionette" / "runtime" / "websocket_publisher_runner.py",
-)
-COMPATIBILITY_RUNTIME_MODULES = (
-    ROOT / "src" / "selfrionette" / "runtime" / "pipeline.py",
-    ROOT / "src" / "selfrionette" / "runtime" / "mujoco_pipeline.py",
-)
+PRODUCTION_SOURCE_MODULES = tuple((ROOT / "src" / "selfrionette").rglob("*.py"))
 FORBIDDEN_RUNTIME_SYMBOLS = (
     "StaticInputSource",
     "NoOpInputInterpreter",
@@ -42,29 +33,14 @@ FORBIDDEN_RUNTIME_SYMBOLS = (
     "ZeroInverseKinematicsSolver",
 )
 FORBIDDEN_RUNTIME_MODULES = {
-    "selfrionette.input_sources.stubs",
-    "selfrionette.input_interpreters.stubs",
-    "selfrionette.kinematics.stubs",
-    "selfrionette.motion.stubs",
-    "selfrionette.mujoco_backend.stubs",
-    "selfrionette.transport.stubs",
+    "tests.support.input_source_doubles",
+    "tests.support.input_interpreter_doubles",
+    "tests.support.kinematics_solver_doubles",
+    "tests.support.motion_doubles",
+    "tests.support.mujoco_doubles",
+    "tests.support.transport_doubles",
 }
 
-COMPATIBILITY_RUNTIME_STUB_IMPORTS = {
-    ROOT / "src" / "selfrionette" / "runtime" / "pipeline.py": {
-        "selfrionette.input_interpreters.stubs": {"NoOpInputInterpreter"},
-        "selfrionette.input_sources.stubs": {"StaticInputSource"},
-        "selfrionette.motion.stubs": {"NoOpMotionGenerator"},
-        "selfrionette.mujoco_backend.stubs": {"NoOpMuJoCoSimulator"},
-        "selfrionette.transport.stubs": {"NoOpStatePublisher"},
-    },
-    ROOT / "src" / "selfrionette" / "runtime" / "mujoco_pipeline.py": {
-        "selfrionette.input_interpreters.stubs": {"NoOpInputInterpreter"},
-        "selfrionette.input_sources.stubs": {"StaticInputSource"},
-        "selfrionette.motion.stubs": {"NoOpMotionGenerator"},
-        "selfrionette.transport.stubs": {"NoOpStatePublisher"},
-    },
-}
 
 
 class RecordingPublisher:
@@ -102,8 +78,8 @@ class _DummyPipeline:
         return object()
 
 
-def test_production_like_runtime_modules_do_not_reference_stub_symbols() -> None:
-    for path in PRODUCTION_LIKE_RUNTIME_MODULES:
+def test_production_source_does_not_reference_test_double_symbols_or_modules() -> None:
+    for path in PRODUCTION_SOURCE_MODULES:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module is not None:
@@ -119,18 +95,6 @@ def test_production_like_runtime_modules_do_not_reference_stub_symbols() -> None
         source = path.read_text(encoding="utf-8")
         offending = [symbol for symbol in FORBIDDEN_RUNTIME_SYMBOLS if symbol in source]
         assert not offending, f"{path.relative_to(ROOT)} references forbidden stub symbols: {offending}"
-
-
-def test_compatibility_runtime_modules_use_stub_namespace_explicitly() -> None:
-    for path in COMPATIBILITY_RUNTIME_MODULES:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        imported_stub_modules: dict[str, set[str]] = {}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module is not None:
-                if node.module.endswith(".stubs"):
-                    imported_stub_modules[node.module] = {alias.name for alias in node.names}
-
-        assert imported_stub_modules == COMPATIBILITY_RUNTIME_STUB_IMPORTS[path]
 
 
 def test_build_concrete_mujoco_pipeline_uses_concrete_components() -> None:

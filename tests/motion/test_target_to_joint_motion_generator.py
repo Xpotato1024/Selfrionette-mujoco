@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from selfrionette.kinematics import (
+from selfrionette.plugins.robots.fast_arm.kinematics import (
     FastArmEndpointForwardKinematicsSolver,
     FastArmEndpointInverseKinematicsSolver,
 )

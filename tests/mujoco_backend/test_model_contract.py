@@ -1,22 +1,23 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+
 import pytest
 
-from selfrionette.mujoco_backend import (
-    default_fast_arm_scene_path,
+from selfrionette.mujoco_backend import load_mujoco_model
+from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
+from selfrionette.plugins.robots.fast_arm import model_contract as model_contract_module
+from selfrionette.plugins.robots.fast_arm.model_contract import (
     fast_arm_model_name_contract,
-    load_mujoco_model,
     resolve_fast_arm_end_effector_reference,
     resolve_fast_arm_tip_reference,
     resolve_fast_arm_wrist_reference,
     validate_fast_arm_model_name_contract,
 )
-from selfrionette.mujoco_backend import model_contract as model_contract_module
-from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 
 
 def test_fast_arm_model_name_contract_matches_default_scene() -> None:
-    bundle = load_mujoco_model(default_fast_arm_scene_path())
+    bundle = load_mujoco_model(FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
     contract = validate_fast_arm_model_name_contract(bundle.model)
 
     assert contract == fast_arm_model_name_contract()

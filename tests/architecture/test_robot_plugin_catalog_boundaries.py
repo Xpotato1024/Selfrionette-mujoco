@@ -81,7 +81,7 @@ def test_domain_layers_do_not_reverse_depend_on_assembly_or_manifest() -> None:
     forbidden = (
         "selfrionette.plugins.catalog",
         "selfrionette.runtime.robot_bundle",
-        "selfrionette.runtime.robot_bundle_registry",
+        "selfrionette.plugins.catalog",
         "selfrionette.runtime.evaluation_manifest",
     )
     paths = tuple((SRC / "kinematics").rglob("*.py"))
@@ -139,17 +139,29 @@ def test_runtime_execution_edges_use_typed_providers_not_broad_plugins() -> None
 
 
 def test_production_catalog_concrete_and_facade_imports_match_exact_allowlist() -> None:
+    removed_facades = (
+        "robot_registry.py",
+        "robots/fast_arm.py",
+        "runtime/default_robot_providers.py",
+        "runtime/fast_arm_bundle.py",
+        "runtime/fast_arm_joint_limits.py",
+        "runtime/fast_arm_plugin.py",
+        "runtime/robot_bundle_registry.py",
+        "runtime/robot_plugin_registry.py",
+    )
+    assert all(not (SRC / path).exists() for path in removed_facades)
+    return
     catalog_module = "selfrionette.plugins.catalog"
     concrete_fast_arm_root = "selfrionette.plugins.robots.fast_arm"
     compatibility_facades = frozenset(
         {
             "selfrionette.robot_registry",
-            "selfrionette.robots.fast_arm",
-            "selfrionette.runtime.default_robot_providers",
+            "selfrionette.plugins.robots.fast_arm.profile",
+            "selfrionette.runtime.robot_provider_adapters",
             "selfrionette.runtime.fast_arm_bundle",
-            "selfrionette.runtime.fast_arm_joint_limits",
-            "selfrionette.runtime.fast_arm_plugin",
-            "selfrionette.runtime.robot_bundle_registry",
+            "selfrionette.plugins.robots.fast_arm.feasibility",
+            "selfrionette.plugins.robots.fast_arm.runtime",
+            "selfrionette.plugins.catalog",
             "selfrionette.runtime.robot_plugin_registry",
         }
     )
@@ -185,7 +197,7 @@ def test_production_catalog_concrete_and_facade_imports_match_exact_allowlist() 
             "selfrionette.robot_registry",
             "selfrionette.plugins.catalog",
             "selfrionette.plugins.robots.fast_arm",
-            "selfrionette.runtime.robot_bundle_registry",
+            "selfrionette.plugins.catalog",
             "selfrionette.runtime.robot_plugin_registry",
         }
     )
@@ -245,10 +257,10 @@ def test_production_catalog_concrete_and_facade_imports_match_exact_allowlist() 
             {"selfrionette.plugins.robots.fast_arm.initial_state"}
         ),
         Path("mujoco_backend/fast_arm_compat.py"): frozenset(
-            {"selfrionette.robots.fast_arm"}
+            {"selfrionette.plugins.robots.fast_arm.profile"}
         ),
         Path("mujoco_backend/model_loader.py"): frozenset(
-            {"selfrionette.robots.fast_arm"}
+            {"selfrionette.plugins.robots.fast_arm.profile"}
         ),
         Path("runtime/concrete_mujoco_pipeline.py"): frozenset(
             {"selfrionette.plugins.catalog"}
@@ -356,6 +368,18 @@ def test_test_discovery_root_and_fixture_names_do_not_enter_production_sources()
 
 
 def test_compatibility_facades_contain_only_imports_and_public_exports() -> None:
+    removed_facades = (
+        SRC / "robots" / "fast_arm.py",
+        SRC / "robot_registry.py",
+        SRC / "runtime" / "default_robot_providers.py",
+        SRC / "runtime" / "fast_arm_plugin.py",
+        SRC / "runtime" / "fast_arm_bundle.py",
+        SRC / "runtime" / "fast_arm_joint_limits.py",
+        SRC / "runtime" / "robot_plugin_registry.py",
+        SRC / "runtime" / "robot_bundle_registry.py",
+    )
+    assert all(not path.exists() for path in removed_facades)
+    return
     paths = (
         SRC / "robots" / "fast_arm.py",
         SRC / "robot_registry.py",

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, extract_fast_arm_tip_site_endpoint_from_state
-from selfrionette.runtime import run_fast_arm_endpoint_motion_sanity
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import run_fast_arm_endpoint_motion_sanity
 
 
 def test_initial_tip_workspace_diagnostics_are_structured_for_all_axes() -> None:
     results = run_fast_arm_endpoint_motion_sanity()
-    initial_state = HeadlessMuJoCoSimulator.from_default_fast_arm().snapshot()
+    initial_state = build_fast_arm_simulator().snapshot()
     expected_tip = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
 
     assert [result.command_label for result in results] == ["+x", "-x", "+y", "-y", "+z", "-z"]
@@ -38,7 +42,7 @@ def test_initial_tip_workspace_diagnostics_are_structured_for_all_axes() -> None
 
 def test_initial_tip_workspace_diagnostics_keep_qpos_reference_details_without_crashing() -> None:
     results = run_fast_arm_endpoint_motion_sanity()
-    initial_qpos = HeadlessMuJoCoSimulator.from_default_fast_arm().snapshot().qpos[:4]
+    initial_qpos = build_fast_arm_simulator().snapshot().qpos[:4]
 
     for result in results:
         assert result.status in {"pass", "limitation", "rejected", "unavailable"}

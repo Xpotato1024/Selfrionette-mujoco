@@ -10,17 +10,15 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from selfrionette.runtime import (
-    run_fast_arm_endpoint_motion_sanity,
-    run_fast_arm_endpoint_trajectory_diagnostics,
-    run_fast_arm_local_jacobian_diagnostics,
-)
-from selfrionette.runtime.endpoint_motion_sanity import (
+from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
     build_fast_arm_endpoint_diagnostic_log_rows,
     build_fast_arm_fk_site_consistency_log_rows,
     build_fast_arm_ik_fk_sanity_log_rows,
     run_fast_arm_fk_site_consistency_diagnostics,
     run_fast_arm_ik_fk_sanity_diagnostics,
+    run_fast_arm_endpoint_motion_sanity,
+    run_fast_arm_endpoint_trajectory_diagnostics,
+    run_fast_arm_local_jacobian_diagnostics,
     write_fast_arm_fk_site_consistency_log_jsonl,
     write_fast_arm_endpoint_trajectory_log_csv,
     write_fast_arm_endpoint_trajectory_log_jsonl,

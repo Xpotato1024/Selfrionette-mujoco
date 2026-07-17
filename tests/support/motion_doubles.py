@@ -1,4 +1,4 @@
-"""Test-double namespace for motion stubs."""
+"""Test-only motion doubles."""
 
 from __future__ import annotations
 

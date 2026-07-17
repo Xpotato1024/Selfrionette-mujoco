@@ -118,6 +118,7 @@ def build_concrete_mujoco_pipeline(
             publisher,
             simulator=simulator,
             fk_solver=fk_solver,
+            endpoint_site_name=plugin.profile.endpoint.site_name or "",
             solver_joint_count=plugin.profile.qpos_dimension,
         ),
         qpos_feasibility_guard=qpos_feasibility_provider.build_guard(

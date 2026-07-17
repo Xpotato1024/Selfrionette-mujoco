@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+
 import asyncio
 from math import dist
 
@@ -7,11 +9,10 @@ import pytest
 
 import selfrionette.runtime.concrete_mujoco_pipeline as concrete_pipeline_module
 from selfrionette.motion import TargetToJointMotionGenerator
-from selfrionette.kinematics import FastArmEndpointInverseKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.kinematics import FastArmEndpointInverseKinematicsSolver
 from selfrionette.runtime import EndpointEvaluationStatePublisher, RuntimePipeline, build_concrete_mujoco_pipeline
-from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.schemas import JointCommand, MuJoCoState, RawInputFrame
-from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from generic_qpos_test_doubles import RejectingGenericQposGuard
 
 

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import math
 
 import pytest
 
-from selfrionette.kinematics.fast_arm_endpoint import FastArmMuJoCoModelForwardKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
 from selfrionette.motion import LocalEndpointMotionGenerator
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.schemas import InputIntent, JointCommand
 
@@ -135,7 +139,7 @@ def test_local_endpoint_motion_generator_matches_mujoco_tip_site_for_representat
         endpoint_model="mujoco_model_aligned_tip_site",
     )
     qpos = (0.0, -1.5707963267948966, 0.0, 0.0)
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     simulator.apply_qpos_command(JointCommand(joint_angles_rad=qpos))
     tip_site = extract_fast_arm_tip_site_endpoint_from_state(simulator.snapshot())
 

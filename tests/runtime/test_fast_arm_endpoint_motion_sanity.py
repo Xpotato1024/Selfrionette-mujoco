@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.runtime import FastArmEndpointMotionSanityResult, run_fast_arm_endpoint_motion_sanity
-from selfrionette.runtime import endpoint_motion_sanity as endpoint_motion_sanity_module
+from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import FastArmEndpointMotionSanityResult, run_fast_arm_endpoint_motion_sanity
+from selfrionette.plugins.robots.fast_arm.diagnostics import endpoint_motion_sanity as endpoint_motion_sanity_module
 
 
 def _vector_delta(

@@ -10,12 +10,13 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
-from selfrionette.kinematics.fast_arm_endpoint import (
+from selfrionette.plugins.robots.fast_arm.kinematics import (
     FastArmMuJoCoModelForwardKinematicsSolver,
 )
-from selfrionette.mujoco_backend import FAST_ARM_ARM_BODY_NAMES, HeadlessMuJoCoSimulator
+from selfrionette.plugins.robots.fast_arm.model_contract import FAST_ARM_ARM_BODY_NAMES
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
 from selfrionette.runtime.endpoint_progress import calculate_endpoint_progress
-from selfrionette.runtime.jacobian_mobility_diagnostics import (
+from selfrionette.plugins.robots.fast_arm.diagnostics.jacobian_mobility import (
     CONTROLLED_JOINT_NAMES,
     PoseDiagnostic,
     evaluate_fast_arm_pose_mobility,
@@ -475,7 +476,7 @@ def _ranking_key(
 
 
 def evaluate_fast_arm_neutral_initial_pose_candidates() -> NeutralPoseEvaluation:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     joint_metadata = _joint_metadata(simulator)
     candidates = generate_fast_arm_neutral_pose_candidates(simulator)
     baseline_extension, nominal_reach, shoulder_height, baseline_tip = _model_geometry(

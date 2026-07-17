@@ -110,12 +110,12 @@ def test_sweep_x_programmed_target_module_does_not_import_noop_motion_generator(
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module is not None:
-            assert node.module != "selfrionette.motion.stubs"
+            assert node.module != "tests.support.motion_doubles"
             imported_names = {alias.name for alias in node.names}
             assert "NoOpMotionGenerator" not in imported_names
         elif isinstance(node, ast.Import):
             imported_names = {alias.name for alias in node.names}
-            assert "selfrionette.motion.stubs" not in imported_names
+            assert "tests.support.motion_doubles" not in imported_names
 
     assert "NoOpMotionGenerator" not in source_text
 

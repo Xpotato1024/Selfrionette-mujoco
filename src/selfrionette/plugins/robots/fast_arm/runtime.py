@@ -12,8 +12,9 @@ from selfrionette.plugins.robots.fast_arm.kinematics import (
     FastArmMuJoCoModelForwardKinematicsSolver,
 )
 from selfrionette.motion import LocalEndpointMotionGenerator, TargetToJointMotionGenerator
-from selfrionette.mujoco_backend.model_contract import validate_fast_arm_model_name_contract
+from selfrionette.plugins.robots.fast_arm.model_contract import validate_fast_arm_model_name_contract
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
+from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.feasibility import (
     FastArmJointLimitGuard,
     load_and_validate_fast_arm_joint_limit_config,
@@ -124,4 +125,13 @@ class FastArmRuntimePlugin:
 FAST_ARM_RUNTIME_PLUGIN = FastArmRuntimePlugin()
 
 
-__all__ = ["FAST_ARM_RUNTIME_PLUGIN", "FastArmRuntimePlugin"]
+def build_fast_arm_simulator() -> HeadlessMuJoCoSimulator:
+    """Build the canonical fast_arm model through Profile-owned resources."""
+
+    return HeadlessMuJoCoSimulator.from_model_path(
+        FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
+        initial_keyframe_name=FAST_ARM_ROBOT_PROFILE.initial_keyframe_name,
+    )
+
+
+__all__ = ["FAST_ARM_RUNTIME_PLUGIN", "FastArmRuntimePlugin", "build_fast_arm_simulator"]

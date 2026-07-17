@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import json
 import math
 from pathlib import Path
 
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoSiteEndpointEvaluation
-from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
-from selfrionette.runtime.endpoint_motion_sanity import (
+from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
     _build_fast_arm_fk_site_consistency_diagnostic,
     _fast_arm_fk_site_consistency_qpos_fixtures,
     _vector_norm_m,
@@ -59,9 +64,9 @@ def test_fast_arm_fk_site_consistency_default_qpos_fixture_is_deterministic_and_
     fixtures = _fast_arm_fk_site_consistency_qpos_fixtures()
 
     assert fixtures[0][0] == "default_qpos"
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     assert fixtures[0][1] == pytest.approx(
-        tuple(simulator.model.key(FAST_ARM_INITIAL_KEYFRAME_NAME).qpos),
+        tuple(simulator.model.key(FAST_ARM_ROBOT_PROFILE.initial_keyframe_name).qpos),
         abs=1e-12,
     )
     assert any(label != "default_qpos" and qpos != fixtures[0][1] for label, qpos in fixtures)
@@ -97,7 +102,7 @@ def test_fast_arm_fk_site_consistency_fixed_fixtures_pass_after_model_aligned_fk
 def test_fast_arm_fk_site_consistency_tip_site_is_primary_and_body_reference_is_not_treated_as_primary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     state = simulator.snapshot()
 
     tip_evaluation = extract_fast_arm_tip_site_endpoint_from_state(state)
@@ -112,7 +117,7 @@ def test_fast_arm_fk_site_consistency_tip_site_is_primary_and_body_reference_is_
     )
 
     monkeypatch.setattr(
-        "selfrionette.runtime.endpoint_motion_sanity.extract_fast_arm_tip_site_endpoint_from_state",
+        "selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity.extract_fast_arm_tip_site_endpoint_from_state",
         lambda state: fake_body_reference,
     )
 

@@ -1,4 +1,4 @@
-"""Test-double namespace for MuJoCo backend stubs."""
+"""Test-only MuJoCo backend doubles."""
 
 from __future__ import annotations
 

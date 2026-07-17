@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from selfrionette.mujoco_backend.model_contract import (
+from selfrionette.plugins.robots.fast_arm.model_contract import (
     FAST_ARM_END_EFFECTOR_BODY_NAME,
     FAST_ARM_END_EFFECTOR_SITE_NAME,
 )

@@ -1,4 +1,4 @@
-"""Test-double namespace for input source stubs."""
+"""Test-only input source doubles."""
 
 from __future__ import annotations
 

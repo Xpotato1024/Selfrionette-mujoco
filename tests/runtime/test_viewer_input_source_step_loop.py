@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+
 import asyncio
 from math import dist
 
 import pytest
 
 from selfrionette.input_sources import ViewerInputSource
-from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.runtime import (
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
@@ -14,7 +15,7 @@ from selfrionette.runtime import (
     select_runtime_input_source,
 )
 from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
-from selfrionette.transport.stubs import NoOpStatePublisher
+from tests.support.transport_doubles import NoOpStatePublisher
 
 
 class _ClockSequence:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from selfrionette.runtime import (
+from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
     run_fast_arm_endpoint_motion_sanity,
     run_fast_arm_local_jacobian_diagnostics,
 )

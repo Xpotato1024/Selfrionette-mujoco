@@ -1,4 +1,4 @@
-"""Test-double namespace for transport stubs."""
+"""Test-only transport doubles."""
 
 from __future__ import annotations
 

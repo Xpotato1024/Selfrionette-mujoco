@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 from dataclasses import replace
 import asyncio
 
@@ -92,7 +94,7 @@ def test_fresh_runtime_input_safety_result_leaves_motion_command_unchanged() -> 
 
 
 def test_stale_runtime_input_safety_result_holds_current_qpos_deterministically() -> None:
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     current_state = simulator.snapshot()
     command = MotionCommand(
         timestamp_s=1.0,

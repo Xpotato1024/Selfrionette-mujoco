@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+
 import asyncio
 from pathlib import Path
 
@@ -132,7 +134,7 @@ def test_home_qpos_is_checked_against_the_loaded_config(tmp_path: Path) -> None:
             "[joints.elbow_joint]\nlower_rad = -0.5\nupper_rad = 0.5",
         ),
     )
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
 
     with pytest.raises(ValueError, match="home qpos"):
         load_and_validate_fast_arm_joint_limit_config(path, model=simulator.model)
@@ -211,7 +213,7 @@ def test_runtime_factory_accepts_a_replaced_config_and_validates_it_at_startup(t
             "[joints.sholder_joint_1]\nlower_rad = -0.25\nupper_rad = 0.25",
         ),
     )
-    simulator = HeadlessMuJoCoSimulator.from_default_fast_arm()
+    simulator = build_fast_arm_simulator()
     config = load_and_validate_fast_arm_joint_limit_config(custom_path, model=simulator.model)
     pipeline = build_concrete_mujoco_pipeline(
         config=RuntimeConfig(

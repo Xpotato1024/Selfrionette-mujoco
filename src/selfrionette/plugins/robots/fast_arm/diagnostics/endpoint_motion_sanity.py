@@ -9,21 +9,21 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from selfrionette.input_sources import ReplayInputSource
-from selfrionette.kinematics.fast_arm_endpoint import (
+from selfrionette.plugins.robots.fast_arm.kinematics import (
     FAST_ARM_ENDPOINT_BASE_POSITION_M,
     FAST_ARM_ENDPOINT_LINK_LENGTHS_M,
     FastArmEndpointForwardKinematicsSolver,
     FastArmEndpointInverseKinematicsSolver,
     FastArmMuJoCoModelForwardKinematicsSolver,
 )
-from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, inspect_mujoco_model
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.mujoco_backend import inspect_mujoco_model
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.runtime.evaluation import evaluate_fk_endpoint_from_qpos
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, RawInputFrame, Vector3
-from selfrionette.transport.stubs import NoOpStatePublisher
 
 _DEFAULT_COMMAND_DELTA_M = 0.02
 _BASE_ENDPOINT_SOURCE_INITIAL_TIP = "initial_tip"
@@ -41,6 +41,16 @@ _KNOWN_FK_SITE_CONSISTENCY_STATUS = "pass"
 _KNOWN_FK_SITE_CONSISTENCY_NOTE = "fk_site_consistency_repaired_with_mujoco_model_aligned_fk"
 _TRAJECTORY_DIRECTION_DOT_THRESHOLD = 0.85
 _TRAJECTORY_MOVEMENT_EPSILON_M = 1e-6
+
+
+class _DiagnosticStatePublisher:
+    """Retain diagnostic output locally without performing external I/O."""
+
+    def __init__(self) -> None:
+        self.last_state: MuJoCoState | None = None
+
+    async def publish(self, state: MuJoCoState) -> None:
+        self.last_state = state
 _TRAJECTORY_LOG_COLUMNS = (
     "step",
     "time_s",
@@ -1166,7 +1176,7 @@ def run_fast_arm_joint_axis_mapping_diagnostics(
         raise ValueError("perturbation_rad must be positive")
 
     simulator = (
-        HeadlessMuJoCoSimulator.from_default_fast_arm()
+        build_fast_arm_simulator()
         if model_path is None
         else HeadlessMuJoCoSimulator.from_model_path(model_path)
     )
@@ -1180,7 +1190,7 @@ def run_fast_arm_joint_axis_mapping_diagnostics(
         if len(axis) != 3:
             raise ValueError("mujoco_joint_axis must contain exactly three values")
         result_simulator = (
-            HeadlessMuJoCoSimulator.from_default_fast_arm()
+            build_fast_arm_simulator()
             if model_path is None
             else HeadlessMuJoCoSimulator.from_model_path(model_path)
         )
@@ -1352,7 +1362,7 @@ def sample_fast_arm_viewer_endpoint_workspace(
 
 def _build_fast_arm_simulator(model_path: str | Path | None) -> HeadlessMuJoCoSimulator:
     return (
-        HeadlessMuJoCoSimulator.from_default_fast_arm()
+        build_fast_arm_simulator()
         if model_path is None
         else HeadlessMuJoCoSimulator.from_model_path(model_path)
     )
@@ -1975,7 +1985,7 @@ async def _run_fast_arm_endpoint_motion_sanity_case_async(
             frames=(_initialization_frame(command_label),),
             config=config,
             model_path=model_path,
-            publisher=NoOpStatePublisher(),
+            publisher=_DiagnosticStatePublisher(),
             seed_joint_angles_rad=seed_joint_angles_rad,
         )
     except Exception as exc:  # noqa: BLE001
