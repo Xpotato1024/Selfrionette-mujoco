@@ -31,6 +31,20 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
 - 未接続時のcompatibility path: plugin-owned
   `/mujoco/fast_arm/viewer-profile.json`をlegacy static facade経由でloadする
 
+## WebSocket connectionとlive inputのlifecycle
+
+- `connectionStatus`の所有者はWebSocket lifecycleである。開始前は`connecting`、`onOpen`は`open`、
+  `onClose`は`closed`、`onConnectionError`は`error`、WebSocket無効時は`disabled`を設定する。
+- declaration fetch、digest validation、model / VFS fetch、MuJoCo compile、scene構築はrendererの
+  `status`（`loading` / `ready` / `error`など）だけを更新し、既に`open`になったconnectionを
+  `connecting`へ戻さない。
+- payload-first bootstrapは`open -> first profile-aware payload -> declaration / model bootstrap -> ready`
+  の順で進み、bootstrap中もconnectionを`open`として保持する。
+- keyboard / gamepad lifecycleは`connectionStatus === "open"`の間だけactiveであり、bootstrap中の
+  renderer status更新ではdisposeしない。close / errorではsenderとpollingを停止する。
+- keyboardのblur / hidden safety、gamepadのfocus / visibility safety、cadence、deadzoneはこの
+  connection lifecycleによって変更しない。
+
 ## startup pose source
 
 - `home` keyframe: canonical fast_arm startup qpos。pre-payload表示はMJCFからこのqposを読む

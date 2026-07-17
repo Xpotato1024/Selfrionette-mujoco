@@ -48,9 +48,12 @@ import {
 import { resolveBodyVisualStyle } from "./visualStyles.js";
 import type { BodyVisualStyle } from "./visualStyles.js";
 import {
+  applyProductViewerRendererStatePatch,
   createInitialProductViewerState,
   buildProductViewerInputOverlayState,
   formatViewerStatusText,
+  type ProductViewerConnectionStatus,
+  type ProductViewerRendererStatePatch,
   type ProductViewerState,
 } from "./productViewerState.js";
 import {
@@ -144,19 +147,6 @@ function buildPrimitiveGeometry(type: number, size: ArrayLike<number>): BufferGe
   return new BufferGeometry();
 }
 
-function createStatePatch(
-  previous: ProductViewerState,
-  patch: Partial<ProductViewerState> & { statusText?: string },
-): ProductViewerState {
-  const next = {
-    ...previous,
-    ...patch,
-  };
-  next.statusText = patch.statusText ?? formatViewerStatusText(next);
-  next.currentQposText = patch.currentQposText ?? (next.currentQpos === null ? "[]" : formatQpos(next.currentQpos));
-  return next;
-}
-
 export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): MujocoSceneRenderer {
   const frameTiming = createViewerFrameTiming();
   let profile = options.profile;
@@ -168,9 +158,10 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     }
     return profile;
   };
-  const emitState = (patch: Partial<ProductViewerState> & { statusText?: string }): void => {
+  const emitState = (next: ProductViewerState): void => {
     frameTiming.recordUiStateUpdate();
-    Object.assign(state, createStatePatch(state, { ...patch, viewerTiming: frameTiming.snapshot() }));
+    next.viewerTiming = frameTiming.snapshot();
+    Object.assign(state, next);
     options.onStateChange({ ...state });
   };
 
@@ -237,8 +228,17 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       ? null
       : options.websocketUrl;
 
-  const updateStatus = (patch: Partial<ProductViewerState> & { statusText?: string }): void => {
-    emitState(patch);
+  const updateRendererStatus = (patch: ProductViewerRendererStatePatch): void => {
+    emitState(applyProductViewerRendererStatePatch(state, patch));
+  };
+
+  const updateConnectionStatus = (
+    connectionStatus: ProductViewerConnectionStatus,
+    patch: ProductViewerRendererStatePatch = {},
+  ): void => {
+    const next = applyProductViewerRendererStatePatch(state, patch);
+    next.connectionStatus = connectionStatus;
+    emitState(next);
   };
 
   const buildCompiledMeshGeometry = (meshId: number): BufferGeometry => {
@@ -387,7 +387,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     if (candidate !== null) {
       frameTiming.recordSceneApplied(candidate, frameTiming.now() - sceneApplyStartedMs);
     }
-    updateStatus({
+    updateRendererStatus({
       status: "ready",
       sourceLabel,
       qposStatus: "ready",
@@ -415,7 +415,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     const inputOverlay = buildProductViewerInputOverlayState(payload);
     const qposResolution = resolveTransportQpos(payload, model.nq, requireProfile());
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
-      updateStatus({
+      updateRendererStatus({
         status: "warning",
         sourceLabel: qposResolution.sourceLabel,
         qposStatus: qposResolution.status,
@@ -481,7 +481,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     const qposResolution = resolveTransportQpos(payload, model.nq, requireProfile());
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
       frameTiming.recordCompatibilityInvalidIngress();
-      updateStatus({
+      updateRendererStatus({
         status: "warning",
         sourceLabel: qposResolution.sourceLabel,
         qposStatus: qposResolution.status,
@@ -500,23 +500,20 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
   const startWebSocketClient = (): void => {
     if (websocketUrl === null) {
-      updateStatus({
-        connectionStatus: "disabled",
-      });
+      updateConnectionStatus("disabled");
       return;
     }
 
     websocketClient = createViewerWebSocketClient({
       url: websocketUrl,
       onOpen() {
-        updateStatus({ connectionStatus: "open" });
+        updateConnectionStatus("open");
       },
       onClose() {
-        updateStatus({ connectionStatus: "closed" });
+        updateConnectionStatus("closed");
       },
       onConnectionError(error) {
-        updateStatus({
-          connectionStatus: "error",
+        updateConnectionStatus("error", {
           status: "warning",
           qposStatus: "unavailable",
           qposError: error instanceof Error ? error.message : "viewer WebSocket connection error",
@@ -552,7 +549,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       },
       onPayloadError(error) {
         frameTiming.recordParseError();
-        updateStatus({
+        updateRendererStatus({
           status: "warning",
           qposStatus: "invalid",
           qposError: error.message,
@@ -562,7 +559,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       },
     });
 
-    updateStatus({ connectionStatus: "connecting" });
+    updateConnectionStatus("connecting");
     websocketClient.start();
   };
 
@@ -614,7 +611,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      updateStatus({
+      updateRendererStatus({
         status: "error",
         qposStatus: "unavailable",
         qposError: message,
@@ -626,7 +623,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
   const initializeModel = async (): Promise<void> => {
     const activeProfile = requireProfile();
-    updateStatus({ status: "loading", connectionStatus: websocketUrl === null ? "disabled" : "connecting" });
+    updateRendererStatus({ status: "loading" });
 
     mujocoApi = await loadMujocoWasm();
 
@@ -698,7 +695,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       mjvPerturb = new mujocoApi.MjvPerturb();
       mjvCamera = new mujocoApi.MjvCamera();
 
-      updateStatus({
+      updateRendererStatus({
         robotProfileId: activeProfile.profileId,
         modelContractVersion: activeProfile.modelContractVersion,
         modelPath: activeProfile.modelUrl,
@@ -711,7 +708,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
       hasLoaded = true;
       syncToLatestSource();
-      updateStatus({
+      updateRendererStatus({
         status: "ready",
         sceneSummaryText: `loaded ${model.ngeom} geoms and ${model.nmesh} compiled meshes`,
       });
@@ -738,14 +735,14 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
           startWebSocketClient();
         }
         setCanvasSize();
-        updateStatus({
+        updateRendererStatus({
           statusText: formatViewerStatusText(state),
         });
         window.addEventListener("resize", setCanvasSize);
         frameHandle = window.requestAnimationFrame(animate);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        updateStatus({
+        updateRendererStatus({
           status: "error",
           qposStatus: "unavailable",
           qposError: message,

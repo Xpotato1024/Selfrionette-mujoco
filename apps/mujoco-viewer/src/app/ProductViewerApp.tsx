@@ -2,14 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { readViewerEndpointConfig } from "../config/websocketEndpoint.js";
 import {
   createViewerKeyboardCapture,
-  createViewerKeyboardControlSender,
   DEFAULT_VIEWER_KEYBOARD_BINDINGS,
 } from "../input/keyboardInput.js";
-import {
-  createViewerGamepadControlSender,
-  type ViewerGamepadLike,
-} from "../input/gamepadInput.js";
-import { createViewerGamepadLifecycle } from "./gamepadLifecycle.js";
+import type { ViewerGamepadLike } from "../input/gamepadInput.js";
+import { createViewerInputLifecycle } from "./viewerInputLifecycle.js";
 import { formatQpos } from "../wasm-scene/mujocoQposSync.js";
 import {
   formatEndpointEvaluationAngles,
@@ -204,118 +200,15 @@ export function ProductViewerApp() {
   }, [endpointConfig.websocketUrl, requestedProfileId]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined" || state.connectionStatus !== "open") {
+    if (typeof window === "undefined" || typeof document === "undefined") {
       return;
     }
 
-    const keyboardCapture = keyboardCaptureRef.current;
-    const keyboardSender = createViewerKeyboardControlSender({
-      url: endpointConfig.websocketUrl,
-    });
-    let disposed = false;
-    let animationFrameId = 0;
-
-    const publishKeyboardState = (): void => {
-      keyboardSender.publish(keyboardCapture.snapshot(), undefined, {
-        metadata: {
-          intent_kind: "local_endpoint_velocity",
-          input_continuity: "continuous",
-          source_kind: "viewer_keyboard",
-          control_frame: "world",
-          local_endpoint_speed_m_s: 0.1,
-          local_endpoint_max_delta_m: 0.03,
-        },
-      });
-    };
-
-    const scheduleKeyboardPublish = (): void => {
-      if (disposed) {
-        return;
-      }
-
-      publishKeyboardState();
-      animationFrameId = window.requestAnimationFrame(scheduleKeyboardPublish);
-    };
-
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (!keyboardCapture.isBoundKey(event.code)) {
-        return;
-      }
-      event.preventDefault();
-      if (!keyboardCapture.handleKeyDown(event.code, event.repeat)) {
-        return;
-      }
-
-      publishKeyboardState();
-    };
-
-    const onKeyUp = (event: KeyboardEvent): void => {
-      if (!keyboardCapture.isBoundKey(event.code)) {
-        return;
-      }
-      if (!keyboardCapture.handleKeyUp(event.code)) {
-        return;
-      }
-
-      event.preventDefault();
-      publishKeyboardState();
-    };
-
-    const onWindowBlur = (): void => {
-      if (!keyboardCapture.handleBlur()) {
-        return;
-      }
-
-      publishKeyboardState();
-    };
-
-    const onWindowFocus = (): void => {
-      if (!keyboardCapture.handleFocus()) {
-        return;
-      }
-
-      publishKeyboardState();
-    };
-
-    const onVisibilityChange = (): void => {
-      if (!keyboardCapture.handleVisibilityChange(document.visibilityState === "visible")) {
-        return;
-      }
-
-      publishKeyboardState();
-    };
-
-    publishKeyboardState();
-    animationFrameId = window.requestAnimationFrame(scheduleKeyboardPublish);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", onWindowBlur);
-    window.addEventListener("focus", onWindowFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      disposed = true;
-      window.cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", onWindowBlur);
-      window.removeEventListener("focus", onWindowFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      keyboardSender.dispose();
-    };
-  }, [endpointConfig.websocketUrl, state.connectionStatus]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined" || state.connectionStatus !== "open") {
-      return;
-    }
-
-    const gamepadSender = createViewerGamepadControlSender({
-      url: endpointConfig.websocketUrl,
-    });
-    const gamepadLifecycle = createViewerGamepadLifecycle({
+    const inputLifecycle = createViewerInputLifecycle({
       window,
       document,
+      url: endpointConfig.websocketUrl,
+      keyboardCapture: keyboardCaptureRef.current,
       getGamepads: () => {
         if (typeof navigator === "undefined" || typeof navigator.getGamepads !== "function") {
           return null;
@@ -323,16 +216,9 @@ export function ProductViewerApp() {
 
         return navigator.getGamepads() as unknown as ArrayLike<ViewerGamepadLike | null | undefined>;
       },
-      publish(snapshot) {
-        gamepadSender.publish(snapshot);
-      },
     });
-    gamepadLifecycle.start();
-
-    return () => {
-      gamepadLifecycle.dispose();
-      gamepadSender.dispose();
-    };
+    inputLifecycle.setConnectionStatus(state.connectionStatus);
+    return () => inputLifecycle.dispose();
   }, [endpointConfig.websocketUrl, state.connectionStatus]);
 
   const currentQposText = state.currentQpos === null ? "qpos unavailable" : formatQpos(state.currentQpos);
