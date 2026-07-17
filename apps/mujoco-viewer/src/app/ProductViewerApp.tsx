@@ -15,6 +15,7 @@ import {
 import {
   createInitialProductViewerState,
   formatInputOverlayText,
+  isProductViewerLiveInputEnabled,
   type ProductViewerState,
 } from "../wasm-scene/productViewerState.js";
 import { createMujocoSceneRenderer } from "../wasm-scene/mujocoSceneRenderer.js";
@@ -137,6 +138,7 @@ export function ProductViewerApp() {
     }
     return new URLSearchParams(window.location.search).get("robotProfileId");
   }, []);
+  const liveInputEnabled = isProductViewerLiveInputEnabled(state);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -217,9 +219,9 @@ export function ProductViewerApp() {
         return navigator.getGamepads() as unknown as ArrayLike<ViewerGamepadLike | null | undefined>;
       },
     });
-    inputLifecycle.setConnectionStatus(state.connectionStatus);
+    inputLifecycle.setLiveInputEnabled(liveInputEnabled);
     return () => inputLifecycle.dispose();
-  }, [endpointConfig.websocketUrl, state.connectionStatus]);
+  }, [endpointConfig.websocketUrl, liveInputEnabled]);
 
   const currentQposText = state.currentQpos === null ? "qpos unavailable" : formatQpos(state.currentQpos);
 

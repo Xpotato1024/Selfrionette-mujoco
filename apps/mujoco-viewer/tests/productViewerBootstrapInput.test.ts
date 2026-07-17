@@ -10,6 +10,7 @@ import { parseViewerControlMessageJson, type ViewerControlMessage } from "../src
 import {
   applyProductViewerRendererStatePatch,
   createInitialProductViewerState,
+  isProductViewerLiveInputEnabled,
 } from "../src/wasm-scene/productViewerState.js";
 
 type LifecycleWindowEvent = "gamepadconnected" | "gamepaddisconnected" | "blur" | "focus";
@@ -35,6 +36,16 @@ class FakeTimer {
     }
     this.callbacks.delete(entry[0]);
     entry[1]();
+  }
+
+  runNextIfPending(): boolean {
+    const entry = this.callbacks.entries().next().value as [number, () => void] | undefined;
+    if (entry === undefined) {
+      return false;
+    }
+    this.callbacks.delete(entry[0]);
+    entry[1]();
+    return true;
   }
 }
 
@@ -125,6 +136,16 @@ class FakeBrowser {
     entry[1]();
   }
 
+  runAnimationFrameIfPending(): boolean {
+    const entry = this.animationFrames.entries().next().value as [number, () => void] | undefined;
+    if (entry === undefined) {
+      return false;
+    }
+    this.animationFrames.delete(entry[0]);
+    entry[1]();
+    return true;
+  }
+
   dispatchWindow(type: LifecycleWindowEvent): void {
     for (const listener of [...(this.windowListeners.get(type) ?? [])]) {
       listener();
@@ -193,6 +214,32 @@ function parseMessages(sockets: FakeControlSocket[]): ViewerControlMessage[] {
   return sockets.flatMap((socket) => socket.sentMessages.map((message) => parseViewerControlMessageJson(message)));
 }
 
+function createInputLifecycleHarness() {
+  const browser = new FakeBrowser();
+  const timer = new FakeTimer();
+  const sockets: FakeControlSocket[] = [];
+  class InjectedSocket extends FakeControlSocket {
+    constructor(url: string) {
+      super(url);
+      sockets.push(this);
+    }
+  }
+
+  const lifecycle = createViewerInputLifecycle({
+    window: browser.window,
+    document: browser.document,
+    url: "ws://example.test/viewer",
+    keyboardCapture: createViewerKeyboardCapture(DEFAULT_VIEWER_KEYBOARD_BINDINGS, "focused"),
+    getGamepads: browser.getGamepads,
+    keyboardWebSocketCtor: InjectedSocket,
+    gamepadWebSocketCtor: InjectedSocket,
+    gamepadSetTimeoutFn: timer.setTimeoutFn,
+    gamepadClearTimeoutFn: timer.clearTimeoutFn,
+  });
+
+  return { browser, timer, sockets, lifecycle };
+}
+
 function testPayloadFirstBootstrapKeepsOpenConnectionDuringModelLifecycle(): void {
   const initial = createInitialProductViewerState();
   const connecting = { ...initial, connectionStatus: "connecting" as const };
@@ -217,39 +264,17 @@ function testPayloadFirstBootstrapKeepsOpenConnectionDuringModelLifecycle(): voi
 }
 
 function testKeyboardAndGamepadStayLiveAcrossPayloadBootstrap(): void {
-  const browser = new FakeBrowser();
+  const { browser, sockets, lifecycle } = createInputLifecycleHarness();
   browser.currentGamepads = [activePad(0.5)];
-  const timer = new FakeTimer();
-  const sockets: FakeControlSocket[] = [];
-  class InjectedSocket extends FakeControlSocket {
-    constructor(url: string) {
-      super(url);
-      sockets.push(this);
-    }
-  }
-
-  const lifecycle = createViewerInputLifecycle({
-    window: browser.window,
-    document: browser.document,
-    url: "ws://example.test/viewer",
-    keyboardCapture: createViewerKeyboardCapture(DEFAULT_VIEWER_KEYBOARD_BINDINGS, "focused"),
-    getGamepads: browser.getGamepads,
-    keyboardWebSocketCtor: InjectedSocket,
-    gamepadWebSocketCtor: InjectedSocket,
-    gamepadSetTimeoutFn: timer.setTimeoutFn,
-    gamepadClearTimeoutFn: timer.clearTimeoutFn,
-  });
-
-  lifecycle.setConnectionStatus("connecting");
-  assert.equal(sockets.length, 0);
-  lifecycle.setConnectionStatus("open");
-  for (const socket of sockets) {
-    socket.emitOpen();
-  }
-
   const openState = { ...createInitialProductViewerState(), connectionStatus: "open" as const };
   const bootstrappingState = applyProductViewerRendererStatePatch(openState, { status: "loading" });
   assert.equal(bootstrappingState.connectionStatus, "open");
+  assert.equal(isProductViewerLiveInputEnabled(bootstrappingState), true);
+  lifecycle.setLiveInputEnabled(isProductViewerLiveInputEnabled(bootstrappingState));
+  assert.equal(sockets.length, 2, "open/loading must create keyboard and gamepad senders");
+  for (const socket of sockets) {
+    socket.emitOpen();
+  }
   browser.dispatchKey("keydown", "KeyW");
   browser.dispatchKey("keyup", "KeyW");
 
@@ -267,23 +292,110 @@ function testKeyboardAndGamepadStayLiveAcrossPayloadBootstrap(): void {
   assert.ok((gamepadMessages.at(-1)?.sequence ?? -1) > (gamepadMessages.at(-2)?.sequence ?? -1));
 
   const messageCountBeforeClose = parseMessages(sockets).length;
-  lifecycle.setConnectionStatus("closed");
+  lifecycle.setLiveInputEnabled(false);
   assert.ok(sockets.every((socket) => socket.closed), "close must dispose both input senders");
   browser.dispatchKey("keydown", "KeyW");
   assert.equal(parseMessages(sockets).length, messageCountBeforeClose, "closed lifecycle must stop keyboard publication");
 
-  lifecycle.setConnectionStatus("open");
+  lifecycle.setLiveInputEnabled(true);
   const reopenedSockets = sockets.slice(sockets.length - 2);
   for (const socket of reopenedSockets) {
     socket.emitOpen();
   }
-  lifecycle.setConnectionStatus("error");
+  lifecycle.setLiveInputEnabled(false);
   assert.ok(reopenedSockets.every((socket) => socket.closed), "error must dispose both input senders");
 
   lifecycle.dispose();
 }
 
+function testRendererErrorStopsLiveInputWithoutChangingOpenConnection(): void {
+  const { browser, timer, sockets, lifecycle } = createInputLifecycleHarness();
+  browser.currentGamepads = [activePad(0.25)];
+
+  const openLoading = {
+    ...createInitialProductViewerState(),
+    connectionStatus: "open" as const,
+    status: "loading" as const,
+  };
+  assert.equal(isProductViewerLiveInputEnabled(openLoading), true);
+  lifecycle.setLiveInputEnabled(isProductViewerLiveInputEnabled(openLoading));
+  for (const socket of sockets) {
+    socket.emitOpen();
+  }
+  const socketsAfterOpen = [...sockets];
+
+  const ready = applyProductViewerRendererStatePatch(openLoading, { status: "ready" });
+  assert.equal(isProductViewerLiveInputEnabled(ready), true);
+  lifecycle.setLiveInputEnabled(isProductViewerLiveInputEnabled(ready));
+  assert.deepEqual(sockets, socketsAfterOpen, "loading -> ready must not recreate input senders");
+
+  browser.currentGamepads = [activePad(-0.65)];
+  browser.runAnimationFrame();
+  assert.equal(timer.runNextIfPending(), true, "active gamepad publication must schedule a heartbeat");
+  const messageCountBeforeError = parseMessages(sockets).length;
+
+  const rendererError = applyProductViewerRendererStatePatch(ready, {
+    status: "error",
+    qposError: "failed to compile viewer model",
+  });
+  assert.equal(rendererError.connectionStatus, "open", "renderer error must not rewrite connection status");
+  assert.equal(isProductViewerLiveInputEnabled(rendererError), false);
+  lifecycle.setLiveInputEnabled(isProductViewerLiveInputEnabled(rendererError));
+  assert.ok(sockets.every((socket) => socket.closed), "renderer error must dispose keyboard and gamepad senders");
+
+  const messageCountAfterError = parseMessages(sockets).length;
+  assert.equal(messageCountAfterError, messageCountBeforeError);
+  browser.dispatchKey("keydown", "KeyW");
+  browser.dispatchKey("keyup", "KeyW");
+  assert.equal(browser.runAnimationFrameIfPending(), false, "renderer error must cancel input polling RAF");
+  assert.equal(timer.runNextIfPending(), false, "renderer error must cancel gamepad heartbeat timers");
+  assert.equal(parseMessages(sockets).length, messageCountAfterError, "renderer error must block new keyboard/gamepad messages");
+
+  const reconnectLoading = applyProductViewerRendererStatePatch(rendererError, { status: "loading" });
+  assert.equal(reconnectLoading.connectionStatus, "open");
+  assert.equal(isProductViewerLiveInputEnabled(reconnectLoading), true);
+  lifecycle.setLiveInputEnabled(isProductViewerLiveInputEnabled(reconnectLoading));
+  assert.equal(sockets.length, socketsAfterOpen.length + 2, "new open/loading session must create fresh senders");
+  for (const socket of sockets.slice(-2)) {
+    socket.emitOpen();
+  }
+  browser.dispatchKey("keydown", "KeyW");
+  const reconnectKeyboardMessages = parseMessages(sockets).filter((message) => message.source_kind === "keyboard");
+  assert.ok(reconnectKeyboardMessages.length > 0, "reconnect must resume keyboard publication");
+
+  const closed = { ...rendererError, connectionStatus: "closed" as const };
+  assert.equal(isProductViewerLiveInputEnabled(closed), false, "closed connection must remain input-disabled");
+  lifecycle.setLiveInputEnabled(isProductViewerLiveInputEnabled(closed));
+  lifecycle.dispose();
+}
+
+function testBootstrapFailureVariantsShareRendererErrorFailSafe(): void {
+  const openReady = {
+    ...createInitialProductViewerState(),
+    connectionStatus: "open" as const,
+    status: "ready" as const,
+  };
+  const failures = [
+    "malformed viewer declaration",
+    "viewer declaration digest mismatch",
+    "failed to fetch model",
+    "failed to fetch VFS asset",
+    "MuJoCo model compatibility failure",
+  ];
+
+  for (const failure of failures) {
+    const rendererError = applyProductViewerRendererStatePatch(openReady, {
+      status: "error",
+      qposError: failure,
+    });
+    assert.equal(rendererError.connectionStatus, "open");
+    assert.equal(isProductViewerLiveInputEnabled(rendererError), false, failure);
+  }
+}
+
 testPayloadFirstBootstrapKeepsOpenConnectionDuringModelLifecycle();
 testKeyboardAndGamepadStayLiveAcrossPayloadBootstrap();
+testRendererErrorStopsLiveInputWithoutChangingOpenConnection();
+testBootstrapFailureVariantsShareRendererErrorFailSafe();
 
-console.log("product viewer payload-first input lifecycle tests passed");
+console.log("product viewer payload-first and renderer-error input lifecycle tests passed");

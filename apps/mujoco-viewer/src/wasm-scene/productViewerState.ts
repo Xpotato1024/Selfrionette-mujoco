@@ -101,6 +101,12 @@ export function applyProductViewerRendererStatePatch(
   return next;
 }
 
+export function isProductViewerLiveInputEnabled(
+  state: Pick<ProductViewerState, "connectionStatus" | "status">,
+): boolean {
+  return state.connectionStatus === "open" && state.status !== "error";
+}
+
 export function createInitialProductViewerState(profile?: ViewerRobotProfile): ProductViewerState {
   return {
     rendererMode: "wasm-scene",

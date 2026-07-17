@@ -40,8 +40,14 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
   `connecting`へ戻さない。
 - payload-first bootstrapは`open -> first profile-aware payload -> declaration / model bootstrap -> ready`
   の順で進み、bootstrap中もconnectionを`open`として保持する。
-- keyboard / gamepad lifecycleは`connectionStatus === "open"`の間だけactiveであり、bootstrap中の
-  renderer status更新ではdisposeしない。close / errorではsenderとpollingを停止する。
+- live input availabilityは`connectionStatus === "open" && status !== "error"`から導出する。
+  したがって`open/loading`、`open/ready`、`open/warning`はactive、`open/error`はfail-safeでinactive、
+  closed / connection error / disabledもinactiveである。
+- ProductViewerAppのinput effectはraw renderer statusではなく、この安定したavailability booleanだけを
+  依存する。loading -> ready / warningではsenderとpollingを再生成せず、renderer errorになった時点で
+  keyboard sender、gamepad sender、keyboard RAF、gamepad RAF / heartbeatをdisposeする。
+- declaration fetch、digest validation、model / VFS fetch、MuJoCo compile、scene構築のfailureは共通して
+  renderer `status=error`へ到達し、connectionStatusが`open`のままでもlive inputをfail-safe停止する。
 - keyboardのblur / hidden safety、gamepadのfocus / visibility safety、cadence、deadzoneはこの
   connection lifecycleによって変更しない。
 

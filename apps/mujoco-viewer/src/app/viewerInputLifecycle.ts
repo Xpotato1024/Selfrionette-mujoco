@@ -15,7 +15,6 @@ import {
   type ViewerGamepadLifecycle,
   type ViewerGamepadLifecycleWindowLike,
 } from "./gamepadLifecycle.js";
-import type { ProductViewerConnectionStatus } from "../wasm-scene/productViewerState.js";
 
 export interface ViewerKeyboardEventLike {
   code: string;
@@ -50,12 +49,12 @@ export interface ViewerInputLifecycleOptions {
 }
 
 export interface ViewerInputLifecycle {
-  setConnectionStatus(status: ProductViewerConnectionStatus): void;
+  setLiveInputEnabled(enabled: boolean): void;
   dispose(): void;
 }
 
 export function createViewerInputLifecycle(options: ViewerInputLifecycleOptions): ViewerInputLifecycle {
-  let connectionStatus: ProductViewerConnectionStatus = "disabled";
+  let liveInputEnabled = false;
   let active = false;
   let animationFrameId: number | null = null;
   let keyboardSender: ViewerKeyboardControlSender | null = null;
@@ -156,7 +155,7 @@ export function createViewerInputLifecycle(options: ViewerInputLifecycleOptions)
   };
 
   const activateInputs = (): void => {
-    if (active || connectionStatus !== "open") {
+    if (active || !liveInputEnabled) {
       return;
     }
 
@@ -198,16 +197,16 @@ export function createViewerInputLifecycle(options: ViewerInputLifecycleOptions)
   };
 
   return {
-    setConnectionStatus(status) {
-      connectionStatus = status;
-      if (status === "open") {
+    setLiveInputEnabled(enabled) {
+      liveInputEnabled = enabled;
+      if (enabled) {
         activateInputs();
       } else {
         disposeActiveInputs();
       }
     },
     dispose() {
-      connectionStatus = "closed";
+      liveInputEnabled = false;
       disposeActiveInputs();
     },
   };
