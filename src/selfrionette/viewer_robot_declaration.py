@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
+from urllib.parse import quote
 
 
 VIEWER_ROBOT_DECLARATION_SCHEMA_VERSION = "viewer-robot-declaration/v1"
@@ -52,6 +56,26 @@ def _require_local_url(value: str, name: str) -> None:
         raise ValueError(f"{name} must be a local absolute-path URL")
 
 
+def repository_resource_public_url(repository_path: str) -> str:
+    """Map a repository asset path to its deterministic viewer URL."""
+
+    _require_string(repository_path, "repository resource path")
+    path = PurePosixPath(repository_path)
+    if (
+        path.is_absolute()
+        or "\\" in repository_path
+        or ".." in path.parts
+        or path.parts[:1] != ("assets",)
+        or len(path.parts) < 2
+        or any(re.fullmatch(r"[A-Za-z0-9._~-]+", part) is None for part in path.parts)
+    ):
+        raise ValueError(
+            "viewer repository resource path must be below the assets root"
+        )
+    public_path = PurePosixPath(*path.parts[1:]).as_posix()
+    return "/" + quote(public_path, safe="/-._~")
+
+
 @dataclass(frozen=True, slots=True)
 class ViewerVfsAsset:
     vfs_path: str
@@ -65,6 +89,12 @@ class ViewerVfsAsset:
         if vfs_path.is_absolute() or ".." in vfs_path.parts:
             raise ValueError("viewer VFS path must not escape the virtual root")
         _require_local_url(self.url, "viewer VFS URL")
+        expected_url = repository_resource_public_url(self.resource_path)
+        if self.url != expected_url:
+            raise ValueError(
+                "viewer VFS resource path/URL mismatch: "
+                f"expected {expected_url!r}, got {self.url!r}"
+            )
 
     def to_document(self) -> dict[str, object]:
         return {
@@ -141,6 +171,7 @@ class ViewerRobotDeclaration:
     initial_keyframe_name: str
     initial_pose_source_label: str
     fixture_url: str
+    fixture_resource_path: str
     vfs_assets: tuple[ViewerVfsAsset, ...]
     visual_style_selection: tuple[ViewerVisualStyleSelection, ...]
     body_visual_styles: tuple[ViewerBodyVisualStyle, ...]
@@ -158,12 +189,27 @@ class ViewerRobotDeclaration:
             ("viewer profile ID", self.profile_id),
             ("viewer model contract version", self.model_contract_version),
             ("viewer model resource path", self.model_resource_path),
+            ("viewer fixture resource path", self.fixture_resource_path),
             ("viewer initial keyframe name", self.initial_keyframe_name),
             ("viewer initial pose source label", self.initial_pose_source_label),
         ):
             _require_string(value, name)
         _require_local_url(self.model_url, "viewer model URL")
         _require_local_url(self.fixture_url, "viewer fixture URL")
+        expected_model_url = repository_resource_public_url(self.model_resource_path)
+        if self.model_url != expected_model_url:
+            raise ValueError(
+                "viewer model resource path/URL mismatch: "
+                f"expected {expected_model_url!r}, got {self.model_url!r}"
+            )
+        expected_fixture_url = repository_resource_public_url(
+            self.fixture_resource_path
+        )
+        if self.fixture_url != expected_fixture_url:
+            raise ValueError(
+                "viewer fixture resource path/URL mismatch: "
+                f"expected {expected_fixture_url!r}, got {self.fixture_url!r}"
+            )
         _require_positive_int(
             self.profile_contract_version, "viewer profile contract version"
         )
@@ -209,6 +255,7 @@ class ViewerRobotDeclaration:
             "initialKeyframeName": self.initial_keyframe_name,
             "initialPoseSourceLabel": self.initial_pose_source_label,
             "fixtureUrl": self.fixture_url,
+            "fixtureResourcePath": self.fixture_resource_path,
             "vfsAssets": [item.to_document() for item in self.vfs_assets],
             "visualStyleSelection": [
                 item.to_document() for item in self.visual_style_selection
@@ -231,6 +278,7 @@ _ROOT_KEYS = frozenset(
         "initialKeyframeName",
         "initialPoseSourceLabel",
         "fixtureUrl",
+        "fixtureResourcePath",
         "vfsAssets",
         "visualStyleSelection",
         "bodyVisualStyles",
@@ -289,6 +337,9 @@ def decode_viewer_robot_declaration(value: object) -> ViewerRobotDeclaration:
             root["initialPoseSourceLabel"], "initialPoseSourceLabel"
         ),
         fixture_url=_require_string(root["fixtureUrl"], "fixtureUrl"),
+        fixture_resource_path=_require_string(
+            root["fixtureResourcePath"], "fixtureResourcePath"
+        ),
         vfs_assets=tuple(
             ViewerVfsAsset(
                 vfs_path=_require_string(item["vfsPath"], "vfsPath"),
@@ -326,6 +377,24 @@ def decode_viewer_robot_declaration(value: object) -> ViewerRobotDeclaration:
     )
 
 
+def viewer_robot_declaration_canonical_bytes(
+    declaration: ViewerRobotDeclaration,
+) -> bytes:
+    return json.dumps(
+        declaration.to_document(),
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def viewer_robot_declaration_digest(declaration: ViewerRobotDeclaration) -> str:
+    return "sha256:" + hashlib.sha256(
+        viewer_robot_declaration_canonical_bytes(declaration)
+    ).hexdigest()
+
+
 __all__ = [
     "VIEWER_ROBOT_DECLARATION_SCHEMA_VERSION",
     "ViewerAxisVisualStyle",
@@ -334,4 +403,7 @@ __all__ = [
     "ViewerVfsAsset",
     "ViewerVisualStyleSelection",
     "decode_viewer_robot_declaration",
+    "repository_resource_public_url",
+    "viewer_robot_declaration_canonical_bytes",
+    "viewer_robot_declaration_digest",
 ]

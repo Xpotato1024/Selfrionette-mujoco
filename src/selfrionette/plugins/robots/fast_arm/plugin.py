@@ -20,6 +20,12 @@ ROBOT_PLUGIN = RobotPluginRegistration(
         configurations=(
             RepositoryResource("configs/fast_arm/joint_limits.toml"),
         ),
+        viewer_declaration=RepositoryResource(
+            "assets/mujoco/fast_arm/viewer-profile.json"
+        ),
+        viewer_fixture=RepositoryResource(
+            "assets/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json"
+        ),
         viewer_vfs_resources=tuple(
             RepositoryResource(item.resource_path)
             for item in FAST_ARM_VIEWER_DECLARATION.vfs_assets

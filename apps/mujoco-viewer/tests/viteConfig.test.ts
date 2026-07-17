@@ -9,5 +9,6 @@ describe("vite config", () => {
     const source = readFileSync(viteConfigPath, "utf8");
 
     assert.match(source, /open:\s*["']\/apps\/mujoco-viewer\/["']/);
+    assert.match(source, /publicDir:\s*resolve\(repoRoot,\s*["']assets["']\)/);
   });
 });

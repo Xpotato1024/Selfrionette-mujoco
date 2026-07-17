@@ -19,6 +19,7 @@ from selfrionette.plugins.robot_discovery import (
 from selfrionette.plugins.robot_registration import (
     RepositoryResource,
     RobotResourceDeclaration,
+    _resolved_resource,
     _validate_viewer_vfs_coverage,
 )
 from selfrionette.runtime.experiment_contracts import VersionedIdentity
@@ -186,8 +187,11 @@ def test_package_identity_missing_resource_and_path_escape_fail_closed(
             "from test_robot_plugins.fixture_bot.plugin import ROBOT_PLUGIN as BASE\n"
             "from selfrionette.plugins.robot_registration import RepositoryResource, RobotResourceDeclaration\n"
             "ROBOT_PLUGIN = replace(BASE, resources=RobotResourceDeclaration("
-            "model=RepositoryResource('assets/missing.xml'), "
-            "configurations=BASE.resources.configurations, viewer_vfs_resources=()))\n"
+            "model=RepositoryResource('assets/mujoco/fixture_bot/missing.xml'), "
+            "configurations=BASE.resources.configurations, "
+            "viewer_declaration=BASE.resources.viewer_declaration, "
+            "viewer_fixture=BASE.resources.viewer_fixture, "
+            "viewer_vfs_resources=()))\n"
         ),
     )
     with pytest.raises(RobotPluginDiscoveryError, match="missing robot resource"):
@@ -225,8 +229,28 @@ def test_registration_rejects_viewer_and_resource_contract_mismatches(
     mismatched_viewer = replace(registration.viewer, profile_id="other")
     with pytest.raises(ValueError, match="registration/viewer declaration identity mismatch"):
         replace(registration, viewer=mismatched_viewer)
-    with pytest.raises(ValueError, match="unsupported robot onboarding contract version"):
+    with pytest.raises(ValueError, match="unsupported Robot Plugin onboarding schema version"):
         replace(registration, onboarding_contract_version=2)
+    with pytest.raises(ValueError, match="registration/Robot Bundle identity mismatch"):
+        replace(registration, identity=VersionedIdentity("fixture_bot", 2))
+    with pytest.raises(
+        ValueError,
+        match="Robot Plugin logical version/viewer profile contract version mismatch",
+    ):
+        replace(
+            registration,
+            viewer=replace(registration.viewer, profile_contract_version=2),
+        )
+    with pytest.raises(
+        ValueError, match="robot profile/plugin profile contract version mismatch"
+    ):
+        replace(
+            registration.bundle,
+            profile=replace(
+                registration.bundle.profile,
+                profile_contract_version=2,
+            ),
+        )
 
     incomplete_bundle = replace(
         registration.bundle,
@@ -238,10 +262,136 @@ def test_registration_rejects_viewer_and_resource_contract_mismatches(
     mismatched_resources = RobotResourceDeclaration(
         model=registration.resources.model,
         configurations=registration.resources.configurations,
-        viewer_vfs_resources=(RepositoryResource("assets/mujoco/other.bin"),),
+        viewer_declaration=registration.resources.viewer_declaration,
+        viewer_fixture=registration.resources.viewer_fixture,
+        viewer_vfs_resources=(
+            RepositoryResource("assets/mujoco/fixture_bot/other.bin"),
+        ),
     )
     with pytest.raises(ValueError, match="viewer VFS/resource declaration mismatch"):
         replace(registration, resources=mismatched_resources).validate_resources(
+            FIXTURE_ROOT,
+            asset_roots=(FIXTURE_ROOT / "assets" / "mujoco",),
+            configuration_roots=(FIXTURE_ROOT / "configs",),
+        )
+
+
+def test_onboarding_schema_version_is_independent_from_robot_logical_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN as FAST_ARM
+
+    fixture_v1 = _discover_fixture(monkeypatch).resolve("fixture_bot")
+    logical_identity_v2 = VersionedIdentity("fixture_bot", 2)
+    viewer_v2 = replace(fixture_v1.viewer, profile_contract_version=2)
+    profile_v2 = replace(
+        fixture_v1.bundle.profile,
+        profile_contract_version=2,
+        viewer_declaration=viewer_v2,
+    )
+    runtime_v2 = replace(fixture_v1.bundle.runtime_plugin, profile=profile_v2)
+    bundle_v2 = replace(
+        fixture_v1.bundle,
+        identity=logical_identity_v2,
+        profile=profile_v2,
+        runtime_plugin=runtime_v2,
+    )
+    registration_v2 = replace(
+        fixture_v1,
+        identity=logical_identity_v2,
+        bundle=bundle_v2,
+        viewer=viewer_v2,
+    )
+
+    registry = RobotPluginRegistry((FAST_ARM, registration_v2))
+    assert registry.resolve("fast_arm").identity == VersionedIdentity("fast_arm", 1)
+    assert registry.resolve("fixture_bot") is registration_v2
+    assert registration_v2.onboarding_contract_version == 1
+    assert registration_v2.identity.version == 2
+    with pytest.raises(ValueError, match="unsupported Robot Plugin onboarding schema version"):
+        replace(registration_v2, onboarding_contract_version=2)
+
+
+@pytest.mark.parametrize(
+    ("resource_field", "sibling_path", "message"),
+    (
+        ("model", "assets/mujoco/sibling_bot/model.xml", "asset resource is not owned"),
+        (
+            "configuration",
+            "configs/sibling_bot/limits.toml",
+            "configuration resource is not owned",
+        ),
+    ),
+)
+def test_robot_resource_ownership_rejects_sibling_directories(
+    monkeypatch: pytest.MonkeyPatch,
+    resource_field: str,
+    sibling_path: str,
+    message: str,
+) -> None:
+    registration = _discover_fixture(monkeypatch).resolve("fixture_bot")
+    if resource_field == "model":
+        resources = replace(
+            registration.resources,
+            model=RepositoryResource(sibling_path),
+        )
+    else:
+        resources = replace(
+            registration.resources,
+            configurations=(RepositoryResource(sibling_path),),
+        )
+    with pytest.raises(ValueError, match=message):
+        replace(registration, resources=resources).validate_resources(
+            FIXTURE_ROOT,
+            asset_roots=(FIXTURE_ROOT / "assets" / "mujoco",),
+            configuration_roots=(FIXTURE_ROOT / "configs",),
+        )
+
+
+def test_robot_resource_symlink_escape_is_rejected(tmp_path: Path) -> None:
+    repository_root = tmp_path / "repository"
+    owned_root = repository_root / "assets" / "mujoco" / "fixture_bot"
+    owned_root.mkdir(parents=True)
+    outside = tmp_path / "outside.xml"
+    outside.write_text("<mujoco/>", encoding="utf-8")
+    link = owned_root / "linked.xml"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    with pytest.raises(ValueError, match="escapes allowed repository resource roots"):
+        _resolved_resource(
+            repository_root,
+            RepositoryResource("assets/mujoco/fixture_bot/linked.xml"),
+            allowed_roots=(repository_root / "assets" / "mujoco",),
+        )
+
+
+def test_viewer_resource_path_and_public_url_must_identify_the_same_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registration = _discover_fixture(monkeypatch).resolve("fixture_bot")
+    with pytest.raises(ValueError, match="model resource path/URL mismatch"):
+        replace(registration.viewer, model_url="/mujoco/fixture_bot/other.xml")
+    with pytest.raises(ValueError, match="fixture resource path/URL mismatch"):
+        replace(registration.viewer, fixture_url="/mujoco/fixture_bot/missing.json")
+    from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN as FAST_ARM
+
+    with pytest.raises(ValueError, match="VFS resource path/URL mismatch"):
+        replace(
+            FAST_ARM.viewer.vfs_assets[0],
+            resource_path="assets/mujoco/fast_arm/other.xml",
+        )
+
+    missing_fixture_resources = replace(
+        registration.resources,
+        viewer_fixture=RepositoryResource(
+            "assets/mujoco/fixture_bot/missing.json"
+        ),
+    )
+    with pytest.raises(ValueError, match="missing robot resource"):
+        replace(registration, resources=missing_fixture_resources).validate_resources(
             FIXTURE_ROOT,
             asset_roots=(FIXTURE_ROOT / "assets" / "mujoco",),
             configuration_roots=(FIXTURE_ROOT / "configs",),

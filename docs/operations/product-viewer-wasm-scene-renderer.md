@@ -27,9 +27,9 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
 
 - `apps/mujoco-viewer/src/main.tsx`
 - default renderer mode: `wasm-scene`
-- WebSocket接続時のmodel path: 最初のprofile-aware payloadに含まれるversioned viewer declaration
+- WebSocket接続時のmodel path: 最初のprofile-aware payloadのURL + digestから解決するversioned viewer declaration
 - 未接続時のcompatibility path: plugin-owned
-  `/assets/mujoco/fast_arm/viewer-profile.json`をlegacy static facade経由でloadする
+  `/mujoco/fast_arm/viewer-profile.json`をlegacy static facade経由でloadする
 
 ## startup pose source
 
@@ -41,8 +41,11 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
 ## viewer declaration startup
 
 - generic viewer sourceはproduction robot ID registryを持たない。
-- WebSocket接続時は`viewer_robot_declaration`をstrict decodeし、local URL、resource path、VFS mapping、
+- WebSocket接続時は最初のframeにあるdeclaration resource path、deterministic public URL、SHA-256 digestを
+  検証してfull declarationを一度だけfetch / strict decodeする。model、fixture、VFSのURL / resource対応、
   joint order、qpos dimension、keyframe、model contractを描画前に検証する。
+- steady-state frameは同じcompact referenceだけを比較し、full declarationを再送・再decodeしない。
+  reconnectでは再fetchし、session中のdigest / URL / resource path変更を拒否する。
 - payload compatibility metadataとdeclarationが一致した場合だけmodelをloadし、qposを適用する。
 - `fastArm.ts`は未接続時の既存表示を維持するcompatibility facadeであり、宣言内容を再定義せず
   plugin-owned JSONをloadする。新robot onboardingでこのfacadeまたはTypeScript registryを編集しない。
@@ -51,8 +54,8 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
 
 ## canonical qpos fixture
 
-- owner: product viewerの`apps/mujoco-viewer/`
-- path: `apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json`
+- owner: fast_arm Robot Plugin resource
+- path: `assets/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json`
 - schema owner: `apps/mujoco-viewer/src/wasm-scene/qposFrameTypes.ts`
 - 再生成: `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30`
 - fixture playbackはdebug/validation専用であり、startupはnamed `home` keyframeを使う

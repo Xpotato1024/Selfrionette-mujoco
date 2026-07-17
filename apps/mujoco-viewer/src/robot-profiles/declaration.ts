@@ -58,6 +58,35 @@ function requireResourcePath(value: unknown, name: string): string {
   return path;
 }
 
+export function repositoryResourcePublicUrl(resourcePath: string): string {
+  const path = requireResourcePath(resourcePath, "repository resource path");
+  const parts = path.split("/");
+  if (
+    parts[0] !== "assets" ||
+    parts.length < 2 ||
+    parts.some((part) => !/^[A-Za-z0-9._~-]+$/.test(part))
+  ) {
+    throw new Error("viewer repository resource path must be below the assets root");
+  }
+  return `/${parts.slice(1).map(encodeURIComponent).join("/")}`;
+}
+
+function requireResourceUrlPair(
+  resourcePathValue: unknown,
+  urlValue: unknown,
+  name: string,
+): { resourcePath: string; url: string } {
+  const resourcePath = requireResourcePath(resourcePathValue, `${name} resource path`);
+  const url = requireLocalUrl(urlValue, `${name} URL`);
+  const expectedUrl = repositoryResourcePublicUrl(resourcePath);
+  if (url !== expectedUrl) {
+    throw new Error(
+      `${name} resource path/URL mismatch: expected ${expectedUrl}, got ${url}`,
+    );
+  }
+  return { resourcePath, url };
+}
+
 function requireArray(value: unknown, name: string): readonly unknown[] {
   if (!Array.isArray(value)) {
     throw new Error(`${name} must be an array`);
@@ -81,6 +110,7 @@ const ROOT_KEYS = [
   "initialKeyframeName",
   "initialPoseSourceLabel",
   "fixtureUrl",
+  "fixtureResourcePath",
   "vfsAssets",
   "visualStyleSelection",
   "bodyVisualStyles",
@@ -109,11 +139,13 @@ export function decodeViewerRobotDeclaration(value: unknown): ViewerRobotProfile
     if (vfsAssets.has(vfsPath)) {
       throw new Error(`duplicate viewer VFS path: ${vfsPath}`);
     }
-    vfsResourcePaths.set(
-      vfsPath,
-      requireResourcePath(item.resourcePath, `vfsAssets[${index}].resourcePath`),
+    const resource = requireResourceUrlPair(
+      item.resourcePath,
+      item.url,
+      `vfsAssets[${index}]`,
     );
-    vfsAssets.set(vfsPath, requireLocalUrl(item.url, `vfsAssets[${index}].url`));
+    vfsResourcePaths.set(vfsPath, resource.resourcePath);
+    vfsAssets.set(vfsPath, resource.url);
   }
 
   const bodyVisualStyles: Record<string, ViewerBodyVisualStyle> = {};
@@ -167,16 +199,24 @@ export function decodeViewerRobotDeclaration(value: unknown): ViewerRobotProfile
   }
   requireUnique(jointNames, "jointNames");
 
+  const model = requireResourceUrlPair(root.modelResourcePath, root.modelUrl, "model");
+  const fixture = requireResourceUrlPair(
+    root.fixtureResourcePath,
+    root.fixtureUrl,
+    "fixture",
+  );
+
   return Object.freeze({
     schemaVersion: VIEWER_ROBOT_DECLARATION_SCHEMA_VERSION,
     profileId: requireString(root.profileId, "profileId"),
     profileContractVersion: requirePositiveInteger(root.profileContractVersion, "profileContractVersion"),
     modelContractVersion: requireString(root.modelContractVersion, "modelContractVersion"),
-    modelUrl: requireLocalUrl(root.modelUrl, "modelUrl"),
-    modelResourcePath: requireResourcePath(root.modelResourcePath, "modelResourcePath"),
+    modelUrl: model.url,
+    modelResourcePath: model.resourcePath,
     initialKeyframeName: requireString(root.initialKeyframeName, "initialKeyframeName"),
     initialPoseSourceLabel: requireString(root.initialPoseSourceLabel, "initialPoseSourceLabel"),
-    fixtureUrl: requireLocalUrl(root.fixtureUrl, "fixtureUrl"),
+    fixtureUrl: fixture.url,
+    fixtureResourcePath: fixture.resourcePath,
     vfsAssets,
     vfsResourcePaths,
     visualStyleSelection,
@@ -187,8 +227,50 @@ export function decodeViewerRobotDeclaration(value: unknown): ViewerRobotProfile
   });
 }
 
-export function viewerRobotProfileFromPayload(payload: TransportPayloadV0): ViewerRobotProfile {
-  const profile = decodeViewerRobotDeclaration(payload.metadata.viewer_robot_declaration);
+export interface ViewerRobotDeclarationReference {
+  readonly resourcePath: string;
+  readonly url: string;
+  readonly digest: string;
+}
+
+export function viewerRobotDeclarationReferenceFromPayload(
+  payload: TransportPayloadV0,
+): ViewerRobotDeclarationReference | null {
+  const metadata = payload.metadata;
+  const values = [
+    metadata.viewer_robot_declaration_resource_path,
+    metadata.viewer_robot_declaration_url,
+    metadata.viewer_robot_declaration_digest,
+  ];
+  if (values.every((value) => value === undefined)) {
+    return null;
+  }
+  if (values.some((value) => value === undefined)) {
+    throw new Error("viewer declaration frame reference must be complete");
+  }
+  const resource = requireResourceUrlPair(
+    metadata.viewer_robot_declaration_resource_path,
+    metadata.viewer_robot_declaration_url,
+    "viewer declaration",
+  );
+  const digest = requireString(
+    metadata.viewer_robot_declaration_digest,
+    "viewer declaration digest",
+  );
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest)) {
+    throw new Error("viewer declaration digest must be a canonical sha256 digest");
+  }
+  return Object.freeze({
+    resourcePath: resource.resourcePath,
+    url: resource.url,
+    digest,
+  });
+}
+
+export function validateViewerRobotProfileCompatibility(
+  payload: TransportPayloadV0,
+  profile: ViewerRobotProfile,
+): void {
   const metadata = payload.metadata;
   if (metadata.robot_profile_id !== profile.profileId) {
     throw new Error("backend/viewer declaration robot profile mismatch");
@@ -206,11 +288,10 @@ export function viewerRobotProfileFromPayload(payload: TransportPayloadV0): View
   ) {
     throw new Error("backend/viewer declaration joint name/order mismatch");
   }
-  return profile;
 }
 
-export function viewerRobotProfileCanonicalJson(profile: ViewerRobotProfile): string {
-  return JSON.stringify({
+function viewerRobotProfileDocument(profile: ViewerRobotProfile): JsonRecord {
+  return {
     schemaVersion: profile.schemaVersion,
     profileId: profile.profileId,
     profileContractVersion: profile.profileContractVersion,
@@ -220,23 +301,99 @@ export function viewerRobotProfileCanonicalJson(profile: ViewerRobotProfile): st
     initialKeyframeName: profile.initialKeyframeName,
     initialPoseSourceLabel: profile.initialPoseSourceLabel,
     fixtureUrl: profile.fixtureUrl,
+    fixtureResourcePath: profile.fixtureResourcePath,
     vfsAssets: Array.from(profile.vfsAssets.entries()).map(([vfsPath, url]) => ({
       vfsPath,
       resourcePath: profile.vfsResourcePaths.get(vfsPath),
       url,
     })),
-    visualStyleSelection: Array.from(profile.visualStyleSelection.entries()),
-    bodyVisualStyles: profile.bodyVisualStyles,
+    visualStyleSelection: Array.from(profile.visualStyleSelection.entries()).map(
+      ([match, styleKey]) => ({ match, styleKey }),
+    ),
+    bodyVisualStyles: Object.entries(profile.bodyVisualStyles).map(([key, style]) => ({
+      key,
+      ...style,
+    })),
     axisVisualStyles: profile.axisVisualStyles,
     jointNames: profile.jointNames,
     qposDimension: profile.qposDimension,
-  });
+  };
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  const record = value as JsonRecord;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
+}
+
+export function viewerRobotProfileCanonicalJson(profile: ViewerRobotProfile): string {
+  return canonicalJson(viewerRobotProfileDocument(profile));
+}
+
+export async function viewerRobotProfileDigest(
+  profile: ViewerRobotProfile,
+): Promise<string> {
+  const bytes = new TextEncoder().encode(viewerRobotProfileCanonicalJson(profile));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return `sha256:${Array.from(new Uint8Array(digest), (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("")}`;
+}
+
+export async function loadViewerRobotProfileFromPayload(
+  payload: TransportPayloadV0,
+  fetcher: typeof fetch = fetch,
+): Promise<{
+  readonly profile: ViewerRobotProfile;
+  readonly reference: ViewerRobotDeclarationReference;
+}> {
+  const reference = viewerRobotDeclarationReferenceFromPayload(payload);
+  if (reference === null) {
+    throw new Error("viewer declaration frame reference is required before state");
+  }
+  const profile = await loadViewerRobotDeclaration(reference.url, fetcher);
+  const actualDigest = await viewerRobotProfileDigest(profile);
+  if (actualDigest !== reference.digest) {
+    throw new Error(
+      `viewer declaration digest mismatch: expected ${reference.digest}, got ${actualDigest}`,
+    );
+  }
+  validateViewerRobotProfileCompatibility(payload, profile);
+  return Object.freeze({ profile, reference });
+}
+
+export function validateViewerRobotProfileFrameReference(
+  payload: TransportPayloadV0,
+  expected: ViewerRobotDeclarationReference,
+  profile: ViewerRobotProfile,
+): void {
+  const actual = viewerRobotDeclarationReferenceFromPayload(payload);
+  if (actual === null) {
+    throw new Error("viewer declaration frame reference disappeared during the session");
+  }
+  if (
+    actual.resourcePath !== expected.resourcePath ||
+    actual.url !== expected.url ||
+    actual.digest !== expected.digest
+  ) {
+    throw new Error("viewer declaration frame reference changed during the session");
+  }
+  validateViewerRobotProfileCompatibility(payload, profile);
 }
 
 export async function loadViewerRobotDeclaration(
   url: string,
   fetcher: typeof fetch = fetch,
 ): Promise<ViewerRobotProfile> {
+  requireLocalUrl(url, "viewer declaration URL");
   const response = await fetcher(url);
   if (!response.ok) {
     throw new Error(`failed to fetch ${url}: ${response.status} ${response.statusText}`);

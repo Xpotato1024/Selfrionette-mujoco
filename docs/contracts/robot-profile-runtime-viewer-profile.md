@@ -53,13 +53,18 @@ profile-driven testが必要である。
 
 `RobotPluginRegistration`はonboarding assembly boundaryであり、`RobotBundle`、
 `viewer-robot-declaration/v1`、`RobotResourceDeclaration`、onboarding contract versionを一つの
-immutable objectへ束ねる。registration identity、Bundle identity、Profile / Runtime Plugin identity、
-Viewer declaration identityとcontract versionは一致しなければならない。Bundleは引き続きtyped provider
+immutable objectへ束ねる。`onboarding_contract_version`はregistration schemaのversionであり、robotの
+logical identity versionではない。onboarding schema v1はlogical v1とlogical v2のrobotを同じregistryへ
+登録できる。registration identityとBundle identityは一致し、Profile、Runtime Pluginが参照するProfile、
+Viewer declarationの`profile_contract_version`はrobot logical versionと一致しなければならない。
+unsupported onboarding schemaはlogical versionに関係なくfailする。Bundleは引き続きtyped provider
 assemblyだけを担い、execution中のservice locatorにはしない。
 
 asset / configurationのlogical repository pathはregistration declarationをSoTとする。Profileの
-`Path`とviewerのmodel / VFS referenceはregistrationとstartup時に照合し、generic codeはrobot IDや
-package pathからresource pathを推測しない。registration、viewer serialization、canonical identity
+`Path`とviewerのdeclaration / model / fixture / VFS referenceはregistrationとstartup時に照合し、
+generic codeはrobot IDやpackage pathから実行pathを推測しない。通常resourceは宣言identityに対応する
+`assets/mujoco/<robot_id>/`または`configs/<robot_id>/`の内側だけを許可する。shared resourceは暗黙許可せず、
+必要になった時点で別の明示contractを定義する。registration、viewer serialization、canonical identity
 materialにはPython package、module、class名を含めない。
 
 architecture test向けのcontract sentinelとして、ここでは`selects Option B`を固定し、
@@ -77,10 +82,11 @@ RuntimeConfig.robot_profile_id
   -> profile/model/joint/dimension validation
   -> IK/FK/motion/guard composition
 
-profile-aware startup payload
-  -> viewer-robot-declaration/v1 strict decoder
+profile-aware startup payload URL + digest
+  -> validated repository declaration resourceをfetch
+  -> viewer-robot-declaration/v1 strict decoder / digest validation
   -> asset/style/model composition
-  -> payload metadata compatibility check
+  -> steady-state frameのcompact reference / compatibility check
   -> qpos render only when compatible
 ```
 
@@ -191,36 +197,42 @@ first-input continuityと、physical collision feasibilityは別のacceptance bo
 
 Runtimeは既存のopen payload-v0 `metadata` mapへ`robot_profile_id`、
 `model_contract_version`、`robot_joint_names`、`robot_qpos_dimension`、
-`viewer_robot_declaration`を追加する。最後の値は`viewer-robot-declaration/v1`のserializable documentであり、
-plugin-owned declarationから生成する。envelopeとpayload versionは変更しない。WebSocket viewerは最初の
-profile-aware payloadをstartup declarationとして検証し、
+`viewer_robot_declaration_resource_path`、`viewer_robot_declaration_url`、
+`viewer_robot_declaration_digest`を追加する。frameへfull declarationを含めず、後三つは検証済みrepository
+resourceを指すcompactなsession referenceである。envelopeとpayload versionは変更しない。WebSocket viewerは
+接続後の最初のprofile-aware payloadでURLからfull declarationを取得し、strict decodeとcanonical
+SHA-256 digest検証を一度だけ行ってsession cacheを確定する。reconnect時は同じ手順で再取得する。
 qpos適用前にloaded modelのdimension/joint orderと四つすべてのbackend compatibility keyを
 確認する。profile-aware production viewerでは、`robot_profile_id`、
 `model_contract_version`、`robot_joint_names`、`robot_qpos_dimension`が
 解決済みViewer Robot Profileと完全一致しなければならない。compatibility metadataが
 missing、unknown、malformed、mismatchedの場合は明示的なinvalid diagnosticを生成し、
 qposを適用しない。このviewerではprofile-free legacy payloadまたはgeneric payloadから
-暗黙にfast_armへfallbackしない。このadditive metadata boundaryは、rendererにtransport
-policyを所有させることなく、将来session manifestまたはhello messageへ移せる。
+暗黙にfast_armへfallbackしない。static profileを明示したgeneric payloadではsession referenceがない既存挙動を
+維持する。
 
-四つのcompatibility keyとdiscovered registrationの`viewer_robot_declaration`はreservedかつ
-authoritativeである。production compositionでは
+四つのcompatibility keyと三つのviewer declaration reference keyはreservedかつauthoritativeである。
+production compositionでは
 general state metadataと分離し、state、replay frame、input intent、motion command、
 input-source metadataの後に最後に適用する（overwrite-protection Option A）。したがって
 spoofed valueは、qpos-rejection pathを含めて解決済みprofile valueに置換される。
 authoritative profile metadataを持たないgeneric pipelineはこれらのkeyを追加せず、通常の
 metadata behaviorを維持する。fieldはopen payload-v0 metadata mapへのadditive fieldのままだが、
 profile-aware production compositionではprofile-aware viewer compatibilityのため四つのkeyと
-viewer declarationをauthoritativeかつmandatoryとする。
+compact declaration referenceをauthoritativeかつmandatoryとする。steady-state frameではreferenceの
+resource path、URL、digestだけを比較し、full declarationのJSON decode / canonicalizeを反復しない。
+session中のreference欠落またはdigest / URL / resource path変更はfail-closedに拒否する。
 
-viewer declarationはmodel URL / resource path、VFS mapping、joint order、qpos dimension、startup keyframe、
-rendering styleを持つ。unknown field、missing field、schema version、remote / escaped resource、duplicate
-mapping、backend compatibility mismatch、session中のdeclaration変更は描画前またはqpos適用前にfailする。
+viewer declarationはmodel URL / resource path、fixture URL / resource path、VFS mapping、joint order、
+qpos dimension、startup keyframe、rendering styleを持つ。repository `assets/` pathからpublic URLを
+deterministicに導出し、declaration、model、fixture、各VFS URLをstartup検証済みfileへ一意に結び付ける。
+unknown field、missing field、schema version、remote / escaped resource、resource / URL mismatch、duplicate
+mapping、backend compatibility mismatchは描画前またはqpos適用前にfailする。
 viewerはdeclarationを使ってMuJoCo WASM sceneを構成するだけで、runtime state、IK / FK、planning、target、
 safety decisionを再計算しない。
 
 未接続時の既存fast_arm表示はTypeScript compatibility facadeがplugin-owned
-`assets/mujoco/fast_arm/viewer-profile.json`をloadして維持する。facadeは宣言内容を再定義せず、
+`/mujoco/fast_arm/viewer-profile.json`をloadして維持する。facadeは宣言内容を再定義せず、
 new robot onboarding registryとして使用しない。WebSocket pathのgeneric viewer sourceは具体robot IDを知らず、
 新robot追加時に編集しない。
 

@@ -28,13 +28,14 @@ ROBOT_BUNDLE_REGISTRY: VersionedPluginRegistry[RobotBundle] = VersionedPluginReg
 
 
 def resolve_robot_plugin_registration(
-    robot_id: str, *, contract_version: int = 1
+    robot_id: str, *, robot_logical_version: int = 1
 ) -> RobotPluginRegistration:
     registration = ROBOT_PLUGIN_REGISTRY.resolve(robot_id)
-    if registration.identity.version != contract_version:
+    if registration.identity.version != robot_logical_version:
         raise ValueError(
-            f"Robot Plugin contract version mismatch for {robot_id!r}: "
-            f"requested v{contract_version}, registered v{registration.identity.version}"
+            f"Robot Plugin logical version mismatch for {robot_id!r}: "
+            f"requested v{robot_logical_version}, "
+            f"registered v{registration.identity.version}"
         )
     return registration
 

@@ -10,6 +10,7 @@ from selfrionette.runtime.robot_plugin import (
     state_transform_by_name,
     validate_profile_model_dimensions,
 )
+from selfrionette.robot_profile import RobotProfile
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, MuJoCoState
 from test_robot_plugins.fixture_bot.profile import FIXTURE_ROBOT_PROFILE
 
@@ -43,7 +44,7 @@ class _FixtureMotionGenerator:
 
 @dataclass(frozen=True, slots=True)
 class FixtureRobotRuntimePlugin:
-    profile = FIXTURE_ROBOT_PROFILE
+    profile: RobotProfile = FIXTURE_ROBOT_PROFILE
 
     @property
     def profile_id(self) -> str:

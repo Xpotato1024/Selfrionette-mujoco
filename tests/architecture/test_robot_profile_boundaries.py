@@ -101,6 +101,6 @@ def test_fast_arm_viewer_registry_is_a_single_sot_compatibility_facade() -> None
         assert duplicated_field not in fast_arm_facade
     assert '"fast_arm"' not in registry
     assert '"fast_arm"' not in app
-    assert "viewerRobotProfileFromPayload" in (
+    assert "loadViewerRobotProfileFromPayload" in (
         viewer_root / "wasm-scene" / "mujocoSceneRenderer.ts"
     ).read_text(encoding="utf-8")

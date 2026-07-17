@@ -3,41 +3,42 @@
   "profileId": "fast_arm",
   "profileContractVersion": 1,
   "modelContractVersion": "fast_arm-mujoco-model/v1",
-  "modelUrl": "/assets/mujoco/fast_arm/scene.xml",
+  "modelUrl": "/mujoco/fast_arm/scene.xml",
   "modelResourcePath": "assets/mujoco/fast_arm/scene.xml",
   "initialKeyframeName": "home",
   "initialPoseSourceLabel": "MuJoCo home keyframe",
-  "fixtureUrl": "/fixtures/fast_arm_sweep_x_qpos.json",
+  "fixtureUrl": "/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json",
+  "fixtureResourcePath": "assets/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json",
   "vfsAssets": [
     {
       "vfsPath": "arm.xml",
       "resourcePath": "assets/mujoco/fast_arm/arm.xml",
-      "url": "/assets/mujoco/fast_arm/arm.xml"
+      "url": "/mujoco/fast_arm/arm.xml"
     },
     {
       "vfsPath": "meshes/BaseLink.stl",
       "resourcePath": "assets/mujoco/fast_arm/meshes/BaseLink.stl",
-      "url": "/assets/mujoco/fast_arm/meshes/BaseLink.stl"
+      "url": "/mujoco/fast_arm/meshes/BaseLink.stl"
     },
     {
       "vfsPath": "meshes/SholderLink1.stl",
       "resourcePath": "assets/mujoco/fast_arm/meshes/SholderLink1.stl",
-      "url": "/assets/mujoco/fast_arm/meshes/SholderLink1.stl"
+      "url": "/mujoco/fast_arm/meshes/SholderLink1.stl"
     },
     {
       "vfsPath": "meshes/SholderLink2.stl",
       "resourcePath": "assets/mujoco/fast_arm/meshes/SholderLink2.stl",
-      "url": "/assets/mujoco/fast_arm/meshes/SholderLink2.stl"
+      "url": "/mujoco/fast_arm/meshes/SholderLink2.stl"
     },
     {
       "vfsPath": "meshes/UpperArmLink.stl",
       "resourcePath": "assets/mujoco/fast_arm/meshes/UpperArmLink.stl",
-      "url": "/assets/mujoco/fast_arm/meshes/UpperArmLink.stl"
+      "url": "/mujoco/fast_arm/meshes/UpperArmLink.stl"
     },
     {
       "vfsPath": "meshes/ForeArmLink.stl",
       "resourcePath": "assets/mujoco/fast_arm/meshes/ForeArmLink.stl",
-      "url": "/assets/mujoco/fast_arm/meshes/ForeArmLink.stl"
+      "url": "/mujoco/fast_arm/meshes/ForeArmLink.stl"
     }
   ],
   "visualStyleSelection": [

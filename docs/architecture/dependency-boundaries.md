@@ -55,7 +55,8 @@ generic schema / domain / Protocol
   import pathとして使用しない。
 - 各robot packageの`ROBOT_PLUGIN`はBundle、viewer declaration、resource declaration、
   onboarding contract versionを一つのimmutable registrationへ束ねる。`__init__.py`の
-  import副作用で自己登録しない。
+  import副作用で自己登録しない。onboarding contract versionはregistration schema軸であり、
+  Bundle / Profile / Viewerのrobot logical version軸とは独立させる。
 - `selfrionette.plugins.catalog`はproduction discovery結果の唯一のprojection入口であり、
   concrete robot package、具体robot ID、Bundle singletonを直接importまたは列挙しない。
 - ProfileとRuntime Pluginのresolverは、別registryへ具体objectを重複登録せず、resolved Bundleの
@@ -69,6 +70,8 @@ generic schema / domain / Protocol
   concrete catalogをloadしない。
 - production discoveryを起動できるgeneric moduleはcatalogだけとする。test fixtureはproduction namespaceへ
   置かず、明示的なtest discovery rootを使用する。
+- registration resourceは宣言identityと同じ`assets/mujoco/<robot_id>/` / `configs/<robot_id>/`へ限定し、
+  viewer public URLは検証済みasset pathからdeterministicに生成する。shared resourceは暗黙許可しない。
 
 禁止するdependency:
 

@@ -38,7 +38,13 @@ Runtime Pluginを直接使用できるのはcomposition中のmodel validationと
 discoveryはapplicationがcatalog resolverへ初めて到達した時点で同期的に完了し、duplicate identity、
 broken entry point、contract / capability不整合、missing / escaped resourceをpartial registryなしで拒否する。
 readinessはdiscovered catalogからBundleを選択した後に行い、discovery順、package path、module / class名を
-requested / resolved / freeze identityへ含めない。
+requested / resolved / freeze identityへ含めない。onboarding schema versionはdiscovery registrationのdecode軸、
+Bundle identity versionはrobot selection / logical contract軸として別々に検証し、catalog resolverで混同しない。
+
+viewer deliveryではruntime frameにfull declarationを埋め込まず、検証済みrepository declaration resourceの
+public URLとcanonical digestだけをauthoritative metadataとして渡す。viewerはconnection開始後に一度だけfetchし、
+steady-state frameではcompact referenceの一致だけを検査する。このdeliveryはrendering resourceの解決であり、
+runtime execution edgeまたはreadinessへviewer serviceを持ち込まない。
 
 実験compositionでは、Robot Bundle、Environment / Scene、Control / Mapping、Task、Evaluationを
 versioned known-ID registryから明示解決する。`runtime/`はphysicsやrunner開始前にcapability provider、

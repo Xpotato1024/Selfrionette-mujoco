@@ -20,6 +20,7 @@ export interface ViewerRobotProfile {
   readonly initialKeyframeName: string;
   readonly initialPoseSourceLabel: string;
   readonly fixtureUrl: string;
+  readonly fixtureResourcePath: string;
   readonly vfsAssets: ReadonlyMap<string, string>;
   readonly vfsResourcePaths: ReadonlyMap<string, string>;
   readonly visualStyleSelection: ReadonlyMap<string, string>;

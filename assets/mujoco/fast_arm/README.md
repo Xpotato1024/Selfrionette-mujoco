@@ -8,14 +8,15 @@
 - `scene.xml`: `arm.xml`をincludeするcanonical scene wrapper。
 - `meshes/`: arm model用canonical STL mesh directory。
 - `viewer-profile.json`: Robot Pluginが所有するversioned viewer declarationのserializable SoT。
+- `fixtures/`: viewer debug fixtureを含むplugin-owned resource directory。
 
 ## path contract
 
 - `arm.xml`は`meshdir="meshes"`を使用し、`meshes/`からmeshを解決する。
 - `scene.xml`は同じdirectoryの`arm.xml`をincludeする。
 - STL filenameは既存の`Sholder`という綴りを含むlegacy asset名を維持する。
-- backend model、viewer model URL、VFS mappingの対応は`ROBOT_PLUGIN`のresource declarationと
-  `viewer-profile.json`で明示し、robot IDから推測しない。
+- backend model、viewer declaration / model / fixture / VFSのrepository pathとpublic URLの対応は
+  `ROBOT_PLUGIN`のresource declarationと`viewer-profile.json`で明示し、実行時にrobot IDから推測しない。
 
 ## 変更規則
 

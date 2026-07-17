@@ -17,15 +17,19 @@ canonical contractである。
 
 新しいrobotの標準配置は`assets/mujoco/<robot_id>/`と`configs/<robot_id>/`である。ただし、
 generic catalog、runtime、viewerはrobot IDからpathを組み立てない。`ROBOT_PLUGIN`の
-`RobotResourceDeclaration`がmodel、configuration、viewer VFS resourceのrepository-relative pathを
-明示し、`ViewerRobotDeclaration`がmodel URL、model resource path、VFS path / resource / URL対応を
-明示する。
+`RobotResourceDeclaration`がmodel、configuration、viewer declaration、viewer fixture、viewer VFS resourceの
+repository-relative pathを明示し、`ViewerRobotDeclaration`がmodel、fixture、VFSのresource path / public URL対応を
+明示する。public URLはrepository `assets/` pathからdeterministicに生成し、Vite dev/buildは同じ`assets/` rootを
+公開する。
 
 production discoveryはcatalog registryを公開する前に、全resourceが許可されたrepository root内の
 実fileへ解決すること、Profileのmodel / configuration referenceと一致すること、viewer declarationと
 backend resource declarationが一致することを検証する。MJCFの`include`とmesh / texture / hfield fileは
 宣言済みVFS mappingで解決できなければならない。absolute path、`..`によるescape、remote URL、missing
-resourceはstartup failureであり、warning skipまたはrobot ID由来pathへのfallbackを行わない。
+resourceはstartup failureであり、warning skipまたはrobot ID由来pathへのfallbackを行わない。さらにregistration
+identityが`<robot_id>`ならasset resourceは`assets/mujoco/<robot_id>/`、configurationは
+`configs/<robot_id>/`の内側に限定する。sibling robot directoryとsymlink escapeを拒否する。shared resourceは
+暗黙許可せず、必要時に独立した明示contractを追加する。
 
 ## fast_armのcanonical asset
 
@@ -39,6 +43,7 @@ resourceはstartup failureであり、warning skipまたはrobot ID由来pathへ
   - `meshes/UpperArmLink.stl`
   - `meshes/ForeArmLink.stl`
   - `viewer-profile.json`
+  - `fixtures/fast_arm_sweep_x_qpos.json`
 - `arm.xml`はcanonicalなmesh directory contractである`meshdir="meshes"`を使用し、
   `assets/mujoco/fast_arm/meshes/`からmesh fileを解決しなければならない。
 - `scene.xml`は同じdirectoryの`arm.xml`をincludeしなければならない。

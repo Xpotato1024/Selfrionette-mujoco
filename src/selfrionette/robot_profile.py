@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from selfrionette.viewer_robot_declaration import ViewerRobotDeclaration
+from selfrionette.viewer_robot_declaration import (
+    ViewerRobotDeclaration,
+    repository_resource_public_url,
+    viewer_robot_declaration_digest,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +49,8 @@ class RobotProfile:
     viewer_profile_id: str
     supported_capabilities: frozenset[str]
     viewer_declaration: ViewerRobotDeclaration | None = None
+    viewer_declaration_resource_path: str | None = None
+    viewer_declaration_url: str | None = None
 
     def __post_init__(self) -> None:
         if not self.profile_id:
@@ -67,6 +73,26 @@ class RobotProfile:
             raise ValueError("initial_keyframe_name must not be empty")
         if not self.viewer_profile_id:
             raise ValueError("viewer_profile_id must not be empty")
+        viewer_reference_parts = (
+            self.viewer_declaration,
+            self.viewer_declaration_resource_path,
+            self.viewer_declaration_url,
+        )
+        if any(item is None for item in viewer_reference_parts) and any(
+            item is not None for item in viewer_reference_parts
+        ):
+            raise ValueError(
+                "viewer declaration, resource path, and URL must be declared together"
+            )
+        if self.viewer_declaration_resource_path is not None:
+            expected_url = repository_resource_public_url(
+                self.viewer_declaration_resource_path
+            )
+            if self.viewer_declaration_url != expected_url:
+                raise ValueError(
+                    "viewer declaration resource path/URL mismatch: "
+                    f"expected {expected_url!r}, got {self.viewer_declaration_url!r}"
+                )
 
 
 def robot_profile_runtime_metadata(profile: RobotProfile) -> dict[str, object]:
@@ -77,7 +103,19 @@ def robot_profile_runtime_metadata(profile: RobotProfile) -> dict[str, object]:
         "robot_qpos_dimension": profile.qpos_dimension,
     }
     if profile.viewer_declaration is not None:
-        metadata["viewer_robot_declaration"] = profile.viewer_declaration.to_document()
+        assert profile.viewer_declaration_resource_path is not None
+        assert profile.viewer_declaration_url is not None
+        metadata.update(
+            {
+                "viewer_robot_declaration_resource_path": (
+                    profile.viewer_declaration_resource_path
+                ),
+                "viewer_robot_declaration_url": profile.viewer_declaration_url,
+                "viewer_robot_declaration_digest": viewer_robot_declaration_digest(
+                    profile.viewer_declaration
+                ),
+            }
+        )
     return metadata
 
 

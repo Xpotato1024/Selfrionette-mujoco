@@ -44,6 +44,10 @@ FIXTURE_ROBOT_PROFILE = RobotProfile(
         }
     ),
     viewer_declaration=FIXTURE_VIEWER_DECLARATION,
+    viewer_declaration_resource_path=(
+        "assets/mujoco/fixture_bot/viewer-profile.json"
+    ),
+    viewer_declaration_url="/mujoco/fixture_bot/viewer-profile.json",
 )
 
 

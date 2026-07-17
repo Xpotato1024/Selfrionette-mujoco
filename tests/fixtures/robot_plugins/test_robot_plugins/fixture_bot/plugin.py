@@ -20,7 +20,16 @@ ROBOT_PLUGIN = RobotPluginRegistration(
         configurations=(
             RepositoryResource("configs/fixture_bot/limits.toml"),
         ),
-        viewer_vfs_resources=(),
+        viewer_declaration=RepositoryResource(
+            "assets/mujoco/fixture_bot/viewer-profile.json"
+        ),
+        viewer_fixture=RepositoryResource(
+            "assets/mujoco/fixture_bot/fixture.json"
+        ),
+        viewer_vfs_resources=tuple(
+            RepositoryResource(item.resource_path)
+            for item in FIXTURE_VIEWER_DECLARATION.vfs_assets
+        ),
     ),
 )
 

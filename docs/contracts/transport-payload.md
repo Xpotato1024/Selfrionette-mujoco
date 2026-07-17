@@ -44,9 +44,12 @@ target lifecycleを実行しない。payload versionを保持し、別のphysica
 - `robot_profile_id`、`model_contract_version`、`robot_joint_names`、
   `robot_qpos_dimension`はprofile-aware productionでreservedかつauthoritativeである。
   resolved profile valueを最後に適用し、input / replay / command metadataによるspoofingを許さない。
-- discovered Robot Pluginでは、同じreserved metadataへ`viewer_robot_declaration`を追加する。
-  値は`viewer-robot-declaration/v1`のJSON-compatible documentであり、Python module / class / package pathを
-  含まない。runtimeは登録済みProfileが参照するdeclarationだけをauthoritativeに上書きする。
+- discovered Robot Pluginでは、同じreserved metadataへ
+  `viewer_robot_declaration_resource_path`、`viewer_robot_declaration_url`、
+  `viewer_robot_declaration_digest`を追加する。full `viewer-robot-declaration/v1`はframeごとに送らない。
+  三つの値は登録済みProfileが参照する検証済みrepository resourceとcanonical SHA-256 digestであり、
+  Python module / class / package pathを含まない。runtimeは三つを組としてauthoritativeに上書きし、
+  partial referenceと旧full declarationのspoofingを除去する。
 - profile-free generic payloadからfast_armを推論しない。
 
 ## viewer boundary
@@ -54,9 +57,11 @@ target lifecycleを実行しない。payload versionを保持し、別のphysica
 viewerはpayloadをread-onlyに描画する。body/site transform、target marker、optional diagnosticから
 表示を構築してよいが、qpos、IK、FK、hidden physics stateを再計算しない。invalidまたはprofile-mismatched
 candidateはsceneへ適用せず、last valid scene stateを保持する。
-WebSocket viewerは最初のprofile-aware payloadからviewer declarationを検証してmodel loadを開始する。
-同じpayloadの四つのcompatibility keyとdeclarationが一致しない場合、またはsession中にdeclarationが
-変化した場合は、model / qposを適用しない。
+WebSocket viewerは接続後の最初のprofile-aware payloadにあるURLからviewer declarationをfetchし、
+repository resource pathとの対応、strict schema、digest、四つのcompatibility keyを確定してからmodel loadを
+開始する。以後のframeはcompact referenceだけを比較し、full declarationを再decodeしない。session中の
+digest / URL / resource path変更またはreference欠落時はqposを適用しない。新しいconnectionではdeclarationを
+再取得する。session referenceがないprofile-free generic payloadの既存shapeは変更しない。
 
 ## delivery policy
 

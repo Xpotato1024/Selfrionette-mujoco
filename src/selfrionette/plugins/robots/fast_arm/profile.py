@@ -64,6 +64,10 @@ FAST_ARM_ROBOT_PROFILE = RobotProfile(
         }
     ),
     viewer_declaration=FAST_ARM_VIEWER_DECLARATION,
+    viewer_declaration_resource_path=(
+        "assets/mujoco/fast_arm/viewer-profile.json"
+    ),
+    viewer_declaration_url="/mujoco/fast_arm/viewer-profile.json",
 )
 
 

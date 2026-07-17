@@ -1,0 +1,12 @@
+<mujoco>
+  <worldbody>
+    <body name="link">
+      <joint name="fixture_joint" type="hinge" axis="0 0 1" range="-1 1"/>
+      <geom name="link_geom" type="capsule" size="0.02 0.1" pos="0 0 0.1"/>
+      <site name="tip" pos="0 0 0"/>
+    </body>
+  </worldbody>
+  <keyframe>
+    <key name="home" qpos="0.25"/>
+  </keyframe>
+</mujoco>

@@ -26,8 +26,12 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { TransportPayloadV0 } from "../types/transportPayload.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import {
-  viewerRobotProfileCanonicalJson,
-  viewerRobotProfileFromPayload,
+  loadViewerRobotProfileFromPayload,
+  validateViewerRobotProfileCompatibility,
+  validateViewerRobotProfileFrameReference,
+  viewerRobotDeclarationReferenceFromPayload,
+  viewerRobotProfileDigest,
+  type ViewerRobotDeclarationReference,
 } from "../robot-profiles/declaration.js";
 import {
   createViewerWebSocketClient,
@@ -156,6 +160,7 @@ function createStatePatch(
 export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): MujocoSceneRenderer {
   const frameTiming = createViewerFrameTiming();
   let profile = options.profile;
+  let declarationReference: ViewerRobotDeclarationReference | null = null;
   const state = createInitialProductViewerState(profile ?? undefined);
   const requireProfile = (): ViewerRobotProfile => {
     if (profile === null) {
@@ -468,6 +473,31 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     frameHandle = window.requestAnimationFrame(animate);
   };
 
+  const acceptCompatiblePayload = (
+    payload: TransportPayloadV0,
+    observation: ViewerWebSocketPayloadObservation,
+  ): void => {
+    frameTiming.receive(payload, observation);
+    const qposResolution = resolveTransportQpos(payload, model.nq, requireProfile());
+    if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
+      frameTiming.recordCompatibilityInvalidIngress();
+      updateStatus({
+        status: "warning",
+        sourceLabel: qposResolution.sourceLabel,
+        qposStatus: qposResolution.status,
+        qposError: qposResolution.errorMessage,
+        currentFrameIndex: qposResolution.currentFrameIndex,
+        currentTimestampS: qposResolution.currentTimestampS,
+        currentQpos: null,
+        currentQposText: "[]",
+        endpointEvaluation: payload.endpoint_evaluation ?? null,
+        inputOverlay: buildProductViewerInputOverlayState(payload),
+      });
+      return;
+    }
+    frameTiming.acceptLatestCandidate(payload, observation);
+  };
+
   const startWebSocketClient = (): void => {
     if (websocketUrl === null) {
       updateStatus({
@@ -495,43 +525,30 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       onPayload(payload, observation) {
         if (profile === null || !hasLoaded) {
           pendingBootstrapPayload = { payload, observation };
-          if (profile === null && bootstrapPromise === null) {
+          if (bootstrapPromise === null) {
             bootstrapPromise = bootstrapFromPayload(payload);
           }
           return;
         }
-        const deliveredProfile = viewerRobotProfileFromPayload(payload);
-        if (
-          viewerRobotProfileCanonicalJson(deliveredProfile) !==
-          viewerRobotProfileCanonicalJson(profile)
-        ) {
-          frameTiming.recordCompatibilityInvalidIngress();
-          updateStatus({
-            status: "warning",
-            qposStatus: "invalid",
-            qposError: "backend/viewer declaration changed during the session",
-          });
+
+        const deliveredReference = viewerRobotDeclarationReferenceFromPayload(payload);
+        if (declarationReference === null && deliveredReference !== null) {
+          pendingBootstrapPayload = { payload, observation };
+          if (bootstrapPromise === null) {
+            bootstrapPromise = bootstrapFromPayload(payload);
+          }
           return;
         }
-        frameTiming.receive(payload, observation);
-        const qposResolution = resolveTransportQpos(payload, model.nq, requireProfile());
-        if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
-          frameTiming.recordCompatibilityInvalidIngress();
-          updateStatus({
-            status: "warning",
-            sourceLabel: qposResolution.sourceLabel,
-            qposStatus: qposResolution.status,
-            qposError: qposResolution.errorMessage,
-            currentFrameIndex: qposResolution.currentFrameIndex,
-            currentTimestampS: qposResolution.currentTimestampS,
-            currentQpos: null,
-            currentQposText: "[]",
-            endpointEvaluation: payload.endpoint_evaluation ?? null,
-            inputOverlay: buildProductViewerInputOverlayState(payload),
-          });
-          return;
+        if (declarationReference === null) {
+          validateViewerRobotProfileCompatibility(payload, profile);
+        } else {
+          validateViewerRobotProfileFrameReference(
+            payload,
+            declarationReference,
+            profile,
+          );
         }
-        frameTiming.acceptLatestCandidate(payload, observation);
+        acceptCompatiblePayload(payload, observation);
       },
       onPayloadError(error) {
         frameTiming.recordParseError();
@@ -557,29 +574,43 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
   const bootstrapFromPayload = async (payload: TransportPayloadV0): Promise<void> => {
     try {
-      const deliveredProfile = viewerRobotProfileFromPayload(payload);
-      const expectedProfileId = options.expectedProfileId?.trim() || null;
-      if (expectedProfileId !== null && deliveredProfile.profileId !== expectedProfileId) {
-        throw new Error(
-          `viewer requested robot profile ${expectedProfileId}, backend declared ${deliveredProfile.profileId}`,
-        );
+      if (profile === null) {
+        const delivered = await loadViewerRobotProfileFromPayload(payload);
+        const expectedProfileId = options.expectedProfileId?.trim() || null;
+        if (expectedProfileId !== null && delivered.profile.profileId !== expectedProfileId) {
+          throw new Error(
+            `viewer requested robot profile ${expectedProfileId}, backend declared ${delivered.profile.profileId}`,
+          );
+        }
+        profile = delivered.profile;
+        declarationReference = delivered.reference;
+        startupPoseSourceLabel = delivered.profile.initialPoseSourceLabel;
+        options.onProfileResolved?.(delivered.profile);
+        await initializeModel();
+      } else {
+        const deliveredReference = viewerRobotDeclarationReferenceFromPayload(payload);
+        if (deliveredReference === null) {
+          throw new Error("viewer declaration frame reference is required before state");
+        }
+        const actualDigest = await viewerRobotProfileDigest(profile);
+        if (actualDigest !== deliveredReference.digest) {
+          throw new Error(
+            `viewer declaration digest mismatch: expected ${deliveredReference.digest}, got ${actualDigest}`,
+          );
+        }
+        validateViewerRobotProfileCompatibility(payload, profile);
+        declarationReference = deliveredReference;
       }
-      profile = deliveredProfile;
-      startupPoseSourceLabel = deliveredProfile.initialPoseSourceLabel;
-      options.onProfileResolved?.(deliveredProfile);
-      await initializeModel();
+
       const pending = pendingBootstrapPayload;
       pendingBootstrapPayload = null;
       if (pending !== null) {
-        const latestProfile = viewerRobotProfileFromPayload(pending.payload);
-        if (
-          viewerRobotProfileCanonicalJson(latestProfile) !==
-          viewerRobotProfileCanonicalJson(deliveredProfile)
-        ) {
-          throw new Error("backend/viewer declaration changed during startup");
-        }
-        frameTiming.receive(pending.payload, pending.observation);
-        frameTiming.acceptLatestCandidate(pending.payload, pending.observation);
+        validateViewerRobotProfileFrameReference(
+          pending.payload,
+          declarationReference,
+          requireProfile(),
+        );
+        acceptCompatiblePayload(pending.payload, pending.observation);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
