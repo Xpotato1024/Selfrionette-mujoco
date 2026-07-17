@@ -12,6 +12,7 @@ from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.mujoco_backend.model_loader import load_mujoco_model
 from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.model_contract import FAST_ARM_TIP_SITE_NAME
 from selfrionette.plugins.robots.fast_arm.feasibility import (
     load_and_validate_fast_arm_joint_limit_config,
 )
@@ -150,7 +151,7 @@ def _failure_joint_order_mismatch(_tmp_path: Path) -> None:
 def _failure_missing_endpoint_site(_tmp_path: Path) -> None:
     extract_mujoco_site_endpoint_from_state(
         MuJoCoState(frame_index=0, time_s=0.0),
-        site_name=FAST_ARM_ROBOT_PROFILE.endpoint.site_name or "",
+        site_name=FAST_ARM_TIP_SITE_NAME,
     )
 
 
@@ -249,7 +250,7 @@ FAST_ARM_ROBOT_RUNTIME_PLUGIN_CONFORMANCE_CASE = RobotRuntimePluginConformanceCa
     expected_joint_names=FAST_ARM_ROBOT_PROFILE.canonical_joint_names,
     expected_qpos_dimension=4,
     expected_qvel_dimension=4,
-    endpoint_site_name=FAST_ARM_ROBOT_PROFILE.endpoint.site_name or "",
+    endpoint_site_name=FAST_ARM_TIP_SITE_NAME,
     joint_limit_config_asset=FAST_ARM_ROBOT_PROFILE.joint_limit_config_asset,
     known_fk_cases=FAST_ARM_KNOWN_FK_CASES,
     ik_round_trip_cases=FAST_ARM_IK_ROUND_TRIP_CASES,

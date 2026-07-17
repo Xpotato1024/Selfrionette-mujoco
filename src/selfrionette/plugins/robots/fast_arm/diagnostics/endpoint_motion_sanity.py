@@ -18,6 +18,7 @@ from selfrionette.plugins.robots.fast_arm.kinematics import (
 )
 from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.mujoco_backend import inspect_mujoco_model
+from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.config import RuntimeConfig
@@ -51,6 +52,8 @@ class _DiagnosticStatePublisher:
 
     async def publish(self, state: MuJoCoState) -> None:
         self.last_state = state
+
+
 _TRAJECTORY_LOG_COLUMNS = (
     "step",
     "time_s",
@@ -1175,11 +1178,7 @@ def run_fast_arm_joint_axis_mapping_diagnostics(
     if perturbation_rad <= 0.0:
         raise ValueError("perturbation_rad must be positive")
 
-    simulator = (
-        build_fast_arm_simulator()
-        if model_path is None
-        else HeadlessMuJoCoSimulator.from_model_path(model_path)
-    )
+    simulator = _build_fast_arm_simulator(model_path)
     mujoco = simulator._import_mujoco()
     joint_names = inspect_mujoco_model(simulator.model).joint_names
     results: list[FastArmJointAxisPerturbationResult] = []
@@ -1189,11 +1188,7 @@ def run_fast_arm_joint_axis_mapping_diagnostics(
         axis = tuple(float(component) for component in simulator.model.jnt_axis[joint_id])
         if len(axis) != 3:
             raise ValueError("mujoco_joint_axis must contain exactly three values")
-        result_simulator = (
-            build_fast_arm_simulator()
-            if model_path is None
-            else HeadlessMuJoCoSimulator.from_model_path(model_path)
-        )
+        result_simulator = _build_fast_arm_simulator(model_path)
         results.append(
             _build_joint_axis_perturbation_result(
                 simulator=result_simulator,

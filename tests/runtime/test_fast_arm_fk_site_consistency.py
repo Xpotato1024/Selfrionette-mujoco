@@ -12,8 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoSiteEndpointEvaluation
+from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoEndpointEvaluation
 from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
     _build_fast_arm_fk_site_consistency_diagnostic,
     _fast_arm_fk_site_consistency_qpos_fixtures,
@@ -109,7 +108,7 @@ def test_fast_arm_fk_site_consistency_tip_site_is_primary_and_body_reference_is_
     assert tip_evaluation.kind == "site"
     assert tip_evaluation.name == "tip"
 
-    fake_body_reference = RuntimeMuJoCoSiteEndpointEvaluation(
+    fake_body_reference = RuntimeMuJoCoEndpointEvaluation(
         role="tip",
         kind="body",
         name="fore_arm_link",

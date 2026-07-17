@@ -35,6 +35,12 @@ from selfrionette.schemas import MuJoCoState
 class FastArmRuntimePlugin:
     profile: RobotProfile = FAST_ARM_ROBOT_PROFILE
 
+    def _endpoint_site_name(self) -> str:
+        site_name = self.profile.endpoint.site_name
+        if site_name is None:
+            raise ValueError("fast_arm Runtime Plugin requires an endpoint site binding")
+        return site_name
+
     @property
     def profile_id(self) -> str:
         return self.profile.profile_id
@@ -83,7 +89,7 @@ class FastArmRuntimePlugin:
     def build_local_endpoint_motion_generator(self) -> LocalEndpointMotionGenerator:
         return LocalEndpointMotionGenerator(
             endpoint_kinematics=FastArmMuJoCoModelForwardKinematicsSolver(
-                tip_site_name=self.profile.endpoint.site_name or ""
+                tip_site_name=self._endpoint_site_name()
             ),
             endpoint_model="mujoco_model_aligned_tip_site",
             fd_epsilon_rad=DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD,

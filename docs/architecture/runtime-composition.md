@@ -35,6 +35,9 @@ onboarding schema versionをruntime selectionへ流用しない。
 `RuntimeInputSourceStepLoopPlan`は`EndpointPoseProvider`、`EndpointCommandProvider`、
 `QposFeasibilityProvider`だけを保持し、`ResolvedRobotRuntime`またはRuntime Plugin全体をexecution edgeへ
 持ち越さない。endpoint poseの観測、motion generator、qpos guardはそれぞれのtyped providerを使用する。
+concrete MuJoCo pipelineのendpoint evaluation publisherも`ENDPOINT_POSE_V1` providerを受け取り、
+site/body endpointの選択をgeneric runtime内で再構築しない。assembly時の初期stateでendpoint positionを
+解決できない場合はfail closedとする。
 Runtime Pluginを直接使用できるのはcomposition中のmodel validationとFK factoryに限定する。
 各typed providerの`ProviderAssemblyBinding`はBundle logical identityとcanonical Profile / Runtime Plugin ownerの
 object identityを固定する。custom providerを含め、stale Profile、stale Runtime Plugin、別robot、別logical versionに

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import pytest
 
-from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoSiteEndpointEvaluation
+from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoEndpointEvaluation
 from selfrionette.runtime import (
     RuntimeEndpointEvaluationMetrics,
     RuntimeForwardKinematicsEvaluation,
+    build_endpoint_evaluation_state_publisher,
     build_runtime_endpoint_evaluation_metrics,
     build_runtime_endpoint_evaluation_payload_from_state,
     build_runtime_endpoint_evaluation_payload,
@@ -16,11 +18,67 @@ from selfrionette.runtime import (
     evaluate_fk_endpoint_from_joint_command,
     runtime_endpoint_evaluation_metrics_to_payload,
 )
-from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, SiteTransform
+from selfrionette.robot_profile import EndpointReference
+from selfrionette.runtime.robot_bundle import EndpointPoseObservation
+from selfrionette.schemas import (
+    BodyTransform,
+    JointCommand,
+    MotionCommand,
+    MuJoCoState,
+    SiteTransform,
+)
 from tests.support.kinematics_solver_doubles import (
     FailingForwardKinematicsSolver,
     FixedForwardKinematicsSolver,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _ReferenceEndpointPoseProvider:
+    reference: EndpointReference
+
+    def observe_endpoint_pose(self, state: MuJoCoState) -> EndpointPoseObservation:
+        if self.reference.site_name is not None:
+            transforms = state.sites
+            name = self.reference.site_name
+        else:
+            transforms = state.bodies
+            assert self.reference.body_name is not None
+            name = self.reference.body_name
+        transform = next((item for item in transforms if item.name == name), None)
+        if transform is None:
+            return EndpointPoseObservation(position_m=None, quaternion_wxyz=None)
+        return EndpointPoseObservation(
+            position_m=transform.position_m,
+            quaternion_wxyz=transform.quaternion_wxyz,
+        )
+
+
+def _site_endpoint_pose_provider() -> _ReferenceEndpointPoseProvider:
+    return _ReferenceEndpointPoseProvider(
+        EndpointReference(site_name="tip", body_name=None)
+    )
+
+
+@pytest.mark.parametrize(
+    ("site_name", "body_name"),
+    [("", None), (None, ""), (" tip", None), (None, "tool ")],
+)
+def test_endpoint_reference_rejects_empty_or_untrimmed_names(
+    site_name: str | None,
+    body_name: str | None,
+) -> None:
+    with pytest.raises(ValueError, match="endpoint reference .* must not be empty"):
+        EndpointReference(site_name=site_name, body_name=body_name)
+
+
+class _CommandSource:
+    last_command: MotionCommand | None = None
+
+
+class _RecordingPublisher:
+    async def publish(self, state: MuJoCoState) -> None:
+        self.state = state
 
 
 def test_compute_vector_error_and_norm_use_end_minus_start_semantics() -> None:
@@ -34,7 +92,7 @@ def test_build_runtime_endpoint_evaluation_metrics_keeps_desired_qpos_fk_and_sit
     solver = FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0))
     joint_command = JointCommand(joint_angles_rad=(0.3, -0.2))
     fk_evaluation = evaluate_fk_endpoint_from_joint_command(solver, joint_command)
-    site_evaluation = RuntimeMuJoCoSiteEndpointEvaluation(
+    site_evaluation = RuntimeMuJoCoEndpointEvaluation(
         role="tip",
         kind="site",
         name="tip",
@@ -81,13 +139,13 @@ def test_build_runtime_endpoint_evaluation_metrics_keeps_desired_qpos_fk_and_sit
         (
             None,
             RuntimeForwardKinematicsEvaluation((0.1,), (0.1,), (0.1, 0.2, 0.3)),
-            RuntimeMuJoCoSiteEndpointEvaluation("tip", "site", "tip", (0.1, 0.2, 0.3)),
+            RuntimeMuJoCoEndpointEvaluation("tip", "site", "tip", (0.1, 0.2, 0.3)),
             "desired_endpoint_m is required",
         ),
         (
             (0.1, 0.2, 0.3),
             None,
-            RuntimeMuJoCoSiteEndpointEvaluation("tip", "site", "tip", (0.1, 0.2, 0.3)),
+            RuntimeMuJoCoEndpointEvaluation("tip", "site", "tip", (0.1, 0.2, 0.3)),
             "fk_evaluation is required",
         ),
         (
@@ -101,7 +159,7 @@ def test_build_runtime_endpoint_evaluation_metrics_keeps_desired_qpos_fk_and_sit
 def test_build_runtime_endpoint_evaluation_metrics_rejects_missing_inputs(
     desired_endpoint_m: tuple[float, float, float] | None,
     fk_evaluation: RuntimeForwardKinematicsEvaluation | None,
-    site_evaluation: RuntimeMuJoCoSiteEndpointEvaluation | None,
+    site_evaluation: RuntimeMuJoCoEndpointEvaluation | None,
     match: str,
 ) -> None:
     with pytest.raises(ValueError, match=match):
@@ -142,7 +200,7 @@ def test_build_runtime_endpoint_evaluation_metrics_rejects_malformed_vectors(
     match: str,
 ) -> None:
     fk_evaluation = RuntimeForwardKinematicsEvaluation((0.1, 0.2), (0.1, 0.2), fk_endpoint_m)
-    site_evaluation = RuntimeMuJoCoSiteEndpointEvaluation("tip", "site", "tip", site_endpoint_m)
+    site_evaluation = RuntimeMuJoCoEndpointEvaluation("tip", "site", "tip", site_endpoint_m)
 
     with pytest.raises(ValueError, match=match):
         build_runtime_endpoint_evaluation_metrics(
@@ -159,7 +217,7 @@ def test_build_runtime_endpoint_evaluation_metrics_requires_meter_units() -> Non
         (0.4, 0.5, 0.6),
         unit="centimeter",
     )
-    site_evaluation = RuntimeMuJoCoSiteEndpointEvaluation("tip", "site", "tip", (0.7, 0.8, 0.9))
+    site_evaluation = RuntimeMuJoCoEndpointEvaluation("tip", "site", "tip", (0.7, 0.8, 0.9))
 
     with pytest.raises(ValueError, match="fk_evaluation.unit must use meter units"):
         build_runtime_endpoint_evaluation_metrics(
@@ -169,7 +227,7 @@ def test_build_runtime_endpoint_evaluation_metrics_requires_meter_units() -> Non
         )
 
     fk_evaluation = RuntimeForwardKinematicsEvaluation((0.1, 0.2), (0.1, 0.2), (0.4, 0.5, 0.6))
-    site_evaluation = RuntimeMuJoCoSiteEndpointEvaluation(
+    site_evaluation = RuntimeMuJoCoEndpointEvaluation(
         "tip",
         "site",
         "tip",
@@ -187,7 +245,7 @@ def test_build_runtime_endpoint_evaluation_metrics_requires_meter_units() -> Non
 
 def test_build_runtime_endpoint_evaluation_metrics_rejects_empty_qpos_like_input() -> None:
     fk_evaluation = RuntimeForwardKinematicsEvaluation((), (), (0.4, 0.5, 0.6))
-    site_evaluation = RuntimeMuJoCoSiteEndpointEvaluation("tip", "site", "tip", (0.7, 0.8, 0.9))
+    site_evaluation = RuntimeMuJoCoEndpointEvaluation("tip", "site", "tip", (0.7, 0.8, 0.9))
 
     with pytest.raises(ValueError, match="qpos_like_joint_angles_rad must contain at least one joint angle"):
         build_runtime_endpoint_evaluation_metrics(
@@ -232,12 +290,64 @@ def test_build_runtime_endpoint_evaluation_payload_from_state_prefers_state_meta
         state=state,
         motion_command=motion_command,
         fk_solver=FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0)),
-        endpoint_site_name="tip",
+        endpoint_pose_provider=_site_endpoint_pose_provider(),
     )
 
     assert payload is not None
     assert payload["desired_endpoint_m"] == [0.1, 0.2, 0.3]
     assert payload["qpos_like_joint_angles_rad"] == [0.0, 0.0]
+
+
+def test_build_runtime_endpoint_evaluation_payload_from_state_supports_body_only_endpoint_reference() -> None:
+    state = MuJoCoState(
+        frame_index=1,
+        time_s=0.0,
+        bodies=(
+            BodyTransform(
+                name="tool_body",
+                position_m=(0.5, 0.2, 0.1),
+                quaternion_wxyz=(1.0, 0.0, 0.0, 0.0),
+            ),
+        ),
+        metadata={"desired_endpoint_m": (0.1, 0.2, 0.3)},
+    )
+    provider = _ReferenceEndpointPoseProvider(
+        EndpointReference(site_name=None, body_name="tool_body")
+    )
+    motion_command = MotionCommand(
+        timestamp_s=0.0,
+        joint=JointCommand(joint_angles_rad=(0.0, 0.0)),
+    )
+
+    payload = build_runtime_endpoint_evaluation_payload_from_state(
+        state=state,
+        motion_command=motion_command,
+        fk_solver=FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0)),
+        endpoint_pose_provider=provider,
+    )
+
+    assert payload is not None
+    assert payload["site_endpoint_m"] == [0.5, 0.2, 0.1]
+    assert payload["unit"] == "meter"
+    assert payload["site_endpoint_coordinate_frame"] == "MuJoCo world / scene frame"
+
+
+def test_endpoint_evaluation_publisher_rejects_missing_initial_endpoint_transform() -> None:
+    provider = _ReferenceEndpointPoseProvider(
+        EndpointReference(site_name=None, body_name="missing_body")
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="endpoint pose provider did not resolve an endpoint position",
+    ):
+        build_endpoint_evaluation_state_publisher(
+            _RecordingPublisher(),
+            simulator=_CommandSource(),
+            fk_solver=FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0)),
+            endpoint_pose_provider=provider,
+            initial_state=MuJoCoState(frame_index=0, time_s=0.0),
+        )
 
 
 def test_build_runtime_endpoint_evaluation_payload_from_state_uses_target_position_fallback_only_when_desired_endpoint_is_missing() -> None:
@@ -265,7 +375,7 @@ def test_build_runtime_endpoint_evaluation_payload_from_state_uses_target_positi
         state=state,
         motion_command=motion_command,
         fk_solver=FixedForwardKinematicsSolver(endpoint_m=(0.3, 0.4, 0.0)),
-        endpoint_site_name="tip",
+        endpoint_pose_provider=_site_endpoint_pose_provider(),
     )
 
     assert payload is not None
@@ -296,7 +406,7 @@ def test_build_runtime_endpoint_evaluation_payload_from_state_returns_none_for_f
         state=state,
         motion_command=motion_command,
         fk_solver=solver,
-        endpoint_site_name="tip",
+        endpoint_pose_provider=_site_endpoint_pose_provider(),
     )
 
     assert payload is None

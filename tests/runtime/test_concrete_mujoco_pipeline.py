@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
-
 import asyncio
 from math import dist
 
@@ -9,10 +7,11 @@ import pytest
 
 import selfrionette.runtime.concrete_mujoco_pipeline as concrete_pipeline_module
 from selfrionette.motion import TargetToJointMotionGenerator
+from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.plugins.robots.fast_arm.kinematics import FastArmEndpointInverseKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime import EndpointEvaluationStatePublisher, RuntimePipeline, build_concrete_mujoco_pipeline
 from selfrionette.schemas import JointCommand, MuJoCoState, RawInputFrame
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from generic_qpos_test_doubles import RejectingGenericQposGuard
 
 
@@ -100,7 +99,15 @@ def test_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_updates_qpos
     assert state.qpos[:4] == pytest.approx(pipeline.simulator.last_command.joint.joint_angles_rad, abs=1e-9)
     assert len(publisher.states) == 1
     assert "endpoint_evaluation" in publisher.states[0].metadata
-    assert publisher.states[0].metadata["endpoint_evaluation"]["unit"] == "meter"
+    endpoint_evaluation = publisher.states[0].metadata["endpoint_evaluation"]
+    assert endpoint_evaluation["unit"] == "meter"
+    assert endpoint_evaluation["site_endpoint_coordinate_frame"] == (
+        "MuJoCo world / scene frame"
+    )
+    assert endpoint_evaluation["site_endpoint_m"] == pytest.approx(
+        extract_fast_arm_tip_site_endpoint_from_state(state).position_m,
+        abs=1e-9,
+    )
 
 
 def test_concrete_mujoco_pipeline_handles_small_3d_target_without_padding_or_plane_rejection() -> None:

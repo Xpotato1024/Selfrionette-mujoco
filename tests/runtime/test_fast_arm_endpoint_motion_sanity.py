@@ -4,6 +4,7 @@ import pytest
 
 from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import FastArmEndpointMotionSanityResult, run_fast_arm_endpoint_motion_sanity
 from selfrionette.plugins.robots.fast_arm.diagnostics import endpoint_motion_sanity as endpoint_motion_sanity_module
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 
 
 def _vector_delta(
@@ -47,6 +48,16 @@ def test_run_fast_arm_endpoint_motion_sanity_returns_axiswise_results() -> None:
     assert x_plus.status in {"pass", "limitation", "rejected"}
     assert z_plus.status in {"pass", "limitation", "rejected"}
     assert z_minus.status in {"pass", "limitation", "rejected"}
+
+
+def test_run_fast_arm_endpoint_motion_sanity_accepts_explicit_canonical_model_path() -> None:
+    results = run_fast_arm_endpoint_motion_sanity(
+        model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
+        command_delta_m=0.001,
+    )
+
+    assert len(results) == 6
+    assert all(result.reason != "backend_exception" for result in results)
 
 
 def test_run_fast_arm_endpoint_motion_sanity_preserves_explicit_base_mode() -> None:

@@ -7,6 +7,7 @@ from selfrionette.mujoco_backend.model_loader import (
     load_mujoco_model,
 )
 from selfrionette.mujoco_backend.endpoint_extraction import (
+    RuntimeMuJoCoEndpointEvaluation,
     RuntimeMuJoCoSiteEndpointEvaluation,
     extract_mujoco_reference_endpoint,
     extract_mujoco_reference_endpoint_from_state,
@@ -23,6 +24,7 @@ __all__ = [
     "MuJoCoSimulator",
     "HeadlessMuJoCoSimulator",
     "ResolvedModelReference",
+    "RuntimeMuJoCoEndpointEvaluation",
     "RuntimeMuJoCoSiteEndpointEvaluation",
     "extract_mujoco_reference_endpoint",
     "extract_mujoco_reference_endpoint_from_state",

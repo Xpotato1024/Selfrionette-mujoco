@@ -25,7 +25,9 @@ def _missing_name_message(*, kind: str, name: str, role: str) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeMuJoCoSiteEndpointEvaluation:
+class RuntimeMuJoCoEndpointEvaluation:
+    """Robot-independent evaluation of a named MuJoCo site or body endpoint."""
+
     role: str
     kind: str
     name: str
@@ -34,12 +36,17 @@ class RuntimeMuJoCoSiteEndpointEvaluation:
     coordinate_frame: str = "MuJoCo world / scene frame"
 
 
+# Compatibility alias for the pre-existing public import. New code should use
+# RuntimeMuJoCoEndpointEvaluation because ``kind`` supports both site and body.
+RuntimeMuJoCoSiteEndpointEvaluation = RuntimeMuJoCoEndpointEvaluation
+
+
 def extract_mujoco_reference_endpoint(
     model: object,
     data: object,
     *,
     reference: ResolvedModelReference,
-) -> RuntimeMuJoCoSiteEndpointEvaluation:
+) -> RuntimeMuJoCoEndpointEvaluation:
     mujoco = _import_mujoco()
     mujoco.mj_forward(model, data)
     if reference.kind == "site":
@@ -54,7 +61,7 @@ def extract_mujoco_reference_endpoint(
         raise ValueError(
             _missing_name_message(kind=reference.kind, name=reference.name, role=reference.role)
         )
-    return RuntimeMuJoCoSiteEndpointEvaluation(
+    return RuntimeMuJoCoEndpointEvaluation(
         role=reference.role,
         kind=reference.kind,
         name=reference.name,
@@ -66,7 +73,7 @@ def extract_mujoco_reference_endpoint_from_state(
     state: MuJoCoState,
     *,
     reference: ResolvedModelReference,
-) -> RuntimeMuJoCoSiteEndpointEvaluation:
+) -> RuntimeMuJoCoEndpointEvaluation:
     transforms: tuple[SiteTransform | BodyTransform, ...]
     if reference.kind == "site":
         transforms = state.sites
@@ -76,7 +83,7 @@ def extract_mujoco_reference_endpoint_from_state(
         raise ValueError(f"unsupported MuJoCo endpoint reference kind: {reference.kind!r}")
     for transform in transforms:
         if transform.name == reference.name:
-            return RuntimeMuJoCoSiteEndpointEvaluation(
+            return RuntimeMuJoCoEndpointEvaluation(
                 role=reference.role,
                 kind=reference.kind,
                 name=reference.name,
@@ -93,7 +100,7 @@ def extract_mujoco_site_endpoint(
     *,
     site_name: str,
     role: str = "endpoint",
-) -> RuntimeMuJoCoSiteEndpointEvaluation:
+) -> RuntimeMuJoCoEndpointEvaluation:
     return extract_mujoco_reference_endpoint(
         model,
         data,
@@ -106,7 +113,7 @@ def extract_mujoco_site_endpoint_from_state(
     *,
     site_name: str,
     role: str = "endpoint",
-) -> RuntimeMuJoCoSiteEndpointEvaluation:
+) -> RuntimeMuJoCoEndpointEvaluation:
     return extract_mujoco_reference_endpoint_from_state(
         state,
         reference=ResolvedModelReference(role=role, kind="site", name=site_name),
@@ -114,6 +121,7 @@ def extract_mujoco_site_endpoint_from_state(
 
 
 __all__ = [
+    "RuntimeMuJoCoEndpointEvaluation",
     "RuntimeMuJoCoSiteEndpointEvaluation",
     "extract_mujoco_reference_endpoint",
     "extract_mujoco_reference_endpoint_from_state",

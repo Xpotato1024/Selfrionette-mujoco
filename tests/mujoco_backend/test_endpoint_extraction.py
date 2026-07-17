@@ -1,19 +1,22 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
-
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-
 from types import SimpleNamespace
 
 import pytest
 
-from selfrionette.mujoco_backend import load_mujoco_model, snapshot_mujoco_state
-from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.mujoco_backend import endpoint_extraction as generic_endpoint_extraction
+from selfrionette.mujoco_backend import (
+    ResolvedModelReference,
+    RuntimeMuJoCoEndpointEvaluation,
+    RuntimeMuJoCoSiteEndpointEvaluation,
+    load_mujoco_model,
+    snapshot_mujoco_state,
+)
+from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.plugins.robots.fast_arm import endpoint as endpoint_extraction_module
 from selfrionette.plugins.robots.fast_arm import model_contract as model_contract_module
 from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 
 
 def _fake_mujoco(*, body_id: int = 0, site_id: int = 0) -> object:
@@ -33,6 +36,18 @@ def _fake_mujoco(*, body_id: int = 0, site_id: int = 0) -> object:
         mj_name2id=mj_name2id,
     )
     return fake_mujoco_module
+
+
+def test_runtime_mujoco_endpoint_evaluation_has_documented_site_name_alias() -> None:
+    assert RuntimeMuJoCoSiteEndpointEvaluation is RuntimeMuJoCoEndpointEvaluation
+
+
+def test_resolved_model_reference_rejects_invalid_kind() -> None:
+    with pytest.raises(
+        ValueError,
+        match="unsupported MuJoCo model reference kind: 'geom'",
+    ):
+        ResolvedModelReference(role="endpoint", kind="geom", name="tool")
 
 
 def test_extract_fast_arm_tip_site_endpoint_from_model_data_returns_tip_site_world_position() -> None:

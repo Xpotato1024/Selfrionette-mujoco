@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from selfrionette.mujoco_backend.endpoint_extraction import (
-    RuntimeMuJoCoSiteEndpointEvaluation,
+    RuntimeMuJoCoEndpointEvaluation,
     extract_mujoco_reference_endpoint,
     extract_mujoco_reference_endpoint_from_state,
 )
@@ -64,7 +64,7 @@ def extract_fast_arm_tip_site_endpoint(
     data: object,
     *,
     allow_body_fallback: bool = False,
-) -> RuntimeMuJoCoSiteEndpointEvaluation:
+) -> RuntimeMuJoCoEndpointEvaluation:
     return extract_mujoco_reference_endpoint(
         model,
         data,
@@ -80,7 +80,7 @@ def extract_fast_arm_end_effector_site_endpoint(
     data: object,
     *,
     allow_body_fallback: bool = False,
-) -> RuntimeMuJoCoSiteEndpointEvaluation:
+) -> RuntimeMuJoCoEndpointEvaluation:
     return extract_mujoco_reference_endpoint(
         model,
         data,
@@ -95,7 +95,7 @@ def extract_fast_arm_tip_site_endpoint_from_state(
     state: MuJoCoState,
     *,
     allow_body_fallback: bool = False,
-) -> RuntimeMuJoCoSiteEndpointEvaluation:
+) -> RuntimeMuJoCoEndpointEvaluation:
     return extract_mujoco_reference_endpoint_from_state(
         state,
         reference=_resolve_fast_arm_reference_from_state(
@@ -110,7 +110,7 @@ def extract_fast_arm_end_effector_site_endpoint_from_state(
     state: MuJoCoState,
     *,
     allow_body_fallback: bool = False,
-) -> RuntimeMuJoCoSiteEndpointEvaluation:
+) -> RuntimeMuJoCoEndpointEvaluation:
     return extract_mujoco_reference_endpoint_from_state(
         state,
         reference=_resolve_fast_arm_reference_from_state(

@@ -17,9 +17,11 @@ from selfrionette.runtime.endpoint_metrics import build_endpoint_evaluation_stat
 from selfrionette.runtime.pipeline import RuntimePipeline
 from selfrionette.runtime.robot_bundle import (
     ENDPOINT_COMMAND_V1,
+    ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
     RESET_INITIAL_STATE_V1,
     EndpointCommandProvider,
+    EndpointPoseProvider,
     QposFeasibilityProvider,
     ResetInitialStateProvider,
     RobotBundle,
@@ -86,9 +88,11 @@ def build_concrete_mujoco_pipeline(
     plugin = robot_bundle.runtime_plugin
     initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
     endpoint_command_provider = robot_bundle.provider(ENDPOINT_COMMAND_V1)
+    endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
     qpos_feasibility_provider = robot_bundle.provider(QPOS_FEASIBILITY_V1)
     assert isinstance(initial_state_provider, ResetInitialStateProvider)
     assert isinstance(endpoint_command_provider, EndpointCommandProvider)
+    assert isinstance(endpoint_pose_provider, EndpointPoseProvider)
     assert isinstance(qpos_feasibility_provider, QposFeasibilityProvider)
     initial_state = initial_state_provider.resolve_initial_state()
     if initial_state.source_kind != "named_keyframe":
@@ -118,7 +122,8 @@ def build_concrete_mujoco_pipeline(
             publisher,
             simulator=simulator,
             fk_solver=fk_solver,
-            endpoint_site_name=plugin.profile.endpoint.site_name or "",
+            endpoint_pose_provider=endpoint_pose_provider,
+            initial_state=simulator.snapshot(),
             solver_joint_count=plugin.profile.qpos_dimension,
         ),
         qpos_feasibility_guard=qpos_feasibility_provider.build_guard(
