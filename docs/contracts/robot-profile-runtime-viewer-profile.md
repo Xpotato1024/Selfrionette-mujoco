@@ -156,11 +156,12 @@ logical v2等を選択するcallerは`RuntimeConfig(robot_profile_id=<id>, robot
 `RuntimeConfig.robot_selection`は#405 / #406と同じ`PluginSelection`を返し、catalog projectionとruntime compositionは
 そのselectionを共有する。requested / registered logical version不一致はmodel load前にfailする。
 
-`RuntimePipeline`、`build_mujoco_pipeline()`、`build_replay_mujoco_pipeline()`は
-genericのままとする。model pathまたはjoint nameからprofileを推論せず、profileがない場合に
-fast_armを選択せず、明示的なmodel pathを要求する。callerはgeneric keyframe、guard、
-state metadataをinjectしてよい。したがって最小のnon-fast_arm MJCFは、fast_arm validationや
-configurationなしでloadとstepができる。
+`RuntimePipeline`と`build_replay_mujoco_pipeline()`はgenericのままとする。model pathまたはjoint nameから
+profileを推論せず、profileがない場合にfast_armを選択せず、明示的なmodel pathを要求する。callerはgeneric
+keyframe、guard、state metadataをinjectしてよい。stub-defaultの`build_mujoco_pipeline()`と
+`build_noop_pipeline()`はproduction surfaceから退役した。したがって最小のnon-fast_arm MJCFは、
+real replay componentまたは明示的に構築した`RuntimePipeline`により、fast_arm validationやconfigurationなしで
+loadとstepができる。
 
 generic profile contractではjoint countを`nq`または`nv`と同一視しない。ball jointと
 free jointは、joint nameが一つでもqpos/qvel dimensionが正当に`4/3`、`7/6`となる。

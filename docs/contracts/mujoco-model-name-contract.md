@@ -1,14 +1,14 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for:
   - fast_arm MuJoCo model name contract
 related:
   - docs/contracts/mujoco-state.md
   - docs/contracts/transport-payload.md
   - docs/contracts/kinematics-command-contract.md
-  - src/selfrionette/mujoco_backend/model_contract.py
+  - src/selfrionette/plugins/robots/fast_arm/model_contract.py
   - docs/reports/implementation/r7-e-followup-joint-convention-fast-arm-model-contract.md
   - docs/reports/implementation/r7-e-followup-viewer-backend-endpoint-separation.md
 ---
@@ -83,7 +83,10 @@ strict validation では silent fallback をしない。
 
 ## Backend / Runtime source of truth
 
-この contract の source of truth は `src/selfrionette/mujoco_backend/model_contract.py` に置く。
+このfast_arm固有contractのsource of truthは
+`src/selfrionette/plugins/robots/fast_arm/model_contract.py`に置く。
+generic named-reference contractとsite extractionは`src/selfrionette/mujoco_backend/`が所有し、
+fast_arm名、fallback選択、convenience constructorを公開しない。
 `apps/mujoco-viewer` はこれを推定しないし、MuJoCo を再ロードして検証しない。
 
 ## site endpoint helper contract

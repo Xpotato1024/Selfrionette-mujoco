@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for:
   - kinematics solver contract
   - JointCommand / MotionCommand boundary
@@ -27,8 +27,9 @@ current runtimeで`JointCommand` / `MotionCommand`
 
 - `base.py` は Protocol / interface contract である。
 - `base.py` に concrete implementation を直接書かない。
-- `stubs.py` は runtime fallback ではなく retirement candidate / explicit
-  placeholder / test double / compatibility helper である。
+- production `kinematics/`は`base.py`のProtocolだけを所有する。fast_arm concrete solverは
+  `plugins/robots/fast_arm/kinematics.py`が所有する。
+- test doubleは`tests/support/kinematics_solver_doubles.py`だけに置き、production packageへ置かない。
 - `viewer` は rendering-only であり、FK / IK / qpos recompute を行わない。
 - 既存の wasm-scene product viewer path は MuJoCo model を描画に使うが、
   Python native backend / runtime / payload が source of truth である。
@@ -128,10 +129,9 @@ viewer は backend / runtime payload を受け取り、描画と観測に使う�
 Python native backend / runtime / payload が source of truth である。
 browser-sideへ新しいMuJoCo ownership pathを追加しない。
 
-## Stub boundary
+## Test-double boundary
 
-`stubs.py` は runtime fallback ではなく retirement candidate /
-explicit placeholder / test double / compatibility helper である。
+test-only implementationは`tests/support/`だけが所有する。
 
 - `ZeroForwardKinematicsSolver` は concrete FK ではない。
 - `ZeroInverseKinematicsSolver` は concrete IK ではない。
@@ -140,7 +140,7 @@ explicit placeholder / test double / compatibility helper である。
 - `NoOpInputInterpreter` は input-to-intent 本線ではない。
 - `NoOpStatePublisher` は production transport ではない。
 
-これらをproduction runtime fallbackとして使用しない。
+これらをproduction runtime fallbackとして使用せず、`src/selfrionette/**/stubs.py`を再導入しない。
 
 ## Forward kinematics ownership
 

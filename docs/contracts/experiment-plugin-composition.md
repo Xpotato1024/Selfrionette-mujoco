@@ -196,7 +196,8 @@ readiness後に不足へ気付く設計や、特定robot/task/evaluatorの暗黙
 ## fast_arm migration
 
 production fast_armは`selfrionette.plugins.robots.fast_arm`配下でProfile、Runtime Plugin、
-feasibility adapter、canonical initial state、Robot Bundle assemblyを所有し、`fast_arm/v1` Bundleとして
+kinematics、MuJoCo name contract / endpoint wrapper、feasibility adapter、canonical initial state、
+diagnostics、Robot Bundle assemblyを所有し、`fast_arm/v1` Bundleとして
 `selfrionette.plugins.catalog`だけへ登録する。bundleは同packageの
 `FAST_ARM_ROBOT_PROFILE`と`FAST_ARM_RUNTIME_PLUGIN`の同一objectを参照し、generic
 `runtime.robot_provider_adapters`を使って既存のmodel validation、endpoint IK/FK、target/local motion、
@@ -208,16 +209,19 @@ plugins/robots/fast_arm/profile.py
 plugins/robots/fast_arm/runtime.py
 plugins/robots/fast_arm/feasibility.py
 plugins/robots/fast_arm/initial_state.py
+plugins/robots/fast_arm/kinematics.py
+plugins/robots/fast_arm/model_contract.py
+plugins/robots/fast_arm/endpoint.py
+plugins/robots/fast_arm/diagnostics/
 plugins/robots/fast_arm/bundle.py
         -> plugins/catalog.py
         -> application composition
 ```
 
-`robots/fast_arm.py`、`runtime/fast_arm_plugin.py`、`runtime/fast_arm_bundle.py`、
-`runtime/fast_arm_joint_limits.py`、旧registry moduleは同一class / object / functionをre-exportするだけの
-compatibility facadeである。`runtime/default_robot_providers.py`も
-`runtime/robot_provider_adapters.py`の同一classをre-exportする。facadeはassembly、factory、fallback、
-registrationを所有せず、新規consumer向けAPIではない。
+`robots/fast_arm.py`、`robot_registry.py`、`runtime/fast_arm_*.py`、`runtime/default_robot_providers.py`、
+旧registry moduleは#429で退役した。internal consumerはplugin owner、`runtime/robot_provider_adapters.py`、
+`plugins/catalog.py`を直接使用する。deliberate package-root resolverはcanonical catalog ownerへ直接mappingし、
+intermediate facadeを再導入しない。
 
 `build_concrete_mujoco_pipeline()`は既存Robot Profile / Runtime Plugin resolverを維持したうえで、
 Robot Bundle registryとの同一性を検証し、initial state、endpoint command、qpos feasibilityを

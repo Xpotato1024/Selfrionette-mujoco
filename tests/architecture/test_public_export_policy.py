@@ -68,7 +68,7 @@ def test_public_export_policy_is_canonical_and_evidence_is_not_in_sot_map() -> N
     map_text = DOCS_README_PATH.read_text(encoding="utf-8")
     boundary_text = BOUNDARY_DOC_PATH.read_text(encoding="utf-8")
     assert "public export境界" in boundary_text
-    assert "contract re-export" in boundary_text
+    assert "test doubleは`tests/support/`だけが所有する" in boundary_text
     assert DOC_PATH.relative_to(ROOT).as_posix() not in map_text
     assert R6_I_P3_DOC_PATH.relative_to(ROOT).as_posix() not in map_text
     assert DOC_PATH.is_file()
