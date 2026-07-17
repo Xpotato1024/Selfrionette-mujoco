@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-17
 canonical_for:
   - model asset contract
 related:
@@ -12,6 +12,27 @@ related:
 
 この文書は、MJCF、XML、STL、scale、axis、origin、mesh配置の前提に関する
 canonical contractである。
+
+## Robot Plugin resource ownership
+
+新しいrobotの標準配置は`assets/mujoco/<robot_id>/`と`configs/<robot_id>/`である。ただし、
+generic catalog、runtime、viewerはrobot IDからpathを組み立てない。`ROBOT_PLUGIN`の
+`RobotResourceDeclaration`がmodel、configuration、viewer declaration、viewer fixture、viewer VFS resourceの
+repository-relative pathを明示し、`ViewerRobotDeclaration`がmodel、fixture、VFSのresource path / public URL対応を
+明示する。public URLはrepository `assets/` pathからdeterministicに生成し、Vite dev/buildは同じ`assets/` rootを
+公開する。
+
+production discoveryはcatalog registryを公開する前に、全resourceが許可されたrepository root内の
+実fileへ解決すること、Profileのmodel / configuration referenceと一致すること、viewer declarationと
+backend resource declarationが一致することを検証する。MJCFの`include`とmesh / texture / hfield fileは
+宣言済みVFS mappingで解決できなければならない。absolute path、`..`によるescape、remote URL、missing
+resourceはstartup failureであり、warning skipまたはrobot ID由来pathへのfallbackを行わない。さらにregistration
+identityが`<robot_id>`ならasset resourceは`assets/mujoco/<robot_id>/`、configurationは
+`configs/<robot_id>/`の内側に限定する。lexical declarationだけでなくsymlink解決後の実pathも同じrobot固有
+directory内に残ることを要求する。このgateはmodel、viewer declaration、viewer fixture、VFS asset、configurationの
+全resource種別へ適用し、sibling robot resourceへのdirect reference / symlinkとrepository resource root外への
+symlinkを拒否する。viewer public URLがowned pathを指していても、resolved file ownership違反を許可しない。
+shared resourceは暗黙許可せず、必要時に独立した明示contractを追加する。
 
 ## fast_armのcanonical asset
 
@@ -24,6 +45,8 @@ canonical contractである。
   - `meshes/SholderLink2.stl`
   - `meshes/UpperArmLink.stl`
   - `meshes/ForeArmLink.stl`
+  - `viewer-profile.json`
+  - `fixtures/fast_arm_sweep_x_qpos.json`
 - `arm.xml`はcanonicalなmesh directory contractである`meshdir="meshes"`を使用し、
   `assets/mujoco/fast_arm/meshes/`からmesh fileを解決しなければならない。
 - `scene.xml`は同じdirectoryの`arm.xml`をincludeしなければならない。

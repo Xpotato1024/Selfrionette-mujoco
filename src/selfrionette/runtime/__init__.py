@@ -23,6 +23,7 @@ _PUBLIC_EXPORT_OWNER_GROUPS = (
         (
             "RobotBundle",
             "CapabilityProviderBinding",
+            "ProviderAssemblyBinding",
             "InitialStateContract",
             "InitialStateContractProvider",
             "RESET_INITIAL_STATE_V1",
@@ -292,6 +293,7 @@ __all__ = [
     "ResolvedRobotRuntime",
     "RobotBundle",
     "CapabilityProviderBinding",
+    "ProviderAssemblyBinding",
     "InitialStateContract",
     "InitialStateContractProvider",
     "VersionedIdentity",

@@ -76,3 +76,31 @@ def test_viewer_profile_does_not_claim_an_unused_mesh_fallback_contract() -> Non
     normalized_contract = " ".join(contract.split())
     assert "selects Option B" in normalized_contract
     assert "does not declare an unused fallback mapping" in normalized_contract
+
+
+def test_fast_arm_viewer_registry_is_a_single_sot_compatibility_facade() -> None:
+    viewer_root = ROOT / "apps" / "mujoco-viewer" / "src"
+    fast_arm_facade = (viewer_root / "robot-profiles" / "fastArm.ts").read_text(
+        encoding="utf-8"
+    )
+    registry = (viewer_root / "robot-profiles" / "registry.ts").read_text(
+        encoding="utf-8"
+    )
+    app = (viewer_root / "app" / "ProductViewerApp.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "viewer-profile.json" in fast_arm_facade
+    for duplicated_field in (
+        "modelContractVersion",
+        "initialKeyframeName",
+        "jointNames",
+        "qposDimension",
+        "bodyVisualStyles",
+    ):
+        assert duplicated_field not in fast_arm_facade
+    assert '"fast_arm"' not in registry
+    assert '"fast_arm"' not in app
+    assert "loadViewerRobotProfileFromPayload" in (
+        viewer_root / "wasm-scene" / "mujocoSceneRenderer.ts"
+    ).read_text(encoding="utf-8")

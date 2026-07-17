@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "viewer-robot-declaration/v1",
+  "profileId": "fast_arm",
+  "profileContractVersion": 1,
+  "modelContractVersion": "fast_arm-mujoco-model/v1",
+  "modelUrl": "/mujoco/fast_arm/scene.xml",
+  "modelResourcePath": "assets/mujoco/fast_arm/scene.xml",
+  "initialKeyframeName": "home",
+  "initialPoseSourceLabel": "MuJoCo home keyframe",
+  "fixtureUrl": "/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json",
+  "fixtureResourcePath": "assets/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json",
+  "vfsAssets": [
+    {
+      "vfsPath": "arm.xml",
+      "resourcePath": "assets/mujoco/fast_arm/arm.xml",
+      "url": "/mujoco/fast_arm/arm.xml"
+    },
+    {
+      "vfsPath": "meshes/BaseLink.stl",
+      "resourcePath": "assets/mujoco/fast_arm/meshes/BaseLink.stl",
+      "url": "/mujoco/fast_arm/meshes/BaseLink.stl"
+    },
+    {
+      "vfsPath": "meshes/SholderLink1.stl",
+      "resourcePath": "assets/mujoco/fast_arm/meshes/SholderLink1.stl",
+      "url": "/mujoco/fast_arm/meshes/SholderLink1.stl"
+    },
+    {
+      "vfsPath": "meshes/SholderLink2.stl",
+      "resourcePath": "assets/mujoco/fast_arm/meshes/SholderLink2.stl",
+      "url": "/mujoco/fast_arm/meshes/SholderLink2.stl"
+    },
+    {
+      "vfsPath": "meshes/UpperArmLink.stl",
+      "resourcePath": "assets/mujoco/fast_arm/meshes/UpperArmLink.stl",
+      "url": "/mujoco/fast_arm/meshes/UpperArmLink.stl"
+    },
+    {
+      "vfsPath": "meshes/ForeArmLink.stl",
+      "resourcePath": "assets/mujoco/fast_arm/meshes/ForeArmLink.stl",
+      "url": "/mujoco/fast_arm/meshes/ForeArmLink.stl"
+    }
+  ],
+  "visualStyleSelection": [
+    { "match": "world", "styleKey": "floor" },
+    { "match": "floor", "styleKey": "floor" },
+    { "match": "origin", "styleKey": "origin" },
+    { "match": "base", "styleKey": "base_link" },
+    { "match": "base_link", "styleKey": "base_link" },
+    { "match": "baselink", "styleKey": "base_link" },
+    { "match": "sholder_link_1", "styleKey": "sholder_link_1" },
+    { "match": "sholderlink1", "styleKey": "sholder_link_1" },
+    { "match": "sholder_link_2", "styleKey": "sholder_link_2" },
+    { "match": "sholderlink2", "styleKey": "sholder_link_2" },
+    { "match": "upper_arm_link", "styleKey": "upper_arm_link" },
+    { "match": "upperarmlink", "styleKey": "upper_arm_link" },
+    { "match": "fore_arm_link", "styleKey": "fore_arm_link" },
+    { "match": "forearmlink", "styleKey": "fore_arm_link" }
+  ],
+  "bodyVisualStyles": [
+    { "key": "floor", "color": "#c7d2fe", "label": "floor", "detail": "ground plane" },
+    { "key": "origin", "color": "#f59e0b", "label": "origin", "detail": "reference marker" },
+    { "key": "base_link", "color": "#c2410c", "label": "base_link", "detail": "base housing" },
+    { "key": "sholder_link_1", "color": "#b91c1c", "label": "sholder_link_1", "detail": "first shoulder link" },
+    { "key": "sholder_link_2", "color": "#ea580c", "label": "sholder_link_2", "detail": "second shoulder link" },
+    { "key": "upper_arm_link", "color": "#15803d", "label": "upper_arm_link", "detail": "upper arm" },
+    { "key": "fore_arm_link", "color": "#0284c7", "label": "fore_arm_link", "detail": "forearm" }
+  ],
+  "axisVisualStyles": [
+    { "label": "axes X", "color": "#ef4444", "detail": "positive X" },
+    { "label": "axes Y", "color": "#22c55e", "detail": "positive Y" },
+    { "label": "axes Z", "color": "#3b82f6", "detail": "positive Z" }
+  ],
+  "jointNames": [
+    "sholder_joint_1",
+    "sholder_joint_2",
+    "sholder_joint_3",
+    "elbow_joint"
+  ],
+  "qposDimension": 4
+}

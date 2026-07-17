@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "viewer-robot-declaration/v1",
+  "profileId": "fixture_bot",
+  "profileContractVersion": 2,
+  "modelContractVersion": "fixture-bot-model/v1",
+  "modelUrl": "/mujoco/fixture_bot/model.xml",
+  "modelResourcePath": "assets/mujoco/fixture_bot/model.xml",
+  "initialKeyframeName": "home",
+  "initialPoseSourceLabel": "MuJoCo home keyframe",
+  "fixtureUrl": "/mujoco/fixture_bot/fixture.json",
+  "fixtureResourcePath": "assets/mujoco/fixture_bot/fixture.json",
+  "vfsAssets": [
+    {
+      "vfsPath": "robot.xml",
+      "resourcePath": "assets/mujoco/fixture_bot/robot.xml",
+      "url": "/mujoco/fixture_bot/robot.xml"
+    }
+  ],
+  "visualStyleSelection": [
+    { "match": "link", "styleKey": "link" }
+  ],
+  "bodyVisualStyles": [
+    { "key": "link", "color": "#38bdf8", "label": "link", "detail": "fixture link" }
+  ],
+  "axisVisualStyles": [
+    { "label": "axes X", "color": "#ef4444", "detail": "positive X" },
+    { "label": "axes Y", "color": "#22c55e", "detail": "positive Y" },
+    { "label": "axes Z", "color": "#3b82f6", "detail": "positive Z" }
+  ],
+  "jointNames": ["fixture_joint"],
+  "qposDimension": 1
+}

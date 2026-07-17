@@ -1,5 +1,6 @@
 import type { TransportEndpointEvaluationPayload, TransportPayloadV0 } from "../types/transportPayload.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
+import { formatQpos } from "./mujocoQposSync.js";
 import type { ViewerFrameTimingSnapshot } from "./viewerFrameTiming.js";
 import {
   buildEndpointPresentationState,
@@ -82,6 +83,28 @@ export interface ProductViewerState {
   modelNmesh: number | null;
   sceneSummaryText: string;
   statusText: string;
+}
+
+export type ProductViewerRendererStatePatch = Omit<Partial<ProductViewerState>, "connectionStatus">;
+
+export function applyProductViewerRendererStatePatch(
+  previous: ProductViewerState,
+  patch: ProductViewerRendererStatePatch,
+): ProductViewerState {
+  const next = {
+    ...previous,
+    ...patch,
+  };
+  next.statusText = patch.statusText ?? formatViewerStatusText(next);
+  next.currentQposText =
+    patch.currentQposText ?? (next.currentQpos === null ? "[]" : formatQpos(next.currentQpos));
+  return next;
+}
+
+export function isProductViewerLiveInputEnabled(
+  state: Pick<ProductViewerState, "connectionStatus" | "status">,
+): boolean {
+  return state.connectionStatus === "open" && state.status !== "error";
 }
 
 export function createInitialProductViewerState(profile?: ViewerRobotProfile): ProductViewerState {

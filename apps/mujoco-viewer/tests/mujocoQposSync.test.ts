@@ -17,7 +17,7 @@ import {
   parseQposFixture,
   validateQposFixtureForModel,
 } from "../src/wasm-scene/qposFrameTypes.js";
-import { FAST_ARM_VIEWER_PROFILE } from "../src/robot-profiles/fastArm.js";
+import { FAST_ARM_VIEWER_PROFILE } from "./testViewerProfile.js";
 
 const compatibleMetadata = {
   robot_profile_id: FAST_ARM_VIEWER_PROFILE.profileId,
@@ -50,7 +50,16 @@ const VALID_FIXTURE = {
 
 describe("canonical product qpos fixture", () => {
   it("matches the native MuJoCo fixture contract", () => {
-    const fixturePath = resolve(process.cwd(), "public", "fixtures", "fast_arm_sweep_x_qpos.json");
+    const fixturePath = resolve(
+      process.cwd(),
+      "..",
+      "..",
+      "assets",
+      "mujoco",
+      "fast_arm",
+      "fixtures",
+      "fast_arm_sweep_x_qpos.json",
+    );
     const fixture = validateQposFixtureForModel(
       parseQposFixture(JSON.parse(readFileSync(fixturePath, "utf8")) as unknown),
       FAST_ARM_VIEWER_PROFILE.qposDimension,

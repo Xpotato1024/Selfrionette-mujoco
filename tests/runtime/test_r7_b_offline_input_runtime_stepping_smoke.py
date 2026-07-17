@@ -198,8 +198,9 @@ def test_offline_input_runtime_uses_resolved_plugin_components_and_home_seed(mon
         ),
     )
 
-    def recording_resolver(profile_id: str) -> RobotBundle:
+    def recording_resolver(profile_id: str, **kwargs) -> RobotBundle:
         assert profile_id == "fast_arm"
+        assert kwargs == {"robot_logical_version": 1}
         return bundle
 
     monkeypatch.setattr(offline_smoke_module, "resolve_robot_bundle", recording_resolver)

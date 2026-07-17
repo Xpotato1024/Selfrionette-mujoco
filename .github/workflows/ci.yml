@@ -45,6 +45,8 @@ jobs:
           cache-dependency-path: apps/mujoco-viewer/package-lock.json
       - name: Install viewer dependencies
         run: npm ci
+      - name: Test viewer
+        run: npm test
       - name: Typecheck viewer
         run: npm run typecheck
       - name: Build viewer

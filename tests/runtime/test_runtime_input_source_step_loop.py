@@ -364,9 +364,9 @@ def test_replay_step_loop_injects_typed_providers_and_protects_profile_metadata(
     calls: list[str] = []
     original = input_step_loop.resolve_robot_bundle
 
-    def recording_resolver(profile_id: str):  # noqa: ANN202
-        calls.append(profile_id)
-        return original(profile_id)
+    def recording_resolver(profile_id: str, **kwargs):  # noqa: ANN202
+        calls.append(f"{profile_id}/v{kwargs['robot_logical_version']}")
+        return original(profile_id, **kwargs)
 
     monkeypatch.setattr(input_step_loop, "resolve_robot_bundle", recording_resolver)
     spoofed = {
@@ -383,7 +383,7 @@ def test_replay_step_loop_injects_typed_providers_and_protects_profile_metadata(
     record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1))[0]
     bundle = resolve_robot_bundle("fast_arm")
 
-    assert calls == ["fast_arm"]
+    assert calls == ["fast_arm/v1"]
     assert not hasattr(plan, "resolved_robot_runtime")
     assert plan.endpoint_pose_provider is bundle.provider(ENDPOINT_POSE_V1)
     assert plan.endpoint_command_provider is bundle.provider(ENDPOINT_COMMAND_V1)

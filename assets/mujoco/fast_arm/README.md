@@ -1,26 +1,26 @@
-# Canonical fast_arm MuJoCo Assets
+# canonical fast_arm MuJoCo asset
 
-This directory is the canonical location for the adopted `fast_arm` MuJoCo
-assets.
+このdirectoryは、採用済み`fast_arm` MuJoCo assetのcanonical配置である。
 
-## Roles
+## fileの責務
 
-- `arm.xml`: canonical arm model definition.
-- `scene.xml`: canonical scene wrapper that includes `arm.xml`.
-- `meshes/`: canonical STL mesh directory for the arm model.
+- `arm.xml`: canonical arm model定義。
+- `scene.xml`: `arm.xml`をincludeするcanonical scene wrapper。
+- `meshes/`: arm model用canonical STL mesh directory。
+- `viewer-profile.json`: Robot Pluginが所有するversioned viewer declarationのserializable SoT。
+- `fixtures/`: viewer debug fixtureを含むplugin-owned resource directory。
 
-## Path Contract
+## path contract
 
-- `arm.xml` must resolve meshes from `meshes/` with `meshdir="meshes"`.
-- `scene.xml` must include `arm.xml` from the same directory.
-- STL filenames keep the legacy asset names, including the existing
-  `Sholder` spelling.
+- `arm.xml`は`meshdir="meshes"`を使用し、`meshes/`からmeshを解決する。
+- `scene.xml`は同じdirectoryの`arm.xml`をincludeする。
+- STL filenameは既存の`Sholder`という綴りを含むlegacy asset名を維持する。
+- backend model、viewer declaration / model / fixture / VFSのrepository pathとpublic URLの対応は
+  `ROBOT_PLUGIN`のresource declarationと`viewer-profile.json`で明示し、実行時にrobot IDから推測しない。
 
-## Change Rules
+## 変更規則
 
-- Changing mesh scale, axis, origin, or units requires a docs update first.
-- Joint, body, site, actuator, default pose, geom shape, inertial parameters,
-  joint ranges, and control ranges are model contract data and should not be
-  edited in this adoption step.
-- The assets come from `legacy/fast_arm_control`, but legacy Python code must
-  not be imported or executed from the new implementation.
+- mesh scale、axis、origin、unitを変更する場合は、先に関連canonical docsを更新する。
+- joint、body、site、actuator、default pose、geom shape、inertial parameter、joint range、control rangeは
+  model contract dataであり、asset onboardingだけを目的とする変更では編集しない。
+- assetの由来は`legacy/fast_arm_control`だが、新実装からlegacy Python codeをimportまたは実行しない。

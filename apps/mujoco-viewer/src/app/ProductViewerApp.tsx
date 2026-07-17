@@ -2,14 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { readViewerEndpointConfig } from "../config/websocketEndpoint.js";
 import {
   createViewerKeyboardCapture,
-  createViewerKeyboardControlSender,
   DEFAULT_VIEWER_KEYBOARD_BINDINGS,
 } from "../input/keyboardInput.js";
-import {
-  createViewerGamepadControlSender,
-  type ViewerGamepadLike,
-} from "../input/gamepadInput.js";
-import { createViewerGamepadLifecycle } from "./gamepadLifecycle.js";
+import type { ViewerGamepadLike } from "../input/gamepadInput.js";
+import { createViewerInputLifecycle } from "./viewerInputLifecycle.js";
 import { formatQpos } from "../wasm-scene/mujocoQposSync.js";
 import {
   formatEndpointEvaluationAngles,
@@ -19,10 +15,11 @@ import {
 import {
   createInitialProductViewerState,
   formatInputOverlayText,
+  isProductViewerLiveInputEnabled,
   type ProductViewerState,
 } from "../wasm-scene/productViewerState.js";
 import { createMujocoSceneRenderer } from "../wasm-scene/mujocoSceneRenderer.js";
-import { resolveViewerRobotProfile } from "../robot-profiles/registry.js";
+import { loadDefaultViewerRobotProfile } from "../robot-profiles/registry.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import { viewerVisualLegend } from "../wasm-scene/visualStyles.js";
 import "./productViewer.css";
@@ -119,20 +116,6 @@ function InputOverlayPanel({ state }: { state: ProductViewerState }) {
 }
 
 export function ProductViewerApp() {
-  const profileResolution = useMemo(() => {
-    const requestedProfileId =
-      typeof window === "undefined"
-        ? "fast_arm"
-        : new URLSearchParams(window.location.search).get("robotProfileId") ?? "fast_arm";
-    try {
-      return { profile: resolveViewerRobotProfile(requestedProfileId), error: null as string | null };
-    } catch (error) {
-      return {
-        profile: null,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }, []);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const keyboardCaptureRef = useRef(
     createViewerKeyboardCapture(
@@ -140,9 +123,8 @@ export function ProductViewerApp() {
       typeof document !== "undefined" && document.hasFocus() ? "focused" : "blurred",
     ),
   );
-  const [state, setState] = useState<ProductViewerState>(() =>
-    createInitialProductViewerState(profileResolution.profile ?? undefined),
-  );
+  const [profile, setProfile] = useState<ViewerRobotProfile | null>(null);
+  const [state, setState] = useState<ProductViewerState>(() => createInitialProductViewerState());
   const endpointConfig = useMemo(() => {
     if (typeof window === "undefined") {
       return { websocketUrl: null as string | null };
@@ -150,158 +132,85 @@ export function ProductViewerApp() {
 
     return readViewerEndpointConfig(window.location);
   }, []);
+  const requestedProfileId = useMemo(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    return new URLSearchParams(window.location.search).get("robotProfileId");
+  }, []);
+  const liveInputEnabled = isProductViewerLiveInputEnabled(state);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) {
       return;
     }
-    if (profileResolution.profile === null) {
-      setState((current) => ({
-        ...current,
-        status: "error",
-        qposStatus: "unavailable",
-        qposError: profileResolution.error,
-        statusText: profileResolution.error ?? "viewer robot profile unavailable",
-      }));
-      return;
-    }
-
-    const renderer = createMujocoSceneRenderer({
-      canvas,
-      profile: profileResolution.profile,
-      websocketUrl: endpointConfig.websocketUrl,
-      onStateChange: setState,
-      onError(error) {
+    let disposed = false;
+    let renderer: ReturnType<typeof createMujocoSceneRenderer> | null = null;
+    const start = async (): Promise<void> => {
+      try {
+        const initialProfile =
+          endpointConfig.websocketUrl === null ? await loadDefaultViewerRobotProfile() : null;
+        if (
+          initialProfile !== null &&
+          requestedProfileId !== null &&
+          requestedProfileId !== initialProfile.profileId
+        ) {
+          throw new Error(`unknown compatibility viewer robot profile ID ${requestedProfileId}`);
+        }
+        if (disposed) {
+          return;
+        }
+        if (initialProfile !== null) {
+          setProfile(initialProfile);
+        }
+        renderer = createMujocoSceneRenderer({
+          canvas,
+          profile: initialProfile,
+          expectedProfileId: requestedProfileId,
+          websocketUrl: endpointConfig.websocketUrl,
+          onProfileResolved: setProfile,
+          onStateChange: setState,
+          onError(error) {
+            setState((current) => ({
+              ...current,
+              status: "error",
+              qposStatus: "unavailable",
+              qposError: error.message,
+              statusText: error.message,
+            }));
+          },
+        });
+        await renderer.start();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         setState((current) => ({
           ...current,
           status: "error",
           qposStatus: "unavailable",
-          qposError: error.message,
-          statusText: error.message,
+          qposError: message,
+          statusText: message,
         }));
-      },
-    });
-
-    void renderer.start();
-    return () => {
-      renderer.dispose();
-    };
-  }, [endpointConfig.websocketUrl, profileResolution.error, profileResolution.profile]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined" || state.connectionStatus !== "open") {
-      return;
-    }
-
-    const keyboardCapture = keyboardCaptureRef.current;
-    const keyboardSender = createViewerKeyboardControlSender({
-      url: endpointConfig.websocketUrl,
-    });
-    let disposed = false;
-    let animationFrameId = 0;
-
-    const publishKeyboardState = (): void => {
-      keyboardSender.publish(keyboardCapture.snapshot(), undefined, {
-        metadata: {
-          intent_kind: "local_endpoint_velocity",
-          input_continuity: "continuous",
-          source_kind: "viewer_keyboard",
-          control_frame: "world",
-          local_endpoint_speed_m_s: 0.1,
-          local_endpoint_max_delta_m: 0.03,
-        },
-      });
+      }
     };
 
-    const scheduleKeyboardPublish = (): void => {
-      if (disposed) {
-        return;
-      }
-
-      publishKeyboardState();
-      animationFrameId = window.requestAnimationFrame(scheduleKeyboardPublish);
-    };
-
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (!keyboardCapture.isBoundKey(event.code)) {
-        return;
-      }
-      event.preventDefault();
-      if (!keyboardCapture.handleKeyDown(event.code, event.repeat)) {
-        return;
-      }
-
-      publishKeyboardState();
-    };
-
-    const onKeyUp = (event: KeyboardEvent): void => {
-      if (!keyboardCapture.isBoundKey(event.code)) {
-        return;
-      }
-      if (!keyboardCapture.handleKeyUp(event.code)) {
-        return;
-      }
-
-      event.preventDefault();
-      publishKeyboardState();
-    };
-
-    const onWindowBlur = (): void => {
-      if (!keyboardCapture.handleBlur()) {
-        return;
-      }
-
-      publishKeyboardState();
-    };
-
-    const onWindowFocus = (): void => {
-      if (!keyboardCapture.handleFocus()) {
-        return;
-      }
-
-      publishKeyboardState();
-    };
-
-    const onVisibilityChange = (): void => {
-      if (!keyboardCapture.handleVisibilityChange(document.visibilityState === "visible")) {
-        return;
-      }
-
-      publishKeyboardState();
-    };
-
-    publishKeyboardState();
-    animationFrameId = window.requestAnimationFrame(scheduleKeyboardPublish);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", onWindowBlur);
-    window.addEventListener("focus", onWindowFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
+    void start();
     return () => {
       disposed = true;
-      window.cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", onWindowBlur);
-      window.removeEventListener("focus", onWindowFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      keyboardSender.dispose();
+      renderer?.dispose();
     };
-  }, [endpointConfig.websocketUrl, state.connectionStatus]);
+  }, [endpointConfig.websocketUrl, requestedProfileId]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined" || state.connectionStatus !== "open") {
+    if (typeof window === "undefined" || typeof document === "undefined") {
       return;
     }
 
-    const gamepadSender = createViewerGamepadControlSender({
-      url: endpointConfig.websocketUrl,
-    });
-    const gamepadLifecycle = createViewerGamepadLifecycle({
+    const inputLifecycle = createViewerInputLifecycle({
       window,
       document,
+      url: endpointConfig.websocketUrl,
+      keyboardCapture: keyboardCaptureRef.current,
       getGamepads: () => {
         if (typeof navigator === "undefined" || typeof navigator.getGamepads !== "function") {
           return null;
@@ -309,17 +218,10 @@ export function ProductViewerApp() {
 
         return navigator.getGamepads() as unknown as ArrayLike<ViewerGamepadLike | null | undefined>;
       },
-      publish(snapshot) {
-        gamepadSender.publish(snapshot);
-      },
     });
-    gamepadLifecycle.start();
-
-    return () => {
-      gamepadLifecycle.dispose();
-      gamepadSender.dispose();
-    };
-  }, [endpointConfig.websocketUrl, state.connectionStatus]);
+    inputLifecycle.setLiveInputEnabled(liveInputEnabled);
+    return () => inputLifecycle.dispose();
+  }, [endpointConfig.websocketUrl, liveInputEnabled]);
 
   const currentQposText = state.currentQpos === null ? "qpos unavailable" : formatQpos(state.currentQpos);
 
@@ -437,7 +339,7 @@ export function ProductViewerApp() {
           <h2>Legend</h2>
           <div className="viewer-subtle">shared colors</div>
         </div>
-        <Legend profile={profileResolution.profile} />
+        <Legend profile={profile} />
       </section>
     </main>
   );

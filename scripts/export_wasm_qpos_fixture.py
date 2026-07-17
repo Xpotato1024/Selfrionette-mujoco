@@ -18,7 +18,14 @@ from selfrionette.runtime import run_replay_mujoco_dry_run
 
 FIXTURE_MODEL_PATH = "assets/mujoco/fast_arm/scene.xml"
 FIXTURE_SOURCE = "python-native-mujoco"
-DEFAULT_OUTPUT_PATH = ROOT / "apps" / "mujoco-viewer" / "public" / "fixtures" / "fast_arm_sweep_x_qpos.json"
+DEFAULT_OUTPUT_PATH = (
+    ROOT
+    / "assets"
+    / "mujoco"
+    / "fast_arm"
+    / "fixtures"
+    / "fast_arm_sweep_x_qpos.json"
+)
 
 
 def _positive_int(value: str) -> int:
@@ -46,7 +53,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=DEFAULT_OUTPUT_PATH,
-        help="output JSON path; defaults to apps/mujoco-viewer/public/fixtures/fast_arm_sweep_x_qpos.json",
+        help=(
+            "output JSON path; defaults to "
+            "assets/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json"
+        ),
     )
     return parser
 

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "source": "test-only fixture_bot",
+  "model_path": "assets/mujoco/fixture_bot/model.xml",
+  "qpos_length": 1,
+  "frames": [
+    {
+      "frame_index": 0,
+      "t_s": 0.0,
+      "qpos": [0.25]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { FAST_ARM_VIEWER_PROFILE } from "./fastArm.js";
+import { loadFastArmViewerProfile } from "./fastArm.js";
 import type { ViewerRobotProfile } from "./types.js";
 
 export class ViewerRobotProfileRegistry {
@@ -30,10 +30,8 @@ export class ViewerRobotProfileRegistry {
   }
 }
 
-export const VIEWER_ROBOT_PROFILE_REGISTRY = new ViewerRobotProfileRegistry([
-  FAST_ARM_VIEWER_PROFILE,
-]);
-
-export function resolveViewerRobotProfile(profileId: string): ViewerRobotProfile {
-  return VIEWER_ROBOT_PROFILE_REGISTRY.resolve(profileId);
+export async function loadDefaultViewerRobotProfile(
+  fetcher: typeof fetch = fetch,
+): Promise<ViewerRobotProfile> {
+  return loadFastArmViewerProfile(fetcher);
 }

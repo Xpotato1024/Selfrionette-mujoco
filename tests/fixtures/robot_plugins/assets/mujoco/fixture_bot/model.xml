@@ -1,0 +1,4 @@
+<mujoco model="fixture_bot">
+  <option timestep="0.01"/>
+  <include file="robot.xml"/>
+</mujoco>

@@ -25,7 +25,19 @@ import {
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { TransportPayloadV0 } from "../types/transportPayload.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
-import { createViewerWebSocketClient, type ViewerWebSocketClient } from "../transport/websocketClient.js";
+import {
+  loadViewerRobotProfileFromPayload,
+  validateViewerRobotProfileCompatibility,
+  validateViewerRobotProfileFrameReference,
+  viewerRobotDeclarationReferenceFromPayload,
+  viewerRobotProfileDigest,
+  type ViewerRobotDeclarationReference,
+} from "../robot-profiles/declaration.js";
+import {
+  createViewerWebSocketClient,
+  type ViewerWebSocketClient,
+  type ViewerWebSocketPayloadObservation,
+} from "../transport/websocketClient.js";
 import { loadMujocoWasm } from "./mujocoWasmLoader.js";
 import { matrixFromMujocoGeom } from "./mujocoSceneTransforms.js";
 import {
@@ -36,9 +48,12 @@ import {
 import { resolveBodyVisualStyle } from "./visualStyles.js";
 import type { BodyVisualStyle } from "./visualStyles.js";
 import {
+  applyProductViewerRendererStatePatch,
   createInitialProductViewerState,
   buildProductViewerInputOverlayState,
   formatViewerStatusText,
+  type ProductViewerConnectionStatus,
+  type ProductViewerRendererStatePatch,
   type ProductViewerState,
 } from "./productViewerState.js";
 import {
@@ -48,9 +63,11 @@ import {
 
 export interface MujocoSceneRendererOptions {
   canvas: HTMLCanvasElement;
-  profile: ViewerRobotProfile;
+  profile: ViewerRobotProfile | null;
+  expectedProfileId?: string | null;
   websocketUrl?: string | null;
   onStateChange: (state: ProductViewerState) => void;
+  onProfileResolved?: (profile: ViewerRobotProfile) => void;
   onError?: (error: Error) => void;
 }
 
@@ -130,25 +147,21 @@ function buildPrimitiveGeometry(type: number, size: ArrayLike<number>): BufferGe
   return new BufferGeometry();
 }
 
-function createStatePatch(
-  previous: ProductViewerState,
-  patch: Partial<ProductViewerState> & { statusText?: string },
-): ProductViewerState {
-  const next = {
-    ...previous,
-    ...patch,
-  };
-  next.statusText = patch.statusText ?? formatViewerStatusText(next);
-  next.currentQposText = patch.currentQposText ?? (next.currentQpos === null ? "[]" : formatQpos(next.currentQpos));
-  return next;
-}
-
 export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): MujocoSceneRenderer {
   const frameTiming = createViewerFrameTiming();
-  const state = createInitialProductViewerState(options.profile);
-  const emitState = (patch: Partial<ProductViewerState> & { statusText?: string }): void => {
+  let profile = options.profile;
+  let declarationReference: ViewerRobotDeclarationReference | null = null;
+  const state = createInitialProductViewerState(profile ?? undefined);
+  const requireProfile = (): ViewerRobotProfile => {
+    if (profile === null) {
+      throw new Error("viewer robot declaration is unavailable");
+    }
+    return profile;
+  };
+  const emitState = (next: ProductViewerState): void => {
     frameTiming.recordUiStateUpdate();
-    Object.assign(state, createStatePatch(state, { ...patch, viewerTiming: frameTiming.snapshot() }));
+    next.viewerTiming = frameTiming.snapshot();
+    Object.assign(state, next);
     options.onStateChange({ ...state });
   };
 
@@ -215,8 +228,17 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       ? null
       : options.websocketUrl;
 
-  const updateStatus = (patch: Partial<ProductViewerState> & { statusText?: string }): void => {
-    emitState(patch);
+  const updateRendererStatus = (patch: ProductViewerRendererStatePatch): void => {
+    emitState(applyProductViewerRendererStatePatch(state, patch));
+  };
+
+  const updateConnectionStatus = (
+    connectionStatus: ProductViewerConnectionStatus,
+    patch: ProductViewerRendererStatePatch = {},
+  ): void => {
+    const next = applyProductViewerRendererStatePatch(state, patch);
+    next.connectionStatus = connectionStatus;
+    emitState(next);
   };
 
   const buildCompiledMeshGeometry = (meshId: number): BufferGeometry => {
@@ -283,7 +305,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     }
 
     const style: BodyVisualStyle | null = resolveBodyVisualStyle(
-      options.profile,
+      requireProfile(),
       bodyName,
       meshName,
       geomName,
@@ -365,7 +387,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     if (candidate !== null) {
       frameTiming.recordSceneApplied(candidate, frameTiming.now() - sceneApplyStartedMs);
     }
-    updateStatus({
+    updateRendererStatus({
       status: "ready",
       sourceLabel,
       qposStatus: "ready",
@@ -382,7 +404,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     });
   };
 
-  let startupPoseSourceLabel = options.profile.initialPoseSourceLabel;
+  let startupPoseSourceLabel = profile?.initialPoseSourceLabel ?? "viewer declaration pending";
   const applyStartupPose = (): void => {
     applyModelPose(startupQpos, startupPoseSourceLabel, null, null, null, null);
   };
@@ -391,9 +413,9 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     const payload = candidate.payload;
     const endpointEvaluation = payload.endpoint_evaluation ?? null;
     const inputOverlay = buildProductViewerInputOverlayState(payload);
-    const qposResolution = resolveTransportQpos(payload, model.nq, options.profile);
+    const qposResolution = resolveTransportQpos(payload, model.nq, requireProfile());
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
-      updateStatus({
+      updateRendererStatus({
         status: "warning",
         sourceLabel: qposResolution.sourceLabel,
         qposStatus: qposResolution.status,
@@ -451,54 +473,83 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     frameHandle = window.requestAnimationFrame(animate);
   };
 
+  const acceptCompatiblePayload = (
+    payload: TransportPayloadV0,
+    observation: ViewerWebSocketPayloadObservation,
+  ): void => {
+    frameTiming.receive(payload, observation);
+    const qposResolution = resolveTransportQpos(payload, model.nq, requireProfile());
+    if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
+      frameTiming.recordCompatibilityInvalidIngress();
+      updateRendererStatus({
+        status: "warning",
+        sourceLabel: qposResolution.sourceLabel,
+        qposStatus: qposResolution.status,
+        qposError: qposResolution.errorMessage,
+        currentFrameIndex: qposResolution.currentFrameIndex,
+        currentTimestampS: qposResolution.currentTimestampS,
+        currentQpos: null,
+        currentQposText: "[]",
+        endpointEvaluation: payload.endpoint_evaluation ?? null,
+        inputOverlay: buildProductViewerInputOverlayState(payload),
+      });
+      return;
+    }
+    frameTiming.acceptLatestCandidate(payload, observation);
+  };
+
   const startWebSocketClient = (): void => {
     if (websocketUrl === null) {
-      updateStatus({
-        connectionStatus: "disabled",
-      });
+      updateConnectionStatus("disabled");
       return;
     }
 
     websocketClient = createViewerWebSocketClient({
       url: websocketUrl,
       onOpen() {
-        updateStatus({ connectionStatus: "open" });
+        updateConnectionStatus("open");
       },
       onClose() {
-        updateStatus({ connectionStatus: "closed" });
+        updateConnectionStatus("closed");
       },
       onConnectionError(error) {
-        updateStatus({
-          connectionStatus: "error",
+        updateConnectionStatus("error", {
           status: "warning",
           qposStatus: "unavailable",
           qposError: error instanceof Error ? error.message : "viewer WebSocket connection error",
         });
       },
       onPayload(payload, observation) {
-        frameTiming.receive(payload, observation);
-        const qposResolution = resolveTransportQpos(payload, model.nq, options.profile);
-        if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
-          frameTiming.recordCompatibilityInvalidIngress();
-          updateStatus({
-            status: "warning",
-            sourceLabel: qposResolution.sourceLabel,
-            qposStatus: qposResolution.status,
-            qposError: qposResolution.errorMessage,
-            currentFrameIndex: qposResolution.currentFrameIndex,
-            currentTimestampS: qposResolution.currentTimestampS,
-            currentQpos: null,
-            currentQposText: "[]",
-            endpointEvaluation: payload.endpoint_evaluation ?? null,
-            inputOverlay: buildProductViewerInputOverlayState(payload),
-          });
+        if (profile === null || !hasLoaded) {
+          pendingBootstrapPayload = { payload, observation };
+          if (bootstrapPromise === null) {
+            bootstrapPromise = bootstrapFromPayload(payload);
+          }
           return;
         }
-        frameTiming.acceptLatestCandidate(payload, observation);
+
+        const deliveredReference = viewerRobotDeclarationReferenceFromPayload(payload);
+        if (declarationReference === null && deliveredReference !== null) {
+          pendingBootstrapPayload = { payload, observation };
+          if (bootstrapPromise === null) {
+            bootstrapPromise = bootstrapFromPayload(payload);
+          }
+          return;
+        }
+        if (declarationReference === null) {
+          validateViewerRobotProfileCompatibility(payload, profile);
+        } else {
+          validateViewerRobotProfileFrameReference(
+            payload,
+            declarationReference,
+            profile,
+          );
+        }
+        acceptCompatiblePayload(payload, observation);
       },
       onPayloadError(error) {
         frameTiming.recordParseError();
-        updateStatus({
+        updateRendererStatus({
           status: "warning",
           qposStatus: "invalid",
           qposError: error.message,
@@ -508,24 +559,83 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       },
     });
 
-    updateStatus({ connectionStatus: "connecting" });
+    updateConnectionStatus("connecting");
     websocketClient.start();
   };
 
+  let bootstrapPromise: Promise<void> | null = null;
+  let pendingBootstrapPayload: {
+    payload: TransportPayloadV0;
+    observation: ViewerWebSocketPayloadObservation;
+  } | null = null;
+
+  const bootstrapFromPayload = async (payload: TransportPayloadV0): Promise<void> => {
+    try {
+      if (profile === null) {
+        const delivered = await loadViewerRobotProfileFromPayload(payload);
+        const expectedProfileId = options.expectedProfileId?.trim() || null;
+        if (expectedProfileId !== null && delivered.profile.profileId !== expectedProfileId) {
+          throw new Error(
+            `viewer requested robot profile ${expectedProfileId}, backend declared ${delivered.profile.profileId}`,
+          );
+        }
+        profile = delivered.profile;
+        declarationReference = delivered.reference;
+        startupPoseSourceLabel = delivered.profile.initialPoseSourceLabel;
+        options.onProfileResolved?.(delivered.profile);
+        await initializeModel();
+      } else {
+        const deliveredReference = viewerRobotDeclarationReferenceFromPayload(payload);
+        if (deliveredReference === null) {
+          throw new Error("viewer declaration frame reference is required before state");
+        }
+        const actualDigest = await viewerRobotProfileDigest(profile);
+        if (actualDigest !== deliveredReference.digest) {
+          throw new Error(
+            `viewer declaration digest mismatch: expected ${deliveredReference.digest}, got ${actualDigest}`,
+          );
+        }
+        validateViewerRobotProfileCompatibility(payload, profile);
+        declarationReference = deliveredReference;
+      }
+
+      const pending = pendingBootstrapPayload;
+      pendingBootstrapPayload = null;
+      if (pending !== null) {
+        validateViewerRobotProfileFrameReference(
+          pending.payload,
+          declarationReference,
+          requireProfile(),
+        );
+        acceptCompatiblePayload(pending.payload, pending.observation);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      updateRendererStatus({
+        status: "error",
+        qposStatus: "unavailable",
+        qposError: message,
+        sceneSummaryText: message,
+      });
+      options.onError?.(error instanceof Error ? error : new Error(message));
+    }
+  };
+
   const initializeModel = async (): Promise<void> => {
-    updateStatus({ status: "loading", connectionStatus: websocketUrl === null ? "disabled" : "connecting" });
+    const activeProfile = requireProfile();
+    updateRendererStatus({ status: "loading" });
 
     mujocoApi = await loadMujocoWasm();
 
-    const response = await fetch(options.profile.modelUrl);
+    const response = await fetch(activeProfile.modelUrl);
     if (!response.ok) {
-      throw new Error(`failed to fetch ${options.profile.modelUrl}: ${response.status} ${response.statusText}`);
+      throw new Error(`failed to fetch ${activeProfile.modelUrl}: ${response.status} ${response.statusText}`);
     }
 
     const xml = await response.text();
     const vfs = new mujocoApi.MjVFS();
     try {
-      for (const [vfsPath, assetUrl] of options.profile.vfsAssets.entries()) {
+      for (const [vfsPath, assetUrl] of activeProfile.vfsAssets.entries()) {
         const assetResponse = await fetch(assetUrl);
         if (!assetResponse.ok) {
           throw new Error(`failed to fetch ${assetUrl}: ${assetResponse.status} ${assetResponse.statusText}`);
@@ -535,9 +645,9 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
       model = mujocoApi.MjModel.from_xml_string(xml, vfs);
       data = new mujocoApi.MjData(model);
-      if (model.nq !== options.profile.qposDimension) {
+      if (model.nq !== activeProfile.qposDimension) {
         throw new Error(
-          `viewer model/profile qpos dimension mismatch: expected ${options.profile.qposDimension}, got ${model.nq}`,
+          `viewer model/profile qpos dimension mismatch: expected ${activeProfile.qposDimension}, got ${model.nq}`,
         );
       }
       const modelJointNames = Array.from(
@@ -550,14 +660,14 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
           ) ?? "",
       );
       if (
-        modelJointNames.length !== options.profile.jointNames.length ||
-        modelJointNames.some((name, index) => name !== options.profile.jointNames[index])
+        modelJointNames.length !== activeProfile.jointNames.length ||
+        modelJointNames.some((name, index) => name !== activeProfile.jointNames[index])
       ) {
         throw new Error(
-          `viewer model/profile joint name/order mismatch: expected ${options.profile.jointNames.join(",")}, got ${modelJointNames.join(",")}`,
+          `viewer model/profile joint name/order mismatch: expected ${activeProfile.jointNames.join(",")}, got ${modelJointNames.join(",")}`,
         );
       }
-      const initialKeyframe = resolveNamedInitialKeyframe(model, options.profile);
+      const initialKeyframe = resolveNamedInitialKeyframe(model, activeProfile);
       startupQpos = Array.from(initialKeyframe.qpos);
       startupPoseSourceLabel = initialKeyframe.sourceLabel;
       const modelStat = model.stat as any;
@@ -585,11 +695,11 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       mjvPerturb = new mujocoApi.MjvPerturb();
       mjvCamera = new mujocoApi.MjvCamera();
 
-      updateStatus({
-        robotProfileId: options.profile.profileId,
-        modelContractVersion: options.profile.modelContractVersion,
-        modelPath: options.profile.modelUrl,
-        fixturePath: options.profile.fixtureUrl,
+      updateRendererStatus({
+        robotProfileId: activeProfile.profileId,
+        modelContractVersion: activeProfile.modelContractVersion,
+        modelPath: activeProfile.modelUrl,
+        fixturePath: activeProfile.fixtureUrl,
         modelNq: model.nq,
         modelNv: model.nv,
         modelNgeom: model.ngeom,
@@ -598,7 +708,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
       hasLoaded = true;
       syncToLatestSource();
-      updateStatus({
+      updateRendererStatus({
         status: "ready",
         sceneSummaryText: `loaded ${model.ngeom} geoms and ${model.nmesh} compiled meshes`,
       });
@@ -614,26 +724,34 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       }
 
       try {
-        await initializeModel();
-        startWebSocketClient();
+        if (profile === null) {
+          if (websocketUrl === null) {
+            throw new Error("viewer robot declaration requires a WebSocket startup payload");
+          }
+          startWebSocketClient();
+        } else {
+          await initializeModel();
+          options.onProfileResolved?.(profile);
+          startWebSocketClient();
+        }
         setCanvasSize();
-        updateStatus({
+        updateRendererStatus({
           statusText: formatViewerStatusText(state),
         });
         window.addEventListener("resize", setCanvasSize);
         frameHandle = window.requestAnimationFrame(animate);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        updateStatus({
+        updateRendererStatus({
           status: "error",
           qposStatus: "unavailable",
           qposError: message,
           sceneSummaryText: message,
           statusText: [
             `renderer mode: wasm-scene`,
-            `robot profile: ${options.profile.profileId}`,
-            `model path: ${options.profile.modelUrl}`,
-            `fixture path: ${options.profile.fixtureUrl}`,
+            `robot profile: ${profile?.profileId ?? "unresolved"}`,
+            `model path: ${profile?.modelUrl ?? "unresolved"}`,
+            `fixture path: ${profile?.fixtureUrl ?? "unresolved"}`,
             `error: ${message}`,
           ].join("\n"),
         });

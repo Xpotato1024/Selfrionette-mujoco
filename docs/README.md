@@ -29,7 +29,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | runtime composition | `docs/architecture/runtime-composition.md` | 唯一のmulti-layer composition root |
 | schema | `docs/contracts/schemas.md` | shared contract type |
 | asset | `docs/contracts/assets.md` | MJCF、STL、scale、axis、unit |
-| Robot Profile / Runtime Plugin / Viewer Profile | `docs/contracts/robot-profile-runtime-viewer-profile.md` | robot selectionとbackend/viewer compatibility |
+| Robot Plugin / Profile / Runtime Plugin / Viewer declaration | `docs/contracts/robot-profile-runtime-viewer-profile.md` | bounded discovery、robot selection、resource ownership、backend/viewer compatibility |
 | experiment plugin composition | `docs/contracts/experiment-plugin-composition.md` | Robot、Environment、Mapping、Task、Evaluationのversioned compositionとreadiness |
 | evaluation manifest / readiness freeze | `docs/contracts/evaluation-manifest-readiness.md` | pre-run manifestのcanonical bytes、world/tool pair invariant、requested/resolved identity、software-only readiness |
 | kinematics / command境界 | `docs/contracts/kinematics-command-contract.md` | solver、command、qpos境界 |

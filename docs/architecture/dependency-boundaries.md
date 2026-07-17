@@ -45,14 +45,26 @@ generic schema / domain / Protocol
   <- generic registry / provider adapter / Robot Bundle contract
   <- robot-specific profile / runtime / feasibility / initial state
   <- Robot Bundle assembly
-  <- plugins/catalog.py
+  <- robot-specific plugin.py / ROBOT_PLUGIN registration
+  <- bounded first-party discovery / plugins/catalog.py
   <- application composition root
 ```
 
-- `selfrionette.plugins.catalog`はproduction concrete registrationの唯一の入口であり、
-  concrete `RobotBundle`だけを登録する。
+- `selfrionette.plugins.robot_discovery`は`selfrionette.plugins.robots`直下packageだけを列挙し、
+  固定`plugin.py`の固定`ROBOT_PLUGIN`だけを読む。configuration値、robot ID、external entry pointを
+  import pathとして使用しない。
+- 各robot packageの`ROBOT_PLUGIN`はBundle、viewer declaration、resource declaration、
+  onboarding contract versionを一つのimmutable registrationへ束ねる。`__init__.py`の
+  import副作用で自己登録しない。onboarding contract versionはregistration schema軸であり、
+  Bundle / Profile / Viewerのrobot logical version軸とは独立させる。
+- `selfrionette.plugins.catalog`はproduction discovery結果の唯一のprojection入口であり、
+  concrete robot package、具体robot ID、Bundle singletonを直接importまたは列挙しない。
 - ProfileとRuntime Pluginのresolverは、別registryへ具体objectを重複登録せず、resolved Bundleの
   `profile`と`runtime_plugin`を返す。
+- `RuntimeConfig.robot_selection`、catalog resolver、experiment compositionは同じ`PluginSelection`を使用し、
+  robot logical versionをapplication compositionまで保持する。onboarding schema versionはselection軸にしない。
+- Bundleのtyped providerはgeneric `ProviderAssemblyBinding`でBundle logical identityとcanonical Profile / Runtime
+  Plugin ownerへbindする。provider adapter class名ではなくbinding contractとobject identityを検査する。
 - generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
   `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
@@ -60,6 +72,11 @@ generic schema / domain / Protocol
   新規consumerのcomposition APIとして使用しない。
 - package root `selfrionette.runtime`はpublic compatibility surfaceをlazy resolveするが、package importだけで
   concrete catalogをloadしない。
+- production discoveryを起動できるgeneric moduleはcatalogだけとする。test fixtureはproduction namespaceへ
+  置かず、明示的なtest discovery rootを使用する。
+- registration resourceは宣言identityと同じ`assets/mujoco/<robot_id>/` / `configs/<robot_id>/`へ限定し、
+  symlink解決後の実pathにも同じownershipを要求する。viewer public URLは検証済みasset pathからdeterministicに
+  生成し、resolved ownership違反を回避できない。shared resourceは暗黙許可しない。
 
 禁止するdependency:
 

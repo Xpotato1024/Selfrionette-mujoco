@@ -10,7 +10,7 @@ export default defineConfig({
   root: repoRoot,
   base: "./",
   appType: "mpa",
-  publicDir: resolve(appRoot, "public"),
+  publicDir: resolve(repoRoot, "assets"),
   server: {
     open: "/apps/mujoco-viewer/",
     fs: {

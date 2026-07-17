@@ -7,6 +7,7 @@ from pathlib import Path
 
 from selfrionette.motion.base import MotionGenerator
 from selfrionette.robot_profile import RobotProfile
+from selfrionette.runtime.experiment_contracts import VersionedIdentity
 from selfrionette.runtime.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.runtime.robot_bundle import (
     ENDPOINT_COMMAND_V1,
@@ -18,6 +19,7 @@ from selfrionette.runtime.robot_bundle import (
     EndpointPoseObservation,
     InitialStateContract,
     InitialStateReference,
+    ProviderAssemblyBinding,
     SemanticRoleBinding,
 )
 from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
@@ -28,7 +30,16 @@ from selfrionette.schemas import MuJoCoState
 class NamedKeyframeInitialStateProvider:
     profile: RobotProfile
     contract: InitialStateContract | None = None
+    robot_identity: VersionedIdentity | None = None
     capability_identity = RESET_INITIAL_STATE_V1
+
+    @property
+    def assembly_binding(self) -> ProviderAssemblyBinding:
+        identity = self.robot_identity or VersionedIdentity(
+            self.profile.profile_id,
+            self.profile.profile_contract_version,
+        )
+        return ProviderAssemblyBinding(identity, self.profile)
 
     def resolve_initial_state(self) -> InitialStateReference:
         return InitialStateReference(
@@ -47,7 +58,16 @@ class NamedKeyframeInitialStateProvider:
 @dataclass(frozen=True, slots=True)
 class RuntimeEndpointPoseProvider:
     plugin: RobotRuntimePlugin
+    robot_identity: VersionedIdentity | None = None
     capability_identity = ENDPOINT_POSE_V1
+
+    @property
+    def assembly_binding(self) -> ProviderAssemblyBinding:
+        identity = self.robot_identity or VersionedIdentity(
+            self.plugin.profile.profile_id,
+            self.plugin.profile.profile_contract_version,
+        )
+        return ProviderAssemblyBinding(identity, self.plugin)
 
     def observe_endpoint_pose(self, state: MuJoCoState) -> EndpointPoseObservation:
         return EndpointPoseObservation(
@@ -59,7 +79,16 @@ class RuntimeEndpointPoseProvider:
 @dataclass(frozen=True, slots=True)
 class RuntimeEndpointCommandProvider:
     plugin: RobotRuntimePlugin
+    robot_identity: VersionedIdentity | None = None
     capability_identity = ENDPOINT_COMMAND_V1
+
+    @property
+    def assembly_binding(self) -> ProviderAssemblyBinding:
+        identity = self.robot_identity or VersionedIdentity(
+            self.plugin.profile.profile_id,
+            self.plugin.profile.profile_contract_version,
+        )
+        return ProviderAssemblyBinding(identity, self.plugin)
 
     def build_target_motion_generator(
         self,
@@ -81,7 +110,16 @@ class RuntimeEndpointCommandProvider:
 @dataclass(frozen=True, slots=True)
 class RuntimeQposFeasibilityProvider:
     plugin: RobotRuntimePlugin
+    robot_identity: VersionedIdentity | None = None
     capability_identity = QPOS_FEASIBILITY_V1
+
+    @property
+    def assembly_binding(self) -> ProviderAssemblyBinding:
+        identity = self.robot_identity or VersionedIdentity(
+            self.plugin.profile.profile_id,
+            self.plugin.profile.profile_contract_version,
+        )
+        return ProviderAssemblyBinding(identity, self.plugin)
 
     def build_guard(
         self, *, model: object, config_path: str | Path | None
@@ -95,7 +133,16 @@ class RuntimeQposFeasibilityProvider:
 @dataclass(frozen=True, slots=True)
 class ProfileEndpointSceneRoleProvider:
     profile: RobotProfile
+    robot_identity: VersionedIdentity | None = None
     capability_identity = SCENE_ROLE_BINDING_V1
+
+    @property
+    def assembly_binding(self) -> ProviderAssemblyBinding:
+        identity = self.robot_identity or VersionedIdentity(
+            self.profile.profile_id,
+            self.profile.profile_contract_version,
+        )
+        return ProviderAssemblyBinding(identity, self.profile)
 
     def semantic_role_bindings(self) -> tuple[SemanticRoleBinding, ...]:
         if self.profile.endpoint.site_name is not None:

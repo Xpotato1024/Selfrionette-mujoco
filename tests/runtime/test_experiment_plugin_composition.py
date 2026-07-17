@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -49,6 +49,7 @@ from selfrionette.runtime.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     InitialStateContract,
+    ProviderAssemblyBinding,
     QPOS_FEASIBILITY_V1,
     RESET_INITIAL_STATE_V1,
     ROBOT_TOOL_ENDPOINT_ROLE,
@@ -110,14 +111,18 @@ class _DummyRuntimePlugin:
         return (1.0, 0.0, 0.0, 0.0)
 
 
+@dataclass(frozen=True)
 class _EndpointPoseProvider:
+    assembly_binding: ProviderAssemblyBinding
     capability_identity = ENDPOINT_POSE_V1
 
     def observe_endpoint_pose(self, state):
         return object()
 
 
+@dataclass(frozen=True)
 class _EndpointCommandProvider:
+    assembly_binding: ProviderAssemblyBinding
     capability_identity = ENDPOINT_COMMAND_V1
 
     def build_target_motion_generator(self, **kwargs):
@@ -127,14 +132,18 @@ class _EndpointCommandProvider:
         return object()
 
 
+@dataclass(frozen=True)
 class _QposFeasibilityProvider:
+    assembly_binding: ProviderAssemblyBinding
     capability_identity = QPOS_FEASIBILITY_V1
 
     def build_guard(self, **kwargs):
         return object()
 
 
+@dataclass(frozen=True)
 class _SceneRoleProvider:
+    assembly_binding: ProviderAssemblyBinding
     capability_identity = SCENE_ROLE_BINDING_V1
 
     def semantic_role_bindings(self):
@@ -240,16 +249,39 @@ def _dummy_bundle(
     providers = [
         CapabilityProviderBinding(
             RESET_INITIAL_STATE_V1,
-            NamedKeyframeInitialStateProvider(profile, contract),
+            NamedKeyframeInitialStateProvider(
+                profile,
+                contract,
+                robot_identity=identity,
+            ),
         ),
-        CapabilityProviderBinding(ENDPOINT_COMMAND_V1, _EndpointCommandProvider()),
-        CapabilityProviderBinding(QPOS_FEASIBILITY_V1, _QposFeasibilityProvider()),
-        CapabilityProviderBinding(SCENE_ROLE_BINDING_V1, _SceneRoleProvider()),
+        CapabilityProviderBinding(
+            ENDPOINT_COMMAND_V1,
+            _EndpointCommandProvider(ProviderAssemblyBinding(identity, plugin)),
+        ),
+        CapabilityProviderBinding(
+            QPOS_FEASIBILITY_V1,
+            _QposFeasibilityProvider(ProviderAssemblyBinding(identity, plugin)),
+        ),
+        CapabilityProviderBinding(
+            SCENE_ROLE_BINDING_V1,
+            _SceneRoleProvider(ProviderAssemblyBinding(identity, profile)),
+        ),
     ]
     if include_endpoint_pose:
-        providers.append(CapabilityProviderBinding(ENDPOINT_POSE_V1, _EndpointPoseProvider()))
+        providers.append(
+            CapabilityProviderBinding(
+                ENDPOINT_POSE_V1,
+                _EndpointPoseProvider(ProviderAssemblyBinding(identity, plugin)),
+            )
+        )
     if duplicate_endpoint_pose:
-        providers.append(CapabilityProviderBinding(ENDPOINT_POSE_V1, _EndpointPoseProvider()))
+        providers.append(
+            CapabilityProviderBinding(
+                ENDPOINT_POSE_V1,
+                _EndpointPoseProvider(ProviderAssemblyBinding(identity, plugin)),
+            )
+        )
     return RobotBundle(
         identity=identity,
         profile=profile,
@@ -426,6 +458,65 @@ def test_non_fast_arm_conformance_composition_resolves_all_axes_before_startup()
     )
     reset = resolved.robot_bundle.provider(RESET_INITIAL_STATE_V1)
     assert reset.resolve_initial_state().source_id == "neutral"
+
+
+def test_discovered_logical_v2_fixture_uses_plugin_selection_in_resolved_composition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib
+    import sys
+
+    from selfrionette.plugins.robot_discovery import (
+        RobotDiscoveryRoot,
+        discover_robot_plugins,
+    )
+
+    fixture_root = Path(__file__).resolve().parents[1] / "fixtures" / "robot_plugins"
+    for name in tuple(sys.modules):
+        if name == "test_robot_plugins" or name.startswith("test_robot_plugins."):
+            sys.modules.pop(name)
+    monkeypatch.syspath_prepend(str(fixture_root))
+    namespace = importlib.import_module("test_robot_plugins")
+    registration = discover_robot_plugins(
+        RobotDiscoveryRoot(
+            namespace=namespace,
+            repository_root=fixture_root,
+            asset_roots=(fixture_root / "assets" / "mujoco",),
+            configuration_roots=(fixture_root / "configs",),
+        )
+    ).resolve("fixture_bot", robot_logical_version=2)
+    bundle = registration.bundle
+    robot_requirement = SemanticRoleRequirement(
+        ROBOT_TOOL_ENDPOINT_ROLE,
+        object_kind="robot_endpoint",
+        frame=ROLE_ATTRIBUTE_WILDCARD,
+        unit="meter",
+    )
+    environment = replace(
+        _environment(
+            required_robot_roles=frozenset({robot_requirement}),
+            compatible_robot_bundles=frozenset({bundle.identity}),
+        ),
+        compatible_backend_kinds=frozenset({"mujoco"}),
+    )
+    task = replace(
+        _task(
+            required_semantic_roles=frozenset(
+                {robot_requirement, TARGET_REQUIREMENT}
+            ),
+            compatible_robot_bundles=frozenset({bundle.identity}),
+        ),
+        compatible_backend_kinds=frozenset({"mujoco"}),
+    )
+    resolved = compose_experiment(
+        _manifest(robot_bundle=PluginSelection("fixture_bot", 2)),
+        _registries(bundle=bundle, environment=environment, task=task),
+    )
+
+    assert resolved.robot_bundle is bundle
+    assert resolved.robot_bundle.identity == VersionedIdentity("fixture_bot", 2)
+    reset = resolved.robot_bundle.provider(RESET_INITIAL_STATE_V1)
+    assert reset.resolve_initial_state().source_id == "home"
 
 
 def test_parameter_owners_with_same_raw_id_remain_axis_scoped() -> None:
@@ -649,11 +740,18 @@ def test_capability_provider_contract_mapping_is_immutable_and_typed() -> None:
             _EndpointCommandProvider
         )
     with pytest.raises(TypeError, match="does not satisfy EndpointPoseProvider"):
-        CapabilityProviderBinding(ENDPOINT_POSE_V1, _EndpointCommandProvider())
+        CapabilityProviderBinding(
+            ENDPOINT_POSE_V1,
+            _EndpointCommandProvider(
+                ProviderAssemblyBinding(VersionedIdentity("dummy", 1), object())
+            ),
+        )
     with pytest.raises(ValueError, match="unknown capability identity"):
         CapabilityProviderBinding(
             VersionedIdentity("not_registered", 1),
-            _EndpointPoseProvider(),
+            _EndpointPoseProvider(
+                ProviderAssemblyBinding(VersionedIdentity("dummy", 1), object())
+            ),
         )
 
 

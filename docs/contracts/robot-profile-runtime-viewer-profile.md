@@ -3,6 +3,7 @@ status: canonical
 owner: architecture
 last_verified: 2026-07-17
 canonical_for:
+  - Robot Plugin registration and bounded discovery
   - Robot Profile contract and registry
   - Robot Runtime Plugin contract and registry
   - Viewer Robot Profile contract and registry
@@ -50,43 +51,92 @@ profile-owned VFS asset mappingをmodel-loading boundaryとして維持する。
 fallback routeの追加には、別contract changeと明示的なdiagnostic、cleanup behavior、
 profile-driven testが必要である。
 
+`RobotPluginRegistration`はonboarding assembly boundaryであり、`RobotBundle`、
+`viewer-robot-declaration/v1`、`RobotResourceDeclaration`、onboarding contract versionを一つの
+immutable objectへ束ねる。`onboarding_contract_version`はregistration schemaのversionであり、robotの
+logical identity versionではない。onboarding schema v1はlogical v1とlogical v2のrobotを同じregistryへ
+登録できる。registration identityとBundle identityは一致し、Profile、Runtime Pluginが参照するProfile、
+Viewer declarationの`profile_contract_version`はrobot logical versionと一致しなければならない。
+unsupported onboarding schemaはlogical versionに関係なくfailする。Bundleは引き続きtyped provider
+assemblyだけを担い、execution中のservice locatorにはしない。各providerは
+`ProviderAssemblyBinding`でBundle logical identityとassembly ownerを宣言し、ownerは同じBundleのcanonical
+`RobotProfile`または`RobotRuntimePlugin` objectでなければならない。stale object、別robot、別logical versionを
+registration / Bundle assembly時にfail-closedで拒否する。この検査はadapter class名ではなくgeneric binding
+contractに対して行う。
+
+asset / configurationのlogical repository pathはregistration declarationをSoTとする。Profileの
+`Path`とviewerのdeclaration / model / fixture / VFS referenceはregistrationとstartup時に照合し、
+generic codeはrobot IDやpackage pathから実行pathを推測しない。通常resourceは宣言identityに対応する
+`assets/mujoco/<robot_id>/`または`configs/<robot_id>/`の内側だけを許可する。symlink解決後の実pathも同じrobot
+固有directory内に残らなければならない。model、viewer declaration、viewer fixture、VFS asset、configurationの
+すべてへ同じresolved ownership gateを適用し、viewer URL mappingで回避できない。shared resourceは暗黙許可せず、
+必要になった時点で別の明示contractを定義する。registration、viewer serialization、canonical identity
+materialにはPython package、module、class名を含めない。
+
 architecture test向けのcontract sentinelとして、ここでは`selects Option B`を固定し、
 `does not declare an unused fallback mapping`を保証する。
 
 ## Registry解決
 
 ```text
-RuntimeConfig.robot_profile_id
-  -> Robot Profile registry
-  -> Robot Runtime Plugin registry
+RuntimeConfig.robot_selection
+  = PluginSelection(robot_profile_id, robot_logical_version)
+  -> bounded first-party Robot Plugin discovery
+  -> registration resolver / discovered RobotCatalog / Robot Bundle registry
+  -> same PluginSelectionによるRobot Profile / Runtime Plugin projection
   -> registry-set and profile/plugin consistency validation
   -> model load with explicit keyframe
   -> profile/model/joint/dimension validation
   -> IK/FK/motion/guard composition
 
-viewer robotProfileId
-  -> Viewer Robot Profile registry
+profile-aware startup payload URL + digest
+  -> validated repository declaration resourceをfetch
+  -> viewer-robot-declaration/v1 strict decoder / digest validation
   -> asset/style/model composition
-  -> payload metadata compatibility check
+  -> steady-state frameのcompact reference / compatibility check
   -> qpos render only when compatible
 ```
 
-PythonとTypeScriptのregistryはdeterministicなknown-ID mappingである。
-duplicate registrationとunknown IDは明示的にfailし、registered IDはdiscoverableである。
-configuration stringをarbitrary dynamic importへ渡してはならない。robot追加には、
-declarativeなRobot Profileが一つ必要である。runtime behaviorをsupportする場合は
-runtime plugin registrationが一つ、browser renderingをsupportする場合は
-viewer profile registrationが一つ必要である。
+production discoveryは`selfrionette.plugins.robots`直下の非private packageだけを候補とし、package名を
+sortして固定`<package>.plugin`から固定`ROBOT_PLUGIN`を読む。external entry point、remote package、
+hot reload、configuration stringまたはrobot IDからのarbitrary import、`__init__.py`副作用登録を
+使用しない。candidate packageのentry point欠落、import failure、export欠落、不正型、package / declaration
+identity不一致、duplicate identity、contract / capability / resource不整合をwarning skipせず、immutable
+registryを返す前にfailする。
+
+この境界はconfiguration-drivenな`arbitrary dynamic import`ではない。
+
+## zero-core-change onboarding boundary
+
+production robot追加時に変更する領域は次の三つである。
+
+```text
+assets/mujoco/<robot_id>/
+configs/<robot_id>/
+src/selfrionette/plugins/robots/<robot_id>/
+```
+
+robot packageは少なくともside-effect-freeな`__init__.py`、固定entry pointの`plugin.py`、Profile、
+Runtime Plugin、Bundle assembly、viewer declarationを持つ。robot固有algorithmまたはmodel contractは同packageへ
+置き、generic `runtime/`、`kinematics/`、`mujoco_backend/`、`plugins/catalog.py`、viewer production source、
+root compatibility facadeへ新robot固有import、ID、fallbackを追加しない。
+
+registry IDとcanonical identity materialはlogical identityでsortし、candidate列挙順に依存しない。
+production rootとtest discovery rootは別objectとして明示する。test-only robotはproduction namespaceまたは
+catalogへ混入させない。
 
 すべてのproduction Robot Profile / Robot Runtime Plugin pairには、`tests/`配下に
 明示的なtest-only conformance caseも必要である。このcaseはproduction registry entry、
 runtime composition dependency、public APIではない。
 
-production concrete registrationのSoTは`selfrionette.plugins.catalog`である。catalogへ登録するのは
-`RobotBundle`だけであり、`resolve_robot_profile()`、`resolve_robot_runtime_plugin()`、
+production concrete registrationのSoTは各robot packageの`plugin.py` / `ROBOT_PLUGIN`である。
+`selfrionette.plugins.catalog`はdiscovery結果だけからregistryとprojection resolverを構成し、具体robot
+package、具体robot ID、Bundle singletonをimportしない。`resolve_robot_profile()`、`resolve_robot_runtime_plugin()`、
 `resolve_robot_runtime()`、`resolve_robot_bundle()`は同じBundleのProfile / Runtime Plugin objectへ収束する。
 Profile、Runtime Plugin、Bundleを独立したconcrete registryへ重複登録しない。旧registry moduleは
-同じresolverとprojection registryをre-exportするcompatibility facadeである。
+同じresolverとprojection registryをre-exportするcompatibility facadeである。既存のlogical v1呼出しはversion
+省略時の既定値を維持する。明示選択では`PluginSelection`または`robot_logical_version`をregistration、Bundle、
+Profile、Runtime Plugin、runtime compositionまで失わず伝播し、onboarding schema versionをselectionへ使用しない。
 
 `resolve_robot_runtime()`は共通production boundaryである。test-onlyの明示registry injectionでは、
 一方のregistryだけにあるID、requested/registered/plugin identity mismatch、profile/model contract
@@ -101,6 +151,10 @@ production fast_arm entry pointは`RuntimeConfig(robot_profile_id="fast_arm")`�
 model、`home` keyframe、endpoint reference、現在のIK/FK behavior、motion policy、
 qpos feasibility guardを解決する。IDのないproduction config、unknown ID、incompatible modelを
 与えた場合はstartupをfailする。
+
+logical v2等を選択するcallerは`RuntimeConfig(robot_profile_id=<id>, robot_logical_version=2)`を使用する。
+`RuntimeConfig.robot_selection`は#405 / #406と同じ`PluginSelection`を返し、catalog projectionとruntime compositionは
+そのselectionを共有する。requested / registered logical version不一致はmodel load前にfailする。
 
 `RuntimePipeline`、`build_mujoco_pipeline()`、`build_replay_mujoco_pipeline()`は
 genericのままとする。model pathまたはjoint nameからprofileを推論せず、profileがない場合に
@@ -155,25 +209,58 @@ first-input continuityと、physical collision feasibilityは別のacceptance bo
 ## Backend/viewer整合性とpayload v0
 
 Runtimeは既存のopen payload-v0 `metadata` mapへ`robot_profile_id`、
-`model_contract_version`、`robot_joint_names`、`robot_qpos_dimension`を追加する。
-envelopeとpayload versionは変更しない。viewerはrenderer construction前にprofileを解決し、
+`model_contract_version`、`robot_joint_names`、`robot_qpos_dimension`、
+`viewer_robot_declaration_resource_path`、`viewer_robot_declaration_url`、
+`viewer_robot_declaration_digest`を追加する。frameへfull declarationを含めず、後三つは検証済みrepository
+resourceを指すcompactなsession referenceである。envelopeとpayload versionは変更しない。WebSocket viewerは
+接続後の最初のprofile-aware payloadでURLからfull declarationを取得し、strict decodeとcanonical
+SHA-256 digest検証を一度だけ行ってsession cacheを確定する。reconnect時は同じ手順で再取得する。
 qpos適用前にloaded modelのdimension/joint orderと四つすべてのbackend compatibility keyを
 確認する。profile-aware production viewerでは、`robot_profile_id`、
 `model_contract_version`、`robot_joint_names`、`robot_qpos_dimension`が
 解決済みViewer Robot Profileと完全一致しなければならない。compatibility metadataが
 missing、unknown、malformed、mismatchedの場合は明示的なinvalid diagnosticを生成し、
 qposを適用しない。このviewerではprofile-free legacy payloadまたはgeneric payloadから
-暗黙にfast_armへfallbackしない。このadditive metadata boundaryは、rendererにtransport
-policyを所有させることなく、将来session manifestまたはhello messageへ移せる。
+暗黙にfast_armへfallbackしない。static profileを明示したgeneric payloadではsession referenceがない既存挙動を
+維持する。
 
-四つのcompatibility keyはreservedかつauthoritativeである。production compositionでは
+四つのcompatibility keyと三つのviewer declaration reference keyはreservedかつauthoritativeである。
+production compositionでは
 general state metadataと分離し、state、replay frame、input intent、motion command、
 input-source metadataの後に最後に適用する（overwrite-protection Option A）。したがって
 spoofed valueは、qpos-rejection pathを含めて解決済みprofile valueに置換される。
 authoritative profile metadataを持たないgeneric pipelineはこれらのkeyを追加せず、通常の
 metadata behaviorを維持する。fieldはopen payload-v0 metadata mapへのadditive fieldのままだが、
-profile-aware production compositionではprofile-aware viewer compatibilityのため四つすべてを
-authoritativeかつmandatoryとする。
+profile-aware production compositionではprofile-aware viewer compatibilityのため四つのkeyと
+compact declaration referenceをauthoritativeかつmandatoryとする。steady-state frameではreferenceの
+resource path、URL、digestだけを比較し、full declarationのJSON decode / canonicalizeを反復しない。
+session中のreference欠落またはdigest / URL / resource path変更はfail-closedに拒否する。
+
+viewer declarationはmodel URL / resource path、fixture URL / resource path、VFS mapping、joint order、
+qpos dimension、startup keyframe、rendering styleを持つ。repository `assets/` pathからpublic URLを
+deterministicに導出し、declaration、model、fixture、各VFS URLをstartup検証済みfileへ一意に結び付ける。
+unknown field、missing field、schema version、remote / escaped resource、resource / URL mismatch、duplicate
+mapping、backend compatibility mismatchは描画前またはqpos適用前にfailする。
+viewerはdeclarationを使ってMuJoCo WASM sceneを構成するだけで、runtime state、IK / FK、planning、target、
+safety decisionを再計算しない。
+
+未接続時の既存fast_arm表示はTypeScript compatibility facadeがplugin-owned
+`/mujoco/fast_arm/viewer-profile.json`をloadして維持する。facadeは宣言内容を再定義せず、
+new robot onboarding registryとして使用しない。WebSocket pathのgeneric viewer sourceは具体robot IDを知らず、
+新robot追加時に編集しない。
+
+## #406 runnerへのhandoff
+
+#406はcatalog-backed resolverへ到達した時点でbounded discoveryを完了させ、`PluginSelection`で解決したBundleを既存
+experiment registryへ渡す。orderingは`discovery -> registration / resource validation -> Bundle resolution ->
+readiness / freeze -> runner lifecycle`であり、runner開始後にpluginを追加・再探索しない。
+
+runner execution edgeへ渡すのはassembly時に取得した`EndpointPoseProvider`、
+`EndpointCommandProvider`、`QposFeasibilityProvider`等の必要なtyped providerだけとする。
+readinessでresolveしたlogical versionと`RuntimeConfig.robot_selection`が一致しなければrunnerを開始しない。
+`plugins.robots.<robot_id>`、旧compatibility facade、viewer declarationをruntime service locatorとして直接
+使用しない。viewer deliveryはauthoritative runtime metadataが担い、readiness / freeze logical identityへ
+package / module / class pathまたはdiscovery順を追加しない。
 
 
 実装・cleanup・fixture hashのevidenceは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
