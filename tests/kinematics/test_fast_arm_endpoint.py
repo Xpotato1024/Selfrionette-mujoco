@@ -5,8 +5,15 @@ import math
 import pytest
 
 from selfrionette.kinematics.fast_arm_endpoint import (
+    FastArmEndpointForwardKinematicsSolver as LegacyFastArmEndpointForwardKinematicsSolver,
+    FastArmEndpointInverseKinematicsSolver as LegacyFastArmEndpointInverseKinematicsSolver,
+    FastArmMuJoCoModelForwardKinematicsSolver as LegacyFastArmMuJoCoModelForwardKinematicsSolver,
+)
+from selfrionette.plugins.robots.fast_arm.kinematics import (
     FAST_ARM_MUJOCO_MODEL_JOINT_REFS_RAD,
     FAST_ARM_MUJOCO_MODEL_TIP_SITE_NAME,
+    FastArmEndpointForwardKinematicsSolver,
+    FastArmEndpointInverseKinematicsSolver,
     FastArmMuJoCoModelForwardKinematicsSolver,
 )
 from selfrionette.mujoco_backend import (
@@ -14,6 +21,15 @@ from selfrionette.mujoco_backend import (
     extract_fast_arm_tip_site_endpoint_from_state,
 )
 from selfrionette.schemas import JointCommand
+
+
+def test_fast_arm_kinematics_move_preserves_class_identity() -> None:
+    assert FastArmEndpointForwardKinematicsSolver is LegacyFastArmEndpointForwardKinematicsSolver
+    assert FastArmEndpointInverseKinematicsSolver is LegacyFastArmEndpointInverseKinematicsSolver
+    assert (
+        FastArmMuJoCoModelForwardKinematicsSolver
+        is LegacyFastArmMuJoCoModelForwardKinematicsSolver
+    )
 
 
 def test_fast_arm_mujoco_model_fk_matches_tip_site_for_fixed_qpos_fixtures() -> None:

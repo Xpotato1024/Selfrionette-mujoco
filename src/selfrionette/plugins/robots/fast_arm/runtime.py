@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from selfrionette.kinematics.fast_arm_endpoint import (
+from selfrionette.plugins.robots.fast_arm.kinematics import (
     FAST_ARM_ENDPOINT_LINK_LENGTHS_M,
     FastArmEndpointForwardKinematicsSolver,
     FastArmEndpointInverseKinematicsSolver,
