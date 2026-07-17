@@ -132,6 +132,10 @@ package-root exportとmodule-level exportは別のpublic surfaceである。
 
 - package-root `__all__`へ公開するのはcontract、concrete implementation、または
   canonical文書で維持理由を説明できるcompatibility helperに限定する。
+- `selfrionette.runtime`は各public nameをowner moduleとattribute nameの明示mappingで解決する。
+  module scan、transitive import、module orderingへ解決先を依存させない。generic contractの参照では
+  concrete catalogをloadせず、catalog-backed resolverを参照した時点だけcompatibility facade経由でloadする。
+- 明示mappingのkey setは`__all__`と一致させ、全entryのowner object identityをarchitecture testで固定する。
 - `NoOp*`、`Zero*`、`Static*`などのstub classをpackage-rootのstable APIにしない。
 - `stubs.py`はexplicit import用namespaceとして維持し、stubを使用するcallerは
   `.stubs`から明示的にimportする。

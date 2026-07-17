@@ -26,11 +26,14 @@ canonical文書とactual sourceを優先する。
 | generic adapter | `runtime/default_robot_providers.py` | `runtime/robot_provider_adapters.py` | Robot Bundle assembly、generic composition tests | generic adapter -> Profile / Runtime Plugin / typed provider contract | 旧provider classを同一identityでre-export。default selectionなし |
 | generic primitive | `robot_registry.py`と`runtime/robot_plugin_registry.py`内のregistry / validation | `runtime/robot_resolution.py` | catalog、test-only registry injection、Robot Bundle validation | generic resolution -> Profile / Runtime Plugin contractだけ | `ImmutableRegistry`、`ResolvedRobotRuntime`、validatorを維持 |
 | catalog | Profile / Runtime Plugin / Bundleの3 concrete registry | `plugins/catalog.py`のBundle registrationとprojection resolver | concrete pipeline、input step loop、offline smoke、#406 | application composition -> catalog -> Bundle | 4 resolver、registered ID API、error contractを維持 |
+| generic public facade | `runtime/__init__.py`のmodule scan + `hasattr()` | 同fileのpublic name -> owner module / attribute明示mapping | root public API consumer | generic root ->明示owner。catalog-backed resolverだけcompatibility facade -> catalog | 全`__all__` entryと既存root object identityを維持 |
+| runtime execution edge | input step loop plan / offline smokeの`ResolvedRobotRuntime`またはRuntime Plugin直接利用 | assembly時に解決した`EndpointPoseProvider`、`EndpointCommandProvider`、`QposFeasibilityProvider` | viewer step loop、replay/noop、offline smoke | composition root -> catalog -> typed provider。Plugin直接利用はmodel validation / FK factoryだけ | runtime plan shapeからbroad pluginを除去。既存step / smoke behaviorを維持 |
 | compatibility facade | `robot_registry.py`、`robots/fast_arm.py`、旧`runtime/*registry.py`、`runtime/fast_arm_*.py`、`runtime/default_robot_providers.py` | 新ownerのre-export | legacy / public import compatibility test | facade -> catalogまたは新実装だけ | construction、factory、fallback、registrationを持たない |
 | retain as domain algorithm | `kinematics/fast_arm_endpoint.py` | 同左 | Runtime Plugin、diagnostics、kinematics tests | concrete runtime integration -> kinematics。逆依存は禁止 | 変更なし |
 | retain as domain contract | `mujoco_backend/model_contract.py` | 同左 | Runtime Plugin、feasibility、endpoint extraction | concrete runtime integration -> MuJoCo domain contract。backend -> plugin依存は除去 | 既存function / constantを維持 |
 | retain | generic `motion/`、generic MuJoCo pipeline/backend、experiment contract / registry / manifest | 同左 | runtime / experiment composition | generic layerはcatalog / concrete pluginへ逆依存しない | 変更なし |
 | retain | `runtime/neutral_initial_pose.py`のcandidate生成・診断algorithm | 同左 | diagnostic scripts / tests | fast_arm診断はplugin-owned canonical declarationを読む。Bundle assemblyへは依存しない | 既存function / classを維持 |
+| compatibility helper | `mujoco_backend/model_loader.py::default_fast_arm_scene_path()`、`mujoco_backend/fast_arm_compat.py` | 同左 | legacy diagnostics、model/backend tests | この2 moduleだけ旧Profile facade importをallowlist。generic backendへの拡張は禁止 | 既存public helperを維持。新規composition APIではない |
 | defer | `assets/mujoco/fast_arm/`、`configs/fast_arm/`、viewer profile、native viewer / diagnostic scripts | repository asset / config / presentation / tooling owner | Profile reference、operator / diagnostic path | asset/configはPython packageへ移動しない | pathとbehaviorを維持 |
 | defer | #406 runner、R7-H contact plugin、viewer feature、hardware / serial / OSC | 後続Issue | 後続composition / operator | #423のcatalog / typed provider boundaryだけを利用 | 本Issueでは実装しない |
 
@@ -47,6 +50,8 @@ plugins/catalog.py
 `resolve_robot_profile()`、`resolve_robot_runtime_plugin()`、`resolve_robot_runtime()`は上記Bundleの
 同一Profile / Runtime Plugin objectへ収束する。catalogは`FAST_ARM_ROBOT_BUNDLE`だけを具体登録し、
 Profile / Runtime Pluginの別assemblyまたはimplicit fallbackを持たない。
+application compositionはBundleからtyped providerを取得した後、runtime planへproviderだけを注入する。
+step loopとoffline smokeはendpoint pose、motion command、qpos feasibilityをRuntime Pluginへ直接問い合わせない。
 
 ## #406 handoff
 

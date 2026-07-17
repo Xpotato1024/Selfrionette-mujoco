@@ -62,6 +62,17 @@ from tests.runtime.test_experiment_plugin_composition import (
 )
 
 
+BASELINE_FAST_ARM_MANIFEST_DIGEST = (
+    "sha256:5552d5c0e27ad523228c19a831666d3652f0e599742d25972c1be380f988626f"
+)
+BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST = (
+    "sha256:d43165d8d7bc2fb6b72f5e78fe96b3e0f681dbc8e7f446dea9b4be520c9aecbe"
+)
+BASELINE_FAST_ARM_FREEZE_DIGEST = (
+    "sha256:8fa9fed0906e4f7a12b437fd1ad8d35a0bc237d478107d83393781cf6000da3a"
+)
+
+
 def _environment_parameters(selection: PluginSelection) -> PluginParameters:
     return PluginParameters(
         PluginParameterOwner(PluginAxis.ENVIRONMENT, selection),
@@ -874,6 +885,17 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
             evaluator=fast_evaluator,
         ),
     )
+
+    # Golden values were executed at baseline main
+    # e0311688f8d9738689434a82895616c42e965c0f with test-revision:abc123.
+    for candidate in (readiness, compatibility_readiness):
+        assert candidate.freeze_record.manifest_digest == (
+            BASELINE_FAST_ARM_MANIFEST_DIGEST
+        )
+        assert candidate.resolved_identity == (
+            BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST
+        )
+        assert candidate.freeze_identity == BASELINE_FAST_ARM_FREEZE_DIGEST
 
     assert readiness.composition.robot_bundle is bundle
     assert readiness.robot_profile_identity == VersionedIdentity("fast_arm", 1)

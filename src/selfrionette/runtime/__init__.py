@@ -5,66 +5,280 @@ from __future__ import annotations
 from importlib import import_module
 
 
-_PUBLIC_EXPORT_MODULES = (
-    "selfrionette.runtime.experiment_contracts",
-    "selfrionette.runtime.experiment_registry",
-    "selfrionette.runtime.robot_plugin",
-    "selfrionette.runtime.robot_resolution",
-    "selfrionette.runtime.robot_bundle",
-    "selfrionette.runtime.experiment_composition",
-    "selfrionette.runtime.evaluation_manifest",
-    "selfrionette.runtime.config",
-    "selfrionette.runtime.input_source_selection",
-    "selfrionette.runtime.input_source_state",
-    "selfrionette.runtime.input_safety",
-    "selfrionette.runtime.qpos_feasibility",
-    "selfrionette.runtime.desired_endpoint_resolver",
-    "selfrionette.runtime.endpoint_target_generator",
-    "selfrionette.runtime.endpoint_metrics",
-    "selfrionette.runtime.evaluation",
-    "selfrionette.runtime.pipeline",
-    "selfrionette.runtime.mujoco_pipeline",
-    "selfrionette.runtime.replay_mujoco_pipeline",
-    "selfrionette.runtime.viewer_control_ingress",
-    "selfrionette.mujoco_backend.endpoint_extraction",
-    "selfrionette.runtime.concrete_mujoco_pipeline",
-    "selfrionette.runtime.dry_run",
-    "selfrionette.runtime.input_step_loop",
-    "selfrionette.runtime.endpoint_motion_sanity",
-    "selfrionette.runtime.offline_input_runtime_smoke",
-    "selfrionette.runtime.live_loadcell_runtime_runner",
-    "selfrionette.runtime.websocket_publisher_runner",
-    "selfrionette.runtime.live_viewer_smoke",
-    "selfrionette.runtime.robot_plugin_registry",
-    "selfrionette.runtime.robot_bundle_registry",
+_PUBLIC_EXPORT_OWNER_GROUPS = (
+    ("selfrionette.runtime.config", ("RuntimeConfig",)),
+    ("selfrionette.runtime.pipeline", ("RuntimePipeline", "build_noop_pipeline")),
+    ("selfrionette.runtime.robot_plugin", ("RobotRuntimePlugin",)),
+    (
+        "selfrionette.runtime.robot_plugin_registry",
+        (
+            "ResolvedRobotRuntime",
+            "registered_robot_runtime_plugin_ids",
+            "resolve_robot_runtime",
+            "resolve_robot_runtime_plugin",
+        ),
+    ),
+    (
+        "selfrionette.runtime.robot_bundle",
+        (
+            "RobotBundle",
+            "CapabilityProviderBinding",
+            "InitialStateContract",
+            "InitialStateContractProvider",
+            "RESET_INITIAL_STATE_V1",
+            "ENDPOINT_POSE_V1",
+            "ENDPOINT_COMMAND_V1",
+            "QPOS_FEASIBILITY_V1",
+            "SCENE_ROLE_BINDING_V1",
+            "CONTACT_EVIDENCE_V1",
+            "ROBOT_TOOL_ENDPOINT_ROLE",
+        ),
+    ),
+    (
+        "selfrionette.runtime.experiment_contracts",
+        (
+            "VersionedIdentity",
+            "PluginSelection",
+            "PluginAxis",
+            "PluginParameterOwner",
+            "EnvironmentPlugin",
+            "ControlMappingPlugin",
+            "TaskPlugin",
+            "EvaluationPlugin",
+            "EnvironmentRole",
+            "SemanticRole",
+            "SemanticRoleRequirement",
+            "ROLE_ATTRIBUTE_WILDCARD",
+            "ParameterContract",
+            "ParameterField",
+            "CanonicalEvidence",
+            "CanonicalEvidenceSet",
+            "EvidenceStatus",
+            "EvidenceDisposition",
+            "EvidencePolicy",
+            "MetricResult",
+            "TaskTerminalClassification",
+        ),
+    ),
+    ("selfrionette.runtime.experiment_registry", ("VersionedPluginRegistry",)),
+    (
+        "selfrionette.runtime.experiment_composition",
+        (
+            "ExperimentPluginManifest",
+            "ExperimentPluginRegistries",
+            "EvidenceProducerBinding",
+            "PluginParameters",
+            "ResolvedExperimentComposition",
+            "compose_experiment",
+        ),
+    ),
+    (
+        "selfrionette.runtime.evaluation_manifest",
+        (
+            "EVALUATION_MANIFEST_SCHEMA_VERSION",
+            "EVALUATION_MANIFEST_CONTRACT_VERSION",
+            "EVALUATION_MANIFEST_DIGEST_ALGORITHM",
+            "EVALUATION_FREEZE_SCHEMA_VERSION",
+            "EvaluationManifest",
+            "EvaluationManifestError",
+            "EvaluationManifestDecodeError",
+            "EvaluationReadiness",
+            "EvaluationReadinessError",
+            "EvaluationConditionPair",
+            "EvaluationConditionPairReadiness",
+            "WorldToolConditionPair",
+            "FreezeRecord",
+            "ReadinessStatus",
+            "ReadinessResult",
+            "SoftwareExecutionIdentity",
+            "encode_evaluation_manifest",
+            "decode_evaluation_manifest",
+            "evaluation_manifest_digest",
+            "canonical_encode",
+            "canonical_decode",
+            "compute_manifest_digest",
+            "build_evaluation_readiness",
+            "build_evaluation_condition_pair_readiness",
+            "validate_world_tool_condition_pair",
+            "assert_freeze_identity",
+            "verify_freeze_identity",
+        ),
+    ),
+    (
+        "selfrionette.runtime.input_source_selection",
+        ("RuntimeInputSourceSelection", "select_runtime_input_source"),
+    ),
+    (
+        "selfrionette.runtime.input_source_state",
+        (
+            "RuntimeInputSourceState",
+            "annotate_raw_input_frame",
+            "annotate_runtime_input_source_metadata",
+            "build_runtime_input_source_state",
+            "build_runtime_input_source_state_from_metadata",
+            "runtime_input_source_state_to_metadata",
+        ),
+    ),
+    (
+        "selfrionette.runtime.input_safety",
+        (
+            "RuntimeInputSafetyResult",
+            "DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS",
+            "build_runtime_input_safety_result",
+        ),
+    ),
+    (
+        "selfrionette.runtime.qpos_feasibility",
+        ("QposFeasibilityDiagnostic", "QposFeasibilityGuard", "QposFeasibilityResult"),
+    ),
+    (
+        "selfrionette.runtime.input_step_loop",
+        (
+            "RuntimeInputSourceStepLoopPlan",
+            "RuntimeInputSourceStepLoopRecord",
+            "build_runtime_input_source_step_loop_plan",
+            "run_runtime_input_source_step_loop",
+        ),
+    ),
+    (
+        "selfrionette.runtime.evaluation",
+        (
+            "RuntimeForwardKinematicsEvaluation",
+            "evaluate_fk_endpoint_from_joint_command",
+            "evaluate_fk_endpoint_from_qpos",
+        ),
+    ),
+    (
+        "selfrionette.runtime.endpoint_metrics",
+        (
+            "RuntimeEndpointEvaluationMetrics",
+            "EndpointEvaluationStatePublisher",
+            "build_endpoint_evaluation_state_publisher",
+            "build_runtime_endpoint_evaluation_payload",
+            "build_runtime_endpoint_evaluation_payload_from_state",
+            "build_runtime_endpoint_evaluation_metrics",
+            "compute_error_norm_m",
+            "compute_vector_error_m",
+            "runtime_endpoint_evaluation_metrics_to_payload",
+        ),
+    ),
+    (
+        "selfrionette.runtime.endpoint_motion_sanity",
+        (
+            "FastArmEndpointTrajectoryDiagnostics",
+            "FastArmEndpointTrajectoryStepRecord",
+            "FastArmEndpointTrajectorySummary",
+            "FastArmEndpointMotionSanityResult",
+            "FastArmViewerEndpointWorkspaceDiagnostic",
+            "FastArmLocalJacobianColumn",
+            "FastArmLocalJacobianPoseDiagnostics",
+            "FastArmJointAxisPerturbationResult",
+            "run_fast_arm_endpoint_trajectory_diagnostics",
+            "sample_fast_arm_viewer_endpoint_workspace",
+            "run_fast_arm_joint_axis_mapping_diagnostics",
+            "run_fast_arm_local_jacobian_diagnostics",
+            "run_fast_arm_endpoint_motion_sanity",
+        ),
+    ),
+    (
+        "selfrionette.runtime.live_loadcell_runtime_runner",
+        (
+            "DEFAULT_LIVE_LOADCELL_BAUD_RATE",
+            "DEFAULT_LIVE_LOADCELL_CURRENT_TIP_POSITION_M",
+            "DEFAULT_LIVE_LOADCELL_MAX_FRAMES",
+            "DEFAULT_LIVE_LOADCELL_STEPS_PER_FRAME",
+            "LiveLoadcellRuntimeRunnerConfig",
+            "run_live_loadcell_runtime_runner",
+        ),
+    ),
+    (
+        "selfrionette.runtime.desired_endpoint_resolver",
+        ("ResolvedDesiredEndpoint", "resolve_desired_endpoint_from_motion_command"),
+    ),
+    (
+        "selfrionette.runtime.endpoint_target_generator",
+        (
+            "EndpointTargetGeneratorConfig",
+            "EndpointTargetGeneratorInput",
+            "EndpointTargetGeneratorResult",
+            "EndpointTargetGeneratorState",
+            "endpoint_target_generation_result_to_metadata",
+            "generate_endpoint_target",
+        ),
+    ),
+    (
+        "selfrionette.runtime.offline_input_runtime_smoke",
+        ("OfflineInputRuntimeSmokeResult", "run_offline_input_runtime_stepping_smoke"),
+    ),
+    (
+        "selfrionette.mujoco_backend.endpoint_extraction",
+        (
+            "RuntimeMuJoCoSiteEndpointEvaluation",
+            "extract_fast_arm_end_effector_site_endpoint",
+            "extract_fast_arm_end_effector_site_endpoint_from_state",
+            "extract_fast_arm_tip_site_endpoint",
+            "extract_fast_arm_tip_site_endpoint_from_state",
+            "extract_mujoco_site_endpoint",
+            "extract_mujoco_site_endpoint_from_state",
+        ),
+    ),
+    (
+        "selfrionette.runtime.concrete_mujoco_pipeline",
+        ("build_concrete_mujoco_pipeline",),
+    ),
+    ("selfrionette.runtime.mujoco_pipeline", ("build_mujoco_pipeline",)),
+    (
+        "selfrionette.runtime.replay_mujoco_pipeline",
+        ("build_replay_mujoco_pipeline",),
+    ),
+    (
+        "selfrionette.runtime.viewer_control_ingress",
+        (
+            "build_viewer_input_source",
+            "ingest_viewer_control_message",
+            "ingest_viewer_control_message_json",
+        ),
+    ),
+    ("selfrionette.runtime.dry_run", ("run_replay_mujoco_dry_run",)),
+    ("selfrionette.runtime.live_viewer_smoke", ("run_live_viewer_smoke",)),
+    (
+        "selfrionette.runtime.websocket_publisher_runner",
+        ("run_replay_mujoco_websocket_publisher",),
+    ),
+    (
+        "selfrionette.runtime.robot_bundle_registry",
+        ("registered_robot_bundle_ids", "resolve_robot_bundle"),
+    ),
 )
 
-_PUBLIC_EXPORT_ALIASES = {
-    "SUPPORTED_RUNTIME_INPUT_SOURCE_NAMES": (
+
+def _build_public_exports() -> dict[str, tuple[str, str]]:
+    exports: dict[str, tuple[str, str]] = {}
+    for module_name, names in _PUBLIC_EXPORT_OWNER_GROUPS:
+        for name in names:
+            if name in exports:
+                raise RuntimeError(f"duplicate runtime public export owner: {name}")
+            exports[name] = (module_name, name)
+    exports["SUPPORTED_RUNTIME_INPUT_SOURCE_NAMES"] = (
         "selfrionette.runtime.input_source_selection",
         "SUPPORTED_INPUT_SOURCE_NAMES",
-    ),
-}
+    )
+    return exports
+
+
+_PUBLIC_EXPORTS = _build_public_exports()
 
 
 def __getattr__(name: str) -> object:
     """Resolve the fixed public surface without loading the concrete catalog eagerly."""
 
-    if name not in __all__:
+    owner = _PUBLIC_EXPORTS.get(name)
+    if owner is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    alias = _PUBLIC_EXPORT_ALIASES.get(name)
-    if alias is not None:
-        module_name, attribute_name = alias
-        value = getattr(import_module(module_name), attribute_name)
-        globals()[name] = value
-        return value
-    for module_name in _PUBLIC_EXPORT_MODULES:
-        module = import_module(module_name)
-        if hasattr(module, name):
-            value = getattr(module, name)
-            globals()[name] = value
-            return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute_name = owner
+    value = getattr(import_module(module_name), attribute_name)
+    globals()[name] = value
+    return value
 
 
 def __dir__() -> list[str]:

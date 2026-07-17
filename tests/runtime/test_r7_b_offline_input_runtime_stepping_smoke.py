@@ -1,11 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from selfrionette.input_sources import build_keyboard_motion_command, build_motion_command_from_replay_frame
+from selfrionette.plugins.catalog import resolve_robot_bundle
 from selfrionette.runtime import run_offline_input_runtime_stepping_smoke
 from selfrionette.runtime import offline_input_runtime_smoke as offline_smoke_module
-from selfrionette.runtime.robot_plugin_registry import ResolvedRobotRuntime
+from selfrionette.runtime.robot_bundle import (
+    ENDPOINT_COMMAND_V1,
+    ENDPOINT_POSE_V1,
+    QPOS_FEASIBILITY_V1,
+    CapabilityProviderBinding,
+    RobotBundle,
+)
+from selfrionette.runtime.robot_provider_adapters import (
+    RuntimeEndpointCommandProvider,
+    RuntimeEndpointPoseProvider,
+    RuntimeQposFeasibilityProvider,
+)
 from selfrionette.schemas import MuJoCoState, RawInputFrame
 from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
 
@@ -42,6 +54,9 @@ class _RecordingRuntimePlugin:
     def endpoint_position_from_state(self, state):
         self.calls.append(("endpoint_position_from_state", state))
         return self.wrapped.endpoint_position_from_state(state)
+
+    def endpoint_orientation_from_state(self, state):
+        return self.wrapped.endpoint_orientation_from_state(state)
 
 
 def _assert_runtime_smoke_result(
@@ -164,14 +179,30 @@ def test_offline_input_runtime_profile_metadata_cannot_be_spoofed() -> None:
 
 
 def test_offline_input_runtime_uses_resolved_plugin_components_and_home_seed(monkeypatch) -> None:
-    resolved = offline_smoke_module.resolve_robot_runtime("fast_arm")
-    plugin = _RecordingRuntimePlugin(resolved.plugin)
+    resolved = resolve_robot_bundle("fast_arm")
+    plugin = _RecordingRuntimePlugin(resolved.runtime_plugin)
+    replacement_providers = {
+        ENDPOINT_POSE_V1: RuntimeEndpointPoseProvider(plugin),
+        ENDPOINT_COMMAND_V1: RuntimeEndpointCommandProvider(plugin),
+        QPOS_FEASIBILITY_V1: RuntimeQposFeasibilityProvider(plugin),
+    }
+    bundle = replace(
+        resolved,
+        runtime_plugin=plugin,
+        capability_providers=tuple(
+            CapabilityProviderBinding(
+                binding.identity,
+                replacement_providers.get(binding.identity, binding.provider),
+            )
+            for binding in resolved.capability_providers
+        ),
+    )
 
-    def recording_resolver(profile_id: str) -> ResolvedRobotRuntime:
+    def recording_resolver(profile_id: str) -> RobotBundle:
         assert profile_id == "fast_arm"
-        return ResolvedRobotRuntime(profile=resolved.profile, plugin=plugin)
+        return bundle
 
-    monkeypatch.setattr(offline_smoke_module, "resolve_robot_runtime", recording_resolver)
+    monkeypatch.setattr(offline_smoke_module, "resolve_robot_bundle", recording_resolver)
     command = build_keyboard_motion_command(
         (),
         current_tip_position_m=(0.1, 0.0, 0.3),

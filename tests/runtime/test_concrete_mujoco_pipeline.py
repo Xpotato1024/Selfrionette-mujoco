@@ -35,17 +35,17 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_solver_path() -> None:
     assert pipeline.simulator.last_command is None
 
 
-def test_build_concrete_mujoco_pipeline_uses_common_profile_plugin_resolver(
+def test_build_concrete_mujoco_pipeline_uses_catalog_bundle_resolver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str] = []
-    original = concrete_pipeline_module.resolve_robot_runtime
+    original = concrete_pipeline_module.resolve_robot_bundle
 
     def recording_resolver(profile_id: str):  # noqa: ANN202
         calls.append(profile_id)
         return original(profile_id)
 
-    monkeypatch.setattr(concrete_pipeline_module, "resolve_robot_runtime", recording_resolver)
+    monkeypatch.setattr(concrete_pipeline_module, "resolve_robot_bundle", recording_resolver)
     build_concrete_mujoco_pipeline(publisher=RecordingPublisher())
     assert calls == ["fast_arm"]
 
@@ -184,6 +184,8 @@ def test_concrete_mujoco_pipeline_rejects_unreachable_target() -> None:
     assert pipeline.simulator.last_command is not None
     assert pipeline.simulator.last_command.metadata["target_rejected"] is True
     assert pipeline.simulator.last_command.metadata["target_rejection_reason"] == "target_unreachable"
-    assert pipeline.simulator.last_command.metadata["target_rejection_message"] == "target_position_m is outside the reachable workspace"
+    assert pipeline.simulator.last_command.metadata["target_rejection_message"] == (
+        "target_position_m is outside the reachable workspace"
+    )
     assert state.target_position_m is None
     assert "endpoint_evaluation" not in publisher.states[0].metadata

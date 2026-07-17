@@ -9,6 +9,7 @@ import selfrionette.runtime.input_step_loop as input_step_loop
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.mujoco_backend import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.mujoco_backend.model_loader import FAST_ARM_INITIAL_KEYFRAME_NAME
+from selfrionette.plugins.catalog import resolve_robot_bundle
 from selfrionette.runtime import (
     build_runtime_input_source_step_loop_plan,
     ingest_viewer_control_message,
@@ -18,6 +19,11 @@ from selfrionette.runtime import (
 from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
 from selfrionette.schemas import RawInputFrame
 from selfrionette.robots.fast_arm import FAST_ARM_ROBOT_PROFILE
+from selfrionette.runtime.robot_bundle import (
+    ENDPOINT_COMMAND_V1,
+    ENDPOINT_POSE_V1,
+    QPOS_FEASIBILITY_V1,
+)
 
 
 class _ClockSequence:
@@ -105,11 +111,19 @@ def test_runtime_step_loop_rebases_viewer_source_to_initial_tip_site_position() 
     assert records[0].frame.metadata["current_tip_position_m"] == pytest.approx(initial_tip_site_position_m, abs=1e-12)
     assert records[0].frame.metadata["control_frame"] == "world"
     assert records[0].motion_command.metadata["control_frame"] == "world"
-    assert records[0].frame.metadata["endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, 0.1), abs=1e-12)
-    assert records[0].motion_command.metadata["local_endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, 0.1), abs=1e-12)
-    assert records[0].motion_command.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, 0.1), abs=1e-12)
+    assert records[0].frame.metadata["endpoint_velocity_m_s"] == pytest.approx(
+        (0.0, 0.0, 0.1), abs=1e-12
+    )
+    assert records[0].motion_command.metadata[
+        "local_endpoint_velocity_m_s"
+    ] == pytest.approx((0.0, 0.0, 0.1), abs=1e-12)
+    assert records[0].motion_command.metadata[
+        "resolved_world_endpoint_velocity_m_s"
+    ] == pytest.approx((0.0, 0.0, 0.1), abs=1e-12)
     assert records[0].motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.0, 0.0, 1.0 / 600.0), abs=1e-12)
-    assert records[0].motion_command.metadata["endpoint_delta_requested_m"] == pytest.approx((0.0, 0.0, 1.0 / 600.0), abs=1e-12)
+    assert records[0].motion_command.metadata[
+        "endpoint_delta_requested_m"
+    ] == pytest.approx((0.0, 0.0, 1.0 / 600.0), abs=1e-12)
     assert records[0].motion_command.metadata["motion_status"] in {"accepted", "scaled"}
     assert records[0].state.metadata["endpoint_progress_status"] == "progressing"
     assert records[0].state.metadata["endpoint_progress_ratio"] > 0.5
@@ -133,12 +147,17 @@ def test_runtime_step_loop_dt_scales_viewer_endpoint_delta() -> None:
     assert record_a.frame.metadata["endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
     assert record_b.frame.metadata["endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
     assert record_a.frame.metadata["resolved_world_endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
-    assert record_b.frame.metadata["resolved_world_endpoint_velocity_m_s"][1] == pytest.approx(0.1, abs=1e-12)
+    assert record_b.frame.metadata[
+        "resolved_world_endpoint_velocity_m_s"
+    ][1] == pytest.approx(0.1, abs=1e-12)
     assert record_a.frame.metadata["control_frame"] == "world"
     assert record_b.frame.metadata["control_frame"] == "world"
     assert record_a.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(1.0 / 600.0, abs=1e-12)
     assert record_b.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(1.0 / 300.0, abs=1e-12)
-    assert record_b.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(record_a.motion_command.metadata["endpoint_delta_m"][1] * 2.0, abs=1e-12)
+    assert record_b.motion_command.metadata["endpoint_delta_m"][1] == pytest.approx(
+        record_a.motion_command.metadata["endpoint_delta_m"][1] * 2.0,
+        abs=1e-12,
+    )
 
 
 def test_runtime_step_loop_holds_keyboard_z_binding_and_updates_target_metadata() -> None:
@@ -153,17 +172,23 @@ def test_runtime_step_loop_holds_keyboard_z_binding_and_updates_target_metadata(
     assert record.frame.metadata["axis_values"] == (0.0, 0.0, -1.0)
     assert record.frame.metadata["control_frame"] == "world"
     assert record.frame.metadata["endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, -0.1), abs=1e-12)
-    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, -0.1), abs=1e-12)
+    assert record.motion_command.metadata[
+        "resolved_world_endpoint_velocity_m_s"
+    ] == pytest.approx((0.0, 0.0, -0.1), abs=1e-12)
     assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.0, 0.0, -1.0 / 600.0), abs=1e-12)
     assert record.motion_command.metadata["endpoint_delta_requested_m"][2] < 0.0
-    assert record.motion_command.metadata["qpos_before_rad"] == pytest.approx(tuple(initial_state.qpos[:4]), abs=1e-12)
+    assert record.motion_command.metadata["qpos_before_rad"] == pytest.approx(
+        tuple(initial_state.qpos[:4]), abs=1e-12
+    )
     assert len(record.motion_command.metadata["current_tip_position_m"]) == 3
     assert record.motion_command.metadata["motion_status"] in {"accepted", "scaled"}
     assert record.motion_command.metadata["motion_rejection_reason"] is None
     assert record.motion_command.metadata["endpoint_model"] == "mujoco_model_aligned_tip_site"
     assert record.state.metadata["actual_tip_delta_m"][2] < 0.0
     assert record.state.metadata["endpoint_progress_status"] == "progressing"
-    assert record.state.target_position_m == pytest.approx(record.motion_command.metadata["desired_endpoint_m"], abs=1e-12)
+    assert record.state.target_position_m == pytest.approx(
+        record.motion_command.metadata["desired_endpoint_m"], abs=1e-12
+    )
     assert record.state.metadata.get("target_rejected") is not True
     assert record.state.metadata["local_motion_policy"] == "finite_difference_jacobian"
     assert record.state.metadata["source_kind"] == "viewer_keyboard"
@@ -195,7 +220,12 @@ def test_runtime_step_loop_uses_tool_frame_when_explicitly_requested() -> None:
     assert record.frame.metadata["control_frame"] == "tool"
     assert record.motion_command.metadata["control_frame"] == "tool"
     assert record.motion_command.metadata["local_endpoint_velocity_frame"] == "tool"
-    assert any(abs(component) > 1e-12 for component in record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"])
+    assert any(
+        abs(component) > 1e-12
+        for component in record.motion_command.metadata[
+            "resolved_world_endpoint_velocity_m_s"
+        ]
+    )
     assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx(
         record.motion_command.metadata["endpoint_velocity_m_s"],
         abs=1e-12,
@@ -328,17 +358,17 @@ def test_runtime_step_loop_does_not_fabricate_progress_for_programmed_target_pat
     assert "actual_tip_delta_m" not in record.state.metadata
 
 
-def test_replay_step_loop_uses_common_resolver_and_protects_profile_metadata(
+def test_replay_step_loop_injects_typed_providers_and_protects_profile_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str] = []
-    original = input_step_loop.resolve_robot_runtime
+    original = input_step_loop.resolve_robot_bundle
 
     def recording_resolver(profile_id: str):  # noqa: ANN202
         calls.append(profile_id)
         return original(profile_id)
 
-    monkeypatch.setattr(input_step_loop, "resolve_robot_runtime", recording_resolver)
+    monkeypatch.setattr(input_step_loop, "resolve_robot_bundle", recording_resolver)
     spoofed = {
         "robot_profile_id": "spoofed",
         "model_contract_version": "spoofed/v9",
@@ -351,8 +381,13 @@ def test_replay_step_loop_uses_common_resolver_and_protects_profile_metadata(
         publisher=RecordingPublisher(),
     )
     record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1))[0]
+    bundle = resolve_robot_bundle("fast_arm")
 
     assert calls == ["fast_arm"]
+    assert not hasattr(plan, "resolved_robot_runtime")
+    assert plan.endpoint_pose_provider is bundle.provider(ENDPOINT_POSE_V1)
+    assert plan.endpoint_command_provider is bundle.provider(ENDPOINT_COMMAND_V1)
+    assert plan.qpos_feasibility_provider is bundle.provider(QPOS_FEASIBILITY_V1)
     assert record.state.metadata["robot_profile_id"] == "fast_arm"
     assert record.state.metadata["model_contract_version"] == FAST_ARM_ROBOT_PROFILE.model_contract_version
     assert record.state.metadata["robot_joint_names"] == FAST_ARM_ROBOT_PROFILE.canonical_joint_names
@@ -442,14 +477,18 @@ def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monke
     assert published_states[0] == record.state
 
 
-def test_runtime_step_loop_continues_publish_when_tip_measurement_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runtime_step_loop_continues_publish_when_tip_measurement_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     clock = _ClockSequence((0.0, 0.0))
     viewer_input_source, plan = _build_plan(clock)
     ingest_viewer_control_message(viewer_input_source, _keyboard_message(7.0, "Space"))
     monkeypatch.setattr(
         input_step_loop,
         "measure_post_step_endpoint",
-        lambda pre_state, post_state, *, site_name: input_step_loop.PostStepMeasurement(None, None, None),
+        lambda pre_state, post_state, *, site_name: (
+            input_step_loop.PostStepMeasurement(None, None, None)
+        ),
         raising=False,
     )
 
