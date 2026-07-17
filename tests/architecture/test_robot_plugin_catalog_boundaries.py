@@ -138,7 +138,7 @@ def test_runtime_execution_edges_use_typed_providers_not_broad_plugins() -> None
     )
 
 
-def test_production_catalog_concrete_and_facade_imports_match_exact_allowlist() -> None:
+def test_removed_compatibility_facades_cannot_reappear() -> None:
     removed_facades = (
         "robot_registry.py",
         "robots/fast_arm.py",
@@ -150,161 +150,6 @@ def test_production_catalog_concrete_and_facade_imports_match_exact_allowlist() 
         "runtime/robot_plugin_registry.py",
     )
     assert all(not (SRC / path).exists() for path in removed_facades)
-    return
-    catalog_module = "selfrionette.plugins.catalog"
-    concrete_fast_arm_root = "selfrionette.plugins.robots.fast_arm"
-    compatibility_facades = frozenset(
-        {
-            "selfrionette.robot_registry",
-            "selfrionette.plugins.robots.fast_arm.profile",
-            "selfrionette.runtime.robot_provider_adapters",
-            "selfrionette.runtime.fast_arm_bundle",
-            "selfrionette.plugins.robots.fast_arm.feasibility",
-            "selfrionette.plugins.robots.fast_arm.runtime",
-            "selfrionette.plugins.catalog",
-            "selfrionette.runtime.robot_plugin_registry",
-        }
-    )
-
-    def monitored(imported: str) -> bool:
-        return (
-            imported == catalog_module
-            or imported == concrete_fast_arm_root
-            or imported.startswith(f"{concrete_fast_arm_root}.")
-            or imported in compatibility_facades
-        )
-
-    assert all(monitored(module) for module in compatibility_facades)
-    assert not monitored("selfrionette.runtime.robot_plugin_registry_extra")
-    assert not monitored("selfrionette.plugins.robots.fast_arm_extra")
-    parent_import_examples = "\n".join(
-        (
-            "from selfrionette import robot_registry",
-            "from selfrionette.plugins import catalog",
-            "from selfrionette.plugins.robots import fast_arm",
-            "from selfrionette.runtime import robot_plugin_registry",
-            "from . import robot_bundle_registry",
-            "from .. import robot_registry",
-        )
-    )
-    assert _matching_imports(
-        parent_import_examples,
-        filename="parent_import_examples.py",
-        monitored=monitored,
-        package="selfrionette.runtime",
-    ) == frozenset(
-        {
-            "selfrionette.robot_registry",
-            "selfrionette.plugins.catalog",
-            "selfrionette.plugins.robots.fast_arm",
-            "selfrionette.plugins.catalog",
-            "selfrionette.runtime.robot_plugin_registry",
-        }
-    )
-
-    # Each entry is an explicit production exception with its boundary reason:
-    # concrete implementation, catalog, compatibility facade, diagnostic, or
-    # application composition root. No generic contract/consumer is implicit.
-    allowed = {
-        Path("plugins/robots/fast_arm/plugin.py"): frozenset(
-            {
-                "selfrionette.plugins.robots.fast_arm.bundle",
-                "selfrionette.plugins.robots.fast_arm.viewer",
-            }
-        ),
-        Path("plugins/robots/fast_arm/bundle.py"): frozenset(
-            {
-                "selfrionette.plugins.robots.fast_arm.initial_state",
-                "selfrionette.plugins.robots.fast_arm.profile",
-                "selfrionette.plugins.robots.fast_arm.runtime",
-            }
-        ),
-        Path("plugins/robots/fast_arm/feasibility.py"): frozenset(
-            {"selfrionette.plugins.robots.fast_arm.profile"}
-        ),
-        Path("plugins/robots/fast_arm/profile.py"): frozenset(
-            {"selfrionette.plugins.robots.fast_arm.viewer"}
-        ),
-        Path("plugins/robots/fast_arm/runtime.py"): frozenset(
-            {
-                "selfrionette.plugins.robots.fast_arm.feasibility",
-                "selfrionette.plugins.robots.fast_arm.profile",
-            }
-        ),
-        Path("robot_registry.py"): frozenset({"selfrionette.plugins.catalog"}),
-        Path("robots/fast_arm.py"): frozenset(
-            {"selfrionette.plugins.robots.fast_arm.profile"}
-        ),
-        Path("runtime/fast_arm_bundle.py"): frozenset(
-            {
-                "selfrionette.plugins.robots.fast_arm.bundle",
-                "selfrionette.plugins.robots.fast_arm.initial_state",
-            }
-        ),
-        Path("runtime/fast_arm_joint_limits.py"): frozenset(
-            {"selfrionette.plugins.robots.fast_arm.feasibility"}
-        ),
-        Path("runtime/fast_arm_plugin.py"): frozenset(
-            {"selfrionette.plugins.robots.fast_arm.runtime"}
-        ),
-        Path("runtime/robot_bundle_registry.py"): frozenset(
-            {"selfrionette.plugins.catalog"}
-        ),
-        Path("runtime/robot_plugin_registry.py"): frozenset(
-            {"selfrionette.plugins.catalog"}
-        ),
-        Path("runtime/neutral_initial_pose.py"): frozenset(
-            {"selfrionette.plugins.robots.fast_arm.initial_state"}
-        ),
-        Path("mujoco_backend/fast_arm_compat.py"): frozenset(
-            {"selfrionette.plugins.robots.fast_arm.profile"}
-        ),
-        Path("mujoco_backend/model_loader.py"): frozenset(
-            {"selfrionette.plugins.robots.fast_arm.profile"}
-        ),
-        Path("runtime/concrete_mujoco_pipeline.py"): frozenset(
-            {"selfrionette.plugins.catalog"}
-        ),
-        Path("runtime/input_step_loop.py"): frozenset(
-            {"selfrionette.plugins.catalog"}
-        ),
-        Path("runtime/offline_input_runtime_smoke.py"): frozenset(
-            {"selfrionette.plugins.catalog"}
-        ),
-    }
-    allowed_reasons = {
-        Path("plugins/robots/fast_arm/plugin.py"): "fixed concrete discovery entry point",
-        Path("plugins/robots/fast_arm/bundle.py"): "concrete Bundle assembly",
-        Path("plugins/robots/fast_arm/feasibility.py"): "concrete adapter",
-        Path("plugins/robots/fast_arm/profile.py"): "concrete viewer declaration binding",
-        Path("plugins/robots/fast_arm/runtime.py"): "concrete Runtime Plugin",
-        Path("robot_registry.py"): "profile registry compatibility facade",
-        Path("robots/fast_arm.py"): "Profile compatibility facade",
-        Path("runtime/fast_arm_bundle.py"): "Bundle compatibility facade",
-        Path("runtime/fast_arm_joint_limits.py"): "feasibility compatibility facade",
-        Path("runtime/fast_arm_plugin.py"): "Runtime Plugin compatibility facade",
-        Path("runtime/robot_bundle_registry.py"): "Bundle resolver facade",
-        Path("runtime/robot_plugin_registry.py"): "Runtime Plugin resolver facade",
-        Path("runtime/neutral_initial_pose.py"): "robot-specific diagnostic",
-        Path("mujoco_backend/fast_arm_compat.py"): "legacy simulator helper",
-        Path("mujoco_backend/model_loader.py"): "legacy scene-path helper",
-        Path("runtime/concrete_mujoco_pipeline.py"): "composition root",
-        Path("runtime/input_step_loop.py"): "input-loop composition root",
-        Path("runtime/offline_input_runtime_smoke.py"): "offline composition root",
-    }
-    assert set(allowed_reasons) == set(allowed)
-    assert all(allowed_reasons.values())
-    actual = {
-        path.relative_to(SRC): _matching_imports(
-            path.read_text(encoding="utf-8"),
-            filename=str(path),
-            monitored=monitored,
-            package=".".join(path.relative_to(ROOT / "src").parent.parts),
-        )
-        for path in SRC.rglob("*.py")
-    }
-    actual = {path: imports for path, imports in actual.items() if imports}
-    assert actual == allowed
 
 
 def test_catalog_and_bundle_do_not_introduce_defaults_or_dynamic_discovery() -> None:
@@ -367,7 +212,7 @@ def test_test_discovery_root_and_fixture_names_do_not_enter_production_sources()
     assert not (SRC / "selfrionette_test_plugins").exists()
 
 
-def test_compatibility_facades_contain_only_imports_and_public_exports() -> None:
+def test_removed_facade_paths_are_absent() -> None:
     removed_facades = (
         SRC / "robots" / "fast_arm.py",
         SRC / "robot_registry.py",
@@ -379,27 +224,6 @@ def test_compatibility_facades_contain_only_imports_and_public_exports() -> None
         SRC / "runtime" / "robot_bundle_registry.py",
     )
     assert all(not path.exists() for path in removed_facades)
-    return
-    paths = (
-        SRC / "robots" / "fast_arm.py",
-        SRC / "robot_registry.py",
-        SRC / "runtime" / "default_robot_providers.py",
-        SRC / "runtime" / "fast_arm_plugin.py",
-        SRC / "runtime" / "fast_arm_bundle.py",
-        SRC / "runtime" / "fast_arm_joint_limits.py",
-        SRC / "runtime" / "robot_plugin_registry.py",
-        SRC / "runtime" / "robot_bundle_registry.py",
-    )
-    allowed_nodes = (ast.Expr, ast.Import, ast.ImportFrom, ast.Assign)
-    for path in paths:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        assert all(isinstance(node, allowed_nodes) for node in tree.body), path
-        for node in tree.body:
-            if isinstance(node, ast.Assign):
-                assert all(
-                    isinstance(target, ast.Name) and target.id == "__all__"
-                    for target in node.targets
-                ), path
 
 
 def test_runtime_generic_exports_are_catalog_free_until_resolver_access() -> None:
