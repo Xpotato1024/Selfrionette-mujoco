@@ -12,7 +12,7 @@ from selfrionette.input_sources.loadcell_serial import (
     run_loadcell_serial_dry_run_smoke,
 )
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "r7_a_lite_serial_frames" / "minimal_valid.txt"
 
 
