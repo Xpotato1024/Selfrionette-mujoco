@@ -2,26 +2,15 @@ from __future__ import annotations
 
 import ast
 import importlib
-import sys
 import tomllib
 from pathlib import Path
 
 import pytest
 
-from fast_arm_core.joint_limits import FastArmJointLimit
-from fast_arm_core.reference.initial_state import FAST_ARM_INITIAL_STATE
 from selfrionette.plugins.robots.fast_arm import bundle as compatibility_bundle
 from selfrionette.plugins.robots.fast_arm import kinematics as compatibility_kinematics
 from selfrionette.plugins.robots.fast_arm.adapter import bundle as adapter_bundle
 from selfrionette.plugins.robots.fast_arm.adapter import kinematics as adapter_kinematics
-from selfrionette.plugins.robots.fast_arm.adapter.initial_state import (
-    FAST_ARM_INITIAL_STATE_CONTRACT,
-)
-from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.runtime.composition.robot_resource import (
-    PackageResource,
-    package_resource_traversable,
-)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -169,102 +158,58 @@ def test_compatibility_modules_preserve_all_and_export_identities(
         assert getattr(compatibility, name) is getattr(adapter, name)
 
 
-def test_initial_state_contract_is_an_exact_core_projection() -> None:
-    contract = FAST_ARM_INITIAL_STATE_CONTRACT
-    assert contract.source_id == FAST_ARM_INITIAL_STATE.source_id
-    assert contract.qpos_rad == FAST_ARM_INITIAL_STATE.qpos_rad
-    assert contract.tip_position_m == FAST_ARM_INITIAL_STATE.tip_position_m
-    assert (
-        contract.tool_orientation_wxyz
-        == FAST_ARM_INITIAL_STATE.tool_orientation_wxyz
+def test_fast_arm_test_ownership_directories_have_real_tests_and_no_placeholders() -> None:
+    ownership_roots = (
+        ROOT / "tests/plugins/robots/fast_arm/core",
+        ROOT / "tests/plugins/robots/fast_arm/adapter",
+        ROOT / "tests/integration/fast_arm",
     )
-    assert contract.frame == FAST_ARM_INITIAL_STATE.frame
-    assert contract.position_unit == FAST_ARM_INITIAL_STATE.tip_position_unit
-    assert contract.quaternion_order == FAST_ARM_INITIAL_STATE.quaternion_order
-    assert FAST_ARM_ROBOT_PROFILE.initial_keyframe_name == FAST_ARM_INITIAL_STATE.source_id
-
-
-@pytest.mark.parametrize(
-    "field,value",
-    (
-        ("resource_path", "../escape.xml"),
-        ("resource_path", "/absolute.xml"),
-        ("logical_identifier", "assets/../escape.xml"),
-        ("bundle_path", "../arm.xml"),
-    ),
-)
-def test_package_resource_rejects_traversal(field: str, value: str) -> None:
-    arguments: dict[str, str] = {
-        "package": "fast_arm_core",
-        "resource_path": "resources/model/arm.xml",
-        "logical_identifier": "assets/mujoco/fast_arm/arm.xml",
-        "bundle_path": "arm.xml",
-    }
-    arguments[field] = value
-    with pytest.raises(ValueError):
-        PackageResource(**arguments)
-
-
-def test_package_resource_fails_for_missing_package_and_resource() -> None:
-    with pytest.raises(ValueError, match="missing package resource owner"):
-        package_resource_traversable(
-            PackageResource(
-                "missing_fast_arm_package",
-                "resource.xml",
-                "assets/mujoco/fast_arm/resource.xml",
-            )
-        )
-    with pytest.raises(ValueError, match="missing package resource"):
-        package_resource_traversable(
-            PackageResource(
-                "fast_arm_core",
-                "resources/model/missing.xml",
-                "assets/mujoco/fast_arm/missing.xml",
-            )
+    for directory in ownership_roots:
+        assert directory.is_dir()
+        assert tuple(directory.rglob("test_*.py")), directory
+        assert not tuple(directory.rglob(".gitkeep")), directory
+        assert not any(
+            path.name == "README.md" and not path.read_text(encoding="utf-8").strip()
+            for path in directory.rglob("README.md")
         )
 
 
-def test_package_resource_rejects_resolved_symlink_escape(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    package_root = tmp_path / "fast_arm_resource_owner"
-    package_root.mkdir()
-    (package_root / "__init__.py").write_text("", encoding="utf-8")
-    outside = tmp_path / "outside.xml"
-    outside.write_text("<mujoco/>", encoding="utf-8")
-    link = package_root / "escaped.xml"
-    try:
-        link.symlink_to(outside)
-    except OSError as exc:
-        pytest.skip(f"symlink creation is unavailable: {exc}")
-    monkeypatch.syspath_prepend(str(tmp_path))
-    importlib.invalidate_caches()
-    sys.modules.pop("fast_arm_resource_owner", None)
-    importlib.import_module("fast_arm_resource_owner")
-    with pytest.raises(ValueError, match="escapes its owning package"):
-        package_resource_traversable(
-            PackageResource(
-                "fast_arm_resource_owner",
-                "escaped.xml",
-                "assets/mujoco/fast_arm/escaped.xml",
-            )
-        )
+def test_fast_arm_core_tests_are_selfrionette_free_and_production_has_no_tests() -> None:
+    violations: list[str] = []
+    for path in (ROOT / "tests/plugins/robots/fast_arm/core").rglob("test_*.py"):
+        if any(
+            name == "selfrionette" or name.startswith("selfrionette.")
+            for name in _imports(path)
+        ):
+            violations.append(str(path.relative_to(ROOT)))
+    assert not violations
+    assert not tuple(FAST_ARM_ROOT.rglob("test_*.py"))
 
 
-@pytest.mark.parametrize(
-    "arguments,message",
-    (
-        (("", -1.0, 1.0), "joint name must not be empty"),
-        (("joint", float("inf"), 1.0), "joint 'joint' limits must be finite"),
-        (
-            ("joint", 1.0, 1.0),
-            "joint 'joint' lower_rad must be less than upper_rad",
-        ),
-    ),
-)
-def test_core_joint_limit_validation_preserves_failure_literals(
-    arguments: tuple[str, float, float], message: str
-) -> None:
-    with pytest.raises(ValueError) as exc_info:
-        FastArmJointLimit(*arguments)
-    assert str(exc_info.value) == message
+def test_fast_arm_specific_tests_leave_old_paths_and_generic_owners_in_place() -> None:
+    old_paths = (
+        ROOT / "tests/assets/test_fast_arm_assets.py",
+        ROOT / "tests/kinematics/test_fast_arm_endpoint.py",
+        ROOT / "tests/runtime/test_fast_arm_endpoint_diagnostic_logging.py",
+        ROOT / "tests/runtime/test_fast_arm_endpoint_motion_sanity.py",
+        ROOT / "tests/runtime/test_fast_arm_endpoint_trajectory_diagnostics.py",
+        ROOT / "tests/runtime/test_fast_arm_endpoint_trajectory_export.py",
+        ROOT / "tests/runtime/test_fast_arm_fk_site_consistency.py",
+        ROOT / "tests/runtime/test_fast_arm_ik_fk_sanity.py",
+        ROOT / "tests/runtime/test_fast_arm_initial_tip_workspace_diagnostics.py",
+        ROOT / "tests/runtime/test_fast_arm_jacobian_mobility_diagnostics.py",
+        ROOT / "tests/runtime/test_fast_arm_joint_axis_mapping_diagnostics.py",
+        ROOT / "tests/runtime/test_fast_arm_joint_limits.py",
+        ROOT / "tests/runtime/test_fast_arm_local_jacobian_dof_allocation.py",
+        ROOT / "tests/runtime/test_fast_arm_plugin_catalog.py",
+        ROOT / "tests/runtime/test_fast_arm_solver_mujoco_frame_alignment.py",
+        ROOT / "tests/runtime/test_fast_arm_viewer_endpoint_workspace_diagnostics.py",
+        ROOT / "tests/runtime/test_neutral_initial_pose.py",
+        ROOT / "tests/robots/fast_arm_conformance_case.py",
+    )
+    assert all(not path.exists() for path in old_paths)
+    assert (ROOT / "tests/architecture/test_kinematics_test_double_boundaries.py").is_file()
+    assert (ROOT / "tests/kinematics/test_inverse_kinematics_solver.py").is_file()
+    assert (ROOT / "tests/runtime/test_concrete_mujoco_pipeline.py").is_file()
+    assert (ROOT / "tests/support/test_robot_runtime_plugin_conformance.py").is_file()
+    assert (ROOT / "apps/mujoco-viewer/tests/robotProfileRegistry.test.ts").is_file()

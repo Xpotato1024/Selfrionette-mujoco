@@ -10,7 +10,7 @@ from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay
 from selfrionette.runtime.execution.input_step_loop import build_runtime_input_source_step_loop_plan
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 from tests.support.runtime_pipeline_builders import build_test_mujoco_pipeline
-from selfrionette.plugins.robots.fast_arm.feasibility import FastArmJointLimitGuard
+from selfrionette.plugins.robots.fast_arm.adapter.feasibility import FastArmJointLimitGuard
 from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
 from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
 from generic_qpos_test_doubles import RejectingGenericQposGuard

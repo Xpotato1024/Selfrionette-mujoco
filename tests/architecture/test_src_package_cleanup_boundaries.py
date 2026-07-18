@@ -13,7 +13,7 @@ from selfrionette.plugins.catalog import (
     resolve_robot_profile,
     resolve_robot_runtime_plugin,
 )
-from selfrionette.plugins.robots.fast_arm.bundle import FAST_ARM_ROBOT_BUNDLE
+from selfrionette.plugins.robots.fast_arm.adapter.bundle import FAST_ARM_ROBOT_BUNDLE
 from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN
 
 

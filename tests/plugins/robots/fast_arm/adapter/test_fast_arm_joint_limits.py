@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
-
 import asyncio
 from pathlib import Path
 
@@ -10,25 +8,24 @@ import pytest
 import selfrionette.plugins.robots.fast_arm.adapter.feasibility as joint_limits_module
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
-from selfrionette.plugins.robots.fast_arm.feasibility import (
+from selfrionette.plugins.robots.fast_arm.adapter.feasibility import (
     FastArmJointLimitGuard,
     apply_fast_arm_qpos_feasibility_guard,
     load_and_validate_fast_arm_joint_limit_config,
     parse_fast_arm_joint_limit_config,
     validate_fast_arm_joint_limit_config,
 )
-from selfrionette.plugins.robots.fast_arm.adapter.resources import (
-    FAST_ARM_JOINT_LIMIT_RESOURCE,
-)
-from selfrionette.runtime.composition.robot_resource import read_package_resource_bytes
+from selfrionette.plugins.robots.fast_arm.adapter.resources import FAST_ARM_JOINT_LIMIT_RESOURCE
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import build_fast_arm_simulator
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+from selfrionette.runtime.composition.robot_resource import read_package_resource_bytes
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
 from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
     run_runtime_input_source_step_loop,
 )
-from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
-from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 from selfrionette.schemas import (
     JointCommand,
     MotionCommand,
@@ -48,24 +45,6 @@ def _write_config(tmp_path: Path, text: str) -> Path:
     return path
 
 
-def test_default_config_is_provisional_rad_and_covers_all_fast_arm_joints() -> None:
-    config = parse_fast_arm_joint_limit_config(DEFAULT_CONFIG_PATH)
-
-    assert config.schema_version == 1
-    assert config.robot == "fast_arm"
-    assert config.model == "fast_arm"
-    assert config.angle_unit == "rad"
-    assert config.status == "provisional"
-    assert config.joint_names == (
-        "sholder_joint_1",
-        "sholder_joint_2",
-        "sholder_joint_3",
-        "elbow_joint",
-    )
-    assert all(config.limit_for(name).lower_rad == pytest.approx(-3.141592653589793) for name in config.joint_names)
-    assert all(config.limit_for(name).upper_rad == pytest.approx(3.141592653589793) for name in config.joint_names)
-
-
 def test_missing_config_file_is_a_startup_failure(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         build_concrete_mujoco_pipeline(
@@ -77,61 +56,10 @@ def test_missing_config_file_is_a_startup_failure(tmp_path: Path) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    ("replacement", "message"),
-    [
-        (('schema_version = 1', 'schema_version = 2'), "unsupported"),
-        (('robot = \"fast_arm\"', 'robot = \"other\"'), "robot"),
-        (('model = \"fast_arm\"', 'model = \"other\"'), "model"),
-        (('angle_unit = \"rad\"', 'angle_unit = \"deg\"'), "angle_unit"),
-        (('status = \"provisional\"', 'status = \"unknown\"'), "status"),
-        (('lower_rad = -3.141592653589793', 'lower_rad = nan'), "finite"),
-        (('upper_rad = 3.141592653589793', 'upper_rad = inf'), "finite"),
-        (
-            (
-                "lower_rad = -3.141592653589793\nupper_rad = 3.141592653589793",
-                "lower_rad = 1.0\nupper_rad = 1.0",
-            ),
-            "lower_rad",
-        ),
-        (
-            (
-                "lower_rad = -3.141592653589793\nupper_rad = 3.141592653589793",
-                "lower_rad = 1.0\nupper_rad = 0.5",
-            ),
-            "lower_rad",
-        ),
-    ],
-)
-def test_invalid_config_values_fail_at_parse_or_value_validation(
-    tmp_path: Path,
-    replacement: tuple[str, str],
-    message: str,
-) -> None:
-    path = _write_config(tmp_path, DEFAULT_CONFIG_TEXT.replace(*replacement))
-
-    with pytest.raises(ValueError, match=message):
-        parse_fast_arm_joint_limit_config(path)
-
-
-@pytest.mark.parametrize(
-    "replacement",
-    [
-        ("[joints.elbow_joint]", "[joints.unknown_joint]"),
-        ("[joints.elbow_joint]\nlower_rad = -3.141592653589793\nupper_rad = 3.141592653589793\n", ""),
-    ],
-)
-def test_missing_or_unknown_joint_is_rejected(tmp_path: Path, replacement: tuple[str, str]) -> None:
-    path = _write_config(tmp_path, DEFAULT_CONFIG_TEXT.replace(*replacement))
-
-    with pytest.raises(ValueError, match="required"):
-        parse_fast_arm_joint_limit_config(path)
-
-
 def test_home_qpos_is_checked_against_the_loaded_config(tmp_path: Path) -> None:
     path = _write_config(
         tmp_path,
-        DEFAULT_CONFIG_TEXT.replace("lower_rad = -3.141592653589793\nupper_rad = 3.141592653589793\n\n[joints.elbow_joint]", "lower_rad = -3.141592653589793\nupper_rad = 3.141592653589793\n\n[joints.elbow_joint]", 1).replace(
+        DEFAULT_CONFIG_TEXT.replace(
             "[joints.elbow_joint]\nlower_rad = -3.141592653589793\nupper_rad = 3.141592653589793",
             "[joints.elbow_joint]\nlower_rad = -0.5\nupper_rad = 0.5",
         ),

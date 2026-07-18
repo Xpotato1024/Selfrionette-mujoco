@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.robots.fast_arm_conformance_case import (
+from tests.plugins.robots.fast_arm.adapter.conformance_case import (
     FAST_ARM_ROBOT_RUNTIME_PLUGIN_CONFORMANCE_CASE,
 )
 

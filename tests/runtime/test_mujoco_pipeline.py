@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime.execution.pipeline import RuntimePipeline
 from selfrionette.schemas import MuJoCoState
 from tests.support.input_interpreter_doubles import NoOpInputInterpreter

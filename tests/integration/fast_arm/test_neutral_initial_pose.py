@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-
-from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
-
-import math
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import build_fast_arm_simulator
 
 import pytest
 
@@ -16,23 +13,7 @@ from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.neutral_initial_po
     evaluate_fast_arm_neutral_initial_pose_candidates,
     format_neutral_pose_ranking,
     generate_fast_arm_neutral_pose_candidates,
-    validate_candidate_qpos,
 )
-
-
-@pytest.mark.parametrize(
-    ("value", "message"),
-    (
-        ((0.0, 0.0), "length mismatch"),
-        ((0.0, False, 0.0, 0.0), "bool is not numeric"),
-        ((0.0, math.nan, 0.0, 0.0), "must be finite"),
-        ((0.0, math.inf, 0.0, 0.0), "must be finite"),
-        ("0 0 0 0", "numeric sequence"),
-    ),
-)
-def test_candidate_validation_rejects_invalid_values(value: object, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        validate_candidate_qpos(value, expected_length=4)
 
 
 def test_candidate_generation_is_deterministic_and_duplicate_free() -> None:

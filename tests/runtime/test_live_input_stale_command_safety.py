@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import build_fast_arm_simulator
 
 from dataclasses import replace
 import asyncio

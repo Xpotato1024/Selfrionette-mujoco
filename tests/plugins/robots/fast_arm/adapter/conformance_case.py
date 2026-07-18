@@ -11,13 +11,13 @@ from selfrionette.mujoco_backend.endpoint_extraction import extract_mujoco_site_
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.mujoco_backend.model_loader import load_mujoco_model
 from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
-from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
-from selfrionette.plugins.robots.fast_arm.model_contract import FAST_ARM_TIP_SITE_NAME
-from selfrionette.plugins.robots.fast_arm.feasibility import (
+from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.adapter.model_contract import FAST_ARM_TIP_SITE_NAME
+from selfrionette.plugins.robots.fast_arm.adapter.feasibility import (
     load_and_validate_fast_arm_joint_limit_config,
 )
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.plugins.robots.fast_arm.runtime import FAST_ARM_RUNTIME_PLUGIN
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import FAST_ARM_RUNTIME_PLUGIN
 from selfrionette.runtime.composition.robot_plugin import validate_profile_model_dimensions
 from selfrionette.runtime.composition.robot_resolution import validate_robot_profile_plugin_consistency
 from selfrionette.schemas import MuJoCoState

@@ -10,7 +10,7 @@ from selfrionette.input_interpreters import ReplayInputInterpreter
 from tests.support.input_interpreter_doubles import NoOpInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
 from tests.support.input_source_doubles import StaticInputSource
-from selfrionette.plugins.robots.fast_arm.kinematics import FastArmEndpointInverseKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmEndpointInverseKinematicsSolver
 from tests.support.kinematics_solver_doubles import ZeroInverseKinematicsSolver
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator

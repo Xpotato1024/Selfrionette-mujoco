@@ -16,8 +16,8 @@ from selfrionette.plugins.catalog import (
     registered_robot_profile_ids,
     resolve_robot_profile,
 )
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.plugins.robots.fast_arm.runtime import (
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import (
     FAST_ARM_RUNTIME_PLUGIN,
     FastArmRuntimePlugin,
 )

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.plugins.robots.fast_arm.adapter.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 
-from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import build_fast_arm_simulator
 
 
 import pytest
 
-from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
 from selfrionette.motion import LocalEndpointMotionGenerator
 from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.schemas import InputIntent, JointCommand

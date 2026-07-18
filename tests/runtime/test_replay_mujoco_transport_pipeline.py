@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 
 import asyncio
 import json

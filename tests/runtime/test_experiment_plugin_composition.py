@@ -42,7 +42,7 @@ from selfrionette.runtime.experiment.contracts import (
     VersionedIdentity,
 )
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
-from selfrionette.plugins.robots.fast_arm.runtime import FAST_ARM_RUNTIME_PLUGIN
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import FAST_ARM_RUNTIME_PLUGIN
 from selfrionette.runtime.composition.robot_bundle import (
     CAPABILITY_PROVIDER_TYPES,
     CONTACT_EVIDENCE_V1,

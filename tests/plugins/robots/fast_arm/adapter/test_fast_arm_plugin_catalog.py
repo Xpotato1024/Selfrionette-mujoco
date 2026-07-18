@@ -16,13 +16,13 @@ from selfrionette.plugins.catalog import (
     resolve_robot_runtime,
     resolve_robot_runtime_plugin,
 )
-from selfrionette.plugins.robots.fast_arm.bundle import FAST_ARM_ROBOT_BUNDLE
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.plugins.robots.fast_arm.runtime import (
+from selfrionette.plugins.robots.fast_arm.adapter.bundle import FAST_ARM_ROBOT_BUNDLE
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import (
     FAST_ARM_RUNTIME_PLUGIN,
 )
 from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN
-from selfrionette.plugins.robots.fast_arm.viewer import FAST_ARM_VIEWER_DECLARATION
+from selfrionette.plugins.robots.fast_arm.adapter.viewer import FAST_ARM_VIEWER_DECLARATION
 from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
 from selfrionette.schemas import MuJoCoState
 from selfrionette.transport.websocket import serialize_mujoco_state_message
