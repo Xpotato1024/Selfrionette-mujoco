@@ -69,11 +69,12 @@ async def _run_replay_mujoco_dry_run_async(
     dt_s: float | None,
     frames: Sequence[RawInputFrame] | None,
     preset: str | None,
+    robot_profile_id: str,
 ) -> list[str]:
     sender = _RecordingSender()
-    runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if dt_s is None else RuntimeConfig(
+    runtime_config = RuntimeConfig(robot_profile_id=robot_profile_id) if dt_s is None else RuntimeConfig(
         dt_s=dt_s,
-        robot_profile_id="fast_arm",
+        robot_profile_id=robot_profile_id,
     )
     dt = runtime_config.dt_s
 
@@ -151,6 +152,7 @@ def run_replay_mujoco_dry_run(
     output: TextIO | str | Path | None = None,
     frames: Sequence[RawInputFrame] | None = None,
     preset: str | None = None,
+    robot_profile_id: str = "fast_arm",
 ) -> list[str]:
     _validate_steps(steps)
     _validate_dt_s(dt_s)
@@ -163,6 +165,7 @@ def run_replay_mujoco_dry_run(
             dt_s=dt_s,
             frames=frames,
             preset=preset,
+            robot_profile_id=robot_profile_id,
         )
     )
 
