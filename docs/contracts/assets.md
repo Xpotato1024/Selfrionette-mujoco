@@ -4,8 +4,6 @@ owner: architecture
 last_verified: 2026-07-19
 canonical_for:
   - model asset contract
-related:
-  - assets/mujoco/fast_arm/README.md
 ---
 
 # asset契約
