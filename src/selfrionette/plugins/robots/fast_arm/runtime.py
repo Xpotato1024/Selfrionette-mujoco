@@ -20,7 +20,7 @@ from selfrionette.plugins.robots.fast_arm.feasibility import (
     load_and_validate_fast_arm_joint_limit_config,
 )
 from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.robot_profile import RobotProfile
+from selfrionette.runtime.robot_profile import RobotProfile
 from selfrionette.runtime.robot_plugin import state_transform_by_name, validate_profile_model_dimensions
 from selfrionette.runtime.viewer_motion_policy import (
     DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING,

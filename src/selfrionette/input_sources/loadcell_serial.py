@@ -1,3 +1,5 @@
+"""Load-cell serial protocol and input-source integration."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence

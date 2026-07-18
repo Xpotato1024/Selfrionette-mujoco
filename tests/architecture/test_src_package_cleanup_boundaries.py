@@ -21,6 +21,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "selfrionette"
 FAST_ARM_PLUGIN_ROOT = SRC / "plugins" / "robots" / "fast_arm"
 REMOVED_MODULE_PATHS = (
+    SRC / "robot_profile.py",
+    SRC / "viewer_robot_declaration.py",
+    SRC / "loadcell_serial.py",
     SRC / "robot_registry.py",
     SRC / "robots" / "fast_arm.py",
     SRC / "kinematics" / "fk.py",
@@ -149,6 +152,14 @@ def test_plugin_discovery_does_not_eagerly_load_diagnostics() -> None:
 
 def test_removed_facade_and_compatibility_modules_cannot_reappear() -> None:
     assert all(not path.exists() for path in REMOVED_MODULE_PATHS)
+
+
+def test_package_root_and_robot_namespace_keep_canonical_ownership() -> None:
+    assert {path.name for path in SRC.glob("*.py")} == {"__init__.py"}
+    assert not tuple((SRC / "robots").glob("*.py"))
+    assert (SRC / "runtime" / "robot_profile.py").is_file()
+    assert (SRC / "runtime" / "viewer_robot_declaration.py").is_file()
+    assert (SRC / "input_sources" / "loadcell_serial.py").is_file()
 
 
 def test_repository_has_no_import_consumers_of_removed_modules() -> None:

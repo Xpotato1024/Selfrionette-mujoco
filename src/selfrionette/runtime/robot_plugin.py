@@ -8,7 +8,7 @@ from typing import Protocol
 
 from selfrionette.kinematics.base import ForwardKinematicsSolver, InverseKinematicsSolver
 from selfrionette.motion.base import MotionGenerator
-from selfrionette.robot_profile import RobotProfile
+from selfrionette.runtime.robot_profile import RobotProfile
 from selfrionette.runtime.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.schemas import MuJoCoState
 

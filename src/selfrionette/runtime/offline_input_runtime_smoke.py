@@ -6,7 +6,7 @@ from math import isfinite
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, RuntimeMuJoCoEndpointEvaluation
 from selfrionette.plugins.catalog import resolve_robot_bundle, resolve_robot_profile
-from selfrionette.robot_profile import RobotProfile, robot_profile_runtime_metadata
+from selfrionette.runtime.robot_profile import RobotProfile, robot_profile_runtime_metadata
 from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.runtime.endpoint_metrics import build_runtime_endpoint_evaluation_payload
 from selfrionette.runtime.evaluation import evaluate_fk_endpoint_from_qpos

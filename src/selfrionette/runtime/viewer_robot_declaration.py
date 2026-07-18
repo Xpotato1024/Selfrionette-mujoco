@@ -1,4 +1,4 @@
-"""Versioned serializable declaration consumed by the rendering-only viewer."""
+"""Versioned runtime declaration consumed by the rendering-only viewer."""
 
 from __future__ import annotations
 

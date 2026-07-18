@@ -27,7 +27,7 @@ from selfrionette.input_sources.continuous_endpoint_velocity import (
     build_continuous_endpoint_velocity_intent,
     build_normalized_analog_fixture_intent,
 )
-from selfrionette.loadcell_serial import SerialInputSource
+from selfrionette.input_sources.loadcell_serial import SerialInputSource
 
 __all__ = [
     "AnalogFixtureMappingConfig",

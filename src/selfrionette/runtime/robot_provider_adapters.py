@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from selfrionette.motion.base import MotionGenerator
-from selfrionette.robot_profile import RobotProfile
+from selfrionette.runtime.robot_profile import RobotProfile
 from selfrionette.runtime.experiment_contracts import VersionedIdentity
 from selfrionette.runtime.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.runtime.robot_bundle import (

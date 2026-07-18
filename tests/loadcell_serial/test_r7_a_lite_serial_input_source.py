@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from selfrionette import input_sources
-from selfrionette.loadcell_serial import SerialFrameParseError, SerialInputSource
+from selfrionette.input_sources.loadcell_serial import SerialFrameParseError, SerialInputSource
 from selfrionette.schemas import RawInputFrame
 
 

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from selfrionette.robot_profile import (
+from selfrionette.runtime.robot_profile import (
     CoordinateUnitContract,
     EndpointReference,
     RobotProfile,

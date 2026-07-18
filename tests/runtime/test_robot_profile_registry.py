@@ -6,7 +6,7 @@ import pytest
 
 import selfrionette.plugins.robots.fast_arm.runtime as fast_arm_plugin_module
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
-from selfrionette.robot_profile import (
+from selfrionette.runtime.robot_profile import (
     CoordinateUnitContract,
     EndpointReference,
     RobotProfile,

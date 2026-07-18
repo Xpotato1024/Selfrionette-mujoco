@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.loadcell_serial import (
+from selfrionette.input_sources.loadcell_serial import (
     LoadcellNormalizationConfig,
     LoadcellNormalizedInputIntentConverter,
     NormalizedLoadcellInputIntent,

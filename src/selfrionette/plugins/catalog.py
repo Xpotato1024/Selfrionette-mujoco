@@ -9,7 +9,7 @@ from selfrionette.plugins.robot_discovery import (
     discover_production_robot_plugins,
 )
 from selfrionette.plugins.robot_registration import RobotPluginRegistration
-from selfrionette.robot_profile import RobotProfile
+from selfrionette.runtime.robot_profile import RobotProfile
 from selfrionette.runtime.experiment_contracts import PluginSelection
 from selfrionette.runtime.experiment_registry import VersionedPluginRegistry
 from selfrionette.runtime.robot_bundle import RobotBundle

@@ -11,7 +11,7 @@ from selfrionette.plugins.catalog import (
     resolve_robot_bundle,
     resolve_robot_profile,
 )
-from selfrionette.robot_profile import robot_profile_runtime_metadata
+from selfrionette.runtime.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.endpoint_metrics import build_endpoint_evaluation_state_publisher
 from selfrionette.runtime.pipeline import RuntimePipeline

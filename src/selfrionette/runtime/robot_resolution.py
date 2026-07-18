@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Generic, Protocol, TypeVar
 
-from selfrionette.robot_profile import RobotProfile
+from selfrionette.runtime.robot_profile import RobotProfile
 from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
 
 

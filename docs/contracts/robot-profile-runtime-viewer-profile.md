@@ -19,6 +19,10 @@ related:
 
 ## Ownershipの分離
 
+Python上のgeneric contract ownerは`selfrionette.runtime.robot_profile`、viewer declarationの
+serialization contract ownerは`selfrionette.runtime.viewer_robot_declaration`である。旧package-rootの
+`selfrionette.robot_profile`と`selfrionette.viewer_robot_declaration`は退役し、compatibility facadeは持たない。
+
 `RobotProfile`はimmutableかつversionedなdeclarationである。robot identity、
 MuJoCo asset reference、canonical joint order、qpos/qvel dimension、initial keyframe、
 endpoint reference、joint-limit configuration reference、coordinate/unit contract、

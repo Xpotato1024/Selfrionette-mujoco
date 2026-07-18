@@ -11,7 +11,7 @@ from pathlib import Path
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
 from selfrionette.mujoco_backend.model_loader import load_mujoco_model
 from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
-from selfrionette.robot_profile import RobotProfile
+from selfrionette.runtime.robot_profile import RobotProfile
 from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, Vector3
 

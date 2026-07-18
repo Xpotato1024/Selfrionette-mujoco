@@ -10,7 +10,7 @@ from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 
 from selfrionette.motion.base import MotionGenerator
-from selfrionette.robot_profile import RobotProfile
+from selfrionette.runtime.robot_profile import RobotProfile
 from selfrionette.runtime.experiment_contracts import (
     CanonicalEvidence,
     ParameterContract,

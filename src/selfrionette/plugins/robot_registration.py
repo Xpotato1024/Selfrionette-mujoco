@@ -16,7 +16,7 @@ from selfrionette.runtime.robot_bundle import (
     SCENE_ROLE_BINDING_V1,
     RobotBundle,
 )
-from selfrionette.viewer_robot_declaration import (
+from selfrionette.runtime.viewer_robot_declaration import (
     ViewerRobotDeclaration,
     decode_viewer_robot_declaration,
     repository_resource_public_url,

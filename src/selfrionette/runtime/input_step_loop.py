@@ -11,7 +11,7 @@ from selfrionette.input_sources.viewer import (
     ViewerInputSource,
 )
 from selfrionette.plugins.catalog import resolve_robot_bundle, resolve_robot_profile
-from selfrionette.robot_profile import robot_profile_runtime_metadata
+from selfrionette.runtime.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.config import RuntimeConfig
 from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.input_step_diagnostics import (

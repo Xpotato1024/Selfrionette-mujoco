@@ -18,7 +18,7 @@ from selfrionette.runtime import (
     evaluate_fk_endpoint_from_joint_command,
     runtime_endpoint_evaluation_metrics_to_payload,
 )
-from selfrionette.robot_profile import EndpointReference
+from selfrionette.runtime.robot_profile import EndpointReference
 from selfrionette.runtime.robot_bundle import EndpointPoseObservation
 from selfrionette.schemas import (
     BodyTransform,

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.loadcell_serial import (
+from selfrionette.input_sources.loadcell_serial import (
     LoadcellNormalizationConfig,
     SerialFrameParseError,
     SerialInputSource,
@@ -153,7 +153,7 @@ def test_r7_a_lite_serial_dry_run_cli_fixture_mode_outputs_endpoint_metadata(cap
 
 
 def test_default_endpoint_mapping_is_no_op_and_explicit_mapping_changes_desired_endpoint_m() -> None:
-    from selfrionette.loadcell_serial import LoadcellEndpointMotionCommandConverter, NormalizedLoadcellInputIntent
+    from selfrionette.input_sources.loadcell_serial import LoadcellEndpointMotionCommandConverter, NormalizedLoadcellInputIntent
 
     intent = NormalizedLoadcellInputIntent(
         source="loadcell_serial",
