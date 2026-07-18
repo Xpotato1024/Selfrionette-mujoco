@@ -1,22 +1,24 @@
-# canonical fast_arm MuJoCo asset
+# fast_arm logical resource path
 
-このdirectoryは、採用済み`fast_arm` MuJoCo assetのcanonical配置である。
+このdirectoryにはproduction resourceを置かない。`assets/mujoco/fast_arm/...`はviewer、payload、
+VFS、diagnosticsが維持するstable logical identifierであり、physical repository pathではない。
 
 ## fileの責務
 
-- `arm.xml`: canonical arm model定義。
-- `scene.xml`: `arm.xml`をincludeするcanonical scene wrapper。
-- `meshes/`: arm model用canonical STL mesh directory。
-- `viewer-profile.json`: Robot Pluginが所有するversioned viewer declarationのserializable SoT。
-- `fixtures/`: viewer debug fixtureを含むplugin-owned resource directory。
+- `fast_arm_core:resources/model/arm.xml`: canonical arm model定義。
+- `fast_arm_core:resources/model/meshes/`: arm model用canonical STL mesh directory。
+- Selfrionette adapter `resources/mujoco/scene.xml`: canonical scene wrapper。
+- Selfrionette adapter `resources/viewer-profile.json`: versioned viewer declaration。
+- Selfrionette adapter `resources/fixtures/`: viewer debug fixture。
 
 ## path contract
 
 - `arm.xml`は`meshdir="meshes"`を使用し、`meshes/`からmeshを解決する。
 - `scene.xml`は同じdirectoryの`arm.xml`をincludeする。
 - STL filenameは既存の`Sholder`という綴りを含むlegacy asset名を維持する。
-- backend model、viewer declaration / model / fixture / VFSのrepository pathとpublic URLの対応は
+- backend model、viewer declaration / model / fixture / VFSのlogical pathとpublic URLの対応は
   `ROBOT_PLUGIN`のresource declarationと`viewer-profile.json`で明示し、実行時にrobot IDから推測しない。
+- package resourceはtyped owner/path declarationから解決し、旧directoryへのfallbackやchecked-in duplicateを持たない。
 
 ## 変更規則
 

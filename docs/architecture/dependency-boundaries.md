@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-07-19
 canonical_for:
   - import boundaries
 related:
@@ -78,13 +78,18 @@ generic schema / domain / Protocol
   `selfrionette.input_sources.loadcell_serial`が所有する。package rootの旧moduleは退役済みである。
 - fast_arm固有implementationは`plugins/robots/fast_arm/`だけが所有する。旧`robots/fast_arm.py`、
   `robot_registry.py`、`runtime/fast_arm_*.py`、旧registry moduleは退役済みであり、再作成しない。
-- fast_arm package内をshared coreとSelfrionette adapterへ分離するときは、coreを独立Python package
-  `fast_arm_core`として扱い、Selfrionette namespace packageにしない。`fast_arm_core -> adapter`または
+- fast_arm package内のshared coreは、`plugins/robots/fast_arm/core/`を物理mount pointとする独立Python
+  distribution/package `fast_arm_core`である。root projectはuv workspaceの通常dependencyとして参照し、
+  root distributionのpackage discoveryとsdist manifestから除外する。root package dataは必要なadapter
+  resourceだけを明示し、core mount pointを暗黙収集しない。`fast_arm_core -> adapter`または
   `fast_arm_core -> selfrionette`を禁止し、`adapter -> fast_arm_core`と
   `adapter -> generic Protocol / schema`だけを許可する。
   generic layer、他robot、viewerはfast_arm core implementationへ依存しない。root `plugin.py`の
   `ROBOT_PLUGIN`を唯一のproduction discovery入口とし、coreまたはadapterに第二のentryを作らない。
   `selfrionette.plugins.robots.fast_arm.core`をshared import APIにせず、runtimeで`sys.path`を書き換えない。
+- `plugins/robots/fast_arm/adapter/`はSelfrionette schema、runtime、MuJoCo backend、viewer、diagnosticsへの
+  projectionだけを所有する。旧module pathはadapter ownerからobjectをre-exportするthin compatibility moduleに
+  限定し、数式、定数、resource resolver、factory、registrationを再実装しない。
 - generic `kinematics`はsolver Protocolだけ、generic `mujoco_backend`はnamed reference / site extraction、
   model load / reset、simulation primitiveだけを公開する。fast_arm固有solver、name contract、endpoint wrapper、
   diagnosticはplugin packageから公開する。

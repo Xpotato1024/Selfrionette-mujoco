@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-17
+last_verified: 2026-07-19
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -195,9 +195,10 @@ readiness後に不足へ気付く設計や、特定robot/task/evaluatorの暗黙
 
 ## fast_arm migration
 
-production fast_armは`selfrionette.plugins.robots.fast_arm`配下でProfile、Runtime Plugin、
-kinematics、MuJoCo name contract / endpoint wrapper、feasibility adapter、canonical initial state、
-diagnostics、Robot Bundle assemblyを所有し、`fast_arm/v1` Bundleとして
+production fast_armは独立package `fast_arm_core`でpure kinematics、model/name specification、joint-limit
+parse、canonical initial state、model/config resourceを所有する。`selfrionette.plugins.robots.fast_arm.adapter`は
+Profile、Runtime Plugin、Selfrionette kinematics/schema変換、MuJoCo validator / endpoint wrapper、feasibility guard、
+initial-state projection、diagnostics、scene/viewer resource、Robot Bundle assemblyを所有し、`fast_arm/v1` Bundleとして
 `selfrionette.plugins.catalog`だけへ登録する。bundleは同packageの
 `FAST_ARM_ROBOT_PROFILE`と`FAST_ARM_RUNTIME_PLUGIN`の同一objectを参照し、generic
 `runtime.composition.robot_provider_adapters`を使って既存のmodel validation、endpoint IK/FK、target/local motion、
@@ -205,15 +206,9 @@ qpos feasibility、endpoint state accessorへ委譲する。initial stateは既�
 `fast_arm_initial_state/v1` contractを返す。
 
 ```text
-plugins/robots/fast_arm/profile.py
-plugins/robots/fast_arm/runtime.py
-plugins/robots/fast_arm/feasibility.py
-plugins/robots/fast_arm/initial_state.py
-plugins/robots/fast_arm/kinematics.py
-plugins/robots/fast_arm/model_contract.py
-plugins/robots/fast_arm/endpoint.py
-plugins/robots/fast_arm/diagnostics/
-plugins/robots/fast_arm/bundle.py
+fast_arm_core
+        -> plugins/robots/fast_arm/adapter/
+plugins/robots/fast_arm/plugin.py::ROBOT_PLUGIN
         -> plugins/catalog.py
         -> application composition
 ```
@@ -222,6 +217,7 @@ plugins/robots/fast_arm/bundle.py
 旧registry moduleは#429で退役した。internal consumerはplugin owner、`runtime/composition/robot_provider_adapters.py`、
 `plugins/catalog.py`を直接使用する。deliberate package-root resolverはcanonical catalog ownerへ直接mappingし、
 intermediate facadeを再導入しない。
+`plugins/robots/fast_arm/*.py`の既存module pathはadapterからのthin re-exportに限定する。
 
 `build_concrete_mujoco_pipeline()`は既存Robot Profile / Runtime Plugin resolverを維持したうえで、
 Robot Bundle registryとの同一性を検証し、initial state、endpoint command、qpos feasibilityを

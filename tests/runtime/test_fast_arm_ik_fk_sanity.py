@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
+from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.endpoint_motion_sanity import (
     FastArmIkFkSanityDiagnostic,
     _fast_arm_ik_fk_sanity_target_fixtures,
     _ik_fk_error_vector_m,

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-07-19
 canonical_for:
   - Robot Plugin registration and bounded discovery
   - Robot Profile contract and registry
@@ -68,9 +68,9 @@ assemblyだけを担い、execution中のservice locatorにはしない。各pro
 registration / Bundle assembly時にfail-closedで拒否する。この検査はadapter class名ではなくgeneric binding
 contractに対して行う。
 
-asset / configurationのlogical repository pathはregistration declarationをSoTとする。Profileの
-`Path`とviewerのdeclaration / model / fixture / VFS referenceはregistrationとstartup時に照合し、
-generic codeはrobot IDやpackage pathから実行pathを推測しない。通常resourceは宣言identityに対応する
+asset / configurationのstable logical pathはregistration declarationをSoTとする。Profileのtyped
+`RepositoryResource` / `PackageResource`とviewerのdeclaration / model / fixture / VFS referenceはregistrationと
+startup時に照合し、generic codeはrobot IDやpackage pathから実行pathを推測しない。repository resourceは宣言identityに対応する
 `assets/mujoco/<robot_id>/`または`configs/<robot_id>/`の内側だけを許可する。symlink解決後の実pathも同じrobot
 固有directory内に残らなければならない。model、viewer declaration、viewer fixture、VFS asset、configurationの
 すべてへ同じresolved ownership gateを適用し、viewer URL mappingで回避できない。shared resourceは暗黙許可せず、
@@ -167,6 +167,9 @@ keyframe、guard、state metadataをinjectしてよい。stub-defaultの`build_m
 real replay componentまたは明示的に構築した`RuntimePipeline`により、fast_arm validationやconfigurationなしで
 loadとstepができる。
 
+package resourceは宣言したimport packageとpackage-relative pathだけを許可し、stable logical pathとは別に検証する。
+MuJoCo include/meshは`PackageResourceBundle`のrelative VFS layoutで解決し、filesystemへ永続materializeしない。
+
 generic profile contractではjoint countを`nq`または`nv`と同一視しない。ball jointと
 free jointは、joint nameが一つでもqpos/qvel dimensionが正当に`4/3`、`7/6`となる。
 fast_arm pluginはstartup validationで、四つのcanonical joint、`nq=4`、`nv=4`、
@@ -183,8 +186,8 @@ fast_armのcanonical joint orderとqpos indexは次のとおりである。
 | 2 | `sholder_joint_3` |
 | 3 | `elbow_joint` |
 
-joint orderのsource of truthは`assets/mujoco/fast_arm/arm.xml`とresolved
-`RobotProfile`である。runtimeはjoint nameを推論または並べ替えない。
+joint orderのsource of truthは`fast_arm_core.definition`およびcore package-owned `resources/model/arm.xml`である。
+`RobotProfile`はそのSelfrionette projectionであり、runtimeはjoint nameを推論または並べ替えない。
 `sholder_joint_2`のMuJoCo `ref=-90`に対するsolver adapterは、
 `mujoco_qpos1 = solver_q1 - pi/2`、`solver_q1 = mujoco_qpos1 + pi/2`を維持する。
 legacyのdifferential shoulder mappingをproduction qpos mappingとして暗黙適用しない。
@@ -193,8 +196,9 @@ solver local frameは`base_link`をrootとする。physical endpointのsource of
 MuJoCo world / scene frameの`tip` siteであり、viewer表示またはsolver-local FKではない。
 world commandからsolver-local targetへの変換はrobot-specific runtime/plugin boundaryが所有する。
 
-fast_armのactive initial qpos sourceは、`assets/mujoco/fast_arm/arm.xml`のnamed
-`home` keyframeだけである。selected `home` qposは
+fast_armのinitial pose definitionは`fast_arm_core.reference.initial_state`が所有し、core package-owned
+`resources/model/arm.xml`のnamed `home` keyframe、Selfrionette `InitialStateContract`、viewer fixture/profileは
+同一値のprojectionとして検証する。selected `home` qposは
 `(0, -0.5235987755982989, 0, -1.0471975511965976)`、すなわち
 `(0, -pi/6, 0, -pi/3)`である。Python loader/resetとbrowser WASMのpre-payload
 startupは同じXML keyframeを読み、runtime first state/payloadも同じqposを運ぶ。
@@ -242,8 +246,9 @@ resource path、URL、digestだけを比較し、full declarationのJSON decode 
 session中のreference欠落またはdigest / URL / resource path変更はfail-closedに拒否する。
 
 viewer declarationはmodel URL / resource path、fixture URL / resource path、VFS mapping、joint order、
-qpos dimension、startup keyframe、rendering styleを持つ。repository `assets/` pathからpublic URLを
-deterministicに導出し、declaration、model、fixture、各VFS URLをstartup検証済みfileへ一意に結び付ける。
+qpos dimension、startup keyframe、rendering styleを持つ。stable logical `assets/` identifierからpublic URLを
+deterministicに導出し、declaration、model、fixture、各VFS URLをtyped package resourceへ一意に結び付ける。
+Vite dev serverとproduction buildは同じbindingからresource bytesを配信する。
 unknown field、missing field、schema version、remote / escaped resource、resource / URL mismatch、duplicate
 mapping、backend compatibility mismatchは描画前またはqpos適用前にfailする。
 viewerはdeclarationを使ってMuJoCo WASM sceneを構成するだけで、runtime state、IK / FK、planning、target、

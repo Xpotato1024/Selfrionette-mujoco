@@ -10,10 +10,12 @@ from selfrionette.mujoco_backend import load_mujoco_model
 
 
 def test_fast_arm_profile_model_resource_points_to_scene_xml() -> None:
-    path = FAST_ARM_ROBOT_PROFILE.mujoco_model_asset
+    resource = FAST_ARM_ROBOT_PROFILE.mujoco_model_asset
 
-    assert path.name == "scene.xml"
-    assert path.is_file()
+    assert resource.logical_identifier == "assets/mujoco/fast_arm/scene.xml"
+    model_xml, assets = resource.model_xml_and_assets()
+    assert model_xml
+    assert set(assets) >= {"arm.xml", "meshes/BaseLink.stl"}
 
 
 def test_load_mujoco_model_loads_default_scene() -> None:
@@ -22,7 +24,7 @@ def test_load_mujoco_model_loads_default_scene() -> None:
         initial_keyframe_name=FAST_ARM_ROBOT_PROFILE.initial_keyframe_name,
     )
 
-    assert bundle.model_path == FAST_ARM_ROBOT_PROFILE.mujoco_model_asset.resolve()
+    assert bundle.model_path.as_posix() == "assets/mujoco/fast_arm/scene.xml"
     assert bundle.model is not None
     assert bundle.data is not None
     assert tuple(bundle.data.qpos) == pytest.approx(

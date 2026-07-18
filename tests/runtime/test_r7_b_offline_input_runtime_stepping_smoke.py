@@ -39,6 +39,10 @@ class _RecordingRuntimePlugin:
         self.calls.append(("validate_model", model))
         return self.wrapped.validate_model(model)
 
+    def build_simulator(self, **kwargs):
+        self.calls.append(("build_simulator", kwargs))
+        return self.wrapped.build_simulator(**kwargs)
+
     def build_target_motion_generator(self, **kwargs):
         self.calls.append(("build_target_motion_generator", kwargs))
         return self.wrapped.build_target_motion_generator(**kwargs)
@@ -220,6 +224,7 @@ def test_offline_input_runtime_uses_resolved_plugin_components_and_home_seed(mon
 
     call_names = [name for name, _ in plugin.calls]
     assert call_names == [
+        "build_simulator",
         "validate_model",
         "build_qpos_feasibility_guard",
         "build_target_motion_generator",

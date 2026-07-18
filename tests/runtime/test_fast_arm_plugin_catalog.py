@@ -69,29 +69,25 @@ def test_catalog_resolvers_project_one_canonical_bundle() -> None:
         )
 
 
-def test_profile_keeps_repository_asset_and_configuration_references() -> None:
-    repository_root = Path(__file__).resolve().parents[2]
-
-    assert FAST_ARM_ROBOT_PROFILE.mujoco_model_asset == (
-        repository_root / "assets" / "mujoco" / "fast_arm" / "scene.xml"
+def test_profile_keeps_stable_logical_identifiers_with_package_ownership() -> None:
+    assert FAST_ARM_ROBOT_PROFILE.mujoco_model_asset is ROBOT_PLUGIN.resources.model
+    assert FAST_ARM_ROBOT_PROFILE.joint_limit_config_asset is (
+        ROBOT_PLUGIN.resources.configurations[0]
     )
-    assert FAST_ARM_ROBOT_PROFILE.joint_limit_config_asset == (
-        repository_root / "configs" / "fast_arm" / "joint_limits.toml"
-    )
-    assert ROBOT_PLUGIN.resources.model.repository_path == (
+    assert ROBOT_PLUGIN.resources.model.logical_identifier == (
         "assets/mujoco/fast_arm/scene.xml"
     )
     assert FAST_ARM_VIEWER_DECLARATION.model_resource_path == (
-        ROBOT_PLUGIN.resources.model.repository_path
+        ROBOT_PLUGIN.resources.model.logical_identifier
     )
-    assert ROBOT_PLUGIN.resources.viewer_declaration.repository_path == (
+    assert ROBOT_PLUGIN.resources.viewer_declaration.logical_identifier == (
         "assets/mujoco/fast_arm/viewer-profile.json"
     )
-    assert ROBOT_PLUGIN.resources.viewer_fixture.repository_path == (
+    assert ROBOT_PLUGIN.resources.viewer_fixture.logical_identifier == (
         FAST_ARM_VIEWER_DECLARATION.fixture_resource_path
     )
     assert tuple(
-        item.repository_path for item in ROBOT_PLUGIN.resources.viewer_vfs_resources
+        item.logical_identifier for item in ROBOT_PLUGIN.resources.viewer_vfs_resources
     ) == tuple(item.resource_path for item in FAST_ARM_VIEWER_DECLARATION.vfs_assets)
 
 

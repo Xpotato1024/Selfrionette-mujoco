@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-
 import pytest
 
-from selfrionette.mujoco_backend import load_mujoco_model
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
-from selfrionette.plugins.robots.fast_arm import model_contract as model_contract_module
+from selfrionette.plugins.robots.fast_arm.adapter import model_contract as model_contract_module
+from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
 from selfrionette.plugins.robots.fast_arm.model_contract import (
     fast_arm_model_name_contract,
     resolve_fast_arm_end_effector_reference,
@@ -17,8 +15,8 @@ from selfrionette.plugins.robots.fast_arm.model_contract import (
 
 
 def test_fast_arm_model_name_contract_matches_default_scene() -> None:
-    bundle = load_mujoco_model(FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
-    contract = validate_fast_arm_model_name_contract(bundle.model)
+    simulator = build_fast_arm_simulator()
+    contract = validate_fast_arm_model_name_contract(simulator.model)
 
     assert contract == fast_arm_model_name_contract()
     assert contract.canonical_model_name == "fast_arm"
@@ -38,17 +36,17 @@ def test_fast_arm_model_name_contract_matches_default_scene() -> None:
         "fore_arm_link",
     )
 
-    assert resolve_fast_arm_end_effector_reference(bundle.model) == model_contract_module.ResolvedModelReference(
+    assert resolve_fast_arm_end_effector_reference(simulator.model) == model_contract_module.ResolvedModelReference(
         role="end_effector",
         kind="site",
         name="tip",
     )
-    assert resolve_fast_arm_tip_reference(bundle.model) == model_contract_module.ResolvedModelReference(
+    assert resolve_fast_arm_tip_reference(simulator.model) == model_contract_module.ResolvedModelReference(
         role="tip",
         kind="site",
         name="tip",
     )
-    assert resolve_fast_arm_wrist_reference(bundle.model) == model_contract_module.ResolvedModelReference(
+    assert resolve_fast_arm_wrist_reference(simulator.model) == model_contract_module.ResolvedModelReference(
         role="wrist",
         kind="body",
         name="fore_arm_link",

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-07-19
 canonical_for:
   - model asset contract
 related:
@@ -15,45 +15,43 @@ canonical contractである。
 
 ## Robot Plugin resource ownership
 
-新しいrobotの標準配置は`assets/mujoco/<robot_id>/`と`configs/<robot_id>/`である。ただし、
-generic catalog、runtime、viewerはrobot IDからpathを組み立てない。`ROBOT_PLUGIN`の
-`RobotResourceDeclaration`がmodel、configuration、viewer declaration、viewer fixture、viewer VFS resourceの
-repository-relative pathを明示し、`ViewerRobotDeclaration`がmodel、fixture、VFSのresource path / public URL対応を
-明示する。public URLはrepository `assets/` pathからdeterministicに生成し、Vite dev/buildは同じ`assets/` rootを
-公開する。
+resourceのphysical ownerはtyped declarationで明示する。`RepositoryResource`は許可されたrepository root内の
+fileを、`PackageResource`はimport可能なPython packageとpackage-relative pathを、
+`PackageResourceBundle`はMuJoCo VFSへ渡すentrypointとbundle内relative layoutを表す。
+generic catalog、runtime、viewerはrobot IDや文字列形式からowner/pathを推測しない。`ROBOT_PLUGIN`の
+`RobotResourceDeclaration`がmodel、configuration、viewer declaration、viewer fixture、viewer VFS resourceを
+明示し、`ViewerRobotDeclaration`がstable logical resource path / public URL対応を明示する。
 
-production discoveryはcatalog registryを公開する前に、全resourceが許可されたrepository root内の
-実fileへ解決すること、Profileのmodel / configuration referenceと一致すること、viewer declarationと
+production discoveryはcatalog registryを公開する前に、repository resourceが許可root内の実fileへ、package
+resourceが宣言package内の実fileへ解決すること、Profileのmodel / configuration referenceと一致すること、viewer declarationと
 backend resource declarationが一致することを検証する。MJCFの`include`とmesh / texture / hfield fileは
 宣言済みVFS mappingで解決できなければならない。absolute path、`..`によるescape、remote URL、missing
-resourceはstartup failureであり、warning skipまたはrobot ID由来pathへのfallbackを行わない。さらにregistration
-identityが`<robot_id>`ならasset resourceは`assets/mujoco/<robot_id>/`、configurationは
+resourceはstartup failureであり、warning skipまたはrobot ID由来pathへのfallbackを行わない。さらに
+`RepositoryResource`ではregistration identityが`<robot_id>`ならasset resourceは`assets/mujoco/<robot_id>/`、configurationは
 `configs/<robot_id>/`の内側に限定する。lexical declarationだけでなくsymlink解決後の実pathも同じrobot固有
 directory内に残ることを要求する。このgateはmodel、viewer declaration、viewer fixture、VFS asset、configurationの
 全resource種別へ適用し、sibling robot resourceへのdirect reference / symlinkとrepository resource root外への
 symlinkを拒否する。viewer public URLがowned pathを指していても、resolved file ownership違反を許可しない。
-shared resourceは暗黙許可せず、必要時に独立した明示contractを追加する。
+shared resourceは暗黙許可せず、必要時に独立した明示contractを追加する。package name、package-relative path、
+logical identifier、bundle-relative pathは個別にvalidateし、path traversal、symlink escape、missing package/fileを
+fail-closedで拒否する。checkout path fallback、runtime `sys.path`変更、network fetchは行わない。
 
 ## fast_armのcanonical asset
 
-- canonical pathは`assets/mujoco/fast_arm/`である。
-- 必須fileは次のとおり。
-  - `arm.xml`
-  - `scene.xml`
-  - `meshes/BaseLink.stl`
-  - `meshes/SholderLink1.stl`
-  - `meshes/SholderLink2.stl`
-  - `meshes/UpperArmLink.stl`
-  - `meshes/ForeArmLink.stl`
-  - `viewer-profile.json`
-  - `fixtures/fast_arm_sweep_x_qpos.json`
-- `arm.xml`はcanonicalなmesh directory contractである`meshdir="meshes"`を使用し、
-  `assets/mujoco/fast_arm/meshes/`からmesh fileを解決しなければならない。
-- `scene.xml`は同じdirectoryの`arm.xml`をincludeしなければならない。
+- `fast_arm_core` packageが`resources/model/arm.xml`、`resources/model/meshes/*.stl`、
+  `resources/config/joint_limits.toml`を所有する。
+- Selfrionette adapter packageが`resources/mujoco/scene.xml`、`resources/viewer-profile.json`、
+  `resources/fixtures/fast_arm_sweep_x_qpos.json`を所有する。
+- `assets/mujoco/fast_arm/...`と`configs/fast_arm/...`はviewer/backend互換のstable logical identifierであり、
+  physical repository pathではない。旧directoryにproduction duplicateを置かない。
+- `arm.xml`はcanonicalなbundle layoutである`meshdir="meshes"`を使用し、同じtyped bundleの
+  `meshes/`からmesh fileを解決しなければならない。
+- `scene.xml`は同じMuJoCo VFS bundleの`arm.xml`をincludeしなければならない。package間のfilesystem相対pathは使わない。
 - STL filenameは、既存の`Sholder`という綴りを含め、legacy asset名を維持する。
 - joint、body、siteの名前はmodel contractの一部であり、stable identifierとして扱う。
 - asset path修正とmodel semantics変更を同じ変更として暗黙に扱わない。
-- headless model loaderのcanonical load pathは`assets/mujoco/fast_arm/scene.xml`である。
+- headless model loaderはtyped package bundleのbytesをMuJoCo VFSへ渡す。観測可能なlogical model pathは
+  `assets/mujoco/fast_arm/scene.xml`のまま維持する。
 - MuJoCoのimportは`src/selfrionette/mujoco_backend/`内に限定する。
 - state snapshotのownershipはbackend / runtime contractに従う。
 

@@ -170,8 +170,8 @@ def run_offline_input_runtime_stepping_smoke(
     initial_state = initial_state_provider.resolve_initial_state()
     if initial_state.source_kind != "named_keyframe":
         raise ValueError("production offline input smoke requires a named-keyframe initial state")
-    simulator = HeadlessMuJoCoSimulator.from_model_path(
-        runtime_config.mujoco_model_path or profile.mujoco_model_asset,
+    simulator = plugin.build_simulator(
+        model_path=runtime_config.mujoco_model_path,
         initial_keyframe_name=initial_state.source_id,
     )
     plugin.validate_model(simulator.model)

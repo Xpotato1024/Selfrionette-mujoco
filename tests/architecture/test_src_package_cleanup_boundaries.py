@@ -193,7 +193,7 @@ def test_diagnostic_scripts_import_plugin_owned_entrypoints() -> None:
     for path in (ROOT / "scripts").glob("run_fast_arm_*diagnostic*.py"):
         imported = _imports(path)
         assert any(
-            name.startswith("selfrionette.plugins.robots.fast_arm.diagnostics")
+            name.startswith("selfrionette.plugins.robots.fast_arm.adapter.diagnostics")
             for name in imported
         ), path.relative_to(ROOT)
         assert not any(name.startswith("selfrionette.runtime.endpoint_motion_sanity") for name in imported)

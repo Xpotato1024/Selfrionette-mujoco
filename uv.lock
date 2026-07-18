@@ -2,6 +2,12 @@ version = 1
 revision = 3
 requires-python = ">=3.11"
 
+[manifest]
+members = [
+    "fast-arm-core",
+    "selfrionette-mujoco",
+]
+
 [[package]]
 name = "absl-py"
 version = "2.4.0"
@@ -126,6 +132,17 @@ epath = [
     { name = "typing-extensions" },
     { name = "zipp" },
 ]
+
+[[package]]
+name = "fast-arm-core"
+version = "0.0.0"
+source = { editable = "src/selfrionette/plugins/robots/fast_arm/core" }
+dependencies = [
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "numpy", specifier = ">=2.0" }]
 
 [[package]]
 name = "fonttools"
@@ -673,6 +690,7 @@ name = "selfrionette-mujoco"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fast-arm-core" },
     { name = "matplotlib" },
     { name = "mujoco" },
     { name = "websockets" },
@@ -685,6 +703,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fast-arm-core", editable = "src/selfrionette/plugins/robots/fast_arm/core" },
     { name = "matplotlib", specifier = ">=3.11.0" },
     { name = "mujoco", specifier = ">=3.9.0" },
     { name = "websockets", specifier = ">=16.0" },

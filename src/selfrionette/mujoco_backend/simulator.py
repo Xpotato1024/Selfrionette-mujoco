@@ -6,7 +6,9 @@ from pathlib import Path
 from selfrionette.mujoco_backend.command_adapter import motion_command_to_qpos_command
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
 from selfrionette.mujoco_backend.model_loader import (
+    ModelResourceBundle,
     load_mujoco_model,
+    load_mujoco_model_from_xml_resources,
     reset_mujoco_data_to_initial_state,
 )
 from selfrionette.mujoco_backend.snapshot import snapshot_mujoco_state
@@ -28,12 +30,34 @@ class HeadlessMuJoCoSimulator:
     @classmethod
     def from_model_path(
         cls,
-        model_path: str | Path,
+        model_path: str | Path | ModelResourceBundle,
         *,
         initial_keyframe_name: str | None = None,
     ) -> "HeadlessMuJoCoSimulator":
         bundle = load_mujoco_model(
             model_path,
+            initial_keyframe_name=initial_keyframe_name,
+        )
+        return cls(
+            model=bundle.model,
+            data=bundle.data,
+            model_path=bundle.model_path,
+            initial_keyframe_name=initial_keyframe_name,
+        )
+
+    @classmethod
+    def from_xml_resources(
+        cls,
+        model_xml: bytes,
+        *,
+        assets: dict[str, bytes],
+        logical_model_path: str | Path,
+        initial_keyframe_name: str | None = None,
+    ) -> "HeadlessMuJoCoSimulator":
+        bundle = load_mujoco_model_from_xml_resources(
+            model_xml,
+            assets=assets,
+            logical_model_path=logical_model_path,
             initial_keyframe_name=initial_keyframe_name,
         )
         return cls(

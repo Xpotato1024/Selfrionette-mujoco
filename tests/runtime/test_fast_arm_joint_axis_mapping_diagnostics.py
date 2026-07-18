@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
+from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.endpoint_motion_sanity import (
     run_fast_arm_endpoint_motion_sanity,
     run_fast_arm_joint_axis_mapping_diagnostics,
 )
@@ -50,10 +50,8 @@ def test_joint_axis_mapping_diagnostics_cover_all_fast_arm_qpos() -> None:
         }
 
 
-def test_joint_axis_mapping_diagnostics_accept_explicit_canonical_model_path() -> None:
-    results = run_fast_arm_joint_axis_mapping_diagnostics(
-        model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset
-    )
+def test_joint_axis_mapping_diagnostics_use_profile_owned_model_resource() -> None:
+    results = run_fast_arm_joint_axis_mapping_diagnostics()
 
     assert len(results) == 4
     assert [result.qpos_index for result in results] == [0, 1, 2, 3]

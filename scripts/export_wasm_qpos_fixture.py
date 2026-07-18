@@ -4,28 +4,22 @@ import argparse
 import json
 import math
 import os
-import sys
 import tempfile
 from pathlib import Path
 from typing import Sequence
 
-ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
+from selfrionette.plugins.robots.fast_arm.adapter.resources import (
+    FAST_ARM_VIEWER_FIXTURE_RESOURCE,
+)
+from selfrionette.runtime.composition.robot_resource import package_resource_traversable
 from selfrionette.runtime.runners.dry_run import run_replay_mujoco_dry_run
 
 FIXTURE_MODEL_PATH = "assets/mujoco/fast_arm/scene.xml"
 FIXTURE_SOURCE = "python-native-mujoco"
-DEFAULT_OUTPUT_PATH = (
-    ROOT
-    / "assets"
-    / "mujoco"
-    / "fast_arm"
-    / "fixtures"
-    / "fast_arm_sweep_x_qpos.json"
-)
+_DEFAULT_OUTPUT_RESOURCE = package_resource_traversable(FAST_ARM_VIEWER_FIXTURE_RESOURCE)
+if not isinstance(_DEFAULT_OUTPUT_RESOURCE, Path):
+    raise RuntimeError("default viewer fixture package is not writable on this installation")
+DEFAULT_OUTPUT_PATH = _DEFAULT_OUTPUT_RESOURCE
 
 
 def _positive_int(value: str) -> int:
@@ -55,7 +49,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_OUTPUT_PATH,
         help=(
             "output JSON path; defaults to "
-            "assets/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json"
+            "the adapter-owned fast_arm viewer fixture resource"
         ),
     )
     return parser

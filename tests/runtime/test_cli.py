@@ -42,7 +42,7 @@ def test_unknown_robot_returns_one_without_loading_diagnostics(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    diagnostic_module = "selfrionette.plugins.robots.fast_arm.diagnostics"
+    diagnostic_module = "selfrionette.plugins.robots.fast_arm.adapter.diagnostics"
     sys.modules.pop(diagnostic_module, None)
 
     def reject_unknown(robot_id: str):

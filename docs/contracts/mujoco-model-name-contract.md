@@ -1,14 +1,14 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-07-19
 canonical_for:
   - fast_arm MuJoCo model name contract
 related:
   - docs/contracts/mujoco-state.md
   - docs/contracts/transport-payload.md
   - docs/contracts/kinematics-command-contract.md
-  - src/selfrionette/plugins/robots/fast_arm/model_contract.py
+  - src/selfrionette/plugins/robots/fast_arm/adapter/model_contract.py
   - docs/reports/implementation/r7-e-followup-joint-convention-fast-arm-model-contract.md
   - docs/reports/implementation/r7-e-followup-viewer-backend-endpoint-separation.md
 ---
@@ -21,8 +21,9 @@ related:
 ## Canonical model
 
 - canonical model: `fast_arm`
-- canonical asset root: `assets/mujoco/fast_arm/`
-- canonical scene path: `assets/mujoco/fast_arm/scene.xml`
+- canonical physical model owner: `fast_arm_core:resources/model/arm.xml`
+- canonical scene owner: `selfrionette.plugins.robots.fast_arm.adapter:resources/mujoco/scene.xml`
+- stable logical scene identifier: `assets/mujoco/fast_arm/scene.xml`
 
 ## 採用する名前
 
@@ -83,8 +84,10 @@ strict validation では silent fallback をしない。
 
 ## Backend / Runtime source of truth
 
-このfast_arm固有contractのsource of truthは
-`src/selfrionette/plugins/robots/fast_arm/model_contract.py`に置く。
+名前とframe/unitのpure specificationは`fast_arm_core.model_spec`がsource of truthである。
+MuJoCo model inspectionとの接続は
+`src/selfrionette/plugins/robots/fast_arm/adapter/model_contract.py`に置く。旧module pathは
+adapter objectのthin re-exportだけを提供する。
 generic named-reference contractとsite extractionは`src/selfrionette/mujoco_backend/`が所有し、
 fast_arm名、fallback選択、convenience constructorを公開しない。
 `apps/mujoco-viewer` はこれを推定しないし、MuJoCo を再ロードして検証しない。

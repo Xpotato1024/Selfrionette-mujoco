@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-07-19
 canonical_for:
   - runtime composition root
 related:
@@ -116,7 +116,7 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
   `docs/contracts/evaluation-manifest-readiness.md`の許可リストに限定する。
 
 この文書はcurrent responsibility boundaryを固定し、does not perform a broad runtime rewrite。
-fast_arm固有diagnosticsは`plugins/robots/fast_arm/diagnostics/`が所有し、generic runtime public surfaceや
+fast_arm固有diagnosticsは`plugins/robots/fast_arm/adapter/diagnostics/`が所有し、generic runtime public surfaceや
 plugin discovery entry pointからeager importしない。generic `RuntimePipeline`はtest doubleを構築せず、
 test-only wiringは`tests/support/`が所有する。
 pre-audit composition chronologyとrefactor proposalは

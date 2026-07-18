@@ -17,6 +17,7 @@ EXPECTED_MODULES = {
         "robot_plugin",
         "robot_profile",
         "robot_profile_metadata",
+        "robot_resource",
         "robot_provider_adapters",
         "robot_resolution",
         "viewer_robot_declaration",

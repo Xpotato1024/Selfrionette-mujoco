@@ -18,10 +18,22 @@
 ## セットアップ
 
 - Python 側は `uv run ...` を使います。
+- root projectはuv workspaceで独立distribution `fast_arm_core`を通常dependencyとして解決します。
+  `uv sync --frozen --group dev`はrootとcoreをeditableに同期し、配布確認ではcore wheelとroot wheelを別々にbuild/installします。
 - viewer 側は `apps/mujoco-viewer` 配下で `npm ci` を実行します。
 - browser viewer 用の build は `npm run browser:build` です。
 - `npm run typecheck` と `npm run build` は TypeScript の静的検証です。
 - `npm test` は viewer runtime / WebSocket skeleton のテストを実行します。
+
+独立wheelの確認:
+
+```bash
+uv build --wheel src/selfrionette/plugins/robots/fast_arm/core --out-dir dist
+uv build --wheel --out-dir dist
+```
+
+root sdist/wheelは`fast_arm_core` sourceを内包せず、install時にcore wheelを通常dependencyとして要求します。
+rootのpackage dataはadapter resourceだけを明示収集し、物理mount pointは`MANIFEST.in`でもpruneします。
 
 ## 起動導線
 
