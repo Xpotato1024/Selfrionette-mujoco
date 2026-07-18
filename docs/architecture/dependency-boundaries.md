@@ -38,6 +38,10 @@ transport           -> schemas
 runtime             -> all layers
 ```
 
+`schemas/`内はwire domain間の依存も一方向に固定する。`input`、`command`、`state`、`endpoint`は
+`types`だけへ依存でき、`experiment_log`は`endpoint`だけへ依存できる。`viewer_control`と`types`は
+他schema domainへ依存しない。canonical groupingと退役moduleは`docs/contracts/schemas.md`を正とする。
+
 Robot plugin compositionでは、上記layer境界に加えて次の方向を固定する。
 
 ```text

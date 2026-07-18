@@ -20,6 +20,32 @@ related:
 
 ## Schema一覧
 
+canonical importはpackage public surfaceの`selfrionette.schemas`を使用する。実装moduleは次のwire domainを
+ownerとし、1型1fileの旧pathはcompatibility facadeなしで退役する。
+
+| wire domain | canonical module | 主な型 |
+|---|---|---|
+| input frame / intent | `schemas.input` | `RawInputFrame`、`InputIntent`、`ContinuousEndpointVelocityIntent` |
+| command | `schemas.command` | `TargetCommand`、`JointCommand`、`MotionCommand` |
+| MuJoCo / render state | `schemas.state` | `BodyTransform`、`SiteTransform`、`MuJoCoState`、`RenderState` |
+| endpoint metadata | `schemas.endpoint` | `EndpointMetadata`とframe / status vocabulary |
+| viewer control message | `schemas.viewer_control` | viewer-to-backend control envelopeとstrict decoder |
+| experiment log | `schemas.experiment_log` | JSONL record、encoder、decoder、stream validator |
+| primitive types | `schemas.types` | `Vector3`、`QuaternionWXYZ`、`JointVector`、`ScalarVector` |
+
+domain間依存は`input / command / state / endpoint -> types`、`experiment_log -> endpoint`だけを許可する。
+`viewer_control`と`types`は他domainへ依存しない。`schemas.__init__`は全public symbolを明示的な
+`__all__`で公開し、consumerは退役した実装moduleへ依存しない。
+
+| 退役module | canonical replacement |
+|---|---|
+| `input_frame`、`input_intent`、`continuous_endpoint_velocity` | `input` |
+| `target_command`、`joint_command`、`motion_command` | `command` |
+| `mujoco_state`、`render_state` | `state` |
+| `endpoint_metadata` | `endpoint` |
+| `viewer_control_message` | `viewer_control` |
+| `experiment_motion_log` | `experiment_log` |
+
 - `Vector3`、`QuaternionWXYZ`、`JointVector`、`ScalarVector`: layer contractで
   共有するtuple alias。
 - `RawInputFrame`: `input_sources`が取得するdevice/replayのraw input。

@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-from selfrionette.schemas.input_frame import RawInputFrame
-from selfrionette.schemas.continuous_endpoint_velocity import ContinuousEndpointVelocityIntent
-from selfrionette.schemas.input_intent import InputIntent
-from selfrionette.schemas.joint_command import JointCommand
-from selfrionette.schemas.motion_command import MotionCommand
-from selfrionette.schemas.mujoco_state import BodyTransform, MuJoCoState, SiteTransform
-from selfrionette.schemas.endpoint_metadata import (
+from selfrionette.schemas.command import JointCommand, MotionCommand, TargetCommand
+from selfrionette.schemas.endpoint import (
     ControlFrameResolutionStatus,
     EndpointControlFrame,
     EndpointMetadata,
@@ -15,7 +10,7 @@ from selfrionette.schemas.endpoint_metadata import (
     MotionStatus,
     ResolvedEndpointFrame,
 )
-from selfrionette.schemas.experiment_motion_log import (
+from selfrionette.schemas.experiment_log import (
     EXPERIMENT_MOTION_LOG_SCHEMA_VERSION,
     ConfigurationRecord,
     ExperimentMotionLogRecord,
@@ -28,8 +23,13 @@ from selfrionette.schemas.experiment_motion_log import (
     record_to_json_value,
     validate_record_stream,
 )
-from selfrionette.schemas.render_state import RenderState
-from selfrionette.schemas.viewer_control_message import (
+from selfrionette.schemas.input import (
+    ContinuousEndpointVelocityIntent,
+    InputIntent,
+    RawInputFrame,
+)
+from selfrionette.schemas.state import BodyTransform, MuJoCoState, RenderState, SiteTransform
+from selfrionette.schemas.viewer_control import (
     ViewerControlEnvelopeType,
     ViewerControlGamepadButtonMessage,
     ViewerControlGamepadMessage,
@@ -41,7 +41,6 @@ from selfrionette.schemas.viewer_control_message import (
     coerce_viewer_control_message,
     parse_viewer_control_message_json,
 )
-from selfrionette.schemas.target_command import TargetCommand
 from selfrionette.schemas.types import JointVector, QuaternionWXYZ, ScalarVector, Vector3
 
 __all__ = [

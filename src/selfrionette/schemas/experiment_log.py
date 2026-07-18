@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, fields
 from math import isfinite, sqrt
 from typing import Literal, TypeAlias
 
-from selfrionette.schemas.endpoint_metadata import (
+from selfrionette.schemas.endpoint import (
     ControlFrameResolutionStatus,
     EndpointControlFrame,
     EndpointProgressStatus,

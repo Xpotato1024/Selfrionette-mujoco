@@ -10,6 +10,26 @@ from selfrionette.schemas.types import Vector3
 _VALID_CONTROL_FRAMES = {"world", "tool"}
 
 
+@dataclass(frozen=True, slots=True)
+class RawInputFrame:
+    source: str
+    timestamp_s: float
+    values: tuple[float, ...] = ()
+    buttons: tuple[bool, ...] = ()
+    metadata: Mapping[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class InputIntent:
+    source: str
+    timestamp_s: float
+    values: tuple[float, ...] = ()
+    target_delta_m: Vector3 = (0.0, 0.0, 0.0)
+    joint_delta_rad: tuple[float, ...] = ()
+    buttons: tuple[bool, ...] = ()
+    metadata: Mapping[str, object] = field(default_factory=dict)
+
+
 def _vector3(name: str, value: object) -> Vector3:
     if not isinstance(value, (tuple, list)) or len(value) != 3:
         raise ValueError(f"{name} must contain exactly three values")
@@ -117,3 +137,6 @@ class ContinuousEndpointVelocityIntent:
                 "source_diagnostics": _json_compatible_copy(self.source_diagnostics),
             }
         )
+
+
+__all__ = ["ContinuousEndpointVelocityIntent", "InputIntent", "RawInputFrame"]
