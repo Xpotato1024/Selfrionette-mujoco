@@ -15,7 +15,7 @@ from selfrionette.plugins.robots.fast_arm.kinematics import (
 )
 from selfrionette.plugins.robots.fast_arm.model_contract import FAST_ARM_ARM_BODY_NAMES
 from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
-from selfrionette.runtime.endpoint_progress import calculate_endpoint_progress
+from selfrionette.runtime.evaluation.endpoint_progress import calculate_endpoint_progress
 from selfrionette.plugins.robots.fast_arm.diagnostics.jacobian_mobility import (
     CONTROLLED_JOINT_NAMES,
     PoseDiagnostic,

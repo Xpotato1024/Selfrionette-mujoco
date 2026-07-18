@@ -8,12 +8,12 @@ from math import dist
 import pytest
 
 from selfrionette.input_sources import ViewerInputSource
-from selfrionette.runtime import (
+from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
-    ingest_viewer_control_message,
     run_runtime_input_source_step_loop,
-    select_runtime_input_source,
 )
+from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
 from tests.support.transport_doubles import NoOpStatePublisher
 

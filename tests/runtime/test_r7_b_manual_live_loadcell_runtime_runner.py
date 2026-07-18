@@ -4,7 +4,7 @@ import builtins
 
 import pytest
 
-from selfrionette.runtime.live_loadcell_runtime_runner import (
+from selfrionette.runtime.runners.live_loadcell import (
     LiveLoadcellRuntimeRunnerConfig,
     run_live_loadcell_runtime_runner,
 )

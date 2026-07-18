@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 
 from tests.support.mujoco_doubles import NoOpMuJoCoSimulator
-from selfrionette.runtime import RuntimeConfig, RuntimePipeline
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.execution.pipeline import RuntimePipeline
 from tests.support.runtime_pipeline_builders import build_noop_pipeline
 from selfrionette.schemas import MuJoCoState, RawInputFrame
 

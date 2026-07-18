@@ -7,8 +7,8 @@ from selfrionette.schemas.endpoint import (
     EndpointMetadata,
     EndpointProgressStatus,
 )
-from selfrionette.runtime.endpoint_progress import calculate_endpoint_progress
-from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
+from selfrionette.runtime.evaluation.endpoint_progress import calculate_endpoint_progress
+from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local_motion_metadata
 
 
 def test_endpoint_metadata_contract_contains_canonical_and_compatibility_fields() -> None:

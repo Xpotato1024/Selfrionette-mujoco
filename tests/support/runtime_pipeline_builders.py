@@ -6,9 +6,9 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.pipeline import RuntimePipeline
-from selfrionette.runtime.qpos_feasibility import QposFeasibilityGuard
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.schemas import RawInputFrame
 from tests.support.input_interpreter_doubles import NoOpInputInterpreter
 from tests.support.input_source_doubles import StaticInputSource

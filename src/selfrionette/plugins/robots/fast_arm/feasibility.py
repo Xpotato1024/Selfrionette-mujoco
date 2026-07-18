@@ -12,7 +12,7 @@ from selfrionette.plugins.robots.fast_arm.profile import (
     FAST_ARM_JOINT_NAMES,
     FAST_ARM_ROBOT_PROFILE,
 )
-from selfrionette.runtime.qpos_feasibility import QposFeasibilityDiagnostic, QposFeasibilityResult
+from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityDiagnostic, QposFeasibilityResult
 from selfrionette.schemas import JointCommand, MotionCommand
 
 FAST_ARM_JOINT_LIMIT_SCHEMA_VERSION = 1

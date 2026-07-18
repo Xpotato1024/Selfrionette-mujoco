@@ -13,20 +13,20 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from selfrionette.input_sources.registry import SUPPORTED_INPUT_SOURCE_NAMES
-from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.input_step_loop import (
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
     run_runtime_input_source_step_loop,
 )
-from selfrionette.runtime.viewer_control_ingress import (
+from selfrionette.runtime.control.viewer_control_ingress import (
     build_viewer_input_source,
     ingest_viewer_control_message_json,
 )
-from selfrionette.runtime.input_source_selection import select_runtime_input_source
-from selfrionette.runtime.live_timing import AbsoluteDeadlinePacer, LiveRuntimeTimingMetrics
-from selfrionette.runtime.live_websocket_delivery import LiveLatestStateWebSocketPublisher
-from selfrionette.runtime import run_replay_mujoco_websocket_publisher
-from selfrionette.runtime.websocket_publisher_runner import SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.execution.live_timing import AbsoluteDeadlinePacer, LiveRuntimeTimingMetrics
+from selfrionette.runtime.runners.live_websocket_delivery import LiveLatestStateWebSocketPublisher
+from selfrionette.runtime.runners.websocket_publisher import run_replay_mujoco_websocket_publisher
+from selfrionette.runtime.runners.websocket_publisher import SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS
 from selfrionette.transport import WebSocketPublisherServer, WebSocketStatePublisher
 
 DEFAULT_WEBSOCKET_PUBLISHER_HOST = "127.0.0.1"

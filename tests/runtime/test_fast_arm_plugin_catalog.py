@@ -23,13 +23,13 @@ from selfrionette.plugins.robots.fast_arm.runtime import (
 )
 from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN
 from selfrionette.plugins.robots.fast_arm.viewer import FAST_ARM_VIEWER_DECLARATION
-from selfrionette.runtime.robot_profile import robot_profile_runtime_metadata
+from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
 from selfrionette.schemas import MuJoCoState
 from selfrionette.transport.websocket import serialize_mujoco_state_message
-from selfrionette.runtime.viewer_robot_declaration import viewer_robot_declaration_digest
-from selfrionette.runtime import resolve_robot_bundle as root_resolve_robot_bundle
-from selfrionette.runtime import resolve_robot_runtime as root_resolve_robot_runtime
-from selfrionette.runtime.robot_profile_metadata import merge_runtime_metadata
+from selfrionette.runtime.composition.viewer_robot_declaration import viewer_robot_declaration_digest
+from selfrionette.plugins.catalog import resolve_robot_bundle as root_resolve_robot_bundle
+from selfrionette.plugins.catalog import resolve_robot_runtime as root_resolve_robot_runtime
+from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
 
 
 def test_catalog_resolvers_project_one_canonical_bundle() -> None:

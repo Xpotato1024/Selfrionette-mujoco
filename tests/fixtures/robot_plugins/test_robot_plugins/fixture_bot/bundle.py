@@ -1,7 +1,7 @@
 """Typed provider assembly for the test-only fixture robot."""
 
-from selfrionette.runtime.experiment_contracts import VersionedIdentity
-from selfrionette.runtime.robot_bundle import (
+from selfrionette.runtime.experiment.contracts import VersionedIdentity
+from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
@@ -11,7 +11,7 @@ from selfrionette.runtime.robot_bundle import (
     InitialStateContract,
     RobotBundle,
 )
-from selfrionette.runtime.robot_provider_adapters import (
+from selfrionette.runtime.composition.robot_provider_adapters import (
     NamedKeyframeInitialStateProvider,
     ProfileEndpointSceneRoleProvider,
     RuntimeEndpointCommandProvider,

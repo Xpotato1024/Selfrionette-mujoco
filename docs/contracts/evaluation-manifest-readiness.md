@@ -19,7 +19,7 @@ related:
 
 ## ownershipとscope
 
-`src/selfrionette/runtime/evaluation_manifest.py`が、実行開始前に固定する
+`src/selfrionette/runtime/evaluation/manifest.py`が、実行開始前に固定する
 `evaluation-manifest/v1`のtyped manifest、canonical serialization、software-only readiness、
 world/tool condition-pair、freeze identityを所有する。manifestはimmutableなtyped modelであり、
 内部にmutable mappingやlistを保持しない。5軸のplugin contractはR7-G-P0 / #421の

@@ -25,10 +25,10 @@ from selfrionette.plugins.robot_registration import (
     _resolved_resource,
     _validate_viewer_vfs_coverage,
 )
-from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
-from selfrionette.runtime.experiment_contracts import PluginSelection, VersionedIdentity
-from selfrionette.runtime.robot_bundle import (
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
+from selfrionette.runtime.composition.robot_bundle import (
     CapabilityProviderBinding,
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,

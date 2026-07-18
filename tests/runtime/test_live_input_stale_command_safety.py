@@ -7,15 +7,19 @@ import asyncio
 
 import pytest
 
-from selfrionette.runtime import (
+from selfrionette.runtime.safety.input_safety import (
     DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS,
-    RuntimeInputSourceSelection,
     build_runtime_input_safety_result,
-    build_runtime_input_source_step_loop_plan,
-    run_runtime_input_source_step_loop,
+)
+from selfrionette.runtime.control.input_source_selection import (
+    RuntimeInputSourceSelection,
     select_runtime_input_source,
 )
-from selfrionette.runtime.input_source_state import build_runtime_input_source_state
+from selfrionette.runtime.execution.input_step_loop import (
+    build_runtime_input_source_step_loop_plan,
+    run_runtime_input_source_step_loop,
+)
+from selfrionette.runtime.control.input_source_state import build_runtime_input_source_state
 from selfrionette.schemas import MotionCommand
 from selfrionette.transport import mujoco_state_to_payload
 

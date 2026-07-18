@@ -11,7 +11,7 @@ from selfrionette.input_sources import (
     build_default_keyboard_input_config,
     build_keyboard_motion_command,
 )
-from selfrionette.runtime import resolve_desired_endpoint_from_motion_command
+from selfrionette.runtime.control.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.schemas import MotionCommand
 
 

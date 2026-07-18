@@ -72,8 +72,8 @@ generic schema / domain / Protocol
 - generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
   `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
-- generic Robot Profile contractは`selfrionette.runtime.robot_profile`、viewer向けrobot declaration
-  contractは`selfrionette.runtime.viewer_robot_declaration`が所有する。package rootの旧moduleは退役済みである。
+- generic Robot Profile contractは`selfrionette.runtime.composition.robot_profile`、viewer向けrobot declaration
+  contractは`selfrionette.runtime.composition.viewer_robot_declaration`が所有する。旧flat moduleは退役済みである。
 - loadcell serial parser、normalization、`SerialInputSource`は
   `selfrionette.input_sources.loadcell_serial`が所有する。package rootの旧moduleは退役済みである。
 - fast_arm固有implementationは`plugins/robots/fast_arm/`だけが所有する。旧`robots/fast_arm.py`、

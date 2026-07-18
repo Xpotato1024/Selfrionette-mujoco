@@ -9,16 +9,16 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_generic_runtime_files_do_not_import_fast_arm_implementation() -> None:
     runtime = ROOT / "src" / "selfrionette" / "runtime"
     for name in (
-        "config.py",
-        "pipeline.py",
-        "replay_mujoco_pipeline.py",
-        "qpos_feasibility.py",
-        "robot_plugin.py",
+        "composition/config.py",
+        "execution/pipeline.py",
+        "composition/replay_mujoco_pipeline.py",
+        "safety/qpos_feasibility.py",
+        "composition/robot_plugin.py",
     ):
         source = (runtime / name).read_text(encoding="utf-8")
         assert "fast_arm" not in source.lower(), name
         assert "FastArm" not in source, name
-        if name in ("mujoco_pipeline.py", "replay_mujoco_pipeline.py"):
+        if name.endswith("replay_mujoco_pipeline.py"):
             assert "resolve_robot_runtime" not in source, name
 
     simulator_source = (
@@ -48,11 +48,11 @@ def test_profile_registries_do_not_use_arbitrary_dynamic_imports() -> None:
         assert "import(" not in source
 
 
-def test_runtime_package_root_exports_contract_not_fast_arm_plugin_class() -> None:
+def test_runtime_package_root_exports_resolvers_not_plugin_classes() -> None:
     import selfrionette.runtime as runtime
 
-    assert "RobotRuntimePlugin" in runtime.__all__
-    assert "ResolvedRobotRuntime" in runtime.__all__
+    assert "RobotRuntimePlugin" not in runtime.__all__
+    assert "ResolvedRobotRuntime" not in runtime.__all__
     assert "resolve_robot_runtime" in runtime.__all__
     assert "resolve_robot_runtime_plugin" in runtime.__all__
     assert "FastArmRuntimePlugin" not in runtime.__all__

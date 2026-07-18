@@ -4,11 +4,11 @@ import ast
 import json
 from pathlib import Path
 
-from selfrionette.runtime import run_replay_mujoco_dry_run
+from selfrionette.runtime.runners.dry_run import run_replay_mujoco_dry_run
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DRY_RUN_MODULE = ROOT / "src" / "selfrionette" / "runtime" / "dry_run.py"
+DRY_RUN_MODULE = ROOT / "src" / "selfrionette" / "runtime" / "runners" / "dry_run.py"
 
 
 def _assert_endpoint_evaluation(payload: dict[str, object]) -> None:

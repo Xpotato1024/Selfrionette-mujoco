@@ -11,7 +11,7 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from selfrionette.runtime.live_loadcell_runtime_runner import (
+from selfrionette.runtime.runners.live_loadcell import (
     DEFAULT_LIVE_LOADCELL_BAUD_RATE,
     DEFAULT_LIVE_LOADCELL_CURRENT_TIP_POSITION_M,
     DEFAULT_LIVE_LOADCELL_MAX_FRAMES,

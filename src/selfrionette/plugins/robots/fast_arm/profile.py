@@ -8,7 +8,7 @@ from selfrionette.plugins.robots.fast_arm.model_contract import (
     FAST_ARM_END_EFFECTOR_BODY_NAME,
     FAST_ARM_END_EFFECTOR_SITE_NAME,
 )
-from selfrionette.runtime.robot_profile import (
+from selfrionette.runtime.composition.robot_profile import (
     CoordinateUnitContract,
     EndpointReference,
     RobotProfile,

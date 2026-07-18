@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from selfrionette.runtime.live_websocket_delivery import LiveLatestStateWebSocketPublisher
+from selfrionette.runtime.runners.live_websocket_delivery import LiveLatestStateWebSocketPublisher
 from selfrionette.schemas import MuJoCoState
 
 

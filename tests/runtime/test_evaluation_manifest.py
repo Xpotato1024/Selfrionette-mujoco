@@ -8,7 +8,7 @@ import pytest
 from selfrionette.plugins.catalog import (
     resolve_robot_bundle as resolve_robot_bundle_from_catalog,
 )
-from selfrionette.runtime.evaluation_manifest import (
+from selfrionette.runtime.evaluation.manifest import (
     EVALUATION_MANIFEST_SCHEMA_VERSION,
     EvaluationConditionPair,
     EvaluationManifest,
@@ -24,11 +24,11 @@ from selfrionette.runtime.evaluation_manifest import (
     evaluation_manifest_digest,
     verify_freeze_identity,
 )
-from selfrionette.runtime.experiment_composition import (
+from selfrionette.runtime.experiment.composition import (
     ExperimentPluginRegistries,
     PluginParameters,
 )
-from selfrionette.runtime.experiment_contracts import (
+from selfrionette.runtime.experiment.contracts import (
     EnvironmentRole,
     ControlMappingPlugin,
     ParameterContract,
@@ -38,8 +38,8 @@ from selfrionette.runtime.experiment_contracts import (
     PluginSelection,
     VersionedIdentity,
 )
-from selfrionette.runtime.experiment_registry import VersionedPluginRegistry
-from selfrionette.runtime.robot_bundle import CONTACT_EVIDENCE_V1, InitialStateContract
+from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
+from selfrionette.runtime.composition.robot_bundle import CONTACT_EVIDENCE_V1, InitialStateContract
 from selfrionette.plugins.catalog import (
     resolve_robot_bundle as resolve_robot_bundle_from_compatibility_facade,
 )
@@ -209,7 +209,7 @@ def test_canonical_round_trip_and_field_insertion_order_are_stable() -> None:
 
 
 def test_one_semantic_field_changes_the_manifest_digest() -> None:
-    from selfrionette.runtime.evaluation_manifest import evaluation_manifest_digest
+    from selfrionette.runtime.evaluation.manifest import evaluation_manifest_digest
 
     assert evaluation_manifest_digest(_manifest()) != evaluation_manifest_digest(
         _manifest(gain=0.2)

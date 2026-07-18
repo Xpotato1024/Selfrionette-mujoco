@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 
-from selfrionette.runtime.experiment_contracts import VersionedIdentity
-from selfrionette.runtime.robot_bundle import (
+from selfrionette.runtime.experiment.contracts import VersionedIdentity
+from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
@@ -16,7 +16,7 @@ from selfrionette.runtime.robot_bundle import (
     SCENE_ROLE_BINDING_V1,
     RobotBundle,
 )
-from selfrionette.runtime.viewer_robot_declaration import (
+from selfrionette.runtime.composition.viewer_robot_declaration import (
     ViewerRobotDeclaration,
     decode_viewer_robot_declaration,
     repository_resource_public_url,

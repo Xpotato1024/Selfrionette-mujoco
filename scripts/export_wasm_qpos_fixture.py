@@ -14,7 +14,7 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from selfrionette.runtime import run_replay_mujoco_dry_run
+from selfrionette.runtime.runners.dry_run import run_replay_mujoco_dry_run
 
 FIXTURE_MODEL_PATH = "assets/mujoco/fast_arm/scene.xml"
 FIXTURE_SOURCE = "python-native-mujoco"

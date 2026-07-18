@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from selfrionette.runtime import select_runtime_input_source
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 
 
 ROOT = Path(__file__).resolve().parents[2]

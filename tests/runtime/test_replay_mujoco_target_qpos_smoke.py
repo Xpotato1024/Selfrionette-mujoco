@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from selfrionette.mujoco_backend import snapshot_mujoco_state
-from selfrionette.runtime import build_replay_mujoco_pipeline
+from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.schemas import JointCommand, MotionCommand, RawInputFrame
 from selfrionette.transport import mujoco_state_to_payload
 

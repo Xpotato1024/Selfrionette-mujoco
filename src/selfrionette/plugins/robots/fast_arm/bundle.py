@@ -10,15 +10,15 @@ from selfrionette.plugins.robots.fast_arm.initial_state import (
 )
 from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.plugins.robots.fast_arm.runtime import FAST_ARM_RUNTIME_PLUGIN
-from selfrionette.runtime.robot_provider_adapters import (
+from selfrionette.runtime.composition.robot_provider_adapters import (
     NamedKeyframeInitialStateProvider,
     ProfileEndpointSceneRoleProvider,
     RuntimeEndpointCommandProvider,
     RuntimeEndpointPoseProvider,
     RuntimeQposFeasibilityProvider,
 )
-from selfrionette.runtime.experiment_contracts import VersionedIdentity
-from selfrionette.runtime.robot_bundle import (
+from selfrionette.runtime.experiment.contracts import VersionedIdentity
+from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,

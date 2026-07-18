@@ -157,8 +157,8 @@ def test_removed_facade_and_compatibility_modules_cannot_reappear() -> None:
 def test_package_root_and_robot_namespace_keep_canonical_ownership() -> None:
     assert {path.name for path in SRC.glob("*.py")} == {"__init__.py"}
     assert not tuple((SRC / "robots").glob("*.py"))
-    assert (SRC / "runtime" / "robot_profile.py").is_file()
-    assert (SRC / "runtime" / "viewer_robot_declaration.py").is_file()
+    assert (SRC / "runtime" / "composition" / "robot_profile.py").is_file()
+    assert (SRC / "runtime" / "composition" / "viewer_robot_declaration.py").is_file()
     assert (SRC / "input_sources" / "loadcell_serial.py").is_file()
 
 

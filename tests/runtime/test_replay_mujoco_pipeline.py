@@ -7,7 +7,8 @@ import pytest
 
 from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.runtime import RuntimePipeline, build_replay_mujoco_pipeline
+from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
 
 

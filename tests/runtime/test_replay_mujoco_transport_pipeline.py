@@ -5,7 +5,7 @@ from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 import asyncio
 import json
 
-from selfrionette.runtime import build_replay_mujoco_pipeline
+from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.transport import WebSocketStatePublisher
 
 
