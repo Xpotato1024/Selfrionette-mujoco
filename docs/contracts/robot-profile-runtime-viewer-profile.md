@@ -70,11 +70,12 @@ contractに対して行う。
 
 asset / configurationのstable logical pathはregistration declarationをSoTとする。Profileのtyped
 `RepositoryResource` / `PackageResource`とviewerのdeclaration / model / fixture / VFS referenceはregistrationと
-startup時に照合し、generic codeはrobot IDやpackage pathから実行pathを推測しない。repository resourceは宣言identityに対応する
-`assets/mujoco/<robot_id>/`または`configs/<robot_id>/`の内側だけを許可する。symlink解決後の実pathも同じrobot
-固有directory内に残らなければならない。model、viewer declaration、viewer fixture、VFS asset、configurationの
-すべてへ同じresolved ownership gateを適用し、viewer URL mappingで回避できない。shared resourceは暗黙許可せず、
-必要になった時点で別の明示contractを定義する。registration、viewer serialization、canonical identity
+startup時に照合し、generic codeはrobot IDやlogical pathからpackage名、package path、filesystem pathを推測しない。
+`assets/mujoco/<robot_id>/...`と`configs/<robot_id>/...`はlogical namespaceであり、physical ownerはrepository fileまたは
+typed package resourceのどちらでもよい。resolved repository / package boundaryへ同じownership gateを適用し、viewer URL
+mappingで回避できない。symlink解決後の実pathも宣言されたphysical owner boundary内に残す。logical namespace維持のために
+旧physical directoryへduplicateを残さない。shared resourceは
+暗黙許可せず、必要になった時点で別の明示contractを定義する。registration、viewer serialization、canonical identity
 materialにはPython package、module、class名を含めない。
 
 architecture test向けのcontract sentinelとして、ここでは`selects Option B`を固定し、
@@ -112,13 +113,14 @@ registryを返す前にfailする。
 
 ## zero-core-change onboarding boundary
 
-production robot追加時に変更する領域は次の三つである。
+production robot追加時に変更する領域はrobot packageと、そこから参照するtyped resource ownerである。
 
 ```text
-assets/mujoco/<robot_id>/
-configs/<robot_id>/
 src/selfrionette/plugins/robots/<robot_id>/
+repository-owned resource、またはdeclared Python package resource
 ```
+
+`assets/mujoco/<robot_id>/...`と`configs/<robot_id>/...`は配置先ではなくstable logical identifierとして維持する。
 
 robot packageは少なくともside-effect-freeな`__init__.py`、固定entry pointの`plugin.py`、Profile、
 Runtime Plugin、Bundle assembly、viewer declarationを持つ。robot固有algorithmまたはmodel contractは同packageへ
@@ -247,8 +249,10 @@ session中のreference欠落またはdigest / URL / resource path変更はfail-c
 
 viewer declarationはmodel URL / resource path、fixture URL / resource path、VFS mapping、joint order、
 qpos dimension、startup keyframe、rendering styleを持つ。stable logical `assets/` identifierからpublic URLを
-deterministicに導出し、declaration、model、fixture、各VFS URLをtyped package resourceへ一意に結び付ける。
-Vite dev serverとproduction buildは同じbindingからresource bytesを配信する。
+deterministicに導出する。plugin-owned resource binding manifestがlogical identifier、URL、owning package、package path、
+bundle pathのconcrete inventoryを一意に所有し、Python registrationとVite dev/buildが同じdocumentをdecodeする。
+viewer declarationのmodel、fixture、VFS mappingはmanifestと完全一致しなければならず、generic viewerはrobot固有inventoryを
+持たない。Vite dev serverとproduction buildは同じdecoded bindingからresource bytesを配信する。
 unknown field、missing field、schema version、remote / escaped resource、resource / URL mismatch、duplicate
 mapping、backend compatibility mismatchは描画前またはqpos適用前にfailする。
 viewerはdeclarationを使ってMuJoCo WASM sceneを構成するだけで、runtime state、IK / FK、planning、target、

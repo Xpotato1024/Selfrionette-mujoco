@@ -89,6 +89,43 @@ def test_plugin_entrypoint_only_assembles_the_adapter() -> None:
     )
 
 
+def test_generic_resource_manifest_tooling_contains_no_fast_arm_inventory() -> None:
+    generic_sources = (
+        ROOT
+        / "src/selfrionette/runtime/composition/viewer_package_resource_manifest.py"
+    ).read_text(encoding="utf-8") + (
+        ROOT / "apps/mujoco-viewer/tooling/viewerPackageResources.ts"
+    ).read_text(encoding="utf-8")
+    for forbidden in (
+        "fast_arm",
+        "BaseLink.stl",
+        "SholderLink1.stl",
+        "resources/model/arm.xml",
+        "adapter/resources",
+    ):
+        assert forbidden not in generic_sources
+
+    manifests = tuple(
+        (ROOT / "src").rglob("viewer-resource-bindings.json")
+    )
+    assert manifests == (
+        FAST_ARM_ROOT / "adapter/resources/viewer-resource-bindings.json",
+    )
+
+
+def test_initial_state_modules_describe_core_ownership_and_adapter_projection() -> None:
+    adapter_source = (FAST_ARM_ROOT / "adapter/initial_state.py").read_text(
+        encoding="utf-8"
+    )
+    core_source = (
+        CORE_SOURCE / "reference/initial_state.py"
+    ).read_text(encoding="utf-8")
+    assert "Selfrionette projection of the core-owned" in adapter_source
+    assert "Core-owned fast_arm initial-state reference" in core_source
+    assert "Canonical fast_arm initial-state" not in adapter_source
+    assert "simulator-independent initial-state" not in core_source
+
+
 def test_compatibility_modules_preserve_public_object_identity() -> None:
     assert compatibility_bundle.FAST_ARM_ROBOT_BUNDLE is adapter_bundle.FAST_ARM_ROBOT_BUNDLE
     assert (

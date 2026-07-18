@@ -21,6 +21,7 @@ EXPECTED_MODULES = {
         "robot_provider_adapters",
         "robot_resolution",
         "viewer_robot_declaration",
+        "viewer_package_resource_manifest",
     },
     "control": {
         "desired_endpoint_resolver",

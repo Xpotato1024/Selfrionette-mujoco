@@ -1,4 +1,4 @@
-"""Canonical fast_arm initial-state declaration."""
+"""Selfrionette projection of the core-owned fast_arm initial-state reference."""
 
 from __future__ import annotations
 

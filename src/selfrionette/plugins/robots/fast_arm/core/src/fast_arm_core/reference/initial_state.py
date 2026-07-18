@@ -1,4 +1,4 @@
-"""Canonical simulator-independent initial-state reference for fast_arm."""
+"""Core-owned fast_arm initial-state reference shared by adapters."""
 
 from __future__ import annotations
 

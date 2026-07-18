@@ -99,9 +99,13 @@ generic schema / domain / Protocol
   `robot_profile.py`、`viewer_robot_declaration.py`、`loadcell_serial.py`をrootへ再導入しない。
 - production discoveryを起動できるgeneric moduleはcatalogだけとする。test fixtureはproduction namespaceへ
   置かず、明示的なtest discovery rootを使用する。
-- registration resourceは宣言identityと同じ`assets/mujoco/<robot_id>/` / `configs/<robot_id>/`へ限定し、
-  symlink解決後の実pathにも同じownershipを要求する。viewer public URLは検証済みasset pathからdeterministicに
-  生成し、resolved ownership違反を回避できない。shared resourceは暗黙許可しない。
+- `assets/mujoco/<robot_id>/...`と`configs/<robot_id>/...`はstable logical identifier namespaceであり、
+  physical repository path規則ではない。physical ownerは許可されたrepository fileまたはtyped Python package
+  resourceとし、package resourceではowning packageとpackage-relative pathをtyped declarationが所有する。
+  generic resolverはlogical identifierやrobot IDからpackage名、package path、filesystem pathを推測しない。
+  repository rootまたはresolved package resource boundaryでphysical ownershipをfail-closedに検証する。
+  viewer public URLは`assets/` logical identifierからdeterministicに生成するが、logical namespaceの維持は
+  旧physical directoryへのduplicate維持を意味しない。shared resourceは暗黙許可しない。
 
 禁止するdependency:
 
@@ -158,7 +162,7 @@ legacyの責務を移行する場合は、script全体をcopyせず、次のowne
 
 | legacyの責務 | current owner | 境界 |
 |---|---|---|
-| MuJoCo XML / STL asset | `assets/mujoco/fast_arm/` | canonical assetを参照し、legacy codeを実行しない |
+| MuJoCo XML / STL asset | typed robot package resource（logical namespaceは`assets/mujoco/fast_arm/`） | canonical assetを参照し、legacy codeを実行しない |
 | device input読取 | `input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
 | inputの意味付けとscale | `input_interpreters/` | `RawInputFrame`を`InputIntent`へ変換する |
 | target更新とsafety limit | `motion/` | `MotionCommand`を生成する |

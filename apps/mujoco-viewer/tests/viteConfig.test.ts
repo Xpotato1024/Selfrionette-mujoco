@@ -10,8 +10,7 @@ describe("vite config", () => {
 
     assert.match(source, /open:\s*["']\/apps\/mujoco-viewer\/["']/);
     assert.match(source, /publicDir:\s*false/);
-    assert.match(source, /name:\s*["']fast-arm-package-resources["']/);
-    assert.match(source, /configureServer\(server\)/);
-    assert.match(source, /generateBundle\(\)/);
+    assert.match(source, /createViewerPackageResourcePlugin\(repoRoot\)/);
+    assert.doesNotMatch(source, /fastArmPackageResources/);
   });
 });

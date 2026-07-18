@@ -21,6 +21,11 @@ fileを、`PackageResource`はimport可能なPython packageとpackage-relative p
 generic catalog、runtime、viewerはrobot IDや文字列形式からowner/pathを推測しない。`ROBOT_PLUGIN`の
 `RobotResourceDeclaration`がmodel、configuration、viewer declaration、viewer fixture、viewer VFS resourceを
 明示し、`ViewerRobotDeclaration`がstable logical resource path / public URL対応を明示する。
+plugin-owned `viewer-package-resource-bindings/v1` manifestはconcrete resource inventoryの唯一のSoTであり、
+logical identifier、public URL、owning package、package-relative path、bundle-relative path、resource roleを持つ。
+Python registrationとviewer build toolingは同じmanifestをdecodeし、viewer declarationのmodel、fixture、VFS mappingと
+完全一致することをfail-closedに検証する。manifestはvisual style、joint、qpos、initial pose labelを所有せず、
+それらは引き続きviewer declarationが所有する。
 
 production discoveryはcatalog registryを公開する前に、repository resourceが許可root内の実fileへ、package
 resourceが宣言package内の実fileへ解決すること、Profileのmodel / configuration referenceと一致すること、viewer declarationと
@@ -41,7 +46,9 @@ fail-closedで拒否する。checkout path fallback、runtime `sys.path`変更�
 - `fast_arm_core` packageが`resources/model/arm.xml`、`resources/model/meshes/*.stl`、
   `resources/config/joint_limits.toml`を所有する。
 - Selfrionette adapter packageが`resources/mujoco/scene.xml`、`resources/viewer-profile.json`、
-  `resources/fixtures/fast_arm_sweep_x_qpos.json`を所有する。
+  `resources/fixtures/fast_arm_sweep_x_qpos.json`と`resources/viewer-resource-bindings.json`を所有する。
+- concrete binding inventoryはadapter-owned manifestだけに置く。generic viewer build toolingはuv workspace metadataと
+  package `src` layoutから宣言packageをbuild時に解決し、robot ID、mesh名、core / adapter pathを列挙しない。
 - `assets/mujoco/fast_arm/...`と`configs/fast_arm/...`はviewer/backend互換のstable logical identifierであり、
   physical repository pathではない。旧directoryにproduction duplicateを置かない。
 - `arm.xml`はcanonicalなbundle layoutである`meshdir="meshes"`を使用し、同じtyped bundleの

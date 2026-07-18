@@ -69,9 +69,10 @@ package-root resolverは`plugins/catalog.py`のcanonical resolverへ直接到達
 
 discoveryはapplicationがcatalog resolverへ初めて到達した時点で同期的に完了し、duplicate identity、
 broken entry point、contract / capability不整合、missing / escaped resourceをpartial registryなしで拒否する。
-resourceはlexical declarationに加え、symlink解決後も`assets/mujoco/<robot_id>/`または
-`configs/<robot_id>/`へ閉じる。viewer URLはvalidated resourceのmappingであり、このresolved ownership gateを
-迂回できない。
+`assets/mujoco/<robot_id>/...`と`configs/<robot_id>/...`はresourceのstable logical namespaceであり、
+physical repository pathとは限らない。repository resourceは許可root内、package resourceは宣言package内へ
+symlink解決後も閉じる。generic compositionはrobot IDやlogical identifierからphysical ownerを推測しない。
+viewer URLはvalidated logical resourceのmappingであり、このresolved ownership gateを迂回できない。
 readinessはdiscovered catalogからBundleを選択した後に行い、discovery順、package path、module / class名を
 requested / resolved / freeze identityへ含めない。onboarding schema versionはdiscovery registrationのdecode軸、
 Bundle identity versionはrobot selection / logical contract軸として別々に検証し、catalog resolverで混同しない。
