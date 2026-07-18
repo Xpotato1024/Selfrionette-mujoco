@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-07-16
+last_verified: 2026-07-19
 canonical_for:
   - inverse kinematics contract
   - robot-specific IK ownership
@@ -34,7 +34,8 @@ ownershipを固定する。runtimeはselected `RobotRuntimePlugin`からIK/motio
 Production runtimeはselected `RobotRuntimePlugin.build_inverse_kinematics()`
 またはplugin-owned motion generatorを使用する。profile/pluginはmodel、joint
 order、qpos dimension、home/seed、workspace/failure semanticsを一つのrobot
-contractとして所有する。
+contractとして所有する。fast_arm solverのalgorithm、tolerance、failure literalは`fast_arm_core`が所有し、
+adapterはcore tupleをSelfrionette `JointCommand`へ変換するだけである。
 
 `PlanarTwoLinkInverseKinematicsSolver`はproduction implementationまたはpublic contractではない。
 

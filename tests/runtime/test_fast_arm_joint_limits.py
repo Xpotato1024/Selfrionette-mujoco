@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import selfrionette.plugins.robots.fast_arm.feasibility as joint_limits_module
+import selfrionette.plugins.robots.fast_arm.adapter.feasibility as joint_limits_module
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.plugins.robots.fast_arm.feasibility import (
@@ -17,6 +17,10 @@ from selfrionette.plugins.robots.fast_arm.feasibility import (
     parse_fast_arm_joint_limit_config,
     validate_fast_arm_joint_limit_config,
 )
+from selfrionette.plugins.robots.fast_arm.adapter.resources import (
+    FAST_ARM_JOINT_LIMIT_RESOURCE,
+)
+from selfrionette.runtime.composition.robot_resource import read_package_resource_bytes
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.execution.input_step_loop import (
@@ -33,9 +37,8 @@ from selfrionette.schemas import (
 )
 
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG_PATH = ROOT / "configs" / "fast_arm" / "joint_limits.toml"
-DEFAULT_CONFIG_TEXT = DEFAULT_CONFIG_PATH.read_text(encoding="utf-8")
+DEFAULT_CONFIG_PATH = FAST_ARM_JOINT_LIMIT_RESOURCE
+DEFAULT_CONFIG_TEXT = read_package_resource_bytes(DEFAULT_CONFIG_PATH).decode("utf-8")
 HOME_QPOS = (0.0, -0.5235987755982989, 0.0, -1.0471975511965976)
 
 

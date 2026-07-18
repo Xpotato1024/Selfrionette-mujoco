@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
+from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.endpoint_motion_sanity import (
     run_fast_arm_endpoint_motion_sanity,
     run_fast_arm_local_jacobian_diagnostics,
 )
@@ -35,10 +35,8 @@ def test_local_jacobian_diagnostics_cover_qpos_0_to_3_for_nearby_poses() -> None
             assert column.norm >= 0.0
 
 
-def test_local_jacobian_diagnostics_accept_explicit_canonical_model_path() -> None:
-    diagnostics = run_fast_arm_local_jacobian_diagnostics(
-        model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset
-    )
+def test_local_jacobian_diagnostics_use_profile_owned_model_resource() -> None:
+    diagnostics = run_fast_arm_local_jacobian_diagnostics()
 
     assert [pose.pose_label for pose in diagnostics] == [
         "initial",

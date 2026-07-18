@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-07-19
 canonical_for:
   - runtime composition root
 related:
@@ -69,9 +69,10 @@ package-root resolverは`plugins/catalog.py`のcanonical resolverへ直接到達
 
 discoveryはapplicationがcatalog resolverへ初めて到達した時点で同期的に完了し、duplicate identity、
 broken entry point、contract / capability不整合、missing / escaped resourceをpartial registryなしで拒否する。
-resourceはlexical declarationに加え、symlink解決後も`assets/mujoco/<robot_id>/`または
-`configs/<robot_id>/`へ閉じる。viewer URLはvalidated resourceのmappingであり、このresolved ownership gateを
-迂回できない。
+`assets/mujoco/<robot_id>/...`と`configs/<robot_id>/...`はresourceのstable logical namespaceであり、
+physical repository pathとは限らない。repository resourceは許可root内、package resourceは宣言package内へ
+symlink解決後も閉じる。generic compositionはrobot IDやlogical identifierからphysical ownerを推測しない。
+viewer URLはvalidated logical resourceのmappingであり、このresolved ownership gateを迂回できない。
 readinessはdiscovered catalogからBundleを選択した後に行い、discovery順、package path、module / class名を
 requested / resolved / freeze identityへ含めない。onboarding schema versionはdiscovery registrationのdecode軸、
 Bundle identity versionはrobot selection / logical contract軸として別々に検証し、catalog resolverで混同しない。
@@ -116,7 +117,7 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
   `docs/contracts/evaluation-manifest-readiness.md`の許可リストに限定する。
 
 この文書はcurrent responsibility boundaryを固定し、does not perform a broad runtime rewrite。
-fast_arm固有diagnosticsは`plugins/robots/fast_arm/diagnostics/`が所有し、generic runtime public surfaceや
+fast_arm固有diagnosticsは`plugins/robots/fast_arm/adapter/diagnostics/`が所有し、generic runtime public surfaceや
 plugin discovery entry pointからeager importしない。generic `RuntimePipeline`はtest doubleを構築せず、
 test-only wiringは`tests/support/`が所有する。
 pre-audit composition chronologyとrefactor proposalは

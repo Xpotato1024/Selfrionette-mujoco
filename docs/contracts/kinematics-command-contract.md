@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-07-17
+last_verified: 2026-07-19
 canonical_for:
   - kinematics solver contract
   - JointCommand / MotionCommand boundary
@@ -27,8 +27,9 @@ current runtimeで`JointCommand` / `MotionCommand`
 
 - `base.py` は Protocol / interface contract である。
 - `base.py` に concrete implementation を直接書かない。
-- production `kinematics/`は`base.py`のProtocolだけを所有する。fast_arm concrete solverは
-  `plugins/robots/fast_arm/kinematics.py`が所有する。
+- production `kinematics/`は`base.py`のProtocolだけを所有する。fast_armのpure solver/数式は独立package
+  `fast_arm_core`が所有し、Selfrionette Protocol/schema変換は`plugins/robots/fast_arm/adapter/kinematics.py`が
+  所有する。旧`plugins/robots/fast_arm/kinematics.py`はthin re-exportだけを提供する。
 - test doubleは`tests/support/kinematics_solver_doubles.py`だけに置き、production packageへ置かない。
 - `viewer` は rendering-only であり、FK / IK / qpos recompute を行わない。
 - 既存の wasm-scene product viewer path は MuJoCo model を描画に使うが、

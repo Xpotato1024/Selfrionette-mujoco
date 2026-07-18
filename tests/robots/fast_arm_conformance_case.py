@@ -138,11 +138,11 @@ def _failure_joint_order_mismatch(_tmp_path: Path) -> None:
     info = MuJoCoModelInfo(joint_names=wrong_order, body_names=(), site_names=())
     model = SimpleNamespace(nq=4, nv=4)
     with patch(
-        "selfrionette.plugins.robots.fast_arm.runtime.inspect_mujoco_model",
+        "selfrionette.plugins.robots.fast_arm.adapter.runtime.inspect_mujoco_model",
         return_value=info,
     ):
         with patch(
-            "selfrionette.plugins.robots.fast_arm.runtime."
+            "selfrionette.plugins.robots.fast_arm.adapter.runtime."
             "validate_fast_arm_model_name_contract"
         ):
             FAST_ARM_RUNTIME_PLUGIN.validate_model(model)
@@ -166,7 +166,9 @@ def _failure_home_outside_joint_limits(tmp_path: Path) -> None:
     source = FAST_ARM_ROBOT_PROFILE.joint_limit_config_asset
     if source is None:
         raise AssertionError("fast_arm conformance case requires a joint-limit config")
-    text = source.read_text(encoding="utf-8")
+    from selfrionette.runtime.composition.robot_resource import read_package_resource_bytes
+
+    text = read_package_resource_bytes(source).decode("utf-8")
     invalid = text.replace(
         "[joints.elbow_joint]\nlower_rad = -3.141592653589793\nupper_rad = 3.141592653589793",
         "[joints.elbow_joint]\nlower_rad = -0.5\nupper_rad = 0.5",

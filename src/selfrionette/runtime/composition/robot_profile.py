@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from selfrionette.runtime.composition.robot_resource import (
+    PackageResource,
+    PackageResourceBundle,
+)
+
 from selfrionette.runtime.composition.viewer_robot_declaration import (
     ViewerRobotDeclaration,
     repository_resource_public_url,
@@ -44,13 +49,13 @@ class RobotProfile:
     profile_contract_version: int
     model_contract_version: str
     backend_kind: str
-    mujoco_model_asset: Path
+    mujoco_model_asset: Path | PackageResourceBundle
     canonical_joint_names: tuple[str, ...]
     qpos_dimension: int
     qvel_dimension: int
     initial_keyframe_name: str
     endpoint: EndpointReference
-    joint_limit_config_asset: Path | None
+    joint_limit_config_asset: Path | PackageResource | None
     coordinate_units: CoordinateUnitContract
     viewer_profile_id: str
     supported_capabilities: frozenset[str]

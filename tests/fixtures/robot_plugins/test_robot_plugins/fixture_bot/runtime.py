@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
 from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard
 from selfrionette.runtime.composition.robot_plugin import (
     state_transform_by_name,
@@ -84,6 +85,19 @@ class FixtureRobotRuntimePlugin:
     ) -> NoOpQposFeasibilityGuard:
         _ = (model, config_path)
         return NoOpQposFeasibilityGuard()
+
+    def build_simulator(
+        self,
+        *,
+        model_path: str | Path | None,
+        initial_keyframe_name: str | None,
+    ) -> HeadlessMuJoCoSimulator:
+        resolved = self.profile.mujoco_model_asset if model_path is None else Path(model_path)
+        assert isinstance(resolved, Path)
+        return HeadlessMuJoCoSimulator.from_model_path(
+            resolved,
+            initial_keyframe_name=initial_keyframe_name,
+        )
 
     def endpoint_position_from_state(
         self, state: MuJoCoState

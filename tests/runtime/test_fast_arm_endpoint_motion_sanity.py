@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import FastArmEndpointMotionSanityResult, run_fast_arm_endpoint_motion_sanity
-from selfrionette.plugins.robots.fast_arm.diagnostics import endpoint_motion_sanity as endpoint_motion_sanity_module
+from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.endpoint_motion_sanity import FastArmEndpointMotionSanityResult, run_fast_arm_endpoint_motion_sanity
+from selfrionette.plugins.robots.fast_arm.adapter.diagnostics import endpoint_motion_sanity as endpoint_motion_sanity_module
 from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 
 
@@ -50,11 +50,8 @@ def test_run_fast_arm_endpoint_motion_sanity_returns_axiswise_results() -> None:
     assert z_minus.status in {"pass", "limitation", "rejected"}
 
 
-def test_run_fast_arm_endpoint_motion_sanity_accepts_explicit_canonical_model_path() -> None:
-    results = run_fast_arm_endpoint_motion_sanity(
-        model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
-        command_delta_m=0.001,
-    )
+def test_run_fast_arm_endpoint_motion_sanity_uses_profile_owned_model_resource() -> None:
+    results = run_fast_arm_endpoint_motion_sanity(command_delta_m=0.001)
 
     assert len(results) == 6
     assert all(result.reason != "backend_exception" for result in results)

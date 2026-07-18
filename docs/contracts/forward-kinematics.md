@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-07-16
+last_verified: 2026-07-19
 canonical_for:
   - forward kinematics contract
   - robot-specific FK ownership
@@ -35,7 +35,8 @@ ownershipを固定する。`ZeroForwardKinematicsSolver` はproduction FKでは�
 Production runtimeはselected `RobotRuntimePlugin.build_forward_kinematics()`
 からrobot-specific FKを取得する。fast_armは
 `FastArmEndpointForwardKinematicsSolver`をsolver-local診断に使い、physical
-site整合はMuJoCo model/profile contractとconformance coverageで検証する。
+site整合はMuJoCo model/profile contractとconformance coverageで検証する。数式とmodel-aligned pure FKは
+`fast_arm_core`が所有し、Selfrionette `Vector3` Protocolへの変換はadapterが所有する。
 
 `PlanarChainForwardKinematicsSolver`はproduction implementationまたはpublic contractではない。
 generic testsはalgorithmを持たないtest-only doublesを使用する。
@@ -68,7 +69,7 @@ viewer は backend / runtime payload を描画するだけである。
 
 ## fast_arm physical FK
 
-`assets/mujoco/fast_arm/arm.xml`とその`tip` siteが、physical fast_arm endpointの
+core package-owned `fast_arm_core:resources/model/arm.xml`とその`tip` siteが、physical fast_arm endpointの
 source of truthである。現在のruntime FKには、明示的なfast_arm pathが2つある。
 
 - `FastArmEndpointForwardKinematicsSolver`: 既存のIK/FK self-consistency diagnostic用に

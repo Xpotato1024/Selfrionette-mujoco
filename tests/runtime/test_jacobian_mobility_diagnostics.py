@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from selfrionette.plugins.robots.fast_arm.diagnostics.jacobian_mobility import build_delta_metrics, summarize_jacobian
+from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.jacobian_mobility import build_delta_metrics, summarize_jacobian
 
 
 def test_full_rank_metrics_are_deterministic() -> None:

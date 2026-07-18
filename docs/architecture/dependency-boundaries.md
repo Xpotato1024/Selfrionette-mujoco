@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-07-19
 canonical_for:
   - import boundaries
 related:
@@ -78,13 +78,18 @@ generic schema / domain / Protocol
   `selfrionette.input_sources.loadcell_serial`が所有する。package rootの旧moduleは退役済みである。
 - fast_arm固有implementationは`plugins/robots/fast_arm/`だけが所有する。旧`robots/fast_arm.py`、
   `robot_registry.py`、`runtime/fast_arm_*.py`、旧registry moduleは退役済みであり、再作成しない。
-- fast_arm package内をshared coreとSelfrionette adapterへ分離するときは、coreを独立Python package
-  `fast_arm_core`として扱い、Selfrionette namespace packageにしない。`fast_arm_core -> adapter`または
+- fast_arm package内のshared coreは、`plugins/robots/fast_arm/core/`を物理mount pointとする独立Python
+  distribution/package `fast_arm_core`である。root projectはuv workspaceの通常dependencyとして参照し、
+  root distributionのpackage discoveryとsdist manifestから除外する。root package dataは必要なadapter
+  resourceだけを明示し、core mount pointを暗黙収集しない。`fast_arm_core -> adapter`または
   `fast_arm_core -> selfrionette`を禁止し、`adapter -> fast_arm_core`と
   `adapter -> generic Protocol / schema`だけを許可する。
   generic layer、他robot、viewerはfast_arm core implementationへ依存しない。root `plugin.py`の
   `ROBOT_PLUGIN`を唯一のproduction discovery入口とし、coreまたはadapterに第二のentryを作らない。
   `selfrionette.plugins.robots.fast_arm.core`をshared import APIにせず、runtimeで`sys.path`を書き換えない。
+- `plugins/robots/fast_arm/adapter/`はSelfrionette schema、runtime、MuJoCo backend、viewer、diagnosticsへの
+  projectionだけを所有する。旧module pathはadapter ownerからobjectをre-exportするthin compatibility moduleに
+  限定し、数式、定数、resource resolver、factory、registrationを再実装しない。
 - generic `kinematics`はsolver Protocolだけ、generic `mujoco_backend`はnamed reference / site extraction、
   model load / reset、simulation primitiveだけを公開する。fast_arm固有solver、name contract、endpoint wrapper、
   diagnosticはplugin packageから公開する。
@@ -94,9 +99,13 @@ generic schema / domain / Protocol
   `robot_profile.py`、`viewer_robot_declaration.py`、`loadcell_serial.py`をrootへ再導入しない。
 - production discoveryを起動できるgeneric moduleはcatalogだけとする。test fixtureはproduction namespaceへ
   置かず、明示的なtest discovery rootを使用する。
-- registration resourceは宣言identityと同じ`assets/mujoco/<robot_id>/` / `configs/<robot_id>/`へ限定し、
-  symlink解決後の実pathにも同じownershipを要求する。viewer public URLは検証済みasset pathからdeterministicに
-  生成し、resolved ownership違反を回避できない。shared resourceは暗黙許可しない。
+- `assets/mujoco/<robot_id>/...`と`configs/<robot_id>/...`はstable logical identifier namespaceであり、
+  physical repository path規則ではない。physical ownerは許可されたrepository fileまたはtyped Python package
+  resourceとし、package resourceではowning packageとpackage-relative pathをtyped declarationが所有する。
+  generic resolverはlogical identifierやrobot IDからpackage名、package path、filesystem pathを推測しない。
+  repository rootまたはresolved package resource boundaryでphysical ownershipをfail-closedに検証する。
+  viewer public URLは`assets/` logical identifierからdeterministicに生成するが、logical namespaceの維持は
+  旧physical directoryへのduplicate維持を意味しない。shared resourceは暗黙許可しない。
 
 禁止するdependency:
 
@@ -153,7 +162,7 @@ legacyの責務を移行する場合は、script全体をcopyせず、次のowne
 
 | legacyの責務 | current owner | 境界 |
 |---|---|---|
-| MuJoCo XML / STL asset | `assets/mujoco/fast_arm/` | canonical assetを参照し、legacy codeを実行しない |
+| MuJoCo XML / STL asset | typed robot package resource（logical namespaceは`assets/mujoco/fast_arm/`） | canonical assetを参照し、legacy codeを実行しない |
 | device input読取 | `input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
 | inputの意味付けとscale | `input_interpreters/` | `RawInputFrame`を`InputIntent`へ変換する |
 | target更新とsafety limit | `motion/` | `MotionCommand`を生成する |

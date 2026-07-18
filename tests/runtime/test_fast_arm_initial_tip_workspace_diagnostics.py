@@ -6,7 +6,7 @@ from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulato
 
 import pytest
 
-from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import run_fast_arm_endpoint_motion_sanity
+from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.endpoint_motion_sanity import run_fast_arm_endpoint_motion_sanity
 
 
 def test_initial_tip_workspace_diagnostics_are_structured_for_all_axes() -> None:

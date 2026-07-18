@@ -2,12 +2,19 @@
 
 from selfrionette.plugins.robot_registration import (
     ROBOT_ONBOARDING_CONTRACT_VERSION,
-    RepositoryResource,
     RobotPluginRegistration,
     RobotResourceDeclaration,
 )
-from selfrionette.plugins.robots.fast_arm.bundle import FAST_ARM_ROBOT_BUNDLE
-from selfrionette.plugins.robots.fast_arm.viewer import FAST_ARM_VIEWER_DECLARATION
+from selfrionette.plugins.robots.fast_arm.adapter.bundle import FAST_ARM_ROBOT_BUNDLE
+from selfrionette.plugins.robots.fast_arm.adapter.resources import (
+    FAST_ARM_JOINT_LIMIT_RESOURCE,
+    FAST_ARM_MODEL_BUNDLE,
+    FAST_ARM_MODEL_VFS_RESOURCES,
+    FAST_ARM_SCENE_RESOURCE,
+    FAST_ARM_VIEWER_DECLARATION_RESOURCE,
+    FAST_ARM_VIEWER_FIXTURE_RESOURCE,
+)
+from selfrionette.plugins.robots.fast_arm.adapter.viewer import FAST_ARM_VIEWER_DECLARATION
 
 
 ROBOT_PLUGIN = RobotPluginRegistration(
@@ -16,20 +23,11 @@ ROBOT_PLUGIN = RobotPluginRegistration(
     bundle=FAST_ARM_ROBOT_BUNDLE,
     viewer=FAST_ARM_VIEWER_DECLARATION,
     resources=RobotResourceDeclaration(
-        model=RepositoryResource("assets/mujoco/fast_arm/scene.xml"),
-        configurations=(
-            RepositoryResource("configs/fast_arm/joint_limits.toml"),
-        ),
-        viewer_declaration=RepositoryResource(
-            "assets/mujoco/fast_arm/viewer-profile.json"
-        ),
-        viewer_fixture=RepositoryResource(
-            "assets/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json"
-        ),
-        viewer_vfs_resources=tuple(
-            RepositoryResource(item.resource_path)
-            for item in FAST_ARM_VIEWER_DECLARATION.vfs_assets
-        ),
+        model=FAST_ARM_MODEL_BUNDLE,
+        configurations=(FAST_ARM_JOINT_LIMIT_RESOURCE,),
+        viewer_declaration=FAST_ARM_VIEWER_DECLARATION_RESOURCE,
+        viewer_fixture=FAST_ARM_VIEWER_FIXTURE_RESOURCE,
+        viewer_vfs_resources=FAST_ARM_MODEL_VFS_RESOURCES,
     ),
 )
 

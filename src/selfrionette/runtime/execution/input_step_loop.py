@@ -80,12 +80,12 @@ class RuntimeInputSourceStepLoopRecord:
 
 def _resolve_model_path(
     *, model_path: str | Path | None, config: RuntimeConfig, robot_bundle: RobotBundle
-) -> Path:
+) -> Path | None:
     if model_path is not None:
         return Path(model_path)
     if config.mujoco_model_path is not None:
         return config.mujoco_model_path
-    return robot_bundle.profile.mujoco_model_asset
+    return None
 
 
 def _coerce_viewer_endpoint_m(value: object) -> tuple[float, float, float]:
@@ -177,10 +177,14 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if selection.source_name == "replay":
+        simulator = plugin.build_simulator(
+            model_path=resolved_model_path,
+            initial_keyframe_name=initial_state.source_id,
+        )
         pipeline = build_replay_mujoco_pipeline(
             frames=selection.frames,
             config=runtime_config,
-            model_path=resolved_model_path,
+            simulator=simulator,
             loop=selection.loop,
             publisher=publisher,
             initial_keyframe_name=initial_state.source_id,
@@ -199,6 +203,10 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if selection.source_name == "noop":
+        simulator = plugin.build_simulator(
+            model_path=resolved_model_path,
+            initial_keyframe_name=initial_state.source_id,
+        )
         pipeline = build_replay_mujoco_pipeline(
             frames=(
                 selection.frames
@@ -206,7 +214,7 @@ def build_runtime_input_source_step_loop_plan(
                 else (RawInputFrame(source="noop", timestamp_s=0.0),)
             ),
             config=runtime_config,
-            model_path=resolved_model_path,
+            simulator=simulator,
             loop=True,
             publisher=publisher,
             initial_keyframe_name=initial_state.source_id,

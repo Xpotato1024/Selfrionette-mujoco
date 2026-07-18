@@ -658,20 +658,20 @@ def test_viewer_resource_path_and_public_url_must_identify_the_same_file(
 
 def test_viewer_vfs_validation_rejects_missing_required_model_asset() -> None:
     from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN
+    from selfrionette.runtime.composition.robot_resource import read_package_resource_bytes
 
-    repository_root = Path(__file__).resolve().parents[2]
     incomplete_viewer = replace(
         ROBOT_PLUGIN.viewer,
         vfs_assets=ROBOT_PLUGIN.viewer.vfs_assets[:-1],
     )
     resolved_resources = tuple(
-        (repository_root / item.resource_path).resolve()
-        for item in incomplete_viewer.vfs_assets
+        read_package_resource_bytes(item)
+        for item in ROBOT_PLUGIN.resources.viewer_vfs_resources[:-1]
     )
 
     with pytest.raises(ValueError, match="viewer VFS mapping is missing required mesh asset"):
         _validate_viewer_vfs_coverage(
-            ROBOT_PLUGIN.bundle.profile.mujoco_model_asset,
+            read_package_resource_bytes(ROBOT_PLUGIN.resources.model.entrypoint),
             incomplete_viewer,
             resolved_resources,
         )

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-19
 canonical_for:
   - browser visual smoke
 related:
@@ -149,7 +149,8 @@ connection がある場合は body + site + arm skeleton になる。target と 
   connection として canonical payload body/site positions 間に保持する。
 - fast_arm mesh scene は canonical STL assets を主 arm visual とし、mesh pose
   は payload body transforms からのみ作る。
-- canonical `fast_arm` asset source は `assets/mujoco/fast_arm/` とする。
+- canonical `fast_arm` model/mesh sourceは`fast_arm_core` package、scene/viewer sourceはSelfrionette adapter
+  packageとする。`assets/mujoco/fast_arm/...`はstable logical identifierとして維持する。
   asset contract は `docs/contracts/assets.md` と
   `assets/mujoco/fast_arm/README.md` を参照する。
   viewer は表示用 asset source として参照するだけで、STL / XML の

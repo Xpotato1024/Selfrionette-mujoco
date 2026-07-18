@@ -34,12 +34,12 @@ DEFAULT_CONCRETE_TARGET_POSITION_M = (0.6, 0.0, 0.1)
 
 def _resolve_model_path(
     *, model_path: str | Path | None, config: RuntimeConfig, robot_bundle: RobotBundle
-) -> Path:
+) -> Path | None:
     if model_path is not None:
         return Path(model_path)
     if config.mujoco_model_path is not None:
         return config.mujoco_model_path
-    return robot_bundle.profile.mujoco_model_asset
+    return None
 
 
 def _default_concrete_frame() -> RawInputFrame:
@@ -101,8 +101,8 @@ def build_concrete_mujoco_pipeline(
     resolved_model_path = _resolve_model_path(
         model_path=model_path, config=runtime_config, robot_bundle=robot_bundle
     )
-    simulator = HeadlessMuJoCoSimulator.from_model_path(
-        resolved_model_path,
+    simulator = plugin.build_simulator(
+        model_path=resolved_model_path,
         initial_keyframe_name=initial_state.source_id,
     )
     plugin.validate_model(simulator.model)

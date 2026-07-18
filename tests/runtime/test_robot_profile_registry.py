@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 
 import pytest
 
-import selfrionette.plugins.robots.fast_arm.runtime as fast_arm_plugin_module
+import selfrionette.plugins.robots.fast_arm.adapter.runtime as fast_arm_plugin_module
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.runtime.composition.robot_profile import (
     CoordinateUnitContract,

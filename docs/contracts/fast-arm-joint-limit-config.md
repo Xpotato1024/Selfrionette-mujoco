@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-16
+last_verified: 2026-07-19
 canonical_for:
   - fast_arm TOML joint-angle limits and runtime qpos feasibility guard
 related:
@@ -14,8 +14,10 @@ related:
 
 ## configurationのsource of truth
 
-`configs/fast_arm/joint_limits.toml`がjoint-angle limitの唯一のsource of truthである。
-Python 3.11の`tomllib`によるloadはfast_arm production compositionが所有する。
+`fast_arm_core` packageの`resources/config/joint_limits.toml`がjoint-angle limitの唯一のsource of truthである。
+`configs/fast_arm/joint_limits.toml`は互換用のstable logical identifierであり、repository fileではない。
+Python 3.11の`tomllib`によるpure parse/validationは`fast_arm_core`が、MuJoCo model照合とruntime guardへの
+接続はSelfrionette adapterが所有する。
 input source、kinematics、viewer、transport、generic pipeline、MJCFはlimitを
 読み込まず、複製もしない。schema versionは`1`で、`robot = "fast_arm"`と
 `model = "fast_arm"`の両方を識別し、`angle_unit = "rad"`を必須とし、`status`には

@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoEndpointEvaluation
-from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import (
+from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.endpoint_motion_sanity import (
     _build_fast_arm_fk_site_consistency_diagnostic,
     _fast_arm_fk_site_consistency_qpos_fixtures,
     _vector_norm_m,
@@ -116,7 +116,7 @@ def test_fast_arm_fk_site_consistency_tip_site_is_primary_and_body_reference_is_
     )
 
     monkeypatch.setattr(
-        "selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity.extract_fast_arm_tip_site_endpoint_from_state",
+        "selfrionette.plugins.robots.fast_arm.adapter.diagnostics.endpoint_motion_sanity.extract_fast_arm_tip_site_endpoint_from_state",
         lambda state: fake_body_reference,
     )
 

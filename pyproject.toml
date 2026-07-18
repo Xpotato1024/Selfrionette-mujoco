@@ -7,6 +7,7 @@ name = "selfrionette-mujoco"
 version = "0.0.0"
 requires-python = ">=3.11"
 dependencies = [
+    "fast-arm-core",
     "matplotlib>=3.11.0",
     "mujoco>=3.9.0",
     "websockets>=16.0",
@@ -15,8 +16,26 @@ dependencies = [
 [project.scripts]
 selfrionette = "selfrionette.cli:main"
 
+[tool.setuptools]
+include-package-data = false
+
 [tool.setuptools.packages.find]
 where = ["src"]
+exclude = ["selfrionette.plugins.robots.fast_arm.core*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"selfrionette.plugins.robots.fast_arm.adapter" = [
+    "resources/mujoco/*.xml",
+    "resources/*.json",
+    "resources/fixtures/*.json",
+]
+
+[tool.uv.sources]
+fast-arm-core = { workspace = true }
+
+[tool.uv.workspace]
+members = ["src/selfrionette/plugins/robots/fast_arm/core"]
 
 [dependency-groups]
 dev = [

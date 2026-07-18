@@ -70,7 +70,6 @@ def test_profile_plugin_identity_and_behavioral_boundary(case) -> None:  # noqa:
     ids=lambda case: case.case_id,
 )
 def test_asset_joint_dimension_home_and_endpoint_contract(case) -> None:  # noqa: ANN001
-    assert case.model_asset.is_file()
     bundle = load_case_model(case)
     model = bundle.model
     info = inspect_mujoco_model(model)

@@ -10,6 +10,8 @@ from pathlib import Path
 
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
 from selfrionette.mujoco_backend.model_loader import load_mujoco_model
+from selfrionette.mujoco_backend.model_loader import ModelResourceBundle
+from selfrionette.runtime.composition.robot_resource import PackageResource
 from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
 from selfrionette.runtime.composition.robot_profile import RobotProfile
 from selfrionette.runtime.composition.robot_plugin import RobotRuntimePlugin
@@ -80,13 +82,13 @@ class RobotRuntimePluginConformanceCase:
     expected_profile_id: str
     profile: RobotProfile
     plugin: RobotRuntimePlugin
-    model_asset: Path
+    model_asset: Path | ModelResourceBundle
     home_keyframe_name: str
     expected_joint_names: tuple[str, ...]
     expected_qpos_dimension: int
     expected_qvel_dimension: int
     endpoint_site_name: str
-    joint_limit_config_asset: Path | None
+    joint_limit_config_asset: Path | PackageResource | None
     known_fk_cases: tuple[KnownForwardKinematicsCase, ...]
     ik_round_trip_cases: tuple[InverseKinematicsRoundTripCase, ...]
     mujoco_endpoint_cases: tuple[MuJoCoEndpointConsistencyCase, ...]

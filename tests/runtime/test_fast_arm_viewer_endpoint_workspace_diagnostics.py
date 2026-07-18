@@ -6,7 +6,7 @@ from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulato
 
 import pytest
 
-from selfrionette.plugins.robots.fast_arm.diagnostics.endpoint_motion_sanity import sample_fast_arm_viewer_endpoint_workspace
+from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.endpoint_motion_sanity import sample_fast_arm_viewer_endpoint_workspace
 
 
 def test_fast_arm_viewer_endpoint_workspace_diagnostics_cover_required_samples() -> None:

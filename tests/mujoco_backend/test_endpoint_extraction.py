@@ -14,7 +14,7 @@ from selfrionette.mujoco_backend import (
 )
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
 from selfrionette.plugins.robots.fast_arm import endpoint as endpoint_extraction_module
-from selfrionette.plugins.robots.fast_arm import model_contract as model_contract_module
+from selfrionette.plugins.robots.fast_arm.adapter import model_contract as model_contract_module
 from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
 from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 

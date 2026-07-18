@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Protocol
 
 from selfrionette.kinematics.base import ForwardKinematicsSolver, InverseKinematicsSolver
+from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
 from selfrionette.motion.base import MotionGenerator
 from selfrionette.runtime.composition.robot_profile import RobotProfile
+from selfrionette.runtime.composition.robot_resource import PackageResource
 from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.schemas import MuJoCoState
 
@@ -40,8 +42,15 @@ class RobotRuntimePlugin(Protocol):
         self,
         *,
         model: object,
-        config_path: str | Path | None,
+        config_path: str | Path | PackageResource | None,
     ) -> QposFeasibilityGuard: ...
+
+    def build_simulator(
+        self,
+        *,
+        model_path: str | Path | None,
+        initial_keyframe_name: str | None,
+    ) -> HeadlessMuJoCoSimulator: ...
 
     def endpoint_position_from_state(self, state: MuJoCoState) -> tuple[float, float, float] | None: ...
 

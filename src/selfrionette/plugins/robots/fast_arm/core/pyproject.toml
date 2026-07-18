@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fast_arm_core"
+version = "0.0.0"
+description = "Python-only shared definition and kinematics for fast_arm"
+requires-python = ">=3.11"
+dependencies = ["numpy>=2.0"]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+fast_arm_core = [
+    "resources/model/*.xml",
+    "resources/model/meshes/*.stl",
+    "resources/config/*.toml",
+]

@@ -21,6 +21,11 @@ from selfrionette.runtime.composition.viewer_robot_declaration import (
     decode_viewer_robot_declaration,
     repository_resource_public_url,
 )
+from selfrionette.runtime.composition.robot_resource import (
+    PackageResource,
+    PackageResourceBundle,
+    read_package_resource_bytes,
+)
 
 
 ROBOT_ONBOARDING_CONTRACT_VERSION = 1
@@ -55,24 +60,31 @@ class RepositoryResource:
     def to_document(self) -> dict[str, object]:
         return {"repositoryPath": self.repository_path}
 
+    @property
+    def logical_identifier(self) -> str:
+        return self.repository_path
+
+
+RobotResource = RepositoryResource | PackageResource | PackageResourceBundle
+
 
 @dataclass(frozen=True, slots=True)
 class RobotResourceDeclaration:
-    model: RepositoryResource
-    configurations: tuple[RepositoryResource, ...]
-    viewer_declaration: RepositoryResource
-    viewer_fixture: RepositoryResource
-    viewer_vfs_resources: tuple[RepositoryResource, ...]
+    model: RobotResource
+    configurations: tuple[RobotResource, ...]
+    viewer_declaration: RobotResource
+    viewer_fixture: RobotResource
+    viewer_vfs_resources: tuple[RobotResource, ...]
 
     def __post_init__(self) -> None:
         if not self.configurations:
             raise ValueError("robot resource declaration requires a configuration resource")
         paths = (
-            self.model.repository_path,
-            *(item.repository_path for item in self.configurations),
-            self.viewer_declaration.repository_path,
-            self.viewer_fixture.repository_path,
-            *(item.repository_path for item in self.viewer_vfs_resources),
+            self.model.logical_identifier,
+            *(item.logical_identifier for item in self.configurations),
+            self.viewer_declaration.logical_identifier,
+            self.viewer_fixture.logical_identifier,
+            *(item.logical_identifier for item in self.viewer_vfs_resources),
         )
         if len(paths) != len(set(paths)):
             raise ValueError("robot resource declaration paths must be unique")
@@ -116,12 +128,12 @@ def _resolved_resource(
 
 
 def _validate_robot_resource_ownership(
-    resource: RepositoryResource,
+    resource: RobotResource,
     *,
     robot_id: str,
     resource_kind: str,
 ) -> None:
-    path = PurePosixPath(resource.repository_path)
+    path = PurePosixPath(resource.logical_identifier)
     expected_prefix = (
         ("configs", robot_id)
         if resource_kind == "configuration"
@@ -131,16 +143,37 @@ def _validate_robot_resource_ownership(
         expected = "/".join(expected_prefix) + "/"
         raise ValueError(
             f"{resource_kind} resource is not owned by robot {robot_id!r}: "
-            f"expected path below {expected!r}, got {resource.repository_path!r}"
+            f"expected path below {expected!r}, got {resource.logical_identifier!r}"
         )
 
 
+def _resource_bytes(
+    repository_root: Path,
+    resource: RobotResource,
+    *,
+    allowed_roots: tuple[Path, ...],
+    ownership_root: Path | None = None,
+    ownership_label: str | None = None,
+) -> bytes:
+    if isinstance(resource, PackageResourceBundle):
+        return read_package_resource_bytes(resource.entrypoint)
+    if isinstance(resource, PackageResource):
+        return read_package_resource_bytes(resource)
+    return _resolved_resource(
+        repository_root,
+        resource,
+        allowed_roots=allowed_roots,
+        ownership_root=ownership_root,
+        ownership_label=ownership_label,
+    ).read_bytes()
+
+
 def _validate_viewer_vfs_coverage(
-    model_path: Path,
+    model_path: Path | bytes,
     viewer: ViewerRobotDeclaration,
-    resolved_vfs_resources: tuple[Path, ...],
+    resolved_vfs_resources: tuple[Path | bytes, ...],
 ) -> None:
-    if model_path.suffix.lower() != ".xml":
+    if isinstance(model_path, Path) and model_path.suffix.lower() != ".xml":
         return
     resource_by_vfs_path = {
         declaration.vfs_path: resolved
@@ -156,12 +189,15 @@ def _validate_viewer_vfs_coverage(
             raise ValueError(f"viewer VFS reference escapes the virtual root: {reference!r}")
         return path.as_posix().removeprefix("./")
 
-    def visit(xml_path: Path, logical_path: str) -> None:
+    def read(value: Path | bytes) -> bytes:
+        return value if isinstance(value, bytes) else value.read_bytes()
+
+    def visit(xml_path: Path | bytes, logical_path: str) -> None:
         if logical_path in visited:
             return
         visited.add(logical_path)
         try:
-            root = ElementTree.parse(xml_path).getroot()
+            root = ElementTree.fromstring(read(xml_path))
         except ElementTree.ParseError as exc:
             raise ValueError(f"invalid MuJoCo XML resource {logical_path!r}: {exc}") from exc
         parent = PurePosixPath(logical_path).parent
@@ -259,13 +295,13 @@ class RobotPluginRegistration:
                 "Robot Profile does not reference the registered viewer declaration object"
             )
         if profile.viewer_declaration_resource_path != (
-            self.resources.viewer_declaration.repository_path
+            self.resources.viewer_declaration.logical_identifier
         ):
             raise ValueError(
                 "Robot Profile/viewer declaration resource path mismatch"
             )
         expected_declaration_url = repository_resource_public_url(
-            self.resources.viewer_declaration.repository_path
+            self.resources.viewer_declaration.logical_identifier
         )
         if profile.viewer_declaration_url != expected_declaration_url:
             raise ValueError("Robot Profile/viewer declaration public URL mismatch")
@@ -304,19 +340,32 @@ class RobotPluginRegistration:
                 resource, robot_id=robot_id, resource_kind="configuration"
             )
 
-        model_path = _resolved_resource(
+        model_data = _resource_bytes(
             repository_root,
             self.resources.model,
             allowed_roots=asset_roots,
             ownership_root=asset_ownership_root,
             ownership_label="asset",
         )
-        if model_path != self.bundle.profile.mujoco_model_asset.resolve():
+        profile_model = self.bundle.profile.mujoco_model_asset
+        if isinstance(self.resources.model, RepositoryResource):
+            if not isinstance(profile_model, Path) or (
+                _resolved_resource(
+                    repository_root,
+                    self.resources.model,
+                    allowed_roots=asset_roots,
+                    ownership_root=asset_ownership_root,
+                    ownership_label="asset",
+                )
+                != profile_model.resolve()
+            ):
+                raise ValueError("Robot Profile model asset/resource declaration mismatch")
+        elif profile_model != self.resources.model:
             raise ValueError("Robot Profile model asset/resource declaration mismatch")
-        if self.viewer.model_resource_path != self.resources.model.repository_path:
+        if self.viewer.model_resource_path != self.resources.model.logical_identifier:
             raise ValueError("viewer/backend model resource declaration mismatch")
 
-        declaration_path = _resolved_resource(
+        declaration_data = _resource_bytes(
             repository_root,
             self.resources.viewer_declaration,
             allowed_roots=asset_roots,
@@ -324,18 +373,18 @@ class RobotPluginRegistration:
             ownership_label="asset",
         )
         try:
-            declaration_document = json.loads(declaration_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            declaration_document = json.loads(declaration_data.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError) as exc:
             raise ValueError(
                 "invalid viewer declaration resource: "
-                f"{self.resources.viewer_declaration.repository_path!r}"
+                f"{self.resources.viewer_declaration.logical_identifier!r}"
             ) from exc
         if decode_viewer_robot_declaration(declaration_document) != self.viewer:
             raise ValueError(
                 "registered viewer declaration/resource content mismatch"
             )
 
-        _resolved_resource(
+        _resource_bytes(
             repository_root,
             self.resources.viewer_fixture,
             allowed_roots=asset_roots,
@@ -343,12 +392,12 @@ class RobotPluginRegistration:
             ownership_label="asset",
         )
         if self.viewer.fixture_resource_path != (
-            self.resources.viewer_fixture.repository_path
+            self.resources.viewer_fixture.logical_identifier
         ):
             raise ValueError("viewer fixture/resource declaration mismatch")
 
         resolved_configurations = tuple(
-            _resolved_resource(
+            _resource_bytes(
                 repository_root,
                 resource,
                 allowed_roots=configuration_roots,
@@ -358,17 +407,32 @@ class RobotPluginRegistration:
             for resource in self.resources.configurations
         )
         profile_config = self.bundle.profile.joint_limit_config_asset
-        if profile_config is not None and profile_config.resolve() not in resolved_configurations:
-            raise ValueError("Robot Profile configuration/resource declaration mismatch")
+        if profile_config is not None:
+            if isinstance(profile_config, Path):
+                matching = any(
+                    isinstance(resource, RepositoryResource)
+                    and _resolved_resource(
+                        repository_root,
+                        resource,
+                        allowed_roots=configuration_roots,
+                        ownership_root=configuration_ownership_root,
+                        ownership_label="configuration",
+                    ) == profile_config.resolve()
+                    for resource in self.resources.configurations
+                )
+            else:
+                matching = profile_config in self.resources.configurations
+            if not matching:
+                raise ValueError("Robot Profile configuration/resource declaration mismatch")
 
         declared_vfs_paths = tuple(
-            item.repository_path for item in self.resources.viewer_vfs_resources
+            item.logical_identifier for item in self.resources.viewer_vfs_resources
         )
         viewer_vfs_paths = tuple(item.resource_path for item in self.viewer.vfs_assets)
         if declared_vfs_paths != viewer_vfs_paths:
             raise ValueError("viewer VFS/resource declaration mismatch")
         resolved_vfs_resources = tuple(
-            _resolved_resource(
+            _resource_bytes(
                 repository_root,
                 resource,
                 allowed_roots=asset_roots,
@@ -378,7 +442,7 @@ class RobotPluginRegistration:
             for resource in self.resources.viewer_vfs_resources
         )
         _validate_viewer_vfs_coverage(
-            model_path, self.viewer, resolved_vfs_resources
+            model_data, self.viewer, resolved_vfs_resources
         )
 
     def canonical_identity_bytes(self) -> bytes:
@@ -410,6 +474,8 @@ class RobotPluginRegistration:
 
 
 __all__ = [
+    "PackageResource",
+    "PackageResourceBundle",
     "REQUIRED_ROBOT_CAPABILITIES",
     "ROBOT_ONBOARDING_CONTRACT_VERSION",
     "RepositoryResource",

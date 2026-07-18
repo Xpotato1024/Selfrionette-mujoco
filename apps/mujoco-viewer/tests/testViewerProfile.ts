@@ -4,7 +4,19 @@ import { decodeViewerRobotDeclaration } from "../src/robot-profiles/declaration.
 
 export const FAST_ARM_VIEWER_DECLARATION_DOCUMENT = JSON.parse(
   readFileSync(
-    resolve(process.cwd(), "..", "..", "assets", "mujoco", "fast_arm", "viewer-profile.json"),
+    resolve(
+      process.cwd(),
+      "..",
+      "..",
+      "src",
+      "selfrionette",
+      "plugins",
+      "robots",
+      "fast_arm",
+      "adapter",
+      "resources",
+      "viewer-profile.json",
+    ),
     "utf8",
   ),
 ) as Record<string, unknown>;
