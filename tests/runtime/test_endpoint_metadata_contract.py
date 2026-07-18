@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from selfrionette.schemas.endpoint_metadata import (
+from selfrionette.schemas.endpoint import (
     ControlFrameResolutionStatus,
     EndpointMetadata,
     EndpointProgressStatus,

@@ -1,3 +1,5 @@
+"""Viewer-to-backend control wire domain."""
+
 from __future__ import annotations
 
 import json

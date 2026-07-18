@@ -30,3 +30,13 @@ class MuJoCoState:
     sites: tuple[SiteTransform, ...] = ()
     target_position_m: Vector3 | None = None
     metadata: Mapping[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class RenderState:
+    frame_index: int
+    time_s: float
+    metadata: Mapping[str, object] = field(default_factory=dict)
+
+
+__all__ = ["BodyTransform", "MuJoCoState", "RenderState", "SiteTransform"]

@@ -2,8 +2,9 @@
 
 ## 責務
 
-層間契約を定義する。`RawInputFrame`、`InputIntent`、`TargetCommand`,
-`JointCommand`、`MotionCommand`、`MuJoCoState`, `RenderState` などを置く予定。
+層間契約を定義する。型は`input`、`command`、`state`、`endpoint`、
+`viewer_control`、`experiment_log`、`types`のwire domain単位で所有する。
+package public surfaceは`schemas.__init__`の明示的な`__all__`を正とする。
 
 ## 入力
 
@@ -25,7 +26,4 @@
 
 処理ロジック、MuJoCo 操作、通信、表示、入力読み取りを持たない。
 
-## 今後 stub を置く予定のファイル名
-
-`input_frame.py`, `input_intent.py`, `target_command.py`, `joint_command.py`,
-`motion_command.py`, `mujoco_state.py`, `render_state.py`
+1型1fileの旧moduleは退役済みであり、compatibility facadeとして再導入しない。

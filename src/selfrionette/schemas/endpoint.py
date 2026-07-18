@@ -1,3 +1,5 @@
+"""Endpoint metadata wire vocabulary."""
+
 from __future__ import annotations
 
 from typing import Literal, TypedDict
