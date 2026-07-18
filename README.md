@@ -9,7 +9,6 @@
 - [docs/operations/backend-viewer-startup.md](docs/operations/backend-viewer-startup.md)
 - [docs/operations/websocket-host-port-contract.md](docs/operations/websocket-host-port-contract.md)
 - [docs/operations/runtime-to-viewer-e2e-smoke.md](docs/operations/runtime-to-viewer-e2e-smoke.md)
-- [docs/operations/mujoco-viewer-dev-launcher.md](docs/operations/mujoco-viewer-dev-launcher.md)
 - [docs/reports/audits/r6-g-p1-startup-path-audit.md](docs/reports/audits/r6-g-p1-startup-path-audit.md)
 - [docs/reports/audits/r6-g-p3-startup-script-gap-audit.md](docs/reports/audits/r6-g-p3-startup-script-gap-audit.md)
 - [docs/reports/audits/r6-g-completion-audit.md](docs/reports/audits/r6-g-completion-audit.md)
@@ -29,8 +28,8 @@
 ### backend / dry-run
 
 ```bash
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 1
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x
+uv run selfrionette replay --robot fast_arm --steps 1
+uv run selfrionette replay --robot fast_arm --steps 3 --preset sweep_x
 ```
 
 dry-run は NDJSON payload / backend path の確認用です。WebSocket server は起動せず、browser viewer にも直接接続しません。
@@ -38,7 +37,7 @@ dry-run は NDJSON payload / backend path の確認用です。WebSocket server 
 ### WebSocket publisher
 
 ```bash
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 3
+uv run selfrionette viewer --robot fast_arm --host 127.0.0.1 --port 8766 --steps 3
 ```
 
 browser viewer に payload v0 を流す local/dev publisher です。標準的な loopback は `127.0.0.1:8766` です。
@@ -72,16 +71,6 @@ uv run python scripts/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --st
 ```
 
 browser / viewer smoke の補助導線です。CLI は browser URL と WebSocket endpoint を区別して出力します。R6-F visual elements の観測入口として使います。
-
-### MuJoCo viewer dev launcher
-
-```bash
-uv run python scripts/run_mujoco_viewer_dev.py --host 127.0.0.1 --port 8766 --steps 3 --preset sweep_x
-```
-
-AutoPort / one-command / Tailscale WebView URL 案内は
-[docs/operations/mujoco-viewer-dev-launcher.md](docs/operations/mujoco-viewer-dev-launcher.md) に集約しています。
-browser は強制 open しません。
 
 ## URL と host の注意
 

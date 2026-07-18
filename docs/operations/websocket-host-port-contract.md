@@ -95,7 +95,7 @@ apps/mujoco-viewer/index.html?ws=ws://127.0.0.1:8766
 local browser で同じ machine 上の publisher に接続する最小構成。
 
 ```bash
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 3
+uv run selfrionette viewer --robot fast_arm --host 127.0.0.1 --port 8766 --steps 3
 ```
 
 ```text
@@ -112,7 +112,7 @@ apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 `0.0.0.0` は server 側の bind address であり、browser URL の host ではない。
 
 ```bash
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 0.0.0.0 --port 8766 --steps 3
+uv run selfrionette viewer --robot fast_arm --host 0.0.0.0 --port 8766 --steps 3
 ```
 
 same machine の browser から見る場合:
@@ -131,7 +131,7 @@ apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 publisher machine と browser machine が同一 LAN にある場合は、browser から見える LAN IP を使う。
 
 ```bash
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 0.0.0.0 --port 8766 --steps 3
+uv run selfrionette viewer --robot fast_arm --host 0.0.0.0 --port 8766 --steps 3
 ```
 
 ```text
@@ -146,7 +146,7 @@ apps/mujoco-viewer/?websocketUrl=ws://192.168.x.x:8766
 publisher machine と browser machine が Tailscale 経由でつながる場合は、browser から見える Tailscale IP または MagicDNS 名を使う。
 
 ```bash
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 0.0.0.0 --port 8766 --steps 3
+uv run selfrionette viewer --robot fast_arm --host 0.0.0.0 --port 8766 --steps 3
 ```
 
 ```text

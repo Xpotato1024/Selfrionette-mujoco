@@ -62,7 +62,6 @@ completion audit、implementation report、inventory、handoff、historical reco
 | WebSocket host / port | `docs/operations/websocket-host-port-contract.md` | bind hostとbrowser-visible hostの分離 |
 | WebSocket publisher | `docs/operations/websocket-publisher-runner.md` | local/dev payload delivery |
 | runtime-to-viewer smoke | `docs/operations/runtime-to-viewer-e2e-smoke.md` | backendからbrowser viewerまでの診断入口 |
-| MuJoCo viewer dev launcher | `docs/operations/mujoco-viewer-dev-launcher.md` | one-command / AutoPort / URL案内 |
 | product viewer WASM scene renderer | `docs/operations/product-viewer-wasm-scene-renderer.md` | current product viewerのoperator path |
 | research / implementation log | `research/README.md` | monthly logの責務、entry条件、記録方法 |
 

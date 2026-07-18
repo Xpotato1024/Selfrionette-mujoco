@@ -40,8 +40,8 @@ READMEはこのcurrent手順への入口だけを担う。
 ## backend / dry-run
 
 ```bash
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 1
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x
+uv run selfrionette replay --robot fast_arm --steps 1
+uv run selfrionette replay --robot fast_arm --steps 3 --preset sweep_x
 ```
 
 - dry-run は NDJSON payload / backend path の確認用。
@@ -56,7 +56,7 @@ payload compatibility / unit test path として扱い、manual browser smoke �
 command にはしない。
 
 ```powershell
-uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+uv run selfrionette viewer --robot fast_arm `
   --host 127.0.0.1 `
   --port 8766 `
   --steps 6 `
@@ -150,8 +150,8 @@ http://127.0.0.1:5173/index.html?ws=ws://127.0.0.1:8766
 - `npm run browser:build` は `index.html` が読む `dist/browser/main.js` を作る。
 - host / port / public host contract の正本は
   `docs/operations/websocket-host-port-contract.md` に固定する。
-- AutoPort / one-command / Tailscale WebView URL 案内の正本は
-  `docs/operations/mujoco-viewer-dev-launcher.md` に固定する。
+- bind host と browser-visible host の判断は
+  `docs/operations/websocket-host-port-contract.md` を正本とする。
 
 ## localhost / 127.0.0.1 / 0.0.0.0
 
@@ -235,7 +235,7 @@ npm run dev -- --host 127.0.0.1 --port 5173
 Publisher:
 
 ```powershell
-uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+uv run selfrionette viewer --robot fast_arm `
   --host 127.0.0.1 `
   --port 8766 `
   --steps 6 `

@@ -18,10 +18,10 @@ dry-run entry を追加する。
 ## Commands
 
 ```bash
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 1
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --dt-s 0.0166666667
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --output /tmp/selfrionette_payload.ndjson
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x
+uv run selfrionette replay --robot fast_arm --steps 1
+uv run selfrionette replay --robot fast_arm --steps 3 --dt-s 0.0166666667
+uv run selfrionette replay --robot fast_arm --steps 3 --output /tmp/selfrionette_payload.ndjson
+uv run selfrionette replay --robot fast_arm --steps 3 --preset sweep_x
 ```
 
 ## Output Format
@@ -37,19 +37,19 @@ uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x
 ### Single Step
 
 ```bash
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 1
+uv run selfrionette replay --robot fast_arm --steps 1
 ```
 
 ### Multiple Steps
 
 ```bash
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 3
+uv run selfrionette replay --robot fast_arm --steps 3
 ```
 
 ### Output File
 
 ```bash
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --output /tmp/selfrionette_payload.ndjson
+uv run selfrionette replay --robot fast_arm --steps 3 --output /tmp/selfrionette_payload.ndjson
 ```
 
 ## Scope
