@@ -174,16 +174,29 @@ def test_fast_arm_test_ownership_directories_have_real_tests_and_no_placeholders
         )
 
 
-def test_fast_arm_core_tests_are_selfrionette_free_and_production_has_no_tests() -> None:
+def test_fast_arm_core_test_tree_has_no_selfrionette_imports() -> None:
     violations: list[str] = []
-    for path in (ROOT / "tests/plugins/robots/fast_arm/core").rglob("test_*.py"):
+    for path in (ROOT / "tests/plugins/robots/fast_arm/core").rglob("*.py"):
         if any(
             name == "selfrionette" or name.startswith("selfrionette.")
             for name in _imports(path)
         ):
             violations.append(str(path.relative_to(ROOT)))
     assert not violations
-    assert not tuple(FAST_ARM_ROOT.rglob("test_*.py"))
+    production_test_files = tuple(
+        path
+        for path in FAST_ARM_ROOT.rglob("*.py")
+        if path.name.startswith("test_")
+        or path.name == "conftest.py"
+        or "tests" in path.relative_to(FAST_ARM_ROOT).parts
+    )
+    production_test_directories = tuple(
+        path
+        for path in FAST_ARM_ROOT.rglob("*")
+        if path.is_dir() and path.name == "tests"
+    )
+    assert not production_test_files
+    assert not production_test_directories
 
 
 def test_fast_arm_specific_tests_leave_old_paths_and_generic_owners_in_place() -> None:
