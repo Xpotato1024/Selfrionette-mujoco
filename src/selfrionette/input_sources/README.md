@@ -3,7 +3,8 @@
 ## 責務
 
 Arduino / keyboard / gamepad / replay / OSC / mocap から値を読み、
-`RawInputFrame` を作る。
+`RawInputFrame` を作る。loadcellのserial frame parser、normalization、
+`SerialInputSource`は`loadcell_serial.py`が所有する。
 
 ## 入力
 
@@ -26,7 +27,4 @@ Arduino / keyboard / gamepad / replay / OSC / mocap から値を読み、
 IK禁止、target更新禁止、joint angle 生成禁止、MuJoCo操作禁止、
 WebSocket送信禁止、Three.js 表示変換禁止。
 
-## 今後 stub を置く予定のファイル名
-
-`base.py`, `arduino_serial.py`, `keyboard.py`, `gamepad.py`, `replay.py`,
-`osc.py`, `mocap.py`
+package rootの旧`selfrionette.loadcell_serial`は退役済みであり、再導入しない。

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from selfrionette.loadcell_serial import (
+from selfrionette.input_sources.loadcell_serial import (
     LoadcellEndpointMappingConfig,
     LoadcellEndpointMotionCommandConverter,
     NormalizedLoadcellInputIntent,

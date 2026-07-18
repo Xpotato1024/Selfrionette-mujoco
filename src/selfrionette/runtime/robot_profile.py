@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from selfrionette.viewer_robot_declaration import (
+from selfrionette.runtime.viewer_robot_declaration import (
     ViewerRobotDeclaration,
     repository_resource_public_url,
     viewer_robot_declaration_digest,

@@ -68,6 +68,10 @@ generic schema / domain / Protocol
 - generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
   `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
+- generic Robot Profile contractは`selfrionette.runtime.robot_profile`、viewer向けrobot declaration
+  contractは`selfrionette.runtime.viewer_robot_declaration`が所有する。package rootの旧moduleは退役済みである。
+- loadcell serial parser、normalization、`SerialInputSource`は
+  `selfrionette.input_sources.loadcell_serial`が所有する。package rootの旧moduleは退役済みである。
 - fast_arm固有implementationは`plugins/robots/fast_arm/`だけが所有する。旧`robots/fast_arm.py`、
   `robot_registry.py`、`runtime/fast_arm_*.py`、旧registry moduleは退役済みであり、再作成しない。
 - generic `kinematics`はsolver Protocolだけ、generic `mujoco_backend`はnamed reference / site extraction、
@@ -75,6 +79,8 @@ generic schema / domain / Protocol
   diagnosticはplugin packageから公開する。
 - package root `selfrionette.runtime`はpublic compatibility surfaceをlazy resolveするが、package importだけで
   concrete catalogをloadしない。
+- package root `selfrionette/`は`__init__.py`だけを持つ。空の`selfrionette.robots` namespaceと、
+  `robot_profile.py`、`viewer_robot_declaration.py`、`loadcell_serial.py`をrootへ再導入しない。
 - production discoveryを起動できるgeneric moduleはcatalogだけとする。test fixtureはproduction namespaceへ
   置かず、明示的なtest discovery rootを使用する。
 - registration resourceは宣言identityと同じ`assets/mujoco/<robot_id>/` / `configs/<robot_id>/`へ限定し、

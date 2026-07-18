@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from math import isfinite
 from typing import cast
 
-from selfrionette.loadcell_serial import (
+from selfrionette.input_sources.loadcell_serial import (
     LoadcellEndpointMotionCommandConverter,
     LoadcellNormalizedInputIntentConverter,
     NormalizedLoadcellInputIntent,

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from selfrionette.loadcell_serial import LoadcellEndpointMotionCommandConverter, NormalizedLoadcellInputIntent
+from selfrionette.input_sources.loadcell_serial import LoadcellEndpointMotionCommandConverter, NormalizedLoadcellInputIntent
 from selfrionette.runtime import ResolvedDesiredEndpoint, resolve_desired_endpoint_from_motion_command
 from selfrionette.schemas import MotionCommand, TargetCommand
 
@@ -117,4 +117,3 @@ def test_resolve_desired_endpoint_from_loadcell_motion_command_output() -> None:
     assert resolved.desired_endpoint_m == (0.1, 0.2, 0.3)
     assert resolved.source == 'MotionCommand.metadata["desired_endpoint_m"]'
     assert resolved.metadata["source_kind"] == "loadcell_serial"
-

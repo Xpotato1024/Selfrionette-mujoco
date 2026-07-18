@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from selfrionette.viewer_robot_declaration import (
+from selfrionette.runtime.viewer_robot_declaration import (
     ViewerRobotDeclaration,
     decode_viewer_robot_declaration,
 )

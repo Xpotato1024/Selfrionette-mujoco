@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from selfrionette.loadcell_serial import (
+from selfrionette.input_sources.loadcell_serial import (
     LoadcellNormalizationConfig,
     build_r7_a_lite_smoke_endpoint_mapping_config,
     run_loadcell_serial_dry_run_smoke,
