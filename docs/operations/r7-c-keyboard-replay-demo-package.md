@@ -51,14 +51,14 @@ uv run pytest tests/input_sources/test_r7_b_keyboard_input_source_smoke.py
 
 ## replay fixture demo creation
 
-replay fixture demo は `scripts/run_replay_mujoco_dry_run.py` を使って作る。
+replay fixture demo は統一 CLI の `selfrionette replay` を使って作る。
 `sweep_x` の deterministic fixture を使い、payload / metadata の形が崩れていないことだけを確認する。
 
 推奨コマンド:
 
 ```powershell
 New-Item -ItemType Directory -Force artifacts\r7-c | Out-Null
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 6 --preset sweep_x --output artifacts/r7-c/r7-c-234-replay-demo.ndjson
+uv run selfrionette replay --robot fast_arm --steps 6 --preset sweep_x --output artifacts/r7-c/r7-c-234-replay-demo.ndjson
 ```
 
 この出力は replay demo の local artifact であり、browser 用の viewer 生成物ではない。

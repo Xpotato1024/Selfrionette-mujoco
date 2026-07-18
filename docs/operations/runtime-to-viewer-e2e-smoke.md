@@ -28,8 +28,8 @@ current visual elementsを起動導線込みで観測できることだけを確
 
 - `docs/operations/websocket-host-port-contract.md` にある bind host / browser-visible host /
   viewer page URL / WebSocket endpoint URL の contract を前提にする。
-- AutoPort / one-command / Tailscale WebView dev launcher の正本は
-  `docs/operations/mujoco-viewer-dev-launcher.md` にある。
+- CLI と host / port の正本は `docs/operations/unified-cli.md` と
+  `docs/operations/websocket-host-port-contract.md` にある。
 - viewer は rendering-only のままにする。
 - browser-side MuJoCo model loading、viewer-side FK / IK、viewer-side qpos pose recompute は追加しない。
 - production deployment、auth / TLS / reverse proxy、hardware / serial / OSC は扱わない。
@@ -47,8 +47,8 @@ backend / dry-run 起動
 ## 最短 loopback 手順
 
 ```bash
-uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x
-uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 3
+uv run selfrionette replay --robot fast_arm --steps 3 --preset sweep_x
+uv run selfrionette viewer --robot fast_arm --host 127.0.0.1 --port 8766 --steps 3
 cd apps/mujoco-viewer
 npm ci
 npm run browser:build
@@ -66,8 +66,8 @@ viewer page URL と WebSocket endpoint URL は別である。host / port の詳�
 
 ## WebSocket publisher 起動
 
-- `uv run python scripts/run_replay_mujoco_dry_run.py --steps 3 --preset sweep_x` で payload / backend path を確認する。
-- `uv run python scripts/run_replay_mujoco_websocket_publisher.py --host 127.0.0.1 --port 8766 --steps 3` で
+- `uv run selfrionette replay --robot fast_arm --steps 3 --preset sweep_x` で payload / backend path を確認する。
+- `uv run selfrionette viewer --robot fast_arm --host 127.0.0.1 --port 8766 --steps 3` で
   loopback の WebSocket endpoint を開く。
 - `127.0.0.1:8766` は local smoke 用の既定値である。
 - `0.0.0.0` は bind address であり browser URL の host ではない。

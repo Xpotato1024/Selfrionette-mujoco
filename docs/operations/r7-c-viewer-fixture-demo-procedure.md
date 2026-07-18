@@ -52,7 +52,7 @@ publisher は loopback の `127.0.0.1:8766` を基本にする。
 
 ```powershell
 cd <repository root>
-uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+uv run selfrionette viewer --robot fast_arm `
   --host 127.0.0.1 `
   --port 8766 `
   --steps 6 `

@@ -29,7 +29,6 @@ related:
 - `live-viewer-smoke.md`: live viewer smoke
 - `runtime-to-viewer-e2e-smoke.md`: backendからbrowser viewerまでのE2E診断
 - `browser-visual-smoke.md`: browser-visible scene smoke
-- `mujoco-viewer-dev-launcher.md`: one-command / AutoPort / URL案内
 - `product-viewer-wasm-scene-renderer.md`: product-owned WASM scene renderer
 
 ## reusable test / manual procedure
