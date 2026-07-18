@@ -78,6 +78,10 @@ generic schema / domain / Protocol
   `selfrionette.input_sources.loadcell_serial`が所有する。package rootの旧moduleは退役済みである。
 - fast_arm固有implementationは`plugins/robots/fast_arm/`だけが所有する。旧`robots/fast_arm.py`、
   `robot_registry.py`、`runtime/fast_arm_*.py`、旧registry moduleは退役済みであり、再作成しない。
+- fast_arm package内をshared coreとSelfrionette adapterへ分離するときは、`core -> adapter`または
+  `core -> selfrionette`を禁止し、`adapter -> core`と`adapter -> generic Protocol / schema`だけを許可する。
+  generic layer、他robot、viewerはfast_arm core implementationへ依存しない。root `plugin.py`の
+  `ROBOT_PLUGIN`を唯一のproduction discovery入口とし、coreまたはadapterに第二のentryを作らない。
 - generic `kinematics`はsolver Protocolだけ、generic `mujoco_backend`はnamed reference / site extraction、
   model load / reset、simulation primitiveだけを公開する。fast_arm固有solver、name contract、endpoint wrapper、
   diagnosticはplugin packageから公開する。

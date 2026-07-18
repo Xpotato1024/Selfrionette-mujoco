@@ -2,16 +2,17 @@
 
 ## 責務
 
-FK / IK / joint convention / joint limit / motor_space と joint_space の変換を
-扱う純粋な運動学層。
+genericなFK / IK solver Protocolを所有するport package。
+concrete robotの運動学、joint convention、joint limit、motor-space / joint-space変換は
+各robot pluginが所有し、fast_arm実装をこのpackageへ戻さない。
 
 ## 入力
 
-schema 型または純粋な数値入力。
+generic schema型またはProtocolで定義した純粋な数値入力。
 
 ## 出力
 
-FK / IK / joint diagnostic result などの純粋な計算結果。
+generic solver Protocolで定義した計算結果。
 
 ## 依存してよい層
 
@@ -19,14 +20,10 @@ FK / IK / joint diagnostic result などの純粋な計算結果。
 
 ## 依存してはいけない層
 
-`input_sources`, `input_interpreters`, `mujoco_backend`, `transport`, `runtime`
+`input_sources`, `input_interpreters`, `mujoco_backend`, `transport`, `runtime`,
+concrete robot plugin
 
 ## 禁止事項
 
-入力デバイス依存禁止、MuJoCo data 直接操作禁止、WebSocket禁止、Three.js表示禁止、
-runtime依存禁止。
-
-## 今後 stub を置く予定のファイル名
-
-`fast_arm_kinematics.py`, `ik_controller.py`, `joint_convention.py`,
-`joint_limits.py`
+入力デバイス依存禁止、MuJoCo data直接操作禁止、WebSocket禁止、Three.js表示禁止、
+runtime / input / transport依存禁止。concrete solver、robot固有定数、stubを置かない。
