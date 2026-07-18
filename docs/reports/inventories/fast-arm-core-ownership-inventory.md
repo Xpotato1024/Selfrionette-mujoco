@@ -61,13 +61,14 @@ viewerはfast_arm core implementation、FK、IK、安全判定を参照しない
 
 | 区分 | ownership rule |
 |---|---|
-| shared core | fast_arm固有で、Selfrionette schema / runtime / backendに依存しないrobot identity、joint / unit / frame spec、数式、limit data、initial values、model / geometry、simulator非依存fixture |
-| Selfrionette adapter | core valueをgeneric Protocol / schema / RobotBundle / Profile / Runtime Plugin / typed provider / resource declaration / viewer declarationへ接続する変換とvalidator |
+| shared core | Python-onlyの独立package `fast_arm_core`。Selfrionette schema / runtime / backendに依存しないrobot identity、joint / unit / frame spec、数式、limit data、initial pose definition、`arm.xml`、mesh、simulator非依存fixture |
+| Selfrionette adapter | core valueをgeneric Protocol / schema / RobotBundle / Profile / Runtime Plugin / typed provider / resource declaration / viewer declarationへ接続する変換とvalidator、およびMuJoCo `scene.xml` |
 | integration | MuJoCo site、runtime、payload、viewer、CLIを複数layerにまたがって照合する診断・test。coreへ移さない |
 | repository operation | CLI wrapper、fixture export、viewer operation、hardware operation、CI、migration / validation docs。production library APIにしない |
 | generic ownerに維持 | generic FK/IK Protocol、schema、MuJoCo primitive、motion、runtime composition、transport、viewer renderer、catalog / discovery contract |
 
-coreはSelfrionetteをimportしない。adapterだけがcoreとSelfrionette contractの両方を参照する。
+coreの公開Python package identityは`fast_arm_core`であり、Selfrionette namespaceへ所属させない。
+coreはSelfrionetteをimportしない。adapterだけが`fast_arm_core`とSelfrionette contractの両方を参照する。
 robot固有の数式、定数、resource pathをadapterへ複製せず、adapterはcore representationを変換する。
 
 ## 3. Complete inventory
@@ -84,9 +85,9 @@ robot固有の数式、定数、resource pathをadapterへ複製せず、adapter
 | `viewer.py` | JSON decodeとViewer declaration | plugin、profile、viewer compatibility tests | plugin | `adapter/viewer.py` / adapter | #445 | viewer contractはSelfrionette側 | URL / digest / VFS |
 | `endpoint.py` | generic state/referenceからfast_arm endpoint抽出 | diagnostics、runtime/backend tests、startup script | plugin | `adapter/endpoint.py` / adapter | #445 | MuJoCoState / backend contract依存 | fallback / frame |
 | `feasibility.py` | TOML parse、model照合、runtime guard | runtime、joint-limit tests | plugin | pure parse/specは`core/joint_limits.py`、guard変換は`adapter/feasibility.py` | #445 | data ruleとSelfrionette guardを分離 | reject/hold semantics |
-| `initial_state.py` | initial valuesと`InitialStateContract` | Bundle、readiness、diagnostics、tests | plugin | valuesは`core/reference/initial_state.py`、contractは`adapter/initial_state.py` | #445 | 値SoTとschema adapterを分離 | exact float / identity |
-| `kinematics.py` | solver-local FK/IK、model-aligned FK、geometry / ref定数、Selfrionette schema result | runtime、diagnostics、kinematics/motion/runtime tests | plugin | pure calculation/resultは`core/kinematics.py`と`core/model_kinematics.py`、generic Protocol/schema wrapperは`adapter/kinematics.py` | #445 | coreのtuple/resultとSelfrionette `JointCommand` / `Vector3`を分離 | frames / exact convergence / class identity |
-| `model_contract.py` | model/body/site namesとbackend validator | profile、endpoint、runtime、feasibility、tests | plugin | pure namesは`core/model_spec.py`、backend validatorは`adapter/model_contract.py` | #445 | name SoTとMuJoCo adapterを分離 | error / fallback semantics |
+| `initial_state.py` | initial valuesと`InitialStateContract` | Bundle、readiness、diagnostics、tests | plugin | canonical definitionは`core/src/fast_arm_core/reference/initial_state.py`、contractは`adapter/initial_state.py` | #445 | core SoTとschema projectionを分離 | exact float / identity |
+| `kinematics.py` | solver-local FK/IK、model-aligned FK、geometry / ref定数、Selfrionette schema result | runtime、diagnostics、kinematics/motion/runtime tests | plugin | pure calculation/resultは`core/src/fast_arm_core/{kinematics,model_kinematics}.py`、generic Protocol/schema wrapperは`adapter/kinematics.py` | #445 | `fast_arm_core` resultとSelfrionette `JointCommand` / `Vector3`を分離 | frames / exact convergence / class identity |
+| `model_contract.py` | model/body/site namesとbackend validator | profile、endpoint、runtime、feasibility、tests | plugin | pure namesは`core/src/fast_arm_core/model_spec.py`、backend validatorは`adapter/model_contract.py` | #445 | name SoTとMuJoCo adapterを分離 | error / fallback semantics |
 | `diagnostics/endpoint_motion_sanity.py` | runtime / solver / site / trajectory診断 | script、runtime tests | plugin | `adapter/diagnostics/` / integration | #445、testは#446 | cross-layerでcore単体ではない | report fields / exit semantics |
 | `diagnostics/jacobian_mobility.py` | MuJoCo / motion policy Jacobian診断 | script、runtime tests | plugin | `adapter/diagnostics/` / integration | #445、testは#446 | runtime/MuJoCo依存 | tolerance / labels |
 | `diagnostics/neutral_initial_pose.py` | model / limit / collision evidence / pose評価 | scripts、runtime tests | plugin | `adapter/diagnostics/` / integration | #445、testは#446 | core referenceとruntime evidenceを接続 | ranking / evidence |
@@ -96,13 +97,13 @@ robot固有の数式、定数、resource pathをadapterへ複製せず、adapter
 
 | current path | item / responsibility | current consumers | current owner | proposed owner / kind | migration | rationale | compatibility risk |
 |---|---|---|---|---|---|---|---|
-| `assets/mujoco/fast_arm/arm.xml` | joint axis/ref、body/link、inertial、actuator、`home`、`tip` | scene include、Python/WASM model load、FK/site tests | asset | `core/resources/model/arm.xml` / canonical | #445 | physical model SoT | include path / names / qpos |
-| `assets/mujoco/fast_arm/scene.xml` | canonical scene、`arm.xml` include | Profile、plugin、loader、viewer、scripts/tests | asset | `core/resources/model/scene.xml` / canonical | #445 | model entry resource | public URL / include |
-| `assets/mujoco/fast_arm/meshes/*.stl`（5件） | robot geometry | MJCF、viewer VFS、asset tests | asset | `core/resources/model/meshes/` / canonical | #445 | simulator間共有geometry | filename case / binary integrity |
+| `assets/mujoco/fast_arm/arm.xml` | joint axis/ref、body/link、inertial、actuator、`home`、`tip` | scene include、Python/WASM model load、FK/site tests | asset | `core/src/fast_arm_core/resources/model/arm.xml` / core representation | #445 | shared robot model。`home`はcore initial pose definitionのprojection | include path / names / qpos |
+| `assets/mujoco/fast_arm/scene.xml` | `arm.xml` include、visual quality、skybox、ground texture/material、light、floor | Profile、plugin、loader、viewer、scripts/tests | asset | `adapter/resources/mujoco/scene.xml` / adapter | #445 | Selfrionette MuJoCo sceneでありshared robot coreではない | public URL / include / model load |
+| `assets/mujoco/fast_arm/meshes/*.stl`（5件） | robot geometry | MJCF、viewer VFS、asset tests | asset | `core/src/fast_arm_core/resources/model/meshes/` / canonical | #445 | shared robot geometry | filename case / binary integrity |
 | `assets/mujoco/fast_arm/viewer-profile.json` | viewer serialization、URL/VFS/style/joint projection | viewer adapter、plugin、TS facade/tests | asset | `adapter/resources/viewer-profile.json` / adapter | #445 | rendering declarationはSelfrionette contract | digest / public URL |
 | `assets/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json` | runtime-generated qpos viewer fixture | viewer tests/demo、export script | asset | `adapter/resources/fixtures/` / integration-derived | #445 | payload/runtime metadataを含みcore単体fixtureではない | exact bytes / metadata |
-| `configs/fast_arm/joint_limits.toml` | software qpos limit data | profile、plugin、feasibility、tests/docs | config | `core/resources/config/joint_limits.toml` / canonical | #445 | robot固有limit SoT | path / reject behavior |
-| `assets/mujoco/fast_arm/README.md` | asset usage note | human / docs links | asset docs | `core/resources/README.md`相当 / documentation | #445 | resourceと同居させる | stale command/path |
+| `configs/fast_arm/joint_limits.toml` | software qpos limit data | profile、plugin、feasibility、tests/docs | config | `core/src/fast_arm_core/resources/config/joint_limits.toml` / canonical | #445 | robot固有limit SoT | path / reject behavior |
+| `assets/mujoco/fast_arm/README.md` | robot modelとMuJoCo sceneをまとめたasset usage note | human / docs links | asset docs | `adapter/resources/README.md`相当 / documentation | #445 | core modelとadapter sceneのassembly手順を記録 | stale command/path/ownership |
 
 `legacy/fast_arm_control/mujoco_sim/`とzip内には同名XMLがあるが参照専用duplicateである。#445はcopy元にせず、
 現行canonical assetだけを移す。fixtureはsimulator非依存referenceではなくruntime/viewer integration evidenceなのでcoreへ入れない。
@@ -133,7 +134,7 @@ robot固有の数式、定数、resource pathをadapterへ複製せず、adapter
 | `apps/mujoco-viewer/src/robot-profiles/fastArm.ts` | 未接続時のfast_arm declaration URL facade | `robot-profiles/registry.ts` -> product viewer / tests | viewer compatibility | Selfrionette adapter compatibility facade | #445 | declaration内容を再定義せずstable URLだけを読む | public URL / fallback |
 | `apps/mujoco-viewer/src/robot-profiles/declaration.ts` | generic resource path / URL decode、digest、compatibility | product viewer、viewer tests | generic viewer | generic ownerに維持 | #445でpackage resource binding対応 | fast_armを直接importしない | schema / fail-closed behavior |
 | `apps/mujoco-viewer/vite.config.ts` | repository `assets/`のpublic配信 | Vite dev/build、viewer test | repository/viewer operation | generic viewer operation | #445でpackage resource route対応 | core実装をviewerから参照させない | clean build / URL |
-| `pyproject.toml` | Python package discovery / package-data状態 | build backend、`uv sync`、install | repository packaging | repository operation | #445 | XML/STL/JSON/TOML package-dataとwheel smokeが必要 | installed resource欠落 |
+| `pyproject.toml` | root Python package discovery / package-data状態 | build backend、`uv sync`、install | repository packaging | repository operation | #445 | rootから`fast_arm_core`を導入する方式を選び、core側`pyproject.toml`がXML/STL/TOML package-dataを所有 | installed resource/import欠落 |
 | `.github/workflows/ci.yml` | checkout/editable suites | GitHub Actions | repository | repository operation | #445/#446で必要時同期 | installed smokeは現在なし | clean install gap |
 | `docs/architecture/dependency-boundaries.md` | import / core-adapter dependency rule | source、architecture tests、human | architecture | generic ownerに維持 / canonical | #444で最小更新、#445でactual path照合 | dependency directionの正本 | stale boundary |
 | `docs/contracts/assets.md` | MJCF/STL/resource ownership contract | registration、asset tests、human | architecture | generic resource contract + adapter projection / canonical | #445 | resource path / include / URL rule | stale physical path |
@@ -153,7 +154,7 @@ robot固有の数式、定数、resource pathをadapterへ複製せず、adapter
 
 | subject | current canonical owner | duplicate / derived representation | future owner in #445 | consolidation rule |
 |---|---|---|---|---|
-| robot identity/version | `plugin.py` registration + Bundle `VersionedIdentity` | Profile ID、viewer profile ID/model version、fixture metadata | adapter registration、coreはrobot spec identityを提供 | logical/schema/model versionを混同しない |
+| robot identity/version | `plugin.py` registration + Bundle `VersionedIdentity` | Profile ID、viewer profile ID/model version、fixture metadata | `fast_arm_core` definition + adapter registration | core package identity、robot logical version、registration schema versionを混同しない |
 | joint names/order | `arm.xml`とresolved Profileの一致 | TOML sections、viewer JSON、fixture metadata、tests | core model/spec、adapterはprojection | coreから生成/照合し値を複製しない |
 | joint axes | `arm.xml` | `kinematics.py` model-aligned body chain、diagnostic期待値、historical report | core model + model-aligned FK | #445でcore ownerへ統合し値は不変 |
 | units/frame | Profile coordinate contract、MJCF、solver contract | viewer JSON、fixture metadata、initial contract | core spec + adapter projection | solver-localとMuJoCo worldを区別 |
@@ -163,16 +164,20 @@ robot固有の数式、定数、resource pathをadapterへ複製せず、adapter
 | IK | `kinematics.py` | diagnostics / fixture qposはderived | core kinematics | tolerance、failure、seed continuity不変 |
 | feasibility | TOML + `feasibility.py` accepted/reject logic | diagnostic metadata | core limit parse/spec + adapter guard | accepted bool / hold semanticsはadapter contract |
 | joint limits | `configs/fast_arm/joint_limits.toml` | docs、test literals | core resource TOML | test literalはinvalid-case fixtureだけ許可 |
-| initial poses | `arm.xml` `home` keyframe | `initial_state.py` exact qpos/tip/orientation、viewer label、docs | core reference values + adapter contract | XMLをactive pose SoTとしreferenceをhash/exact consistencyで検証 |
+| initial poses | 現在は`arm.xml` `home`と`initial_state.py`に重複 | MJCF home、Selfrionette `InitialStateContract`、reference qpos fixture、expected endpoint/orientation、viewer metadata | `fast_arm_core` initial pose definition | #445で現行MJCF値をcore definitionへ移し、MJCF/contract/fixture/metadataをprojectionとして完全一致させる |
 | endpoint frame | physicalはMuJoCo world `tip`、solver-localは`base_link` | Profile、model contract、runtime adapters | core frame spec + adapter endpoint | 自動同一視しない |
 | MuJoCo model names | `model_contract.py` + MJCF一致 | Profile、docs/tests | core model spec + adapter validator | fallbackはexplicit opt-in |
-| geometry/mesh | MJCF + STL | viewer compiled geometry | core resources | browser独自geometry SoTを作らない |
-| MJCF | `arm.xml` / `scene.xml` | model-aligned FKのhand-coded transform | core resources | transform定数をcore model specへ集約 |
+| geometry/mesh | `arm.xml` + STL | viewer compiled geometry | `fast_arm_core` resources | browser独自geometry SoTを作らない |
+| robot MJCF | `arm.xml` | model-aligned FKのhand-coded transform | `fast_arm_core` resource | transform定数をcore model specへ集約 |
+| MuJoCo scene | `scene.xml` | visual quality、skybox、ground、light、floorと`arm.xml` include | adapter resource。floor等は将来scene/task ownerへ分離可能 | robot coreへ含めず、include先のcore bytesとの整合を検証 |
 | viewer profile | `viewer-profile.json` | decoded Python/TS objects、TypeScript URL facade | adapter resource | coreをviewerからimportしない |
 | viewer VFS resources | viewer JSON mapping + registration equality | Vite `publicDir` route、tests | adapter declaration referencing core resources | URLは維持しresource registry経由で配信 |
-| reference qpos | XML `home`、viewer fixture frames | initial contract、tests | core reference/model | exact comparison |
-| reference FK | initial contract tip/orientation、FK/site tests | docs report values | core reference fixture | source/provenance/frame付きfixtureにする |
+| reference qpos | XML `home`、viewer fixture frames | initial contract、tests | `fast_arm_core` initial pose definition | XML/contract/fixtureをderived representationとしてexact comparison |
+| reference FK | initial contract tip/orientation、FK/site tests | docs report values | `fast_arm_core` reference definition / derived fixture | solver-localとMuJoCo worldのframe/provenanceを分けて完全一致を検証 |
 | diagnostics fixtures | runtime-generated viewer JSON、test expected dicts | logs / reports | adapter/integration | core fixtureと混在させない |
+
+#445ではinitial poseのfloat値、joint order、frame、endpoint、orientationをprojection間で暗黙変換しない。
+XML、Python definition、fixture、viewer metadataのいずれかが不一致ならfail closedする。
 
 ## 5. Proposed in-repository structure
 
@@ -182,19 +187,7 @@ robot固有の数式、定数、resource pathをadapterへ複製せず、adapter
 src/selfrionette/plugins/robots/fast_arm/
 ├── __init__.py
 ├── plugin.py                         # 唯一のproduction discovery entry
-├── core/
-│   ├── __init__.py                   # discovery entryではない
-│   ├── definition.py                 # identity、joint/unit/frame convention
-│   ├── kinematics.py                 # solver-local FK/IK
-│   ├── model_kinematics.py           # MJCF-aligned pure FK
-│   ├── model_spec.py                 # body/site/joint name spec
-│   ├── joint_limits.py               # pure TOML data parse/validation
-│   ├── reference/
-│   │   └── initial_state.py          # exact reference values
-│   └── resources/
-│       ├── model/{scene.xml,arm.xml,meshes/...}
-│       └── config/joint_limits.toml
-└── adapter/
+├── adapter/
     ├── __init__.py
     ├── bundle.py
     ├── profile.py
@@ -206,10 +199,33 @@ src/selfrionette/plugins/robots/fast_arm/
     ├── initial_state.py
     ├── model_contract.py
     ├── diagnostics/{endpoint_motion_sanity,jacobian_mobility,neutral_initial_pose}.py
-    └── resources/{viewer-profile.json,fixtures/fast_arm_sweep_x_qpos.json}
+    └── resources/
+        ├── mujoco/scene.xml
+        ├── viewer-profile.json
+        └── fixtures/fast_arm_sweep_x_qpos.json
+└── core/                              # 将来の独立repository mount point
+    ├── pyproject.toml
+    ├── src/
+    │   └── fast_arm_core/
+    │       ├── __init__.py
+    │       ├── definition.py
+    │       ├── kinematics.py
+    │       ├── model_kinematics.py
+    │       ├── model_spec.py
+    │       ├── joint_limits.py
+    │       ├── reference/
+    │       │   └── initial_state.py          # canonical initial pose definition
+    │       └── resources/
+    │           ├── model/{arm.xml,meshes/...}
+    │           └── config/joint_limits.toml
+    └── tests/                         # 実体移動は#446
 ```
 
-`adapter/kinematics.py`はpure core resultを`Vector3` / `JointCommand`へ変換し、generic
+`core/`直下に`__init__.py`を置かず、`core/`自体をSelfrionette Python packageにしない。shared APIのimportは
+`from fast_arm_core import ...`であり、`from selfrionette.plugins.robots.fast_arm.core import ...`を使用しない。
+物理配置はplugin package内のmount pointだが、Python package identityはSelfrionette namespaceから独立する。
+
+`adapter/kinematics.py`は`fast_arm_core`のpure resultを`Vector3` / `JointCommand`へ変換し、generic
 `ForwardKinematicsSolver` / `InverseKinematicsSolver`を満たす現在のclassを所有する。旧
 `fast_arm/kinematics.py`は#445の移行中だけadapter classとcore constantをthin re-exportし、class / function identityを
 維持する。ほかの旧module pathも限定re-exportだけとし、別factory、fallback、registrationを持たせない。
@@ -221,23 +237,24 @@ discovery入口にはしない。
 ```text
 generic Protocol / schema / composition contract
                     <- adapter <- plugin.py / ROBOT_PLUGIN
-core                <- adapter
+fast_arm_core       <- adapter
 ```
 
 許可:
 
-- core -> Python標準library、明示済み数値dependency、core内module / resource
-- adapter -> core + generic Selfrionette contract / primitive
+- `fast_arm_core` -> Python標準library、明示済み数値dependency、core内module / resource
+- adapter -> `fast_arm_core` + generic Selfrionette contract / primitive
 - plugin.py -> adapter assemblyだけ
 - runtime composition -> catalog / registrationから得たtyped provider
 
 禁止:
 
-- core -> `selfrionette`
+- `fast_arm_core` -> `selfrionette`
 - generic layer / catalog /他robot -> fast_arm core
 - viewer -> fast_arm core implementation
 - core -> runtime、MuJoCo backend adapter、transport、CLI、experiment / evaluation
 - adapterでrobot固有数式、定数、resource pathを再定義
+- `selfrionette.plugins.robots.fast_arm.core`をshared import APIにすること
 - `__init__.py`副作用登録、coreからの第二production entry、runtime `sys.path`変更
 
 MuJoCoはphysical state SoT、browser viewerはrendering-onlyを維持する。
@@ -246,9 +263,13 @@ MuJoCoはphysical state SoT、browser viewerはrendering-onlyを維持する。
 
 ### #445: 同一repository段階
 
-- resource実体は`fast_arm/core/resources/`、viewer/runtime fixtureは`adapter/resources/`へ所有を寄せる。
+- shared resource実体は`core/src/fast_arm_core/resources/`、MuJoCo `scene.xml`、viewer declaration、runtime fixtureは
+  `adapter/resources/`へ所有を寄せる。`scene.xml`はadapterからcore-owned `arm.xml`をincludeする。
+- `fast_arm_core`は独立したPython-only packageとし、installed/editable/wheelの全形態で同じpackage identityとAPIを使う。
+- root projectからの導入方式をpath dependency、workspace、package discoveryのどれにするかは#445で実測して決める。
+  runtimeの`sys.path`変更は使わない。
 - Pythonは`importlib.resources`相当のpackage resource APIでinstalled/editableの双方を解決する。
-- #445では`pyproject.toml`のpackage-dataを必要最小限更新し、wheelにXML/STL/JSON/TOMLが含まれることをtestする。
+- #445ではcore側`pyproject.toml`のpackage-dataを設定し、wheelにXML/STL/TOMLが含まれることをtestする。
 - MuJoCo include / mesh relative pathを維持する。materialized filesystem pathが必要なAPIではresource contextの寿命を明示する。
 - generic resource contractへpackage resourceを表すtyped declarationをadditiveに追加し、adapterがcore package / relative
   resourceと既存のlogical public pathを一対一でbindする。generic resolverはrobot IDからpackage pathを推測しない。
@@ -258,10 +279,13 @@ MuJoCoはphysical state SoT、browser viewerはrendering-onlyを維持する。
 ### #447: 独立repository段階
 
 - #447までは外部repository、submodule、subtree、vendor copyを導入しない。
-- #447後もSelfrionette側の`fast_arm/core/`配置とadapter APIを維持する。
+- #447後もSelfrionette側の`fast_arm/core/`mount point、`fast_arm_core` package identity、adapter import/APIを維持する。
+- `core/`directory全体を別repositoryまたは固定revisionの外部checkoutへ置換しても、adapterの
+  `from fast_arm_core import ...`を変更しないことを成功条件とする。
 - submodule / pinned snapshot / subtree / release archiveの最終選択、repository名、visibility、ownershipは#447で決める。
 - runtime network fetch、floating revision、duplicate fallback copyは禁止する。
-- C++利用は同じspecificationとfixture bytesを参照可能にするが、bindingやC++ APIは本Issueで固定しない。
+- Rust、C++、openFrameworks、native binaryまたはmulti-language packageは#447の必須成果に含めない。
+  Python-only coreを運用・検証した後、必要なら別Issueで判断する。
 
 ## 8. Test ownership map
 
@@ -317,17 +341,21 @@ adapter / integration testはSelfrionette repositoryに残ることをgateにす
 
 1. #445開始時にbaseline public exports、resource bytes/hash、Profile/Bundle/Runtime object identity、viewer declaration digest、
    FK/IK/site/limit/initial pose結果をfreezeする。
-2. `core/definition.py`とpure `model_spec.py`を現行定数からmoveし、adapter旧moduleからre-exportする。値を再入力しない。
-3. pure kinematicsとmodel-aligned kinematicsをcoreへmoveし、`adapter/kinematics.py`にgeneric Protocol/schema wrapperを
+2. `core/pyproject.toml`と`core/src/fast_arm_core/`で独立Python package boundaryを成立させ、editable/install/wheelの
+   import identityがすべて`fast_arm_core`であることを検証する。root projectへの導入方式は実測で選ぶ。
+3. `fast_arm_core/definition.py`とpure `model_spec.py`を現行定数からmoveし、adapter旧moduleからre-exportする。値を再入力しない。
+4. pure kinematicsとmodel-aligned kinematicsをcoreへmoveし、`adapter/kinematics.py`にgeneric Protocol/schema wrapperを
    置く。旧public solver classはadapter ownerの同一classをre-exportし、runtimeをそのclassへ接続する。
-4. joint-limit parse/specとinitial reference valuesをcoreへmoveし、runtime guard / `InitialStateContract`をadapterへ残す。
-5. model/config resourceをcore packageへmoveし、package-data + installed/editable resolverを先に成立させる。
-6. viewer declarationとruntime-derived fixtureをadapter resourceへmoveし、public URL / VFS mapping / digestを維持する。
-7. Profile、Runtime Plugin、Bundle、endpoint/model validator、diagnosticsをadapterへmoveする。
-8. root `plugin.py`をadapter assemblyだけへ接続し、`ROBOT_PLUGIN`を唯一のdiscovery入口として再検証する。
-9. 全consumerを新ownerまたは限定re-exportへ更新し、物理filesystem accessとしての旧resource path参照が0件であることを
+5. 現行MJCF `home`値を基準にinitial poseをcore definitionへmoveし、MJCF home、`InitialStateContract`、reference fixture、
+   endpoint/orientation、viewer metadataをderived projectionとして完全一致させる。
+6. `arm.xml`、mesh、joint-limit configをcore packageへmoveし、adapterの`scene.xml`からcore-owned `arm.xml`をincludeする。
+   model load、XML include、model name、qpos、`tip` siteを不変にする。
+7. viewer declarationとruntime-derived fixtureをadapter resourceへmoveし、public URL / VFS mapping / bytes / digestを維持する。
+8. Profile、Runtime Plugin、Bundle、endpoint/model validator、diagnosticsをadapterへmoveする。
+9. root `plugin.py`をadapter assemblyだけへ接続し、`ROBOT_PLUGIN`を唯一のdiscovery入口として再検証する。
+10. 全consumerを新ownerまたは限定re-exportへ更新し、物理filesystem accessとしての旧resource path参照が0件であることを
    検査する。viewer JSON / payload / public URLのcompatibility identifierは旧文字列を維持してよい。
-10. #446でtestをownership別に移す。#448でscriptを用途別に移す。#447のpreconditionが揃うまで外部化しない。
+11. #446でtestをownership別に移す。#448でscriptを用途別に移す。#447のpreconditionが揃うまで外部化しない。
 
 各step後もproduction entryを増やさず、current behaviorのtargeted testを通す。途中でadapterにduplicate定数を置かない。
 
@@ -335,15 +363,15 @@ adapter / integration testはSelfrionette repositoryに残ることをgateにす
 
 | validation | #445 in-repository split | #446 test ownership | #447 external core |
 |---|---|---|---|
-| import/public surface | module exports、object identity、`ROBOT_PLUGIN`単一入口 | test import更新、generic owner維持 | adapter import/API不変、未初期化fail |
-| core dependency purity | `core`から`selfrionette`/runtime/CLI等のimport 0 | architecture testをcore suiteへ配置 | core repository単体検査 |
+| package identity / import | editable/install/wheelで`fast_arm_core`、adapter import/API、`ROBOT_PLUGIN`単一入口。Selfrionette namespace core importなし | test import更新、generic owner維持 | directory外部化後も`fast_arm_core` API不変、未初期化fail |
+| core dependency purity | `fast_arm_core`から`selfrionette`/runtime/CLI等のimport 0、runtime `sys.path`変更なし | architecture testをcore suiteへ配置 | core repository単体検査 |
 | FK/IK | exact cases、seed/failure/tolerance | core testへ全case移動 | core単体 + adapter conformance |
-| joint/motor conversion | 現行qpos/solver convention不変、未実装motor mappingを追加しない | convention test ownerを明示 | shared specをPython/C++候補が参照 |
+| joint/motor conversion | 現行qpos/solver convention不変、未実装motor mappingを追加しない | convention test ownerを明示 | Python core/adapterの同じcontractを検証。multi-language parityは対象外 |
 | joint limits | TOML bytes、parse、model validation、hold semantics | core parse / adapter guardへ分割 | core data + adapter behavior |
-| initial pose | XML `home`、reference qpos/tip/orientation exact一致 | core reference + integration continuity | pinned core revisionで再現 |
+| initial pose | core definition -> XML `home` / contract / fixture / viewer metadata、qpos/tip/orientation/frameの完全一致 | core reference + integration continuity | pinned core revisionで同じprojectionを再現 |
 | MuJoCo site consistency | model-aligned FK vs `tip`、frame/provenance | integrationへ移動 | adapter integrationで再検証 |
-| resource integrity | XML include、STL hash/case、JSON/TOML decode | core/adapter resource tests | external checkout/update/rollback |
-| viewer VFS | URL、VFS path、bytes、declaration digest、WASM load | viewer generic test維持 | adapter配信で同一URL/bytes |
+| resource ownership / integrity | core=`arm.xml`/mesh/config、adapter=`scene.xml`/viewer/fixture。XML include、model name、qpos、`tip`、STL hash/case、JSON/TOML decode | core/adapter resource tests | external core + adapter sceneのinclude/update/rollback |
+| viewer VFS | public URL、VFS path/bytes、viewer declaration digest、WASM load | viewer generic test維持 | adapter配信で同一URL/bytes/digest |
 | runtime/viewer/CLI | current targeted + full suite / viewer test/build | selection/coverage維持 | full suite / viewer build |
 | clean clone / installed | wheel content、non-editable install、editable checkout | pytest selection | recursive setupまたはchosen distribution smoke |
 | external revision pinning | 対象外。floating参照を導入しない | 対象外 | fixed revision、no runtime fetch、rollback、missing core fail-closed |
@@ -356,11 +384,15 @@ adapter / integration testはSelfrionette repositoryに残ることをgateにす
 ### #445開始前に確定済み
 
 - root `plugin.py::ROBOT_PLUGIN`だけがproduction discovery入口である。
-- coreはSelfrionetteをimportせず、adapterだけが両側を参照する。
+- coreは当面Python-onlyで、公開package identityは`fast_arm_core`である。`core/`は将来の独立repository mount pointであり、
+  Selfrionette namespace packageにしない。
+- `fast_arm_core`はSelfrionetteをimportせず、adapterだけが両側を参照する。
 - generic Protocol/schema/backend/runtime/viewerはfast_arm coreへ逆依存しない。
-- physical model/geometry/config/pure kinematics/reference valuesはcore、Bundle/Profile/Runtime/provider/schema/viewer declarationはadapterである。
+- `arm.xml`、mesh、config、pure kinematics、initial pose definitionはcore、`scene.xml`、Bundle/Profile/Runtime/provider/schema/viewer declarationはadapterである。
+- initial pose definitionがSoTで、MJCF `home`、`InitialStateContract`、fixture、viewer metadataはprojectionである。
 - runtime/MuJoCo/viewerをまたぐdiagnosticとfixtureはintegrationでありcoreではない。
-- #445はpackage-local resource + installed/editable resolverを成立させ、pathだけを移して壊れたwheelを残さない。
+- #445は独立package + package-local resourceをeditable/install/wheelで成立させ、pathだけを移して壊れたwheelを残さない。
+- root projectのpath dependency / workspace / package discoveryの選択は#445の実装判断だが、package identityは変更しない。
 - motor-space mappingはcurrent productionに存在しないため、#445は新規変換を設計・実装しない。現在のqpos/solver conventionだけを移す。
 - #446までtest実体は移動せず、#448までscript実体は移動しない。
 - #447まで外部repositoryやdistribution mechanismを導入しない。
@@ -369,11 +401,18 @@ adapter / integration testはSelfrionette repositoryに残ることをgateにす
 
 - external repository名、visibility、owner、release / revision policy。
 - submodule、pinned vendored snapshot、subtree、tagged archiveの選択。
-- C++ representation / binding / build system。共有するのはspecification、resource、fixtureの意味とbytesであり、APIを先行固定しない。
+
+### Python-only core運用後の別Issueへ留保
+
+- Rust implementation / binary / static library / dynamic library、PyO3、maturin、C ABI、CXX。
+- C++ implementation、openFrameworks integration、FastArmCommunicator変更。
+- multi-language package設計、native binary distribution、Python/C++ parity test。
 - physical motor-space / differential shoulder mapping。hardware characterizationと別behavior Issueが必要で、core分離だけから推論しない。
 
 ## Scope / impact
 
 このinventoryは値、file配置、import、runtime、viewer、solver、payload、fixture、resource内容を変更しない。
+今回と#445の当面のcore設計はPython-onlyであり、Rust、C++、openFrameworks、native binary、multi-language package、
+motor-space mapping、physical differential shoulder mappingを実装しない。これらを#447の必須成果とも扱わない。
 researchで実行・評価できる能力、実験条件、観測結果も変更しないためresearch logとexperiment noteは更新しない。
 hardware validation、serial open、Arduino、OSC、実機操作、external repository作成、deployment、runtime network fetchは行わない。
