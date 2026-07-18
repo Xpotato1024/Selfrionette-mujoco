@@ -15,6 +15,28 @@ related:
 
 # runtime composition
 
+## Runtime owner map
+
+`src/selfrionette/runtime/`はflat facadeではなく、次の責務ownerへ分ける。
+
+| owner | canonical responsibility |
+|---|---|
+| `composition/` | config、Robot Profile / Plugin / Bundle、typed provider adapter、pipeline assembly |
+| `execution/` | `RuntimePipeline`、input step loop、timing / pacing |
+| `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
+| `safety/` | stale command safety、qpos feasibility |
+| `experiment/` | experiment plugin contract、registry、readiness-only composition |
+| `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
+| `runners/` | 現行operational dry-run / smoke / publisher entry point |
+
+`runtime.__init__`は`RuntimeConfig`、`RuntimePipeline`、既存catalog resolver 5件だけをlazy exportする。
+contractやrunnerをpackage rootからre-exportしない。catalog access前のlazy-load、resolved Bundleのtyped
+provider identity、plugin identityはこの移動で変更しない。
+
+#406以降のexperiment lifecycle / runnerを追加する場合のownerは`experiment/`である。`runners/`は現行の
+operational entry pointを所有するだけであり、future experiment framework、task lifecycle、metric artifact
+emissionを先回りして実装しない。
+
 `runtime/` is the only composition root。input、motion、kinematics、MuJoCo backend、transportを
 layer横断で接続できるのはruntimeだけである。MuJoCo remains the physical source of truth。
 viewerはrender-onlyであり、runtime stateを再計算しない。

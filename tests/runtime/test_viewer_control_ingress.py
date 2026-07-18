@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.runtime import build_viewer_input_source, ingest_viewer_control_message
+from selfrionette.runtime.control.viewer_control_ingress import (
+    build_viewer_input_source,
+    ingest_viewer_control_message,
+)
 from selfrionette.schemas import ViewerControlMessageError
 
 

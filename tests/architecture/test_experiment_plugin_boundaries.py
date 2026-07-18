@@ -10,11 +10,11 @@ RUNTIME = ROOT / "src" / "selfrionette" / "runtime"
 
 def test_generic_experiment_contracts_do_not_import_robot_specific_implementations() -> None:
     generic_files = (
-        "experiment_contracts.py",
-        "experiment_registry.py",
-        "experiment_composition.py",
-        "robot_bundle.py",
-        "robot_provider_adapters.py",
+        "experiment/contracts.py",
+        "experiment/registry.py",
+        "experiment/composition.py",
+        "composition/robot_bundle.py",
+        "composition/robot_provider_adapters.py",
     )
     forbidden = (
         "fast_arm",
@@ -31,7 +31,7 @@ def test_generic_experiment_contracts_do_not_import_robot_specific_implementatio
 
 
 def test_task_and_evaluation_contracts_do_not_import_solver_or_viewer_layers() -> None:
-    source = (RUNTIME / "experiment_contracts.py").read_text(encoding="utf-8")
+    source = (RUNTIME / "experiment" / "contracts.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     imports: list[str] = []
     for node in ast.walk(tree):
@@ -55,24 +55,19 @@ def test_viewer_remains_outside_task_contact_and_metric_ownership() -> None:
         assert "ContactEvidenceProvider" not in source
 
 
-def test_runtime_public_surface_exposes_generic_composition_not_fast_arm_bundle() -> None:
+def test_runtime_public_surface_is_minimal_and_catalog_aware() -> None:
     import selfrionette.runtime as runtime
 
-    for name in (
-        "RobotBundle",
-        "EnvironmentPlugin",
-        "ControlMappingPlugin",
-        "TaskPlugin",
-        "EvaluationPlugin",
-        "ExperimentPluginManifest",
-        "ExperimentPluginRegistries",
-        "PluginAxis",
-        "PluginParameterOwner",
-        "EvidenceProducerBinding",
-        "SemanticRoleRequirement",
-        "compose_experiment",
+    assert set(runtime.__all__) == {
+        "RuntimeConfig",
+        "RuntimePipeline",
+        "registered_robot_bundle_ids",
+        "registered_robot_runtime_plugin_ids",
         "resolve_robot_bundle",
-    ):
-        assert name in runtime.__all__
+        "resolve_robot_runtime",
+        "resolve_robot_runtime_plugin",
+    }
+    assert "RobotBundle" not in runtime.__all__
+    assert "compose_experiment" not in runtime.__all__
     assert "FAST_ARM_ROBOT_BUNDLE" not in runtime.__all__
     assert not hasattr(runtime, "FAST_ARM_ROBOT_BUNDLE")

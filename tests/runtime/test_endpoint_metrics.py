@@ -6,20 +6,22 @@ from dataclasses import dataclass
 import pytest
 
 from selfrionette.mujoco_backend.endpoint_extraction import RuntimeMuJoCoEndpointEvaluation
-from selfrionette.runtime import (
+from selfrionette.runtime.evaluation.endpoint_metrics import (
     RuntimeEndpointEvaluationMetrics,
-    RuntimeForwardKinematicsEvaluation,
     build_endpoint_evaluation_state_publisher,
     build_runtime_endpoint_evaluation_metrics,
     build_runtime_endpoint_evaluation_payload_from_state,
     build_runtime_endpoint_evaluation_payload,
     compute_error_norm_m,
     compute_vector_error_m,
-    evaluate_fk_endpoint_from_joint_command,
     runtime_endpoint_evaluation_metrics_to_payload,
 )
-from selfrionette.runtime.robot_profile import EndpointReference
-from selfrionette.runtime.robot_bundle import EndpointPoseObservation
+from selfrionette.runtime.evaluation.kinematics import (
+    RuntimeForwardKinematicsEvaluation,
+    evaluate_fk_endpoint_from_joint_command,
+)
+from selfrionette.runtime.composition.robot_profile import EndpointReference
+from selfrionette.runtime.composition.robot_bundle import EndpointPoseObservation
 from selfrionette.schemas import (
     BodyTransform,
     JointCommand,

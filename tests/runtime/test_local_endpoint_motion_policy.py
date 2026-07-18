@@ -9,7 +9,7 @@ import pytest
 
 from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
 from selfrionette.motion import LocalEndpointMotionGenerator
-from selfrionette.runtime.viewer_motion_policy import build_viewer_local_motion_metadata
+from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.schemas import InputIntent, JointCommand
 
 

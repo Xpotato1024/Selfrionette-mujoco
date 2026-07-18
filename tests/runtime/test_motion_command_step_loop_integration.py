@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from selfrionette.runtime import (
+from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
     run_runtime_input_source_step_loop,
-    select_runtime_input_source,
 )
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 
 
 class RecordingPublisher:

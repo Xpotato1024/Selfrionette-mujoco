@@ -5,12 +5,14 @@ from math import dist
 
 import pytest
 
-import selfrionette.runtime.concrete_mujoco_pipeline as concrete_pipeline_module
+import selfrionette.runtime.composition.concrete_mujoco_pipeline as concrete_pipeline_module
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.plugins.robots.fast_arm.kinematics import FastArmEndpointInverseKinematicsSolver
 from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.runtime import EndpointEvaluationStatePublisher, RuntimePipeline, build_concrete_mujoco_pipeline
+from selfrionette.runtime.evaluation.endpoint_metrics import EndpointEvaluationStatePublisher
+from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.schemas import JointCommand, MuJoCoState, RawInputFrame
 from generic_qpos_test_doubles import RejectingGenericQposGuard
 

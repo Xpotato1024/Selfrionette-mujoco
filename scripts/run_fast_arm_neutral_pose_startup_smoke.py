@@ -14,12 +14,12 @@ if str(SRC_DIR) not in sys.path:
 
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
-from selfrionette.runtime import (
+from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
-    ingest_viewer_control_message,
     run_runtime_input_source_step_loop,
-    select_runtime_input_source,
 )
+from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
 from selfrionette.transport.payload import mujoco_state_to_payload
 

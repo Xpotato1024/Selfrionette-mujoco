@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
-from selfrionette.runtime import run_replay_mujoco_websocket_publisher
-from selfrionette.runtime.live_websocket_delivery import LiveLatestStateWebSocketPublisher
+import selfrionette.runtime.runners.websocket_publisher as websocket_runner_module
+from selfrionette.runtime.runners.websocket_publisher import run_replay_mujoco_websocket_publisher
+from selfrionette.runtime.runners.live_websocket_delivery import LiveLatestStateWebSocketPublisher
 
 
 ROOT = Path(__file__).resolve().parents[2]
-WEBSOCKET_RUNNER_MODULE = ROOT / "src" / "selfrionette" / "runtime" / "websocket_publisher_runner.py"
+WEBSOCKET_RUNNER_MODULE = ROOT / "src" / "selfrionette" / "runtime" / "runners" / "websocket_publisher.py"
 WEBSOCKET_SCRIPT_MODULE = ROOT / "scripts" / "run_replay_mujoco_websocket_publisher.py"
 
 

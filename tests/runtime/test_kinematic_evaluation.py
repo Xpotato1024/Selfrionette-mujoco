@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.runtime import (
+from selfrionette.runtime.evaluation.kinematics import (
     RuntimeForwardKinematicsEvaluation,
     evaluate_fk_endpoint_from_joint_command,
     evaluate_fk_endpoint_from_qpos,

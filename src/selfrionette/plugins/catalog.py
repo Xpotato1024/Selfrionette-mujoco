@@ -9,12 +9,12 @@ from selfrionette.plugins.robot_discovery import (
     discover_production_robot_plugins,
 )
 from selfrionette.plugins.robot_registration import RobotPluginRegistration
-from selfrionette.runtime.robot_profile import RobotProfile
-from selfrionette.runtime.experiment_contracts import PluginSelection
-from selfrionette.runtime.experiment_registry import VersionedPluginRegistry
-from selfrionette.runtime.robot_bundle import RobotBundle
-from selfrionette.runtime.robot_plugin import RobotRuntimePlugin
-from selfrionette.runtime.robot_resolution import (
+from selfrionette.runtime.composition.robot_profile import RobotProfile
+from selfrionette.runtime.experiment.contracts import PluginSelection
+from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
+from selfrionette.runtime.composition.robot_bundle import RobotBundle
+from selfrionette.runtime.composition.robot_plugin import RobotRuntimePlugin
+from selfrionette.runtime.composition.robot_resolution import (
     ProfileIdRegistry,
     ResolvedRobotRuntime,
     resolve_robot_runtime_from_registries,

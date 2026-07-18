@@ -18,8 +18,8 @@ from selfrionette.plugins.robots.fast_arm.feasibility import (
 )
 from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.plugins.robots.fast_arm.runtime import FAST_ARM_RUNTIME_PLUGIN
-from selfrionette.runtime.robot_plugin import validate_profile_model_dimensions
-from selfrionette.runtime.robot_resolution import validate_robot_profile_plugin_consistency
+from selfrionette.runtime.composition.robot_plugin import validate_profile_model_dimensions
+from selfrionette.runtime.composition.robot_resolution import validate_robot_profile_plugin_consistency
 from selfrionette.schemas import MuJoCoState
 from tests.support.robot_runtime_plugin_conformance import (
     FailClosedCase,

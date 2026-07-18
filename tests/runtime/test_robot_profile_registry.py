@@ -6,7 +6,7 @@ import pytest
 
 import selfrionette.plugins.robots.fast_arm.runtime as fast_arm_plugin_module
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
-from selfrionette.runtime.robot_profile import (
+from selfrionette.runtime.composition.robot_profile import (
     CoordinateUnitContract,
     EndpointReference,
     RobotProfile,
@@ -21,13 +21,14 @@ from selfrionette.plugins.robots.fast_arm.runtime import (
     FAST_ARM_RUNTIME_PLUGIN,
     FastArmRuntimePlugin,
 )
-from selfrionette.runtime import RuntimeConfig, build_concrete_mujoco_pipeline
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.plugins.catalog import (
     resolve_robot_runtime,
     registered_robot_runtime_plugin_ids,
     resolve_robot_runtime_plugin,
 )
-from selfrionette.runtime.robot_resolution import (
+from selfrionette.runtime.composition.robot_resolution import (
     ImmutableRegistry,
     validate_robot_profile_plugin_consistency,
 )

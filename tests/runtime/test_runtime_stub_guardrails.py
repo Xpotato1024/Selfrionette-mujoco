@@ -5,7 +5,7 @@ import asyncio
 import json
 from pathlib import Path
 
-import selfrionette.runtime.websocket_publisher_runner as websocket_runner_module
+import selfrionette.runtime.runners.websocket_publisher as websocket_runner_module
 from selfrionette.input_interpreters import ReplayInputInterpreter
 from tests.support.input_interpreter_doubles import NoOpInputInterpreter
 from selfrionette.input_sources import ReplayInputSource
@@ -15,7 +15,10 @@ from tests.support.kinematics_solver_doubles import ZeroInverseKinematicsSolver
 from selfrionette.motion import TargetToJointMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from tests.support.mujoco_doubles import NoOpMuJoCoSimulator
-from selfrionette.runtime import EndpointEvaluationStatePublisher, build_concrete_mujoco_pipeline, run_replay_mujoco_dry_run, run_replay_mujoco_websocket_publisher
+from selfrionette.runtime.evaluation.endpoint_metrics import EndpointEvaluationStatePublisher
+from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+from selfrionette.runtime.runners.dry_run import run_replay_mujoco_dry_run
+from selfrionette.runtime.runners.websocket_publisher import run_replay_mujoco_websocket_publisher
 from selfrionette.schemas import JointCommand, MuJoCoState
 from selfrionette.transport import WebSocketStatePublisher
 from tests.support.transport_doubles import NoOpStatePublisher

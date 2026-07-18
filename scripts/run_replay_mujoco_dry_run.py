@@ -10,9 +10,9 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from selfrionette.runtime import run_replay_mujoco_dry_run
+from selfrionette.runtime.runners.dry_run import run_replay_mujoco_dry_run
 from selfrionette.input_sources.registry import SUPPORTED_INPUT_SOURCE_NAMES
-from selfrionette.runtime.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 
 
 def _positive_int(value: str) -> int:

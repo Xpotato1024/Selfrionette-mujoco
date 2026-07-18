@@ -4,16 +4,14 @@ import asyncio
 from pathlib import Path
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.runtime import (
-    RuntimeConfig,
-    RuntimePipeline,
-    build_replay_mujoco_pipeline,
-    build_runtime_input_source_step_loop_plan,
-    select_runtime_input_source,
-)
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
+from selfrionette.runtime.execution.input_step_loop import build_runtime_input_source_step_loop_plan
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 from tests.support.runtime_pipeline_builders import build_test_mujoco_pipeline
 from selfrionette.plugins.robots.fast_arm.feasibility import FastArmJointLimitGuard
-from selfrionette.runtime.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
+from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
 from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
 from generic_qpos_test_doubles import RejectingGenericQposGuard
 
@@ -77,7 +75,7 @@ def test_fast_arm_replay_production_step_loop_explicitly_injects_guard() -> None
 def test_fast_arm_production_composition_rejects_non_fast_arm_model(tmp_path: Path) -> None:
     model_path = _write_minimal_model(tmp_path)
 
-    from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+    from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 
     try:
         build_concrete_mujoco_pipeline(model_path=model_path, publisher=_RecordingPublisher())
@@ -102,7 +100,7 @@ def test_generic_feasibility_contract_has_explicit_no_guard_behavior() -> None:
 
 
 def test_runtime_pipeline_uses_typed_rejection_without_fast_arm_metadata() -> None:
-    from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+    from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 
     pipeline = build_concrete_mujoco_pipeline(publisher=_RecordingPublisher())
     pipeline.qpos_feasibility_guard = RejectingGenericQposGuard()
@@ -123,15 +121,15 @@ def test_generic_runtime_package_root_excludes_fast_arm_implementation_details()
     assert not hasattr(runtime, "FastArmJointLimitConfig")
     assert not hasattr(runtime, "FastArmJointLimitViolation")
     assert not hasattr(runtime, "FastArmQposFeasibilityResult")
-    assert hasattr(runtime, "QposFeasibilityGuard")
+    assert not hasattr(runtime, "QposFeasibilityGuard")
 
 
 def test_generic_runtime_modules_do_not_import_fast_arm_limit_implementation() -> None:
     root = Path(__file__).resolve().parents[2] / "src" / "selfrionette" / "runtime"
     for relative_path in (
-        "pipeline.py",
-        "input_safety.py",
-        "replay_mujoco_pipeline.py",
+        "execution/pipeline.py",
+        "safety/input_safety.py",
+        "composition/replay_mujoco_pipeline.py",
     ):
         source = (root / relative_path).read_text(encoding="utf-8")
         assert "fast_arm_joint_limits" not in source
@@ -140,10 +138,10 @@ def test_generic_runtime_modules_do_not_import_fast_arm_limit_implementation() -
 def test_runtime_reject_control_flow_does_not_read_fast_arm_rejection_metadata() -> None:
     root = Path(__file__).resolve().parents[2] / "src" / "selfrionette" / "runtime"
     for relative_path in (
-        "pipeline.py",
-        "dry_run.py",
-        "websocket_publisher_runner.py",
-        "input_step_diagnostics.py",
+        "execution/pipeline.py",
+        "runners/dry_run.py",
+        "runners/websocket_publisher.py",
+        "control/input_step_diagnostics.py",
     ):
         source = (root / relative_path).read_text(encoding="utf-8")
         assert 'metadata.get("qpos_feasibility_rejected"' not in source

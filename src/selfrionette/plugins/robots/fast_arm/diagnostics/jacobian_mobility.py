@@ -16,7 +16,7 @@ import numpy as np
 
 from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
 from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
-from selfrionette.runtime.viewer_motion_policy import (
+from selfrionette.runtime.control.viewer_motion_policy import (
     DEFAULT_VIEWER_LOCAL_ENDPOINT_DAMPING,
     DEFAULT_VIEWER_LOCAL_ENDPOINT_FD_EPSILON_RAD,
     DEFAULT_VIEWER_LOCAL_ENDPOINT_MAX_QPOS_DELTA_NORM_RAD,

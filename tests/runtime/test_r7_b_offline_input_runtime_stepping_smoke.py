@@ -4,16 +4,16 @@ from dataclasses import dataclass, field, replace
 
 from selfrionette.input_sources import build_keyboard_motion_command, build_motion_command_from_replay_frame
 from selfrionette.plugins.catalog import resolve_robot_bundle
-from selfrionette.runtime import run_offline_input_runtime_stepping_smoke
-from selfrionette.runtime import offline_input_runtime_smoke as offline_smoke_module
-from selfrionette.runtime.robot_bundle import (
+from selfrionette.runtime.runners.offline_input_smoke import run_offline_input_runtime_stepping_smoke
+from selfrionette.runtime.runners import offline_input_smoke as offline_smoke_module
+from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
     CapabilityProviderBinding,
     RobotBundle,
 )
-from selfrionette.runtime.robot_provider_adapters import (
+from selfrionette.runtime.composition.robot_provider_adapters import (
     RuntimeEndpointCommandProvider,
     RuntimeEndpointPoseProvider,
     RuntimeQposFeasibilityProvider,

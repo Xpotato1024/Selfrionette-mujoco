@@ -5,18 +5,18 @@ from math import dist
 
 import pytest
 
-import selfrionette.runtime.input_step_loop as input_step_loop
+import selfrionette.runtime.execution.input_step_loop as input_step_loop
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.plugins.catalog import resolve_robot_bundle
 from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.runtime import (
+from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
-    ingest_viewer_control_message,
     run_runtime_input_source_step_loop,
-    select_runtime_input_source,
 )
-from selfrionette.runtime.robot_bundle import (
+from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,

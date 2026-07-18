@@ -5,20 +5,20 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.runtime.robot_profile import (
+from selfrionette.runtime.composition.robot_profile import (
     CoordinateUnitContract,
     EndpointReference,
     RobotProfile,
 )
-from selfrionette.runtime.robot_provider_adapters import NamedKeyframeInitialStateProvider
-from selfrionette.runtime.experiment_composition import (
+from selfrionette.runtime.composition.robot_provider_adapters import NamedKeyframeInitialStateProvider
+from selfrionette.runtime.experiment.composition import (
     EvidenceProducerBinding,
     ExperimentPluginManifest,
     ExperimentPluginRegistries,
     PluginParameters,
     compose_experiment,
 )
-from selfrionette.runtime.experiment_contracts import (
+from selfrionette.runtime.experiment.contracts import (
     CanonicalEvidence,
     CanonicalEvidenceSet,
     ControlMappingPlugin,
@@ -41,9 +41,9 @@ from selfrionette.runtime.experiment_contracts import (
     TaskTerminalClassification,
     VersionedIdentity,
 )
-from selfrionette.runtime.experiment_registry import VersionedPluginRegistry
+from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from selfrionette.plugins.robots.fast_arm.runtime import FAST_ARM_RUNTIME_PLUGIN
-from selfrionette.runtime.robot_bundle import (
+from selfrionette.runtime.composition.robot_bundle import (
     CAPABILITY_PROVIDER_TYPES,
     CONTACT_EVIDENCE_V1,
     ENDPOINT_COMMAND_V1,
@@ -147,7 +147,7 @@ class _SceneRoleProvider:
     capability_identity = SCENE_ROLE_BINDING_V1
 
     def semantic_role_bindings(self):
-        from selfrionette.runtime.robot_bundle import SemanticRoleBinding
+        from selfrionette.runtime.composition.robot_bundle import SemanticRoleBinding
 
         return (
             SemanticRoleBinding(

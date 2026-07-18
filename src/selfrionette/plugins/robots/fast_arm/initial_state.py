@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from selfrionette.runtime.experiment_contracts import VersionedIdentity
-from selfrionette.runtime.robot_bundle import InitialStateContract
+from selfrionette.runtime.experiment.contracts import VersionedIdentity
+from selfrionette.runtime.composition.robot_bundle import InitialStateContract
 
 FAST_ARM_INITIAL_STATE_QPOS_RAD = (
     0.0,

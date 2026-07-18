@@ -17,14 +17,14 @@ from selfrionette.plugins.robots.fast_arm.feasibility import (
     parse_fast_arm_joint_limit_config,
     validate_fast_arm_joint_limit_config,
 )
-from selfrionette.runtime import (
-    RuntimeConfig,
-    build_concrete_mujoco_pipeline,
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
-    ingest_viewer_control_message,
     run_runtime_input_source_step_loop,
-    select_runtime_input_source,
 )
+from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 from selfrionette.schemas import (
     JointCommand,
     MotionCommand,

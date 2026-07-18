@@ -11,7 +11,7 @@ from selfrionette.input_sources.loadcell_serial import (
     build_r7_a_lite_smoke_endpoint_mapping_config,
     run_loadcell_serial_dry_run_smoke,
 )
-from selfrionette.runtime.loadcell_serial_dry_run import DEFAULT_FIXTURE_PATH, main as run_loadcell_serial_dry_run_main
+from selfrionette.runtime.runners.loadcell_serial_dry_run import DEFAULT_FIXTURE_PATH, main as run_loadcell_serial_dry_run_main
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "r7_a_lite_serial_frames"

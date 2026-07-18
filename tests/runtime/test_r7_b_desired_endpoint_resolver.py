@@ -5,7 +5,10 @@ import math
 import pytest
 
 from selfrionette.input_sources.loadcell_serial import LoadcellEndpointMotionCommandConverter, NormalizedLoadcellInputIntent
-from selfrionette.runtime import ResolvedDesiredEndpoint, resolve_desired_endpoint_from_motion_command
+from selfrionette.runtime.control.desired_endpoint_resolver import (
+    ResolvedDesiredEndpoint,
+    resolve_desired_endpoint_from_motion_command,
+)
 from selfrionette.schemas import MotionCommand, TargetCommand
 
 

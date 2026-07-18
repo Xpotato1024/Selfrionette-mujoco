@@ -20,10 +20,10 @@ from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_s
 from selfrionette.mujoco_backend import inspect_mujoco_model
 from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
-from selfrionette.runtime.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
-from selfrionette.runtime.config import RuntimeConfig
-from selfrionette.runtime.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
-from selfrionette.runtime.evaluation import evaluate_fk_endpoint_from_qpos
+from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.control.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
+from selfrionette.runtime.evaluation.kinematics import evaluate_fk_endpoint_from_qpos
 from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, RawInputFrame, Vector3
 
 _DEFAULT_COMMAND_DELTA_M = 0.02

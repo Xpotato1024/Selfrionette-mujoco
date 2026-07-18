@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from selfrionette.runtime.qpos_feasibility import (
+from selfrionette.runtime.safety.qpos_feasibility import (
     QposFeasibilityDiagnostic,
     QposFeasibilityResult,
 )

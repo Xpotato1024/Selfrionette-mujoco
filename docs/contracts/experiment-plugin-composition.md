@@ -200,7 +200,7 @@ kinematics、MuJoCo name contract / endpoint wrapper、feasibility adapter、can
 diagnostics、Robot Bundle assemblyを所有し、`fast_arm/v1` Bundleとして
 `selfrionette.plugins.catalog`だけへ登録する。bundleは同packageの
 `FAST_ARM_ROBOT_PROFILE`と`FAST_ARM_RUNTIME_PLUGIN`の同一objectを参照し、generic
-`runtime.robot_provider_adapters`を使って既存のmodel validation、endpoint IK/FK、target/local motion、
+`runtime.composition.robot_provider_adapters`を使って既存のmodel validation、endpoint IK/FK、target/local motion、
 qpos feasibility、endpoint state accessorへ委譲する。initial stateは既存`home` keyframe referenceと
 `fast_arm_initial_state/v1` contractを返す。
 
@@ -219,7 +219,7 @@ plugins/robots/fast_arm/bundle.py
 ```
 
 `robots/fast_arm.py`、`robot_registry.py`、`runtime/fast_arm_*.py`、`runtime/default_robot_providers.py`、
-旧registry moduleは#429で退役した。internal consumerはplugin owner、`runtime/robot_provider_adapters.py`、
+旧registry moduleは#429で退役した。internal consumerはplugin owner、`runtime/composition/robot_provider_adapters.py`、
 `plugins/catalog.py`を直接使用する。deliberate package-root resolverはcanonical catalog ownerへ直接mappingし、
 intermediate facadeを再導入しない。
 

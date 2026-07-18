@@ -25,14 +25,14 @@ def _imports(path: Path) -> tuple[str, ...]:
 
 def test_generic_contracts_do_not_import_catalog_or_concrete_plugins() -> None:
     paths = (
-        SRC / "runtime" / "robot_plugin.py",
-        SRC / "runtime" / "robot_bundle.py",
-        SRC / "runtime" / "robot_provider_adapters.py",
-        SRC / "runtime" / "robot_resolution.py",
-        SRC / "runtime" / "experiment_contracts.py",
-        SRC / "runtime" / "experiment_registry.py",
-        SRC / "runtime" / "experiment_composition.py",
-        SRC / "runtime" / "evaluation_manifest.py",
+        SRC / "runtime" / "composition" / "robot_plugin.py",
+        SRC / "runtime" / "composition" / "robot_bundle.py",
+        SRC / "runtime" / "composition" / "robot_provider_adapters.py",
+        SRC / "runtime" / "composition" / "robot_resolution.py",
+        SRC / "runtime" / "experiment" / "contracts.py",
+        SRC / "runtime" / "experiment" / "registry.py",
+        SRC / "runtime" / "experiment" / "composition.py",
+        SRC / "runtime" / "evaluation" / "manifest.py",
     )
     for path in paths:
         imported = _imports(path)
@@ -43,8 +43,8 @@ def test_generic_contracts_do_not_import_catalog_or_concrete_plugins() -> None:
 def test_domain_layers_do_not_reverse_depend_on_assembly_or_manifest() -> None:
     forbidden = (
         "selfrionette.plugins.catalog",
-        "selfrionette.runtime.robot_bundle",
-        "selfrionette.runtime.evaluation_manifest",
+        "selfrionette.runtime.composition.robot_bundle",
+        "selfrionette.runtime.evaluation.manifest",
     )
     paths = tuple((SRC / "kinematics").rglob("*.py"))
     paths += tuple((SRC / "motion").rglob("*.py"))
@@ -75,11 +75,11 @@ def test_generic_plugin_axes_do_not_embed_fast_arm_names_or_solver_types() -> No
 
 
 def test_runtime_execution_edges_use_typed_providers_not_broad_plugins() -> None:
-    input_loop_source = (SRC / "runtime" / "input_step_loop.py").read_text(
+    input_loop_source = (SRC / "runtime" / "execution" / "input_step_loop.py").read_text(
         encoding="utf-8"
     )
     offline_smoke_source = (
-        SRC / "runtime" / "offline_input_runtime_smoke.py"
+        SRC / "runtime" / "runners" / "offline_input_smoke.py"
     ).read_text(encoding="utf-8")
     for source in (input_loop_source, offline_smoke_source):
         assert "ResolvedRobotRuntime" not in source
@@ -105,8 +105,8 @@ def test_catalog_and_bundle_do_not_introduce_defaults_or_dynamic_discovery() -> 
         SRC / "plugins" / "catalog.py",
         SRC / "plugins" / "__init__.py",
         SRC / "plugins" / "robots" / "fast_arm" / "bundle.py",
-        SRC / "runtime" / "robot_provider_adapters.py",
-        SRC / "runtime" / "robot_resolution.py",
+        SRC / "runtime" / "composition" / "robot_provider_adapters.py",
+        SRC / "runtime" / "composition" / "robot_resolution.py",
     )
     forbidden = (
         "DefaultRobot",
@@ -168,14 +168,17 @@ def test_runtime_generic_exports_are_catalog_free_until_resolver_access() -> Non
             "import sys; import selfrionette.runtime as runtime; "
             "assert 'selfrionette.plugins.catalog' not in sys.modules; "
             "assert 'selfrionette.plugins.robots.fast_arm.plugin' not in sys.modules; "
-            "from selfrionette.runtime.robot_resolution import "
+            "from selfrionette.runtime.composition.robot_resolution import "
             "ResolvedRobotRuntime as direct_runtime; "
-            "from selfrionette.runtime.robot_bundle import RobotBundle as direct_bundle; "
-            "from selfrionette.runtime.experiment_contracts import "
+            "from selfrionette.runtime.composition.robot_bundle import RobotBundle as direct_bundle; "
+            "from selfrionette.runtime.experiment.contracts import "
             "VersionedIdentity as direct_identity; "
-            "assert runtime.ResolvedRobotRuntime is direct_runtime; "
-            "assert runtime.RobotBundle is direct_bundle; "
-            "assert runtime.VersionedIdentity is direct_identity; "
+            "assert direct_runtime.__module__ == 'selfrionette.runtime.composition.robot_resolution'; "
+            "assert direct_bundle.__module__ == 'selfrionette.runtime.composition.robot_bundle'; "
+            "assert direct_identity.__module__ == 'selfrionette.runtime.experiment.contracts'; "
+            "assert not hasattr(runtime, 'ResolvedRobotRuntime'); "
+            "assert not hasattr(runtime, 'RobotBundle'); "
+            "assert not hasattr(runtime, 'VersionedIdentity'); "
             "assert 'selfrionette.plugins.catalog' not in sys.modules; "
             "assert 'selfrionette.plugins.robots.fast_arm.plugin' not in sys.modules; "
             f"getattr(runtime, {resolver_name!r}); "
