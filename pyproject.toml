@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "selfrionette-mujoco"
 version = "0.0.0"
@@ -7,6 +11,12 @@ dependencies = [
     "mujoco>=3.9.0",
     "websockets>=16.0",
 ]
+
+[project.scripts]
+selfrionette = "selfrionette.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [dependency-groups]
 dev = [

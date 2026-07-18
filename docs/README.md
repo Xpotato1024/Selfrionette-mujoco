@@ -57,6 +57,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | hardware safety | `docs/operations/hardware-safety.md` | serial、OSC、実機作動のoperator gate |
 | 日本語文書guardrail | `docs/operations/japanese-doc-writing-guardrails.md` | UTF-8、BOM、mojibake、language policy |
 | runtime dry-run | `docs/operations/runtime-dry-run.md` | deterministic replayからpayload v0 NDJSONまで |
+| 統一 CLI | `docs/operations/unified-cli.md` | Robot Catalog / Bundleを使うinstallable command |
 | backend / viewer起動 | `docs/operations/backend-viewer-startup.md` | backend、publisher、viewerの起動入口 |
 | WebSocket host / port | `docs/operations/websocket-host-port-contract.md` | bind hostとbrowser-visible hostの分離 |
 | WebSocket publisher | `docs/operations/websocket-publisher-runner.md` | local/dev payload delivery |

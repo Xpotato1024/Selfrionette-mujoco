@@ -106,8 +106,9 @@ async def _run_replay_mujoco_websocket_publisher_async(
     interval_s: float,
     grace_period_s: float,
     preset: str | None,
+    robot_profile_id: str,
 ) -> None:
-    runtime_config = RuntimeConfig(dt_s=dt_s, robot_profile_id="fast_arm")
+    runtime_config = RuntimeConfig(dt_s=dt_s, robot_profile_id=robot_profile_id)
 
     async with WebSocketPublisherServer(host=host, port=port) as server:
         _log(f"serving on ws://{server.host}:{server.bound_port}")
@@ -169,6 +170,7 @@ def run_replay_mujoco_websocket_publisher(
     interval_s: float = DEFAULT_WEBSOCKET_PUBLISHER_INTERVAL_S,
     grace_period_s: float = DEFAULT_WEBSOCKET_PUBLISHER_GRACE_PERIOD_S,
     preset: str | None = None,
+    robot_profile_id: str = "fast_arm",
 ) -> None:
     _validate_host(host)
     _validate_port(port)
@@ -188,6 +190,7 @@ def run_replay_mujoco_websocket_publisher(
             interval_s=interval_s,
             grace_period_s=grace_period_s,
             preset=preset,
+            robot_profile_id=robot_profile_id,
         )
     )
 

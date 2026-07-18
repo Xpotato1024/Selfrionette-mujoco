@@ -95,6 +95,7 @@ browser は強制 open しません。
 ## 参照
 
 - [docs/operations/runtime-dry-run.md](docs/operations/runtime-dry-run.md)
+- [docs/operations/unified-cli.md](docs/operations/unified-cli.md)
 - [docs/operations/websocket-publisher-runner.md](docs/operations/websocket-publisher-runner.md)
 - [docs/operations/live-viewer-smoke.md](docs/operations/live-viewer-smoke.md)
 - [docs/operations/runtime-to-viewer-e2e-smoke.md](docs/operations/runtime-to-viewer-e2e-smoke.md)
