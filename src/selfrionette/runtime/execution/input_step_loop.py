@@ -44,6 +44,7 @@ from selfrionette.runtime.composition.robot_profile_metadata import merge_runtim
 from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.runtime.execution.pipeline import RuntimePipeline
 from selfrionette.runtime.execution.input_source_adapters import (
+    RuntimeInputSourceExecutionAdapter,
     compatibility_execution_adapter,
 )
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
@@ -72,7 +73,7 @@ class RuntimeInputSourceStepLoopPlan:
     endpoint_command_provider: EndpointCommandProvider
     qpos_feasibility_provider: QposFeasibilityProvider
     endpoint_site_name: str | None
-    execution_adapter: object
+    execution_adapter: RuntimeInputSourceExecutionAdapter
 
 
 @dataclass(frozen=True, slots=True)
