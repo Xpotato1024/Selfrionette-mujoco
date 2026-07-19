@@ -5,7 +5,7 @@ from math import inf, nan
 
 import pytest
 
-from tests.robots.fast_arm_conformance_case import (
+from tests.plugins.robots.fast_arm.adapter.conformance_case import (
     FAST_ARM_ROBOT_RUNTIME_PLUGIN_CONFORMANCE_CASE,
 )
 from tests.robots.robot_runtime_plugin_conformance_cases import (

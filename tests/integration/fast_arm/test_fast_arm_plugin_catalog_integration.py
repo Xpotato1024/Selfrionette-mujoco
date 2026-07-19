@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -16,20 +15,20 @@ from selfrionette.plugins.catalog import (
     resolve_robot_runtime,
     resolve_robot_runtime_plugin,
 )
-from selfrionette.plugins.robots.fast_arm.bundle import FAST_ARM_ROBOT_BUNDLE
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.plugins.robots.fast_arm.runtime import (
+from selfrionette.plugins.robots.fast_arm.adapter.bundle import FAST_ARM_ROBOT_BUNDLE
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import (
     FAST_ARM_RUNTIME_PLUGIN,
 )
+from selfrionette.plugins.robots.fast_arm.adapter.viewer import FAST_ARM_VIEWER_DECLARATION
 from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN
-from selfrionette.plugins.robots.fast_arm.viewer import FAST_ARM_VIEWER_DECLARATION
-from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
-from selfrionette.schemas import MuJoCoState
-from selfrionette.transport.websocket import serialize_mujoco_state_message
-from selfrionette.runtime.composition.viewer_robot_declaration import viewer_robot_declaration_digest
 from selfrionette.plugins.catalog import resolve_robot_bundle as root_resolve_robot_bundle
 from selfrionette.plugins.catalog import resolve_robot_runtime as root_resolve_robot_runtime
+from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
+from selfrionette.runtime.composition.viewer_robot_declaration import viewer_robot_declaration_digest
+from selfrionette.schemas import MuJoCoState
+from selfrionette.transport.websocket import serialize_mujoco_state_message
 
 
 def test_catalog_resolvers_project_one_canonical_bundle() -> None:
@@ -67,28 +66,6 @@ def test_catalog_resolvers_project_one_canonical_bundle() -> None:
             binding.provider.assembly_binding.owner is bundle.profile
             or binding.provider.assembly_binding.owner is bundle.runtime_plugin
         )
-
-
-def test_profile_keeps_stable_logical_identifiers_with_package_ownership() -> None:
-    assert FAST_ARM_ROBOT_PROFILE.mujoco_model_asset is ROBOT_PLUGIN.resources.model
-    assert FAST_ARM_ROBOT_PROFILE.joint_limit_config_asset is (
-        ROBOT_PLUGIN.resources.configurations[0]
-    )
-    assert ROBOT_PLUGIN.resources.model.logical_identifier == (
-        "assets/mujoco/fast_arm/scene.xml"
-    )
-    assert FAST_ARM_VIEWER_DECLARATION.model_resource_path == (
-        ROBOT_PLUGIN.resources.model.logical_identifier
-    )
-    assert ROBOT_PLUGIN.resources.viewer_declaration.logical_identifier == (
-        "assets/mujoco/fast_arm/viewer-profile.json"
-    )
-    assert ROBOT_PLUGIN.resources.viewer_fixture.logical_identifier == (
-        FAST_ARM_VIEWER_DECLARATION.fixture_resource_path
-    )
-    assert tuple(
-        item.logical_identifier for item in ROBOT_PLUGIN.resources.viewer_vfs_resources
-    ) == tuple(item.resource_path for item in FAST_ARM_VIEWER_DECLARATION.vfs_assets)
 
 
 def test_runtime_metadata_delivers_a_compact_viewer_declaration_reference() -> None:

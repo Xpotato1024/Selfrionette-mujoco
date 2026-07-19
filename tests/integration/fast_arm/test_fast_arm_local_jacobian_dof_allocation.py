@@ -4,7 +4,7 @@ from selfrionette.plugins.robots.fast_arm.adapter.diagnostics.endpoint_motion_sa
     run_fast_arm_endpoint_motion_sanity,
     run_fast_arm_local_jacobian_diagnostics,
 )
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 
 
 def test_local_jacobian_diagnostics_cover_qpos_0_to_3_for_nearby_poses() -> None:

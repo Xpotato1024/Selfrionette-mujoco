@@ -11,7 +11,7 @@ from selfrionette.runtime.control.input_step_diagnostics import (
 from selfrionette.runtime.safety.input_safety import RuntimeInputSafetyResult
 from selfrionette.runtime.control.input_source_state import RuntimeInputSourceState
 from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInputFrame, SiteTransform
 
 

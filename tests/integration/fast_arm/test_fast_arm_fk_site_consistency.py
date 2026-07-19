@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.endpoint import extract_fast_arm_tip_site_endpoint_from_state
+from selfrionette.plugins.robots.fast_arm.adapter.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 
-from selfrionette.plugins.robots.fast_arm.runtime import build_fast_arm_simulator
+from selfrionette.plugins.robots.fast_arm.adapter.runtime import build_fast_arm_simulator
 
 import json
 import math

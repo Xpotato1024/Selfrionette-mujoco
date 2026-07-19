@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GENERIC_SUPPORT = ROOT / "tests" / "support" / "robot_runtime_plugin_conformance.py"
-ROBOT_CASE = ROOT / "tests" / "robots" / "fast_arm_conformance_case.py"
+ROBOT_CASE = ROOT / "tests" / "plugins" / "robots" / "fast_arm" / "adapter" / "conformance_case.py"
 CASE_REGISTRY = ROOT / "tests" / "robots" / "robot_runtime_plugin_conformance_cases.py"
 
 

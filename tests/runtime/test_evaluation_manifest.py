@@ -43,8 +43,8 @@ from selfrionette.runtime.composition.robot_bundle import CONTACT_EVIDENCE_V1, I
 from selfrionette.plugins.catalog import (
     resolve_robot_bundle as resolve_robot_bundle_from_compatibility_facade,
 )
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.plugins.robots.fast_arm.initial_state import (
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.initial_state import (
     FAST_ARM_INITIAL_STATE_CONTRACT,
     FAST_ARM_INITIAL_STATE_QPOS_RAD,
     FAST_ARM_INITIAL_STATE_TIP_POSITION_M,

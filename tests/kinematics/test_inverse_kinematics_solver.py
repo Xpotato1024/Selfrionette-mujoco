@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.plugins.robots.fast_arm.kinematics import (
+from selfrionette.plugins.robots.fast_arm.adapter.kinematics import (
     FastArmEndpointForwardKinematicsSolver,
     FastArmEndpointInverseKinematicsSolver,
 )

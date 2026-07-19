@@ -13,10 +13,10 @@ from selfrionette.mujoco_backend import (
     snapshot_mujoco_state,
 )
 from selfrionette.mujoco_backend.model_info import MuJoCoModelInfo
-from selfrionette.plugins.robots.fast_arm import endpoint as endpoint_extraction_module
+from selfrionette.plugins.robots.fast_arm.adapter import endpoint as endpoint_extraction_module
 from selfrionette.plugins.robots.fast_arm.adapter import model_contract as model_contract_module
-from selfrionette.plugins.robots.fast_arm.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
-from selfrionette.plugins.robots.fast_arm.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmMuJoCoModelForwardKinematicsSolver
+from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 
 
 def _fake_mujoco(*, body_id: int = 0, site_id: int = 0) -> object:
