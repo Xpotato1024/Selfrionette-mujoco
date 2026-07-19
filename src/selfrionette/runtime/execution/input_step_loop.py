@@ -22,6 +22,7 @@ from selfrionette.runtime.control.input_step_diagnostics import (
 from selfrionette.runtime.control.input_source_selection import RuntimeInputSourceSelection
 from selfrionette.runtime.control.input_source_state import (
     build_runtime_input_source_state_from_metadata,
+    build_runtime_input_source_state_from_health,
 )
 from selfrionette.runtime.safety.input_safety import build_runtime_input_safety_result
 from selfrionette.runtime.execution.live_timing import (
@@ -42,6 +43,9 @@ from selfrionette.runtime.composition.robot_bundle import (
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.execution.input_source_adapters import (
+    compatibility_execution_adapter,
+)
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInputFrame
 from selfrionette.transport import StatePublisher
@@ -68,6 +72,7 @@ class RuntimeInputSourceStepLoopPlan:
     endpoint_command_provider: EndpointCommandProvider
     qpos_feasibility_provider: QposFeasibilityProvider
     endpoint_site_name: str | None
+    execution_adapter: object
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +126,7 @@ def build_runtime_input_source_step_loop_plan(
     viewer_input_source: ViewerInputSource | None = None,
 ) -> RuntimeInputSourceStepLoopPlan:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
+    execution_adapter = selection.execution_adapter or compatibility_execution_adapter(selection.source_name)
     if runtime_config.robot_profile_id is None:
         raise ValueError("production input step-loop requires robot_profile_id")
     profile = resolve_robot_profile(
@@ -155,13 +161,12 @@ def build_runtime_input_source_step_loop_plan(
         "endpoint_site_name": robot_bundle.profile.endpoint.site_name,
     }
 
-    if viewer_input_source is not None and selection.source_name != "viewer":
+    if viewer_input_source is not None and not execution_adapter.uses_viewer_endpoint_compatibility:
         raise ValueError(
-            "viewer_input_source can only be supplied when "
-            "selection.source_name == 'viewer'"
+            "viewer_input_source can only be supplied for the viewer endpoint compatibility adapter"
         )
 
-    if selection.source_name == "programmed_target":
+    if execution_adapter.annotates_target_position and not execution_adapter.uses_viewer_endpoint_compatibility:
         pipeline = build_concrete_mujoco_pipeline(
             frames=selection.frames,
             config=runtime_config,
@@ -169,14 +174,17 @@ def build_runtime_input_source_step_loop_plan(
             loop=selection.loop,
             publisher=publisher if publisher is not None else _InputLoopStatePublisher(),
         )
+        if selection.runtime_reader is not None:
+            pipeline.input_source = selection.runtime_reader
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=True,
             **plan_providers,
+            execution_adapter=execution_adapter,
         )
 
-    if selection.source_name == "replay":
+    if execution_adapter.uses_replay_pipeline:
         simulator = plugin.build_simulator(
             model_path=resolved_model_path,
             initial_keyframe_name=initial_state.source_id,
@@ -195,45 +203,18 @@ def build_runtime_input_source_step_loop_plan(
             model=pipeline.simulator.model,
             config_path=runtime_config.joint_limit_config_path,
         )
+        if selection.runtime_reader is not None:
+            pipeline.input_source = selection.runtime_reader
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=False,
             **plan_providers,
+            execution_adapter=execution_adapter,
         )
 
-    if selection.source_name == "noop":
-        simulator = plugin.build_simulator(
-            model_path=resolved_model_path,
-            initial_keyframe_name=initial_state.source_id,
-        )
-        pipeline = build_replay_mujoco_pipeline(
-            frames=(
-                selection.frames
-                if selection.frames
-                else (RawInputFrame(source="noop", timestamp_s=0.0),)
-            ),
-            config=runtime_config,
-            simulator=simulator,
-            loop=True,
-            publisher=publisher,
-            initial_keyframe_name=initial_state.source_id,
-            robot_profile_metadata=robot_profile_runtime_metadata(robot_bundle.profile),
-        )
-        plugin.validate_model(pipeline.simulator.model)
-        pipeline.qpos_feasibility_guard = qpos_feasibility_provider.build_guard(
-            model=pipeline.simulator.model,
-            config_path=runtime_config.joint_limit_config_path,
-        )
-        return RuntimeInputSourceStepLoopPlan(
-            selection=selection,
-            pipeline=pipeline,
-            annotate_target_position_m=False,
-            **plan_providers,
-        )
-
-    if selection.source_name == "viewer":
-        pipeline_input_source = viewer_input_source
+    if execution_adapter.uses_viewer_endpoint_compatibility:
+        pipeline_input_source = viewer_input_source or selection.runtime_reader
         if pipeline_input_source is None:
             initial_endpoint_m = _coerce_viewer_endpoint_m(
                 selection.initial_metadata.get(
@@ -273,9 +254,10 @@ def build_runtime_input_source_step_loop_plan(
             pipeline=pipeline,
             annotate_target_position_m=True,
             **plan_providers,
+            execution_adapter=execution_adapter,
         )
 
-    raise ValueError(f"unsupported input source for step loop: {selection.source_name!r}")
+    raise ValueError(f"unsupported input source execution adapter: {execution_adapter!r}")
 
 
 def _sync_viewer_input_source_endpoint(
@@ -303,6 +285,45 @@ async def run_runtime_input_source_step_loop(
     timing_metrics: LiveRuntimeTimingMetrics | None = None,
     collect_records: bool = True,
 ) -> tuple[RuntimeInputSourceStepLoopRecord, ...]:
+    reader = plan.pipeline.input_source
+    start = getattr(reader, "start", None)
+    close = getattr(reader, "close", None)
+    attempted_start = False
+    try:
+        if callable(start):
+            attempted_start = True
+            start()
+        return await _run_runtime_input_source_step_loop(
+            plan,
+            steps=steps,
+            dt_s=dt_s,
+            interval_s=interval_s,
+            pacer=pacer,
+            timing_metrics=timing_metrics,
+            collect_records=collect_records,
+        )
+    except BaseException as failure:
+        if attempted_start and callable(close):
+            try:
+                close()
+            except BaseException as cleanup_failure:
+                failure.add_note(f"input source cleanup failed: {cleanup_failure!r}")
+        raise failure
+    finally:
+        if not attempted_start and callable(close):
+            close()
+
+
+async def _run_runtime_input_source_step_loop(
+    plan: RuntimeInputSourceStepLoopPlan,
+    *,
+    steps: int,
+    dt_s: float | None = None,
+    interval_s: float = 0.0,
+    pacer: AbsoluteDeadlinePacer | None = None,
+    timing_metrics: LiveRuntimeTimingMetrics | None = None,
+    collect_records: bool = True,
+) -> tuple[RuntimeInputSourceStepLoopRecord, ...]:
     if steps < 1:
         raise ValueError("steps must be a positive integer")
 
@@ -313,7 +334,7 @@ async def run_runtime_input_source_step_loop(
         pacer.start()
     records: list[RuntimeInputSourceStepLoopRecord] = []
     last_valid_endpoint_m: tuple[float, float, float] | None = None
-    if plan.selection.source_name == "viewer":
+    if plan.execution_adapter.uses_viewer_endpoint_compatibility:
         last_valid_endpoint_m = _extract_current_endpoint_m(
             plan.pipeline, plan.endpoint_pose_provider
         )
@@ -329,18 +350,31 @@ async def run_runtime_input_source_step_loop(
         compute_started_s = timing_metrics.clock() if timing_metrics is not None else 0.0
         frame = plan.pipeline.input_source.read_frame()
         intent = plan.pipeline.input_interpreter.interpret(frame)
-        source_state = build_runtime_input_source_state_from_metadata(
-            frame.metadata,
-            default_source_kind=plan.selection.source_name,
-        )
+        health_provider = getattr(plan.pipeline.input_source, "current_health", None)
+        if callable(health_provider):
+            health = health_provider()
+            source_state = build_runtime_input_source_state_from_health(
+                health, source_kind=plan.selection.source_name
+            )
+            frame_active = frame.metadata.get("source_active")
+            if isinstance(frame_active, bool) and frame_active != source_state.source_active:
+                raise ValueError("input source frame metadata and typed health disagree")
+            frame_reason = frame.metadata.get("stale_reason")
+            if frame_reason is not None and frame_reason != source_state.stale_reason:
+                raise ValueError("input source frame stale reason and typed health disagree")
+        else:
+            source_state = build_runtime_input_source_state_from_metadata(
+                frame.metadata,
+                default_source_kind=plan.selection.source_name,
+            )
         pre_step_state = plan.pipeline.simulator.snapshot()
         pre_step_tip_site_orientation_wxyz = None
-        if plan.selection.source_name == "viewer":
+        if plan.execution_adapter.uses_viewer_endpoint_compatibility:
             pre_step_tip_site_orientation_wxyz = _extract_endpoint_orientation_wxyz_from_state(
                 pre_step_state, plan.endpoint_pose_provider
             )
         motion_intent = intent
-        if plan.selection.source_name == "viewer":
+        if plan.execution_adapter.uses_viewer_endpoint_compatibility:
             motion_intent_metadata = {
                 **frame.metadata,
                 **intent.metadata,
@@ -388,7 +422,7 @@ async def run_runtime_input_source_step_loop(
             ),
         )
         measurement = PostStepMeasurement(None, None, None)
-        if plan.selection.source_name == "viewer" and plan.endpoint_site_name is not None:
+        if plan.execution_adapter.uses_viewer_endpoint_compatibility and plan.endpoint_site_name is not None:
             measurement = measure_post_step_endpoint(
                 pre_step_state,
                 state,
@@ -410,7 +444,7 @@ async def run_runtime_input_source_step_loop(
         publish_started_s = annotation_finished_s
         await plan.pipeline.publisher.publish(annotated_state)
         publish_finished_s = timing_metrics.clock() if timing_metrics is not None else 0.0
-        if plan.selection.source_name == "viewer":
+        if plan.execution_adapter.uses_viewer_endpoint_compatibility:
             if step_endpoint_m is None:
                 step_endpoint_m = annotated_state.target_position_m or last_valid_endpoint_m
             if step_endpoint_m is not None:

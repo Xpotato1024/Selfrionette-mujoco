@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from selfrionette.schemas import RawInputFrame
+from selfrionette.runtime.experiment.input_source import InputSourceHealth, InputSourceHealthStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +91,28 @@ def build_runtime_input_source_state_from_metadata(
     )
 
 
+def build_runtime_input_source_state_from_health(
+    health: InputSourceHealth,
+    *,
+    source_kind: str,
+) -> RuntimeInputSourceState:
+    """Project source-owned typed health without recreating source reasons."""
+
+    if not isinstance(health, InputSourceHealth):
+        raise TypeError("input source health projection requires InputSourceHealth")
+    active = health.status is InputSourceHealthStatus.ACTIVE
+    if active and health.reason is not None:
+        raise ValueError("active input source health cannot carry a stale reason")
+    if not active and not health.reason:
+        raise ValueError("inactive input source health requires a reason")
+    return build_runtime_input_source_state(
+        source_kind,
+        source_active=active,
+        command_age_ms=health.age_ms,
+        stale_reason=health.reason,
+    )
+
+
 def runtime_input_source_state_to_metadata(state: RuntimeInputSourceState) -> dict[str, object]:
     metadata: dict[str, object] = {
         "source_kind": state.source_kind,
@@ -121,5 +144,6 @@ __all__ = [
     "annotate_runtime_input_source_metadata",
     "build_runtime_input_source_state",
     "build_runtime_input_source_state_from_metadata",
+    "build_runtime_input_source_state_from_health",
     "runtime_input_source_state_to_metadata",
 ]

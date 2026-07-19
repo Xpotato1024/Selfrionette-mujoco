@@ -11,6 +11,8 @@ from selfrionette.input_sources.loadcell_serial import (
     NormalizedLoadcellInputIntent,
     SerialInputSource,
 )
+from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
+from selfrionette.runtime.experiment.input_source import InputSourceRuntimeDependencies
 from selfrionette.runtime.runners.offline_input_smoke import run_offline_input_runtime_stepping_smoke
 
 DEFAULT_LIVE_LOADCELL_BAUD_RATE = 115200
@@ -110,39 +112,58 @@ def run_live_loadcell_runtime_runner(
     if config.port is None and line_source is None:
         raise ValueError("port is required for live serial mode")
 
-    source = (
-        SerialInputSource.from_lines(line_source)
+    registration = INPUT_SOURCE_CATALOG.resolve(
+        "loadcell_fixture" if line_source is not None else "loadcell_serial"
+    )
+    source_parameters = (
+        {"lines": tuple(line_source)}
         if line_source is not None
-        else SerialInputSource(_iter_live_serial_lines(config.port, config.baud_rate))
+        else {"port": config.port, "baud_rate": config.baud_rate}
+    )
+    source = registration.plugin.create_runtime_reader(
+        source_parameters,
+        runtime_dependencies=(
+            InputSourceRuntimeDependencies(line_source=tuple(line_source))
+            if line_source is not None
+            else None
+        ),
     )
     normalized_converter = LoadcellNormalizedInputIntentConverter(source="loadcell_serial")
     endpoint_converter = LoadcellEndpointMotionCommandConverter()
 
     payloads: list[Mapping[str, object]] = []
-    for frame_index in range(1, config.max_frames + 1):
-        try:
-            raw_frame = source.read_frame()
-        except StopIteration:
-            break
+    start = getattr(source, "start", None)
+    close = getattr(source, "close", None)
+    try:
+        if callable(start):
+            start()
+        for frame_index in range(1, config.max_frames + 1):
+            try:
+                raw_frame = source.read_frame()
+            except StopIteration:
+                break
 
-        normalized_intent = normalized_converter.convert(raw_frame)
-        runtime_intent = _build_runtime_intent(
-            normalized_intent,
-            frame_index=frame_index,
-            serial_timestamp_s=raw_frame.timestamp_s,
-            config=config,
-        )
-        motion_command = endpoint_converter.convert(
-            runtime_intent,
-            current_tip_position_m=config.current_tip_position_m,
-        )
-        runtime_result = run_offline_input_runtime_stepping_smoke(
-            motion_command,
-            steps=config.steps_per_frame,
-        )
-        if runtime_result.payload is None:  # pragma: no cover - defensive
-            raise RuntimeError("offline runtime smoke did not produce a payload")
-        payloads.append(runtime_result.payload)
+            normalized_intent = normalized_converter.convert(raw_frame)
+            runtime_intent = _build_runtime_intent(
+                normalized_intent,
+                frame_index=frame_index,
+                serial_timestamp_s=raw_frame.timestamp_s,
+                config=config,
+            )
+            motion_command = endpoint_converter.convert(
+                runtime_intent,
+                current_tip_position_m=config.current_tip_position_m,
+            )
+            runtime_result = run_offline_input_runtime_stepping_smoke(
+                motion_command,
+                steps=config.steps_per_frame,
+            )
+            if runtime_result.payload is None:  # pragma: no cover - defensive
+                raise RuntimeError("offline runtime smoke did not produce a payload")
+            payloads.append(runtime_result.payload)
+    finally:
+        if callable(close):
+            close()
 
     return payloads
 

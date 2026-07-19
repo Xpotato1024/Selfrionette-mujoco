@@ -38,7 +38,7 @@ transport           -> schemas
 runtime             -> all layers
 ```
 
-Input Source Pluginのgeneric contractは`runtime/experiment/input_source.py`が所有する。
+Input Source Pluginのgeneric contractは`runtime/experiment/input_source.py`が所有し、production source registrationは`plugins/input_sources/`が所有する。
 既存`input_sources.base.InputSource`の`read_frame() -> RawInputFrame`をreader compatibility
 boundaryとして再利用し、source contractからfast_arm、task / evaluation実装、viewer TypeScript、
 serial transportをimportしない。Control Mapping Pluginはproduced / accepted sample schemaの
@@ -163,7 +163,7 @@ transport           -> runtime
 
 ## Input Source runtime validation boundary
 
-generic source contractのhealth providerとvalidated reader adapterは`runtime/experiment/input_source.py`が所有する。adapterは`fast_arm`、serial transport、browser/viewer implementation、task/evaluation implementationをimportせず、`RawInputFrame`とtyped `InputSourceHealth`だけをruntime boundaryで検証する。具体的sourceの移行はP3、viewer provider separationはP4に残す。
+generic source contractのhealth providerとvalidated reader adapterは`runtime/experiment/input_source.py`が所有する。adapterは`fast_arm`、serial transport、browser/viewer implementation、task/evaluation implementationをimportせず、`RawInputFrame`とtyped `InputSourceHealth`だけをruntime boundaryで検証する。production source pluginはdeterministic known-ID catalogからのみ解決し、source packageがrobot command、task/evaluation、viewer TypeScriptをimportすることを禁止する。mappingはsource package外に残し、loadcell serial portを開かない。P3のviewer packageは既存backend bridgeのcompatibility adapterであり、frontend provider / keyboard / gamepad mapping分離はP4に残す。
 
 ## legacy参照と移行境界
 

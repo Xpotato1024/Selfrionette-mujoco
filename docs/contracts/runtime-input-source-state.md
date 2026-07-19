@@ -12,6 +12,11 @@ related:
 
 # Runtime Input Source State
 
+P3では`InputSourceHealth`をsource pluginが所有し、runtimeは各read後にこのtyped stateを既存の
+`source_active`、`command_age_ms`、`stale_reason`へprojectionする。source reasonをruntimeで再生成せず、
+frame metadataとhealthのactive/stale状態が矛盾する場合はfail-closedとする。viewer backend bridgeの初期値は
+`source_active=false`、`command_age_ms=0`、`stale_reason=no_control_message_received`を維持する。
+
 ## 目的
 
 runtime payload の `metadata` に載せる input source の観測用 state を定義する。

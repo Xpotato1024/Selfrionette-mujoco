@@ -22,7 +22,7 @@ related:
 | owner | canonical responsibility |
 |---|---|
 | `composition/` | config、Robot Profile / Plugin / Bundle、typed provider adapter、pipeline assembly |
-| `execution/` | `RuntimePipeline`、input step loop、timing / pacing |
+| `execution/` | `RuntimePipeline`、input step loop、typed input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness-only composition |
@@ -106,7 +106,9 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 
 ## Input Source reader boundary
 
-Input Sourceのfactory outputは`InputSource`と`InputSourceHealthProvider`を満たし、factory直後のtyped current healthがpluginの`initial_health`と一致しなければならない。`ValidatedInputSourceReader`はframeとhealthを呼出しごとに検証する。composition rootはfactory、frame read、lifecycle startを実行せず、offline / replayにmanaged lifecycleを要求しない。live / viewer_bridgeのruntime instanceだけがmanaged adapterを持つ。
+Input Sourceのfactory outputは`InputSource`と`InputSourceHealthProvider`を満たし、factory直後のtyped current healthがpluginの`initial_health`と一致しなければならない。`ValidatedInputSourceReader`はframeとhealthを呼出しごとに検証する。`input_sources/`のproduction catalogは`plugins/input_sources/catalog.py`をprojectionし、selectionはaliasから`PluginSelection`、resolved plugin、sample schema、validated reader、typed execution adapterへ一度だけ解決する。source固有のpreset、custom frame、factory parameterはregistrationのrequest builderが所有し、runtime coreはsource IDを比較しない。composition rootはfactory、frame read、lifecycle startを実行せず、offline / replayにmanaged lifecycleを要求しない。live / viewer_bridgeのruntime instanceだけがmanaged adapterを持つ。
+
+P3のexecution adapterは`target_metadata`、`replay_compatibility`、`viewer_local_endpoint_compatibility`、loadcell、analog fixtureのversioned semanticsを明示する。viewer adapterはP4までendpoint coercion、local motion、orientation metadata、post-step measurement、publish後rebaseをcompatibility責務として保持する。frontend keyboard / gamepad providerとmappingの分離は#461のscopeであり、P3では変更しない。
 
 ## failureとordering
 

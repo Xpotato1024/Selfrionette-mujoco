@@ -33,7 +33,7 @@ EXPECTED_MODULES = {
         "viewer_motion_policy",
     },
     "evaluation": {"endpoint_metrics", "endpoint_progress", "kinematics", "manifest"},
-    "execution": {"input_step_loop", "live_timing", "pipeline"},
+    "execution": {"input_step_loop", "input_source_adapters", "live_timing", "pipeline"},
     "experiment": {"composition", "contracts", "input_source", "registry"},
     "runners": {
         "dry_run",

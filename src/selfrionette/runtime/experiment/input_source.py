@@ -9,7 +9,7 @@ and optional lifecycle capability around it.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
@@ -47,6 +47,15 @@ class InputSourceHealthProvider(Protocol):
 
     def current_health(self) -> InputSourceHealth:
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class InputSourceRuntimeDependencies:
+    """Typed non-manifest dependencies kept outside canonical plugin parameters."""
+
+    replay_frames: tuple[RawInputFrame, ...] | None = None
+    clock: Callable[[], float] | None = None
+    line_source: tuple[str, ...] | None = None
 
 
 def _freeze_metadata(name: str, value: object) -> object:
@@ -115,7 +124,12 @@ class ManagedInputSource(Protocol):
 
 @runtime_checkable
 class InputSourceFactory(Protocol):
-    def __call__(self, parameters: Mapping[str, object]) -> object: ...
+    def __call__(
+        self,
+        parameters: Mapping[str, object],
+        *,
+        runtime_dependencies: InputSourceRuntimeDependencies | None = None,
+    ) -> object: ...
 
 
 class ValidatedInputSourceReader(InputSource, InputSourceHealthProvider):
@@ -192,7 +206,10 @@ class InputSourcePlugin:
         object.__setattr__(self, "produced_evidence", evidence)
 
     def create_runtime_reader(
-        self, parameters: Mapping[str, object]
+        self,
+        parameters: Mapping[str, object],
+        *,
+        runtime_dependencies: InputSourceRuntimeDependencies | None = None,
     ) -> ValidatedInputSourceReader | ValidatedManagedInputSourceReader:
         """Validate parameters and create one reader without starting it."""
 
@@ -202,7 +219,13 @@ class InputSourcePlugin:
         if not isinstance(frozen_parameters, Mapping):
             raise TypeError("input source parameters must freeze to a mapping")
         self.parameter_contract.validate(frozen_parameters)
-        reader = self.factory(frozen_parameters)
+        if runtime_dependencies is None:
+            reader = self.factory(frozen_parameters)
+        else:
+            reader = self.factory(
+                frozen_parameters,
+                runtime_dependencies=runtime_dependencies,
+            )
         if not isinstance(reader, InputSource):
             raise TypeError(
                 "input source factory returned an object that does not satisfy "
@@ -243,9 +266,15 @@ class InputSourcePlugin:
 
     # Short compatibility spelling for callers that use the generic reader term.
     def create_reader(
-        self, parameters: Mapping[str, object]
+        self,
+        parameters: Mapping[str, object],
+        *,
+        runtime_dependencies: InputSourceRuntimeDependencies | None = None,
     ) -> ValidatedInputSourceReader | ValidatedManagedInputSourceReader:
-        return self.create_runtime_reader(parameters)
+        return self.create_runtime_reader(
+            parameters,
+            runtime_dependencies=runtime_dependencies,
+        )
 
 
 __all__ = [
@@ -253,6 +282,7 @@ __all__ = [
     "InputSourceHealth",
     "InputSourceHealthStatus",
     "InputSourceHealthProvider",
+    "InputSourceRuntimeDependencies",
     "InputSourceMode",
     "InputSourcePlugin",
     "InputSource",

@@ -1,10 +1,12 @@
-# input_sources
+# input_sources compatibility modules
 
 ## 責務
 
-Arduino / keyboard / gamepad / replay / OSC / mocap から値を読み、
-`RawInputFrame` を作る。loadcellのserial frame parser、normalization、
-`SerialInputSource`は`loadcell_serial.py`が所有する。
+既存public importとsource-local algorithmの互換境界を提供する。production sourceのcatalog、
+versioned identity、factory、health、lifecycle registrationは`selfrionette/plugins/input_sources/`
+が所有し、ここから新しいsource implementationを登録しない。Arduino / keyboard / gamepad /
+replay / OSC / mocapから値を読み、`RawInputFrame`を作る。loadcellのserial frame parser、
+normalization、`SerialInputSource`はP3でもこの互換moduleから同一実装を参照する。
 
 ## 入力
 
@@ -20,7 +22,9 @@ Arduino / keyboard / gamepad / replay / OSC / mocap から値を読み、
 
 ## 依存してはいけない層
 
-`motion`, `kinematics`, `mujoco_backend`, `transport`, `runtime`
+`motion`, `kinematics`, `mujoco_backend`, `transport`
+
+plugin catalogとのcomposition接続は`runtime`が所有する。
 
 ## 禁止事項
 

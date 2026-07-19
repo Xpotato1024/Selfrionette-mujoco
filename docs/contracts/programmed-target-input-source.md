@@ -13,6 +13,10 @@ related:
 
 # ProgrammedTargetInputSource Contract
 
+P3ではこのbehaviorを`plugins/input_sources/programmed_target/`のversioned registrationがfactoryへ
+接続する。`selfrionette.input_sources.programmed_target`は既存public importを維持するcompatibility
+boundaryであり、trajectory、preset validation、terminal hold、loop semanticsを変更しない。
+
 ## 1. 目的
 
 `ProgrammedTargetInputSource` は、決め打ちの target trajectory を `RawInputFrame`

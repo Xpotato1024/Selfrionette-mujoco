@@ -11,6 +11,10 @@ related:
 
 # 記録済みanalog fixture mapping
 
+P3では`AnalogFixtureSample`のstrict parsingとsequence readerを`analog_fixture` source pluginが所有する。
+center、half-range、axis weights、sign、scale、deadzone、control frame、endpoint velocity intentは
+従来どおりmapping側に残し、sample schemaは`analog_fixture_sample/v1`として登録する。
+
 pure mappingは、JSON互換の記録済みsample 1件を既存の
 `ContinuousEndpointVelocityIntent`へmappingする。これはpureなoffline boundaryであり、
 自身ではfileを読まず、deviceを検出せず、serial/Arduino/OSC I/Oを実行せず、

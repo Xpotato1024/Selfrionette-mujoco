@@ -12,6 +12,10 @@ related:
 
 # Viewer Control Messageのschema
 
+P3ではこのmessageを受けるbackend `viewer` sourceをcompatibility pluginとしてcatalogへ登録する。
+keyboard / gamepad capture、provider lifecycle、binding、gain、deadzone、control-frame mappingは変更せず、
+frontend providerとbackend source / mappingの分離は#461で扱う。
+
 この文書はviewer-to-backend control messageのcanonical contractを定義する。
 
 これはschema-onlyかつJSON-compatibleである。Viewer JSはkeyboardまたは

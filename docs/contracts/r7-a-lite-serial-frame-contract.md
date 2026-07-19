@@ -10,6 +10,10 @@ related:
 
 # R7-A-lite Serial Frame契約
 
+P3ではserial parserと7-channel `RawInputFrame` acquisitionを`loadcell_serial` plugin registrationへ
+接続し、recorded linesは`loadcell_fixture`として同じparserと`loadcell_vector_sample/v1`を使用する。
+channel-axis mapping、gain、endpoint delta、`MotionCommand`生成はこのsource contractの外に残す。
+
 ## 対象範囲
 
 この文書は、R7-A-liteが使用する現在の`main` firmware targetのserial frame contractを

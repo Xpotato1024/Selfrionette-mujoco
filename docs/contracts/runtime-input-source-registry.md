@@ -24,8 +24,9 @@ Issue #459〜#462向けのInput Source Plugin v1境界を分けて定義する�
 
 `A. Current implemented contract`はbaseline mainで実際に存在するsymbol、source名、
 selection、metadata、CLI互換性を記載する。`B. P2 implemented contract`は#459で成立した
-generic contract、registry、composition gateを記載し、#460 / #461の未実装部分を現在の
-production implementationとして扱わない。
+generic contract、registry、composition gateを記載する。`C. P3 migrated production catalog`は
+#460で成立したbackend source migrationを記載し、#461 / #462の未実装部分を現在のproduction
+implementationとして扱わない。
 
 Input Sourceは、Issue #457の判断に従い、既存のRobot、Environment、Control/Mapping、
 Task、Evaluationに加わる第6のcomposition軸とする。ただし、frontend providerはbackend
@@ -195,9 +196,57 @@ mapping、runtime orchestrationを自己完結したpluginとして分離でき�
 
 ### B.6 P3 / P4 remaining scope
 
-- #460: programmed target、replay、noop、loadcell / fixture sourceのbehavior-preserving production plugin移行。
+- #460のbackend source migrationは次のC節に記録する。
 - #461: backend viewer sourceとControl Mappingの分離、keyboard / gamepad frontend providerの分離。
 - #462: plugin-local test scope、onboarding、completion audit。
+
+## C. P3 migrated production catalog（#460）
+
+### C.1 catalogとalias
+
+`src/selfrionette/plugins/input_sources/catalog.py`がproduction catalogの正本であり、
+`VersionedPluginRegistry[InputSourcePlugin]`とalias mapを同時に検証する。登録順ではなくplugin IDを
+決定的に並べ、duplicate plugin ID、duplicate CLI alias、unknown alias、contract version mismatchを
+fail-closedで拒否する。旧`selfrionette.input_sources.registry`はこのcatalogを遅延projectionする互換境界であり、
+source factoryを実装しない。
+
+| plugin ID | contract | sample schema | mode | CLI alias | generic CLI | execution adapter |
+|---|---:|---|---|---|---|---|
+| `programmed_target` | 1 | `programmed_target_sample/v1` | offline | `programmed_target` | yes | `target_metadata_input_execution/v1` |
+| `replay` | 1 | `replay_raw_input_frame/v1` | replay | `replay` | yes | `replay_compatibility_input_execution/v1` |
+| `noop` | 1 | `noop_sample/v1` | offline | `noop` | yes | `replay_compatibility_input_execution/v1` |
+| `viewer` | 1 | `viewer_control_sample/v1` | viewer_bridge | `viewer` | yes | `viewer_local_endpoint_input_execution/v1` |
+| `loadcell_serial` | 1 | `loadcell_vector_sample/v1` | live | `loadcell_serial` | no | `loadcell_input_execution/v1` |
+| `loadcell_fixture` | 1 | `loadcell_vector_sample/v1` | replay | `loadcell_fixture` | no | `loadcell_input_execution/v1` |
+| `analog_fixture` | 1 | `analog_fixture_sample/v1` | replay | `analog_fixture` | no | `analog_fixture_input_execution/v1` |
+
+`SUPPORTED_INPUT_SOURCE_NAMES`は従来どおり`("programmed_target", "replay", "noop", "viewer")`である。
+loadcell live、loadcell fixture、analog fixtureはgeneric replay CLI choicesへ追加せず、専用runner / injected
+fixture boundaryからのみ到達する。plugin identityとsample schema identityは別のversioned identityであり、
+loadcell live / fixtureは同じ7-channel sample schemaを共有する。
+
+### C.2 selection、health、lifecycle
+
+`select_runtime_input_source()`はalias、`PluginSelection`、registration request builder、typed factory、
+initial healthを順に解決し、`RuntimeInputSourceSelection`へplugin、sample schema、mode、validated reader、
+execution adapterを保持する。source固有のpreset/custom frame validationはregistrationへ閉じ、custom replay
+framesやclockはcanonical parameterではなく`InputSourceRuntimeDependencies`へ渡す。
+
+step-loopはresolved execution adapterのcapabilityだけを呼び、source IDの`if / elif`を持たない。typed healthは
+各read後に`source_active`、`command_age_ms`、`stale_reason`へgeneric projectionする。理由文字列はruntimeで再生成せず、
+active healthにreasonを許さず、inactive healthにreasonを要求する。
+
+managed viewer bridge / live serialはruntimeがstartを最大1回、normal / failure pathでcloseを最大1回orchestrateする。
+factory creationではserial portやbrowserを開かない。fixtureはcanonical serial parserを再利用し、mapping、gain、
+deadzone、axis sign、control frame、MotionCommand生成はsource pluginへ移していない。
+
+### C.3 compatibilityとremaining scope
+
+programmed target、replay、noop、viewer backend、loadcell live / fixture、analog fixtureの既存frame、metadata、
+loop、EOF / terminal hold、stale safety、CLI / runner behaviorはcompatibility adapterで維持する。旧public source
+importsは動作し、同じ実装の新旧コピーは作らない。viewerのkeyboard / gamepad capture、frontend provider lifecycle、
+mapping分離、message schema、gain / deadzoneは変更していない。これらは#461へ残る。plugin-local test ownershipと
+onboarding / completion auditは#462へ残る。
 
 ## 既存canonical文書との関係
 
