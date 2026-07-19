@@ -34,11 +34,11 @@ serial frame lines
 - `docs/experiment-notes/2026-06-21-r7-a-lite-data/com5-calibrated-transcript.txt`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-data/com5-calibrated-vectors.csv`
 - `docs/contracts/r7-a-lite-serial-frame-contract.md`
-- `scripts/hardware/loadcell/measure_loadcell_channel_response.ps1`
-- `scripts/hardware/loadcell/monitor_loadcell_serial.ps1`
-- `scripts/hardware/loadcell/plot_loadcell_vectors.ps1`
-- `scripts/hardware/loadcell/run_live_loadcell_runtime.py`
-- `scripts/hardware/loadcell/run_loadcell_serial_dry_run.py`
+- `scripts/hardware/loadcell/measure_loadcell_channel_response.ps1`: channel response測定
+- `scripts/hardware/loadcell/monitor_loadcell_serial.ps1`: serial monitor
+- `scripts/hardware/loadcell/plot_loadcell_vectors.ps1`: recorded vector evidenceの再表示
+- `scripts/hardware/loadcell/run_live_loadcell_runtime.py`: manual-gated live runtime
+- `scripts/hardware/loadcell/run_loadcell_serial_dry_run.py`: offline fixture dry-run
 
 `transcript.txt` と `vectors.csv` は背景証拠として残す。smoke 実行は小さな fixture を使う。
 

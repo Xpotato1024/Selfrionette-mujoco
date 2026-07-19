@@ -113,5 +113,5 @@ uv run python scripts/diagnostics/fast_arm/run_fast_arm_endpoint_motion_sanity.p
 ## 参考実装
 
 - diagnostic owner: `src/selfrionette/plugins/robots/fast_arm/diagnostics/endpoint_motion_sanity.py`
-- CLI script: `scripts/diagnostics/fast_arm/run_fast_arm_endpoint_motion_sanity.py`
+- CLI script: `scripts/diagnostics/fast_arm/run_fast_arm_endpoint_motion_sanity.py` を使用する。
 - 既存 procedure: `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md`
