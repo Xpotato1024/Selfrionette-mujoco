@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 
 
-SCRIPT_PATH = Path(__file__).parents[2] / "scripts" / "validate_markdown_docs.py"
+SCRIPT_PATH = Path(__file__).parents[2] / "scripts" / "repository" / "validate_markdown_docs.py"
 SPEC = importlib.util.spec_from_file_location("validate_markdown_docs", SCRIPT_PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)

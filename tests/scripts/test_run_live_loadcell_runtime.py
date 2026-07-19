@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "run_live_loadcell_runtime.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "hardware" / "loadcell" / "run_live_loadcell_runtime.py"
 SPEC = importlib.util.spec_from_file_location("run_live_loadcell_runtime", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)

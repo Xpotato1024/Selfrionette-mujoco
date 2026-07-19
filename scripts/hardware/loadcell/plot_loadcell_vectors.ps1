@@ -32,16 +32,16 @@
   Print help and exit.
 
 .EXAMPLE
-  Get-Content .\logs\loadcell.txt | .\scripts\plot_loadcell_vectors.ps1
+  Get-Content .\logs\loadcell.txt | .\scripts\hardware\loadcell\plot_loadcell_vectors.ps1
 
 .EXAMPLE
-  .\scripts\plot_loadcell_vectors.ps1 -InputPath .\logs\loadcell.txt
+  .\scripts\hardware\loadcell\plot_loadcell_vectors.ps1 -InputPath .\logs\loadcell.txt
 
 .EXAMPLE
-  .\scripts\plot_loadcell_vectors.ps1 -Clipboard
+  .\scripts\hardware\loadcell\plot_loadcell_vectors.ps1 -Clipboard
 
 .EXAMPLE
-  .\scripts\plot_loadcell_vectors.ps1 -InputPath .\logs\loadcell.txt -OutputPath .\plots\loadcell.png
+  .\scripts\hardware\loadcell\plot_loadcell_vectors.ps1 -InputPath .\logs\loadcell.txt -OutputPath .\plots\loadcell.png
 #>
 param(
   [string]$InputPath,

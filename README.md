@@ -79,7 +79,7 @@ browser page URL と WebSocket URL は別です。viewer は `websocketUrl` を�
 ### live viewer smoke
 
 ```bash
-uv run python scripts/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --steps 3 --grace-period-s 5
+uv run python scripts/viewer/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --steps 3 --grace-period-s 5
 ```
 
 browser / viewer smoke の補助導線です。CLI は browser URL と WebSocket endpoint を区別して出力します。R6-F visual elements の観測入口として使います。

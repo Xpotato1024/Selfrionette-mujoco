@@ -18,7 +18,7 @@ replay payload v0からbrowser viewer runtimeまでのdeterministic local smoke 
 ## command
 
 ```bash
-uv run python scripts/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --steps 3 --grace-period-s 5
+uv run python scripts/viewer/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --steps 3 --grace-period-s 5
 ```
 
 ## viewer URL

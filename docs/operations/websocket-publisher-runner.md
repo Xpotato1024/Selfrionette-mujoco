@@ -101,7 +101,7 @@ host / port / public host contractは`docs/operations/websocket-host-port-contra
 runnerとbrowser viewerを組み合わせるsmokeは次を参照する。
 
 - `docs/operations/live-viewer-smoke.md`
-- `scripts/run_live_viewer_smoke.py`
+- `scripts/viewer/run_live_viewer_smoke.py`
 
 dry-run、publisher、viewer、browser connectionを接続するtop-level startup guideは
 `docs/operations/backend-viewer-startup.md`である。

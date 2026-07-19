@@ -77,7 +77,7 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
 - owner: fast_arm Robot Plugin resource
 - path: `assets/mujoco/fast_arm/fixtures/fast_arm_sweep_x_qpos.json`
 - schema owner: `apps/mujoco-viewer/src/wasm-scene/qposFrameTypes.ts`
-- 再生成: `uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30`
+- 再生成: `uv run python scripts/viewer/export_wasm_qpos_fixture.py --preset sweep_x --steps 30`
 - fixture playbackはdebug/validation専用であり、startupはnamed `home` keyframeを使う
 
 ## fixture生成のintegrity

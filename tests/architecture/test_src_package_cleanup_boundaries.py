@@ -190,7 +190,7 @@ def test_generic_kinematics_and_mujoco_packages_are_robot_independent() -> None:
 
 
 def test_diagnostic_scripts_import_plugin_owned_entrypoints() -> None:
-    for path in (ROOT / "scripts").glob("run_fast_arm_*diagnostic*.py"):
+    for path in (ROOT / "scripts" / "diagnostics" / "fast_arm").glob("run_fast_arm_*diagnostic*.py"):
         imported = _imports(path)
         assert any(
             name.startswith("selfrionette.plugins.robots.fast_arm.adapter.diagnostics")

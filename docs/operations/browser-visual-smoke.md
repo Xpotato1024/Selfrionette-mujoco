@@ -61,11 +61,11 @@ host / port / public host contract は
 ## One-command launcher
 
 Windows / PowerShell 向けの one-command smoke は
-`scripts/run-browser-viewer-smoke.ps1` を使う。Windows PowerShell 5.1 で動く
+`scripts/viewer/run-browser-viewer-smoke.ps1` を使う。Windows PowerShell 5.1 で動く
 構文を優先している。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-browser-viewer-smoke.ps1 `
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\viewer\run-browser-viewer-smoke.ps1 `
   -PublisherPort 8768 `
   -ViewerPort 5176 `
   -Preset sweep_x `

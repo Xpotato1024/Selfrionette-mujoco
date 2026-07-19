@@ -43,7 +43,7 @@ serial frame lines
 ## 実行例
 
 ```powershell
-uv run python scripts/run_live_loadcell_runtime.py --port COM5 --max-frames 120
+uv run python scripts/hardware/loadcell/run_live_loadcell_runtime.py --port COM5 --max-frames 120
 ```
 
 startup banner には manual gated live serial mode と対象 `port` / `baud_rate` / `max_frames` を表示する。

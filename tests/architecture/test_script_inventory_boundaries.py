@@ -1,54 +1,90 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY = ROOT / "docs/reports/implementation/script-inventory-and-retirement.md"
 RETIRED_LAUNCHER = "run_mujoco_viewer_dev.py"
+TEXT_SUFFIXES = {".md", ".py", ".ps1", ".yml", ".yaml", ".toml", ".txt"}
 EXPECTED_SCRIPTS = {
-    "export_wasm_qpos_fixture.py",
-    "measure_loadcell_channel_response.ps1",
-    "monitor_loadcell_serial.ps1",
-    "plot_fast_arm_endpoint_trajectory_log.py",
-    "plot_loadcell_vectors.ps1",
-    "run_fast_arm_endpoint_motion_sanity.py",
-    "run_fast_arm_jacobian_mobility_diagnostics.py",
-    "run_fast_arm_neutral_pose_evaluator.py",
-    "run_fast_arm_neutral_pose_startup_smoke.py",
-    "run_live_loadcell_runtime.py",
-    "run_live_viewer_smoke.py",
-    "run_loadcell_serial_dry_run.py",
-    "run_replay_mujoco_dry_run.py",
-    "run_replay_mujoco_websocket_publisher.py",
-    "run-browser-viewer-smoke.ps1",
-    "validate_github_body_structure.py",
-    "validate_markdown_docs.py",
-    "view_fast_arm_native_mujoco.py",
+    "scripts/hardware/loadcell/measure_loadcell_channel_response.ps1",
+    "scripts/hardware/loadcell/monitor_loadcell_serial.ps1",
+    "scripts/hardware/loadcell/plot_loadcell_vectors.ps1",
+    "scripts/hardware/loadcell/run_live_loadcell_runtime.py",
+    "scripts/hardware/loadcell/run_loadcell_serial_dry_run.py",
+    "scripts/diagnostics/fast_arm/plot_fast_arm_endpoint_trajectory_log.py",
+    "scripts/diagnostics/fast_arm/run_fast_arm_endpoint_motion_sanity.py",
+    "scripts/diagnostics/fast_arm/run_fast_arm_jacobian_mobility_diagnostics.py",
+    "scripts/diagnostics/fast_arm/run_fast_arm_neutral_pose_evaluator.py",
+    "scripts/diagnostics/fast_arm/run_fast_arm_neutral_pose_startup_smoke.py",
+    "scripts/diagnostics/fast_arm/view_fast_arm_native_mujoco.py",
+    "scripts/viewer/export_wasm_qpos_fixture.py",
+    "scripts/viewer/run_live_viewer_smoke.py",
+    "scripts/viewer/run-browser-viewer-smoke.ps1",
+    "scripts/compatibility/run_replay_mujoco_dry_run.py",
+    "scripts/compatibility/run_replay_mujoco_websocket_publisher.py",
+    "scripts/repository/validate_github_body_structure.py",
+    "scripts/repository/validate_markdown_docs.py",
 }
 
 
-def test_script_inventory_covers_the_exact_current_directory() -> None:
-    current = {path.name for path in (ROOT / "scripts").iterdir() if path.is_file()}
-    assert current == EXPECTED_SCRIPTS
+def _tracked_scripts() -> set[str]:
+    result = subprocess.run(
+        ["git", "ls-files", "scripts"], cwd=ROOT, check=True, capture_output=True, text=True
+    )
+    return set(result.stdout.splitlines())
+
+
+def _current_consumer_files() -> list[Path]:
+    files = [ROOT / "README.md", ROOT / "AGENTS.md"]
+    for directory in (ROOT / ".github", ROOT / "apps", ROOT / "tests", ROOT / "scripts"):
+        files.extend(
+            path for path in directory.rglob("*") if path.is_file() and path.suffix in TEXT_SUFFIXES
+        )
+    for path in (ROOT / "docs").rglob("*.md"):
+        relative = path.relative_to(ROOT).as_posix()
+        if relative.startswith(("docs/reports/", "docs/archive/", "docs/experiment-notes/", "docs/audits/")):
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "status: canonical" in text or "status: supporting" in text:
+            files.append(path)
+    return [path for path in files if path.is_file()]
+
+
+def test_script_inventory_covers_the_exact_current_paths() -> None:
+    assert _tracked_scripts() == EXPECTED_SCRIPTS
+    assert not tuple(path for path in (ROOT / "scripts").iterdir() if path.is_file())
+    assert not any(path.name == ".gitkeep" for path in (ROOT / "scripts").rglob("*"))
+    assert not any(
+        path.name.lower() == "readme.md" and not path.read_text(encoding="utf-8").strip()
+        for path in (ROOT / "scripts").rglob("*")
+        if path.is_file()
+    )
 
     report = INVENTORY.read_text(encoding="utf-8")
-    for name in EXPECTED_SCRIPTS | {RETIRED_LAUNCHER}:
+    for name in {Path(path).name for path in EXPECTED_SCRIPTS} | {RETIRED_LAUNCHER}:
         assert f"`{name}`" in report
+
+
+def test_old_root_script_paths_are_not_current_consumers() -> None:
+    consumers: list[str] = []
+    for path in _current_consumer_files():
+        if path == Path(__file__):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for relative in EXPECTED_SCRIPTS:
+            name = Path(relative).name
+            if f"scripts/{name}" in text or f"scripts\\{name}" in text:
+                consumers.append(f"{path.relative_to(ROOT)}: scripts/{name}")
+    assert consumers == []
 
 
 def test_retired_launcher_has_no_current_consumer() -> None:
     assert not (ROOT / "scripts" / RETIRED_LAUNCHER).exists()
 
-    files = [ROOT / "README.md", ROOT / "docs/README.md"]
-    for directory in (
-        ROOT / ".github",
-        ROOT / "apps",
-        ROOT / "docs/operations",
-        ROOT / "scripts",
-        ROOT / "tests",
-    ):
-        files.extend(directory.rglob("*"))
+    files = _current_consumer_files()
 
     consumers = []
     for path in files:

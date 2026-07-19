@@ -160,7 +160,7 @@ GitHub Issue、PR、comment、discussionなど、非ASCII文字を含む長文�
 - read-back不一致、欠落、短文化、文字化けを検出した場合は次の更新へ進まず、exact backupからrollbackする。failed / expected / actual bodyの差分を保存し、原因を解消するまで再送しない。
 - connectorまたはAPIにrevision controlがない場合も、write直前のfull-body再取得とbackup一致をconcurrency gateとする。
 - exact read-backによるtransport integrityと、exact pre-update bodyに対するstructural preservationを独立したgateとして検証する。Read-back equality alone is insufficient. A body that was already malformed before transmission can pass exact read-back verification.
-- numbering SoT、parent Issue、長期roadmap、historical ledgerのmetadata更新は、既定で`localized-update`として`scripts/validate_github_body_structure.py`をwrite前に実行する。candidateはexact previous bodyへのnarrow replacementまたはpatch applicationで作り、文書全体を再構築しない。
+- numbering SoT、parent Issue、長期roadmap、historical ledgerのmetadata更新は、既定で`localized-update`として`scripts/repository/validate_github_body_structure.py`をwrite前に実行する。candidateはexact previous bodyへのnarrow replacementまたはpatch applicationで作り、文書全体を再構築しない。
 - structural overrideはintentionalな構造差分だけを対象とし、encoding / corruption、one-line collapse、fence balanceのhard failureを回避できない。CLI / imported APIのどちらも明示承認、理由、保存済みunified diffを必須とする。
 - before / after bodyは別filesystem objectとし、structural elementはfence外の実heading / header-plus-delimiter table blockから抽出する。diff evidence pathも両inputと同一またはaliasにしない。
 - 古い正常backupから復旧する場合は、damaged latest bodyをcontent evidenceとして照合し、後続の正当なhistorical entryが欠落していないことをwrite前に確認する。

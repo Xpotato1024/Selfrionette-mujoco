@@ -35,7 +35,7 @@ payload stateとoverlay stateを表示する。
 viewer input sourceを有効にしてbackend runtimeを実行する。
 
 ```powershell
-uv run python scripts/run_replay_mujoco_websocket_publisher.py `
+uv run python scripts/compatibility/run_replay_mujoco_websocket_publisher.py `
   --host 127.0.0.1 `
   --port 8766 `
   --steps 18000 `

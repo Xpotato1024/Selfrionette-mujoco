@@ -71,7 +71,7 @@ viewer page URL と WebSocket endpoint URL は別である。`0.0.0.0` はbind�
 ## Specialized input
 
 viewer keyboard/gamepad inputなど `--input-source` を必要とする既存procedureは、移行完了まで
-`scripts/run_replay_mujoco_websocket_publisher.py` thin wrapperを使う。標準 replay publisher は
+`scripts/compatibility/run_replay_mujoco_websocket_publisher.py` thin wrapperを使う。標準 replay publisher は
 installable CLIを正本とする。
 
 ## 非目標

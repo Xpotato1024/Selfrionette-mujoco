@@ -8,7 +8,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = ROOT / "scripts" / "export_wasm_qpos_fixture.py"
+SCRIPT_PATH = ROOT / "scripts" / "viewer" / "export_wasm_qpos_fixture.py"
 SPEC = importlib.util.spec_from_file_location("export_wasm_qpos_fixture", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
