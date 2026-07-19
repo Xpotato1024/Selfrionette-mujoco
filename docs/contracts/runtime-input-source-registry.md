@@ -1,52 +1,199 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-20
 canonical_for:
   - runtime input source registry
+  - Input Source Plugin v1 ownership boundary
 related:
   - docs/architecture/data-flow.md
   - docs/architecture/runtime-composition.md
   - docs/contracts/programmed-target-input-source.md
-  - docs/contracts/r7-b-runtime-input-pipeline-contract.md
+  - docs/contracts/runtime-input-source-state.md
+  - docs/contracts/experiment-plugin-composition.md
+  - docs/reports/inventories/input-source-plugin-ownership-inventory.md
 ---
 
 # Runtime Input Source Registry
 
-## 目的
-runtime input source registryは、CLI の choice と runtime の source 選択を同じ入口にそろえ、registry は pure metadata と frame factory だけを持つ。
-serial、OSC、browser capture、MuJoCo backend などの concrete I/O は registry に入れない。
+## 目的と位置付け
 
-## 対象 source
-registry が扱う source 名は次の 3 つ。
-- `programmed_target`
-- `replay`
-- `noop`
+この文書は、現在実装されているruntime input source registryの契約と、Issue
+[#458](https://github.com/Xpotato1024/Selfrionette-mujoco/issues/458)で受け入れた
+Issue #459〜#462向けのInput Source Plugin v1境界を分けて定義する。
 
-unknown source は明示的な validation error で拒否する。
+`A. Current implemented contract`はbaseline mainで実際に存在するsymbol、source名、
+selection、metadata、CLI互換性だけを記載する。`B. Accepted target contract`はP2以降の
+実装を開始するための受入設計であり、Issue #458時点では未実装である。後者を現在の
+production implementationとして扱わない。
 
-## descriptor 契約
-各 source descriptor は少なくとも次を持つ。
-- `name`
-- `build_frames(...)`
-- `initial_metadata`
+Input Sourceは、Issue #457の判断に従い、既存のRobot、Environment、Control/Mapping、
+Task、Evaluationに加わる第6のcomposition軸とする。ただし、frontend providerはbackend
+processのsource plugin instanceではなく、versioned viewer control messageを介する別境界とする。
 
-`initial_metadata` は source ごとの初期 metadata contract を表す。current contractは次のとおり。
-- `programmed_target`: `source_kind = programmed_target`, `trajectory_name = sweep_x`
-- `replay`: `preset = r6-h-p5-default`
-- `noop`: `preset = noop`, `source_kind = noop`
+## A. Current implemented contract
 
-## runtime 境界
-- `runtime/` は source selection の結線だけを行う。
-- `input_sources/registry.py` は registry と frame factory だけを持つ。
-- `programmed_target` は既存の `sweep_x` 系列と整合させる。
-- `replay` は既存の replay path を維持する。
-- `noop` は最小の compatibility source として扱う。
-- `--input-source` を使う CLI は registry の選択結果を runtime に渡す。
+### A.1 実装済みregistry catalog
 
-## validation
-- supported source names の列挙
-- unknown source の rejection
-- selected source の initial metadata contract
-- programmed_target / replay path の preservation
-- CLI option の pass-through
+baseline `5ce12be54038d2a5b9d33d1ba91ac7b36bfb4dc9`の
+`src/selfrionette/input_sources/registry.py`に登録される名前は次の4件である。旧版文書に
+あった3件という記載を4件へ修正した。
+
+| source name | descriptor / frame factory | 実装済み初期metadataの要点 | runtimeでの意味 |
+|---|---|---|---|
+| `programmed_target` | `InputSourceDescriptor` / `_build_programmed_target_frames` | `source_kind=programmed_target`, `trajectory_name=sweep_x` | deterministic offline target sequence |
+| `replay` | `InputSourceDescriptor` / `_build_replay_frames` | registry defaultは`preset=r6-h-p5-default`; runtime selectionはtarget/endpointも補う | replay frame bootstrap |
+| `noop` | `InputSourceDescriptor` / `_build_noop_frames` | `preset=noop`, `source_kind=noop` | `RawInputFrame` 1件を使うcompatibility source |
+| `viewer` | `InputSourceDescriptor` / `_build_viewer_frames` | `preset=viewer`, `source_active=false`, `command_age_ms=0`, `stale_reason=no_control_message_received`, safe endpoint | viewer bridgeの初期frame/bootstrap |
+
+`SUPPORTED_INPUT_SOURCE_NAMES`は`tuple(INPUT_SOURCE_REGISTRY)`であり、この4件の挿入順を
+CLI compatibility layerが利用する。`loadcell_serial`、keyboard、analog fixtureは現在この
+production registryのsource nameではない。
+
+### A.2 現在のdescriptor契約
+
+`InputSourceDescriptor`は次の3 fieldだけを持つ frozen dataclassである。
+
+| field | 実装済み型 | 所有している意味 |
+|---|---|---|
+| `name` | `str` | registry上のsource name |
+| `build_frames` | `Callable[..., tuple[RawInputFrame, ...]]` | bootstrap frameの生成関数 |
+| `initial_metadata` | `Mapping[str, object]` | source初期metadataの静的projection |
+
+これはplugin identity、contract version、config contract、lifecycle、health、sample schema
+compatibilityを表すdescriptorではない。`InputSource` Protocolも
+`read_frame() -> RawInputFrame`という1 methodだけを要求し、connect/start/stop/cleanupや
+health capabilityを要求しない。
+
+### A.3 現在のselectionとlifecycle
+
+`select_runtime_input_source()`がsource別conditional、preset/custom frameのvalidation、
+loop値、runtime初期metadataを所有する。`run_runtime_input_source_step_loop()`が次のframe
+を読み、interpreter、motion generator、runtime stale safety、MuJoCo step、payload投影を
+順に実行する。
+
+| source | selectionの現在の条件 | loop / EOFの現在のowner | 実際のruntime instance |
+|---|---|---|---|
+| `programmed_target` | presetは未指定または`sweep_x`; custom framesは拒否; `steps >= 1` | selectionが`loop=False`; `ProgrammedTargetInputSource`はterminal frameを保持 | `ProgrammedTargetInputSource` |
+| `replay` | presetは拒否; custom framesは受理; なしならdefault frame | selectionが`loop=True`; sourceは順序を読み、`loop=False`ならEOFで`StopIteration` | `ReplayInputSource` |
+| `noop` | preset/custom framesを拒否 | selectionとstep loopが`loop=True`; synthetic frameをreplay sourceで反復 | 専用classなし。registry frame + `ReplayInputSource` |
+| `viewer` | preset/custom framesを拒否; optional `ViewerInputSource`を受理 | bootstrapは`loop=True`だが実際はviewer sourceがmessage/clockを管理 | `ViewerInputSource` |
+
+`src/selfrionette/runtime/composition/replay_mujoco_pipeline.py`、
+`concrete_mujoco_pipeline.py`、offline smoke、websocket publisherには複数のreplay default
+metadataが残っている（例: `r6-a-p1-default`、`r6-a-p3-default`、`r6-h-p5-default`）。これは
+P1で一方へ正規化せず、P3でcompatibility requirementとして扱う。
+
+### A.4 現在のCLI compatibility
+
+`scripts/compatibility/run_replay_mujoco_dry_run.py`と
+`scripts/compatibility/run_replay_mujoco_websocket_publisher.py`の`--input-source` choicesは
+registryの4件をそのまま利用する。両scriptのpreset choiceは`sweep_x`だけであり、source
+selection側ではprogrammed target以外のpresetを拒否する。
+
+canonical `selfrionette` CLIの`replay` / `viewer` subcommandは現状`--input-source`を持たず、
+`--preset sweep_x`の互換入口を持つ。P2で`--input-source`を追加する場合も、この既存CLIの
+挙動を暗黙に変更せず、aliasとして明示する。
+
+### A.5 実装済みsourceとmappingの現在の混在
+
+- `ViewerInputSource`はcontrol message ingestionとactive/stale/timeoutだけでなく、keyboard
+  binding、gamepad axis/button、speed、deadzone、control frame、endpoint velocityへの変換も行う。
+- `loadcell_serial.py`はserial line parse、diagnostic収集、raw frame生成、intrinsicな
+  channel normalizationに加え、channel-axis weight、gain、max delta、current tipからの
+  desired endpoint生成と`MotionCommand`生成を含む。
+- `keyboard.py`と`continuous_endpoint_velocity.py`はsource acquisitionではなく、axisから
+  intentへのmapping algorithmを`input_sources` package内で提供する。
+- `analog_fixture.py`のparser/sampleはfixture contractだが、`map_analog_fixture_sample()`は
+  normalization後のaxis projection、sign、scale、deadzoneを含むmappingである。
+- `replay.py`の`build_motion_command_from_replay_frame()`はraw replay frameから
+  `MotionCommand`を作るcompatibility helperであり、source acquisitionの責務ではない。
+
+したがって、現在のregistryをplugin registryと呼んでも、production上はsource acquisition、
+mapping、runtime orchestrationを自己完結したpluginとして分離できていない。
+
+## B. Accepted target contract for #459〜#462（未実装）
+
+### B.1 Identity、version、sample schema
+
+1. plugin identityは既存の`VersionedIdentity(name, version)`で表す。
+2. runtime選択は既存の`PluginSelection(plugin_id, contract_version)`を使い、source nameの
+   stringだけをversioned selectionの代わりにしない。
+3. produced sample schemaはplugin identityとは別のversioned identityとして宣言する。
+   sourceごとにsampleのfield、unit、timestamp semantics、health semanticsが異なり得るため、
+   すべてのdeviceが同じsample schemaを生成する前提は置かない。
+4. mapping pluginは入力として受け付けるsample schema identityを宣言し、sourceの宣言と
+   exact compatibilityを検証する。unknown、version mismatch、未宣言のimplicit coercionは
+   startup時にfail closedとする。
+
+### B.2 Parameter / config / factory / instance
+
+- plugin parameterは既存の`ParameterContract`とtyped `PluginParameters`の意味に合わせる。
+  source parameterは`PluginParameterOwner(PluginAxis.INPUT_SOURCE, selection)`でscopeを付け、
+  arbitrary dictionaryやsource名に依存した未宣言fieldを受け付けない。
+- factory boundaryは既知IDを決定的に保持するregistryのfactoryとする。factoryにはversioned
+  selectionとvalidated typed configを渡し、runtime instanceを1つ返す。
+- external package discovery、arbitrary dynamic import、marketplace、hot reloadは採用しない。
+- runtime instanceの既存互換境界は`InputSource.read_frame() -> RawInputFrame`を維持する。
+  これは全sourceのnative sampleを1つに潰す判断ではない。source plugin固有のtyped sampleは
+  plugin内に保持し、必要な場合だけ明示的なcompatibility adapterで`RawInputFrame`へ投影する。
+  adapterを使う場合もsource schema identityと元のtimestamp/sequence/healthを失わせない。
+
+### B.3 Mode、lifecycle、health
+
+- source modeは`offline`、`replay`、`live`、`viewer_bridge`を明示する。frontend providerは
+  backend source modeと同一processのplugin instanceとは数えない。
+- offline/replay sourceへ意味のない`connect()`を要求しない。
+- live/viewer bridgeはtyped optional capabilityとしてstartup、stop、cleanupを表現し、live
+  sourceへ暗黙のno-op lifecycleを与えない。
+- sourceがacquisition resource、source-local diagnostic、cleanupを所有し、runtimeはその
+  lifecycleをorchestrateしてfailure時もcleanupを実行する。
+- health stateはsource-ownedのclosed vocabulary（`active`、`stale`、`invalid`、
+  `disconnected`）を基本とする。`active`は有効な最新sampleを意味し、`stale`はtimeoutや
+  source timestamp policyで判定された状態、`invalid`はsample validation failure、
+  `disconnected`はtransport/device断を表す。
+- current payload compatibilityは`source_active`、`command_age_ms`、`stale_reason`へ投影する。
+  sourceがhealthのtruthを持ち、runtimeはgeneric stale safetyとしてholdを適用する。
+  active/stale/invalid/disconnectedのownerをmappingやviewer rendererへ移さない。
+
+### B.4 Initial metadata、failure、cleanup
+
+- factory成功時にsource identity、contract version、sample schema identity、mode、初期healthを
+  deterministicに返す。初期viewer bridgeは現行互換の`source_active=false`、
+  `command_age_ms=0`、`stale_reason=no_control_message_received`を保持する。
+- startup時のunknown source、duplicate registration、contract version mismatch、sample schema
+  mismatch、必須config欠落はfail closedとし、noopや空frameへ黙ってfallbackしない。
+- malformed sampleをzero/empty sampleへ変換して安全に見せるfallbackはしない。source-local error
+  とhealthを返し、runtimeのstale safetyが定義されたholdを適用できる形にする。
+- cleanup failureは元のstartup/read failureを隠さず、cleanup診断を追加してcallerへ伝える。
+  offline sourceは不要なtransport cleanupを持たず、live sourceのserial open/close boundaryは
+  live sourceまたはそのtransport capabilityに明示する。
+
+### B.5 Registry、composition、manifest、CLI
+
+- registryはdeterministic known-ID registryとし、duplicate/unknown/version mismatchをrejectする。
+- `PluginAxis.INPUT_SOURCE`をexperiment compositionへ追加し、manifest/runtime selectionは
+  source selectionを明示的に保持する。既存5軸（Robot Bundle、Environment、Control/Mapping、
+  Task、Evaluation）の意味を変更しない。
+- `ControlMappingPlugin`のsample schema declarationをsource selectionとのcompatibility gateに
+  接続する。mappingがserialやbrowserを直接openする設計にはしない。
+- CLIで既存の`programmed_target`、`replay`、`noop`、`viewer`名をaliasとして保ち、既存options、
+  preset validation、custom frame、loop、metadataをbehavior-preservingに維持する。
+- conformance testはgeneric source contract/registry/selection/lifecycle/health/schema
+  compatibilityを共通化し、source-specific behaviorは各plugin-local test、runtimeのstaleと
+  payloadだけをintegration test、frontend providerはfrontend testとする。
+
+このB節はP2〜P5が実装するaccepted targetであり、Issue #458のproduction code変更ではない。
+
+## 既存canonical文書との関係
+
+実装済み仕様の参照先は`docs/README.md`のSource of Truth Mapと、次のcanonical contractである。
+
+- [runtime input source state](runtime-input-source-state.md)
+- [runtime input safety](runtime-input-safety.md)
+- [programmed target input source](programmed-target-input-source.md)
+- [continuous endpoint velocity input](continuous-endpoint-velocity-input.md)
+- [viewer control message schema](viewer-control-message-schema.md)
+- [experiment plugin composition](experiment-plugin-composition.md)
+
+棚卸しの根拠と時点別の詳細は、[Issue #458 input source ownership inventory](../reports/inventories/input-source-plugin-ownership-inventory.md)を参照する。ただしinventoryはhistorical evidenceであり、current contractの正本ではない。
