@@ -42,6 +42,12 @@ from selfrionette.runtime.experiment.contracts import (
     VersionedIdentity,
 )
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
+from selfrionette.runtime.experiment.input_source import InputSourceMode
+from tests.support.input_source_plugin_doubles import (
+    CONFORMANCE_INPUT_SOURCE,
+    CONFORMANCE_SAMPLE_SCHEMA,
+    build_conformance_input_source,
+)
 from selfrionette.plugins.robots.fast_arm.adapter.runtime import FAST_ARM_RUNTIME_PLUGIN
 from selfrionette.runtime.composition.robot_bundle import (
     CAPABILITY_PROVIDER_TYPES,
@@ -332,6 +338,7 @@ def _mapping(
     return ControlMappingPlugin(
         identity=identity,
         strategy=_MappingStrategy(),
+        accepted_input_sample_schemas=frozenset({CONFORMANCE_SAMPLE_SCHEMA}),
         required_robot_capabilities=frozenset({ENDPOINT_COMMAND_V1}),
         produced_evidence=produced_evidence,
         comparison_family_identity=VersionedIdentity("dummy_mapping_family", 1),
@@ -393,6 +400,7 @@ def _registries(
     mapping: ControlMappingPlugin | None = None,
     task: TaskPlugin | None = None,
     evaluator: EvaluationPlugin | None = None,
+    input_source=None,
 ) -> ExperimentPluginRegistries:
     return ExperimentPluginRegistries(
         robot_bundles=VersionedPluginRegistry(
@@ -408,6 +416,10 @@ def _registries(
         evaluators=VersionedPluginRegistry(
             (evaluator or _evaluator(),), kind="evaluation plugin"
         ),
+        input_sources=VersionedPluginRegistry(
+            (input_source or build_conformance_input_source(),),
+            kind="input source plugin",
+        ),
     )
 
 
@@ -417,6 +429,7 @@ def _manifest(**overrides) -> ExperimentPluginManifest:
         "environment": PluginSelection("dummy_environment", 1),
         "control_mapping": PluginSelection("dummy_mapping", 1),
         "task": PluginSelection("dummy_reach_task", 1),
+        "input_source": PluginSelection(CONFORMANCE_INPUT_SOURCE.name, 1),
         "evaluators": (PluginSelection("dummy_success_evaluator", 1),),
         "parameters": (
             PluginParameters(
@@ -603,6 +616,7 @@ def test_composition_rejects_registry_set_type_mismatch() -> None:
         control_mappings=VersionedPluginRegistry((_task(),), kind="mapping plugin"),
         tasks=registries.tasks,
         evaluators=registries.evaluators,
+        input_sources=registries.input_sources,
     )
 
     with pytest.raises(ValueError, match="registry-set type mismatch for control mapping"):

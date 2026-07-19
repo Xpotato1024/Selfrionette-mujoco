@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-19
+last_verified: 2026-07-20
 canonical_for:
   - runtime composition root
 related:
@@ -25,7 +25,7 @@ related:
 | `execution/` | `RuntimePipeline`、input step loop、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
-| `experiment/` | experiment plugin contract、registry、readiness-only composition |
+| `experiment/` | 6軸のexperiment plugin contract、registry、readiness-only composition |
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
 | `runners/` | 現行operational dry-run / smoke / publisher entry point |
 
@@ -102,7 +102,11 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |
 | target lifecycle | runtime target resolver | pure lifecycle reducer | desired / active / measured target evidence | authoritative active targetまたはhold |
 | experiment record construction | explicit caller-owned adapter | production loop外のrecord builder | completed step evidence | immutable record。default runtimeはfileを開かない |
-| experiment plugin readiness | runtime composition | versioned plugin resolver | explicit 5-axis selectionとaxis-scoped typed parameter | resolved capability、typed role、evidence producer binding、freeze identityまたはstartup failure |
+| experiment plugin readiness | runtime composition | versioned plugin resolver | explicit 6-axis selectionとaxis-scoped typed parameter | resolved capability、typed role、source sample schema、evidence producer binding、freeze identityまたはstartup failure |
+
+## Input Source reader boundary
+
+Input Sourceのfactory outputは`InputSource`と`InputSourceHealthProvider`を満たし、factory直後のtyped current healthがpluginの`initial_health`と一致しなければならない。`ValidatedInputSourceReader`はframeとhealthを呼出しごとに検証する。composition rootはfactory、frame read、lifecycle startを実行せず、offline / replayにmanaged lifecycleを要求しない。live / viewer_bridgeのruntime instanceだけがmanaged adapterを持つ。
 
 ## failureとordering
 

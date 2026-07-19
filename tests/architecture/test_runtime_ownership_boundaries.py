@@ -34,7 +34,7 @@ EXPECTED_MODULES = {
     },
     "evaluation": {"endpoint_metrics", "endpoint_progress", "kinematics", "manifest"},
     "execution": {"input_step_loop", "live_timing", "pipeline"},
-    "experiment": {"composition", "contracts", "registry"},
+    "experiment": {"composition", "contracts", "input_source", "registry"},
     "runners": {
         "dry_run",
         "live_loadcell",

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-19
+last_verified: 2026-07-20
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -18,7 +18,7 @@ related:
 
 ## 目的とownership
 
-実験runtimeは、Robot、Environment / Scene、Control / Mapping、Task、Evaluationを
+実験runtimeは、Robot、Environment / Scene、Control / Mapping、Task、Evaluation、Input Sourceを
 独立したversioned pluginとして明示選択する。multi-layer compositionとstartup readinessの
 ownerは引き続き`runtime/`であり、MuJoCoはphysical stateのsource of truth、viewerは
 rendering-onlyである。viewerはtask terminal判定、contact判定、metric導出を再実装しない。
@@ -30,6 +30,7 @@ rendering-onlyである。viewerはtask terminal判定、contact判定、metric�
 | Control / Mapping | mapping plugin | input intentからcommand intentへのpure mapping、gain/deadzone等のparameter contract | physics state、task判定 |
 | Task | task plugin | required capability/role、parameter contract、lifecycle、canonical task event、terminal classification | robot固有site/geom/joint、metric集計 |
 | Evaluation | evaluation plugin | required canonical evidence、evidence policy、deterministic metric、provenance | backend固有state抽出、viewer表示 |
+| Input Source | input source plugin | versioned source identity、mode、reader factory、health、initial metadata、produced sample schema、optional lifecycle | mapping algorithm、robot capability、task outcome、viewer frontend provider |
 
 ## versioned identityとregistry
 
@@ -47,15 +48,16 @@ registryの登録順とID一覧はdeterministicである。
 - Environment Plugin selection
 - Control Mapping Plugin selection
 - Task Plugin selection
+- Input Source Plugin selection
 - Evaluation Plugin selectionのordered tuple
 - `PluginParameterOwner(plugin axis, plugin ID, contract version)`に紐づくtyped parameter values
 
-parameter ownerは5軸のselection identity全体を所有者とし、raw plugin IDだけでは識別しない。
+parameter ownerは6軸のselection identity全体を所有者とし、raw plugin IDだけでは識別しない。
 異なる軸で同じIDを選べる一方、ownerのaxis、ID、versionのいずれかがselectionと一致しない場合、
 同じownerへのparameter重複、未選択pluginへのparameterはstartup failureとして拒否する。
 同じevaluatorの重複選択も拒否する。
 R7-G-P1 / #405とR7-H-P1 / #411は、software revision、condition、canonical serializationを
-含む上位manifestを追加できるが、この5軸selectionを別の暗黙規則へ置き換えない。
+含む上位manifestを追加できるが、この6軸selectionを別の暗黙規則へ置き換えない。
 
 ## Robot Bundleとcapability provider
 
@@ -174,20 +176,26 @@ required evidenceのidentityがtask/environment/mapping/robot extensionのproduc
 selected Evaluation Plugin identityと一致し、provenanceがplugin宣言値と一致することも検証する。
 `unavailable` / `invalid`のvalueなし・reason必須invariantは`MetricResult` constructionで維持する。
 
+### Input Source runtime reader readiness
+
+Input Sourceのcompositionはplugin、selection、parameter、produced sample schema、mappingのaccepted schemaを解決するが、factoryを呼び出してruntime instanceを生成しない。runtime側でfactoryを実行する場合は、出力が`InputSource`と`InputSourceHealthProvider`を満たすこと、factory直後のcurrent healthが`initial_health`と一致することを確認する。
+
+runtime readerは`ValidatedInputSourceReader`で`read_frame()`と`current_health()`の戻り値を毎回検証する。offline / replayにはmanaged lifecycleを要求せず、live / viewer_bridgeだけがmanaged adapterを通じて`start()` / `close()`を委譲する。payload projectionはP3、concrete source migrationはP3、viewer provider separationはP4の範囲であり、このcomposition contractでは扱わない。
+
 ## composition readiness
 
 `compose_experiment()`は実行開始前に次の順で検証する。
 
-1. 5軸すべてをknown-ID registryからversion一致でresolveする。
+1. 6軸すべてをknown-ID registryからversion一致でresolveする。
 2. parameter ownerのaxis / ID / versionがselectionと完全一致することと、required field、unknown
    field、runtime typeを検証する。
-3. environment / mapping / taskのrequired capabilityをunionし、Robot Bundleのtyped providerを解決する。
+3. environment / mapping / taskのrequired capabilityをunionし、Robot Bundleのtyped providerを解決する。Input Source factoryは呼び出さない。
 4. robot/environment semantic roleをtyped descriptorとして統合し、missing、attribute mismatch、
    ambiguous bindingを拒否する。
 5. Robot Bundle / Environment / Taskのexact versioned compatibilityとbackend compatibilityを検証する。
-6. robot/environment/mapping/taskのproduced evidenceをproducer bindingへ解決し、ambiguous producerと
+6. robot/environment/mapping/task/input sourceのproduced evidenceをproducer bindingへ解決し、ambiguous producerと
    evaluator requirement mismatchを拒否する。
-7. resolved capability、typed role、evidence producer binding、available evidenceをimmutable readiness
+7. resolved capability、typed role、resolved input sample schema、evidence producer binding、available evidenceをimmutable readiness
    resultとして返す。
 
 このboundaryはrunner execution、scene spawn、physics step、task advance、metric artifact出力を行わない。
@@ -229,7 +237,7 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
 
 - #405は`ExperimentPluginManifest`、`PluginParameterOwner`、`VersionedPluginRegistry`、
   `ExperimentPluginRegistries`、`compose_experiment()`、`EvidenceProducerBinding`を使い、world/tool条件の
-  5軸selection、axis-scoped parameter、version compatibility、evidence producerを
+  6軸selection、axis-scoped parameter、version compatibility、evidence producerを
   `EvaluationManifest` / `EvaluationReadiness` / `FreezeRecord`へ固定できる。requested selectionと
   resolved plugin/capability/role/evidence identityを混同せず、package location変更ではlogical identityを
   変更しない。

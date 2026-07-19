@@ -23,8 +23,8 @@ related:
 Issue #459〜#462向けのInput Source Plugin v1境界を分けて定義する。
 
 `A. Current implemented contract`はbaseline mainで実際に存在するsymbol、source名、
-selection、metadata、CLI互換性だけを記載する。`B. Accepted target contract`はP2以降の
-実装を開始するための受入設計であり、Issue #458時点では未実装である。後者を現在の
+selection、metadata、CLI互換性を記載する。`B. P2 implemented contract`は#459で成立した
+generic contract、registry、composition gateを記載し、#460 / #461の未実装部分を現在の
 production implementationとして扱わない。
 
 Input Sourceは、Issue #457の判断に従い、既存のRobot、Environment、Control/Mapping、
@@ -112,7 +112,7 @@ canonical `selfrionette` CLIの`replay` / `viewer` subcommandは現状`--input-s
 したがって、現在のregistryをplugin registryと呼んでも、production上はsource acquisition、
 mapping、runtime orchestrationを自己完結したpluginとして分離できていない。
 
-## B. Accepted target contract for #459〜#462（未実装）
+## B. P2 implemented contract（#459）
 
 ### B.1 Identity、version、sample schema
 
@@ -183,7 +183,21 @@ mapping、runtime orchestrationを自己完結したpluginとして分離でき�
   compatibilityを共通化し、source-specific behaviorは各plugin-local test、runtimeのstaleと
   payloadだけをintegration test、frontend providerはfrontend testとする。
 
-このB節はP2〜P5が実装するaccepted targetであり、Issue #458のproduction code変更ではない。
+このB節は#459で実装したgeneric contract、deterministic registry、composition readinessの正本である。
+既存source実装のplugin package移動、CLI source selectionの置換、viewer provider分離は行っていない。
+
+### B.5.1 Runtime health and reader output boundary
+
+- factory outputは`InputSource`と`InputSourceHealthProvider`の両方を満たさなければならない。`current_health()`はdevice read、network access、lifecycle state変更を行わないsource-owned capabilityである。
+- factory直後に取得するcurrent healthはpluginの`initial_health`と値一致しなければならず、不一致または不正なhealthはfail-closedで拒否する。初期確認はframe先読みや`start()` / `close()`を行わない。
+- `ValidatedInputSourceReader`は`read_frame()`の戻り値を呼出しごとに`RawInputFrame`として検証し、invalid object、fallback frame、例外の隠蔽を許可しない。`current_health()`の戻り値も呼出しごとに検証する。
+- offline / replayはmanaged lifecycle capabilityを持たず、live / viewer_bridgeだけが`ValidatedManagedInputSourceReader`を通じて`start()` / `close()`を透過委譲する。
+
+### B.6 P3 / P4 remaining scope
+
+- #460: programmed target、replay、noop、loadcell / fixture sourceのbehavior-preserving production plugin移行。
+- #461: backend viewer sourceとControl Mappingの分離、keyboard / gamepad frontend providerの分離。
+- #462: plugin-local test scope、onboarding、completion audit。
 
 ## 既存canonical文書との関係
 
