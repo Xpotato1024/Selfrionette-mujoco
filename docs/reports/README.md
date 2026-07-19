@@ -33,6 +33,9 @@ contract、反復operationのsource of truthにはしない。現在仕様は`do
 - [#444 fast_arm core ownership inventory](inventories/fast-arm-core-ownership-inventory.md):
   baseline `678c25d65a627cd612b4293c9160bf459ef8d5fe`に対するshared core、Selfrionette adapter、
   integration、repository operation、generic ownerの分類と#445〜#448のmigration / acceptance判断。
+- [#458 Input Source Plugin ownership inventory](inventories/input-source-plugin-ownership-inventory.md):
+  baseline `5ce12be54038d2a5b9d33d1ba91ac7b36bfb4dc9`に対する現行source、mapping、lifecycle、
+  test ownershipと、Issue #458のhistorical snapshot。current contractの正本ではない。
 - [2026-07-16 canonical content / history separation audit](audits/canonical-content-history-separation-2026-07-16.md):
   全canonical文書のcontent review、history extraction、status再分類、抽出元commitを記録する。
   追加抽出本文は[separation supplement](audits/canonical-content-history-separation-supplement-2026-07-16.md)へ

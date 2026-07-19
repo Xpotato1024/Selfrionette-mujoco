@@ -22,6 +22,7 @@ canonical contract文書:
 - `docs/contracts/transport-payload.md`
 - `docs/contracts/schemas.md`
 - `docs/contracts/viewer-control-message-schema.md`
+- `docs/contracts/runtime-input-source-registry.md`
 - `docs/contracts/programmed-target-input-source.md`
 - `docs/contracts/r7-b-runtime-input-pipeline-contract.md`
 - `docs/contracts/endpoint-target-generator.md`
