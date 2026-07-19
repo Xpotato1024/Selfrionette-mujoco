@@ -30,7 +30,7 @@ canonical fixtureはnative MuJoCo replay pathから生成し、fast_arm Robot Pl
 repository rootから次のコマンドで再生成する。
 
 ```powershell
-uv run python scripts/export_wasm_qpos_fixture.py --preset sweep_x --steps 30
+uv run python scripts/viewer/export_wasm_qpos_fixture.py --preset sweep_x --steps 30
 ```
 
 既定の出力先はSelfrionette adapter packageの

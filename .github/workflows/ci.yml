@@ -23,7 +23,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          uv run python scripts/validate_markdown_docs.py --base-ref "$BASE_SHA" --strict-map --strict-links
+          uv run python scripts/repository/validate_markdown_docs.py --base-ref "$BASE_SHA" --strict-map --strict-links
       - name: Run tests
         run: uv run pytest tests/architecture tests/schemas tests/support tests/runtime tests/mujoco_backend tests/transport tests/input_sources tests/input_interpreters tests/motion tests/kinematics tests/plugins tests/integration -q
       - name: Compile Python files

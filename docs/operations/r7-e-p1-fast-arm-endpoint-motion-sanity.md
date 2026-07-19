@@ -45,7 +45,7 @@ command sanity ではなくなるためである。
 任意の base からの確認が必要な場合だけ、explicit base を指定する。
 
 ```powershell
-uv run python scripts/run_fast_arm_endpoint_motion_sanity.py --base-desired-endpoint-m 0.6 0.0 0.1
+uv run python scripts/diagnostics/fast_arm/run_fast_arm_endpoint_motion_sanity.py --base-desired-endpoint-m 0.6 0.0 0.1
 ```
 
 この場合は次を使う。
@@ -61,7 +61,7 @@ result では `base_endpoint_source=explicit` として記録する。
 標準確認:
 
 ```powershell
-uv run python scripts/run_fast_arm_endpoint_motion_sanity.py
+uv run python scripts/diagnostics/fast_arm/run_fast_arm_endpoint_motion_sanity.py
 ```
 
 標準出力には axis ごとに少なくとも次が出る。
@@ -113,5 +113,5 @@ uv run python scripts/run_fast_arm_endpoint_motion_sanity.py
 ## 参考実装
 
 - diagnostic owner: `src/selfrionette/plugins/robots/fast_arm/diagnostics/endpoint_motion_sanity.py`
-- CLI script: `scripts/run_fast_arm_endpoint_motion_sanity.py`
+- CLI script: `scripts/diagnostics/fast_arm/run_fast_arm_endpoint_motion_sanity.py` を使用する。
 - 既存 procedure: `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md`

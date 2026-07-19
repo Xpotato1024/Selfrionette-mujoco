@@ -13,7 +13,7 @@ from selfrionette.runtime.runners.live_websocket_delivery import LiveLatestState
 
 ROOT = Path(__file__).resolve().parents[2]
 WEBSOCKET_RUNNER_MODULE = ROOT / "src" / "selfrionette" / "runtime" / "runners" / "websocket_publisher.py"
-WEBSOCKET_SCRIPT_MODULE = ROOT / "scripts" / "run_replay_mujoco_websocket_publisher.py"
+WEBSOCKET_SCRIPT_MODULE = ROOT / "scripts" / "compatibility" / "run_replay_mujoco_websocket_publisher.py"
 
 
 def _load_script_module(path: Path, module_name: str):

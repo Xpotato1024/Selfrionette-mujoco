@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "run_replay_mujoco_websocket_publisher.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "compatibility" / "run_replay_mujoco_websocket_publisher.py"
 SPEC = importlib.util.spec_from_file_location("run_replay_mujoco_websocket_publisher", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)

@@ -42,23 +42,23 @@
   Prints script help and exits.
 
 .EXAMPLE
-  .\scripts\monitor_loadcell_serial.ps1 -Port COM5
+  .\scripts\hardware\loadcell\monitor_loadcell_serial.ps1 -Port COM5
   Opens COM5 and streams vector lines only.
 
 .EXAMPLE
-  .\scripts\monitor_loadcell_serial.ps1 -Port COM5 -DisplayLevel warn
+  .\scripts\hardware\loadcell\monitor_loadcell_serial.ps1 -Port COM5 -DisplayLevel warn
   Shows status and warn lines, and also vector lines.
 
 .EXAMPLE
-  .\scripts\monitor_loadcell_serial.ps1 -Port COM5 -Calibrate
+  .\scripts\hardware\loadcell\monitor_loadcell_serial.ps1 -Port COM5 -Calibrate
   Sends 'c', waits for calibration completion, then resumes vector output.
 
 .EXAMPLE
-  .\scripts\monitor_loadcell_serial.ps1 -Port COM5 -PausedDisplayLevel status
+  .\scripts\hardware\loadcell\monitor_loadcell_serial.ps1 -Port COM5 -PausedDisplayLevel status
   Pauses vector output while still showing status lines.
 
 .EXAMPLE
-  .\scripts\monitor_loadcell_serial.ps1 -Port COM5 -DurationSeconds 10
+  .\scripts\hardware\loadcell\monitor_loadcell_serial.ps1 -Port COM5 -DurationSeconds 10
   Runs for 10 seconds and then exits.
 
 .NOTES

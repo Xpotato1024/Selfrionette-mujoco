@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-SCRIPT_PATH = Path(__file__).resolve().parents[3] / "scripts" / "plot_fast_arm_endpoint_trajectory_log.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[3] / "scripts" / "diagnostics" / "fast_arm" / "plot_fast_arm_endpoint_trajectory_log.py"
 
 
 def _load_plot_module():

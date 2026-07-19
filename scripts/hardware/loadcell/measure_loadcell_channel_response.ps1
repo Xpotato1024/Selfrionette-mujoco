@@ -29,13 +29,13 @@
   Repeat the same sensor measurement this many times.
 
 .EXAMPLE
-  .\scripts\measure_loadcell_channel_response.ps1 -Port COM5
+  .\scripts\hardware\loadcell\measure_loadcell_channel_response.ps1 -Port COM5
 
 .EXAMPLE
-  .\scripts\measure_loadcell_channel_response.ps1 -Port COM5 -AllSensors
+  .\scripts\hardware\loadcell\measure_loadcell_channel_response.ps1 -Port COM5 -AllSensors
 
 .EXAMPLE
-  .\scripts\measure_loadcell_channel_response.ps1 -Port COM5 -Sensor 4 -Repeats 3
+  .\scripts\hardware\loadcell\measure_loadcell_channel_response.ps1 -Port COM5 -Sensor 4 -Repeats 3
 #>
 param(
   [string]$Port = 'COM5',

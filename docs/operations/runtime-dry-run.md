@@ -41,5 +41,5 @@ file は JSON array ではなく UTF-8、LF の NDJSON である。`frame_index`
 
 ## Compatibility
 
-`scripts/run_replay_mujoco_dry_run.py` は specialized `--input-source` consumer の移行が
+`scripts/compatibility/run_replay_mujoco_dry_run.py` は specialized `--input-source` consumer の移行が
 完了するまで thin wrapper として維持する。標準操作の正本は installable CLI とする。

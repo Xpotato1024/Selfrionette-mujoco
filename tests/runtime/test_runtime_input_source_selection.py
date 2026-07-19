@@ -14,8 +14,8 @@ from selfrionette.runtime.control.input_source_selection import select_runtime_i
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DRY_RUN_SCRIPT_PATH = ROOT / "scripts" / "run_replay_mujoco_dry_run.py"
-WEBSOCKET_SCRIPT_PATH = ROOT / "scripts" / "run_replay_mujoco_websocket_publisher.py"
+DRY_RUN_SCRIPT_PATH = ROOT / "scripts" / "compatibility" / "run_replay_mujoco_dry_run.py"
+WEBSOCKET_SCRIPT_PATH = ROOT / "scripts" / "compatibility" / "run_replay_mujoco_websocket_publisher.py"
 
 
 def _load_script_module(path: Path, module_name: str):

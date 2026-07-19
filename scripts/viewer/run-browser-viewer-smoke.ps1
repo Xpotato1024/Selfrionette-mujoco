@@ -15,7 +15,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $scriptRoot = $PSScriptRoot
-$repoRoot = (Resolve-Path (Join-Path $scriptRoot "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $scriptRoot "..\..")).Path
 $viewerRoot = Join-Path $repoRoot "apps/mujoco-viewer"
 
 function Get-UrlHost {
@@ -180,7 +180,7 @@ $publisherUrlHost = Get-UrlHost -Value $HostName
 $viewerUrlHost = Get-UrlHost -Value $HostName
 $websocketUrl = "ws://$publisherUrlHost`:$PublisherPort"
 $viewerPath = "/apps/mujoco-viewer/"
-$viewerUrl = "http://$viewerUrlHost`:$ViewerPort$viewerPath?websocketUrl=$websocketUrl"
+$viewerUrl = "http://$viewerUrlHost`:$ViewerPort${viewerPath}?websocketUrl=$websocketUrl"
 $shouldOpenBrowser = $false
 if ($NoBrowser) {
     $shouldOpenBrowser = $false
@@ -216,7 +216,7 @@ try {
     $publisherArgs = @(
         "run"
         "python"
-        "scripts/run_replay_mujoco_websocket_publisher.py"
+        "scripts/compatibility/run_replay_mujoco_websocket_publisher.py"
         "--host"
         $HostName
         "--port"

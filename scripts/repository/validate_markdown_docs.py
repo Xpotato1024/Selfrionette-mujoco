@@ -9,7 +9,7 @@ import sys
 from urllib.parse import unquote
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_SNAPSHOT_PATH = (
     ROOT / "docs" / "reports" / "inventories" / "markdown-inventory.md"
 )

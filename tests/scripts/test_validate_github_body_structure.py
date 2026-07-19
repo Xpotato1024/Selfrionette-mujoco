@@ -8,7 +8,7 @@ import sys
 import pytest
 
 
-SCRIPT_PATH = Path(__file__).parents[2] / "scripts" / "validate_github_body_structure.py"
+SCRIPT_PATH = Path(__file__).parents[2] / "scripts" / "repository" / "validate_github_body_structure.py"
 SPEC = importlib.util.spec_from_file_location("validate_github_body_structure", SCRIPT_PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)

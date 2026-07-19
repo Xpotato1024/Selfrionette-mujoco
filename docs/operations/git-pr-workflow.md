@@ -52,7 +52,7 @@ Read-back equality alone is insufficient. A body that was already malformed befo
 numbering SoT、parent Issue、長期roadmap、historical ledgerでは`localized-update`を既定とし、candidateはexact previous bodyへのnarrow replacementまたはpatch applicationで作る。parsed cellsやsummaryから文書全体を再構築しない。
 
 ```bash
-python scripts/validate_github_body_structure.py before.md after.md \
+python scripts/repository/validate_github_body_structure.py before.md after.md \
   --mode localized-update \
   --required-section "## 状態" \
   --required-section "## 更新ルール" \

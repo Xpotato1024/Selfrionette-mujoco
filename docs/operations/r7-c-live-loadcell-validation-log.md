@@ -26,7 +26,7 @@ Codex / CI は live serial、COM access、hardware validation、OSC、robot outp
 人間が実行する場合だけ、repo root から次の形で実行する。
 
 ```powershell
-uv run python scripts/run_live_loadcell_runtime.py --port COM5 --baud-rate 115200 --max-frames 120
+uv run python scripts/hardware/loadcell/run_live_loadcell_runtime.py --port COM5 --baud-rate 115200 --max-frames 120
 ```
 
 `--port` は実環境に合わせて operator が明示する。
