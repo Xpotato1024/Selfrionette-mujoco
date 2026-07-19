@@ -25,7 +25,9 @@ class VersionedPluginRegistry(Generic[T]):
                 raise ValueError(f"duplicate {kind} registration: {plugin_id!r}")
             values[plugin_id] = entry
         self._kind = kind
-        self._values: Mapping[str, T] = MappingProxyType(values)
+        self._values: Mapping[str, T] = MappingProxyType(
+            {plugin_id: values[plugin_id] for plugin_id in sorted(values)}
+        )
 
     @property
     def ids(self) -> tuple[str, ...]:

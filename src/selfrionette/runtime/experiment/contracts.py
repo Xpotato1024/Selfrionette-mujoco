@@ -42,6 +42,7 @@ class PluginAxis(str, Enum):
     CONTROL_MAPPING = "control_mapping"
     TASK = "task"
     EVALUATION = "evaluation"
+    INPUT_SOURCE = "input_source"
 
 
 @dataclass(frozen=True, slots=True)
@@ -360,6 +361,7 @@ class EnvironmentPlugin:
 class ControlMappingPlugin:
     identity: VersionedIdentity
     strategy: ControlMappingStrategy
+    accepted_input_sample_schemas: frozenset[VersionedIdentity]
     required_robot_capabilities: frozenset[VersionedIdentity] = field(default_factory=frozenset)
     parameter_contract: ParameterContract = ParameterContract()
     produced_evidence: frozenset[VersionedIdentity] = field(default_factory=frozenset)
@@ -370,6 +372,12 @@ class ControlMappingPlugin:
     def __post_init__(self) -> None:
         if not isinstance(self.strategy, ControlMappingStrategy):
             raise TypeError("control mapping plugin requires a typed mapping strategy")
+        schemas = frozenset(self.accepted_input_sample_schemas)
+        if any(not isinstance(identity, VersionedIdentity) for identity in schemas):
+            raise TypeError(
+                "control mapping accepted input sample schemas must use VersionedIdentity"
+            )
+        object.__setattr__(self, "accepted_input_sample_schemas", schemas)
         if self.control_frame is not None and self.control_frame not in {"world", "tool"}:
             raise ValueError("control mapping control_frame must be 'world' or 'tool'")
         for name, identity in (

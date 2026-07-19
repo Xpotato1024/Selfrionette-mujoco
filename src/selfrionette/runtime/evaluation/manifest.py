@@ -42,8 +42,8 @@ from selfrionette.runtime.composition.robot_bundle import (
 )
 
 
-EVALUATION_MANIFEST_SCHEMA_VERSION = "evaluation-manifest/v1"
-EVALUATION_MANIFEST_CONTRACT_VERSION = 1
+EVALUATION_MANIFEST_SCHEMA_VERSION = "evaluation-manifest/v2"
+EVALUATION_MANIFEST_CONTRACT_VERSION = 2
 EVALUATION_MANIFEST_DIGEST_ALGORITHM = "sha256"
 EVALUATION_FREEZE_SCHEMA_VERSION = "evaluation-freeze/v1"
 _CONTROL_FRAMES = frozenset({"world", "tool"})
@@ -408,6 +408,7 @@ class EvaluationManifest:
     environment: PluginSelection
     control_mapping: PluginSelection
     task: PluginSelection
+    input_source: PluginSelection
     evaluators: tuple[PluginSelection, ...]
     parameters: tuple[PluginParameters, ...]
     initial_keyframe_name: str
@@ -461,6 +462,7 @@ class EvaluationManifest:
             "environment",
             "control_mapping",
             "task",
+            "input_source",
         ):
             _selection(name, getattr(self, name))
         _identity("robot_profile_identity", self.robot_profile_identity)
@@ -626,7 +628,7 @@ class EvaluationManifest:
         return self.target_identity
 
     @property
-    def input_source(self) -> str:
+    def input_source_name(self) -> str:
         return self.input_source_identity
 
     @property
@@ -648,6 +650,7 @@ class EvaluationManifest:
             environment=self.environment,
             control_mapping=self.control_mapping,
             task=self.task,
+            input_source=self.input_source,
             evaluators=self.evaluators,
             parameters=self.parameters,
         )
@@ -670,6 +673,7 @@ class EvaluationManifest:
             "environment": _selection_document(self.environment),
             "control_mapping": _selection_document(self.control_mapping),
             "task": _selection_document(self.task),
+            "input_source": _selection_document(self.input_source),
             "evaluators": [_selection_document(item) for item in self.evaluators],
             "parameters": [
                 {
@@ -802,6 +806,9 @@ def decode_evaluation_manifest(
         ),
         task=_document_selection(
             _require_object(root["task"], "task"), "task"
+        ),
+        input_source=_document_selection(
+            _require_object(root["input_source"], "input_source"), "input_source"
         ),
         evaluators=evaluators,
         parameters=tuple(parameters),
@@ -1095,6 +1102,7 @@ def _resolved_identity_document(
             "environment": _selection_document(manifest.environment),
             "control_mapping": _selection_document(manifest.control_mapping),
             "task": _selection_document(manifest.task),
+            "input_source": _selection_document(manifest.input_source),
             "evaluators": [_selection_document(item) for item in manifest.evaluators],
         },
         "resolved_plugin_identities": {
@@ -1102,10 +1110,14 @@ def _resolved_identity_document(
             "environment": _identity_document(composition.environment.identity),
             "control_mapping": _identity_document(composition.control_mapping.identity),
             "task": _identity_document(composition.task.identity),
+            "input_source": _identity_document(composition.input_source.identity),
             "evaluators": [
                 _identity_document(item.identity) for item in composition.evaluators
             ],
         },
+        "resolved_input_sample_schema": _identity_document(
+            composition.resolved_input_sample_schema
+        ),
         "resolved_control_frame": composition.control_mapping.control_frame,
         "resolved_mapping_comparison": {
             "family_identity": _identity_document(mapping_family_identity),

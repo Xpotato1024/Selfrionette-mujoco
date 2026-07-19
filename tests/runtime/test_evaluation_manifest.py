@@ -39,6 +39,7 @@ from selfrionette.runtime.experiment.contracts import (
     VersionedIdentity,
 )
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
+from tests.support.input_source_plugin_doubles import CONFORMANCE_SAMPLE_SCHEMA
 from selfrionette.runtime.composition.robot_bundle import CONTACT_EVIDENCE_V1, InitialStateContract
 from selfrionette.plugins.catalog import (
     resolve_robot_bundle as resolve_robot_bundle_from_compatibility_facade,
@@ -63,13 +64,13 @@ from tests.runtime.test_experiment_plugin_composition import (
 
 
 BASELINE_FAST_ARM_MANIFEST_DIGEST = (
-    "sha256:5552d5c0e27ad523228c19a831666d3652f0e599742d25972c1be380f988626f"
+    "sha256:55d2103e69f414bc0aa513ffa96287f0e56900ad2e5d286d6cdc5a8128eadb95"
 )
 BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST = (
-    "sha256:d43165d8d7bc2fb6b72f5e78fe96b3e0f681dbc8e7f446dea9b4be520c9aecbe"
+    "sha256:208478963f6ae539c164feebc3a58876bbdce972106f21596aa6aff7fb2cc08c"
 )
 BASELINE_FAST_ARM_FREEZE_DIGEST = (
-    "sha256:8fa9fed0906e4f7a12b437fd1ad8d35a0bc237d478107d83393781cf6000da3a"
+    "sha256:5f4ccbdebffd7d5c3919c66d1e51452809f373a459521283ae47e9531c08faaf"
 )
 
 
@@ -90,7 +91,7 @@ def _manifest(**overrides: object) -> EvaluationManifest:
     environment = PluginSelection("dummy_environment", 1)
     values: dict[str, object] = {
         "schema_version": EVALUATION_MANIFEST_SCHEMA_VERSION,
-        "contract_version": 1,
+        "contract_version": 2,
         "repository_identity": "Xpotato1024/Selfrionette-mujoco",
         "software_revision_identity": EXECUTION_IDENTITY.software_revision_identity,
         "robot_bundle": PluginSelection("dummy_robot_bundle", 1),
@@ -103,6 +104,7 @@ def _manifest(**overrides: object) -> EvaluationManifest:
         "environment": environment,
         "control_mapping": PluginSelection("dummy_mapping", 1),
         "task": PluginSelection("dummy_reach_task", 1),
+        "input_source": PluginSelection("conformance_input_source", 1),
         "evaluators": (PluginSelection("dummy_success_evaluator", 1),),
         "parameters": (_environment_parameters(environment),),
         "initial_keyframe_name": "neutral",
@@ -292,7 +294,7 @@ def test_recursive_parameter_values_reject_non_canonical_python_values() -> None
 
 def test_malformed_version_identity_and_pose_dimensions_fail_closed() -> None:
     with pytest.raises(EvaluationManifestError, match="schema version"):
-        _manifest(schema_version="evaluation-manifest/v2")
+        _manifest(schema_version="evaluation-manifest/v1")
     with pytest.raises((EvaluationManifestError, ValueError), match="empty"):
         _manifest(robot_profile_identity=VersionedIdentity("", 1))
     with pytest.raises(EvaluationManifestError, match="exactly 3"):
@@ -465,6 +467,7 @@ def _condition_pair() -> tuple[EvaluationConditionPair, ExperimentPluginRegistri
         ),
         tasks=base.tasks,
         evaluators=base.evaluators,
+        input_sources=base.input_sources,
     )
     world_selection = PluginSelection("world_mapping", 1)
     tool_selection = PluginSelection("tool_mapping", 1)
@@ -577,6 +580,7 @@ def test_mapping_strategy_semantic_identity_cannot_reuse_a_family_incorrectly() 
         ControlMappingPlugin(
             identity=VersionedIdentity("other_mapping", 1),
             strategy=_OtherStrategy(),
+            accepted_input_sample_schemas=frozenset({CONFORMANCE_SAMPLE_SCHEMA}),
             comparison_family_identity=VersionedIdentity("dummy_mapping_family", 1),
             mapping_semantics_identity=VersionedIdentity("dummy_mapping_semantics", 1),
         )

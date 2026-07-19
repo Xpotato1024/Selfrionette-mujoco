@@ -21,6 +21,7 @@ from selfrionette.runtime.experiment.contracts import (
     TaskPlugin,
     VersionedIdentity,
 )
+from selfrionette.runtime.experiment.input_source import InputSourcePlugin
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from selfrionette.runtime.composition.robot_bundle import RobotBundle
 
@@ -104,6 +105,7 @@ class ExperimentPluginManifest:
     environment: PluginSelection
     control_mapping: PluginSelection
     task: PluginSelection
+    input_source: PluginSelection
     evaluators: tuple[PluginSelection, ...]
     parameters: tuple[PluginParameters, ...] = ()
 
@@ -127,6 +129,7 @@ class ExperimentPluginRegistries:
     control_mappings: VersionedPluginRegistry[ControlMappingPlugin]
     tasks: VersionedPluginRegistry[TaskPlugin]
     evaluators: VersionedPluginRegistry[EvaluationPlugin]
+    input_sources: VersionedPluginRegistry[InputSourcePlugin]
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,12 +139,22 @@ class ResolvedExperimentComposition:
     environment: EnvironmentPlugin
     control_mapping: ControlMappingPlugin
     task: TaskPlugin
+    input_source: InputSourcePlugin
+    resolved_input_sample_schema: VersionedIdentity
     evaluators: tuple[EvaluationPlugin, ...]
     resolved_capabilities: frozenset[VersionedIdentity]
     resolved_roles: frozenset[SemanticRole]
     resolved_role_descriptors: tuple[EnvironmentRole, ...]
     available_evidence: frozenset[VersionedIdentity]
     evidence_producers: tuple[EvidenceProducerBinding, ...]
+
+    @property
+    def resolved_produced_sample_schema(self) -> VersionedIdentity:
+        return self.resolved_input_sample_schema
+
+    @property
+    def produced_sample_schema_identity(self) -> VersionedIdentity:
+        return self.resolved_input_sample_schema
 
     def evidence_producer(
         self, evidence_identity: VersionedIdentity
@@ -264,6 +277,7 @@ def compose_experiment(
     environment = registries.environments.resolve(manifest.environment)
     mapping = registries.control_mappings.resolve(manifest.control_mapping)
     task = registries.tasks.resolve(manifest.task)
+    input_source = registries.input_sources.resolve(manifest.input_source)
     evaluators = tuple(
         registries.evaluators.resolve(selection) for selection in manifest.evaluators
     )
@@ -272,6 +286,7 @@ def compose_experiment(
         (environment, EnvironmentPlugin, "environment"),
         (mapping, ControlMappingPlugin, "control mapping"),
         (task, TaskPlugin, "task"),
+        (input_source, InputSourcePlugin, "input source"),
         *((evaluator, EvaluationPlugin, "evaluation") for evaluator in evaluators),
     )
     for plugin, expected_type, registry_kind in resolved_types:
@@ -297,6 +312,10 @@ def compose_experiment(
             mapping,
         ),
         (PluginParameterOwner(PluginAxis.TASK, manifest.task), task),
+        (
+            PluginParameterOwner(PluginAxis.INPUT_SOURCE, manifest.input_source),
+            input_source,
+        ),
         *(
             (
                 PluginParameterOwner(PluginAxis.EVALUATION, selection),
@@ -316,6 +335,17 @@ def compose_experiment(
         )
     for owner, plugin in selected_plugins:
         plugin.parameter_contract.validate(parameter_values.get(owner, {}))
+
+    if not mapping.accepted_input_sample_schemas:
+        raise ValueError(
+            "control mapping must declare at least one accepted input sample schema"
+        )
+    if input_source.produced_sample_schema not in mapping.accepted_input_sample_schemas:
+        raise ValueError(
+            "input sample schema compatibility mismatch: source produces "
+            f"{input_source.produced_sample_schema.canonical_id!r}, mapping accepts "
+            f"{tuple(sorted(item.canonical_id for item in mapping.accepted_input_sample_schemas))!r}"
+        )
 
     required_capabilities = (
         environment.required_robot_capabilities
@@ -364,6 +394,11 @@ def compose_experiment(
             (PluginAxis.ENVIRONMENT, environment.identity, environment.produced_evidence),
             (PluginAxis.CONTROL_MAPPING, mapping.identity, mapping.produced_evidence),
             (PluginAxis.TASK, task.identity, task.produced_evidence),
+            (
+                PluginAxis.INPUT_SOURCE,
+                input_source.identity,
+                input_source.produced_evidence,
+            ),
         )
     )
     available_evidence = frozenset(
@@ -389,6 +424,8 @@ def compose_experiment(
         environment=environment,
         control_mapping=mapping,
         task=task,
+        input_source=input_source,
+        resolved_input_sample_schema=input_source.produced_sample_schema,
         evaluators=evaluators,
         resolved_capabilities=robot.provided_capabilities,
         resolved_roles=resolved_roles,

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-17
+last_verified: 2026-07-20
 canonical_for:
   - versioned evaluation manifest
   - canonical manifest serialization
@@ -20,9 +20,9 @@ related:
 ## ownershipとscope
 
 `src/selfrionette/runtime/evaluation/manifest.py`が、実行開始前に固定する
-`evaluation-manifest/v1`のtyped manifest、canonical serialization、software-only readiness、
+`evaluation-manifest/v2`のtyped manifest、canonical serialization、software-only readiness、
 world/tool condition-pair、freeze identityを所有する。manifestはimmutableなtyped modelであり、
-内部にmutable mappingやlistを保持しない。5軸のplugin contractはR7-G-P0 / #421の
+内部にmutable mappingやlistを保持しない。6軸のplugin contractはR7-G-P0 / #421の
 `ExperimentPluginManifest`、`PluginSelection`、`PluginAxis`、`PluginParameterOwner`、
 `ExperimentPluginRegistries`、`compose_experiment()`、`ResolvedExperimentComposition`、
 `EvidenceProducerBinding`を再利用する。同義のR7-G-P1専用plugin contractは作らない。
@@ -35,9 +35,9 @@ software gateであり、model load、MuJoCo forward / step、hardware accessを
 
 `EvaluationManifest`は次のidentityとconfigurationを一つのcondition-level recordへ保持する。
 
-- `schema_version=evaluation-manifest/v1`とcontract version
+- `schema_version=evaluation-manifest/v2`とcontract version。Input Source selection追加に伴う明示的なversion updateであり、v1へ暗黙補完しない。
 - repository、software revision、Robot Bundle、Robot Profile、Runtime Plugin、model contract、canonical initial-state contract
-- Environment、Control Mapping、Task、Evaluatorの`PluginSelection`と各contract version
+- Environment、Control Mapping、Task、Input Source、Evaluatorの`PluginSelection`と各contract version
 - axis-scoped `PluginParameterOwner`とrecursive canonical JSON parameter values
 - named initial keyframe、finite initial qpos、initial tip position / frame / unit、WXYZ unit quaternion
 - target family / identity / world position、initial-tip-to-target distance identity

@@ -11,6 +11,7 @@ RUNTIME = ROOT / "src" / "selfrionette" / "runtime"
 def test_generic_experiment_contracts_do_not_import_robot_specific_implementations() -> None:
     generic_files = (
         "experiment/contracts.py",
+        "experiment/input_source.py",
         "experiment/registry.py",
         "experiment/composition.py",
         "composition/robot_bundle.py",
@@ -44,6 +45,30 @@ def test_task_and_evaluation_contracts_do_not_import_solver_or_viewer_layers() -
         for imported in imports
         for marker in ("fast_arm", "kinematics", "mujoco_backend", "viewer")
     )
+
+
+def test_generic_input_source_contract_does_not_import_concrete_layers() -> None:
+    source = (RUNTIME / "experiment" / "input_source.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    imports: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.append(node.module)
+    assert not any(
+        marker in imported
+        for imported in imports
+        for marker in (
+            "fast_arm",
+            "task",
+            "evaluation",
+            "viewer",
+            "serial",
+            "mujoco_backend",
+        )
+    )
+    assert "importlib" not in source
 
 
 def test_viewer_remains_outside_task_contact_and_metric_ownership() -> None:

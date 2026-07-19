@@ -165,6 +165,7 @@ def test_experiment_plugin_composition_contract_is_canonical_and_registered() ->
         "Control / Mapping",
         "Task",
         "Evaluation",
+        "Input Source",
         "contact_evidence/v1",
         "PluginParameterOwner",
         "EvidenceProducerBinding",
@@ -191,7 +192,7 @@ def test_evaluation_manifest_readiness_contract_is_canonical_and_registered() ->
     assert "`docs/contracts/evaluation-manifest-readiness.md`" in index
     for marker in (
         "EvaluationManifest",
-        "evaluation-manifest/v1",
+        "evaluation-manifest/v2",
         "canonical JSON",
         "sha256",
         "FreezeRecord",

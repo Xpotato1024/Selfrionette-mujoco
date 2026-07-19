@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-19
+last_verified: 2026-07-20
 canonical_for:
   - import boundaries
 related:
@@ -37,6 +37,12 @@ mujoco_backend      -> schemas
 transport           -> schemas
 runtime             -> all layers
 ```
+
+Input Source Pluginのgeneric contractは`runtime/experiment/input_source.py`が所有する。
+既存`input_sources.base.InputSource`の`read_frame() -> RawInputFrame`をreader compatibility
+boundaryとして再利用し、source contractからfast_arm、task / evaluation実装、viewer TypeScript、
+serial transportをimportしない。Control Mapping Pluginはproduced / accepted sample schemaの
+versioned identityだけを参照し、device handle、serial、browser eventを所有しない。
 
 `schemas/`内はwire domain間の依存も一方向に固定する。`input`、`command`、`state`、`endpoint`は
 `types`だけへ依存でき、`experiment_log`は`endpoint`だけへ依存できる。`viewer_control`と`types`は
