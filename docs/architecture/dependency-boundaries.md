@@ -161,6 +161,10 @@ transport           -> runtime
 `apps/mujoco-viewer/src`は`tests/architecture/test_layer_import_boundaries.py`で
 検査する。rendering-onlyを維持し、MuJoCo、IK/FK、Rapier layerをimportしてはならない。
 
+## Input Source runtime validation boundary
+
+generic source contractのhealth providerとvalidated reader adapterは`runtime/experiment/input_source.py`が所有する。adapterは`fast_arm`、serial transport、browser/viewer implementation、task/evaluation implementationをimportせず、`RawInputFrame`とtyped `InputSourceHealth`だけをruntime boundaryで検証する。具体的sourceの移行はP3、viewer provider separationはP4に残す。
+
 ## legacy参照と移行境界
 
 `legacy/`は参照専用であり、新しい実装から直接importまたはexecuteしない。

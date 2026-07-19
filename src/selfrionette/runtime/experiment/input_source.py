@@ -41,6 +41,14 @@ class InputSourceHealthStatus(str, Enum):
     DISCONNECTED = "disconnected"
 
 
+@runtime_checkable
+class InputSourceHealthProvider(Protocol):
+    """Side-effect-free source-owned health capability."""
+
+    def current_health(self) -> InputSourceHealth:
+        ...
+
+
 def _freeze_metadata(name: str, value: object) -> object:
     if value is None or type(value) in (bool, int, str):
         return value
@@ -110,6 +118,41 @@ class InputSourceFactory(Protocol):
     def __call__(self, parameters: Mapping[str, object]) -> object: ...
 
 
+class ValidatedInputSourceReader(InputSource, InputSourceHealthProvider):
+    """Read-time validation adapter for offline and replay source instances."""
+
+    def __init__(self, delegate: InputSourceHealthProvider) -> None:
+        self._delegate = delegate
+
+    def read_frame(self) -> RawInputFrame:
+        frame = self._delegate.read_frame()  # type: ignore[attr-defined]
+        if not isinstance(frame, RawInputFrame):
+            raise TypeError(
+                "input source reader returned an invalid frame: expected RawInputFrame, "
+                f"got {type(frame).__name__}"
+            )
+        return frame
+
+    def current_health(self) -> InputSourceHealth:
+        health = self._delegate.current_health()
+        if not isinstance(health, InputSourceHealth):
+            raise TypeError(
+                "input source reader returned invalid health: expected "
+                f"InputSourceHealth, got {type(health).__name__}"
+            )
+        return health
+
+
+class ValidatedManagedInputSourceReader(ValidatedInputSourceReader):
+    """Validated reader adapter with lifecycle passthrough for managed modes."""
+
+    def start(self) -> None:
+        self._delegate.start()  # type: ignore[attr-defined]
+
+    def close(self) -> None:
+        self._delegate.close()  # type: ignore[attr-defined]
+
+
 @dataclass(frozen=True, slots=True)
 class InputSourcePlugin:
     identity: VersionedIdentity
@@ -148,13 +191,16 @@ class InputSourcePlugin:
             raise TypeError("input source produced evidence must use VersionedIdentity")
         object.__setattr__(self, "produced_evidence", evidence)
 
-    def create_runtime_reader(self, parameters: Mapping[str, object]) -> InputSource:
+    def create_runtime_reader(
+        self, parameters: Mapping[str, object]
+    ) -> ValidatedInputSourceReader | ValidatedManagedInputSourceReader:
         """Validate parameters and create one reader without starting it."""
 
         if not isinstance(parameters, Mapping):
             raise TypeError("input source parameters must use a mapping")
         frozen_parameters = _freeze_metadata("input source parameters", parameters)
-        assert isinstance(frozen_parameters, Mapping)
+        if not isinstance(frozen_parameters, Mapping):
+            raise TypeError("input source parameters must freeze to a mapping")
         self.parameter_contract.validate(frozen_parameters)
         reader = self.factory(frozen_parameters)
         if not isinstance(reader, InputSource):
@@ -162,14 +208,30 @@ class InputSourcePlugin:
                 "input source factory returned an object that does not satisfy "
                 "InputSource.read_frame()"
             )
-        if self.mode in (InputSourceMode.LIVE, InputSourceMode.VIEWER_BRIDGE) and not isinstance(
-            reader, ManagedInputSource
-        ):
+        if not isinstance(reader, InputSourceHealthProvider):
+            raise TypeError(
+                "input source factory output must provide "
+                "InputSourceHealthProvider.current_health()"
+            )
+        managed = self.mode in (InputSourceMode.LIVE, InputSourceMode.VIEWER_BRIDGE)
+        if managed and not isinstance(reader, ManagedInputSource):
             raise TypeError(
                 f"{self.mode.value} input source factory output must provide "
                 "ManagedInputSource.start()/close()"
             )
-        return reader
+        initial_health = reader.current_health()
+        if not isinstance(initial_health, InputSourceHealth):
+            raise TypeError(
+                "input source factory returned invalid initial health: expected "
+                f"InputSourceHealth, got {type(initial_health).__name__}"
+            )
+        if initial_health != self.initial_health:
+            raise ValueError(
+                "input source factory initial health does not match plugin initial health"
+            )
+        if managed:
+            return ValidatedManagedInputSourceReader(reader)
+        return ValidatedInputSourceReader(reader)
 
     @property
     def source_mode(self) -> InputSourceMode:
@@ -180,7 +242,9 @@ class InputSourcePlugin:
         return self.produced_sample_schema
 
     # Short compatibility spelling for callers that use the generic reader term.
-    def create_reader(self, parameters: Mapping[str, object]) -> InputSource:
+    def create_reader(
+        self, parameters: Mapping[str, object]
+    ) -> ValidatedInputSourceReader | ValidatedManagedInputSourceReader:
         return self.create_runtime_reader(parameters)
 
 
@@ -188,10 +252,13 @@ __all__ = [
     "InputSourceFactory",
     "InputSourceHealth",
     "InputSourceHealthStatus",
+    "InputSourceHealthProvider",
     "InputSourceMode",
     "InputSourcePlugin",
     "InputSource",
     "ManagedInputSource",
     "RawInputFrame",
     "SourceMode",
+    "ValidatedInputSourceReader",
+    "ValidatedManagedInputSourceReader",
 ]

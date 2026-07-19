@@ -19,11 +19,15 @@ from selfrionette.runtime.experiment.contracts import (
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceHealthStatus,
+    InputSourceHealthProvider,
     InputSourceMode,
     InputSourcePlugin,
     ManagedInputSource,
+    ValidatedInputSourceReader,
+    ValidatedManagedInputSourceReader,
 )
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
+from selfrionette.schemas import RawInputFrame
 from tests.runtime.test_experiment_plugin_composition import (
     _manifest,
     _mapping,
@@ -35,6 +39,10 @@ from tests.support.input_source_plugin_doubles import (
     CONFORMANCE_SAMPLE_SCHEMA,
     ConformanceInputSourceReader,
     ManagedConformanceInputSourceReader,
+    ReaderWithFrameSequence,
+    ReaderWithInvalidFrame,
+    ReaderWithInvalidHealth,
+    ReaderWithoutHealth,
     build_conformance_input_source,
 )
 
@@ -97,7 +105,9 @@ def test_factory_output_and_parameters_are_validated_without_fallback() -> None:
 
 def test_offline_does_not_require_lifecycle_and_live_does() -> None:
     offline = build_conformance_input_source(mode=InputSourceMode.OFFLINE)
-    assert isinstance(offline.create_runtime_reader({}), ConformanceInputSourceReader)
+    offline_reader = offline.create_runtime_reader({})
+    assert isinstance(offline_reader, ValidatedInputSourceReader)
+    assert not isinstance(offline_reader, ManagedInputSource)
 
     def plain_factory(parameters):
         return ConformanceInputSourceReader(parameters)
@@ -110,16 +120,184 @@ def test_offline_does_not_require_lifecycle_and_live_does() -> None:
 
 
 def test_live_factory_creation_is_side_effect_free_until_explicit_start() -> None:
-    plugin = build_conformance_input_source(mode=InputSourceMode.VIEWER_BRIDGE)
+    created = []
+
+    def factory(parameters):
+        reader = ManagedConformanceInputSourceReader(parameters)
+        created.append(reader)
+        return reader
+
+    plugin = build_conformance_input_source(
+        mode=InputSourceMode.VIEWER_BRIDGE, factory_override=factory
+    )
     reader = plugin.create_runtime_reader({})
 
     assert isinstance(reader, ManagedInputSource)
-    assert isinstance(reader, ManagedConformanceInputSourceReader)
-    assert reader.started is False
+    assert isinstance(reader, ValidatedManagedInputSourceReader)
+    assert isinstance(created[0], ManagedConformanceInputSourceReader)
+    assert created[0].started is False
+    assert created[0].closed is False
     reader.start()
-    assert reader.started is True
+    assert created[0].started is True
     reader.close()
-    assert reader.closed is True
+    assert created[0].closed is True
+
+
+def test_factory_output_requires_side_effect_free_typed_health_provider() -> None:
+    with pytest.raises(TypeError, match="InputSourceHealthProvider"):
+        replace(
+            build_conformance_input_source(),
+            factory=ReaderWithoutHealth,
+        ).create_runtime_reader({})
+
+    with pytest.raises(TypeError, match="invalid initial health"):
+        replace(
+            build_conformance_input_source(),
+            factory=ReaderWithInvalidHealth,
+        ).create_runtime_reader({})
+
+
+def test_initial_health_is_checked_once_without_frame_or_lifecycle_side_effects() -> None:
+    created = []
+
+    def factory(parameters):
+        reader = ManagedConformanceInputSourceReader(parameters)
+        created.append(reader)
+        return reader
+
+    plugin = build_conformance_input_source(
+        mode=InputSourceMode.LIVE, factory_override=factory
+    )
+    adapter = plugin.create_runtime_reader({})
+
+    assert isinstance(adapter, ValidatedManagedInputSourceReader)
+    assert created[0].health_calls == 1
+    assert created[0].read_calls == 0
+    assert created[0].started is False
+    assert created[0].closed is False
+
+
+def test_initial_health_mismatch_is_rejected_without_fallback() -> None:
+    created = []
+    stale = InputSourceHealth(
+        InputSourceHealthStatus.STALE, reason="no recent sample", age_ms=12
+    )
+
+    def factory(parameters):
+        reader = ConformanceInputSourceReader(parameters)
+        reader.set_health(stale)
+        created.append(reader)
+        return reader
+
+    with pytest.raises(ValueError, match="initial health does not match"):
+        build_conformance_input_source(factory_override=factory).create_runtime_reader({})
+    assert created[0].health_calls == 1
+    assert created[0].read_calls == 0
+
+
+@pytest.mark.parametrize(
+    "status, reason, age_ms",
+    (
+        (InputSourceHealthStatus.STALE, "timeout", 5),
+        (InputSourceHealthStatus.INVALID, "malformed sample", 6),
+        (InputSourceHealthStatus.DISCONNECTED, "transport closed", 7),
+    ),
+)
+def test_health_transitions_remain_typed_and_immutable(
+    status: InputSourceHealthStatus, reason: str, age_ms: int
+) -> None:
+    created = []
+
+    def factory(parameters):
+        reader = ConformanceInputSourceReader(parameters)
+        created.append(reader)
+        return reader
+
+    adapter = build_conformance_input_source(factory_override=factory).create_runtime_reader({})
+    assert isinstance(adapter, InputSourceHealthProvider)
+    created[0].set_health(
+        InputSourceHealth(status, reason=reason, age_ms=age_ms, metadata={"code": status.value})
+    )
+
+    health = adapter.current_health()
+    assert health.status is status
+    assert health.reason == reason
+    assert health.age_ms == age_ms
+    assert health.metadata["code"] == status.value
+    with pytest.raises(TypeError):
+        health.metadata["new"] = "mutation"  # type: ignore[index]
+
+
+def test_adapter_validates_current_health_on_every_call() -> None:
+    created = []
+
+    def factory(parameters):
+        reader = ConformanceInputSourceReader(parameters)
+        created.append(reader)
+        return reader
+
+    adapter = build_conformance_input_source(factory_override=factory).create_runtime_reader({})
+    assert created[0].health_calls == 1
+    created[0].current_health = lambda: object()
+
+    with pytest.raises(TypeError, match="expected InputSourceHealth"):
+        adapter.current_health()
+
+    assert created[0].health_calls == 1
+
+
+@pytest.mark.parametrize("invalid_frame", ({"not": "RawInputFrame"}, (1, 2), [1, 2], None, object()))
+def test_read_frame_output_is_validated_at_read_time(invalid_frame: object) -> None:
+    created = []
+
+    def factory(parameters):
+        reader = ReaderWithInvalidFrame(parameters, invalid_frame)
+        created.append(reader)
+        return reader
+
+    adapter = build_conformance_input_source(factory_override=factory).create_runtime_reader({})
+    assert created[0].read_calls == 0
+    with pytest.raises(TypeError, match="expected RawInputFrame"):
+        adapter.read_frame()
+    assert created[0].read_calls == 1
+
+
+def test_valid_frame_is_returned_unchanged_and_each_read_is_checked() -> None:
+    frame = RawInputFrame(source="fixture", timestamp_s=1.0, values=(1.0,))
+    created = []
+
+    def factory(parameters):
+        reader = ReaderWithFrameSequence(parameters, [frame, {"bad": True}])
+        created.append(reader)
+        return reader
+
+    adapter = build_conformance_input_source(factory_override=factory).create_runtime_reader({})
+    assert adapter.read_frame() is frame
+    with pytest.raises(TypeError, match="expected RawInputFrame"):
+        adapter.read_frame()
+    assert created[0].read_calls == 2
+
+
+@pytest.mark.parametrize("exception", (StopIteration("end"), RuntimeError("domain failure")))
+def test_delegate_read_exceptions_are_preserved(exception: Exception) -> None:
+    class RaisingReader(ConformanceInputSourceReader):
+        def read_frame(self):
+            self.read_calls += 1
+            raise exception
+
+    adapter = build_conformance_input_source(
+        factory_override=RaisingReader
+    ).create_runtime_reader({})
+    with pytest.raises(type(exception), match=str(exception)):
+        adapter.read_frame()
+
+
+def test_replay_has_no_managed_lifecycle_and_viewer_bridge_does() -> None:
+    replay = build_conformance_input_source(mode=InputSourceMode.REPLAY)
+    assert not isinstance(replay.create_runtime_reader({}), ManagedInputSource)
+
+    viewer = build_conformance_input_source(mode=InputSourceMode.VIEWER_BRIDGE)
+    assert isinstance(viewer.create_runtime_reader({}), ManagedInputSource)
 
 
 def test_registry_resolve_and_ids_are_deterministic() -> None:
@@ -161,6 +339,20 @@ def test_composition_resolves_source_schema_and_evidence_without_factory_call() 
     assert resolved.input_source is source
     assert resolved.resolved_input_sample_schema == CONFORMANCE_SAMPLE_SCHEMA
     assert resolved.evidence_producer(evidence).producer_axis is PluginAxis.INPUT_SOURCE
+
+
+def test_composition_does_not_invoke_input_source_factory() -> None:
+    calls = 0
+
+    def factory(parameters):
+        nonlocal calls
+        calls += 1
+        return ConformanceInputSourceReader(parameters)
+
+    source = build_conformance_input_source(factory_override=factory)
+    compose_experiment(_manifest(), _registries(input_source=source))
+
+    assert calls == 0
 
 
 def test_composition_rejects_schema_mismatch_and_empty_mapping_acceptance() -> None:

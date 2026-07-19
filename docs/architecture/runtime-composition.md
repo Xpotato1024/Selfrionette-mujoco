@@ -104,6 +104,10 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 | experiment record construction | explicit caller-owned adapter | production loop外のrecord builder | completed step evidence | immutable record。default runtimeはfileを開かない |
 | experiment plugin readiness | runtime composition | versioned plugin resolver | explicit 6-axis selectionとaxis-scoped typed parameter | resolved capability、typed role、source sample schema、evidence producer binding、freeze identityまたはstartup failure |
 
+## Input Source reader boundary
+
+Input Sourceのfactory outputは`InputSource`と`InputSourceHealthProvider`を満たし、factory直後のtyped current healthがpluginの`initial_health`と一致しなければならない。`ValidatedInputSourceReader`はframeとhealthを呼出しごとに検証する。composition rootはfactory、frame read、lifecycle startを実行せず、offline / replayにmanaged lifecycleを要求しない。live / viewer_bridgeのruntime instanceだけがmanaged adapterを持つ。
+
 ## failureとordering
 
 - unknown profile、incompatible model、invalid joint orderはcomposition前に失敗する。
