@@ -24,26 +24,41 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           uv run python scripts/repository/validate_markdown_docs.py --base-ref "$BASE_SHA" --strict-map --strict-links
-      - name: Architecture A-F
+      - name: Architecture A
         shell: bash
         run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[a-f]*.py' -print | sort)
-          uv run pytest "${files[@]}" -q
-      - name: Architecture G-L
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_a*.py' -print | sort)
+          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
+      - name: Architecture B
         shell: bash
         run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[g-l]*.py' -print | sort)
-          uv run pytest "${files[@]}" -q
-      - name: Architecture M-R
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_b*.py' -print | sort)
+          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
+      - name: Architecture C
         shell: bash
         run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[m-r]*.py' -print | sort)
-          uv run pytest "${files[@]}" -q
-      - name: Architecture S-Z
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_c*.py' -print | sort)
+          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
+      - name: Architecture D
         shell: bash
         run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[s-z]*.py' -print | sort)
-          uv run pytest "${files[@]}" -q
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_d*.py' -print | sort)
+          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
+      - name: Architecture E
+        shell: bash
+        run: |
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_e*.py' -print | sort)
+          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
+      - name: Architecture F
+        shell: bash
+        run: |
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_f*.py' -print | sort)
+          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
+      - name: Architecture G-Z
+        shell: bash
+        run: |
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[g-z]*.py' -print | sort)
+          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
       - name: Compile Python files
         run: uv run python -m compileall src tests
       - name: Check diff whitespace
