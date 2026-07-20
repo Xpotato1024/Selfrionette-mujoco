@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-21
 canonical_for:
   - R7-A-lite serial frame contract
 related:
@@ -16,20 +16,23 @@ channel-axis mapping、gain、endpoint delta、`MotionCommand`生成はこのsou
 
 ## 対象範囲
 
-この文書は、R7-A-liteが使用する現在の`main` firmware targetのserial frame contractを
-固定する。`firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/`にある
-現在のfirmwareをsource of truthとし、merge済みhardware bring-up noteをsupporting evidenceとして
-使用する。
+この文書は、R7-A-liteが使用する現在の`main` firmware targetのserial frame contractと、その
+backend source pluginへの接続境界を固定する。
+`firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/`にある現在のfirmwareをprotocolの
+source of truthとし、merge済みhardware bring-up noteをsupporting evidenceとして使用する。
 
-このcontractはdocs-onlyである。firmware、script、runtime、parser、viewer behaviorは変更しない。
+P3はfirmware、serial protocol、parser semantics、mapping、viewer behaviorを変更せず、既存parserを
+versioned source registrationへ接続する。
 
 ## 参照元
 
 primary source:
+
 - `firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/platformio.ini`
 - `firmware/arduino/legacy_selfrionette/loadcell_7ch_pro_micro/src/main.cpp`
 
 secondary source:
+
 - `docs/reports/inventories/r7-a-lite-p0-device-inventory.md`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-bringup-summary.md`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-hardware-log.md`
@@ -37,7 +40,8 @@ secondary source:
 - `docs/experiment-notes/2026-06-21-r7-a-lite-plotting.md`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-data/com5-calibrated-transcript.txt`
 
-PR本文をsource of truthとして使用しない。firmware sourceと上記supporting evidenceに基づくcurrent contractだけをこの文書へ反映する。
+PR本文をsource of truthとして使用しない。firmware sourceと上記supporting evidenceに基づくcurrent
+contractだけをこの文書へ反映する。
 
 ## 現在のfirmware target
 
@@ -59,6 +63,7 @@ PR本文をsource of truthとして使用しない。firmware sourceと上記sup
 Pro MicroからPCへのUSB serialを使用する。contractはline-based ASCII streamである。
 
 ## Baud rate設定
+
 `115200`
 
 ## Sampling rate設定
@@ -80,6 +85,7 @@ vector,<timestamp_ms>,<ch0>,<ch1>,<ch2>,<ch3>,<ch4>,<ch5>,<ch6>
 ```
 
 ## Frame prefix一覧
+
 - `status`
 - `warn`
 - `vector`
@@ -129,25 +135,23 @@ vector,<timestamp_ms>,<ch0>,<ch1>,<ch2>,<ch3>,<ch4>,<ch5>,<ch6>
 frameにはexactly 7 channel value、合計exactly 9 comma-separated fieldが必要である。
 
 ## Channel数
+
 `7`
 
 ## Channel順序
 
 frame orderはfirmware orderの`ch0`から`ch6`である。
-
-このcontractではphysical sensor-to-channel mappingを確定しない。そのmappingは
-hardware bring-up noteで別途追跡する。
+このcontractではphysical sensor-to-channel mappingを確定しない。そのmappingはhardware bring-up noteで
+別途追跡する。
 
 ## Timestamp field仕様
 
 `timestamp_ms`はframe出力時に`millis()`が返す値である。
-
 bootからのunsigned millisecond counterをASCII decimal形式で表す。
 
 ## Numeric fieldのsemantics
 
-- `vector` channel valueは、firmwareのzero handlingとspike gating後のsigned decimal
-  sensor readingである。
+- `vector` channel valueは、firmwareのzero handlingとspike gating後のsigned decimal sensor readingである。
 - `status` numeric fieldはchannel indexやcalibration meanなどのdiagnostic dataである。
 - `warn` numeric fieldはchannel indexやretained valueなどのdiagnostic dataである。
 - valueはplain ASCII decimal textとして出力する。
@@ -201,12 +205,10 @@ supportするruntime command:
 
 ## Timeout / ready failure時のbehavior
 
-- warmupまたはcalibration中のready timeoutでは、対応する
-  `warn,..._timeout,...` frameを出力する。
-- calibration sampleを一つも収集できない場合、firmwareは
-  `warn,calibration_skipped,<channel>`を出力する。
-- runtime readのready timeoutでは`warn,ready_timeout,<channel>`を出力し、
-  そのchannelのprevious output valueを再利用する。
+- warmupまたはcalibration中のready timeoutでは、対応する`warn,..._timeout,...` frameを出力する。
+- calibration sampleを一つも収集できない場合、firmwareは`warn,calibration_skipped,<channel>`を出力する。
+- runtime readのready timeoutでは`warn,ready_timeout,<channel>`を出力し、そのchannelのprevious output
+  valueを再利用する。
 
 ## Spike / abnormal value時のbehavior
 
@@ -235,25 +237,36 @@ parserは次のruleに従う。
 - small text fixtureだけを使用する。
 - parser testではfull transcript、CSV、PNG artifactを要求しない。
 
-## PR #465 lifecycle correction
+## Source plugin factoryとlifecycle
 
-`loadcell_serial` plugin factoryはserial portをopenせず、managed runtimeのexplicit `start()`だけがportをopenする。`read_frame()`は未start時に`loadcell serial input source is not started`でfail-closedし、暗黙startを行わない。closeはbounded cleanupとして一度だけ実行し、fixture modeはreal serialをopenしない。parser、baud `115200`、diagnostic accumulation、7-channel vector semanticsは変更しない。
+`loadcell_serial/v1` factoryはI/O前に次をfail-closedで検証する。
 
-## 明示的なnon-goal
+- port指定時はnonblank stringである。
+- baud rateはpositive integerである。boolはintegerとして受理しない。
+- injected linesはtupleで、各要素はstringである。
+- portとinjected linesを同時に指定しない。
+- portとinjected linesのどちらもないconfigを受理しない。
 
-- このPRではfirmwareを変更しない。
-- このPRではparserを実装しない。
-- このPRでは`SerialInputSource`を実装しない。
-- このPRではserial protocol、mapping、frontend viewer behaviorを変更しない。P3では既存parserをplugin registrationへ接続するruntime wiringだけを扱う。
-- このPRではWebSocketを変更しない。
-- このPRではlive serialへaccessしない。
-- このPRではfirmwareをuploadしない。
-- この文書以外のgenerated artifactをimportしない。
-- このPRではphysical axis mappingを確定しない。
-- このPRではloadcell calibration algorithmを変更しない。
+factory creationはserial moduleをimportせず、portをopenしない。managed runtimeのexplicit `start()`だけが
+live portをopenする。`read_frame()`は未start時に
+`loadcell serial input source is not started`でfail-closedし、暗黙startを行わない。
+closeはnormal / failure / start failure後に最大1回試行し、primary failureをcleanup failureで置換しない。
+
+`loadcell_fixture/v1`は同じparserと`loadcell_vector_sample/v1`を使用し、real serialをopenしない。
+runnerが受け取るone-shot `Iterable[str]`は一度だけtuple化し、同じrecorded linesをfactoryへ渡す。
+parser、baud `115200`、diagnostic accumulation、7-channel vector semanticsは変更しない。
+
+## Non-goals
+
+- firmwareを変更しない。
+- serial protocol、parser semantics、mapping、frontend viewer behaviorを変更しない。
+- physical axis mappingを確定しない。
+- loadcell calibration algorithmを変更しない。
+- runtime validationまたはtestでreal serialへaccessしない。
+- firmwareをuploadしない。
 - OSCをsendしない。
-- real robotへoutputしない。
-- actuator commandを送らない。
+- real robotまたはactuatorへoutputしない。
+- generated artifactをcurrent contractの根拠としてimportしない。
 
-
-pre-audit implementation chronologyは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
+pre-audit implementation chronologyは
+`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
