@@ -57,6 +57,10 @@ top-level field:
 - `stale`: optional boolean
 - `zero_state`: optional boolean
 
+## PR #465 backend bridge correction
+
+backend `viewer` pluginは`ViewerBridgeRuntimeCapability`をtyped optional bindingとして公開する。ingress、JSON ingress、`rebase_current_endpoint_m()`は同一の`ViewerInputSource` instanceへ結線され、plugin-backed selectionでもdirect source pathと同じframe metadata、health、initial / post-publish rebase semanticsを維持する。viewer capabilityが欠落したplugin-backed selectionはfail-closedとする。
+
 ## Validation規則
 
 - malformed JSONはrejectする。

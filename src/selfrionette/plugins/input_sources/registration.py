@@ -58,6 +58,8 @@ _VIEWER_SAFE_ENDPOINT = DEFAULT_VIEWER_SAFE_ENDPOINT_M
 
 
 def _programmed_request(*, steps: int, frames: Sequence[RawInputFrame] | None, preset: str | None, replay_initial_metadata: Mapping[str, object] | None = None, **_: object) -> InputSourcePluginRequest:
+    if type(steps) is not int or steps < 1:
+        raise ValueError("steps must be a positive integer")
     if preset not in (None, "sweep_x"):
         raise ValueError("unsupported programmed_target preset")
     if frames is not None:

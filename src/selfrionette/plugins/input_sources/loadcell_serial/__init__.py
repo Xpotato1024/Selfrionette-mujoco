@@ -44,7 +44,7 @@ class _ManagedSerialDelegate:
 
     def read_frame(self):
         if self._source is None:
-            self.start()
+            raise RuntimeError("loadcell serial input source is not started")
         assert self._source is not None
         return self._source.read_frame()
 

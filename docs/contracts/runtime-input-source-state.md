@@ -43,6 +43,12 @@ age と stale metadata を source 側で emit する。
 - accepted frame では rejection fields は `none` / `n/a` に戻る。
 - missing metadata でも viewer parser は crash しない。
 
+## PR #465 review correction rules
+
+- runtimeはraw frameをreadした後、typed healthを取得し、native state fieldsとの整合性を検証してから同じprojection helperでframeをannotateする。
+- `source_kind`のsource-specific valueは保持する。runtimeがcanonicalに上書きするのは`source_active`、`command_age_ms`、`stale_reason`である。
+- mismatchはfail-closedとし、source reasonやtimeout reasonをruntimeで再生成しない。
+
 ## rules
 
 - これらは optional metadata であり、既存 payload の parse を壊さない

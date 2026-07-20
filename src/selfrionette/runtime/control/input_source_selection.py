@@ -16,6 +16,7 @@ from selfrionette.runtime.experiment.input_source import (
     InputSourceRuntimeDependencies,
     ValidatedInputSourceReader,
     ValidatedManagedInputSourceReader,
+    ViewerBridgeRuntimeCapability,
 )
 from selfrionette.runtime.execution.input_source_adapters import (
     RuntimeInputSourceExecutionAdapter,
@@ -68,6 +69,7 @@ class RuntimeInputSourceSelection:
     initial_health: InputSourceHealth | None = None
     execution_adapter: RuntimeInputSourceExecutionAdapter | None = None
     validated_parameters: Mapping[str, object] | None = None
+    viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
 
     @property
     def plugin(self) -> InputSourcePlugin | None:
@@ -121,6 +123,13 @@ def select_runtime_input_source(
         request.parameters,
         runtime_dependencies=runtime_dependencies,
     )
+    viewer_bridge_capability = (
+        reader.viewer_bridge_capability
+        if isinstance(reader, ValidatedManagedInputSourceReader)
+        else None
+    )
+    if plugin.source_mode is InputSourceMode.VIEWER_BRIDGE and viewer_bridge_capability is None:
+        raise ValueError("viewer input source plugin is missing its runtime bridge capability")
     initial_metadata = {
         **plugin.initial_metadata,
         **request.initial_metadata,
@@ -140,6 +149,7 @@ def select_runtime_input_source(
         initial_health=plugin.initial_health,
         execution_adapter=registration.execution_adapter,
         validated_parameters=request.parameters,
+        viewer_bridge_capability=viewer_bridge_capability,
     )
 
 

@@ -9,7 +9,7 @@ and optional lifecycle capability around it.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
@@ -20,7 +20,7 @@ from selfrionette.runtime.experiment.contracts import (
     ParameterContract,
     VersionedIdentity,
 )
-from selfrionette.schemas import RawInputFrame
+from selfrionette.schemas import RawInputFrame, ViewerControlMessage
 
 
 class InputSourceMode(str, Enum):
@@ -46,6 +46,33 @@ class InputSourceHealthProvider(Protocol):
     """Side-effect-free source-owned health capability."""
 
     def current_health(self) -> InputSourceHealth:
+        ...
+
+
+@runtime_checkable
+class ViewerBridgeRuntimeCapability(Protocol):
+    """Optional, viewer-only runtime bridge capability.
+
+    This is deliberately not part of the generic input-source reader
+    interface.  The viewer registration may expose it to runtime ingress and
+    endpoint continuity code when the reader is plugin-backed.
+    """
+
+    def ingest_control_message(self, message: ViewerControlMessage) -> RawInputFrame:
+        ...
+
+    def ingest_control_message_json(self, message: str) -> RawInputFrame:
+        ...
+
+    def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
+        ...
+
+
+@runtime_checkable
+class ViewerEndpointRebaseCapability(Protocol):
+    """Narrow typed capability used only by endpoint continuity code."""
+
+    def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
         ...
 
 
@@ -160,11 +187,24 @@ class ValidatedInputSourceReader(InputSource, InputSourceHealthProvider):
 class ValidatedManagedInputSourceReader(ValidatedInputSourceReader):
     """Validated reader adapter with lifecycle passthrough for managed modes."""
 
+    def __init__(
+        self,
+        delegate: ManagedInputSource,
+        *,
+        viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None,
+    ) -> None:
+        super().__init__(delegate)
+        self._viewer_bridge_capability = viewer_bridge_capability
+
     def start(self) -> None:
         self._delegate.start()  # type: ignore[attr-defined]
 
     def close(self) -> None:
         self._delegate.close()  # type: ignore[attr-defined]
+
+    @property
+    def viewer_bridge_capability(self) -> ViewerBridgeRuntimeCapability | None:
+        return self._viewer_bridge_capability
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,7 +293,17 @@ class InputSourcePlugin:
                 "input source factory initial health does not match plugin initial health"
             )
         if managed:
-            return ValidatedManagedInputSourceReader(reader)
+            viewer_bridge_capability = getattr(reader, "viewer_bridge_capability", None)
+            if viewer_bridge_capability is not None and not isinstance(
+                viewer_bridge_capability, ViewerBridgeRuntimeCapability
+            ):
+                raise TypeError(
+                    "viewer bridge capability must satisfy ViewerBridgeRuntimeCapability"
+                )
+            return ValidatedManagedInputSourceReader(
+                reader,
+                viewer_bridge_capability=viewer_bridge_capability,
+            )
         return ValidatedInputSourceReader(reader)
 
     @property
@@ -289,6 +339,8 @@ __all__ = [
     "ManagedInputSource",
     "RawInputFrame",
     "SourceMode",
+    "ViewerBridgeRuntimeCapability",
+    "ViewerEndpointRebaseCapability",
     "ValidatedInputSourceReader",
     "ValidatedManagedInputSourceReader",
 ]

@@ -248,6 +248,16 @@ importsは動作し、同じ実装の新旧コピーは作らない。viewerのk
 mapping分離、message schema、gain / deadzoneは変更していない。これらは#461へ残る。plugin-local test ownershipと
 onboarding / completion auditは#462へ残る。
 
+### C.4 Review corrections（PR #465）
+
+PR #465のreview correctionでは、次のbehavior boundaryを追加で固定する。
+
+- `noop` registrationのfactoryはtupleではなく、単一の`RawInputFrame`を返すreaderを生成する。同じframeを繰り返し、`source=noop`、`timestamp_s=0.0`、既存metadata、ACTIVE healthを維持する。
+- managed readerはfactory creationでstartせず、runtimeがstartを最大1回試行する。startの成否にかかわらず、試行後はnormal / failure pathでcloseを最大1回試行し、primary failureをcleanup failureで置き換えない。offline / replayは外部所有readerをcloseしない。
+- viewer registrationはgeneric readerの任意属性転送を行わず、`ViewerBridgeRuntimeCapability`（ingress、JSON ingress、endpoint rebase）をtyped optional capabilityとしてselectionへ渡す。plugin-backed viewerでcapability欠落はfail-closedとする。
+- programmed targetは`steps >= 1`をregistrationで検証し、runtime readerは`ProgrammedTargetInputSource`へdelegateする。非loopのterminal holdとloopのwrapをtuple iteratorへ退化させない。
+- selection materializationとruntime read後のframeへ同じruntime-owned health projection helperを適用する。既存source-specific metadata（viewer keyboardなどの`source_kind`）は保持し、`source_active`、`command_age_ms`、`stale_reason`だけをtyped healthからcanonicalに投影する。
+
 ## 既存canonical文書との関係
 
 実装済み仕様の参照先は`docs/README.md`のSource of Truth Mapと、次のcanonical contractである。

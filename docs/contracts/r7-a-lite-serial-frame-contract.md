@@ -235,12 +235,16 @@ parserは次のruleに従う。
 - small text fixtureだけを使用する。
 - parser testではfull transcript、CSV、PNG artifactを要求しない。
 
+## PR #465 lifecycle correction
+
+`loadcell_serial` plugin factoryはserial portをopenせず、managed runtimeのexplicit `start()`だけがportをopenする。`read_frame()`は未start時に`loadcell serial input source is not started`でfail-closedし、暗黙startを行わない。closeはbounded cleanupとして一度だけ実行し、fixture modeはreal serialをopenしない。parser、baud `115200`、diagnostic accumulation、7-channel vector semanticsは変更しない。
+
 ## 明示的なnon-goal
 
 - このPRではfirmwareを変更しない。
 - このPRではparserを実装しない。
 - このPRでは`SerialInputSource`を実装しない。
-- このPRではruntime/backend/viewerを変更しない。
+- このPRではserial protocol、mapping、frontend viewer behaviorを変更しない。P3では既存parserをplugin registrationへ接続するruntime wiringだけを扱う。
 - このPRではWebSocketを変更しない。
 - このPRではlive serialへaccessしない。
 - このPRではfirmwareをuploadしない。

@@ -13,6 +13,7 @@ from typing import Any
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceHealthStatus,
+    ViewerBridgeRuntimeCapability,
 )
 from selfrionette.schemas import RawInputFrame
 
@@ -63,18 +64,25 @@ class FrameHealthReader:
 class ManagedFrameHealthReader(FrameHealthReader):
     """Health adapter with idempotent managed lifecycle forwarding."""
 
-    def __init__(self, delegate: Any, initial_health: InputSourceHealth) -> None:
+    def __init__(
+        self,
+        delegate: Any,
+        initial_health: InputSourceHealth,
+        *,
+        viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None,
+    ) -> None:
         super().__init__(delegate, initial_health)
+        self._viewer_bridge_capability = viewer_bridge_capability
         self._started = False
         self._closed = False
 
     def start(self) -> None:
         if self._started:
             return
-        self._started = True
         callback = getattr(self._delegate, "start", None)
         if callable(callback):
             callback()
+        self._started = True
 
     def close(self) -> None:
         if self._closed:
@@ -83,6 +91,10 @@ class ManagedFrameHealthReader(FrameHealthReader):
         callback = getattr(self._delegate, "close", None)
         if callable(callback):
             callback()
+
+    @property
+    def viewer_bridge_capability(self) -> ViewerBridgeRuntimeCapability | None:
+        return self._viewer_bridge_capability
 
 
 class NoopInputSource:

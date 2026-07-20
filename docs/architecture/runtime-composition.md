@@ -110,6 +110,12 @@ Input Sourceのfactory outputは`InputSource`と`InputSourceHealthProvider`を�
 
 P3のexecution adapterは`target_metadata`、`replay_compatibility`、`viewer_local_endpoint_compatibility`、loadcell、analog fixtureのversioned semanticsを明示する。viewer adapterはP4までendpoint coercion、local motion、orientation metadata、post-step measurement、publish後rebaseをcompatibility責務として保持する。frontend keyboard / gamepad providerとmappingの分離は#461のscopeであり、P3では変更しない。
 
+## PR #465 review correction boundary
+
+- managed sourceのlifecycleはruntime-owned coordinatorが`start attempted`、`start completed`、`close attempted`、`close completed`を追跡する。start failure後もcloseを試行し、cleanup failureはprimary failureへdiagnostic noteとして保持する。
+- viewer backendは`ViewerBridgeRuntimeCapability`を介してingressとendpoint rebaseを同一underlying sourceへ結線する。generic readerへ`__getattr__`などの任意forwardingは追加しない。
+- step-loopはraw frame、typed health、canonical state projectionの順で処理し、projected frameをinterpreter、record、diagnosticsへ渡す。
+
 ## failureとordering
 
 - unknown profile、incompatible model、invalid joint orderはcomposition前に失敗する。

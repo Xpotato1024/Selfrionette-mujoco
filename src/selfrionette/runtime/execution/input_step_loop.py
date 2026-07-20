@@ -21,8 +21,13 @@ from selfrionette.runtime.control.input_step_diagnostics import (
 )
 from selfrionette.runtime.control.input_source_selection import RuntimeInputSourceSelection
 from selfrionette.runtime.control.input_source_state import (
+    annotate_raw_input_frame,
     build_runtime_input_source_state_from_metadata,
     build_runtime_input_source_state_from_health,
+)
+from selfrionette.runtime.experiment.input_source import (
+    ViewerBridgeRuntimeCapability,
+    ViewerEndpointRebaseCapability,
 )
 from selfrionette.runtime.safety.input_safety import build_runtime_input_safety_result
 from selfrionette.runtime.execution.live_timing import (
@@ -74,6 +79,7 @@ class RuntimeInputSourceStepLoopPlan:
     qpos_feasibility_provider: QposFeasibilityProvider
     endpoint_site_name: str | None
     execution_adapter: RuntimeInputSourceExecutionAdapter
+    viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +221,11 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if execution_adapter.uses_viewer_endpoint_compatibility:
+        viewer_capability: ViewerBridgeRuntimeCapability | None = (
+            viewer_input_source or selection.viewer_bridge_capability
+        )
+        if viewer_capability is None and selection.plugin_selection is not None:
+            raise ValueError("plugin-backed viewer input source is missing its runtime bridge capability")
         pipeline_input_source = viewer_input_source or selection.runtime_reader
         if pipeline_input_source is None:
             initial_endpoint_m = _coerce_viewer_endpoint_m(
@@ -227,6 +238,10 @@ def build_runtime_input_source_step_loop_plan(
                 clock=viewer_clock if viewer_clock is not None else monotonic,
                 initial_endpoint_m=initial_endpoint_m,
             )
+            viewer_capability = pipeline_input_source
+
+        if viewer_capability is None:
+            raise ValueError("viewer input source is missing its runtime bridge capability")
 
         pipeline = build_concrete_mujoco_pipeline(
             frames=selection.frames,
@@ -246,7 +261,7 @@ def build_runtime_input_source_step_loop_plan(
         )
         if initial_tip_site_position_m is not None:
             _sync_viewer_input_source_endpoint(
-                pipeline.input_source,
+                viewer_capability,
                 endpoint_m=initial_tip_site_position_m,
             )
 
@@ -256,24 +271,21 @@ def build_runtime_input_source_step_loop_plan(
             annotate_target_position_m=True,
             **plan_providers,
             execution_adapter=execution_adapter,
+            viewer_bridge_capability=viewer_capability,
         )
 
     raise ValueError(f"unsupported input source execution adapter: {execution_adapter!r}")
 
 
 def _sync_viewer_input_source_endpoint(
-    input_source: object,
+    capability: ViewerEndpointRebaseCapability,
     *,
     endpoint_m: tuple[float, float, float] | None,
 ) -> None:
-    rebase_current_endpoint_m = getattr(input_source, "rebase_current_endpoint_m", None)
-    if not callable(rebase_current_endpoint_m):
-        return
-
     if endpoint_m is None:
         endpoint_m = DEFAULT_VIEWER_SAFE_ENDPOINT_M
 
-    rebase_current_endpoint_m(endpoint_m)
+    capability.rebase_current_endpoint_m(endpoint_m)
 
 
 async def run_runtime_input_source_step_loop(
@@ -289,11 +301,16 @@ async def run_runtime_input_source_step_loop(
     reader = plan.pipeline.input_source
     start = getattr(reader, "start", None)
     close = getattr(reader, "close", None)
-    attempted_start = False
+    start_attempted = False
+    start_completed = False
+    close_attempted = False
+    close_completed = False
+    primary_failure: BaseException | None = None
     try:
         if callable(start):
-            attempted_start = True
+            start_attempted = True
             start()
+            start_completed = True
         return await _run_runtime_input_source_step_loop(
             plan,
             steps=steps,
@@ -304,15 +321,21 @@ async def run_runtime_input_source_step_loop(
             collect_records=collect_records,
         )
     except BaseException as failure:
-        if attempted_start and callable(close):
+        primary_failure = failure
+        raise
+    finally:
+        if start_attempted and callable(close) and not close_attempted:
+            close_attempted = True
             try:
                 close()
+                close_completed = True
             except BaseException as cleanup_failure:
-                failure.add_note(f"input source cleanup failed: {cleanup_failure!r}")
-        raise failure
-    finally:
-        if not attempted_start and callable(close):
-            close()
+                if primary_failure is not None:
+                    primary_failure.add_note(
+                        f"input source cleanup failed: {cleanup_failure!r}"
+                    )
+                else:
+                    raise
 
 
 async def _run_runtime_input_source_step_loop(
@@ -349,25 +372,32 @@ async def _run_runtime_input_source_step_loop(
 
     for index in range(steps):
         compute_started_s = timing_metrics.clock() if timing_metrics is not None else 0.0
-        frame = plan.pipeline.input_source.read_frame()
-        intent = plan.pipeline.input_interpreter.interpret(frame)
+        raw_frame = plan.pipeline.input_source.read_frame()
         health_provider = getattr(plan.pipeline.input_source, "current_health", None)
         if callable(health_provider):
             health = health_provider()
             source_state = build_runtime_input_source_state_from_health(
                 health, source_kind=plan.selection.source_name
             )
-            frame_active = frame.metadata.get("source_active")
-            if isinstance(frame_active, bool) and frame_active != source_state.source_active:
+            native_state = build_runtime_input_source_state_from_metadata(
+                raw_frame.metadata,
+                default_source_kind=source_state.source_kind,
+            )
+            if any(
+                getattr(native_state, field) != getattr(source_state, field)
+                for field in ("source_active", "command_age_ms", "stale_reason")
+            ) and any(
+                key in raw_frame.metadata
+                for key in ("source_active", "command_age_ms", "stale_reason")
+            ):
                 raise ValueError("input source frame metadata and typed health disagree")
-            frame_reason = frame.metadata.get("stale_reason")
-            if frame_reason is not None and frame_reason != source_state.stale_reason:
-                raise ValueError("input source frame stale reason and typed health disagree")
         else:
             source_state = build_runtime_input_source_state_from_metadata(
-                frame.metadata,
+                raw_frame.metadata,
                 default_source_kind=plan.selection.source_name,
             )
+        frame = annotate_raw_input_frame(raw_frame, source_state)
+        intent = plan.pipeline.input_interpreter.interpret(frame)
         pre_step_state = plan.pipeline.simulator.snapshot()
         pre_step_tip_site_orientation_wxyz = None
         if plan.execution_adapter.uses_viewer_endpoint_compatibility:
@@ -450,8 +480,16 @@ async def _run_runtime_input_source_step_loop(
                 step_endpoint_m = annotated_state.target_position_m or last_valid_endpoint_m
             if step_endpoint_m is not None:
                 last_valid_endpoint_m = step_endpoint_m
+            pipeline_capability = plan.pipeline.input_source
+            capability = (
+                pipeline_capability
+                if isinstance(pipeline_capability, ViewerEndpointRebaseCapability)
+                else plan.viewer_bridge_capability
+            )
+            if capability is None:
+                raise RuntimeError("viewer execution adapter has no runtime bridge capability")
             _sync_viewer_input_source_endpoint(
-                plan.pipeline.input_source,
+                capability,
                 endpoint_m=step_endpoint_m,
             )
         post_publish_finished_s = timing_metrics.clock() if timing_metrics is not None else 0.0

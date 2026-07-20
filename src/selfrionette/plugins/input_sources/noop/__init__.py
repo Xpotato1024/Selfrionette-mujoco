@@ -12,7 +12,8 @@ def build_frames(parameters: Mapping[str, object]) -> tuple[RawInputFrame, ...]:
 
 
 def build_reader(parameters: Mapping[str, object]) -> NoopInputSource:
-    return NoopInputSource(build_frames(parameters))
+    frames = build_frames(parameters)
+    return NoopInputSource(frames[0])
 
 
 __all__ = ["build_frames", "build_reader"]

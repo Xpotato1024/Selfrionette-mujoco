@@ -165,6 +165,12 @@ transport           -> runtime
 
 generic source contractのhealth providerとvalidated reader adapterは`runtime/experiment/input_source.py`が所有する。adapterは`fast_arm`、serial transport、browser/viewer implementation、task/evaluation implementationをimportせず、`RawInputFrame`とtyped `InputSourceHealth`だけをruntime boundaryで検証する。production source pluginはdeterministic known-ID catalogからのみ解決し、source packageがrobot command、task/evaluation、viewer TypeScriptをimportすることを禁止する。mappingはsource package外に残し、loadcell serial portを開かない。P3のviewer packageは既存backend bridgeのcompatibility adapterであり、frontend provider / keyboard / gamepad mapping分離はP4に残す。
 
+## PR #465 review correction boundary
+
+`ViewerBridgeRuntimeCapability`はviewer registrationとruntime ingress / endpoint continuityだけが使用するoptional typed capabilityであり、generic `InputSource` readerの必須interfaceではない。source pluginはviewer control schemaを維持し、frontend providerやkeyboard / gamepad mappingを所有しない。
+
+Health-to-frame projectionはruntime-owned helperに集約する。source pluginはtyped health truthを提供し、runtimeはgeneric fieldsだけをprojectionする。loadcell pluginはfactory creationまたはread-before-startでserial portをopenしない。
+
 ## legacy参照と移行境界
 
 `legacy/`は参照専用であり、新しい実装から直接importまたはexecuteしない。

@@ -130,7 +130,9 @@ def annotate_runtime_input_source_metadata(
     state: RuntimeInputSourceState,
 ) -> dict[str, object]:
     annotated_metadata = dict(metadata)
-    annotated_metadata.update(runtime_input_source_state_to_metadata(state))
+    state_metadata = runtime_input_source_state_to_metadata(state)
+    annotated_metadata.setdefault("source_kind", state_metadata.pop("source_kind"))
+    annotated_metadata.update(state_metadata)
     return annotated_metadata
 
 

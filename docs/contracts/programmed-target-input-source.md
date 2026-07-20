@@ -138,10 +138,14 @@ programmed target の契約は interpreter 側で再定義しない。
 - `desired_endpoint_m` は viewer-visible target marker feedback の別名ではなく、
   current command target の metadata bridge である
 
+## PR #465 review correction
+
+plugin registrationは`steps`が1以上であることを`steps must be a positive integer`で検証する。runtime readerは既存`ProgrammedTargetInputSource`へdelegateし、非loopではtrajectory終端後にterminal frameをholdし、loopではtrajectory先頭へwrapする。selection.framesのmaterializationは独立delegateから行い、runtime readerを先読みしない。
+
 ## 10. Non-goals
 
 - dry-run preset wiring
-- runtime wiring
+- runtime mapping / robot command semanticsの変更
 - WebSocket publisher runner wiring
 - target command schema formalization
 - MuJoCo site / body contract 変更

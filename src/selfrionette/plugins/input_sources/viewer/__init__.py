@@ -5,7 +5,11 @@ from time import monotonic
 
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M, ViewerInputSource
 from selfrionette.plugins.input_sources._common import ManagedFrameHealthReader
-from selfrionette.runtime.experiment.input_source import InputSourceHealth, InputSourceHealthStatus, InputSourceRuntimeDependencies
+from selfrionette.runtime.experiment.input_source import (
+    InputSourceHealth,
+    InputSourceHealthStatus,
+    InputSourceRuntimeDependencies,
+)
 from selfrionette.schemas import RawInputFrame
 
 
@@ -22,7 +26,11 @@ def build_reader(parameters: Mapping[str, object], *, runtime_dependencies: Inpu
         reason="no_control_message_received",
         age_ms=0,
     )
-    return ManagedFrameHealthReader(delegate, initial)
+    return ManagedFrameHealthReader(
+        delegate,
+        initial,
+        viewer_bridge_capability=delegate,
+    )
 
 
 __all__ = ["build_frames", "build_reader"]
