@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
+from dataclasses import replace
 
 import pytest
 
@@ -18,10 +20,14 @@ from selfrionette.runtime.control.viewer_control_ingress import (
 )
 from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
+    run_runtime_input_source_step_loop,
 )
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceHealthStatus,
+)
+from selfrionette.runtime.safety.input_safety import (
+    DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS,
 )
 from selfrionette.schemas import (
     RawInputFrame,
@@ -100,6 +106,29 @@ def test_managed_reader_allows_cleanup_retry_after_close_failure() -> None:
     assert delegate.start_calls == 1
     assert delegate.close_calls == 2
     assert delegate.is_open is False
+
+
+def test_loadcell_plugin_rejects_read_after_close_and_restarts_cleanly() -> None:
+    plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+    reader = plugin.create_runtime_reader(
+        {"lines": ("vector,1000,1,2,3,4,5,6,7",)}
+    )
+
+    reader.start()
+    first = reader.read_frame()
+    reader.close()
+
+    with pytest.raises(
+        RuntimeError,
+        match="loadcell serial input source is not started",
+    ):
+        reader.read_frame()
+
+    reader.start()
+    restarted = reader.read_frame()
+    reader.close()
+
+    assert restarted == first
 
 
 def _analog_sample(
@@ -183,6 +212,103 @@ def test_inactive_health_rejects_failure_reason() -> None:
         )
 
 
+def _replay_state_frame(
+    timestamp_s: float,
+    **state_metadata: object,
+) -> RawInputFrame:
+    endpoint = (0.6, 0.0, 0.1)
+    return RawInputFrame(
+        source="replay",
+        timestamp_s=timestamp_s,
+        metadata={
+            "desired_endpoint_m": endpoint,
+            "target_position_m": endpoint,
+            **state_metadata,
+        },
+    )
+
+
+def test_custom_replay_preserves_recorded_source_state_through_runtime() -> None:
+    recorded_frames = (
+        _replay_state_frame(1.0, source_active=False),
+        _replay_state_frame(
+            2.0,
+            source_active=True,
+            command_age_ms=DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS + 1,
+        ),
+        _replay_state_frame(
+            3.0,
+            source_active=True,
+            stale_reason="explicit_stale",
+        ),
+    )
+    selection = select_runtime_input_source(
+        "replay",
+        steps=len(recorded_frames),
+        frames=recorded_frames,
+    )
+
+    assert selection.frames[0].metadata["source_active"] is False
+    assert selection.frames[0].metadata["command_age_ms"] == 0
+    assert "stale_reason" not in selection.frames[0].metadata
+    assert selection.frames[1].metadata["source_active"] is True
+    assert selection.frames[1].metadata["command_age_ms"] == 251
+    assert "stale_reason" not in selection.frames[1].metadata
+    assert selection.frames[2].metadata["source_active"] is True
+    assert selection.frames[2].metadata["command_age_ms"] == 0
+    assert selection.frames[2].metadata["stale_reason"] == "explicit_stale"
+    assert selection.initial_metadata["source_active"] is False
+
+    plan = build_runtime_input_source_step_loop_plan(selection)
+    records = asyncio.run(
+        run_runtime_input_source_step_loop(
+            plan,
+            steps=len(recorded_frames),
+        )
+    )
+
+    assert tuple(record.frame for record in records) == selection.frames
+    assert records[0].motion_command.metadata["stale_reason"] == "source_inactive"
+    assert records[1].motion_command.metadata["stale_reason"] == (
+        f"command_age_ms_exceeded_timeout_{DEFAULT_RUNTIME_INPUT_COMMAND_TIMEOUT_MS}"
+    )
+    assert records[2].motion_command.metadata["stale_reason"] == "explicit_stale"
+
+
+class _PartialMetadataReader:
+    def __init__(self, frame: RawInputFrame) -> None:
+        self._frame = frame
+
+    def read_frame(self) -> RawInputFrame:
+        return self._frame
+
+    def current_health(self) -> InputSourceHealth:
+        return InputSourceHealth(
+            InputSourceHealthStatus.INACTIVE,
+            age_ms=None,
+        )
+
+
+def test_live_health_comparison_only_checks_metadata_keys_that_exist() -> None:
+    selection = select_runtime_input_source("programmed_target", steps=1)
+    metadata = dict(selection.frames[0].metadata)
+    metadata["source_active"] = False
+    metadata.pop("command_age_ms", None)
+    metadata.pop("stale_reason", None)
+    partial_frame = replace(selection.frames[0], metadata=metadata)
+    plan = build_runtime_input_source_step_loop_plan(selection)
+    plan.pipeline.input_source = _PartialMetadataReader(partial_frame)
+
+    record = asyncio.run(
+        run_runtime_input_source_step_loop(plan, steps=1)
+    )[0]
+
+    assert record.frame.metadata["source_active"] is False
+    assert "command_age_ms" not in record.frame.metadata
+    assert "stale_reason" not in record.frame.metadata
+    assert record.motion_command.metadata["stale_reason"] == "source_inactive"
+
+
 class _MutableClock:
     def __init__(self, now_s: float) -> None:
         self.now_s = now_s
@@ -191,40 +317,50 @@ class _MutableClock:
         return self.now_s
 
 
-def test_plugin_backed_viewer_plan_applies_injected_clock() -> None:
-    clock = _MutableClock(10.0)
-    original_selection = select_runtime_input_source("viewer", steps=1)
-
-    plan = build_runtime_input_source_step_loop_plan(
-        original_selection,
-        viewer_clock=clock,
-    )
-    capability = plan.viewer_bridge_capability
-    assert capability is not None
-    assert plan.selection.runtime_reader is plan.pipeline.input_source
-
-    ingest_viewer_control_message(
-        capability,
-        ViewerControlMessage(
-            type="viewer_control_message",
-            timestamp_s=1.0,
-            source_kind="keyboard",
-            keyboard=ViewerControlKeyboardMessage(
-                active_key_codes=("KeyD",),
-                key_state={"KeyD": True},
-                focus_state="focused",
-                zero_state=False,
-            ),
+def _viewer_message(timestamp_s: float) -> ViewerControlMessage:
+    return ViewerControlMessage(
+        type="viewer_control_message",
+        timestamp_s=timestamp_s,
+        source_kind="keyboard",
+        keyboard=ViewerControlKeyboardMessage(
+            active_key_codes=("KeyD",),
+            key_state={"KeyD": True},
+            focus_state="focused",
+            zero_state=False,
         ),
     )
 
-    clock.now_s = 10.251
-    frame = plan.pipeline.input_source.read_frame()
-    health = plan.pipeline.input_source.current_health()
 
-    assert frame.metadata["command_age_ms"] == 251
-    assert frame.metadata["source_active"] is False
-    assert frame.metadata["stale_reason"] == "command_age_ms_exceeded_timeout_250"
-    assert health.status is InputSourceHealthStatus.STALE
-    assert health.age_ms == 251
-    assert health.reason == "command_age_ms_exceeded_timeout_250"
+def test_plugin_backed_viewer_plan_rebinds_clock_without_replacing_capability() -> None:
+    clock = _MutableClock(10.0)
+    selection = select_runtime_input_source("viewer", steps=1)
+    original_capability = selection.viewer_bridge_capability
+    assert original_capability is not None
+
+    ingest_viewer_control_message(original_capability, _viewer_message(1.0))
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        viewer_clock=clock,
+    )
+
+    assert plan.selection is selection
+    assert plan.viewer_bridge_capability is original_capability
+    assert plan.pipeline.input_source is selection.runtime_reader
+
+    fresh_frame = plan.pipeline.input_source.read_frame()
+    assert fresh_frame.metadata["viewer_source_kind"] == "keyboard"
+    assert fresh_frame.metadata["source_active"] is True
+
+    clock.now_s = 10.251
+    stale_frame = plan.pipeline.input_source.read_frame()
+    stale_health = plan.pipeline.input_source.current_health()
+    assert stale_frame.metadata["command_age_ms"] >= 251
+    assert stale_frame.metadata["source_active"] is False
+    assert stale_frame.metadata["stale_reason"] == "command_age_ms_exceeded_timeout_250"
+    assert stale_health.status is InputSourceHealthStatus.STALE
+
+    clock.now_s = 11.0
+    ingest_viewer_control_message(original_capability, _viewer_message(2.0))
+    refreshed_frame = plan.pipeline.input_source.read_frame()
+    assert refreshed_frame.metadata["source_active"] is True
+    assert refreshed_frame.metadata["command_age_ms"] == 0
