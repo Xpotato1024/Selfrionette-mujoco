@@ -205,7 +205,10 @@ def test_loadcell_factory_has_no_io_and_read_before_start_is_fail_closed(
         ({}, "port is required for live serial mode"),
         ({"port": "   "}, "port must not be empty"),
         ({"port": "COM-test", "baud_rate": 0}, "baud_rate must be positive"),
-        ({"port": "COM-test", "baud_rate": True}, "baud_rate must be positive"),
+        (
+            {"port": "COM-test", "baud_rate": True},
+            "plugin parameter 'baud_rate' must be int",
+        ),
         (
             {
                 "port": "COM-test",
