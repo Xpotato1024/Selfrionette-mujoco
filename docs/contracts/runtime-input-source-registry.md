@@ -106,10 +106,10 @@ factory outputは`InputSource`と`InputSourceHealthProvider`を満たす。
 - factory直後のcurrent healthはpluginの`initial_health`と一致する。
 - initial health検証ではframe read、start、close、device accessを行わない。
 
-health statusは`active`、`stale`、`invalid`、`disconnected`のclosed vocabularyである。sourceがhealth truthと
-reasonを所有し、runtimeは`source_active`、`command_age_ms`、`stale_reason`へgeneric projectionする。
-active healthはreasonを持たず、inactive healthはreasonを持つ。frame内に既存state fieldがある場合、typed
-healthとの不一致をfail-closedで拒否する。
+health statusは`active`、`inactive`、`stale`、`invalid`、`disconnected`のclosed vocabularyである。
+`active`はcommand可能、`inactive`はreasonを持たない意図的な非active状態であり、残る3状態はreason必須のfailureである。
+sourceがhealth truthとreasonを所有し、runtimeは`source_active`、`command_age_ms`、`stale_reason`へgeneric projectionする。
+frame内に既存state fieldがある場合、typed healthとの不一致をfail-closedで拒否する。
 
 ### Lifecycle
 
@@ -117,9 +117,11 @@ offline / replay sourceへmanaged lifecycleを要求しない。live / viewer br
 `ValidatedManagedInputSourceReader`を通じて`start()` / `close()`を委譲する。
 
 runtimeはpure execution argumentをstart前に検証する。無効な`steps`等ではstartもcloseも呼ばない。
-managed executionを開始した場合は、start failureを含む全経路でcloseを最大1回試行する。
+managed executionを開始した場合は、start failureを含む各attemptでcloseを最大1回試行する。
 primary failureがある場合、cleanup failureは元のfailureを置換せずdiagnostic noteとして保持する。
 正常終了後のcleanup failureはfail-closedで表面化する。
+start failure後にcleanupできたreaderは再startでき、再start成功後のcloseはdelegateへ届く。
+close failure時はclosed扱いにせずcleanup retryを許可する。
 
 loadcell liveはexplicit startだけがserial portをopenする。read-before-startは
 `loadcell serial input source is not started`で拒否し、暗黙startしない。factory config errorではserial import /
@@ -182,6 +184,8 @@ diagnostics、publishの順に実行する。source-specific health reasonをrun
 - generic readerへ任意attribute forwardingを追加しない。
 - readerとcapabilityは同じunderlying `ViewerInputSource`を参照する。
 - initial FK endpointとpublish後endpointを同じcapabilityへrebaseする。
+- planの`viewer_clock`はplugin-backed pathでもtyped runtime dependencyとしてreaderへ注入する。
+  plan selection、pipeline reader、viewer capabilityは注入後の同じreaderを参照する。
 - keyboard / gamepad capture、binding、gain、deadzone、control-frame mappingは#461まで既存compatibility
   implementationが保持する。
 
@@ -195,7 +199,10 @@ diagnostics、publishの順に実行する。source-specific health reasonをrun
 
 ### Analog fixture
 
-- strict sample parsing、timestamp、raw values、active / stale stateをsource pluginが所有する。
+- strict sample parsing、timestamp、raw values、active / inactive / stale stateをsource pluginが所有する。
+- inactiveかつreasonなしのsampleは`inactive`を維持し、syntheticなstale reasonを追加しない。
+- reason付きinactive sampleだけを`stale`へ投影する。
+- frame metadataとtyped healthのparity、sequence ordering、terminal holdを維持する。
 - center、half-range、axis weight、sign、scale、deadzone、control frame、endpoint velocity intentはmapping側に残す。
 
 ## Compatibility
