@@ -135,7 +135,7 @@ def test_runtime_composition_documents_current_responsibility_split() -> None:
     assert "MuJoCo remains the physical source of truth" in text
     assert "only composition root" in text
     assert "render-only" in text
-    assert "publish-before-`ViewerInputSource`-rebase ordering" in text
+    assert "publish-before-ViewerInputSource-rebase" in text
     assert "does not perform a broad runtime rewrite" in text
 
 
