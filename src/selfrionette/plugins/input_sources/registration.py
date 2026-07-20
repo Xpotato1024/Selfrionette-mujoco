@@ -64,7 +64,7 @@ def _programmed_request(*, steps: int, frames: Sequence[RawInputFrame] | None, p
         raise ValueError("unsupported programmed_target preset")
     if frames is not None:
         raise ValueError("programmed_target input source does not accept custom frames")
-    parameters = {"steps": steps, "initial_position_m": _TARGET_POSITION, "preset": "sweep_x"}
+    parameters = {"steps": steps, "initial_position_m": _TARGET_POSITION, "preset": "sweep_x", "loop": False}
     selected = programmed_target.build_frames(parameters)
     return InputSourcePluginRequest(
         parameters=parameters,
@@ -153,7 +153,7 @@ def _plugin(name: str, schema: str, mode: InputSourceMode, factory, contract: Pa
 PROGRAMMED_TARGET_PLUGIN = _plugin(
     "programmed_target", "programmed_target_sample", InputSourceMode.OFFLINE,
     programmed_target.build_reader,
-    ParameterContract((ParameterField("steps", int), ParameterField("initial_position_m", tuple), ParameterField("preset", str, required=False))),
+    ParameterContract((ParameterField("steps", int), ParameterField("initial_position_m", tuple), ParameterField("preset", str, required=False), ParameterField("loop", bool, required=False))),
     _active_health(), {"source_kind": "programmed_target", "trajectory_name": "sweep_x"},
 )
 REPLAY_PLUGIN = _plugin(
