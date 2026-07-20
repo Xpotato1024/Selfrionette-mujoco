@@ -8,6 +8,7 @@ related:
   - docs/contracts/schemas.md
   - docs/contracts/transport-payload.md
   - docs/architecture/runtime-composition.md
+  - docs/contracts/runtime-input-source-registry.md
 ---
 
 # Viewer Control Messageのschema
@@ -60,9 +61,17 @@ top-level field:
 ## Backend viewer bridge
 
 backend `viewer` pluginは`ViewerBridgeRuntimeCapability`をtyped optional bindingとして公開する。
-ingress、JSON ingress、`rebase_current_endpoint_m()`は同一の`ViewerInputSource` instanceへ結線する。
-plugin-backed selectionでもdirect source pathと同じframe metadata、health、initial / post-publish rebase
-semanticsを維持する。viewer capabilityが欠落したplugin-backed selectionはfail-closedとする。
+次を同一の`ViewerInputSource` instanceへ結線する。
+
+- message ingress
+- JSON ingress
+- `rebase_current_endpoint_m()`
+- deterministic test / runtime clockの`rebind_clock()`
+
+clock rebindはreaderやcapabilityを再生成しない。rebind前に受け取ったcontrol message、current endpoint、
+selection capability identityを維持し、旧clockで経過済みのcommand ageを新clock domainへ連続的に移す。
+plugin-backed selectionでもdirect source pathと同じframe metadata、health、timeout、initial / post-publish
+rebase semanticsを維持する。viewer capabilityが欠落したplugin-backed selectionはfail-closedとする。
 
 generic source readerへ任意attribute forwardingを追加せず、viewer固有capabilityだけをselectionとruntime
 continuity codeへ渡す。frontend provider、keyboard / gamepad mapping、message schema自体はP3で変更しない。
@@ -79,6 +88,7 @@ continuity codeへ渡す。frontend provider、keyboard / gamepad mapping、mess
 - nested JSON-compatibleな`metadata`はそのまま保持する。
 - `index`、`id`、buttonの`value`はoptionalであり、contract上もoptionalのままとする。
 - buttonの`value`は、存在する場合finiteでなければならない。
+- clockはcallableで、rebind時にfinite valueを返さなければならない。
 
 ## 責務boundary
 
