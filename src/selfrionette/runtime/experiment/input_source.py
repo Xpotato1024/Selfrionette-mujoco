@@ -1,7 +1,7 @@
 """Generic versioned Input Source Plugin contracts.
 
 This module deliberately owns no concrete device, robot, task, or viewer
-implementation.  Existing ``InputSource`` remains the runtime reader
+implementation. Existing ``InputSource`` remains the runtime reader
 compatibility boundary; this module adds the versioned composition metadata
 and optional lifecycle capability around it.
 """
@@ -36,6 +36,7 @@ SourceMode = InputSourceMode
 
 class InputSourceHealthStatus(str, Enum):
     ACTIVE = "active"
+    INACTIVE = "inactive"
     STALE = "stale"
     INVALID = "invalid"
     DISCONNECTED = "disconnected"
@@ -54,7 +55,7 @@ class ViewerBridgeRuntimeCapability(Protocol):
     """Optional, viewer-only runtime bridge capability.
 
     This is deliberately not part of the generic input-source reader
-    interface.  The viewer registration may expose it to runtime ingress and
+    interface. The viewer registration may expose it to runtime ingress and
     endpoint continuity code when the reader is plugin-backed.
     """
 
@@ -120,9 +121,14 @@ class InputSourceHealth:
     def __post_init__(self) -> None:
         if not isinstance(self.status, InputSourceHealthStatus):
             raise TypeError("input source health status must use InputSourceHealthStatus")
-        if self.status is InputSourceHealthStatus.ACTIVE:
+        if self.status in (
+            InputSourceHealthStatus.ACTIVE,
+            InputSourceHealthStatus.INACTIVE,
+        ):
             if self.reason is not None:
-                raise ValueError("active input source health must not have a failure reason")
+                raise ValueError(
+                    f"{self.status.value} input source health must not have a failure reason"
+                )
         elif not isinstance(self.reason, str) or not self.reason:
             raise ValueError(
                 f"{self.status.value} input source health requires a reason"
@@ -130,7 +136,9 @@ class InputSourceHealth:
         if self.age_ms is not None and (
             type(self.age_ms) is not int or self.age_ms < 0
         ):
-            raise ValueError("input source health age_ms must be None or a non-negative integer")
+            raise ValueError(
+                "input source health age_ms must be None or a non-negative integer"
+            )
         if not isinstance(self.metadata, Mapping):
             raise TypeError("input source health metadata must use a mapping")
         object.__setattr__(
@@ -276,7 +284,10 @@ class InputSourcePlugin:
                 "input source factory output must provide "
                 "InputSourceHealthProvider.current_health()"
             )
-        managed = self.mode in (InputSourceMode.LIVE, InputSourceMode.VIEWER_BRIDGE)
+        managed = self.mode in (
+            InputSourceMode.LIVE,
+            InputSourceMode.VIEWER_BRIDGE,
+        )
         if managed and not isinstance(reader, ManagedInputSource):
             raise TypeError(
                 f"{self.mode.value} input source factory output must provide "
@@ -293,9 +304,14 @@ class InputSourcePlugin:
                 "input source factory initial health does not match plugin initial health"
             )
         if managed:
-            viewer_bridge_capability = getattr(reader, "viewer_bridge_capability", None)
+            viewer_bridge_capability = getattr(
+                reader,
+                "viewer_bridge_capability",
+                None,
+            )
             if viewer_bridge_capability is not None and not isinstance(
-                viewer_bridge_capability, ViewerBridgeRuntimeCapability
+                viewer_bridge_capability,
+                ViewerBridgeRuntimeCapability,
             ):
                 raise TypeError(
                     "viewer bridge capability must satisfy ViewerBridgeRuntimeCapability"
