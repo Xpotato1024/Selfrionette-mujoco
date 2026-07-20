@@ -150,11 +150,15 @@ programmed target の契約は interpreter 側で再定義しない。
 - `desired_endpoint_m` は viewer-visible target marker feedback の別名ではなく、
   current command target の metadata bridge である
 
-## PR #465 review correction
+## 10. Plugin factory and runtime reader semantics
 
-plugin packageは`steps`、`preset`、`loop`のsemantic validationを共通helperへ集約する。runtime readerは既存`ProgrammedTargetInputSource`へdelegateし、非loopではtrajectory終端後にterminal frameをholdし、loopではtrajectory先頭へwrapする。selection.framesのmaterializationは独立delegateから行い、runtime readerを先読みしない。
+plugin packageは`steps`、`preset`、`loop`のsemantic validationを共通helperへ集約する。
+`build_frames()`とdirect runtime reader factoryの両方が同じfail-closed規則を使用する。
+runtime readerは既存`ProgrammedTargetInputSource`へdelegateし、非loopではtrajectory終端後に
+terminal frameをholdし、loopではtrajectory先頭へwrapする。`selection.frames`のmaterializationは
+独立delegateから行い、runtime readerを先読みしない。
 
-## 10. Non-goals
+## 11. Non-goals
 
 - dry-run preset wiring
 - runtime mapping / robot command semanticsの変更
