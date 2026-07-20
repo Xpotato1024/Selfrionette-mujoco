@@ -298,6 +298,9 @@ async def run_runtime_input_source_step_loop(
     timing_metrics: LiveRuntimeTimingMetrics | None = None,
     collect_records: bool = True,
 ) -> tuple[RuntimeInputSourceStepLoopRecord, ...]:
+    if steps < 1:
+        raise ValueError("steps must be a positive integer")
+
     reader = plan.pipeline.input_source
     start = getattr(reader, "start", None)
     close = getattr(reader, "close", None)
