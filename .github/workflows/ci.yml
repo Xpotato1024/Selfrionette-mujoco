@@ -24,41 +24,8 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           uv run python scripts/repository/validate_markdown_docs.py --base-ref "$BASE_SHA" --strict-map --strict-links
-      - name: Architecture A
-        shell: bash
-        run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_a*.py' -print | sort)
-          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
-      - name: Architecture B
-        shell: bash
-        run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_b*.py' -print | sort)
-          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
-      - name: Architecture C
-        shell: bash
-        run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_c*.py' -print | sort)
-          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
-      - name: Architecture D
-        shell: bash
-        run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_d*.py' -print | sort)
-          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
-      - name: Architecture E
-        shell: bash
-        run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_e*.py' -print | sort)
-          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
-      - name: Architecture F
-        shell: bash
-        run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_f*.py' -print | sort)
-          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
-      - name: Architecture G-Z
-        shell: bash
-        run: |
-          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[g-z]*.py' -print | sort)
-          ((${#files[@]} == 0)) || uv run pytest "${files[@]}" -q
+      - name: Run tests
+        run: uv run pytest tests/architecture tests/schemas tests/support tests/runtime tests/mujoco_backend tests/transport tests/input_sources tests/input_interpreters tests/motion tests/kinematics tests/plugins tests/integration -q
       - name: Compile Python files
         run: uv run python -m compileall src tests
       - name: Check diff whitespace
