@@ -18,8 +18,8 @@ runtime payloadの`metadata`に載せるinput sourceの観測用stateと、sourc
 既存metadataへprojectionする規則を定義する。
 
 P3では`InputSourceHealth`をsource pluginが所有し、runtimeは各read後にtyped healthを取得する。
-runtimeはsource固有のreasonを再生成せず、frame metadataとtyped healthのactive/stale状態が矛盾する
-場合はfail-closedとする。viewer backend bridgeの初期値は`source_active=false`、
+runtimeはsource固有のreasonを再生成せず、frame metadataとtyped healthのactive / inactive / stale状態が
+矛盾する場合はfail-closedとする。viewer backend bridgeの初期値は`source_active=false`、
 `command_age_ms=0`、`stale_reason=no_control_message_received`を維持する。
 
 ## fields
@@ -27,14 +27,25 @@ runtimeはsource固有のreasonを再生成せず、frame metadataとtyped healt
 - `source_kind`: 選択されたruntime input sourceまたはsource-specific subtype
 - `source_active`: 現在commandを出せるかどうかの観測値
 - `command_age_ms`: sourceがemitしたcommand ageの観測値
-- `stale_reason`: stale判定理由。正常経路では省略または`null`
+- `stale_reason`: stale / invalid / disconnected判定理由。activeまたは意図的inactiveでは省略または`null`
 
 これらの値はobservability用の入力状態であり、runtime stale-command safetyはこのmetadataを
 読み取って別途判定する。runtimeは`command_age_ms`をwall clockから再計算しない。
 offlineのprogrammed target / replay / noopはdeterministicな`0`をemitしてよい。
-browser / live sourceはageとstale reasonをsource側でemitする。
+browser / live sourceはageとfailure reasonをsource側でemitする。
 
 ## typed health projection
+
+`InputSourceHealthStatus`は次を区別する。
+
+- `active`: `source_active=true`、reasonなし
+- `inactive`: `source_active=false`、reasonなし
+- `stale`: `source_active=false`、reason必須
+- `invalid`: `source_active=false`、reason必須
+- `disconnected`: `source_active=false`、reason必須
+
+`inactive`は、analog fixture等で既存契約が区別する「inactiveだがnon-stale」を表す。
+これを`stale`へ読み替えたり、runtimeがsynthetic reasonを追加したりしない。
 
 runtime step-loopは次の順で処理する。
 
@@ -62,4 +73,5 @@ source reasonやtimeout reasonをruntimeで再生成しない。
 - required payload fieldsには含めない。
 - endpoint evaluation semanticsを変えない。
 - normal pathでは`source_active=true`, `command_age_ms=0`, `stale_reason` omittedが許容される。
+- intentional inactive pathでは`source_active=false`, `stale_reason` omittedが許容される。
 - stale safetyは`source_active`, `command_age_ms`, `stale_reason`を参照する。
