@@ -8,6 +8,7 @@ They do not interpret frames or create robot commands.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from enum import Enum
 from typing import Any
 
 from selfrionette.runtime.experiment.input_source import (
@@ -27,16 +28,23 @@ def health_from_frame(
     active = metadata.get("source_active")
     reason = metadata.get("stale_reason")
     age = metadata.get("command_age_ms")
-    if active is False or reason is not None:
+    age_ms = age if type(age) is int and age >= 0 else 0
+    if reason is not None:
         return InputSourceHealth(
             InputSourceHealthStatus.STALE,
-            reason=str(reason) if reason else "source_inactive",
-            age_ms=age if type(age) is int and age >= 0 else 0,
+            reason=str(reason),
+            age_ms=age_ms,
+            metadata={"source": frame.source},
+        )
+    if active is False:
+        return InputSourceHealth(
+            InputSourceHealthStatus.INACTIVE,
+            age_ms=age_ms,
             metadata={"source": frame.source},
         )
     return InputSourceHealth(
         default_status,
-        age_ms=age if type(age) is int and age >= 0 else 0,
+        age_ms=age_ms,
         metadata={"source": frame.source},
     )
 
@@ -61,8 +69,17 @@ class FrameHealthReader:
         return self._health
 
 
+class _ManagedLifecycleState(str, Enum):
+    NEW = "new"
+    STARTING = "starting"
+    STARTED = "started"
+    START_FAILED = "start_failed"
+    CLOSING = "closing"
+    CLOSED = "closed"
+
+
 class ManagedFrameHealthReader(FrameHealthReader):
-    """Health adapter with idempotent managed lifecycle forwarding."""
+    """Health adapter with retry-safe managed lifecycle forwarding."""
 
     def __init__(
         self,
@@ -73,24 +90,54 @@ class ManagedFrameHealthReader(FrameHealthReader):
     ) -> None:
         super().__init__(delegate, initial_health)
         self._viewer_bridge_capability = viewer_bridge_capability
-        self._started = False
-        self._closed = False
+        self._lifecycle_state = _ManagedLifecycleState.NEW
 
     def start(self) -> None:
-        if self._started:
+        if self._lifecycle_state is _ManagedLifecycleState.STARTED:
             return
+        if self._lifecycle_state is _ManagedLifecycleState.START_FAILED:
+            raise RuntimeError(
+                "managed input source must be closed after a failed start before retry"
+            )
+        if self._lifecycle_state in (
+            _ManagedLifecycleState.STARTING,
+            _ManagedLifecycleState.CLOSING,
+        ):
+            raise RuntimeError(
+                f"managed input source cannot start while {self._lifecycle_state.value}"
+            )
+
+        self._lifecycle_state = _ManagedLifecycleState.STARTING
         callback = getattr(self._delegate, "start", None)
-        if callable(callback):
-            callback()
-        self._started = True
+        try:
+            if callable(callback):
+                callback()
+        except BaseException:
+            self._lifecycle_state = _ManagedLifecycleState.START_FAILED
+            raise
+        self._lifecycle_state = _ManagedLifecycleState.STARTED
 
     def close(self) -> None:
-        if self._closed:
+        if self._lifecycle_state in (
+            _ManagedLifecycleState.NEW,
+            _ManagedLifecycleState.CLOSED,
+        ):
             return
-        self._closed = True
+        if self._lifecycle_state is _ManagedLifecycleState.CLOSING:
+            return
+        if self._lifecycle_state is _ManagedLifecycleState.STARTING:
+            raise RuntimeError("managed input source cannot close while starting")
+
+        previous_state = self._lifecycle_state
+        self._lifecycle_state = _ManagedLifecycleState.CLOSING
         callback = getattr(self._delegate, "close", None)
-        if callable(callback):
-            callback()
+        try:
+            if callable(callback):
+                callback()
+        except BaseException:
+            self._lifecycle_state = previous_state
+            raise
+        self._lifecycle_state = _ManagedLifecycleState.CLOSED
 
     @property
     def viewer_bridge_capability(self) -> ViewerBridgeRuntimeCapability | None:
@@ -110,11 +157,17 @@ class NoopInputSource:
 
 class AnalogFixtureInputSource:
     def __init__(self, samples: tuple[Mapping[str, object], ...]) -> None:
-        from selfrionette.input_sources.analog_fixture import parse_analog_fixture_sample
+        from selfrionette.input_sources.analog_fixture import (
+            parse_analog_fixture_sample,
+        )
 
-        self._samples = tuple(parse_analog_fixture_sample(sample) for sample in samples)
+        self._samples = tuple(
+            parse_analog_fixture_sample(sample) for sample in samples
+        )
         if not self._samples:
-            raise ValueError("analog_fixture input source requires at least one sample")
+            raise ValueError(
+                "analog_fixture input source requires at least one sample"
+            )
         self._index = 0
         self._last = None
 
@@ -139,9 +192,14 @@ class AnalogFixtureInputSource:
                 InputSourceHealthStatus.ACTIVE,
                 age_ms=0,
             )
+        if self._last.stale_reason is None:
+            return InputSourceHealth(
+                InputSourceHealthStatus.INACTIVE,
+                age_ms=0,
+            )
         return InputSourceHealth(
             InputSourceHealthStatus.STALE,
-            reason=self._last.stale_reason or "recording_stale",
+            reason=self._last.stale_reason,
             age_ms=0,
         )
 
