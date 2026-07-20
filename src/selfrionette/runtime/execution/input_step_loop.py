@@ -26,8 +26,6 @@ from selfrionette.runtime.control.input_source_state import (
     build_runtime_input_source_state_from_health,
 )
 from selfrionette.runtime.experiment.input_source import (
-    InputSourceRuntimeDependencies,
-    ValidatedManagedInputSourceReader,
     ViewerBridgeRuntimeCapability,
     ViewerEndpointRebaseCapability,
 )
@@ -123,37 +121,6 @@ def _extract_endpoint_orientation_wxyz_from_state(
     state: MuJoCoState, provider: EndpointPoseProvider
 ) -> tuple[float, float, float, float] | None:
     return provider.observe_endpoint_pose(state).quaternion_wxyz
-
-
-def _selection_with_viewer_clock(
-    selection: RuntimeInputSourceSelection,
-    viewer_clock: Callable[[], float],
-) -> RuntimeInputSourceSelection:
-    plugin = selection.resolved_plugin
-    parameters = selection.validated_parameters
-    if plugin is None or parameters is None:
-        raise ValueError(
-            "plugin-backed viewer clock injection requires resolved plugin parameters"
-        )
-
-    reader = plugin.create_runtime_reader(
-        parameters,
-        runtime_dependencies=InputSourceRuntimeDependencies(clock=viewer_clock),
-    )
-    if not isinstance(reader, ValidatedManagedInputSourceReader):
-        raise TypeError(
-            "plugin-backed viewer clock injection requires a managed reader"
-        )
-    capability = reader.viewer_bridge_capability
-    if capability is None:
-        raise ValueError(
-            "plugin-backed viewer input source is missing its runtime bridge capability"
-        )
-    return replace(
-        selection,
-        runtime_reader=reader,
-        viewer_bridge_capability=capability,
-    )
 
 
 def build_runtime_input_source_step_loop_plan(
@@ -254,18 +221,18 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if execution_adapter.uses_viewer_endpoint_compatibility:
-        if (
-            viewer_clock is not None
-            and viewer_input_source is None
-            and selection.plugin_selection is not None
-        ):
-            selection = _selection_with_viewer_clock(selection, viewer_clock)
-
         viewer_capability: ViewerBridgeRuntimeCapability | None = (
             viewer_input_source or selection.viewer_bridge_capability
         )
         if viewer_capability is None and selection.plugin_selection is not None:
             raise ValueError("plugin-backed viewer input source is missing its runtime bridge capability")
+        if (
+            viewer_clock is not None
+            and viewer_input_source is None
+            and selection.plugin_selection is not None
+        ):
+            assert viewer_capability is not None
+            viewer_capability.rebind_clock(viewer_clock)
         pipeline_input_source = viewer_input_source or selection.runtime_reader
         if pipeline_input_source is None:
             initial_endpoint_m = _coerce_viewer_endpoint_m(
@@ -416,29 +383,38 @@ async def _run_runtime_input_source_step_loop(
     for index in range(steps):
         compute_started_s = timing_metrics.clock() if timing_metrics is not None else 0.0
         raw_frame = plan.pipeline.input_source.read_frame()
-        health_provider = getattr(plan.pipeline.input_source, "current_health", None)
-        if callable(health_provider):
-            health = health_provider()
-            source_state = build_runtime_input_source_state_from_health(
-                health, source_kind=plan.selection.source_name
-            )
-            native_state = build_runtime_input_source_state_from_metadata(
-                raw_frame.metadata,
-                default_source_kind=source_state.source_kind,
-            )
-            if any(
-                getattr(native_state, field) != getattr(source_state, field)
-                for field in ("source_active", "command_age_ms", "stale_reason")
-            ) and any(
-                key in raw_frame.metadata
-                for key in ("source_active", "command_age_ms", "stale_reason")
-            ):
-                raise ValueError("input source frame metadata and typed health disagree")
-        else:
+        if plan.execution_adapter.uses_replay_pipeline:
             source_state = build_runtime_input_source_state_from_metadata(
                 raw_frame.metadata,
                 default_source_kind=plan.selection.source_name,
             )
+        else:
+            health_provider = getattr(plan.pipeline.input_source, "current_health", None)
+            if callable(health_provider):
+                health = health_provider()
+                source_state = build_runtime_input_source_state_from_health(
+                    health, source_kind=plan.selection.source_name
+                )
+                native_state = build_runtime_input_source_state_from_metadata(
+                    raw_frame.metadata,
+                    default_source_kind=source_state.source_kind,
+                )
+                field_keys = (
+                    ("source_active", "source_active"),
+                    ("command_age_ms", "command_age_ms"),
+                    ("stale_reason", "stale_reason"),
+                )
+                if any(
+                    key in raw_frame.metadata
+                    and getattr(native_state, field) != getattr(source_state, field)
+                    for field, key in field_keys
+                ):
+                    raise ValueError("input source frame metadata and typed health disagree")
+            else:
+                source_state = build_runtime_input_source_state_from_metadata(
+                    raw_frame.metadata,
+                    default_source_kind=plan.selection.source_name,
+                )
         frame = annotate_raw_input_frame(raw_frame, source_state)
         intent = plan.pipeline.input_interpreter.interpret(frame)
         pre_step_state = plan.pipeline.simulator.snapshot()
