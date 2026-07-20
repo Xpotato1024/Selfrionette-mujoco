@@ -68,6 +68,9 @@ class ViewerBridgeRuntimeCapability(Protocol):
     def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
         ...
 
+    def rebind_clock(self, clock: Callable[[], float]) -> None:
+        ...
+
 
 @runtime_checkable
 class ViewerEndpointRebaseCapability(Protocol):
