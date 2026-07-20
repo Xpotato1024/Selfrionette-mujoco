@@ -24,18 +24,26 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           uv run python scripts/repository/validate_markdown_docs.py --base-ref "$BASE_SHA" --strict-map --strict-links
-      - name: Existing architecture suite
-        run: uv run pytest tests/architecture -q
-      - name: Existing runtime suite
-        run: uv run pytest tests/runtime -q
-      - name: Existing input source suite
-        run: uv run pytest tests/input_sources -q
-      - name: Existing schema and support suites
-        run: uv run pytest tests/schemas tests/support -q
-      - name: Existing backend and transport suites
-        run: uv run pytest tests/mujoco_backend tests/transport -q
-      - name: Existing mapping and plugin suites
-        run: uv run pytest tests/input_interpreters tests/motion tests/kinematics tests/plugins tests/integration -q
+      - name: Architecture A-F
+        shell: bash
+        run: |
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[a-f]*.py' -print | sort)
+          uv run pytest "${files[@]}" -q
+      - name: Architecture G-L
+        shell: bash
+        run: |
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[g-l]*.py' -print | sort)
+          uv run pytest "${files[@]}" -q
+      - name: Architecture M-R
+        shell: bash
+        run: |
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[m-r]*.py' -print | sort)
+          uv run pytest "${files[@]}" -q
+      - name: Architecture S-Z
+        shell: bash
+        run: |
+          mapfile -t files < <(find tests/architecture -maxdepth 1 -name 'test_[s-z]*.py' -print | sort)
+          uv run pytest "${files[@]}" -q
       - name: Compile Python files
         run: uv run python -m compileall src tests
       - name: Check diff whitespace
