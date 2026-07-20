@@ -13,7 +13,6 @@ from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceMode,
     InputSourcePlugin,
-    InputSourceRuntimeDependencies,
     ValidatedInputSourceReader,
     ValidatedManagedInputSourceReader,
     ViewerBridgeRuntimeCapability,
@@ -23,8 +22,8 @@ from selfrionette.runtime.execution.input_source_adapters import (
 )
 from selfrionette.runtime.control.input_source_state import (
     annotate_raw_input_frame,
-    build_runtime_input_source_state,
     build_runtime_input_source_state_from_health,
+    build_runtime_input_source_state_from_metadata,
     runtime_input_source_state_to_metadata,
 )
 from selfrionette.schemas import RawInputFrame
@@ -53,6 +52,12 @@ _DEFAULT_VIEWER_INITIAL_METADATA: dict[str, object] = {
     "command_age_ms": 0,
     "stale_reason": "no_control_message_received",
 }
+
+_INPUT_STATE_METADATA_KEYS = (
+    "source_active",
+    "command_age_ms",
+    "stale_reason",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +93,21 @@ class RuntimeInputSourceSelection:
         return self.runtime_reader
 
 
+def _canonicalize_selected_frame(
+    frame: RawInputFrame,
+    *,
+    default_source_kind: str,
+    default_state,
+) -> RawInputFrame:
+    state = default_state
+    if any(key in frame.metadata for key in _INPUT_STATE_METADATA_KEYS):
+        state = build_runtime_input_source_state_from_metadata(
+            frame.metadata,
+            default_source_kind=default_source_kind,
+        )
+    return annotate_raw_input_frame(frame, state)
+
+
 def select_runtime_input_source(
     source_name: str,
     *,
@@ -112,7 +132,14 @@ def select_runtime_input_source(
         plugin.initial_health,
         source_kind=plugin.identity.name,
     )
-    selected_frames = tuple(annotate_raw_input_frame(frame, source_state) for frame in request.frames)
+    selected_frames = tuple(
+        _canonicalize_selected_frame(
+            frame,
+            default_source_kind=plugin.identity.name,
+            default_state=source_state,
+        )
+        for frame in request.frames
+    )
     runtime_dependencies = request.runtime_dependencies
     if runtime_dependencies is not None and runtime_dependencies.replay_frames is not None:
         runtime_dependencies = replace(
@@ -130,10 +157,18 @@ def select_runtime_input_source(
     )
     if plugin.source_mode is InputSourceMode.VIEWER_BRIDGE and viewer_bridge_capability is None:
         raise ValueError("viewer input source plugin is missing its runtime bridge capability")
+    initial_source_state = (
+        build_runtime_input_source_state_from_metadata(
+            selected_frames[0].metadata,
+            default_source_kind=plugin.identity.name,
+        )
+        if selected_frames
+        else source_state
+    )
     initial_metadata = {
         **plugin.initial_metadata,
         **request.initial_metadata,
-        **runtime_input_source_state_to_metadata(source_state),
+        **runtime_input_source_state_to_metadata(initial_source_state),
     }
 
     return RuntimeInputSourceSelection(
