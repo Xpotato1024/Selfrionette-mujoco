@@ -1,6 +1,6 @@
 """Loadcell serial source adapter; mapping remains outside this package."""
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 
 from selfrionette.input_sources.loadcell_serial import SerialInputSource
 from selfrionette.plugins.input_sources._common import ManagedFrameHealthReader
@@ -21,7 +21,7 @@ class _ManagedSerialDelegate:
         *,
         port: str | None,
         baud_rate: int,
-        injected_lines: Iterable[str] | None,
+        injected_lines: tuple[str, ...] | None,
     ) -> None:
         self._port = port
         self._baud_rate = baud_rate
@@ -60,9 +60,11 @@ class _ManagedSerialDelegate:
         return self._source.read_frame()
 
     def close(self) -> None:
-        if self._serial_port is not None:
-            self._serial_port.close()
-            self._serial_port = None
+        serial_port = self._serial_port
+        if serial_port is not None:
+            serial_port.close()
+        self._serial_port = None
+        self._source = None
 
 
 def _validate_parameters(
