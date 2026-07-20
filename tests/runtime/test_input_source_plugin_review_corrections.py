@@ -112,6 +112,20 @@ def test_managed_reader_closes_once_after_normal_loop_and_loop_failure() -> None
     assert (failed.start_calls, failed.close_calls) == (1, 1)
 
 
+def test_invalid_steps_are_rejected_before_managed_lifecycle() -> None:
+    reader = _ManagedReader()
+
+    with pytest.raises(ValueError, match="steps must be a positive integer"):
+        asyncio.run(
+            run_runtime_input_source_step_loop(
+                _build_managed_test_plan(reader),
+                steps=0,
+            )
+        )
+
+    assert (reader.start_calls, reader.close_calls) == (0, 0)
+
+
 def test_managed_reader_start_failure_is_preserved_when_cleanup_also_fails() -> None:
     reader = _ManagedReader(fail_on_start=True, fail_on_close=True)
 
@@ -156,7 +170,9 @@ def test_managed_reader_normal_close_failure_is_surface_and_reader_start_failure
     assert len(starts) == 2
 
 
-def test_loadcell_factory_has_no_io_and_read_before_start_is_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_loadcell_factory_has_no_io_and_read_before_start_is_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls = {"open": 0, "close": 0}
 
     class FakeSerial:
@@ -181,6 +197,65 @@ def test_loadcell_factory_has_no_io_and_read_before_start_is_fail_closed(monkeyp
     reader.close()
     reader.close()
     assert calls == {"open": 1, "close": 1}
+
+
+@pytest.mark.parametrize(
+    ("parameters", "message"),
+    [
+        ({}, "port is required for live serial mode"),
+        ({"port": "   "}, "port must not be empty"),
+        ({"port": "COM-test", "baud_rate": 0}, "baud_rate must be positive"),
+        ({"port": "COM-test", "baud_rate": True}, "baud_rate must be positive"),
+        (
+            {
+                "port": "COM-test",
+                "lines": ("vector,0,1,2,3,4,5,6,7",),
+            },
+            "cannot combine port and injected lines",
+        ),
+    ],
+)
+def test_loadcell_direct_factory_rejects_invalid_configuration_before_io(
+    monkeypatch: pytest.MonkeyPatch,
+    parameters: dict[str, object],
+    message: str,
+) -> None:
+    calls = {"open": 0}
+
+    class FakeSerial:
+        def __init__(self, **_: object) -> None:
+            calls["open"] += 1
+
+    monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=FakeSerial))
+    plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+
+    with pytest.raises(ValueError, match=message):
+        plugin.create_runtime_reader(parameters)
+
+    assert calls["open"] == 0
+
+
+def test_loadcell_direct_factory_accepts_injected_lines_without_serial_io(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"open": 0}
+
+    class FakeSerial:
+        def __init__(self, **_: object) -> None:
+            calls["open"] += 1
+
+    monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=FakeSerial))
+    plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+    reader = plugin.create_runtime_reader(
+        {"lines": ("vector,0,1,2,3,4,5,6,7",)}
+    )
+
+    reader.start()
+    frame = reader.read_frame()
+    reader.close()
+
+    assert frame.values == (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0)
+    assert calls["open"] == 0
 
 
 @pytest.mark.parametrize("steps", [0, -1])
