@@ -26,6 +26,8 @@ from selfrionette.runtime.control.input_source_state import (
     build_runtime_input_source_state_from_health,
 )
 from selfrionette.runtime.experiment.input_source import (
+    InputSourceRuntimeDependencies,
+    ValidatedManagedInputSourceReader,
     ViewerBridgeRuntimeCapability,
     ViewerEndpointRebaseCapability,
 )
@@ -121,6 +123,37 @@ def _extract_endpoint_orientation_wxyz_from_state(
     state: MuJoCoState, provider: EndpointPoseProvider
 ) -> tuple[float, float, float, float] | None:
     return provider.observe_endpoint_pose(state).quaternion_wxyz
+
+
+def _selection_with_viewer_clock(
+    selection: RuntimeInputSourceSelection,
+    viewer_clock: Callable[[], float],
+) -> RuntimeInputSourceSelection:
+    plugin = selection.resolved_plugin
+    parameters = selection.validated_parameters
+    if plugin is None or parameters is None:
+        raise ValueError(
+            "plugin-backed viewer clock injection requires resolved plugin parameters"
+        )
+
+    reader = plugin.create_runtime_reader(
+        parameters,
+        runtime_dependencies=InputSourceRuntimeDependencies(clock=viewer_clock),
+    )
+    if not isinstance(reader, ValidatedManagedInputSourceReader):
+        raise TypeError(
+            "plugin-backed viewer clock injection requires a managed reader"
+        )
+    capability = reader.viewer_bridge_capability
+    if capability is None:
+        raise ValueError(
+            "plugin-backed viewer input source is missing its runtime bridge capability"
+        )
+    return replace(
+        selection,
+        runtime_reader=reader,
+        viewer_bridge_capability=capability,
+    )
 
 
 def build_runtime_input_source_step_loop_plan(
@@ -221,6 +254,13 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if execution_adapter.uses_viewer_endpoint_compatibility:
+        if (
+            viewer_clock is not None
+            and viewer_input_source is None
+            and selection.plugin_selection is not None
+        ):
+            selection = _selection_with_viewer_clock(selection, viewer_clock)
+
         viewer_capability: ViewerBridgeRuntimeCapability | None = (
             viewer_input_source or selection.viewer_bridge_capability
         )
