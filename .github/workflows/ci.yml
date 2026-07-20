@@ -24,16 +24,18 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           uv run python scripts/repository/validate_markdown_docs.py --base-ref "$BASE_SHA" --strict-map --strict-links
-      - name: Focused registry compatibility
-        run: uv run pytest tests/input_sources/test_runtime_input_source_registry.py -q
-      - name: Focused plugin correction
-        run: uv run pytest tests/runtime/test_input_source_plugin_review_corrections.py -q
-      - name: Focused loadcell runner
-        run: uv run pytest tests/runtime/test_r7_b_manual_live_loadcell_runtime_runner.py -q
-      - name: Focused ownership boundary
-        run: uv run pytest tests/architecture/test_runtime_ownership_boundaries.py -q
-      - name: Run tests
-        run: uv run pytest tests/architecture tests/schemas tests/support tests/runtime tests/mujoco_backend tests/transport tests/input_sources tests/input_interpreters tests/motion tests/kinematics tests/plugins tests/integration -q
+      - name: Existing architecture suite
+        run: uv run pytest tests/architecture -q
+      - name: Existing runtime suite
+        run: uv run pytest tests/runtime -q
+      - name: Existing input source suite
+        run: uv run pytest tests/input_sources -q
+      - name: Existing schema and support suites
+        run: uv run pytest tests/schemas tests/support -q
+      - name: Existing backend and transport suites
+        run: uv run pytest tests/mujoco_backend tests/transport -q
+      - name: Existing mapping and plugin suites
+        run: uv run pytest tests/input_interpreters tests/motion tests/kinematics tests/plugins tests/integration -q
       - name: Compile Python files
         run: uv run python -m compileall src tests
       - name: Check diff whitespace
