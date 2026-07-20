@@ -22,7 +22,13 @@ from selfrionette.runtime.execution.input_step_loop import (
     run_runtime_input_source_step_loop,
 )
 from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
-from selfrionette.schemas import RawInputFrame, ViewerControlKeyboardMessage, ViewerControlMessage
+from selfrionette.schemas import (
+    RawInputFrame,
+    ViewerControlGamepadButtonMessage,
+    ViewerControlGamepadMessage,
+    ViewerControlKeyboardMessage,
+    ViewerControlMessage,
+)
 
 
 def _keyboard_message(timestamp_s: float = 1.0) -> ViewerControlMessage:
@@ -242,3 +248,31 @@ def test_plugin_backed_viewer_exposes_ingress_and_rebases_the_same_underlying_so
     assert capability.current_endpoint_m == pytest.approx(
         records[0].motion_command.metadata["desired_endpoint_m"]
     )
+
+
+def test_plugin_backed_viewer_ingress_preserves_gamepad_frame_semantics() -> None:
+    selection = select_runtime_input_source("viewer", steps=1)
+    capability = selection.viewer_bridge_capability
+    assert capability is not None
+    plan = build_runtime_input_source_step_loop_plan(selection)
+
+    frame = ingest_viewer_control_message(
+        capability,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=2.0,
+            source_kind="gamepad",
+            gamepad=ViewerControlGamepadMessage(
+                connected=True,
+                index=0,
+                id="test-pad",
+                axes=(0.25, -0.5, 0.0),
+                buttons=(ViewerControlGamepadButtonMessage(pressed=True, value=1.0),),
+            ),
+        ),
+    )
+    assert frame.metadata["viewer_source_kind"] == "gamepad"
+
+    record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1))[0]
+    assert record.frame.metadata["source_active"] is True
+    assert record.frame.metadata["viewer_source_kind"] == "gamepad"
