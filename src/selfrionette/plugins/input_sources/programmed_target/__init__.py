@@ -13,14 +13,20 @@ def build_frames(parameters: Mapping[str, object]) -> tuple[RawInputFrame, ...]:
     if type(steps) is not int or steps < 1:
         raise ValueError("steps must be a positive integer")
     initial_position_m = parameters["initial_position_m"]
-    source = build_sweep_x_input_source(initial_position_m=initial_position_m, loop=False)
+    loop = parameters.get("loop", False)
+    if type(loop) is not bool:
+        raise ValueError("loop must be a boolean")
+    source = build_sweep_x_input_source(initial_position_m=initial_position_m, loop=loop)
     return tuple(source.read_frame() for _ in range(steps))
 
 
 def build_reader(parameters: Mapping[str, object]) -> FrameHealthReader:
+    loop = parameters.get("loop", False)
+    if type(loop) is not bool:
+        raise ValueError("loop must be a boolean")
     source = build_sweep_x_input_source(
         initial_position_m=parameters["initial_position_m"],
-        loop=False,
+        loop=loop,
     )
     return FrameHealthReader(
         source,
