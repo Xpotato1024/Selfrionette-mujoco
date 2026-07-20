@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-21
 canonical_for:
   - programmed target input source contract
   - RawInputFrame.metadata bridge for deterministic programmed target trajectories
@@ -16,6 +16,18 @@ related:
 P3ではこのbehaviorを`plugins/input_sources/programmed_target/`のversioned registrationがfactoryへ
 接続する。`selfrionette.input_sources.programmed_target`は既存public importを維持するcompatibility
 boundaryであり、trajectory、preset validation、terminal hold、loop semanticsを変更しない。
+
+## Versioned plugin parameter contract
+
+| field | type | required | semantics |
+|---|---|---:|---|
+| `steps` | `int` | yes | 1以上 |
+| `initial_position_m` | `tuple` | yes | 3要素vector |
+| `preset` | `str` | no | 省略時と指定時のいずれも`sweep_x` |
+| `loop` | `bool` | no | 省略時は`False` |
+
+semantic validationはplugin package内の共通helperが所有し、frame materializationとruntime reader
+factoryの両方から同じ規則を使用する。generic CLI selectionは`loop=False`を明示する。
 
 ## 1. 目的
 
@@ -140,7 +152,7 @@ programmed target の契約は interpreter 側で再定義しない。
 
 ## PR #465 review correction
 
-plugin registrationは`steps`が1以上であることを`steps must be a positive integer`で検証する。runtime readerは既存`ProgrammedTargetInputSource`へdelegateし、非loopではtrajectory終端後にterminal frameをholdし、loopではtrajectory先頭へwrapする。selection.framesのmaterializationは独立delegateから行い、runtime readerを先読みしない。
+plugin packageは`steps`、`preset`、`loop`のsemantic validationを共通helperへ集約する。runtime readerは既存`ProgrammedTargetInputSource`へdelegateし、非loopではtrajectory終端後にterminal frameをholdし、loopではtrajectory先頭へwrapする。selection.framesのmaterializationは独立delegateから行い、runtime readerを先読みしない。
 
 ## 10. Non-goals
 
@@ -151,7 +163,6 @@ plugin registrationは`steps`が1以上であることを`steps must be a positi
 - MuJoCo site / body contract 変更
 - viewer 変更
 - hardware validation
-- serial port open
-- OSC send
-- legacy import / execute
+- external I/O
+- legacy code execution
 - dependency change
