@@ -2,11 +2,15 @@
 
 ## 責務
 
-既存public importとsource-local algorithmの互換境界を提供する。production sourceのcatalog、
-versioned identity、factory、health、lifecycle registrationは`selfrionette/plugins/input_sources/`
-が所有し、ここから新しいsource implementationを登録しない。Arduino / keyboard / gamepad /
-replay / OSC / mocapから値を読み、`RawInputFrame`を作る。loadcellのserial frame parser、
-normalization、`SerialInputSource`はP3でもこの互換moduleから同一実装を参照する。
+既存public import、低位source-local algorithm、`RawInputFrame`生成の互換境界を提供する。
+production runtime selectionのcatalog、versioned identity、factory registration、health、lifecycleは
+`selfrionette/plugins/input_sources/`が所有する。ただし、この低位packageからplugin catalogまたは
+runtimeへ逆依存しない。
+
+Arduino / keyboard / gamepad / replay / OSC / mocapから値を読み、`RawInputFrame`を作る。
+loadcellのserial frame parser、normalization、`SerialInputSource`はP3でもこのpackageの同一実装を
+plugin adapterが参照する。`input_sources.registry`は既存descriptor APIのsignatureとframe behaviorだけを
+維持し、production plugin catalogの第二のregistration SoTにはしない。
 
 ## 入力
 
@@ -22,7 +26,7 @@ normalization、`SerialInputSource`はP3でもこの互換moduleから同一実�
 
 ## 依存してはいけない層
 
-`motion`, `kinematics`, `mujoco_backend`, `transport`
+`motion`, `kinematics`, `mujoco_backend`, `transport`, `runtime`, `plugins`
 
 plugin catalogとのcomposition接続は`runtime`が所有する。
 
