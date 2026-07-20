@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-24
+last_verified: 2026-07-21
 canonical_for:
   - viewer control message schema
 related:
@@ -57,9 +57,15 @@ top-level field:
 - `stale`: optional boolean
 - `zero_state`: optional boolean
 
-## PR #465 backend bridge correction
+## Backend viewer bridge
 
-backend `viewer` pluginは`ViewerBridgeRuntimeCapability`をtyped optional bindingとして公開する。ingress、JSON ingress、`rebase_current_endpoint_m()`は同一の`ViewerInputSource` instanceへ結線され、plugin-backed selectionでもdirect source pathと同じframe metadata、health、initial / post-publish rebase semanticsを維持する。viewer capabilityが欠落したplugin-backed selectionはfail-closedとする。
+backend `viewer` pluginは`ViewerBridgeRuntimeCapability`をtyped optional bindingとして公開する。
+ingress、JSON ingress、`rebase_current_endpoint_m()`は同一の`ViewerInputSource` instanceへ結線する。
+plugin-backed selectionでもdirect source pathと同じframe metadata、health、initial / post-publish rebase
+semanticsを維持する。viewer capabilityが欠落したplugin-backed selectionはfail-closedとする。
+
+generic source readerへ任意attribute forwardingを追加せず、viewer固有capabilityだけをselectionとruntime
+continuity codeへ渡す。frontend provider、keyboard / gamepad mapping、message schema自体はP3で変更しない。
 
 ## Validation規則
 
