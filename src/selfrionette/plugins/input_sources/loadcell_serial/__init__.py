@@ -4,13 +4,25 @@ from collections.abc import Iterable, Iterator, Mapping
 
 from selfrionette.input_sources.loadcell_serial import SerialInputSource
 from selfrionette.plugins.input_sources._common import ManagedFrameHealthReader
-from selfrionette.runtime.experiment.input_source import InputSourceHealth, InputSourceHealthStatus, InputSourceRuntimeDependencies
+from selfrionette.runtime.experiment.input_source import (
+    InputSourceHealth,
+    InputSourceHealthStatus,
+    InputSourceRuntimeDependencies,
+)
 
-_SERIAL_IMPORT_ERROR = "serial module is required for live serial mode. Install pyserial or run fixture mode."
+_SERIAL_IMPORT_ERROR = (
+    "serial module is required for live serial mode. Install pyserial or run fixture mode."
+)
 
 
 class _ManagedSerialDelegate:
-    def __init__(self, *, port: str | None, baud_rate: int, injected_lines: Iterable[str] | None) -> None:
+    def __init__(
+        self,
+        *,
+        port: str | None,
+        baud_rate: int,
+        injected_lines: Iterable[str] | None,
+    ) -> None:
         self._port = port
         self._baud_rate = baud_rate
         self._injected_lines = injected_lines
@@ -23,7 +35,7 @@ class _ManagedSerialDelegate:
         if self._injected_lines is not None:
             self._source = SerialInputSource.from_lines(self._injected_lines)
             return
-        if self._port is None:
+        if self._port is None:  # pragma: no cover - validated before construction
             raise ValueError("port is required for live serial mode")
         try:
             import serial  # type: ignore[import-not-found]
@@ -45,7 +57,6 @@ class _ManagedSerialDelegate:
     def read_frame(self):
         if self._source is None:
             raise RuntimeError("loadcell serial input source is not started")
-        assert self._source is not None
         return self._source.read_frame()
 
     def close(self) -> None:
@@ -54,16 +65,58 @@ class _ManagedSerialDelegate:
             self._serial_port = None
 
 
-def build_reader(parameters: Mapping[str, object], *, runtime_dependencies: InputSourceRuntimeDependencies | None = None) -> ManagedFrameHealthReader:
-    lines = runtime_dependencies.line_source if runtime_dependencies is not None and runtime_dependencies.line_source is not None else parameters.get("lines")
+def _validate_parameters(
+    parameters: Mapping[str, object],
+    *,
+    runtime_dependencies: InputSourceRuntimeDependencies | None,
+) -> tuple[str | None, int, tuple[str, ...] | None]:
     port = parameters.get("port")
-    if port is not None and not isinstance(port, str):
-        raise ValueError("port must be a string when provided")
+    if port is not None:
+        if not isinstance(port, str):
+            raise ValueError("port must be a string when provided")
+        if not port.strip():
+            raise ValueError("port must not be empty")
+
     baud_rate = parameters.get("baud_rate", 115200)
+    if type(baud_rate) is not int or baud_rate <= 0:
+        raise ValueError("baud_rate must be positive")
+
+    parameter_lines = parameters.get("lines")
+    if parameter_lines is not None and not isinstance(parameter_lines, tuple):
+        raise ValueError("loadcell serial injected lines must be a tuple")
+    dependency_lines = (
+        runtime_dependencies.line_source
+        if runtime_dependencies is not None
+        else None
+    )
+    selected_lines = dependency_lines if dependency_lines is not None else parameter_lines
+    injected_lines = tuple(selected_lines) if selected_lines is not None else None
+    if injected_lines is not None and any(not isinstance(line, str) for line in injected_lines):
+        raise ValueError("loadcell serial injected lines must contain strings")
+
+    if port is not None and injected_lines is not None:
+        raise ValueError(
+            "loadcell serial input source cannot combine port and injected lines"
+        )
+    if port is None and injected_lines is None:
+        raise ValueError("port is required for live serial mode")
+
+    return port, baud_rate, injected_lines
+
+
+def build_reader(
+    parameters: Mapping[str, object],
+    *,
+    runtime_dependencies: InputSourceRuntimeDependencies | None = None,
+) -> ManagedFrameHealthReader:
+    port, baud_rate, injected_lines = _validate_parameters(
+        parameters,
+        runtime_dependencies=runtime_dependencies,
+    )
     delegate = _ManagedSerialDelegate(
         port=port,
         baud_rate=baud_rate,
-        injected_lines=tuple(lines) if lines is not None else None,
+        injected_lines=injected_lines,
     )
     return ManagedFrameHealthReader(
         delegate,
