@@ -122,16 +122,21 @@ production registrationには使用しない。撤去可否は#462のcompletion 
 composition readinessはfactory、frame read、lifecycle startを実行しない。offline / replayにmanaged lifecycleを
 要求せず、live / viewer_bridgeのruntime instanceだけがmanaged adapterを持つ。execution開始前に`steps`等の
 pure argumentを検証し、無効な要求では`start()`も`close()`も呼ばない。managed executionを開始した場合は
-start failureを含む全経路でcloseを最大1回試行し、cleanup failureはprimary failureを置換せずdiagnostic noteへ
-保持する。正常終了後のcleanup failureはfail-closedで表面化する。
+start failureを含む各attemptでcloseを最大1回試行し、cleanup failureはprimary failureを置換せずdiagnostic noteへ
+保持する。正常終了後のcleanup failureはfail-closedで表面化する。close完了後はlive delegateのresource参照を
+破棄し、read-after-closeを拒否する。再start時はresourceを再構築する。
 
 P3のexecution adapterは`target_metadata`、`replay_compatibility`、
 `viewer_local_endpoint_compatibility`、loadcell、analog fixtureのversioned semanticsを明示する。
-viewer backendは`ViewerBridgeRuntimeCapability`を介してingressとendpoint rebaseを同一underlying sourceへ
-結線し、generic readerへ任意attribute forwardingを追加しない。viewer adapterはP4までendpoint coercion、
-local motion、orientation metadata、post-step measurement、publish後rebaseをcompatibility責務として保持する。
-step-loopはraw frame、typed health、canonical state projectionの順で処理し、projected frameをinterpreter、
-record、diagnosticsへ渡す。frontend keyboard / gamepad providerとmappingの分離は#461のscopeである。
+viewer backendは`ViewerBridgeRuntimeCapability`を介してingress、endpoint rebase、clock rebindを同一underlying
+sourceへ結線し、generic readerへ任意attribute forwardingを追加しない。clock rebindはreader / capability identityと
+既存message / endpoint stateを保持する。viewer adapterはP4までendpoint coercion、local motion、orientation metadata、
+post-step measurement、publish後rebaseをcompatibility責務として保持する。
+
+step-loopはreplay compatibilityではrecorded frame metadataをsource-state truthとして使用し、その他のsourceでは
+typed healthをsource-state truthとして使用する。live frameにstate fieldがある場合は存在するkeyだけhealthと照合し、
+省略keyをhealth projectionで補完する。canonical projection後の同じframeをinterpreter、record、diagnosticsへ渡す。
+frontend keyboard / gamepad providerとmappingの分離は#461のscopeである。
 
 ## failureとordering
 
