@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-21
 canonical_for:
   - runtime input source state payload
 related:
@@ -12,47 +12,54 @@ related:
 
 # Runtime Input Source State
 
-P3では`InputSourceHealth`をsource pluginが所有し、runtimeは各read後にこのtyped stateを既存の
-`source_active`、`command_age_ms`、`stale_reason`へprojectionする。source reasonをruntimeで再生成せず、
-frame metadataとhealthのactive/stale状態が矛盾する場合はfail-closedとする。viewer backend bridgeの初期値は
-`source_active=false`、`command_age_ms=0`、`stale_reason=no_control_message_received`を維持する。
-
 ## 目的
 
-runtime payload の `metadata` に載せる input source の観測用 state を定義する。
+runtime payloadの`metadata`に載せるinput sourceの観測用stateと、source-owned typed healthから
+既存metadataへprojectionする規則を定義する。
+
+P3では`InputSourceHealth`をsource pluginが所有し、runtimeは各read後にtyped healthを取得する。
+runtimeはsource固有のreasonを再生成せず、frame metadataとtyped healthのactive/stale状態が矛盾する
+場合はfail-closedとする。viewer backend bridgeの初期値は`source_active=false`、
+`command_age_ms=0`、`stale_reason=no_control_message_received`を維持する。
 
 ## fields
 
-- `source_kind`: 選択された runtime input source 名
-- `source_active`: 現在 command を出せるかどうかの観測値
-- `command_age_ms`: source が emit した command age の観測値
-- `stale_reason`: stale 判定理由。正常経路では省略または `null`
+- `source_kind`: 選択されたruntime input sourceまたはsource-specific subtype
+- `source_active`: 現在commandを出せるかどうかの観測値
+- `command_age_ms`: sourceがemitしたcommand ageの観測値
+- `stale_reason`: stale判定理由。正常経路では省略または`null`
 
-これらの値は observability 用の入力状態であり、runtime stale-command
-safety はこの metadata を読み取って別途判定する。runtime は
-`command_age_ms` を wall clock から計算しない。offline sourceはsource-provided
-metadata として扱い、offline の programmed_target / replay / noop は
-deterministic な `0` を emit してよい。browser / live sourcesは
-age と stale metadata を source 側で emit する。
+これらの値はobservability用の入力状態であり、runtime stale-command safetyはこのmetadataを
+読み取って別途判定する。runtimeは`command_age_ms`をwall clockから再計算しない。
+offlineのprogrammed target / replay / noopはdeterministicな`0`をemitしてよい。
+browser / live sourceはageとstale reasonをsource側でemitする。
+
+## typed health projection
+
+runtime step-loopは次の順で処理する。
+
+1. `RawInputFrame`をreadする。
+2. `current_health()`から`InputSourceHealth`を取得する。
+3. frame内に既存state fieldがある場合、typed healthとの整合性を検証する。
+4. `source_active`、`command_age_ms`、`stale_reason`を同じruntime-owned helperでannotateする。
+5. annotate後のframeをinterpreter、record、diagnosticsへ渡す。
+
+`source_kind`のsource-specific valueは保持する。runtimeがcanonicalに上書きするのは
+`source_active`、`command_age_ms`、`stale_reason`だけである。mismatchはfail-closedとし、
+source reasonやtimeout reasonをruntimeで再生成しない。
 
 ## overlay diagnostics
 
-- viewer overlay で `runtime_input_safety_applied`, `target_status`,
-  `target_rejected`, `target_rejection_reason`, `target_rejection_message`,
-  `rejected_desired_endpoint_m`, `target_position_m` を read-only で読む。
-- accepted frame では rejection fields は `none` / `n/a` に戻る。
-- missing metadata でも viewer parser は crash しない。
-
-## PR #465 review correction rules
-
-- runtimeはraw frameをreadした後、typed healthを取得し、native state fieldsとの整合性を検証してから同じprojection helperでframeをannotateする。
-- `source_kind`のsource-specific valueは保持する。runtimeがcanonicalに上書きするのは`source_active`、`command_age_ms`、`stale_reason`である。
-- mismatchはfail-closedとし、source reasonやtimeout reasonをruntimeで再生成しない。
+- viewer overlayで`runtime_input_safety_applied`, `target_status`, `target_rejected`,
+  `target_rejection_reason`, `target_rejection_message`, `rejected_desired_endpoint_m`,
+  `target_position_m`をread-onlyで読む。
+- accepted frameではrejection fieldsは`none` / `n/a`に戻る。
+- missing metadataでもviewer parserはcrashしない。
 
 ## rules
 
-- これらは optional metadata であり、既存 payload の parse を壊さない
-- required payload fields には含めない
-- endpoint evaluation semantics を変えない
-- normal path では `source_active=true`, `command_age_ms=0`, `stale_reason` omitted が許容
-- stale safety は `source_active`, `command_age_ms`, `stale_reason` を参照する
+- これらはoptional metadataであり、既存payloadのparseを壊さない。
+- required payload fieldsには含めない。
+- endpoint evaluation semanticsを変えない。
+- normal pathでは`source_active=true`, `command_age_ms=0`, `stale_reason` omittedが許容される。
+- stale safetyは`source_active`, `command_age_ms`, `stale_reason`を参照する。
