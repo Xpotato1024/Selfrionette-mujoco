@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from types import MappingProxyType
-
-from selfrionette.plugins.input_sources.registration import INPUT_SOURCE_REGISTRATIONS, InputSourcePluginRegistration
+from selfrionette.plugins.input_sources.registration import (
+    INPUT_SOURCE_REGISTRATIONS,
+    InputSourcePluginRegistration,
+)
 from selfrionette.runtime.experiment.contracts import PluginSelection
 from selfrionette.runtime.experiment.input_source import InputSourcePlugin
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
@@ -41,6 +42,10 @@ class InputSourceCatalog:
     def registrations(self) -> tuple[InputSourcePluginRegistration, ...]:
         return self._registrations
 
+    @property
+    def registry(self) -> VersionedPluginRegistry[InputSourcePlugin]:
+        return self._registry
+
     def resolve(self, alias: str) -> InputSourcePluginRegistration:
         try:
             return self._by_alias[alias]
@@ -52,14 +57,14 @@ class InputSourceCatalog:
 
     def resolve_selection(self, alias: str) -> PluginSelection:
         registration = self.resolve(alias)
-        return PluginSelection(registration.plugin.identity.name, registration.plugin.identity.version)
+        return PluginSelection(
+            registration.plugin.identity.name,
+            registration.plugin.identity.version,
+        )
 
 
 INPUT_SOURCE_CATALOG = InputSourceCatalog(INPUT_SOURCE_REGISTRATIONS)
-INPUT_SOURCE_PLUGIN_REGISTRY = VersionedPluginRegistry(
-    (registration.plugin for registration in INPUT_SOURCE_REGISTRATIONS),
-    kind="input source plugin",
-)
+INPUT_SOURCE_PLUGIN_REGISTRY = INPUT_SOURCE_CATALOG.registry
 SUPPORTED_INPUT_SOURCE_NAMES = INPUT_SOURCE_CATALOG.aliases
 
 
