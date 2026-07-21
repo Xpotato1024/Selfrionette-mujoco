@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-22
 canonical_for:
   - runtime composition root
 related:
@@ -130,13 +130,40 @@ P3のexecution adapterは`target_metadata`、`replay_compatibility`、
 `viewer_local_endpoint_compatibility`、loadcell、analog fixtureのversioned semanticsを明示する。
 viewer backendは`ViewerBridgeRuntimeCapability`を介してingress、endpoint rebase、clock rebindを同一underlying
 sourceへ結線し、generic readerへ任意attribute forwardingを追加しない。clock rebindはreader / capability identityと
-既存message / endpoint stateを保持する。viewer adapterはP4までendpoint coercion、local motion、orientation metadata、
-post-step measurement、publish後rebaseをcompatibility責務として保持する。
+既存message / endpoint stateを保持する。P4後のviewer adapterはsource ingress、health、timeout、canonical
+sample projectionを保持し、local motion、orientation metadata、post-step measurement、publish後rebaseは
+runtime composition側で保持する。
 
 step-loopはreplay compatibilityではrecorded frame metadataをsource-state truthとして使用し、その他のsourceでは
 typed healthをsource-state truthとして使用する。live frameにstate fieldがある場合は存在するkeyだけhealthと照合し、
 省略keyをhealth projectionで補完する。canonical projection後の同じframeをinterpreter、record、diagnosticsへ渡す。
-frontend keyboard / gamepad providerとmappingの分離は#461のscopeである。
+frontend keyboard / gamepad providerとmappingの分離は#461で成立し、P5のtest-layout migrationとlegacy
+fallback retirementは#462で監査する。
+
+### P4 viewer source and mapping composition
+
+P4ではviewerを次のtyped compositionとして扱う。
+
+```text
+ViewerInputProviderRegistry
+        -> provider raw message
+backend ViewerInputSource
+        -> viewer_control_sample/v1 + typed health
+ViewerKeyboardGamepadMappingPlugin
+        -> typed endpoint-velocity intent
+runtime step loop
+        -> desired endpoint progression / rebase / MuJoCo command
+```
+
+provider registryは`keyboard/v1`と`gamepad/v1`の静的known-IDだけを解決する。frontend providerは
+browser acquisitionとlifecycleを所有し、backend sourceはparse、schema、latest sample、health、
+timeout、cleanupを所有する。mappingはtransportやfrontend APIをimportせず、canonical sampleから
+既存keyboard / gamepad semanticsを一度だけ実行する。runtimeはmapping resultを適用し、publish-before-
+rebase orderingと同一source/capability instanceのidentityを維持する。
+
+legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping実装へ分岐しない。P4は
+`src/selfrionette/input_sources/`全体を削除せず、未移行consumerがあるkeyboard、continuous velocity、
+viewer compatibility symbolだけをthin facadeとして残す。残存symbolの最終retirementは#462で監査する。
 
 ## failureとordering
 

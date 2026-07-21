@@ -10,6 +10,10 @@ from typing import Literal
 ViewerControlSourceKind = Literal["keyboard", "gamepad"]
 ViewerControlEnvelopeType = Literal["viewer_control_message"]
 ViewerControlKeyboardFocusState = Literal["focused", "blurred"]
+ViewerControlProviderId = Literal["keyboard/v1", "gamepad/v1"]
+ViewerControlProviderSchema = Literal[
+    "viewer_keyboard_sample/v1", "viewer_gamepad_sample/v1"
+]
 
 
 class ViewerControlMessageError(ValueError):
@@ -50,6 +54,8 @@ class ViewerControlMessage:
     keyboard: ViewerControlKeyboardMessage | None = None
     gamepad: ViewerControlGamepadMessage | None = None
     metadata: Mapping[str, object] = field(default_factory=dict)
+    provider_id: ViewerControlProviderId | None = None
+    provider_schema: ViewerControlProviderSchema | None = None
 
 
 def _is_plain_mapping(value: object) -> bool:
@@ -239,7 +245,17 @@ def coerce_viewer_control_message(payload: object) -> ViewerControlMessage:
     if not _is_plain_mapping(payload):
         raise ViewerControlMessageError("Invalid viewer control message: expected a JSON object")
 
-    allowed_keys = {"type", "timestamp_s", "source_kind", "sequence", "keyboard", "gamepad", "metadata"}
+    allowed_keys = {
+        "type",
+        "timestamp_s",
+        "source_kind",
+        "sequence",
+        "keyboard",
+        "gamepad",
+        "metadata",
+        "provider_id",
+        "provider_schema",
+    }
     _ensure_allowed_keys(payload, allowed_keys, "viewer control message")
 
     if payload.get("type") != "viewer_control_message":
@@ -256,6 +272,36 @@ def coerce_viewer_control_message(payload: object) -> ViewerControlMessage:
     source_kind = payload["source_kind"]
     if source_kind not in {"keyboard", "gamepad"}:
         raise ViewerControlMessageError("viewer control message.source_kind must be 'keyboard' or 'gamepad'")
+
+    provider_id = payload.get("provider_id")
+    if provider_id is not None:
+        if not isinstance(provider_id, str) or provider_id not in {"keyboard/v1", "gamepad/v1"}:
+            raise ViewerControlMessageError(
+                "viewer control message.provider_id must be 'keyboard/v1' or 'gamepad/v1'"
+            )
+    provider_schema = payload.get("provider_schema")
+    if provider_schema is not None:
+        if not isinstance(provider_schema, str) or provider_schema not in {
+            "viewer_keyboard_sample/v1",
+            "viewer_gamepad_sample/v1",
+        }:
+            raise ViewerControlMessageError(
+                "viewer control message.provider_schema is unknown"
+            )
+    if (provider_id is None) != (provider_schema is None):
+        raise ViewerControlMessageError(
+            "viewer provider_id and provider_schema must be supplied together"
+        )
+    if provider_id is not None and provider_schema is not None:
+        expected_provider = (
+            ("keyboard/v1", "viewer_keyboard_sample/v1")
+            if source_kind == "keyboard"
+            else ("gamepad/v1", "viewer_gamepad_sample/v1")
+        )
+        if (provider_id, provider_schema) != expected_provider:
+            raise ViewerControlMessageError(
+                "viewer provider identity/schema does not match source_kind"
+            )
 
     if "sequence" in payload:
         sequence = payload["sequence"]
@@ -298,6 +344,8 @@ def coerce_viewer_control_message(payload: object) -> ViewerControlMessage:
         keyboard=keyboard,
         gamepad=gamepad,
         metadata=metadata_copy,
+        provider_id=provider_id,  # type: ignore[arg-type]
+        provider_schema=provider_schema,  # type: ignore[arg-type]
     )
 
 
@@ -319,6 +367,8 @@ __all__ = [
     "ViewerControlMessage",
     "ViewerControlMessageError",
     "ViewerControlSourceKind",
+    "ViewerControlProviderId",
+    "ViewerControlProviderSchema",
     "coerce_viewer_control_message",
     "parse_viewer_control_message_json",
 ]

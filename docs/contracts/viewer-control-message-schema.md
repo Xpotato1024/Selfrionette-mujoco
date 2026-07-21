@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-22
 canonical_for:
   - viewer control message schema
 related:
@@ -13,9 +13,9 @@ related:
 
 # Viewer Control Messageのschema
 
-P3ではこのmessageを受けるbackend `viewer` sourceをcompatibility pluginとしてcatalogへ登録する。
-keyboard / gamepad capture、provider lifecycle、binding、gain、deadzone、control-frame mappingは変更せず、
-frontend providerとbackend source / mappingの分離は#461で扱う。
+P3ではこのmessageを受けるbackend `viewer` sourceをcompatibility pluginとしてcatalogへ登録した。
+P4では既存wire shapeを維持したまま、frontend provider、backend source、Control Mapping、runtimeの
+責務境界を分離する。
 
 この文書はviewer-to-backend control messageのcanonical contractを定義する。
 
@@ -23,6 +23,30 @@ frontend providerとbackend source / mappingの分離は#461で扱う。
 gamepad stateを取得してこのenvelopeをserializeしてよいが、このmessageを使って
 simulation state、physics state、FK / IK、qpos、またはbrowser-sideの
 source of truthを変更してはならない。
+
+## P4 provider extension (#461)
+
+P4では既存envelopeを維持したまま、frontend provider identityをoptionalに追加した。
+
+- `provider_id`: `keyboard/v1`または`gamepad/v1`
+- `provider_schema`: `viewer_keyboard_sample/v1`または`viewer_gamepad_sample/v1`
+
+2 fieldは指定する場合は必ず同時に指定する。`source_kind=keyboard`は
+`keyboard/v1` + `viewer_keyboard_sample/v1`、`source_kind=gamepad`は
+`gamepad/v1` + `viewer_gamepad_sample/v1`だけを受け付ける。未知・重複・組合せ不一致は
+keyboard、gamepad、noopへfallbackせずrejectする。provider fieldを持たない従来messageは
+backend viewer sourceが`source_kind`から既知providerへcanonicalizeして受け付ける。
+
+frontendのknown-ID registryは`keyboard/v1`と`gamepad/v1`を静的に登録し、providerごとに
+attach/start、dispose、timestamp、sequence、focus / visibility / connected state、zero-state、
+provider固有raw payloadを所有する。backend viewer sourceはmessage parse、canonical sample、
+latest sample、health、250 ms timeout、cleanupだけを所有する。mappingはcanonical
+`viewer_control_sample/v1`を受け、axis/sign/gain/speed/deadzone/button supplement/control frameを
+typed continuous endpoint-velocity intentへ変換する。
+
+runtimeはmapping resultを適用し、desired endpoint progression、publish-before-rebase、
+MuJoCo command compositionを所有する。従ってlegacy `metadata`のoverlay fieldを保持しても、
+messageやsourceがmapping algorithmまたはendpoint progressionのSoTになることはない。
 
 ## Envelope仕様
 

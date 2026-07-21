@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from selfrionette.plugins.input_sources.catalog import (
     INPUT_SOURCE_CATALOG,
@@ -9,6 +9,7 @@ from selfrionette.plugins.input_sources.catalog import (
 )
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
+from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceMode,
@@ -75,6 +76,8 @@ class RuntimeInputSourceSelection:
     execution_adapter: RuntimeInputSourceExecutionAdapter | None = None
     validated_parameters: Mapping[str, object] | None = None
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
+    control_mapping: ControlMappingPlugin | None = None
+    control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
 
     @property
     def plugin(self) -> InputSourcePlugin | None:
@@ -157,6 +160,13 @@ def select_runtime_input_source(
     )
     if plugin.source_mode is InputSourceMode.VIEWER_BRIDGE and viewer_bridge_capability is None:
         raise ValueError("viewer input source plugin is missing its runtime bridge capability")
+    control_mapping = registration.control_mapping
+    if control_mapping is not None and plugin.produced_sample_schema not in control_mapping.accepted_input_sample_schemas:
+        raise ValueError(
+            "input sample schema compatibility mismatch: source produces "
+            f"{plugin.produced_sample_schema.canonical_id!r}, mapping accepts "
+            f"{tuple(sorted(item.canonical_id for item in control_mapping.accepted_input_sample_schemas))!r}"
+        )
     initial_source_state = (
         build_runtime_input_source_state_from_metadata(
             selected_frames[0].metadata,
@@ -185,6 +195,8 @@ def select_runtime_input_source(
         execution_adapter=registration.execution_adapter,
         validated_parameters=request.parameters,
         viewer_bridge_capability=viewer_bridge_capability,
+        control_mapping=control_mapping,
+        control_mapping_parameters=dict(registration.control_mapping_parameters),
     )
 
 

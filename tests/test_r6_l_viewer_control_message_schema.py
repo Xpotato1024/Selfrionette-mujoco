@@ -421,3 +421,48 @@ def test_parse_viewer_control_message_json_rejects_unknown_nested_fields(
 ) -> None:
     with pytest.raises(ViewerControlMessageError, match=expected_message):
         coerce_viewer_control_message(payload)
+
+
+@pytest.mark.parametrize(
+    ("provider_fields", "expected_message"),
+    [
+        ({"provider_id": "keyboard/v1"}, "provider_id and provider_schema must be supplied together"),
+        (
+            {"provider_id": "gamepad/v1", "provider_schema": "viewer_gamepad_sample/v1"},
+            "provider identity/schema does not match source_kind",
+        ),
+        (
+            {"provider_id": "keyboard/v1", "provider_schema": "viewer_unknown_sample/v1"},
+            "provider_schema is unknown",
+        ),
+    ],
+)
+def test_provider_identity_and_schema_mismatch_fails_closed(
+    provider_fields: dict[str, str], expected_message: str
+) -> None:
+    payload = {
+        "type": "viewer_control_message",
+        "timestamp_s": 1.0,
+        "source_kind": "keyboard",
+        "keyboard": {"active_key_codes": ["KeyW"], "key_state": {"KeyW": True}},
+        "metadata": {},
+        **provider_fields,
+    }
+    with pytest.raises(ViewerControlMessageError, match=re.escape(expected_message)):
+        coerce_viewer_control_message(payload)
+
+
+def test_provider_identity_extension_is_backward_compatible() -> None:
+    payload = coerce_viewer_control_message(
+        {
+            "type": "viewer_control_message",
+            "timestamp_s": 1.0,
+            "source_kind": "keyboard",
+            "provider_id": "keyboard/v1",
+            "provider_schema": "viewer_keyboard_sample/v1",
+            "keyboard": {"active_key_codes": [], "key_state": {}},
+            "metadata": {},
+        }
+    )
+    assert payload.provider_id == "keyboard/v1"
+    assert payload.provider_schema == "viewer_keyboard_sample/v1"

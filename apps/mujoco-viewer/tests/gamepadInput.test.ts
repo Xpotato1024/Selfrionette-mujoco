@@ -205,6 +205,8 @@ function testBuildViewerGamepadControlMessageBuildsSchemaPayload(): void {
     type: "viewer_control_message",
     timestamp_s: 42.5,
     source_kind: "gamepad",
+    provider_id: "gamepad/v1",
+    provider_schema: "viewer_gamepad_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",
@@ -268,6 +270,8 @@ function testViewerGamepadControlSenderQueuesUntilOpen(): void {
     type: "viewer_control_message",
     timestamp_s: 7.5,
     source_kind: "gamepad",
+    provider_id: "gamepad/v1",
+    provider_schema: "viewer_gamepad_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",

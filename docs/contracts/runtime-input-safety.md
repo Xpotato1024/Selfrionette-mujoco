@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-21
+last_verified: 2026-07-22
 canonical_for:
   - runtime input stale-command safety
 related:
@@ -76,3 +76,15 @@ publisher が同じ値を参照できるようにする。`runtime_input_safety_
 この contract は live / replay input の stale safety に限定する。
 IK / FK solver は変更しない。
 browser input, serial open, OSC, hardware access は scope 外である。
+
+## viewer provider lifecycle safety (#461)
+
+frontend providerのfocus / visibility / disconnect処理はzero-stateをpublicationし、backend sourceの
+latest sampleを非activeまたはstaleへ遷移させる。provider ID / schema不一致は別のproviderやnoopに
+置き換えない。lifecycle dispose後はkeyboard listener、gamepad polling、heartbeat、WebSocket sender
+を停止する。再activationでは古いactive sampleを再利用せず、最初にzero / safe stateから開始する。
+
+mappingがstaleまたはinactive sampleからintent metadataを生成しても、runtime safetyがsource healthを
+確認してhold-current-qposへ変換する。従って古いaxis値、button supplement、desired endpoint metadata
+がstale commandを再開させることはない。provider acquisition、backend source health、mapping intent、
+runtime holdは別の診断層としてpayloadに残す。

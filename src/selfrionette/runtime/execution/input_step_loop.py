@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from time import monotonic
 
@@ -29,6 +29,7 @@ from selfrionette.runtime.experiment.input_source import (
     ViewerBridgeRuntimeCapability,
     ViewerEndpointRebaseCapability,
 )
+from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
 from selfrionette.runtime.safety.input_safety import build_runtime_input_safety_result
 from selfrionette.runtime.execution.live_timing import (
     AbsoluteDeadlinePacer,
@@ -79,6 +80,8 @@ class RuntimeInputSourceStepLoopPlan:
     qpos_feasibility_provider: QposFeasibilityProvider
     endpoint_site_name: str | None
     execution_adapter: RuntimeInputSourceExecutionAdapter
+    control_mapping: ControlMappingPlugin | None = None
+    control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
 
 
@@ -189,6 +192,8 @@ def build_runtime_input_source_step_loop_plan(
             annotate_target_position_m=True,
             **plan_providers,
             execution_adapter=execution_adapter,
+            control_mapping=selection.control_mapping,
+            control_mapping_parameters=selection.control_mapping_parameters,
         )
 
     if execution_adapter.uses_replay_pipeline:
@@ -218,6 +223,8 @@ def build_runtime_input_source_step_loop_plan(
             annotate_target_position_m=False,
             **plan_providers,
             execution_adapter=execution_adapter,
+            control_mapping=selection.control_mapping,
+            control_mapping_parameters=selection.control_mapping_parameters,
         )
 
     if execution_adapter.uses_viewer_endpoint_compatibility:
@@ -278,6 +285,8 @@ def build_runtime_input_source_step_loop_plan(
             annotate_target_position_m=True,
             **plan_providers,
             execution_adapter=execution_adapter,
+            control_mapping=selection.control_mapping,
+            control_mapping_parameters=selection.control_mapping_parameters,
             viewer_bridge_capability=viewer_capability,
         )
 
@@ -416,12 +425,45 @@ async def _run_runtime_input_source_step_loop(
                     default_source_kind=plan.selection.source_name,
                 )
         frame = annotate_raw_input_frame(raw_frame, source_state)
-        intent = plan.pipeline.input_interpreter.interpret(frame)
+        if plan.control_mapping is None:
+            intent = plan.pipeline.input_interpreter.interpret(frame)
+        else:
+            mapped_intent = plan.control_mapping.strategy.map_input(
+                frame,
+                plan.control_mapping_parameters,
+            )
+            if not isinstance(mapped_intent, InputIntent):
+                raise TypeError(
+                    "control mapping strategy must return a typed InputIntent"
+                )
+            intent = mapped_intent
+            # The frame remains the source record, but expose the canonical
+            # mapping result in its compatibility metadata for existing
+            # viewer diagnostics and runtime records. The source itself never
+            # computes these fields.
+            frame = replace(
+                frame,
+                values=intent.values,
+                buttons=intent.buttons,
+                metadata={**frame.metadata, **intent.metadata},
+            )
         pre_step_state = plan.pipeline.simulator.snapshot()
         pre_step_tip_site_orientation_wxyz = None
         if plan.execution_adapter.uses_viewer_endpoint_compatibility:
             pre_step_tip_site_orientation_wxyz = _extract_endpoint_orientation_wxyz_from_state(
                 pre_step_state, plan.endpoint_pose_provider
+            )
+            pre_step_tip_site_position_m = _extract_current_endpoint_m(
+                plan.pipeline, plan.endpoint_pose_provider
+            )
+            frame = replace(
+                frame,
+                metadata={
+                    **frame.metadata,
+                    "current_tip_position_m": pre_step_tip_site_position_m,
+                    "desired_endpoint_m": last_valid_endpoint_m,
+                    "target_position_m": last_valid_endpoint_m,
+                },
             )
         motion_intent = intent
         if plan.execution_adapter.uses_viewer_endpoint_compatibility:

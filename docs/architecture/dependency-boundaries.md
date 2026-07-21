@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-22
 canonical_for:
   - import boundaries
 related:
@@ -215,3 +215,17 @@ package-root exportとmodule-level exportは別のpublic surfaceである。
 
 このpublic surfaceを変更する場合は、`tests/architecture/test_public_export_policy.py`と
 該当packageの`__all__` contract testを同じ変更で更新する。
+
+## viewer provider / source / mapping direction (#461)
+
+viewer frontend providerはbrowser-only boundaryであり、physics、robot、task、FK、IKをimportしない。
+backend viewer sourceはtransport messageとviewer sample schemaを扱うが、keyboard axis assignment、
+gamepad normalization semantics、gain、deadzone、control-frame command conversion、desired endpoint
+progressionを持たない。Control Mapping Pluginはfrontend DOM、Gamepad API、WebSocket lifecycle、
+source healthをimportしない。runtimeだけがsourceとmappingをtyped registrationからcomposeし、mapping
+resultをendpoint runtimeへ渡す。
+
+provider ID / sample schema、source produced schema / mapping accepted schema、provider lifecycle stateは
+各boundaryで検証する。unknown、duplicate、version mismatch、missing capability、malformed provider
+payloadはimplicit fallbackなしでfail-closedとする。これによりlegacy message compatibilityはsourceの
+canonicalizationに限定され、mapping algorithmの二重実装にならない。

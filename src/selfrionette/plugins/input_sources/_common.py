@@ -32,6 +32,25 @@ def health_from_frame(
     health_metadata: dict[str, object] = {"source": frame.source}
     if "source_kind" in metadata:
         health_metadata["source_kind"] = metadata["source_kind"]
+    if metadata.get("source_health_status") == "invalid":
+        return InputSourceHealth(
+            InputSourceHealthStatus.INVALID,
+            reason=str(reason or "invalid_input_source_frame"),
+            age_ms=age_ms,
+            metadata=health_metadata,
+        )
+    if (
+        metadata.get("viewer_source_kind") == "gamepad"
+        and isinstance(metadata.get("viewer_control_message"), Mapping)
+        and isinstance(metadata["viewer_control_message"].get("gamepad"), Mapping)
+        and metadata["viewer_control_message"]["gamepad"].get("connected") is False
+    ):
+        return InputSourceHealth(
+            InputSourceHealthStatus.DISCONNECTED,
+            reason=str(reason or "gamepad_disconnected"),
+            age_ms=age_ms,
+            metadata=health_metadata,
+        )
     if reason is not None:
         return InputSourceHealth(
             InputSourceHealthStatus.STALE,
@@ -62,13 +81,26 @@ class FrameHealthReader:
 
     def read_frame(self) -> RawInputFrame:
         frame = self._delegate.read_frame()
-        self._health = health_from_frame(
-            frame,
-            default_status=InputSourceHealthStatus.ACTIVE,
-        )
+        delegate_health = getattr(self._delegate, "current_health", None)
+        if callable(delegate_health):
+            health = delegate_health()
+            if not isinstance(health, InputSourceHealth):
+                raise TypeError("input source delegate current_health() returned invalid health")
+            self._health = health
+        else:
+            self._health = health_from_frame(
+                frame,
+                default_status=InputSourceHealthStatus.ACTIVE,
+            )
         return frame
 
     def current_health(self) -> InputSourceHealth:
+        delegate_health = getattr(self._delegate, "current_health", None)
+        if callable(delegate_health):
+            health = delegate_health()
+            if not isinstance(health, InputSourceHealth):
+                raise TypeError("input source delegate current_health() returned invalid health")
+            self._health = health
         return self._health
 
 

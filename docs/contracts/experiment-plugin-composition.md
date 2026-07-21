@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-21
+last_verified: 2026-07-22
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -267,3 +267,14 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
 virtual reaction force、viewer feature、hardware/serial/Arduino/OSC/robot outputを実装しない。
 conformance testはcontractとreadinessの成立を示すが、実験結果、metric妥当性、接触物理、physical
 safetyを証明しない。
+
+## viewer input composition handoff (#461)
+
+Input Sourceが提供する`viewer_control_sample/v1`とControl Mappingが受け付けるsample identityは
+composition boundaryでexact compatibilityを検証する。viewer providerの`keyboard/v1` / `gamepad/v1`
+はfrontendのacquisition IDであり、backend source plugin identityやmapping identityを暗黙に選択する
+source-name dispatchではない。source registrationがtyped mappingを結線し、runtimeがそのmapping resultを
+endpoint progressionへ適用する。
+
+P4はprovider lifecycleとbackend source / mapping ownershipを成立させる。plugin-local test relocation、
+dummy onboarding、未移行legacy fallbackのretirementと残存symbolの最終監査は#462にhand offする。

@@ -16,6 +16,7 @@ DOMAIN_MODULES = {
     "state": {"types"},
     "types": set(),
     "viewer_control": set(),
+    "viewer_input": {"viewer_control"},
 }
 RETIRED_MODULES = {
     "continuous_endpoint_velocity",

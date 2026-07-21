@@ -389,6 +389,28 @@ function testParseViewerControlMessageJsonPreservesOptionalGamepadIdentity(): vo
   assert.equal(payload.gamepad?.id, undefined);
 }
 
+function testProviderIdentityAndSchemaMismatchFailsClosed(): void {
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "keyboard",
+      provider_id: "keyboard/v1",
+      keyboard: { active_key_codes: [], key_state: {} },
+    }),
+  "viewer provider_id and provider_schema must be supplied together");
+  assertThrows(() =>
+    coerceViewerControlMessage({
+      type: "viewer_control_message",
+      timestamp_s: 1.0,
+      source_kind: "keyboard",
+      provider_id: "gamepad/v1",
+      provider_schema: "viewer_gamepad_sample/v1",
+      keyboard: { active_key_codes: [], key_state: {} },
+    }),
+  "viewer provider identity/schema does not match source_kind");
+}
+
 testParseViewerControlMessageJsonAcceptsKeyboardPayload();
 testParseViewerControlMessageJsonAcceptsGamepadPayload();
 testParseViewerControlMessageJsonRejectsMalformedPayload();
@@ -400,5 +422,6 @@ testParseViewerControlMessageJsonRequiresSourceSpecificPayload();
 testParseViewerControlMessageJsonRejectsWrongFieldTypes();
 testParseViewerControlMessageJsonRejectsWrongButtonsShape();
 testParseViewerControlMessageJsonPreservesOptionalGamepadIdentity();
+testProviderIdentityAndSchemaMismatchFailsClosed();
 
 console.log("viewer control message tests passed");

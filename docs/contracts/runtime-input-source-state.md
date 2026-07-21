@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-22
 canonical_for:
   - runtime input source state payload
 related:
@@ -79,3 +79,19 @@ runtime step-loopは次の順で処理する。
 - intentional inactive pathでは`source_active=false`, `stale_reason` omittedが許容される。
 - replayはcustom frameのstate metadata、ordering、timestampを保持する。
 - stale safetyは`source_active`, `command_age_ms`, `stale_reason`を参照する。
+
+## viewer canonical sample
+
+viewer sourceは`viewer_input_sample` metadataに`viewer_control_sample/v1`を出力する。
+sampleにはprovider ID / schema、`source_kind`、provider timestamp、sequence、raw keyboardまたは
+gamepad payload、`source_active`、`zero_state`、`stale_reason`、diagnosticsを含める。
+このsampleはsourceのlatest observationであり、axis assignment、gain、deadzone、control-frame
+conversion、desired endpointを含むmapping resultではない。
+
+legacy viewer messageにprovider fieldがない場合も、sourceはknown provider contractへcanonicalize
+して同じsample schemaを作る。provider identity / schemaの不一致、malformed payload、sequence / timestamp
+不正はinvalidとして扱い、別providerまたはnoopへfallbackしない。keyboard blur / hidden、gamepad
+disconnect、zero-stateは新しいvalid active sampleが来るまでactiveへ戻さない。
+
+viewer sourceのhealthはlatest sampleと250 ms timeoutを正本とする。runtimeはtyped healthとframeに
+存在するstate keyを比較し、mapping後のintentをsource healthの代替にしない。

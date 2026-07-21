@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-22
 canonical_for:
   - runtime input source registry
   - Input Source Plugin v1 ownership boundary
@@ -213,8 +213,8 @@ catalogをresolveする。一方、`--input-source`未指定時に呼ばれる`r
 
 ## Remaining scope
 
-- #461: viewer frontend provider、backend source、keyboard / gamepad mappingの分離
-- #462: plugin-local test ownership、dummy onboarding、legacy compatibility fallbackのcompletion audit
+- #461: viewer frontend provider、backend source、keyboard / gamepad mappingの分離を本PRで成立させる。
+- #462: plugin-local test ownership、dummy onboarding、legacy compatibility fallback、retained symbolのcompletion audit
 
 ## 関連canonical文書
 
@@ -228,3 +228,31 @@ catalogをresolveする。一方、`--input-source`未指定時に呼ばれる`r
 棚卸しの根拠と時点別の詳細は
 [Issue #458 input source ownership inventory](../reports/inventories/input-source-plugin-ownership-inventory.md)を参照する。
 inventoryはhistorical evidenceでありcurrent contractの正本ではない。
+
+## P4 viewer provider / source / mapping boundary (#461)
+
+viewer pluginの`viewer_control_sample/v1`は、browser providerが送ったraw payloadをbackend
+viewer sourceが検証済みcanonical sampleへ投影したschemaである。source registrationは
+`VIEWER_CONTROL_MAPPING_PLUGIN`をtyped mappingとして結線し、selection時にproduced sample
+schemaとmappingのaccepted schemaをexact matchで検証する。未知schemaやidentity mismatchは
+mapping実行前にfail-closedとする。
+
+責務は次の通り固定する。
+
+- frontend `ViewerInputProviderRegistry`: known static IDs、provider lifecycle、browser event / Gamepad API、focus / visibility / disconnect、zero-state、timestamp / sequence、raw payload。
+- backend `ViewerInputSource`: parse / validation、provider identity / schema、latest sample、active / stale / invalid / disconnected health、250 ms timeout、cleanup、canonical sample、legacy metadata projection。
+- `ViewerKeyboardGamepadMappingStrategy`: keyboard binding、gamepad axis、sign、speed / gain、deadzone、button 0/1 supplement、world / tool frame、typed endpoint-velocity intent。
+- runtime step loop: mapping resultの適用、desired endpoint progression、endpoint rebase、MuJoCo command composition。
+
+frontend registryはarbitrary dynamic importを行わない。lifecycleが選択providerを一括activate / disposeし、
+unknownまたはduplicate provider IDは安全なdefaultへ置換せずrejectする。provider disposal後は
+publication、polling、heartbeatを停止し、再activationはzero / safe stateから開始する。
+
+`src/selfrionette/input_sources/keyboard.py`、`continuous_endpoint_velocity.py`、
+`viewer.py`は既存consumerのためのcompatibility facadeまたは低位boundaryとして残す。keyboardと
+continuous mappingのcanonical implementationは`src/selfrionette/plugins/mappings/`にあり、viewer
+source facadeはmapping algorithm、desired endpoint integration、command generationを持たない。
+retained symbolのconsumer、canonical owner、facade status、#462または後続cleanup review pointは
+P5 completion auditで再確認する。programmed target、replay、noop、loadcell、analog fixtureはP4で移動しない。
+
+P4後のtest-layout migration、dummy onboarding、legacy fallback retirementは#462へhandoffする。

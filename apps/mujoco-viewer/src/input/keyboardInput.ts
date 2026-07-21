@@ -208,6 +208,8 @@ export function buildViewerKeyboardControlMessage(
     type: "viewer_control_message",
     timestamp_s: timestampS,
     source_kind: "keyboard",
+    provider_id: "keyboard/v1",
+    provider_schema: "viewer_keyboard_sample/v1",
     keyboard,
     metadata: {
       intent_kind: "local_endpoint_velocity",

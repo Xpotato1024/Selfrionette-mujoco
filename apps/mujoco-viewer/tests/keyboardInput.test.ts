@@ -155,6 +155,8 @@ function testViewerKeyboardControlMessageBuildsSchemaPayload(): void {
     type: "viewer_control_message",
     timestamp_s: 12.5,
     source_kind: "keyboard",
+    provider_id: "keyboard/v1",
+    provider_schema: "viewer_keyboard_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",
@@ -208,6 +210,8 @@ function testViewerKeyboardControlSenderQueuesUntilOpen(): void {
     type: "viewer_control_message",
     timestamp_s: 9.5,
     source_kind: "keyboard",
+    provider_id: "keyboard/v1",
+    provider_schema: "viewer_keyboard_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",
@@ -241,6 +245,8 @@ function testViewerKeyboardControlSenderHandlesMissingBackendGracefully(): void 
     type: "viewer_control_message",
     timestamp_s: 4.25,
     source_kind: "keyboard",
+    provider_id: "keyboard/v1",
+    provider_schema: "viewer_keyboard_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",

@@ -292,6 +292,8 @@ export function buildViewerGamepadControlMessage(
     type: "viewer_control_message",
     timestamp_s: timestampS,
     source_kind: "gamepad",
+    provider_id: "gamepad/v1",
+    provider_schema: "viewer_gamepad_sample/v1",
     gamepad: snapshotToGamepadMessage(snapshot),
     metadata: {
       intent_kind: "local_endpoint_velocity",

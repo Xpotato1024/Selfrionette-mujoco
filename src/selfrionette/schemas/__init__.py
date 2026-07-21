@@ -38,8 +38,17 @@ from selfrionette.schemas.viewer_control import (
     ViewerControlMessage,
     ViewerControlMessageError,
     ViewerControlSourceKind,
+    ViewerControlProviderId,
+    ViewerControlProviderSchema,
     coerce_viewer_control_message,
     parse_viewer_control_message_json,
+)
+from selfrionette.schemas.viewer_input import (
+    VIEWER_CONTROL_SAMPLE_SCHEMA,
+    ViewerCanonicalInputSample,
+    ViewerProviderId,
+    ViewerProviderSchema,
+    viewer_sample_to_metadata,
 )
 from selfrionette.schemas.types import JointVector, QuaternionWXYZ, ScalarVector, Vector3
 
@@ -79,11 +88,18 @@ __all__ = [
     "ViewerControlMessage",
     "ViewerControlMessageError",
     "ViewerControlSourceKind",
+    "ViewerControlProviderId",
+    "ViewerControlProviderSchema",
+    "VIEWER_CONTROL_SAMPLE_SCHEMA",
+    "ViewerCanonicalInputSample",
+    "ViewerProviderId",
+    "ViewerProviderSchema",
     "coerce_viewer_control_message",
     "decode_jsonl",
     "encode_jsonl",
     "parse_record",
     "parse_viewer_control_message_json",
+    "viewer_sample_to_metadata",
     "record_to_json_value",
     "validate_record_stream",
 ]

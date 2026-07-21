@@ -1,6 +1,8 @@
 export type ViewerControlSourceKind = "keyboard" | "gamepad";
 export type ViewerControlEnvelopeType = "viewer_control_message";
 export type ViewerControlKeyboardFocusState = "focused" | "blurred";
+export type ViewerControlProviderId = "keyboard/v1" | "gamepad/v1";
+export type ViewerControlProviderSchema = "viewer_keyboard_sample/v1" | "viewer_gamepad_sample/v1";
 
 export interface ViewerControlKeyboardMessage {
   active_key_codes: string[];
@@ -32,6 +34,8 @@ export interface ViewerControlMessage {
   keyboard?: ViewerControlKeyboardMessage;
   gamepad?: ViewerControlGamepadMessage;
   metadata?: Record<string, unknown>;
+  provider_id?: ViewerControlProviderId;
+  provider_schema?: ViewerControlProviderSchema;
 }
 
 export class ViewerControlMessageError extends Error {
@@ -243,7 +247,7 @@ export function coerceViewerControlMessage(value: unknown): ViewerControlMessage
     throw new ViewerControlMessageError("Invalid viewer control message: expected a JSON object");
   }
 
-  ensureAllowedKeys(value, ["type", "timestamp_s", "source_kind", "sequence", "keyboard", "gamepad", "metadata"], "viewer control message");
+  ensureAllowedKeys(value, ["type", "timestamp_s", "source_kind", "sequence", "keyboard", "gamepad", "metadata", "provider_id", "provider_schema"], "viewer control message");
 
   if (value.type !== "viewer_control_message") {
     throw new ViewerControlMessageError("viewer control message type must be 'viewer_control_message'");
@@ -259,6 +263,24 @@ export function coerceViewerControlMessage(value: unknown): ViewerControlMessage
   }
   if (value.source_kind !== "keyboard" && value.source_kind !== "gamepad") {
     throw new ViewerControlMessageError("viewer control message.source_kind must be 'keyboard' or 'gamepad'");
+  }
+  if (value.provider_id !== undefined && value.provider_id !== "keyboard/v1" && value.provider_id !== "gamepad/v1") {
+    throw new ViewerControlMessageError("viewer control message.provider_id must be 'keyboard/v1' or 'gamepad/v1'");
+  }
+  if (value.provider_schema !== undefined && value.provider_schema !== "viewer_keyboard_sample/v1" && value.provider_schema !== "viewer_gamepad_sample/v1") {
+    throw new ViewerControlMessageError("viewer control message.provider_schema is unknown");
+  }
+  const hasProviderIdentity = value.provider_id !== undefined || value.provider_schema !== undefined;
+  if (hasProviderIdentity && (value.provider_id === undefined || value.provider_schema === undefined)) {
+    throw new ViewerControlMessageError("viewer provider_id and provider_schema must be supplied together");
+  }
+  if (
+    value.provider_id !== undefined &&
+    value.provider_schema !== undefined &&
+    ((value.source_kind === "keyboard" && (value.provider_id !== "keyboard/v1" || value.provider_schema !== "viewer_keyboard_sample/v1")) ||
+      (value.source_kind === "gamepad" && (value.provider_id !== "gamepad/v1" || value.provider_schema !== "viewer_gamepad_sample/v1")))
+  ) {
+    throw new ViewerControlMessageError("viewer provider identity/schema does not match source_kind");
   }
   if (value.sequence !== undefined && !isInteger(value.sequence)) {
     throw new ViewerControlMessageError("viewer control message.sequence must be an integer");
@@ -291,6 +313,12 @@ export function coerceViewerControlMessage(value: unknown): ViewerControlMessage
     if (metadataCopy !== undefined) {
       message.metadata = metadataCopy;
     }
+    if (value.provider_id !== undefined) {
+      message.provider_id = value.provider_id;
+    }
+    if (value.provider_schema !== undefined) {
+      message.provider_schema = value.provider_schema;
+    }
     return message;
   }
 
@@ -312,6 +340,12 @@ export function coerceViewerControlMessage(value: unknown): ViewerControlMessage
   }
   if (metadataCopy !== undefined) {
     message.metadata = metadataCopy;
+  }
+  if (value.provider_id !== undefined) {
+    message.provider_id = value.provider_id;
+  }
+  if (value.provider_schema !== undefined) {
+    message.provider_schema = value.provider_schema;
   }
   return message;
 }
