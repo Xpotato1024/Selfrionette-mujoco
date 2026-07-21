@@ -13,6 +13,20 @@ from selfrionette.runtime.experiment.input_source import (
 _SERIAL_IMPORT_ERROR = (
     "serial module is required for live serial mode. Install pyserial or run fixture mode."
 )
+_NOT_STARTED_HEALTH = InputSourceHealth(
+    InputSourceHealthStatus.DISCONNECTED,
+    reason="not_started",
+    age_ms=0,
+)
+_STARTED_HEALTH = InputSourceHealth(
+    InputSourceHealthStatus.ACTIVE,
+    age_ms=0,
+)
+_START_FAILURE_HEALTH = InputSourceHealth(
+    InputSourceHealthStatus.DISCONNECTED,
+    reason="start_failed",
+    age_ms=0,
+)
 
 
 class _ManagedSerialDelegate:
@@ -122,11 +136,10 @@ def build_reader(
     )
     return ManagedFrameHealthReader(
         delegate,
-        InputSourceHealth(
-            InputSourceHealthStatus.DISCONNECTED,
-            reason="not_started",
-            age_ms=0,
-        ),
+        _NOT_STARTED_HEALTH,
+        started_health=_STARTED_HEALTH,
+        start_failure_health=_START_FAILURE_HEALTH,
+        closed_health=_NOT_STARTED_HEALTH,
     )
 
 
