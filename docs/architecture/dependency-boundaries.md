@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-20
+last_verified: 2026-07-21
 canonical_for:
   - import boundaries
 related:
@@ -38,11 +38,14 @@ transport           -> schemas
 runtime             -> all layers
 ```
 
-Input Source Pluginのgeneric contractは`runtime/experiment/input_source.py`が所有する。
-既存`input_sources.base.InputSource`の`read_frame() -> RawInputFrame`をreader compatibility
-boundaryとして再利用し、source contractからfast_arm、task / evaluation実装、viewer TypeScript、
-serial transportをimportしない。Control Mapping Pluginはproduced / accepted sample schemaの
-versioned identityだけを参照し、device handle、serial、browser eventを所有しない。
+Input Source Pluginのgeneric contractは`runtime/experiment/input_source.py`が所有し、production source
+registrationは`plugins/input_sources/`が所有する。既存`input_sources.base.InputSource`の
+`read_frame() -> RawInputFrame`をreader compatibility boundaryとして再利用するが、低位の
+`input_sources/`から`plugins/`または`runtime/`へ逆依存しない。`input_sources.registry`は既存descriptor
+signatureとframe behaviorだけを保持し、production catalogをimportまたは再登録しない。
+source contractからfast_arm、task / evaluation実装、viewer TypeScript、serial transportをimportしない。
+Control Mapping Pluginはproduced / accepted sample schemaのversioned identityだけを参照し、device handle、
+serial、browser eventを所有しない。
 
 `schemas/`内はwire domain間の依存も一方向に固定する。`input`、`command`、`state`、`endpoint`は
 `types`だけへ依存でき、`experiment_log`は`endpoint`だけへ依存できる。`viewer_control`と`types`は
@@ -121,6 +124,7 @@ input_sources       -> kinematics
 input_sources       -> mujoco_backend
 input_sources       -> transport
 input_sources       -> runtime
+input_sources       -> plugins
 
 input_interpreters  -> input_sources
 input_interpreters  -> motion
@@ -163,7 +167,18 @@ transport           -> runtime
 
 ## Input Source runtime validation boundary
 
-generic source contractのhealth providerとvalidated reader adapterは`runtime/experiment/input_source.py`が所有する。adapterは`fast_arm`、serial transport、browser/viewer implementation、task/evaluation implementationをimportせず、`RawInputFrame`とtyped `InputSourceHealth`だけをruntime boundaryで検証する。具体的sourceの移行はP3、viewer provider separationはP4に残す。
+generic source contractのhealth providerとvalidated reader adapterは`runtime/experiment/input_source.py`が
+所有する。adapterは`fast_arm`、serial transport、browser/viewer implementation、task/evaluation implementationを
+importせず、`RawInputFrame`とtyped `InputSourceHealth`だけをruntime boundaryで検証する。production source pluginは
+deterministic known-ID catalogからのみ解決し、source packageがrobot command、task/evaluation、viewer TypeScriptを
+importすることを禁止する。mappingはsource package外に残す。
+
+`ViewerBridgeRuntimeCapability`はviewer registrationとruntime ingress / endpoint continuityだけが使用する
+optional typed capabilityであり、generic `InputSource` readerの必須interfaceではない。source pluginはviewer
+control schemaを維持し、frontend providerやkeyboard / gamepad mappingを所有しない。
+Health-to-frame projectionはruntime-owned helperに集約する。source pluginはtyped health truthを提供し、runtimeは
+generic fieldsだけをprojectionする。loadcell pluginはfactory creation、invalid configuration、read-before-startで
+serial portをopenしない。direct factoryはport、baud、injected linesをI/O前にfail-closedで検証する。
 
 ## legacy参照と移行境界
 
@@ -199,4 +214,4 @@ package-root exportとmodule-level exportは別のpublic surfaceである。
   private adapterはtest doubleと区別し、production ownerのmodule内へ閉じる。
 
 このpublic surfaceを変更する場合は、`tests/architecture/test_public_export_policy.py`と
-該当packageの`__all__` assertionを同じ変更で更新する。
+該当packageの`__all__` contract testを同じ変更で更新する。

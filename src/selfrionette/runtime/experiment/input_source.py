@@ -1,7 +1,7 @@
 """Generic versioned Input Source Plugin contracts.
 
 This module deliberately owns no concrete device, robot, task, or viewer
-implementation.  Existing ``InputSource`` remains the runtime reader
+implementation. Existing ``InputSource`` remains the runtime reader
 compatibility boundary; this module adds the versioned composition metadata
 and optional lifecycle capability around it.
 """
@@ -9,7 +9,7 @@ and optional lifecycle capability around it.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
@@ -20,7 +20,7 @@ from selfrionette.runtime.experiment.contracts import (
     ParameterContract,
     VersionedIdentity,
 )
-from selfrionette.schemas import RawInputFrame
+from selfrionette.schemas import RawInputFrame, ViewerControlMessage
 
 
 class InputSourceMode(str, Enum):
@@ -36,6 +36,7 @@ SourceMode = InputSourceMode
 
 class InputSourceHealthStatus(str, Enum):
     ACTIVE = "active"
+    INACTIVE = "inactive"
     STALE = "stale"
     INVALID = "invalid"
     DISCONNECTED = "disconnected"
@@ -47,6 +48,45 @@ class InputSourceHealthProvider(Protocol):
 
     def current_health(self) -> InputSourceHealth:
         ...
+
+
+@runtime_checkable
+class ViewerBridgeRuntimeCapability(Protocol):
+    """Optional, viewer-only runtime bridge capability.
+
+    This is deliberately not part of the generic input-source reader
+    interface. The viewer registration may expose it to runtime ingress and
+    endpoint continuity code when the reader is plugin-backed.
+    """
+
+    def ingest_control_message(self, message: ViewerControlMessage) -> RawInputFrame:
+        ...
+
+    def ingest_control_message_json(self, message: str) -> RawInputFrame:
+        ...
+
+    def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
+        ...
+
+    def rebind_clock(self, clock: Callable[[], float]) -> None:
+        ...
+
+
+@runtime_checkable
+class ViewerEndpointRebaseCapability(Protocol):
+    """Narrow typed capability used only by endpoint continuity code."""
+
+    def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class InputSourceRuntimeDependencies:
+    """Typed non-manifest dependencies kept outside canonical plugin parameters."""
+
+    replay_frames: tuple[RawInputFrame, ...] | None = None
+    clock: Callable[[], float] | None = None
+    line_source: tuple[str, ...] | None = None
 
 
 def _freeze_metadata(name: str, value: object) -> object:
@@ -84,9 +124,14 @@ class InputSourceHealth:
     def __post_init__(self) -> None:
         if not isinstance(self.status, InputSourceHealthStatus):
             raise TypeError("input source health status must use InputSourceHealthStatus")
-        if self.status is InputSourceHealthStatus.ACTIVE:
+        if self.status in (
+            InputSourceHealthStatus.ACTIVE,
+            InputSourceHealthStatus.INACTIVE,
+        ):
             if self.reason is not None:
-                raise ValueError("active input source health must not have a failure reason")
+                raise ValueError(
+                    f"{self.status.value} input source health must not have a failure reason"
+                )
         elif not isinstance(self.reason, str) or not self.reason:
             raise ValueError(
                 f"{self.status.value} input source health requires a reason"
@@ -94,7 +139,9 @@ class InputSourceHealth:
         if self.age_ms is not None and (
             type(self.age_ms) is not int or self.age_ms < 0
         ):
-            raise ValueError("input source health age_ms must be None or a non-negative integer")
+            raise ValueError(
+                "input source health age_ms must be None or a non-negative integer"
+            )
         if not isinstance(self.metadata, Mapping):
             raise TypeError("input source health metadata must use a mapping")
         object.__setattr__(
@@ -115,7 +162,12 @@ class ManagedInputSource(Protocol):
 
 @runtime_checkable
 class InputSourceFactory(Protocol):
-    def __call__(self, parameters: Mapping[str, object]) -> object: ...
+    def __call__(
+        self,
+        parameters: Mapping[str, object],
+        *,
+        runtime_dependencies: InputSourceRuntimeDependencies | None = None,
+    ) -> object: ...
 
 
 class ValidatedInputSourceReader(InputSource, InputSourceHealthProvider):
@@ -146,11 +198,24 @@ class ValidatedInputSourceReader(InputSource, InputSourceHealthProvider):
 class ValidatedManagedInputSourceReader(ValidatedInputSourceReader):
     """Validated reader adapter with lifecycle passthrough for managed modes."""
 
+    def __init__(
+        self,
+        delegate: ManagedInputSource,
+        *,
+        viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None,
+    ) -> None:
+        super().__init__(delegate)
+        self._viewer_bridge_capability = viewer_bridge_capability
+
     def start(self) -> None:
         self._delegate.start()  # type: ignore[attr-defined]
 
     def close(self) -> None:
         self._delegate.close()  # type: ignore[attr-defined]
+
+    @property
+    def viewer_bridge_capability(self) -> ViewerBridgeRuntimeCapability | None:
+        return self._viewer_bridge_capability
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,7 +257,10 @@ class InputSourcePlugin:
         object.__setattr__(self, "produced_evidence", evidence)
 
     def create_runtime_reader(
-        self, parameters: Mapping[str, object]
+        self,
+        parameters: Mapping[str, object],
+        *,
+        runtime_dependencies: InputSourceRuntimeDependencies | None = None,
     ) -> ValidatedInputSourceReader | ValidatedManagedInputSourceReader:
         """Validate parameters and create one reader without starting it."""
 
@@ -202,7 +270,13 @@ class InputSourcePlugin:
         if not isinstance(frozen_parameters, Mapping):
             raise TypeError("input source parameters must freeze to a mapping")
         self.parameter_contract.validate(frozen_parameters)
-        reader = self.factory(frozen_parameters)
+        if runtime_dependencies is None:
+            reader = self.factory(frozen_parameters)
+        else:
+            reader = self.factory(
+                frozen_parameters,
+                runtime_dependencies=runtime_dependencies,
+            )
         if not isinstance(reader, InputSource):
             raise TypeError(
                 "input source factory returned an object that does not satisfy "
@@ -213,7 +287,10 @@ class InputSourcePlugin:
                 "input source factory output must provide "
                 "InputSourceHealthProvider.current_health()"
             )
-        managed = self.mode in (InputSourceMode.LIVE, InputSourceMode.VIEWER_BRIDGE)
+        managed = self.mode in (
+            InputSourceMode.LIVE,
+            InputSourceMode.VIEWER_BRIDGE,
+        )
         if managed and not isinstance(reader, ManagedInputSource):
             raise TypeError(
                 f"{self.mode.value} input source factory output must provide "
@@ -230,7 +307,22 @@ class InputSourcePlugin:
                 "input source factory initial health does not match plugin initial health"
             )
         if managed:
-            return ValidatedManagedInputSourceReader(reader)
+            viewer_bridge_capability = getattr(
+                reader,
+                "viewer_bridge_capability",
+                None,
+            )
+            if viewer_bridge_capability is not None and not isinstance(
+                viewer_bridge_capability,
+                ViewerBridgeRuntimeCapability,
+            ):
+                raise TypeError(
+                    "viewer bridge capability must satisfy ViewerBridgeRuntimeCapability"
+                )
+            return ValidatedManagedInputSourceReader(
+                reader,
+                viewer_bridge_capability=viewer_bridge_capability,
+            )
         return ValidatedInputSourceReader(reader)
 
     @property
@@ -243,9 +335,15 @@ class InputSourcePlugin:
 
     # Short compatibility spelling for callers that use the generic reader term.
     def create_reader(
-        self, parameters: Mapping[str, object]
+        self,
+        parameters: Mapping[str, object],
+        *,
+        runtime_dependencies: InputSourceRuntimeDependencies | None = None,
     ) -> ValidatedInputSourceReader | ValidatedManagedInputSourceReader:
-        return self.create_runtime_reader(parameters)
+        return self.create_runtime_reader(
+            parameters,
+            runtime_dependencies=runtime_dependencies,
+        )
 
 
 __all__ = [
@@ -253,12 +351,15 @@ __all__ = [
     "InputSourceHealth",
     "InputSourceHealthStatus",
     "InputSourceHealthProvider",
+    "InputSourceRuntimeDependencies",
     "InputSourceMode",
     "InputSourcePlugin",
     "InputSource",
     "ManagedInputSource",
     "RawInputFrame",
     "SourceMode",
+    "ViewerBridgeRuntimeCapability",
+    "ViewerEndpointRebaseCapability",
     "ValidatedInputSourceReader",
     "ValidatedManagedInputSourceReader",
 ]

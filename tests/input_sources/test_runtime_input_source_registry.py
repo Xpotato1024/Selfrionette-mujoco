@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.input_sources import INPUT_SOURCE_REGISTRY, SUPPORTED_INPUT_SOURCE_NAMES, get_input_source_descriptor
+from selfrionette.input_sources import (
+    INPUT_SOURCE_REGISTRY,
+    SUPPORTED_INPUT_SOURCE_NAMES,
+    get_input_source_descriptor,
+)
+from selfrionette.schemas import RawInputFrame
 
 
 def test_runtime_input_source_registry_exposes_supported_sources() -> None:
@@ -36,6 +41,43 @@ def test_runtime_input_source_registry_initial_metadata_contract(
         assert descriptor.initial_metadata["command_age_ms"] == 0
         assert descriptor.initial_metadata["stale_reason"] == "no_control_message_received"
         assert descriptor.initial_metadata["desired_endpoint_m"] == descriptor.initial_metadata["target_position_m"]
+
+
+def test_low_level_registry_preserves_programmed_target_initial_position() -> None:
+    descriptor = get_input_source_descriptor("programmed_target")
+
+    frame = descriptor.build_frames(
+        steps=1,
+        initial_position_m=(0.1, 0.2, 0.3),
+    )[0]
+
+    assert frame.metadata["target_position_m"] == (0.1, 0.2, 0.3)
+    assert frame.metadata["desired_endpoint_m"] == (0.1, 0.2, 0.3)
+
+
+def test_low_level_registry_preserves_replay_frames_and_metadata() -> None:
+    descriptor = get_input_source_descriptor("replay")
+    custom_frame = RawInputFrame(source="custom", timestamp_s=2.5, values=(1.0,))
+
+    assert descriptor.build_frames(frames=(custom_frame,)) == (custom_frame,)
+    assert descriptor.build_frames(metadata={"custom": "value"})[0].metadata == {
+        "custom": "value"
+    }
+
+
+def test_low_level_registry_preserves_noop_and_viewer_metadata() -> None:
+    noop_metadata = {"custom": "noop"}
+    viewer_metadata = {"custom": "viewer", "source_active": False}
+
+    noop_frame = get_input_source_descriptor("noop").build_frames(
+        metadata=noop_metadata
+    )[0]
+    viewer_frame = get_input_source_descriptor("viewer").build_frames(
+        metadata=viewer_metadata
+    )[0]
+
+    assert noop_frame.metadata == noop_metadata
+    assert viewer_frame.metadata == viewer_metadata
 
 
 def test_runtime_input_source_registry_rejects_unknown_source() -> None:

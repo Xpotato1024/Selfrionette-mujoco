@@ -11,7 +11,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from selfrionette.runtime.runners.dry_run import run_replay_mujoco_dry_run
-from selfrionette.input_sources.registry import SUPPORTED_INPUT_SOURCE_NAMES
+from selfrionette.plugins.input_sources.catalog import SUPPORTED_INPUT_SOURCE_NAMES
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 
 
@@ -68,7 +68,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "dt_s": args.dt_s,
         "output": output,
     }
-    if selection.source_name == "programmed_target":
+    adapter = selection.execution_adapter
+    if adapter is not None and adapter.annotates_target_position and not adapter.uses_viewer_endpoint_compatibility:
         run_kwargs["preset"] = "sweep_x"
     else:
         run_kwargs["frames"] = selection.frames

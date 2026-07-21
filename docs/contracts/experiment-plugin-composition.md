@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-20
+last_verified: 2026-07-21
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -178,9 +178,17 @@ selected Evaluation Plugin identityと一致し、provenanceがplugin宣言値�
 
 ### Input Source runtime reader readiness
 
-Input Sourceのcompositionはplugin、selection、parameter、produced sample schema、mappingのaccepted schemaを解決するが、factoryを呼び出してruntime instanceを生成しない。runtime側でfactoryを実行する場合は、出力が`InputSource`と`InputSourceHealthProvider`を満たすこと、factory直後のcurrent healthが`initial_health`と一致することを確認する。
+Input Sourceのcompositionはplugin、selection、parameter、produced sample schema、mappingのaccepted schemaを
+解決するが、factoryを呼び出してruntime instanceを生成しない。runtime側でfactoryを実行する場合は、
+出力が`InputSource`と`InputSourceHealthProvider`を満たすこと、factory直後のcurrent healthが
+`initial_health`と一致することを確認する。
 
-runtime readerは`ValidatedInputSourceReader`で`read_frame()`と`current_health()`の戻り値を毎回検証する。offline / replayにはmanaged lifecycleを要求せず、live / viewer_bridgeだけがmanaged adapterを通じて`start()` / `close()`を委譲する。payload projectionはP3、concrete source migrationはP3、viewer provider separationはP4の範囲であり、このcomposition contractでは扱わない。
+runtime readerは`ValidatedInputSourceReader`で`read_frame()`と`current_health()`の戻り値を毎回検証する。
+offline / replayにはmanaged lifecycleを要求せず、live / viewer_bridgeだけがmanaged adapterを通じて
+`start()` / `close()`を委譲する。P3ではproduction backend source catalog、concrete source migration、
+source-owned healthから既存payload metadataへのprojection、typed execution adapterを実装済みである。
+viewer frontend providerとkeyboard / gamepad mappingの分離はP4、plugin-local test ownershipとonboarding /
+completion auditはP5の範囲であり、このcomposition readiness contractでは実行しない。
 
 ## composition readiness
 

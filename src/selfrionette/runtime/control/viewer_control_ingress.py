@@ -8,6 +8,7 @@ from time import monotonic
 from selfrionette.input_sources import ViewerInputSource
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS, DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.input_sources.keyboard import KeyboardInputConfig
+from selfrionette.runtime.experiment.input_source import ViewerBridgeRuntimeCapability
 from selfrionette.schemas import RawInputFrame, ViewerControlMessage, coerce_viewer_control_message, parse_viewer_control_message_json
 
 
@@ -33,7 +34,7 @@ def build_viewer_input_source(
 
 
 def ingest_viewer_control_message(
-    source: ViewerInputSource,
+    source: ViewerBridgeRuntimeCapability,
     message: ViewerControlMessage | str | Mapping[str, object],
 ) -> RawInputFrame:
     if isinstance(message, str):
@@ -46,7 +47,7 @@ def ingest_viewer_control_message(
     return source.ingest_control_message(validated_message)
 
 
-def ingest_viewer_control_message_json(source: ViewerInputSource, message: str) -> RawInputFrame:
+def ingest_viewer_control_message_json(source: ViewerBridgeRuntimeCapability, message: str) -> RawInputFrame:
     return source.ingest_control_message(parse_viewer_control_message_json(message))
 
 

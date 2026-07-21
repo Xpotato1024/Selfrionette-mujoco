@@ -1,15 +1,34 @@
 ---
 status: canonical
 owner: input contract
-last_verified: 2026-07-16
+last_verified: 2026-07-21
 canonical_for:
   - recorded analog fixture mapping
 related:
   - docs/contracts/continuous-endpoint-velocity-input.md
   - docs/contracts/experiment-motion-log-v1.md
+  - docs/contracts/runtime-input-source-state.md
 ---
 
 # 記録済みanalog fixture mapping
+
+P3では`AnalogFixtureSample`のstrict parsing、timestamp、raw values、active / inactive / stale state、
+sequence readerを`analog_fixture` source pluginが所有する。center、half-range、axis weights、sign、scale、
+deadzone、control frame、endpoint velocity intentは従来どおりmapping側に残し、sample schemaは
+`analog_fixture_sample/v1`として登録する。
+
+source plugin factoryはtuple形式のfixture samplesを要求し、各sampleを既存strict parserへ渡す。
+source acquisitionとmappingを同一pluginへ統合せず、source readerは`RawInputFrame`とtyped healthだけを
+runtime boundaryへ提供する。
+
+plugin readerはsample状態を次のようにtyped healthへ投影する。
+
+- `active=true`, `stale_reason=null`: `active`
+- `active=false`, `stale_reason=null`: `inactive`
+- `active=false`, reasonあり: `stale`
+
+`inactive`へsyntheticな`recording_stale` reasonを追加しない。frame metadataとtyped healthの
+`source_active` / `stale_reason`を一致させ、sequence orderingとterminal holdを維持する。
 
 pure mappingは、JSON互換の記録済みsample 1件を既存の
 `ContinuousEndpointVelocityIntent`へmappingする。これはpureなoffline boundaryであり、

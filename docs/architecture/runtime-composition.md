@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-20
+last_verified: 2026-07-21
 canonical_for:
   - runtime composition root
 related:
@@ -22,7 +22,7 @@ related:
 | owner | canonical responsibility |
 |---|---|
 | `composition/` | config、Robot Profile / Plugin / Bundle、typed provider adapter、pipeline assembly |
-| `execution/` | `RuntimePipeline`、input step loop、timing / pacing |
+| `execution/` | `RuntimePipeline`、input step loop、typed input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness-only composition |
@@ -106,7 +106,37 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 
 ## Input Source reader boundary
 
-Input Sourceのfactory outputは`InputSource`と`InputSourceHealthProvider`を満たし、factory直後のtyped current healthがpluginの`initial_health`と一致しなければならない。`ValidatedInputSourceReader`はframeとhealthを呼出しごとに検証する。composition rootはfactory、frame read、lifecycle startを実行せず、offline / replayにmanaged lifecycleを要求しない。live / viewer_bridgeのruntime instanceだけがmanaged adapterを持つ。
+Input Sourceのfactory outputは`InputSource`と`InputSourceHealthProvider`を満たし、factory直後のtyped
+current healthがpluginの`initial_health`と一致しなければならない。`ValidatedInputSourceReader`はframeと
+healthを呼出しごとに検証する。production runtime selectionのSoTは
+`plugins/input_sources/catalog.py`であり、selectionはaliasから`PluginSelection`、resolved plugin、sample schema、
+validated reader、typed execution adapterへ一度だけ解決する。
+
+`input_sources/registry.py`は既存低位descriptor APIのsignatureとframe behaviorだけを維持する独立compatibility
+boundaryであり、plugin catalogをimportまたはprojectionしない。source固有のpreset、custom frame、factory
+parameterはproduction registrationのrequest builderが所有する。plugin-backed primary pathはsource IDを比較せず、
+registrationが保持するexecution adapterを使用する。`compatibility_execution_adapter()`のsource-name tableは
+plugin metadataを持たないlegacy hand-built `RuntimeInputSourceSelection`だけのbounded fallbackであり、新規sourceの
+production registrationには使用しない。撤去可否は#462のcompletion auditで確認する。
+
+composition readinessはfactory、frame read、lifecycle startを実行しない。offline / replayにmanaged lifecycleを
+要求せず、live / viewer_bridgeのruntime instanceだけがmanaged adapterを持つ。execution開始前に`steps`等の
+pure argumentを検証し、無効な要求では`start()`も`close()`も呼ばない。managed executionを開始した場合は
+start failureを含む各attemptでcloseを最大1回試行し、cleanup failureはprimary failureを置換せずdiagnostic noteへ
+保持する。正常終了後のcleanup failureはfail-closedで表面化する。close完了後はlive delegateのresource参照を
+破棄し、read-after-closeを拒否する。再start時はresourceを再構築する。
+
+P3のexecution adapterは`target_metadata`、`replay_compatibility`、
+`viewer_local_endpoint_compatibility`、loadcell、analog fixtureのversioned semanticsを明示する。
+viewer backendは`ViewerBridgeRuntimeCapability`を介してingress、endpoint rebase、clock rebindを同一underlying
+sourceへ結線し、generic readerへ任意attribute forwardingを追加しない。clock rebindはreader / capability identityと
+既存message / endpoint stateを保持する。viewer adapterはP4までendpoint coercion、local motion、orientation metadata、
+post-step measurement、publish後rebaseをcompatibility責務として保持する。
+
+step-loopはreplay compatibilityではrecorded frame metadataをsource-state truthとして使用し、その他のsourceでは
+typed healthをsource-state truthとして使用する。live frameにstate fieldがある場合は存在するkeyだけhealthと照合し、
+省略keyをhealth projectionで補完する。canonical projection後の同じframeをinterpreter、record、diagnosticsへ渡す。
+frontend keyboard / gamepad providerとmappingの分離は#461のscopeである。
 
 ## failureとordering
 
@@ -114,7 +144,7 @@ Input Sourceのfactory outputは`InputSource`と`InputSourceHealthProvider`を�
 - qpos feasibilityはcandidate全体を検証し、invalid candidateを部分適用しない。
 - stale / inactive sourceはhold-current semanticsを優先し、新しいactive targetを捏造しない。
 - unavailable diagnostic fieldは欠落のままとし、stale値を保持しない。
-- `publish-before-`ViewerInputSource`-rebase ordering`を維持する。
+- `publish-before-ViewerInputSource-rebase` orderingを維持する。
 - transport failureをphysics successへ読み替えず、viewer failureをbackend stateへ反映しない。
 - evaluation manifest readinessはrunner / log / outcomeを開始せず、canonical requested identityとresolved
   identityをfreezeするsoftware-only gateである。world/tool pairの条件差分は

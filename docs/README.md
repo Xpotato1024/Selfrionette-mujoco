@@ -44,7 +44,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | endpoint metadata | `docs/contracts/endpoint-metadata-vocabulary.md` | field、owner、unit、frame、lifecycle |
 | EndpointTargetGenerator | `docs/contracts/endpoint-target-generator.md` | input vectorからcommand-side targetを生成する契約 |
 | programmed target input | `docs/contracts/programmed-target-input-source.md` | deterministic target trajectoryとmetadata bridge |
-| runtime input source registry | `docs/contracts/runtime-input-source-registry.md` | input source選択contract |
+| runtime input source registry | `docs/contracts/runtime-input-source-registry.md` | versioned production catalog、selection、CLI alias、health、lifecycle contract |
 | runtime input source state | `docs/contracts/runtime-input-source-state.md` | source stateのpayload metadata |
 | runtime input safety | `docs/contracts/runtime-input-safety.md` | stale commandのhold contract |
 | continuous endpoint velocity input | `docs/contracts/continuous-endpoint-velocity-input.md` | evaluation-ready velocity intent |

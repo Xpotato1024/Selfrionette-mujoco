@@ -188,6 +188,18 @@ class ViewerInputSource:
     def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
         self._current_endpoint_m = _coerce_vector3("endpoint_m", endpoint_m)
 
+    def rebind_clock(self, clock: Callable[[], float]) -> None:
+        if not callable(clock):
+            raise TypeError("viewer clock must be callable")
+        old_now_s = float(self._clock())
+        new_now_s = float(clock())
+        if not isfinite(old_now_s) or not isfinite(new_now_s):
+            raise ValueError("viewer clock must return finite values")
+        if self._last_update_monotonic_s is not None:
+            elapsed_s = max(0.0, old_now_s - self._last_update_monotonic_s)
+            self._last_update_monotonic_s = new_now_s - elapsed_s
+        self._clock = clock
+
     def _build_inactive_frame(
         self,
         *,

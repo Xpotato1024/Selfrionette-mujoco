@@ -1,3 +1,12 @@
+"""Backward-compatible low-level input-source descriptor registry.
+
+The production runtime selection source of truth is
+``selfrionette.plugins.input_sources.catalog``.  This module intentionally
+remains independent from ``plugins`` and ``runtime`` so existing low-level
+callers keep their historical frame-builder signatures without reversing the
+canonical layer dependency.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
@@ -16,11 +25,18 @@ class InputSourceDescriptor:
     initial_metadata: Mapping[str, object]
 
 
-def _build_programmed_target_frames(*, steps: int, initial_position_m: Vector3) -> tuple[RawInputFrame, ...]:
+def _build_programmed_target_frames(
+    *,
+    steps: int,
+    initial_position_m: Vector3,
+) -> tuple[RawInputFrame, ...]:
     if steps < 1:
         raise ValueError("steps must be a positive integer")
 
-    source = build_sweep_x_input_source(initial_position_m=initial_position_m, loop=False)
+    source = build_sweep_x_input_source(
+        initial_position_m=initial_position_m,
+        loop=False,
+    )
     return tuple(source.read_frame() for _ in range(steps))
 
 

@@ -1,12 +1,13 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-21
 canonical_for:
   - runtime input source state payload
 related:
   - docs/README.md
   - docs/contracts/r7-b-runtime-input-pipeline-contract.md
+  - docs/contracts/runtime-input-safety.md
   - docs/reports/implementation/r6-k-p3-input-source-state-payload.md
 ---
 
@@ -14,34 +15,67 @@ related:
 
 ## 目的
 
-runtime payload の `metadata` に載せる input source の観測用 state を定義する。
+runtime payloadの`metadata`に載せるinput sourceの観測用stateと、source-owned typed healthまたは
+recorded replay metadataから既存metadataへprojectionする規則を定義する。
+
+P3ではlive / viewer / fixture sourceの`InputSourceHealth`をsource pluginが所有し、runtimeは各read後に
+typed healthを取得する。replayはrecorded `RawInputFrame.metadata`をsource-stateの正本とし、pluginの
+initial healthで記録済みstateを上書きしない。viewer backend bridgeの初期値は`source_active=false`、
+`command_age_ms=0`、`stale_reason=no_control_message_received`を維持する。
 
 ## fields
 
-- `source_kind`: 選択された runtime input source 名
-- `source_active`: 現在 command を出せるかどうかの観測値
-- `command_age_ms`: source が emit した command age の観測値
-- `stale_reason`: stale 判定理由。正常経路では省略または `null`
+- `source_kind`: 選択されたruntime input sourceまたはsource-specific subtype
+- `source_active`: 現在commandを出せるかどうかの観測値
+- `command_age_ms`: sourceがemitしたcommand ageの観測値
+- `stale_reason`: stale / invalid / disconnected判定理由。activeまたは意図的inactiveでは省略または`null`
 
-これらの値は observability 用の入力状態であり、runtime stale-command
-safety はこの metadata を読み取って別途判定する。runtime は
-`command_age_ms` を wall clock から計算しない。offline sourceはsource-provided
-metadata として扱い、offline の programmed_target / replay / noop は
-deterministic な `0` を emit してよい。browser / live sourcesは
-age と stale metadata を source 側で emit する。
+これらの値はobservability用の入力状態であり、runtime stale-command safetyはこのmetadataを
+読み取って別途判定する。runtimeは`command_age_ms`をwall clockから再計算しない。
+offlineのprogrammed target / replay / noopはdeterministicな`0`をemitしてよい。
+browser / live sourceはageとfailure reasonをsource側でemitする。
+
+## typed health projection
+
+`InputSourceHealthStatus`は次を区別する。
+
+- `active`: `source_active=true`、reasonなし
+- `inactive`: `source_active=false`、reasonなし
+- `stale`: `source_active=false`、reason必須
+- `invalid`: `source_active=false`、reason必須
+- `disconnected`: `source_active=false`、reason必須
+
+`inactive`は、analog fixture等で既存契約が区別する「inactiveだがnon-stale」を表す。
+source healthからmetadataへ投影する段階では、これを`stale`へ読み替えたりsynthetic reasonを追加したりしない。
+runtime safety policyは別の責務として、inactive commandをholdへ変換した理由に`source_inactive`を付けてよい。
+
+runtime step-loopは次の順で処理する。
+
+1. `RawInputFrame`をreadする。
+2. replay executionではrecorded frame metadataからsource stateを復元する。
+3. replay以外では`current_health()`からtyped healthを取得する。
+4. frameに明示されたstate keyだけをtyped healthと比較し、不一致をfail-closedとする。
+5.省略されたstate keyをtyped healthで補完する。
+6. canonical frameをinterpreter、record、diagnosticsへ渡す。
+
+`source_kind`のsource-specific valueは保持する。runtimeがcanonicalに補完するfieldは
+`source_active`、`command_age_ms`、`stale_reason`である。frameに存在しないoptional fieldをdefault値へ
+読み替えてhealth mismatchとは扱わない。source-owned reasonとruntime safetyが導出するhold reasonを混同しない。
 
 ## overlay diagnostics
 
-- viewer overlay で `runtime_input_safety_applied`, `target_status`,
-  `target_rejected`, `target_rejection_reason`, `target_rejection_message`,
-  `rejected_desired_endpoint_m`, `target_position_m` を read-only で読む。
-- accepted frame では rejection fields は `none` / `n/a` に戻る。
-- missing metadata でも viewer parser は crash しない。
+- viewer overlayで`runtime_input_safety_applied`, `target_status`, `target_rejected`,
+  `target_rejection_reason`, `target_rejection_message`, `rejected_desired_endpoint_m`,
+  `target_position_m`をread-onlyで読む。
+- accepted frameではrejection fieldsは`none` / `n/a`に戻る。
+- missing metadataでもviewer parserはcrashしない。
 
 ## rules
 
-- これらは optional metadata であり、既存 payload の parse を壊さない
-- required payload fields には含めない
-- endpoint evaluation semantics を変えない
-- normal path では `source_active=true`, `command_age_ms=0`, `stale_reason` omitted が許容
-- stale safety は `source_active`, `command_age_ms`, `stale_reason` を参照する
+- これらはoptional metadataであり、既存payloadのparseを壊さない。
+- required payload fieldsには含めない。
+- endpoint evaluation semanticsを変えない。
+- normal pathでは`source_active=true`, `command_age_ms=0`, `stale_reason` omittedが許容される。
+- intentional inactive pathでは`source_active=false`, `stale_reason` omittedが許容される。
+- replayはcustom frameのstate metadata、ordering、timestampを保持する。
+- stale safetyは`source_active`, `command_age_ms`, `stale_reason`を参照する。

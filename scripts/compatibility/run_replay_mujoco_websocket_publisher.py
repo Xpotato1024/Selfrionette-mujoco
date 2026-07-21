@@ -12,7 +12,8 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from selfrionette.input_sources.registry import SUPPORTED_INPUT_SOURCE_NAMES
+from selfrionette.plugins.input_sources.catalog import SUPPORTED_INPUT_SOURCE_NAMES
+from selfrionette.plugins.input_sources.catalog import get_input_source_registration
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
@@ -81,7 +82,8 @@ async def _run_input_source_websocket_publisher_async(
 ) -> None:
     runtime_config = RuntimeConfig(dt_s=dt_s, robot_profile_id="fast_arm")
 
-    if input_source == "viewer":
+    registration = get_input_source_registration(input_source)
+    if registration.execution_adapter.uses_viewer_endpoint_compatibility:
         viewer_input_source = build_viewer_input_source()
 
         def handle_viewer_message(message: str) -> None:

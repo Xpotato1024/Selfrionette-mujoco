@@ -8,6 +8,7 @@ import selfrionette.runtime as runtime
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_ROOT = ROOT / "src" / "selfrionette" / "runtime"
+INPUT_SOURCE_ROOT = ROOT / "src" / "selfrionette" / "input_sources"
 EXPECTED_MODULES = {
     "composition": {
         "config",
@@ -33,7 +34,7 @@ EXPECTED_MODULES = {
         "viewer_motion_policy",
     },
     "evaluation": {"endpoint_metrics", "endpoint_progress", "kinematics", "manifest"},
-    "execution": {"input_step_loop", "live_timing", "pipeline"},
+    "execution": {"input_step_loop", "input_source_adapters", "live_timing", "pipeline"},
     "experiment": {"composition", "contracts", "input_source", "registry"},
     "runners": {
         "dry_run",
@@ -90,6 +91,19 @@ def test_retired_flat_runtime_imports_have_no_repository_consumers() -> None:
     for root in (ROOT / "src", ROOT / "tests", ROOT / "scripts"):
         for path in root.rglob("*.py"):
             assert _imports(path).isdisjoint(retired_imports), path.relative_to(ROOT)
+
+
+def test_low_level_input_source_registry_has_no_plugin_or_runtime_reverse_dependency() -> None:
+    imports = _imports(INPUT_SOURCE_ROOT / "registry.py")
+
+    assert not any(
+        module == "selfrionette.plugins" or module.startswith("selfrionette.plugins.")
+        for module in imports
+    )
+    assert not any(
+        module == "selfrionette.runtime" or module.startswith("selfrionette.runtime.")
+        for module in imports
+    )
 
 
 def test_runtime_package_root_is_a_minimal_lazy_facade() -> None:

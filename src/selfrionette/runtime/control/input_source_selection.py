@@ -1,14 +1,29 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from selfrionette.input_sources.programmed_target import build_sweep_x_input_source
-from selfrionette.input_sources.registry import SUPPORTED_INPUT_SOURCE_NAMES, get_input_source_descriptor
+from selfrionette.plugins.input_sources.catalog import (
+    INPUT_SOURCE_CATALOG,
+    SUPPORTED_INPUT_SOURCE_NAMES,
+)
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
+from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
+from selfrionette.runtime.experiment.input_source import (
+    InputSourceHealth,
+    InputSourceMode,
+    InputSourcePlugin,
+    ValidatedInputSourceReader,
+    ValidatedManagedInputSourceReader,
+    ViewerBridgeRuntimeCapability,
+)
+from selfrionette.runtime.execution.input_source_adapters import (
+    RuntimeInputSourceExecutionAdapter,
+)
 from selfrionette.runtime.control.input_source_state import (
     annotate_raw_input_frame,
-    build_runtime_input_source_state,
+    build_runtime_input_source_state_from_health,
+    build_runtime_input_source_state_from_metadata,
     runtime_input_source_state_to_metadata,
 )
 from selfrionette.schemas import RawInputFrame
@@ -38,6 +53,12 @@ _DEFAULT_VIEWER_INITIAL_METADATA: dict[str, object] = {
     "stale_reason": "no_control_message_received",
 }
 
+_INPUT_STATE_METADATA_KEYS = (
+    "source_active",
+    "command_age_ms",
+    "stale_reason",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class RuntimeInputSourceSelection:
@@ -45,36 +66,46 @@ class RuntimeInputSourceSelection:
     frames: tuple[RawInputFrame, ...]
     loop: bool
     initial_metadata: Mapping[str, object]
+    plugin_selection: PluginSelection | None = None
+    resolved_plugin: InputSourcePlugin | None = None
+    produced_sample_schema: VersionedIdentity | None = None
+    source_mode: InputSourceMode | None = None
+    runtime_reader: ValidatedInputSourceReader | ValidatedManagedInputSourceReader | None = None
+    initial_health: InputSourceHealth | None = None
+    execution_adapter: RuntimeInputSourceExecutionAdapter | None = None
+    validated_parameters: Mapping[str, object] | None = None
+    viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
+
+    @property
+    def plugin(self) -> InputSourcePlugin | None:
+        return self.resolved_plugin
+
+    @property
+    def produced_sample_schema_identity(self) -> VersionedIdentity | None:
+        return self.produced_sample_schema
+
+    @property
+    def runtime_execution_adapter(self) -> RuntimeInputSourceExecutionAdapter | None:
+        return self.execution_adapter
+
+    @property
+    def reader(self) -> ValidatedInputSourceReader | ValidatedManagedInputSourceReader | None:
+        return self.runtime_reader
 
 
-def _build_programmed_target_frames(*, steps: int) -> tuple[RawInputFrame, ...]:
-    if steps < 1:
-        raise ValueError("steps must be a positive integer")
-
-    source = build_sweep_x_input_source(initial_position_m=DEFAULT_RUNTIME_SELECTION_TARGET_POSITION_M, loop=False)
-    return tuple(source.read_frame() for _ in range(steps))
-
-
-def _build_replay_frames(
-    frames: Sequence[RawInputFrame] | None,
+def _canonicalize_selected_frame(
+    frame: RawInputFrame,
     *,
-    metadata: Mapping[str, object] | None = None,
-) -> tuple[RawInputFrame, ...]:
-    descriptor = get_input_source_descriptor("replay")
-    return descriptor.build_frames(
-        frames=frames,
-        metadata=_DEFAULT_REPLAY_INITIAL_METADATA if metadata is None else metadata,
-    )
-
-
-def _build_noop_frames() -> tuple[RawInputFrame, ...]:
-    descriptor = get_input_source_descriptor("noop")
-    return descriptor.build_frames(metadata=_DEFAULT_NOOP_INITIAL_METADATA)
-
-
-def _build_viewer_frames() -> tuple[RawInputFrame, ...]:
-    descriptor = get_input_source_descriptor("viewer")
-    return descriptor.build_frames(metadata=_DEFAULT_VIEWER_INITIAL_METADATA)
+    default_source_kind: str,
+    default_state,
+) -> RawInputFrame:
+    state = default_state
+    if any(key in frame.metadata for key in _INPUT_STATE_METADATA_KEYS):
+        state = build_runtime_input_source_state_from_metadata(
+            frame.metadata,
+            default_source_kind=default_source_kind,
+        )
+    return annotate_raw_input_frame(frame, state)
 
 
 def select_runtime_input_source(
@@ -85,69 +116,75 @@ def select_runtime_input_source(
     preset: str | None = None,
     replay_initial_metadata: Mapping[str, object] | None = None,
 ) -> RuntimeInputSourceSelection:
-    descriptor = get_input_source_descriptor(source_name)
-
-    if source_name == "programmed_target":
-        if preset not in (None, "sweep_x"):
-            raise ValueError("unsupported programmed_target preset")
-        if frames is not None:
-            raise ValueError("programmed_target input source does not accept custom frames")
-
-        selected_frames = _build_programmed_target_frames(steps=steps)
-        loop = False
-    elif source_name == "replay":
-        if preset is not None:
-            raise ValueError("preset is not supported for replay input source")
-
-        selected_frames = _build_replay_frames(
-            frames,
-            metadata=_DEFAULT_REPLAY_INITIAL_METADATA if replay_initial_metadata is None else replay_initial_metadata,
+    registration = INPUT_SOURCE_CATALOG.resolve(source_name)
+    plugin_selection = PluginSelection(
+        registration.plugin.identity.name,
+        registration.plugin.identity.version,
+    )
+    plugin = INPUT_SOURCE_CATALOG.resolve_plugin(plugin_selection)
+    request = registration.request_builder(
+        steps=steps,
+        frames=frames,
+        preset=preset,
+        replay_initial_metadata=replay_initial_metadata,
+    )
+    source_state = build_runtime_input_source_state_from_health(
+        plugin.initial_health,
+        source_kind=plugin.identity.name,
+    )
+    selected_frames = tuple(
+        _canonicalize_selected_frame(
+            frame,
+            default_source_kind=plugin.identity.name,
+            default_state=source_state,
         )
-        loop = True
-    elif source_name == "noop":
-        if preset is not None:
-            raise ValueError("preset is not supported for noop input source")
-        if frames is not None:
-            raise ValueError("noop input source does not accept custom frames")
-
-        selected_frames = _build_noop_frames()
-        loop = True
-    elif source_name == "viewer":
-        if preset is not None:
-            raise ValueError("preset is not supported for viewer input source")
-        if frames is not None:
-            raise ValueError("viewer input source does not accept custom frames")
-
-        selected_frames = _build_viewer_frames()
-        loop = True
-    else:
-        raise ValueError(f"unsupported input source: {source_name!r}")
-
-    if source_name == "viewer":
-        source_state = build_runtime_input_source_state(
-            descriptor.name,
-            source_active=False,
-            command_age_ms=0,
-            stale_reason="no_control_message_received",
+        for frame in request.frames
+    )
+    runtime_dependencies = request.runtime_dependencies
+    if runtime_dependencies is not None and runtime_dependencies.replay_frames is not None:
+        runtime_dependencies = replace(
+            runtime_dependencies,
+            replay_frames=selected_frames,
         )
-    else:
-        source_state = build_runtime_input_source_state(
-            descriptor.name,
-            source_active=True,
-            command_age_ms=0,
+    reader = plugin.create_runtime_reader(
+        request.parameters,
+        runtime_dependencies=runtime_dependencies,
+    )
+    viewer_bridge_capability = (
+        reader.viewer_bridge_capability
+        if isinstance(reader, ValidatedManagedInputSourceReader)
+        else None
+    )
+    if plugin.source_mode is InputSourceMode.VIEWER_BRIDGE and viewer_bridge_capability is None:
+        raise ValueError("viewer input source plugin is missing its runtime bridge capability")
+    initial_source_state = (
+        build_runtime_input_source_state_from_metadata(
+            selected_frames[0].metadata,
+            default_source_kind=plugin.identity.name,
         )
-
-    selected_frames = tuple(annotate_raw_input_frame(frame, source_state) for frame in selected_frames)
+        if selected_frames
+        else source_state
+    )
     initial_metadata = {
-        **descriptor.initial_metadata,
-        **runtime_input_source_state_to_metadata(source_state),
+        **plugin.initial_metadata,
+        **request.initial_metadata,
+        **runtime_input_source_state_to_metadata(initial_source_state),
     }
 
     return RuntimeInputSourceSelection(
-        source_name=descriptor.name,
+        source_name=registration.cli_aliases[0],
         frames=selected_frames,
-        loop=loop,
+        loop=request.loop,
         initial_metadata=initial_metadata,
+        plugin_selection=plugin_selection,
+        resolved_plugin=plugin,
+        produced_sample_schema=plugin.produced_sample_schema_identity,
+        source_mode=plugin.source_mode,
+        runtime_reader=reader,
+        initial_health=plugin.initial_health,
+        execution_adapter=registration.execution_adapter,
+        validated_parameters=request.parameters,
+        viewer_bridge_capability=viewer_bridge_capability,
     )
 
 

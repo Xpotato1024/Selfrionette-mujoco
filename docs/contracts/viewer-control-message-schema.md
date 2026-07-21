@@ -1,16 +1,21 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-06-24
+last_verified: 2026-07-21
 canonical_for:
   - viewer control message schema
 related:
   - docs/contracts/schemas.md
   - docs/contracts/transport-payload.md
   - docs/architecture/runtime-composition.md
+  - docs/contracts/runtime-input-source-registry.md
 ---
 
 # Viewer Control Messageのschema
+
+P3ではこのmessageを受けるbackend `viewer` sourceをcompatibility pluginとしてcatalogへ登録する。
+keyboard / gamepad capture、provider lifecycle、binding、gain、deadzone、control-frame mappingは変更せず、
+frontend providerとbackend source / mappingの分離は#461で扱う。
 
 この文書はviewer-to-backend control messageのcanonical contractを定義する。
 
@@ -53,6 +58,24 @@ top-level field:
 - `stale`: optional boolean
 - `zero_state`: optional boolean
 
+## Backend viewer bridge
+
+backend `viewer` pluginは`ViewerBridgeRuntimeCapability`をtyped optional bindingとして公開する。
+次を同一の`ViewerInputSource` instanceへ結線する。
+
+- message ingress
+- JSON ingress
+- `rebase_current_endpoint_m()`
+- deterministic test / runtime clockの`rebind_clock()`
+
+clock rebindはreaderやcapabilityを再生成しない。rebind前に受け取ったcontrol message、current endpoint、
+selection capability identityを維持し、旧clockで経過済みのcommand ageを新clock domainへ連続的に移す。
+plugin-backed selectionでもdirect source pathと同じframe metadata、health、timeout、initial / post-publish
+rebase semanticsを維持する。viewer capabilityが欠落したplugin-backed selectionはfail-closedとする。
+
+generic source readerへ任意attribute forwardingを追加せず、viewer固有capabilityだけをselectionとruntime
+continuity codeへ渡す。frontend provider、keyboard / gamepad mapping、message schema自体はP3で変更しない。
+
 ## Validation規則
 
 - malformed JSONはrejectする。
@@ -65,6 +88,7 @@ top-level field:
 - nested JSON-compatibleな`metadata`はそのまま保持する。
 - `index`、`id`、buttonの`value`はoptionalであり、contract上もoptionalのままとする。
 - buttonの`value`は、存在する場合finiteでなければならない。
+- clockはcallableで、rebind時にfinite valueを返さなければならない。
 
 ## 責務boundary
 

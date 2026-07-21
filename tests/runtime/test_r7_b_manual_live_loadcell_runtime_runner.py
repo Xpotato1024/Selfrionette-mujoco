@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import builtins
+from types import SimpleNamespace
 
 import pytest
 
+import selfrionette.runtime.runners.live_loadcell as live_loadcell
 from selfrionette.runtime.runners.live_loadcell import (
     LiveLoadcellRuntimeRunnerConfig,
     run_live_loadcell_runtime_runner,
 )
+from selfrionette.schemas import RawInputFrame
 
 
-def test_live_loadcell_runtime_runner_processes_injected_lines_without_opening_serial(monkeypatch: pytest.MonkeyPatch) -> None:
+def _guard_serial_import(monkeypatch: pytest.MonkeyPatch) -> None:
     original_import = builtins.__import__
 
     def guarded_import(name: str, *args, **kwargs):
@@ -19,6 +22,12 @@ def test_live_loadcell_runtime_runner_processes_injected_lines_without_opening_s
         return original_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", guarded_import)
+
+
+def test_live_loadcell_runtime_runner_processes_injected_lines_without_opening_serial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _guard_serial_import(monkeypatch)
 
     payloads = run_live_loadcell_runtime_runner(
         LiveLoadcellRuntimeRunnerConfig(
@@ -46,7 +55,114 @@ def test_live_loadcell_runtime_runner_processes_injected_lines_without_opening_s
     assert "target_position_m" not in payload["metadata"]
 
 
-def test_live_loadcell_runtime_runner_rejects_live_mode_without_pyserial(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_loadcell_runtime_runner_consumes_one_shot_generator_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _guard_serial_import(monkeypatch)
+    lines = (
+        line
+        for line in (
+            "status,setup_start",
+            "vector,1000,40000,0,0,0,0,0,0",
+        )
+    )
+
+    payloads = run_live_loadcell_runtime_runner(
+        LiveLoadcellRuntimeRunnerConfig(port=None, max_frames=1),
+        line_source=lines,
+    )
+
+    assert len(payloads) == 1
+    assert payloads[0]["metadata"]["serial_timestamp_s"] == 1.0
+
+
+def test_live_loadcell_runtime_runner_preserves_primary_failure_when_close_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Reader:
+        def start(self) -> None:
+            pass
+
+        def read_frame(self) -> RawInputFrame:
+            return RawInputFrame(
+                source="loadcell_serial",
+                timestamp_s=1.0,
+                values=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            )
+
+        def close(self) -> None:
+            raise RuntimeError("cleanup failure")
+
+    reader = Reader()
+    registration = SimpleNamespace(
+        plugin=SimpleNamespace(create_runtime_reader=lambda *args, **kwargs: reader)
+    )
+    monkeypatch.setattr(
+        live_loadcell,
+        "INPUT_SOURCE_CATALOG",
+        SimpleNamespace(resolve=lambda alias: registration),
+    )
+
+    def fail_runtime(*args, **kwargs):
+        raise RuntimeError("runtime failure")
+
+    monkeypatch.setattr(
+        live_loadcell,
+        "run_offline_input_runtime_stepping_smoke",
+        fail_runtime,
+    )
+
+    with pytest.raises(RuntimeError, match="runtime failure") as error:
+        run_live_loadcell_runtime_runner(
+            LiveLoadcellRuntimeRunnerConfig(port=None, max_frames=1),
+            line_source=("vector,1000,0,0,0,0,0,0,0",),
+        )
+
+    assert any("cleanup failed" in note for note in error.value.__notes__)
+
+
+def test_live_loadcell_runtime_runner_surfaces_close_failure_after_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Reader:
+        def start(self) -> None:
+            pass
+
+        def read_frame(self) -> RawInputFrame:
+            return RawInputFrame(
+                source="loadcell_serial",
+                timestamp_s=1.0,
+                values=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            )
+
+        def close(self) -> None:
+            raise RuntimeError("cleanup failure")
+
+    reader = Reader()
+    registration = SimpleNamespace(
+        plugin=SimpleNamespace(create_runtime_reader=lambda *args, **kwargs: reader)
+    )
+    monkeypatch.setattr(
+        live_loadcell,
+        "INPUT_SOURCE_CATALOG",
+        SimpleNamespace(resolve=lambda alias: registration),
+    )
+    monkeypatch.setattr(
+        live_loadcell,
+        "run_offline_input_runtime_stepping_smoke",
+        lambda *args, **kwargs: SimpleNamespace(payload={"version": 0}),
+    )
+
+    with pytest.raises(RuntimeError, match="cleanup failure"):
+        run_live_loadcell_runtime_runner(
+            LiveLoadcellRuntimeRunnerConfig(port=None, max_frames=1),
+            line_source=("vector,1000,0,0,0,0,0,0,0",),
+        )
+
+
+def test_live_loadcell_runtime_runner_rejects_live_mode_without_pyserial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     original_import = builtins.__import__
 
     def guarded_import(name: str, *args, **kwargs):
