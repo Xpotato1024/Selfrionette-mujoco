@@ -39,8 +39,9 @@ mode、factory、health、lifecycle、CLI alias、execution adapterを登録す�
 ## Production plugin catalog
 
 catalogはknown-IDの`VersionedPluginRegistry[InputSourcePlugin]`とCLI alias mapを構築する。
-duplicate plugin ID、duplicate alias、unknown alias、contract version mismatchをfail-closedで拒否する。
-external package discovery、arbitrary dynamic import、hot reload、implicit noop fallbackは持たない。
+`INPUT_SOURCE_PLUGIN_REGISTRY`はcatalog内部の同一registry instanceをexportする互換名であり、別registryを
+再生成しない。duplicate plugin ID、duplicate alias、unknown alias、contract version mismatchをfail-closedで
+拒否する。external package discovery、arbitrary dynamic import、hot reload、implicit noop fallbackは持たない。
 
 | plugin ID | contract | produced sample schema | mode | CLI alias | generic CLI | execution adapter |
 |---|---:|---|---|---|---|---|
@@ -98,6 +99,8 @@ factory outputは`InputSource`と`InputSourceHealthProvider`を満たす。
 
 health statusは`active`、`inactive`、`stale`、`invalid`、`disconnected`のclosed vocabularyである。
 `active`はcommand可能、`inactive`はreasonなしの意図的な非active状態、残る3状態はreason必須のfailureである。
+source frameが`viewer_keyboard`や`viewer_gamepad`等のsource-specific `source_kind`を持つ場合、source-owned
+health metadataがそのsubtypeを保持し、runtime projection、stale hold、final payloadまで同じ値を維持する。
 
 live / viewer / fixture executionではtyped healthがsource-state truthである。frameにstate fieldがある場合は、
 **存在するkeyだけ**をtyped healthと比較し、省略keyはhealth projectionで補完する。
@@ -115,10 +118,11 @@ offline / replay sourceへmanaged lifecycleを要求しない。live / viewer br
 - start failure後にcleanupできたreaderは再startできる。
 - close failure時はclosed扱いにせずcleanup retryを許可する。
 
-loadcell liveはexplicit startだけがserial portをopenする。正常close後はportとsource参照を破棄し、
-read-after-closeを`loadcell serial input source is not started`で拒否する。restart時はnew sourceを構築し、
-real serialではportを再openする。close failure時は参照を保持してcleanup retryを可能にする。
-fixtureのone-shot `Iterable[str]`はrunner boundaryで一度だけtuple化する。
+loadcell liveはfactory直後と正常close後を`disconnected / not_started`、start成功後を`active`、start失敗後を
+`disconnected / start_failed`としてhealthへ反映する。explicit startだけがserial portをopenする。正常close後は
+portとsource参照を破棄し、read-after-closeを`loadcell serial input source is not started`で拒否する。restart時は
+new sourceを構築し、real serialではportを再openする。close failure時は参照と直前healthを保持してcleanup retryを
+可能にする。fixtureのone-shot `Iterable[str]`はrunner boundaryで一度だけtuple化する。
 
 ## Selectionとexecution
 
@@ -166,7 +170,7 @@ runtime step-loopのsource-state解決:
 ### Noop
 
 - explicit registered pluginでありimplicit fallbackではない。
--単一のdeterministic `RawInputFrame`を繰り返す。
+- 単一のdeterministic `RawInputFrame`を繰り返す。
 - `source=noop`、`timestamp_s=0.0`、既存metadata、ACTIVE stateを維持する。
 
 ### Viewer backend bridge
@@ -176,6 +180,7 @@ runtime step-loopのsource-state解決:
 - planの`viewer_clock`は既存capabilityへrebindし、readerまたはcapabilityを交換しない。
 - rebind前のcontrol messageとendpoint stateを維持し、clock domain間で既存command ageを連続させる。
 - initial FK endpointとpublish後endpointを同じcapabilityへrebaseする。
+- `viewer_keyboard` / `viewer_gamepad` subtypeをactive / staleの両経路でframe、command、payloadへ維持する。
 - frontend capture / mapping redesignは#461へ残す。
 
 ### Loadcell serial / fixture
@@ -198,6 +203,13 @@ runtime step-loopのsource-state解決:
 既存public source modulesはsource-local implementationを維持する。CLI options、source alias、preset、
 custom replay frame、loop、payload、stale safety、viewer message schema、loadcell protocol、baud 115200、
 mapping semanticsを意図的に変更しない。
+
+`scripts/compatibility/run_replay_mujoco_dry_run.py`と
+`scripts/compatibility/run_replay_mujoco_websocket_publisher.py`で`--input-source`を指定した経路はproduction
+catalogをresolveする。一方、`--input-source`未指定時に呼ばれる`runtime/runners/dry_run.py`と
+`runtime/runners/websocket_publisher.py`のdirect programmed-target / replay構築は、既存default CLI behaviorを
+維持するbounded legacy compatibility pathであり、production catalogの第二のSoTではない。統合または撤去の可否は
+#462のcompletion auditで判定する。
 
 ## Remaining scope
 
