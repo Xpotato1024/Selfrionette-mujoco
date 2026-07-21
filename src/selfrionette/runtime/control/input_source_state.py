@@ -119,6 +119,11 @@ def build_runtime_input_source_state_from_health(
             "input source health projection requires InputSourceHealth"
         )
 
+    resolved_source_kind = _coerce_source_kind(
+        health.metadata.get("source_kind"),
+        default_source_kind=source_kind,
+    )
+
     if health.status is InputSourceHealthStatus.ACTIVE:
         source_active = True
         if health.reason is not None:
@@ -139,7 +144,7 @@ def build_runtime_input_source_state_from_health(
             )
 
     return build_runtime_input_source_state(
-        source_kind,
+        resolved_source_kind,
         source_active=source_active,
         command_age_ms=health.age_ms,
         stale_reason=health.reason,
