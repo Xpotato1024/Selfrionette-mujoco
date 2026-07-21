@@ -29,23 +29,26 @@ def health_from_frame(
     reason = metadata.get("stale_reason")
     age = metadata.get("command_age_ms")
     age_ms = age if type(age) is int and age >= 0 else 0
+    health_metadata: dict[str, object] = {"source": frame.source}
+    if "source_kind" in metadata:
+        health_metadata["source_kind"] = metadata["source_kind"]
     if reason is not None:
         return InputSourceHealth(
             InputSourceHealthStatus.STALE,
             reason=str(reason),
             age_ms=age_ms,
-            metadata={"source": frame.source},
+            metadata=health_metadata,
         )
     if active is False:
         return InputSourceHealth(
             InputSourceHealthStatus.INACTIVE,
             age_ms=age_ms,
-            metadata={"source": frame.source},
+            metadata=health_metadata,
         )
     return InputSourceHealth(
         default_status,
         age_ms=age_ms,
-        metadata={"source": frame.source},
+        metadata=health_metadata,
     )
 
 
@@ -87,9 +90,15 @@ class ManagedFrameHealthReader(FrameHealthReader):
         initial_health: InputSourceHealth,
         *,
         viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None,
+        started_health: InputSourceHealth | None = None,
+        start_failure_health: InputSourceHealth | None = None,
+        closed_health: InputSourceHealth | None = None,
     ) -> None:
         super().__init__(delegate, initial_health)
         self._viewer_bridge_capability = viewer_bridge_capability
+        self._started_health = started_health
+        self._start_failure_health = start_failure_health
+        self._closed_health = closed_health
         self._lifecycle_state = _ManagedLifecycleState.NEW
 
     def start(self) -> None:
@@ -114,8 +123,12 @@ class ManagedFrameHealthReader(FrameHealthReader):
                 callback()
         except BaseException:
             self._lifecycle_state = _ManagedLifecycleState.START_FAILED
+            if self._start_failure_health is not None:
+                self._health = self._start_failure_health
             raise
         self._lifecycle_state = _ManagedLifecycleState.STARTED
+        if self._started_health is not None:
+            self._health = self._started_health
 
     def close(self) -> None:
         if self._lifecycle_state in (
@@ -138,6 +151,8 @@ class ManagedFrameHealthReader(FrameHealthReader):
             self._lifecycle_state = previous_state
             raise
         self._lifecycle_state = _ManagedLifecycleState.CLOSED
+        if self._closed_health is not None:
+            self._health = self._closed_health
 
     @property
     def viewer_bridge_capability(self) -> ViewerBridgeRuntimeCapability | None:
