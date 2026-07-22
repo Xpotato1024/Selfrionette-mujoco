@@ -4,15 +4,8 @@ import type {
   ViewerControlMessage,
 } from "../transport/viewerControlMessage.js";
 
-export type ViewerKeyboardBindingAxis = "x" | "y" | "z";
-export type ViewerKeyboardBindingDirection = -1 | 1;
-
-export interface ViewerKeyboardBinding {
-  axis: ViewerKeyboardBindingAxis;
-  direction: ViewerKeyboardBindingDirection;
-}
-
-export type ViewerKeyboardBindings = Readonly<Record<string, ViewerKeyboardBinding>>;
+/** Browser capture allowlist; axis/sign semantics belong to the backend mapping. */
+export type ViewerKeyboardCaptureKeys = Readonly<Record<string, unknown>>;
 
 export interface ViewerKeyboardCaptureSnapshot {
   active_key_codes: string[];
@@ -27,19 +20,20 @@ export interface ViewerKeyboardCapture {
   handleBlur(): boolean;
   handleFocus(): boolean;
   handleVisibilityChange(visible: boolean): boolean;
+  reset(): void;
   snapshot(): ViewerKeyboardCaptureSnapshot;
   isBoundKey(code: string): boolean;
 }
 
-export const DEFAULT_VIEWER_KEYBOARD_BINDINGS = Object.freeze({
-  KeyW: { axis: "y", direction: 1 },
-  KeyS: { axis: "y", direction: -1 },
-  KeyA: { axis: "x", direction: -1 },
-  KeyD: { axis: "x", direction: 1 },
-  Space: { axis: "z", direction: 1 },
-  ShiftLeft: { axis: "z", direction: -1 },
-  ShiftRight: { axis: "z", direction: -1 },
-} satisfies ViewerKeyboardBindings);
+export const DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS = Object.freeze({
+  KeyW: true,
+  KeyS: true,
+  KeyA: true,
+  KeyD: true,
+  Space: true,
+  ShiftLeft: true,
+  ShiftRight: true,
+} satisfies ViewerKeyboardCaptureKeys);
 
 export interface ViewerKeyboardControlMessageOptions {
   sequence?: number;
@@ -126,7 +120,7 @@ function buildSnapshot(activeKeyCodes: ReadonlySet<string>, focusState: ViewerCo
 }
 
 export function createViewerKeyboardCapture(
-  bindings: ViewerKeyboardBindings = DEFAULT_VIEWER_KEYBOARD_BINDINGS,
+  bindings: ViewerKeyboardCaptureKeys = DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS,
   initialFocusState: ViewerControlKeyboardFocusState = "focused",
 ): ViewerKeyboardCapture {
   const activeKeyCodes = new Set<string>();
@@ -192,6 +186,9 @@ export function createViewerKeyboardCapture(
       activeKeyCodes.clear();
       focusState = "blurred";
       return hadState;
+    },
+    reset(): void {
+      activeKeyCodes.clear();
     },
     snapshot,
     isBoundKey,

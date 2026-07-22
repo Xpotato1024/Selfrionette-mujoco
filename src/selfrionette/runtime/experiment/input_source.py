@@ -65,6 +65,9 @@ class ViewerBridgeRuntimeCapability(Protocol):
     def ingest_control_message_json(self, message: str) -> RawInputFrame:
         ...
 
+    def record_ingress_failure(self, reason: str) -> None:
+        ...
+
     def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
         ...
 

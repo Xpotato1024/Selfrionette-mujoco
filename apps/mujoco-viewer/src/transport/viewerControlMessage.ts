@@ -20,6 +20,7 @@ export interface ViewerControlGamepadMessage {
   index?: number;
   id?: string;
   connected: boolean;
+  raw_axes?: number[];
   axes: number[];
   buttons: ViewerControlGamepadButtonMessage[];
   stale?: boolean;
@@ -198,7 +199,7 @@ function coerceGamepadMessage(value: unknown): ViewerControlGamepadMessage {
     throw new ViewerControlMessageError("gamepad must be a JSON object");
   }
 
-  ensureAllowedKeys(value, ["index", "id", "connected", "axes", "buttons", "stale", "zero_state"], "gamepad");
+  ensureAllowedKeys(value, ["index", "id", "connected", "raw_axes", "axes", "buttons", "stale", "zero_state"], "gamepad");
 
   if (!("connected" in value)) {
     throw new ViewerControlMessageError("gamepad.connected is required");
@@ -225,6 +226,9 @@ function coerceGamepadMessage(value: unknown): ViewerControlGamepadMessage {
     axes: coerceFiniteNumberArray(value.axes, "gamepad.axes"),
     buttons: coerceGamepadButtons(value.buttons, "gamepad.buttons"),
   };
+  if (value.raw_axes !== undefined) {
+    gamepadMessage.raw_axes = coerceFiniteNumberArray(value.raw_axes, "gamepad.raw_axes");
+  }
   if (value.index !== undefined) {
     gamepadMessage.index = value.index;
   }

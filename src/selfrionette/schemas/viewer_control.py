@@ -39,6 +39,7 @@ class ViewerControlGamepadMessage:
     connected: bool
     index: int | None = None
     id: str | None = None
+    raw_axes: tuple[float, ...] | None = None
     axes: tuple[float, ...] = ()
     buttons: tuple[ViewerControlGamepadButtonMessage, ...] = ()
     stale: bool | None = None
@@ -198,7 +199,7 @@ def _coerce_gamepad_message(value: object) -> ViewerControlGamepadMessage:
     if not _is_plain_mapping(value):
         raise ViewerControlMessageError("gamepad must be a JSON object")
 
-    allowed_keys = {"index", "id", "connected", "axes", "buttons", "stale", "zero_state"}
+    allowed_keys = {"index", "id", "connected", "raw_axes", "axes", "buttons", "stale", "zero_state"}
     _ensure_allowed_keys(value, allowed_keys, "gamepad")
 
     if "connected" not in value:
@@ -226,6 +227,7 @@ def _coerce_gamepad_message(value: object) -> ViewerControlGamepadMessage:
         raise ViewerControlMessageError("gamepad.connected must be a boolean")
 
     axes = _coerce_number_tuple(value["axes"], context="gamepad.axes")
+    raw_axes = _coerce_number_tuple(value["raw_axes"], context="gamepad.raw_axes") if "raw_axes" in value else None
     buttons = _coerce_button_tuple(value["buttons"], context="gamepad.buttons")
     stale = _coerce_optional_bool(value["stale"], context="gamepad.stale") if "stale" in value else None
     zero_state = _coerce_optional_bool(value["zero_state"], context="gamepad.zero_state") if "zero_state" in value else None
@@ -234,6 +236,7 @@ def _coerce_gamepad_message(value: object) -> ViewerControlGamepadMessage:
         index=index,
         id=gamepad_id,
         connected=value["connected"],
+        raw_axes=raw_axes,
         axes=axes,
         buttons=buttons,
         stale=stale,

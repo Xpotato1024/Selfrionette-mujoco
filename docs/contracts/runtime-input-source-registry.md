@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-22
+last_verified: 2026-07-23
 canonical_for:
   - runtime input source registry
   - Input Source Plugin v1 ownership boundary
@@ -232,16 +232,19 @@ inventoryはhistorical evidenceでありcurrent contractの正本ではない。
 ## P4 viewer provider / source / mapping boundary (#461)
 
 viewer pluginの`viewer_control_sample/v1`は、browser providerが送ったraw payloadをbackend
-viewer sourceが検証済みcanonical sampleへ投影したschemaである。source registrationは
-`VIEWER_CONTROL_MAPPING_PLUGIN`をtyped mappingとして結線し、selection時にproduced sample
-schemaとmappingのaccepted schemaをexact matchで検証する。未知schemaやidentity mismatchは
-mapping実行前にfail-closedとする。
+viewer sourceが検証済みcanonical sampleへ投影したschemaである。source registrationはconcrete
+Control Mapping objectを所有せず、optionalなdefault mapping `PluginSelection`だけを宣言する。
+runtimeはsourceとは独立してmapping selectionをresolveし、callerのexplicit selectionをdefaultで上書きしない。
+selection時にproduced sample schemaとmappingのaccepted schemaをexact matchで検証し、未知schemaやidentity
+mismatchはmapping実行前にfail-closedとする。
 
 責務は次の通り固定する。
 
 - frontend `ViewerInputProviderRegistry`: known static IDs、provider lifecycle、browser event / Gamepad API、focus / visibility / disconnect、zero-state、timestamp / sequence、raw payload。
 - backend `ViewerInputSource`: parse / validation、provider identity / schema、latest sample、active / stale / invalid / disconnected health、250 ms timeout、cleanup、canonical sample、legacy metadata projection。
-- `ViewerKeyboardGamepadMappingStrategy`: keyboard binding、gamepad axis、sign、speed / gain、deadzone、button 0/1 supplement、world / tool frame、typed endpoint-velocity intent。
+- `ViewerKeyboardGamepadMappingStrategy`: canonical sampleのkeyboard binding、gamepad raw axis、sign、speed /
+  gain、deadzone、button 0/1 supplement、world / tool frame、typed endpoint-velocity intent。mappingは
+  `viewer_control_message`のlegacy summary、frontend module、transport implementation detailを読まない。
 - runtime step loop: mapping resultの適用、desired endpoint progression、endpoint rebase、MuJoCo command composition。
 
 frontend registryはarbitrary dynamic importを行わない。lifecycleが選択providerを一括activate / disposeし、

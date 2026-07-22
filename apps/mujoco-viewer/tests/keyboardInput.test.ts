@@ -3,7 +3,7 @@ import {
   buildViewerKeyboardControlMessage,
   createViewerKeyboardCapture,
   createViewerKeyboardControlSender,
-  DEFAULT_VIEWER_KEYBOARD_BINDINGS,
+  DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS,
   type ViewerKeyboardControlSender,
   type ViewerKeyboardControlSocketLike,
 } from "../src/input/keyboardInput.js";
@@ -101,10 +101,10 @@ function testViewerKeyboardCaptureMapsDefaultBindings(): void {
   });
 }
 
-function testViewerKeyboardDefaultZAxisBindings(): void {
-  assert.deepEqual(DEFAULT_VIEWER_KEYBOARD_BINDINGS.Space, { axis: "z", direction: 1 });
-  assert.deepEqual(DEFAULT_VIEWER_KEYBOARD_BINDINGS.ShiftLeft, { axis: "z", direction: -1 });
-  assert.deepEqual(DEFAULT_VIEWER_KEYBOARD_BINDINGS.ShiftRight, { axis: "z", direction: -1 });
+function testViewerKeyboardCaptureAllowlistHasNoMappingSemantics(): void {
+  assert.equal(DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS.Space, true);
+  assert.equal(DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS.ShiftLeft, true);
+  assert.equal(DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS.ShiftRight, true);
 }
 
 function testViewerKeyboardCaptureClearsOnBlurAndVisibilityLoss(): void {
@@ -134,6 +134,10 @@ function testViewerKeyboardCaptureClearsOnBlurAndVisibilityLoss(): void {
     focus_state: "blurred",
     zero_state: true,
   });
+
+  capture.handleKeyDown("KeyW");
+  capture.reset();
+  assert.equal(capture.snapshot().zero_state, true);
 }
 
 function testViewerKeyboardControlMessageBuildsSchemaPayload(): void {
@@ -323,7 +327,7 @@ function testViewerKeyboardControlSenderSwallowsConstructorAndSendFailures(): vo
 }
 
 testViewerKeyboardCaptureMapsDefaultBindings();
-testViewerKeyboardDefaultZAxisBindings();
+testViewerKeyboardCaptureAllowlistHasNoMappingSemantics();
 testViewerKeyboardCaptureClearsOnBlurAndVisibilityLoss();
 testViewerKeyboardControlMessageBuildsSchemaPayload();
 testViewerKeyboardControlSenderQueuesUntilOpen();

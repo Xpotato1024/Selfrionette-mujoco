@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-22
+last_verified: 2026-07-23
 canonical_for:
   - viewer control message schema
 related:
@@ -77,6 +77,8 @@ top-level field:
 - `id`: optional string
 - `connected`: boolean
 - `axes`: finite number array
+- `raw_axes`: optional finite number array。browserから取得したunprocessed raw axisであり、存在する場合は
+  mappingのauthoritative gamepad inputとする。`axes`は既存wire互換projectionとして保持できる。
 - `buttons`: button-state object array。各itemは
   `{"pressed": boolean, "value": optional finite number}`
 - `stale`: optional boolean
@@ -98,7 +100,21 @@ plugin-backed selectionでもdirect source pathと同じframe metadata、health�
 rebase semanticsを維持する。viewer capabilityが欠落したplugin-backed selectionはfail-closedとする。
 
 generic source readerへ任意attribute forwardingを追加せず、viewer固有capabilityだけをselectionとruntime
-continuity codeへ渡す。frontend provider、keyboard / gamepad mapping、message schema自体はP3で変更しない。
+continuity codeへ渡す。frontend providerはraw acquisitionとlifecycle、backend sourceはvalidation・canonical
+sample・health、mappingはsample interpretationを所有する。
+
+## Canonical sampleとlegacy compatibility
+
+backend sourceがframe metadataへ出力する`viewer_input_sample`（schema identity
+`viewer_control_sample/v1`）がmappingのauthoritative inputである。sample単体でprovider identity / schema、
+source kind、timestamp / sequence、keyboardまたはgamepad payload、requested control frame、active / zero /
+stale state、raw provider value、diagnosticsを復元できる。legacy `viewer_control_message` summaryはwire
+compatibilityまたはdiagnosticsとして残せるが、mappingは参照しない。両者が矛盾する場合はcanonical sampleを
+使用し、canonical sample自体が不正ならfail-closedとする。
+
+malformed JSON、schema validation、provider identity mismatchはsource-owned typed ingress failureへ伝え、
+source healthを即時`invalid`にする。timeoutまで旧active sampleを保持せず、valid sample受信後にだけrecover
+する。
 
 ## Validation規則
 

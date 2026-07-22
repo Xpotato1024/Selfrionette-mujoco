@@ -7,6 +7,7 @@ from selfrionette.plugins.input_sources.catalog import (
     INPUT_SOURCE_CATALOG,
     SUPPORTED_INPUT_SOURCE_NAMES,
 )
+from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
@@ -76,6 +77,7 @@ class RuntimeInputSourceSelection:
     execution_adapter: RuntimeInputSourceExecutionAdapter | None = None
     validated_parameters: Mapping[str, object] | None = None
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
+    control_mapping_selection: PluginSelection | None = None
     control_mapping: ControlMappingPlugin | None = None
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
 
@@ -118,6 +120,8 @@ def select_runtime_input_source(
     frames: Sequence[RawInputFrame] | None = None,
     preset: str | None = None,
     replay_initial_metadata: Mapping[str, object] | None = None,
+    control_mapping_selection: PluginSelection | None = None,
+    control_mapping_parameters: Mapping[str, object] | None = None,
 ) -> RuntimeInputSourceSelection:
     registration = INPUT_SOURCE_CATALOG.resolve(source_name)
     plugin_selection = PluginSelection(
@@ -160,7 +164,16 @@ def select_runtime_input_source(
     )
     if plugin.source_mode is InputSourceMode.VIEWER_BRIDGE and viewer_bridge_capability is None:
         raise ValueError("viewer input source plugin is missing its runtime bridge capability")
-    control_mapping = registration.control_mapping
+    resolved_mapping_selection = (
+        control_mapping_selection
+        if control_mapping_selection is not None
+        else registration.default_control_mapping_selection
+    )
+    control_mapping = (
+        resolve_control_mapping_plugin(resolved_mapping_selection)
+        if resolved_mapping_selection is not None
+        else None
+    )
     if control_mapping is not None and plugin.produced_sample_schema not in control_mapping.accepted_input_sample_schemas:
         raise ValueError(
             "input sample schema compatibility mismatch: source produces "
@@ -195,8 +208,13 @@ def select_runtime_input_source(
         execution_adapter=registration.execution_adapter,
         validated_parameters=request.parameters,
         viewer_bridge_capability=viewer_bridge_capability,
+        control_mapping_selection=resolved_mapping_selection,
         control_mapping=control_mapping,
-        control_mapping_parameters=dict(registration.control_mapping_parameters),
+        control_mapping_parameters=dict(
+            registration.control_mapping_parameters
+            if control_mapping_parameters is None
+            else control_mapping_parameters
+        ),
     )
 
 

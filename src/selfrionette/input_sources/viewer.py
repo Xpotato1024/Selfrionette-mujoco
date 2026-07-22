@@ -86,6 +86,11 @@ def _canonical_sample(
         source_kind=message.source_kind,
         timestamp_s=message.timestamp_s,
         sequence=message.sequence,
+        requested_control_frame=(
+            message.metadata.get("control_frame", "world")
+            if isinstance(message.metadata.get("control_frame", "world"), str)
+            else "world"
+        ),
         keyboard=message.keyboard,
         gamepad=message.gamepad,
         source_active=source_active,
@@ -155,22 +160,49 @@ class ViewerInputSource:
         initial_endpoint_m: tuple[float, float, float] = DEFAULT_VIEWER_SAFE_ENDPOINT_M,
         timeout_ms: int = DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS,
         clock: Callable[[], float] = monotonic,
-        # Kept as keyword-compatible, intentionally ignored compatibility
-        # arguments. Mapping configuration now belongs to the mapping plugin.
+        # These keyword arguments remain a compatibility composition handoff.
+        # The source stores them as opaque mapping parameters; it never applies
+        # keyboard/gamepad interpretation itself.
         keyboard_config: object | None = None,
         gamepad_speed_m_s: float = 0.1,
         gamepad_deadzone: float = 0.1,
         gamepad_max_delta_m: float = 0.03,
     ) -> None:
-        del keyboard_config, gamepad_speed_m_s, gamepad_deadzone, gamepad_max_delta_m
         if timeout_ms < 0:
             raise ValueError("timeout_ms must be non-negative")
+        for name, value in (
+            ("gamepad_speed_m_s", gamepad_speed_m_s),
+            ("gamepad_deadzone", gamepad_deadzone),
+            ("gamepad_max_delta_m", gamepad_max_delta_m),
+        ):
+            if not isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
         self._clock = clock
         self._timeout_ms = timeout_ms
+        self._viewer_mapping_parameters: dict[str, object] = {
+            "gamepad_speed_m_s": float(gamepad_speed_m_s),
+            "gamepad_deadzone": float(gamepad_deadzone),
+            "gamepad_max_delta_m": float(gamepad_max_delta_m),
+        }
+        if keyboard_config is not None:
+            bindings = getattr(keyboard_config, "bindings", None)
+            self._viewer_mapping_parameters["keyboard_config"] = {
+                "bindings": {
+                    str(key): {
+                        "axis": getattr(binding, "axis", None),
+                        "direction": getattr(binding, "direction", None),
+                    }
+                    for key, binding in (bindings.items() if isinstance(bindings, Mapping) else ())
+                },
+                "speed_m_s": getattr(keyboard_config, "speed_m_s", None),
+                "deadzone": getattr(keyboard_config, "deadzone", None),
+                "max_delta_m": getattr(keyboard_config, "max_delta_m", None),
+            }
         self._compatibility_endpoint_m = _coerce_vector3("initial_endpoint_m", initial_endpoint_m)
         self._last_update_monotonic_s: float | None = None
         self._last_message_kind: str | None = None
         self._last_control_message: ViewerControlMessage | None = None
+        self._has_been_read = False
         self._last_frame = self._build_inactive_frame(
             stale_reason=_SOURCE_INACTIVE_STALE_REASON,
             timestamp_s=0.0,
@@ -219,6 +251,112 @@ class ViewerInputSource:
             self._last_update_monotonic_s = new_now_s - elapsed_s
         self._clock = clock
 
+    def health_snapshot(self) -> tuple[str, str | None, int, dict[str, object]]:
+        """Return source-owned health primitives without importing runtime contracts."""
+
+        metadata = self._last_frame.metadata
+        age = metadata.get("command_age_ms")
+        age_ms = age if type(age) is int and age >= 0 else 0
+        health_metadata: dict[str, object] = {}
+        if self._last_update_monotonic_s is not None and isinstance(metadata.get("source_kind"), str):
+            health_metadata["source_kind"] = metadata["source_kind"]
+        if self._invalid_reason is not None or metadata.get("source_health_status") == "invalid":
+            return (
+                "invalid",
+                self._invalid_reason or str(metadata.get("stale_reason") or "invalid_viewer_control_message"),
+                age_ms,
+                health_metadata,
+            )
+        if self._last_update_monotonic_s is None or self._last_message_kind is None:
+            return (
+                "stale",
+                "source_inactive" if self._has_been_read else "no_control_message_received",
+                age_ms,
+                health_metadata,
+            )
+        sample = metadata.get("viewer_input_sample")
+        if isinstance(sample, Mapping):
+            gamepad = sample.get("gamepad")
+            if isinstance(gamepad, Mapping) and gamepad.get("connected") is False:
+                return (
+                    "disconnected",
+                    str(metadata.get("stale_reason") or "gamepad_disconnected"),
+                    age_ms,
+                    health_metadata,
+                )
+        stale_reason = metadata.get("stale_reason")
+        if stale_reason is not None:
+            return (
+                "stale",
+                str(stale_reason),
+                age_ms,
+                health_metadata,
+            )
+        if age_ms > self._timeout_ms:
+            return (
+                "stale",
+                _stale_reason_for_timeout(self._timeout_ms),
+                age_ms,
+                health_metadata,
+            )
+        if metadata.get("source_active") is False:
+            return (
+                "inactive",
+                None,
+                age_ms,
+                health_metadata,
+            )
+        return (
+            "active",
+            None,
+            age_ms,
+            health_metadata,
+        )
+
+    def _mark_invalid(self, reason: object) -> None:
+        invalid_reason = str(reason) or "invalid_viewer_control_message"
+        self._invalid_reason = invalid_reason
+        invalid_metadata = dict(self._last_frame.metadata)
+        invalid_metadata.update(
+            {
+                "source_active": False,
+                "stale_reason": invalid_reason,
+                "source_health_status": "invalid",
+                "command_age_ms": invalid_metadata.get("command_age_ms", 0),
+            }
+        )
+        sample = invalid_metadata.get("viewer_input_sample")
+        if isinstance(sample, Mapping):
+            invalid_sample = dict(sample)
+            invalid_sample.update(
+                {
+                    "source_active": False,
+                    "zero_state": True,
+                    "stale_reason": invalid_reason,
+                    "diagnostics": {
+                        **(
+                            dict(sample.get("diagnostics", {}))
+                            if isinstance(sample.get("diagnostics"), Mapping)
+                            else {}
+                        ),
+                        "invalid_reason": invalid_reason,
+                    },
+                }
+            )
+            invalid_metadata["viewer_input_sample"] = invalid_sample
+        self._last_frame = RawInputFrame(
+            source=self._last_frame.source,
+            timestamp_s=self._last_frame.timestamp_s,
+            values=(),
+            buttons=(),
+            metadata=invalid_metadata,
+        )
+
+    def record_ingress_failure(self, reason: str) -> None:
+        """Record a parse/schema failure before a typed message reaches the source."""
+
+        self._mark_invalid(reason)
+
     def _build_inactive_frame(
         self,
         *,
@@ -245,6 +383,7 @@ class ViewerInputSource:
                 _VIEWER_CONTROL_SUMMARY_KEY: dict(control_summary),
                 "intent_kind": None,
                 "input_continuity": None,
+                "viewer_mapping_parameters": dict(self._viewer_mapping_parameters),
                 "local_endpoint_velocity_frame": "world",
             },
         )
@@ -284,6 +423,7 @@ class ViewerInputSource:
             "control_frame": message.metadata.get("control_frame", "world"),
             "intent_kind": message.metadata.get("intent_kind"),
             "input_continuity": message.metadata.get("input_continuity"),
+            "viewer_mapping_parameters": dict(self._viewer_mapping_parameters),
             "local_endpoint_velocity_frame": message.metadata.get("control_frame", "world"),
             _VIEWER_CONTROL_SUMMARY_KEY: _control_summary(message),
             "viewer_input_sample": viewer_sample_to_metadata(sample),
@@ -298,7 +438,7 @@ class ViewerInputSource:
 
     def ingest_control_message(self, message: ViewerControlMessage) -> RawInputFrame:
         if not isinstance(message, ViewerControlMessage):
-            self._invalid_reason = "invalid_viewer_control_message"
+            self._mark_invalid("invalid_viewer_control_message")
             raise TypeError("viewer control source requires ViewerControlMessage")
         try:
             if message.keyboard is not None:
@@ -320,22 +460,7 @@ class ViewerInputSource:
                 message, source_active=source_active, stale_reason=stale_reason
             )
         except Exception as exc:
-            self._invalid_reason = str(exc) or "invalid_viewer_control_message"
-            invalid_metadata = dict(self._last_frame.metadata)
-            invalid_metadata.update(
-                {
-                    "source_active": False,
-                    "stale_reason": self._invalid_reason,
-                    "source_health_status": "invalid",
-                }
-            )
-            self._last_frame = RawInputFrame(
-                source=self._last_frame.source,
-                timestamp_s=self._last_frame.timestamp_s,
-                values=(),
-                buttons=(),
-                metadata=invalid_metadata,
-            )
+            self._mark_invalid(exc)
             raise
 
         self._invalid_reason = None
@@ -348,12 +473,12 @@ class ViewerInputSource:
     def ingest_control_message_json(self, message: str) -> RawInputFrame:
         try:
             return self.ingest_control_message(parse_viewer_control_message_json(message))
-        except Exception:
-            if self._invalid_reason is None:
-                self._invalid_reason = "invalid_viewer_control_message"
+        except Exception as exc:
+            self._mark_invalid(exc)
             raise
 
     def read_frame(self) -> RawInputFrame:
+        self._has_been_read = True
         if self._last_update_monotonic_s is None or self._last_message_kind is None:
             return self._last_frame
 
@@ -361,7 +486,7 @@ class ViewerInputSource:
         metadata = dict(self._last_frame.metadata)
         source_active = bool(metadata.get("source_active", False))
         stale_reason = metadata.get("stale_reason")
-        if age_ms > self._timeout_ms:
+        if metadata.get("source_health_status") != "invalid" and age_ms > self._timeout_ms:
             source_active = False
             stale_reason = _stale_reason_for_timeout(self._timeout_ms)
         metadata["source_active"] = source_active

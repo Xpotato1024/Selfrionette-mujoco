@@ -109,7 +109,10 @@ function createKeyboardProvider(options: ViewerInputProviderOptions): ViewerInpu
     animationFrameId = options.window.requestAnimationFrame(schedule);
   };
   const dispose = (): void => {
-    if (!active) return;
+    if (!active) {
+      options.keyboardCapture.reset();
+      return;
+    }
     active = false;
     if (animationFrameId !== null) {
       options.window.cancelAnimationFrame(animationFrameId);
@@ -122,6 +125,7 @@ function createKeyboardProvider(options: ViewerInputProviderOptions): ViewerInpu
     options.document.removeEventListener("visibilitychange", onVisibilityChange);
     sender?.dispose();
     sender = null;
+    options.keyboardCapture.reset();
   };
 
   return {
@@ -130,6 +134,7 @@ function createKeyboardProvider(options: ViewerInputProviderOptions): ViewerInpu
     start(): void {
       if (active) return;
       active = true;
+      options.keyboardCapture.reset();
       sender = createViewerKeyboardControlSender({
         url: options.url,
         WebSocketCtor: options.keyboardWebSocketCtor,

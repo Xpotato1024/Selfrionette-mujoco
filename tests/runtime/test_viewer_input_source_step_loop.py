@@ -228,6 +228,28 @@ def test_viewer_step_loop_holds_motion_without_repeated_keydown_until_keyup(
     assert stopped_record.state.metadata["actual_tip_delta_m"] == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
 
+def test_malformed_ingress_replaces_old_active_command_with_runtime_hold() -> None:
+    clock = _ClockSequence((0.0, 0.0, 0.0))
+    source, plan = _build_viewer_plan(clock)
+    ingest_viewer_control_message(source, _keyboard_message(4.0, "KeyD"))
+    with pytest.raises(ValueError, match="malformed JSON"):
+        ingest_viewer_control_message(source, "{not json")
+
+    record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
+
+    assert record.frame.metadata["source_health_status"] == "invalid"
+    assert record.frame.metadata["source_active"] is False
+    # The existing runtime hold contract represents a safe hold as an
+    # accepted zero-motion command rather than a new physical command.
+    assert record.motion_command.metadata["motion_status"] == "accepted"
+    assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx(
+        (0.0, 0.0, 0.0), abs=1e-12
+    )
+    assert record.state.metadata["actual_tip_delta_m"] == pytest.approx(
+        (0.0, 0.0, 0.0), abs=1e-12
+    )
+
+
 def test_viewer_step_loop_scales_large_dt_boundary_motion() -> None:
     clock = _ClockSequence((0.0, 0.0))
     source, plan = _build_viewer_plan(clock)

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-22
+last_verified: 2026-07-23
 canonical_for:
   - runtime composition root
 related:
@@ -161,6 +161,12 @@ timeout、cleanupを所有する。mappingはtransportやfrontend APIをimport�
 既存keyboard / gamepad semanticsを一度だけ実行する。runtimeはmapping resultを適用し、publish-before-
 rebase orderingと同一source/capability instanceのidentityを維持する。
 
+source selectionとmapping selectionは別の`PluginSelection`として解決する。source registrationが持つのは
+optionalなdefault mapping identityであり、callerが指定したmapping identityを上書きしない。runtimeは
+resolved sourceのproduced sample schemaとmappingのaccepted schemaをexact matchで検証してからmappingを
+実行する。unknown、duplicate、version mismatch、schema mismatch、missing mapping capabilityはimplicit
+fallbackなしでfail-closedとする。
+
 legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping実装へ分岐しない。P4は
 `src/selfrionette/input_sources/`全体を削除せず、未移行consumerがあるkeyboard、continuous velocity、
 viewer compatibility symbolだけをthin facadeとして残す。残存symbolの最終retirementは#462で監査する。
@@ -170,6 +176,9 @@ viewer compatibility symbolだけをthin facadeとして残す。残存symbolの
 - unknown profile、incompatible model、invalid joint orderはcomposition前に失敗する。
 - qpos feasibilityはcandidate全体を検証し、invalid candidateを部分適用しない。
 - stale / inactive sourceはhold-current semanticsを優先し、新しいactive targetを捏造しない。
+- malformed JSON、schema不一致、provider identity不一致はsource-owned typed ingress failureとして即時
+  `invalid` healthへ反映し、timeout待ちで旧active frameを継続しない。次のvalid sampleだけが明示的な
+  recoveryとなる。
 - unavailable diagnostic fieldは欠落のままとし、stale値を保持しない。
 - `publish-before-ViewerInputSource-rebase` orderingを維持する。
 - transport failureをphysics successへ読み替えず、viewer failureをbackend stateへ反映しない。

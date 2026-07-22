@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createViewerInputLifecycle, type ViewerInputLifecycleDocumentLike, type ViewerInputLifecycleWindowLike, type ViewerKeyboardEventLike } from "../src/app/viewerInputLifecycle.js";
 import {
   createViewerKeyboardCapture,
-  DEFAULT_VIEWER_KEYBOARD_BINDINGS,
+  DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS,
   type ViewerKeyboardControlSocketLike,
 } from "../src/input/keyboardInput.js";
 import type { ViewerGamepadControlSocketLike, ViewerGamepadLike } from "../src/input/gamepadInput.js";
@@ -229,7 +229,7 @@ function createInputLifecycleHarness() {
     window: browser.window,
     document: browser.document,
     url: "ws://example.test/viewer",
-    keyboardCapture: createViewerKeyboardCapture(DEFAULT_VIEWER_KEYBOARD_BINDINGS, "focused"),
+    keyboardCapture: createViewerKeyboardCapture(DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS, "focused"),
     getGamepads: browser.getGamepads,
     keyboardWebSocketCtor: InjectedSocket,
     gamepadWebSocketCtor: InjectedSocket,
@@ -369,6 +369,33 @@ function testRendererErrorStopsLiveInputWithoutChangingOpenConnection(): void {
   lifecycle.dispose();
 }
 
+function testKeyboardReactivationStartsWithFreshZeroState(): void {
+  const { browser, sockets, lifecycle } = createInputLifecycleHarness();
+  lifecycle.setLiveInputEnabled(true);
+  for (const socket of sockets) {
+    socket.emitOpen();
+  }
+
+  browser.dispatchKey("keydown", "KeyW");
+  lifecycle.setLiveInputEnabled(false);
+  // The keyup is intentionally dispatched while the provider is disabled.
+  browser.dispatchKey("keyup", "KeyW");
+
+  lifecycle.setLiveInputEnabled(true);
+  const reopenedSockets = sockets.slice(-2);
+  for (const socket of reopenedSockets) {
+    socket.emitOpen();
+  }
+  const reopenedKeyboardMessages = parseMessages(reopenedSockets).filter(
+    (message) => message.source_kind === "keyboard",
+  );
+  assert.equal(reopenedKeyboardMessages.length, 1);
+  assert.deepEqual(reopenedKeyboardMessages[0]?.keyboard?.active_key_codes, []);
+  assert.equal(reopenedKeyboardMessages[0]?.keyboard?.zero_state, true);
+
+  lifecycle.dispose();
+}
+
 function testBootstrapFailureVariantsShareRendererErrorFailSafe(): void {
   const openReady = {
     ...createInitialProductViewerState(),
@@ -396,6 +423,7 @@ function testBootstrapFailureVariantsShareRendererErrorFailSafe(): void {
 testPayloadFirstBootstrapKeepsOpenConnectionDuringModelLifecycle();
 testKeyboardAndGamepadStayLiveAcrossPayloadBootstrap();
 testRendererErrorStopsLiveInputWithoutChangingOpenConnection();
+testKeyboardReactivationStartsWithFreshZeroState();
 testBootstrapFailureVariantsShareRendererErrorFailSafe();
 
 console.log("product viewer payload-first and renderer-error input lifecycle tests passed");

@@ -31,6 +31,7 @@ class ViewerCanonicalInputSample:
     source_kind: ViewerControlSourceKind
     timestamp_s: float
     sequence: int | None
+    requested_control_frame: str = "world"
     keyboard: ViewerControlKeyboardMessage | None = None
     gamepad: ViewerControlGamepadMessage | None = None
     source_active: bool = False
@@ -57,6 +58,8 @@ class ViewerCanonicalInputSample:
                 raise ValueError("gamepad viewer sample payload mismatch")
         else:
             raise ValueError("unknown viewer sample source kind")
+        if not isinstance(self.requested_control_frame, str):
+            raise ValueError("viewer sample requested_control_frame must be a string")
         if self.source_active and self.stale_reason is not None:
             raise ValueError("active viewer sample cannot have a stale reason")
 
@@ -71,6 +74,7 @@ def viewer_sample_to_metadata(sample: ViewerCanonicalInputSample) -> dict[str, o
         "source_kind": sample.source_kind,
         "timestamp_s": sample.timestamp_s,
         "sequence": sample.sequence,
+        "requested_control_frame": sample.requested_control_frame,
         "source_active": sample.source_active,
         "zero_state": sample.zero_state,
         "stale_reason": sample.stale_reason,
@@ -98,6 +102,8 @@ def viewer_sample_to_metadata(sample: ViewerCanonicalInputSample) -> dict[str, o
                 for button in sample.gamepad.buttons
             ),
         }
+        if sample.gamepad.raw_axes is not None:
+            gamepad_payload["raw_axes"] = tuple(sample.gamepad.raw_axes)
         if sample.gamepad.index is not None:
             gamepad_payload["index"] = sample.gamepad.index
         if sample.gamepad.id is not None:

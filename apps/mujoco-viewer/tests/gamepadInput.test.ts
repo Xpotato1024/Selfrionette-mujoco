@@ -173,6 +173,7 @@ function testSampleViewerGamepadSnapshotUsesFirstConnectedPad(): void {
     connected: true,
     index: 2,
     id: "Browser Gamepad",
+    raw_axes: [0.05, 0.8, -1.2],
     axes: [0, 0.7777777777777778, -1],
     buttons: [
       { pressed: true, value: 0.75 },
@@ -189,6 +190,7 @@ function testBuildViewerGamepadControlMessageBuildsSchemaPayload(): void {
       connected: true,
       index: 0,
       id: "Pad",
+      raw_axes: [0.25, 0.5],
       axes: [0, 0.5],
       buttons: [
         { pressed: true, value: 1 },
@@ -220,6 +222,7 @@ function testBuildViewerGamepadControlMessageBuildsSchemaPayload(): void {
       connected: true,
       index: 0,
       id: "Pad",
+      raw_axes: [0.25, 0.5],
       axes: [0, 0.5],
       buttons: [
         { pressed: true, value: 1 },

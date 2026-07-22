@@ -3,11 +3,12 @@ from __future__ import annotations
 import pytest
 
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
+from selfrionette.plugins.mappings.catalog import CONTROL_MAPPING_REGISTRY
 from selfrionette.plugins.input_sources.registration import (
     InputSourcePluginRegistration,
 )
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
-from selfrionette.runtime.experiment.contracts import VersionedIdentity
+from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
 from selfrionette.runtime.experiment.input_source import InputSourceHealthStatus
 from selfrionette.runtime.execution.input_source_adapters import (
     REPLAY_COMPATIBILITY_EXECUTION_ADAPTER,
@@ -58,6 +59,25 @@ def test_selection_resolves_plugin_schema_reader_health_and_adapter() -> None:
     assert selection.execution_adapter.identity == VersionedIdentity(
         "viewer_local_endpoint_input_execution", 1
     )
+    assert selection.control_mapping_selection == PluginSelection(
+        "viewer_keyboard_gamepad_mapping", 1
+    )
+    assert selection.control_mapping is CONTROL_MAPPING_REGISTRY.resolve(
+        PluginSelection("viewer_keyboard_gamepad_mapping", 1)
+    )
+    registration = INPUT_SOURCE_CATALOG.resolve("viewer")
+    assert not hasattr(registration, "control_mapping")
+
+
+def test_explicit_mapping_selection_is_not_replaced_by_source_default() -> None:
+    explicit = PluginSelection("viewer_keyboard_gamepad_mapping", 1)
+    selection = select_runtime_input_source(
+        "viewer",
+        steps=1,
+        control_mapping_selection=explicit,
+    )
+    assert selection.control_mapping_selection is explicit
+    assert selection.control_mapping is CONTROL_MAPPING_REGISTRY.resolve(explicit)
 
 
 def test_duplicate_alias_is_rejected_before_catalog_creation() -> None:

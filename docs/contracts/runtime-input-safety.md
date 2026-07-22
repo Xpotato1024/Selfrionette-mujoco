@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-22
+last_verified: 2026-07-23
 canonical_for:
   - runtime input stale-command safety
 related:
@@ -88,3 +88,8 @@ mappingがstaleまたはinactive sampleからintent metadataを生成しても�
 確認してhold-current-qposへ変換する。従って古いaxis値、button supplement、desired endpoint metadata
 がstale commandを再開させることはない。provider acquisition、backend source health、mapping intent、
 runtime holdは別の診断層としてpayloadに残す。
+
+viewerのmalformed JSON、schema validation failure、provider identity mismatchは、source objectへ到達する
+前の失敗でも`ViewerBridgeRuntimeCapability.record_ingress_failure()`を通じてsource-owned healthへ伝える。
+sourceは即時`invalid`へ遷移し、`invalid_reason`をdiagnosticsへ残す。timeoutまで旧active frameを継続せず、
+runtimeはhold-currentへ移行する。valid viewer sampleが届いた場合だけactiveへrecoveryする。

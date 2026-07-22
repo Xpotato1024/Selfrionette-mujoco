@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-22
+last_verified: 2026-07-23
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -273,8 +273,14 @@ safetyを証明しない。
 Input Sourceが提供する`viewer_control_sample/v1`とControl Mappingが受け付けるsample identityは
 composition boundaryでexact compatibilityを検証する。viewer providerの`keyboard/v1` / `gamepad/v1`
 はfrontendのacquisition IDであり、backend source plugin identityやmapping identityを暗黙に選択する
-source-name dispatchではない。source registrationがtyped mappingを結線し、runtimeがそのmapping resultを
-endpoint progressionへ適用する。
+source-name dispatchではない。source registrationはconcrete mapping objectではなくdefaultの
+`PluginSelection`を宣言し、runtimeがsource selectionとは独立したmapping selectionをresolveする。callerが
+指定したmapping selectionをdefaultで上書きせず、runtimeはschema compatibilityをmapping実行前に検証する。
+resolved mapping resultはruntimeがendpoint progressionへ適用する。
+
+viewer mappingの`keyboard_config`、`gamepad_speed_m_s`、`gamepad_deadzone`、`gamepad_max_delta_m`は
+typed Control Mapping parametersであり、finite / non-negativeおよびkeyboard bindingのaxis / direction
+validationをmapping boundaryで行う。frontend providerとbackend sourceはこれらを適用しない。
 
 P4はprovider lifecycleとbackend source / mapping ownershipを成立させる。plugin-local test relocation、
 dummy onboarding、未移行legacy fallbackのretirementと残存symbolの最終監査は#462にhand offする。

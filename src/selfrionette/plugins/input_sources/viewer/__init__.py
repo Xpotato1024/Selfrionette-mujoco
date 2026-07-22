@@ -13,6 +13,16 @@ from selfrionette.runtime.experiment.input_source import (
 from selfrionette.schemas import RawInputFrame
 
 
+def _current_health(delegate: ViewerInputSource) -> InputSourceHealth:
+    status, reason, age_ms, metadata = delegate.health_snapshot()
+    return InputSourceHealth(
+        InputSourceHealthStatus(status),
+        reason=reason,
+        age_ms=age_ms,
+        metadata=metadata,
+    )
+
+
 def build_frames(parameters: Mapping[str, object]) -> tuple[RawInputFrame, ...]:
     return (RawInputFrame(source="viewer", timestamp_s=0.0, metadata=dict(parameters["metadata"])),)
 
@@ -30,6 +40,7 @@ def build_reader(parameters: Mapping[str, object], *, runtime_dependencies: Inpu
         delegate,
         initial,
         viewer_bridge_capability=delegate,
+        health_reader=lambda: _current_health(delegate),
     )
 
 

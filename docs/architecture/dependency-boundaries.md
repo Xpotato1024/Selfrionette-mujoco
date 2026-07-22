@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-22
+last_verified: 2026-07-23
 canonical_for:
   - import boundaries
 related:
@@ -229,3 +229,15 @@ provider ID / sample schema、source produced schema / mapping accepted schema�
 各boundaryで検証する。unknown、duplicate、version mismatch、missing capability、malformed provider
 payloadはimplicit fallbackなしでfail-closedとする。これによりlegacy message compatibilityはsourceの
 canonicalizationに限定され、mapping algorithmの二重実装にならない。
+
+keyboard providerはcapture対象keyのallowlistとpressed key lifecycleだけを保持し、disable / dispose時に
+capture stateをresetする。gamepad providerはbrowserから取得したfiniteな`raw_axes`を公開し、既存の
+normalized `axes`はwire互換projectionとして残す。axis assignment、binding direction、speed / gain、
+deadzone、button supplement、requested control frameはControl Mappingのtyped parametersとcanonical
+sampleが所有する。
+
+viewer sourceはtyped ingress failureを受けてlatest canonical sampleを`source_active=false`、healthを
+`invalid`へ遷移させる。runtimeはinvalid / stale / inactive / disconnectedでhold-currentを適用し、valid
+sampleが来るまで古いactive intentを再開しない。source registrationはconcrete mapping objectを保持せず、
+`PluginSelection`をdefaultとして宣言するだけであり、explicit mapping selectionはruntime compositionで
+優先される。produced sample schemaとaccepted sample schemaのexact compatibilityはmapping実行前に検証する。

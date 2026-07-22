@@ -9,6 +9,8 @@ export interface ViewerGamepadSnapshot {
   connected: boolean;
   index?: number;
   id?: string;
+  /** Raw finite browser axes; mapping must use this field when present. */
+  raw_axes?: number[];
   axes: number[];
   buttons: ViewerGamepadButtonSnapshot[];
   stale: boolean;
@@ -156,6 +158,7 @@ export function sampleViewerGamepadSnapshot(
   const axes = Array.from(connectedPad.axes, (value) =>
     isFiniteNumber(value) ? normalizeViewerGamepadAxis(value, options) : 0,
   );
+  const rawAxes = Array.from(connectedPad.axes, (value) => (isFiniteNumber(value) ? value : 0));
   const buttons = Array.from(connectedPad.buttons, (button) => normalizeViewerGamepadButton(button));
   const zeroState =
     axes.every((value) => value === 0) && buttons.every((button) => !button.pressed && (button.value === null || button.value === 0));
@@ -164,6 +167,7 @@ export function sampleViewerGamepadSnapshot(
     connected: true,
     index: connectedPad.index,
     id: connectedPad.id,
+    raw_axes: rawAxes,
     axes,
     buttons,
     stale: false,
@@ -272,6 +276,10 @@ function snapshotToGamepadMessage(snapshot: ViewerGamepadSnapshot): ViewerContro
     stale: snapshot.stale,
     zero_state: snapshot.zero_state,
   };
+
+  if (snapshot.raw_axes !== undefined) {
+    message.raw_axes = [...snapshot.raw_axes];
+  }
 
   if (snapshot.index !== undefined) {
     message.index = snapshot.index;
