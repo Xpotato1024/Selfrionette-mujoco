@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-23
+last_verified: 2026-07-26
 canonical_for:
   - viewer control message schema
 related:
@@ -38,9 +38,9 @@ keyboard、gamepad、noopへfallbackせずrejectする。provider fieldを持た
 backend viewer sourceが`source_kind`から既知providerへcanonicalizeして受け付ける。
 
 frontendのknown-ID registryは`keyboard/v1`と`gamepad/v1`を静的に登録し、providerごとに
-attach/start、dispose、timestamp、sequence、focus / visibility / connected state、zero-state、
-provider固有raw payloadを所有する。backend viewer sourceはmessage parse、canonical sample、
-latest sample、health、250 ms timeout、cleanupだけを所有する。mappingはcanonical
+attach/start、dispose、timestamp、sequence、focus / visibility / connected state、raw device neutral state、
+provider固有raw payloadを所有する。backend viewer sourceはmessage parse、canonical sample、latest sample、
+health、250 ms timeout、cleanupだけを所有する。mappingはcanonical
 `viewer_control_sample/v1`を受け、axis/sign/gain/speed/deadzone/button supplement/control frameを
 typed continuous endpoint-velocity intentへ変換する。
 
@@ -84,6 +84,12 @@ top-level field:
 - `stale`: optional boolean
 - `zero_state`: optional boolean
 
+`raw_axes`が存在するgamepadでは、source activityは`connected`、provider lifecycle、`stale`、disconnectなど
+source-owned stateから決まり、legacy normalized `axes`やmapping deadzoneからは決まらない。`zero_state`は
+providerのraw neutral / legacy wire stateであり、mapping後のcommand zeroやsource healthの代替ではない。
+raw axisがzeroでもbutton pressはactive command sampleとして扱う。`raw_axes`がないlegacy messageは旧
+`axes` / `zero_state`解釈を維持する。
+
 ## Backend viewer bridge
 
 backend `viewer` pluginは`ViewerBridgeRuntimeCapability`をtyped optional bindingとして公開する。
@@ -115,6 +121,11 @@ compatibilityまたはdiagnosticsとして残せるが、mappingは参照しな�
 malformed JSON、schema validation、provider identity mismatchはsource-owned typed ingress failureへ伝え、
 source healthを即時`invalid`にする。timeoutまで旧active sampleを保持せず、valid sample受信後にだけrecover
 する。
+
+Control Mapping parametersはsource lifecycle開始とframe readの前にgeneric `ParameterContract`および
+mapping-specific semantic validation / normalizationを通過する。unknown parameter、negative / non-finite
+speed・deadzone・max delta、invalid keyboard axis / directionはrejectし、検証済みのdeterministic parameterを
+mappingへ渡す。
 
 ## Validation規則
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite
+from types import MappingProxyType
 
 from selfrionette.plugins.mappings.continuous_endpoint_velocity import (
     build_continuous_endpoint_velocity_intent,
@@ -137,15 +138,15 @@ def _coerce_axis_vector3(axes: Sequence[float]) -> tuple[float, float, float]:
     )
 
 
-def _normalize_browser_compatibility_axis(value: float) -> float:
-    """Reproduce the old browser normalization inside the mapping boundary."""
+def _normalize_gamepad_axis_for_mapping(value: float, deadzone: float) -> float:
+    """Apply the selected mapping deadzone to one canonical raw axis."""
 
     clamped = max(-1.0, min(1.0, value))
     magnitude = abs(clamped)
-    if magnitude <= _DEFAULT_GAMEPAD_DEADZONE:
+    if magnitude <= deadzone:
         return 0.0
-    scaled = (magnitude - _DEFAULT_GAMEPAD_DEADZONE) / (1.0 - _DEFAULT_GAMEPAD_DEADZONE)
-    return (1.0 if clamped > 0 else -1.0) * max(0.0, min(1.0, scaled))
+    scaled = (magnitude - deadzone) / max(1.0 - deadzone, 1e-12)
+    return (1.0 if clamped > 0.0 else -1.0) * max(0.0, min(1.0, scaled))
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,12 +194,13 @@ def build_viewer_control_mapping_parameters(
                 raise ValueError("keyboard_config bindings must use mapping values")
             if "axis" not in binding or "direction" not in binding:
                 raise ValueError(f"binding {key!r} must include axis and direction")
-            try:
-                direction = int(binding["direction"])
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"invalid direction for binding {key!r}") from exc
+            if type(binding["direction"]) is not int or binding["direction"] not in {-1, 1}:
+                raise ValueError(f"invalid direction for binding {key!r}")
+            if not isinstance(binding["axis"], str):
+                raise ValueError(f"invalid axis for binding {key!r}")
+            direction = binding["direction"]
             bindings[str(key)] = KeyboardBinding(
-                axis=str(binding["axis"]),
+                axis=binding["axis"],
                 direction=direction,
             )
         speed_m_s = keyboard_config.get("speed_m_s")
@@ -217,6 +219,30 @@ def build_viewer_control_mapping_parameters(
         gamepad_speed_m_s=float(values.get("gamepad_speed_m_s", _DEFAULT_GAMEPAD_SPEED_M_S)),
         gamepad_deadzone=float(values.get("gamepad_deadzone", _DEFAULT_GAMEPAD_DEADZONE)),
         gamepad_max_delta_m=float(values.get("gamepad_max_delta_m", _DEFAULT_GAMEPAD_MAX_DELTA_M)),
+    )
+
+
+def normalize_viewer_control_mapping_parameters(
+    parameters: Mapping[str, object],
+) -> Mapping[str, object]:
+    """Validate and freeze viewer mapping parameters before source execution."""
+
+    normalized = build_viewer_control_mapping_parameters(parameters)
+    keyboard_config = KeyboardInputConfig(
+        bindings=MappingProxyType(
+            dict(sorted(normalized.keyboard_config.bindings.items()))
+        ),
+        speed_m_s=normalized.keyboard_config.speed_m_s,
+        deadzone=normalized.keyboard_config.deadzone,
+        max_delta_m=normalized.keyboard_config.max_delta_m,
+    )
+    return MappingProxyType(
+        {
+            "keyboard_config": keyboard_config,
+            "gamepad_speed_m_s": normalized.gamepad_speed_m_s,
+            "gamepad_deadzone": normalized.gamepad_deadzone,
+            "gamepad_max_delta_m": normalized.gamepad_max_delta_m,
+        }
     )
 
 
@@ -290,7 +316,10 @@ class ViewerKeyboardGamepadMappingStrategy:
             )
             mapping_axes = (
                 tuple(
-                    _normalize_browser_compatibility_axis(value)
+                    _normalize_gamepad_axis_for_mapping(
+                        value,
+                        mapping_parameters.gamepad_deadzone,
+                    )
                     for value in source_axes
                 )
                 if sample.gamepad.raw_axes is not None
@@ -303,7 +332,15 @@ class ViewerKeyboardGamepadMappingStrategy:
                 source_kind="viewer_gamepad",
                 source_timestamp_s=sample.timestamp_s,
                 speed_m_s=mapping_parameters.gamepad_speed_m_s,
-                deadzone=mapping_parameters.gamepad_deadzone,
+                # Raw gamepad axes have already received the selected mapping
+                # deadzone above. Legacy axes are already normalized by the
+                # old provider projection and retain the existing threshold
+                # semantics through their compatibility path.
+                deadzone=(
+                    0.0
+                    if sample.gamepad.raw_axes is not None
+                    else mapping_parameters.gamepad_deadzone
+                ),
                 max_delta_m=mapping_parameters.gamepad_max_delta_m,
                 control_frame=control_frame,
                 source_active=sample.source_active,
@@ -359,6 +396,7 @@ VIEWER_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(
     control_frame=None,
     comparison_family_identity=VersionedIdentity("viewer_keyboard_gamepad_comparison", 1),
     mapping_semantics_identity=VIEWER_MAPPING_SEMANTICS_IDENTITY,
+    parameter_normalizer=normalize_viewer_control_mapping_parameters,
 )
 
 
@@ -367,6 +405,7 @@ __all__ = [
     "VIEWER_CONTROL_MAPPING_PLUGIN",
     "ViewerControlMappingParameters",
     "build_viewer_control_mapping_parameters",
+    "normalize_viewer_control_mapping_parameters",
     "VIEWER_CONTROL_SAMPLE_IDENTITY",
     "VIEWER_MAPPING_SEMANTICS_IDENTITY",
     "ViewerKeyboardGamepadMappingStrategy",

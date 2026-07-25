@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-23
+last_verified: 2026-07-26
 canonical_for:
   - import boundaries
 related:
@@ -231,13 +231,18 @@ payloadはimplicit fallbackなしでfail-closedとする。これによりlegacy
 canonicalizationに限定され、mapping algorithmの二重実装にならない。
 
 keyboard providerはcapture対象keyのallowlistとpressed key lifecycleだけを保持し、disable / dispose時に
-capture stateをresetする。gamepad providerはbrowserから取得したfiniteな`raw_axes`を公開し、既存の
-normalized `axes`はwire互換projectionとして残す。axis assignment、binding direction、speed / gain、
-deadzone、button supplement、requested control frameはControl Mappingのtyped parametersとcanonical
+capture stateをresetする。gamepad providerはbrowserから取得したfiniteな`raw_axes`をcanonical sampleへ
+保持し、既存のnormalized `axes`はwire / overlay互換projectionとして残す。providerのactivityは
+connection、focus、visibility、stale、disconnectなどsource-owned lifecycleから決まり、normalized axesや
+mapping deadzoneからは決まらない。axis assignment、binding direction、speed / gain、deadzone、button
+supplement、requested control frame、command zero判定はControl Mappingのtyped parametersとcanonical
 sampleが所有する。
 
 viewer sourceはtyped ingress failureを受けてlatest canonical sampleを`source_active=false`、healthを
 `invalid`へ遷移させる。runtimeはinvalid / stale / inactive / disconnectedでhold-currentを適用し、valid
 sampleが来るまで古いactive intentを再開しない。source registrationはconcrete mapping objectを保持せず、
 `PluginSelection`をdefaultとして宣言するだけであり、explicit mapping selectionはruntime compositionで
-優先される。produced sample schemaとaccepted sample schemaのexact compatibilityはmapping実行前に検証する。
+優先される。produced sample schemaとaccepted sample schema、mapping `ParameterContract`、optionalな
+mapping-specific parameter normalizationはreaderのlifecycle開始・frame read・mapping execution前に検証する。
+検証済みparametersはdeterministicなfrozen mappingとしてplanへ渡し、invalid parameterではmanaged sourceを
+startせず、frameもreadしない。

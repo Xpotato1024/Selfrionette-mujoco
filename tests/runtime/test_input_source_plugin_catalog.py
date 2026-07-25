@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from math import nan
+from types import MappingProxyType
+
 import pytest
 
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
@@ -9,6 +12,7 @@ from selfrionette.plugins.input_sources.registration import (
 )
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
+from selfrionette.runtime.experiment.input_source import InputSourcePlugin
 from selfrionette.runtime.experiment.input_source import InputSourceHealthStatus
 from selfrionette.runtime.execution.input_source_adapters import (
     REPLAY_COMPATIBILITY_EXECUTION_ADAPTER,
@@ -78,6 +82,87 @@ def test_explicit_mapping_selection_is_not_replaced_by_source_default() -> None:
     )
     assert selection.control_mapping_selection is explicit
     assert selection.control_mapping is CONTROL_MAPPING_REGISTRY.resolve(explicit)
+
+
+@pytest.mark.parametrize(
+    "mapping_selection",
+    (None, PluginSelection("viewer_keyboard_gamepad_mapping", 1)),
+)
+@pytest.mark.parametrize(
+    "parameters",
+    (
+        {"unknown_parameter": 1.0},
+        {"gamepad_speed_m_s": -0.1},
+        {"gamepad_deadzone": nan},
+        {
+            "keyboard_config": {
+                "bindings": {"KeyQ": {"axis": "bad", "direction": 1}},
+                "speed_m_s": 0.1,
+                "deadzone": 0.0,
+                "max_delta_m": 0.03,
+            }
+        },
+        {
+            "keyboard_config": {
+                "bindings": {"KeyQ": {"axis": "x", "direction": 0}},
+                "speed_m_s": 0.1,
+                "deadzone": 0.0,
+                "max_delta_m": 0.03,
+            }
+        },
+    ),
+)
+def test_mapping_parameters_fail_during_selection_for_default_and_explicit_mapping(
+    mapping_selection: PluginSelection | None,
+    parameters: dict[str, object],
+) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        select_runtime_input_source(
+            "viewer",
+            steps=1,
+            control_mapping_selection=mapping_selection,
+            control_mapping_parameters=parameters,
+        )
+
+
+def test_invalid_mapping_parameters_do_not_create_a_managed_reader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_calls: list[str] = []
+    original = InputSourcePlugin.create_runtime_reader
+
+    def spy(self, *args, **kwargs):
+        create_calls.append(self.identity.canonical_id)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(InputSourcePlugin, "create_runtime_reader", spy)
+    with pytest.raises(ValueError, match="unknown"):
+        select_runtime_input_source(
+            "viewer",
+            steps=1,
+            control_mapping_parameters={"unknown_parameter": True},
+        )
+
+    assert create_calls == []
+
+
+def test_valid_mapping_parameters_are_normalized_and_frozen_before_runtime() -> None:
+    selection = select_runtime_input_source(
+        "viewer",
+        steps=1,
+        control_mapping_parameters={
+            "gamepad_speed_m_s": 0.2,
+            "gamepad_deadzone": 0.0,
+            "gamepad_max_delta_m": 0.05,
+        },
+    )
+
+    assert isinstance(selection.control_mapping_parameters, MappingProxyType)
+    assert selection.control_mapping_parameters["gamepad_speed_m_s"] == 0.2
+    assert selection.control_mapping_parameters["gamepad_deadzone"] == 0.0
+    assert selection.control_mapping_parameters["gamepad_max_delta_m"] == 0.05
+    with pytest.raises(TypeError):
+        selection.control_mapping_parameters["gamepad_deadzone"] = 0.1  # type: ignore[index]
 
 
 def test_duplicate_alias_is_rejected_before_catalog_creation() -> None:

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-23
+last_verified: 2026-07-26
 canonical_for:
   - runtime input stale-command safety
 related:
@@ -79,10 +79,11 @@ browser input, serial open, OSC, hardware access は scope 外である。
 
 ## viewer provider lifecycle safety (#461)
 
-frontend providerのfocus / visibility / disconnect処理はzero-stateをpublicationし、backend sourceの
-latest sampleを非activeまたはstaleへ遷移させる。provider ID / schema不一致は別のproviderやnoopに
-置き換えない。lifecycle dispose後はkeyboard listener、gamepad polling、heartbeat、WebSocket sender
-を停止する。再activationでは古いactive sampleを再利用せず、最初にzero / safe stateから開始する。
+frontend providerのfocus / visibility / disconnect処理はzero / inactive sampleをpublicationし、backend sourceの
+latest sampleを非activeまたはstaleへ遷移させる。raw gamepad sampleのconnected activityはlegacy normalized
+axesやmapping deadzoneと独立し、command zeroはmappingの責務としてhealthへ混ぜない。provider ID / schema
+不一致は別のproviderやnoopに置き換えない。lifecycle dispose後はkeyboard listener、gamepad polling、heartbeat、
+WebSocket senderを停止する。再activationでは古いactive sampleを再利用せず、最初にzero / safe stateから開始する。
 
 mappingがstaleまたはinactive sampleからintent metadataを生成しても、runtime safetyがsource healthを
 確認してhold-current-qposへ変換する。従って古いaxis値、button supplement、desired endpoint metadata

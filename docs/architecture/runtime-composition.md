@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-23
+last_verified: 2026-07-26
 canonical_for:
   - runtime composition root
 related:
@@ -137,8 +137,8 @@ runtime composition側で保持する。
 step-loopはreplay compatibilityではrecorded frame metadataをsource-state truthとして使用し、その他のsourceでは
 typed healthをsource-state truthとして使用する。live frameにstate fieldがある場合は存在するkeyだけhealthと照合し、
 省略keyをhealth projectionで補完する。canonical projection後の同じframeをinterpreter、record、diagnosticsへ渡す。
-frontend keyboard / gamepad providerとmappingの分離は#461で成立し、P5のtest-layout migrationとlegacy
-fallback retirementは#462で監査する。
+frontend keyboard / gamepad provider、backend source、mappingの分離とmapping readinessは#461で成立し、
+P5のtest-layout migration、dummy onboarding、legacy fallback retirement、retained symbolの最終監査は#462で行う。
 
 ### P4 viewer source and mapping composition
 
@@ -156,20 +156,30 @@ runtime step loop
 ```
 
 provider registryは`keyboard/v1`と`gamepad/v1`の静的known-IDだけを解決する。frontend providerは
-browser acquisitionとlifecycleを所有し、backend sourceはparse、schema、latest sample、health、
-timeout、cleanupを所有する。mappingはtransportやfrontend APIをimportせず、canonical sampleから
-既存keyboard / gamepad semanticsを一度だけ実行する。runtimeはmapping resultを適用し、publish-before-
-rebase orderingと同一source/capability instanceのidentityを維持する。
+browser raw acquisitionとlifecycleを所有し、gamepadのnormalized `axes`はwire / overlay compatibility
+projectionに限る。backend sourceはparse、schema、latest canonical sample、health、timeout、cleanupを
+所有する。raw `raw_axes`がある場合のsource activityはconnection / focus / visibility / stale / disconnect
+などsource-owned stateで決まり、mapping deadzoneやcommand zeroとは別概念である。mappingはtransportや
+frontend APIをimportせず、canonical sampleから既存keyboard / gamepad semanticsを一度だけ実行する。
+runtimeはmapping resultを適用し、publish-before-rebase orderingと同一source/capability instanceのidentityを維持する。
 
 source selectionとmapping selectionは別の`PluginSelection`として解決する。source registrationが持つのは
 optionalなdefault mapping identityであり、callerが指定したmapping identityを上書きしない。runtimeは
-resolved sourceのproduced sample schemaとmappingのaccepted schemaをexact matchで検証してからmappingを
-実行する。unknown、duplicate、version mismatch、schema mismatch、missing mapping capabilityはimplicit
-fallbackなしでfail-closedとする。
+resolved sourceのproduced sample schemaとmappingのaccepted schemaをexact matchで検証し、mappingのgeneric
+parameter contractとoptional semantic validator / normalizerをsource lifecycle開始前に実行してからmappingを
+実行する。unknown parameter、negative / non-finite speed・deadzone・max delta、invalid keyboard axis / directionは
+selection / plan readinessでrejectし、normalized / frozen parametersをstep loopへ渡す。unknown、duplicate、
+version mismatch、schema mismatch、missing mapping capabilityはimplicit fallbackなしでfail-closedとする。
 
 legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping実装へ分岐しない。P4は
 `src/selfrionette/input_sources/`全体を削除せず、未移行consumerがあるkeyboard、continuous velocity、
 viewer compatibility symbolだけをthin facadeとして残す。残存symbolの最終retirementは#462で監査する。
+
+raw gamepad sampleでは`raw_axes=[0.05]`、legacy `axes=[0.0]`でもsourceを先にinactiveにせず、default
+mapping deadzone `0.1`ならcommandはzero、mapping deadzone `0.0`ならnon-zero intentへ進む。button-only
+sampleもactive provider sampleとしてmappingへ渡す。`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`
+解釈を維持する。default behavior parity、disconnected / hidden / blurred / staleのhold safety、malformed
+ingressの即時`invalid`遷移を維持する。
 
 ## failureとordering
 

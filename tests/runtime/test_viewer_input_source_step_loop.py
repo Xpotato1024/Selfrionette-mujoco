@@ -14,7 +14,13 @@ from selfrionette.runtime.execution.input_step_loop import (
 )
 from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
-from selfrionette.schemas import ViewerControlKeyboardMessage, ViewerControlMessage
+from selfrionette.schemas import (
+    ViewerControlGamepadButtonMessage,
+    ViewerControlGamepadMessage,
+    ViewerControlKeyboardMessage,
+    ViewerControlMessage,
+)
+from selfrionette.runtime.experiment.contracts import PluginSelection
 from tests.support.transport_doubles import NoOpStatePublisher
 
 
@@ -96,6 +102,99 @@ def test_viewer_step_loop_accepts_continuous_keyboard_motion_with_small_bounded_
     assert record.state.target_position_m is not None
     assert source.current_endpoint_m == pytest.approx(record.state.target_position_m, abs=1e-12)
     assert record.frame.metadata["current_tip_position_m"] == pytest.approx(initial_tip_site_position_m, abs=1e-12)
+
+
+def test_actual_provider_raw_gamepad_axis_reaches_custom_mapping_and_motion_state() -> None:
+    clock = _ClockSequence((0.0, 0.0))
+    selection = select_runtime_input_source(
+        "viewer",
+        steps=1,
+        control_mapping_selection=PluginSelection("viewer_keyboard_gamepad_mapping", 1),
+        control_mapping_parameters={
+            "gamepad_speed_m_s": 0.1,
+            "gamepad_deadzone": 0.0,
+            "gamepad_max_delta_m": 0.03,
+        },
+    )
+    source = ViewerInputSource(clock=clock.monotonic)
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=source,
+        publisher=NoOpStatePublisher(),
+    )
+    ingest_viewer_control_message(
+        source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=1.0,
+            source_kind="gamepad",
+            gamepad=ViewerControlGamepadMessage(
+                connected=True,
+                index=0,
+                id="provider-pad",
+                raw_axes=(0.05, 0.0, 0.0),
+                axes=(0.0, 0.0, 0.0),
+                buttons=(ViewerControlGamepadButtonMessage(pressed=False, value=0.0),),
+                stale=False,
+                zero_state=True,
+            ),
+        ),
+    )
+
+    record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
+
+    assert record.frame.metadata["source_active"] is True
+    assert record.frame.metadata["viewer_input_sample"]["gamepad"]["raw_axes"] == (0.05, 0.0, 0.0)
+    assert record.intent.values[0] == pytest.approx(0.05, abs=1e-12)
+    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"][0] == pytest.approx(
+        0.005, abs=1e-12
+    )
+    assert record.motion_command.metadata["endpoint_delta_m"][0] > 0.0
+    assert record.state.metadata["source_kind"] == "viewer_gamepad"
+    assert record.state.metadata["actual_tip_delta_m"] != pytest.approx(
+        (0.0, 0.0, 0.0), abs=1e-12
+    )
+
+
+def test_disconnected_provider_sample_holds_runtime_motion_state() -> None:
+    clock = _ClockSequence((0.0, 0.0))
+    source = ViewerInputSource(clock=clock.monotonic)
+    plan = build_runtime_input_source_step_loop_plan(
+        select_runtime_input_source("viewer", steps=1),
+        viewer_clock=clock.monotonic,
+        viewer_input_source=source,
+        publisher=NoOpStatePublisher(),
+    )
+    ingest_viewer_control_message(
+        source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=2.0,
+            source_kind="gamepad",
+            gamepad=ViewerControlGamepadMessage(
+                connected=False,
+                index=0,
+                id="disconnected-pad",
+                raw_axes=(0.8, 0.0, 0.0),
+                axes=(0.0, 0.0, 0.0),
+                buttons=(),
+                stale=False,
+                zero_state=False,
+            ),
+        ),
+    )
+
+    record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
+
+    assert source.health_snapshot()[0] == "disconnected"
+    assert record.frame.metadata["source_active"] is False
+    assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx(
+        (0.0, 0.0, 0.0), abs=1e-12
+    )
+    assert record.state.metadata["actual_tip_delta_m"] == pytest.approx(
+        (0.0, 0.0, 0.0), abs=1e-12
+    )
 
 
 @pytest.mark.parametrize(

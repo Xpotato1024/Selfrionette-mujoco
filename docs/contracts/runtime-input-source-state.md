@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-23
+last_verified: 2026-07-26
 canonical_for:
   - runtime input source state payload
 related:
@@ -85,14 +85,16 @@ runtime step-loopは次の順で処理する。
 viewer sourceは`viewer_input_sample` metadataに`viewer_control_sample/v1`を出力する。
 sampleにはprovider ID / schema、`source_kind`、provider timestamp、sequence、raw keyboardまたは
 gamepad payload（存在する場合はunprocessed finite `raw_axes`）、`requested_control_frame`、
-`source_active`、`zero_state`、`stale_reason`、diagnosticsを含める。
+`source_active`、providerのraw neutralを表す`zero_state`、`stale_reason`、diagnosticsを含める。
 このsampleはsourceのlatest observationであり、axis assignment、gain、deadzone、control-frame
 conversion、desired endpointを含むmapping resultではない。
 
 legacy viewer messageにprovider fieldがない場合も、sourceはknown provider contractへcanonicalize
 して同じsample schemaを作る。provider identity / schemaの不一致、malformed payload、sequence / timestamp
 不正はinvalidとして扱い、別providerまたはnoopへfallbackしない。keyboard blur / hidden、gamepad
-disconnect、zero-stateは新しいvalid active sampleが来るまでactiveへ戻さない。
+disconnect、staleはinactiveまたはfailureへ遷移させる。raw gamepad sampleではlegacy normalized `axes`の
+zeroやmapping deadzone内のraw axisだけではsourceをinactiveにせず、command zeroはmappingが判定する。
+`raw_axes`を持たないlegacy messageだけは旧`zero_state`解釈を維持する。
 
 viewer sourceのhealthはlatest sampleと250 ms timeoutを正本とする。runtimeはtyped healthとframeに
 存在するstate keyを比較し、mapping後のintentをsource healthの代替にしない。

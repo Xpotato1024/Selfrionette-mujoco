@@ -51,6 +51,19 @@ def _stale_reason_for_timeout(timeout_ms: int) -> str:
     return f"command_age_ms_exceeded_timeout_{timeout_ms}"
 
 
+def _gamepad_zero_state(message: ViewerControlMessage) -> bool:
+    gamepad = message.gamepad
+    if gamepad is None:
+        return True
+    if gamepad.raw_axes is None:
+        # Preserve the legacy wire interpretation when raw_axes is absent.
+        return gamepad.zero_state is True or not gamepad.connected
+    return all(axis == 0.0 for axis in gamepad.raw_axes) and all(
+        not button.pressed and (button.value is None or button.value == 0.0)
+        for button in gamepad.buttons
+    )
+
+
 def _provider_contract(message: ViewerControlMessage) -> tuple[str, str, bool]:
     if message.source_kind == "keyboard":
         expected = ("keyboard/v1", "viewer_keyboard_sample/v1")
@@ -398,9 +411,7 @@ class ViewerInputSource:
         zero_state = (
             message.keyboard.zero_state is True
             if message.keyboard is not None
-            else message.gamepad is None
-            or message.gamepad.zero_state is True
-            or not message.gamepad.connected
+            else _gamepad_zero_state(message)
         )
         sample = _canonical_sample(
             message,
@@ -448,11 +459,22 @@ class ViewerInputSource:
                 )
                 stale_reason = None if source_active else _VIEWER_KEYBOARD_INACTIVE_STALE_REASON
             elif message.gamepad is not None:
-                source_active = not (
-                    message.gamepad.zero_state is True
-                    or message.gamepad.stale is True
-                    or message.gamepad.connected is False
-                )
+                if message.gamepad.raw_axes is not None:
+                    # raw_axes is the canonical mapping input. Its numeric
+                    # value, and the legacy zero_state projection, must not
+                    # make a connected provider inactive before mapping.
+                    source_active = not (
+                        message.gamepad.stale is True
+                        or message.gamepad.connected is False
+                    )
+                else:
+                    # Keep the established interpretation for legacy messages
+                    # that predate the raw_axes extension.
+                    source_active = not (
+                        message.gamepad.zero_state is True
+                        or message.gamepad.stale is True
+                        or message.gamepad.connected is False
+                    )
                 stale_reason = None if source_active else _VIEWER_GAMEPAD_INACTIVE_STALE_REASON
             else:
                 raise ViewerControlMessageError("viewer control payload is required")

@@ -161,7 +161,8 @@ export function sampleViewerGamepadSnapshot(
   const rawAxes = Array.from(connectedPad.axes, (value) => (isFiniteNumber(value) ? value : 0));
   const buttons = Array.from(connectedPad.buttons, (button) => normalizeViewerGamepadButton(button));
   const zeroState =
-    axes.every((value) => value === 0) && buttons.every((button) => !button.pressed && (button.value === null || button.value === 0));
+    rawAxes.every((value) => value === 0) &&
+    buttons.every((button) => !button.pressed && (button.value === null || button.value === 0));
 
   return {
     connected: true,
@@ -176,7 +177,10 @@ export function sampleViewerGamepadSnapshot(
 }
 
 function isActiveGamepadSnapshot(snapshot: ViewerGamepadSnapshot): boolean {
-  return snapshot.connected && !snapshot.stale && !snapshot.zero_state;
+  // Provider publication follows source lifecycle, not mapping or legacy
+  // normalized-axis semantics. A connected neutral sample still carries the
+  // source heartbeat, and mapping decides whether its command is zero.
+  return snapshot.connected && !snapshot.stale;
 }
 
 export function createViewerGamepadPublicationController(

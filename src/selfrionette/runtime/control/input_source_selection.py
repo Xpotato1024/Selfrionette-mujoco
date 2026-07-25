@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 
 from selfrionette.plugins.input_sources.catalog import (
     INPUT_SOURCE_CATALOG,
@@ -113,6 +114,37 @@ def _canonicalize_selected_frame(
     return annotate_raw_input_frame(frame, state)
 
 
+def _resolve_control_mapping_parameters(
+    registration,
+    control_mapping: ControlMappingPlugin | None,
+    control_mapping_parameters: Mapping[str, object] | None,
+) -> Mapping[str, object]:
+    if control_mapping is None:
+        return MappingProxyType({})
+
+    selected_parameters = (
+        registration.control_mapping_parameters
+        if control_mapping_parameters is None
+        else control_mapping_parameters
+    )
+    if not isinstance(selected_parameters, Mapping):
+        raise TypeError("control mapping parameters must use a mapping")
+
+    # The generic contract owns the first gate; the optional plugin capability
+    # adds mapping-specific semantic validation and deterministic normalization.
+    control_mapping.parameter_contract.validate(selected_parameters)
+    normalizer = control_mapping.parameter_normalizer
+    normalized = (
+        normalizer(selected_parameters)
+        if normalizer is not None
+        else dict(selected_parameters)
+    )
+    if not isinstance(normalized, Mapping):
+        raise TypeError("control mapping parameter_normalizer must return a mapping")
+    control_mapping.parameter_contract.validate(normalized)
+    return MappingProxyType(dict(sorted(normalized.items())))
+
+
 def select_runtime_input_source(
     source_name: str,
     *,
@@ -153,17 +185,6 @@ def select_runtime_input_source(
             runtime_dependencies,
             replay_frames=selected_frames,
         )
-    reader = plugin.create_runtime_reader(
-        request.parameters,
-        runtime_dependencies=runtime_dependencies,
-    )
-    viewer_bridge_capability = (
-        reader.viewer_bridge_capability
-        if isinstance(reader, ValidatedManagedInputSourceReader)
-        else None
-    )
-    if plugin.source_mode is InputSourceMode.VIEWER_BRIDGE and viewer_bridge_capability is None:
-        raise ValueError("viewer input source plugin is missing its runtime bridge capability")
     resolved_mapping_selection = (
         control_mapping_selection
         if control_mapping_selection is not None
@@ -180,6 +201,26 @@ def select_runtime_input_source(
             f"{plugin.produced_sample_schema.canonical_id!r}, mapping accepts "
             f"{tuple(sorted(item.canonical_id for item in control_mapping.accepted_input_sample_schemas))!r}"
         )
+    resolved_mapping_parameters = _resolve_control_mapping_parameters(
+        registration,
+        control_mapping,
+        control_mapping_parameters,
+    )
+
+    # No managed reader is created until source/mapping schema and all mapping
+    # parameters have passed readiness. In particular, invalid mapping input
+    # cannot reach source start or the first frame read.
+    reader = plugin.create_runtime_reader(
+        request.parameters,
+        runtime_dependencies=runtime_dependencies,
+    )
+    viewer_bridge_capability = (
+        reader.viewer_bridge_capability
+        if isinstance(reader, ValidatedManagedInputSourceReader)
+        else None
+    )
+    if plugin.source_mode is InputSourceMode.VIEWER_BRIDGE and viewer_bridge_capability is None:
+        raise ValueError("viewer input source plugin is missing its runtime bridge capability")
     initial_source_state = (
         build_runtime_input_source_state_from_metadata(
             selected_frames[0].metadata,
@@ -210,11 +251,7 @@ def select_runtime_input_source(
         viewer_bridge_capability=viewer_bridge_capability,
         control_mapping_selection=resolved_mapping_selection,
         control_mapping=control_mapping,
-        control_mapping_parameters=dict(
-            registration.control_mapping_parameters
-            if control_mapping_parameters is None
-            else control_mapping_parameters
-        ),
+        control_mapping_parameters=resolved_mapping_parameters,
     )
 
 

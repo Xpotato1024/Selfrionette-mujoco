@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-23
+last_verified: 2026-07-26
 canonical_for:
   - runtime input source registry
   - Input Source Plugin v1 ownership boundary
@@ -181,7 +181,9 @@ runtime step-loopのsource-state解決:
 - rebind前のcontrol messageとendpoint stateを維持し、clock domain間で既存command ageを連続させる。
 - initial FK endpointとpublish後endpointを同じcapabilityへrebaseする。
 - `viewer_keyboard` / `viewer_gamepad` subtypeをactive / staleの両経路でframe、command、payloadへ維持する。
-- frontend capture / mapping redesignは#461へ残す。
+- frontend providerはbrowser raw acquisitionとlifecycleを所有し、backend sourceはcanonical sampleとhealth、
+  Control Mappingはdeadzone、axis/sign、button supplement、command intentを所有する。frontendのnormalized
+  gamepad `axes`はcompatibility projectionであり、`raw_axes`がmappingのauthoritative inputである。
 
 ### Loadcell serial / fixture
 
@@ -238,14 +240,23 @@ runtimeはsourceとは独立してmapping selectionをresolveし、callerのexpl
 selection時にproduced sample schemaとmappingのaccepted schemaをexact matchで検証し、未知schemaやidentity
 mismatchはmapping実行前にfail-closedとする。
 
+mappingの`ParameterContract`とoptional semantic validator / normalizerもselection / plan readinessで実行する。
+unknown parameter、negative / non-finite speed・deadzone・max delta、invalid keyboard axis / directionは
+source lifecycle開始前にrejectし、normalized / frozen parameter mappingをstep loopへ渡す。invalid parameterでは
+managed sourceをstartせず、frameをreadしない。
+
 責務は次の通り固定する。
 
-- frontend `ViewerInputProviderRegistry`: known static IDs、provider lifecycle、browser event / Gamepad API、focus / visibility / disconnect、zero-state、timestamp / sequence、raw payload。
+- frontend `ViewerInputProviderRegistry`: known static IDs、provider lifecycle、browser event / Gamepad API、focus / visibility / disconnect、raw device neutral state、timestamp / sequence、raw payload。normalized `axes`はwire / overlay compatibility projectionである。
 - backend `ViewerInputSource`: parse / validation、provider identity / schema、latest sample、active / stale / invalid / disconnected health、250 ms timeout、cleanup、canonical sample、legacy metadata projection。
 - `ViewerKeyboardGamepadMappingStrategy`: canonical sampleのkeyboard binding、gamepad raw axis、sign、speed /
   gain、deadzone、button 0/1 supplement、world / tool frame、typed endpoint-velocity intent。mappingは
   `viewer_control_message`のlegacy summary、frontend module、transport implementation detailを読まない。
 - runtime step loop: mapping resultの適用、desired endpoint progression、endpoint rebase、MuJoCo command composition。
+
+raw gamepad sampleではconnection / focus / visibility / stale / disconnectがsource activityを決め、mapping
+deadzoneの結果はsource healthと別のcommand zero semanticsとして扱う。button-only inputはraw axisがzeroでも
+mappingへ渡す。`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。
 
 frontend registryはarbitrary dynamic importを行わない。lifecycleが選択providerを一括activate / disposeし、
 unknownまたはduplicate provider IDは安全なdefaultへ置換せずrejectする。provider disposal後は

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-23
+last_verified: 2026-07-26
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -187,8 +187,10 @@ runtime readerは`ValidatedInputSourceReader`で`read_frame()`と`current_health
 offline / replayにはmanaged lifecycleを要求せず、live / viewer_bridgeだけがmanaged adapterを通じて
 `start()` / `close()`を委譲する。P3ではproduction backend source catalog、concrete source migration、
 source-owned healthから既存payload metadataへのprojection、typed execution adapterを実装済みである。
-viewer frontend providerとkeyboard / gamepad mappingの分離はP4、plugin-local test ownershipとonboarding /
-completion auditはP5の範囲であり、このcomposition readiness contractでは実行しない。
+P4ではviewer frontend provider、backend source、keyboard / gamepad mappingを分離し、mappingの
+`ParameterContract`とoptional semantic validation / normalizationをsource lifecycle開始、frame read、
+mapping executionより前に実行する。plugin-local test ownershipとonboarding / completion auditはP5として
+#462へhand offする。
 
 ## composition readiness
 
@@ -196,7 +198,8 @@ completion auditはP5の範囲であり、このcomposition readiness contract�
 
 1. 6軸すべてをknown-ID registryからversion一致でresolveする。
 2. parameter ownerのaxis / ID / versionがselectionと完全一致することと、required field、unknown
-   field、runtime typeを検証する。
+   field、runtime typeを検証する。Control Mappingはgeneric contractに加えてoptionalなsemantic
+   validator / normalizerを実行し、結果をdeterministicなfrozen parameter mappingとして保持する。
 3. environment / mapping / taskのrequired capabilityをunionし、Robot Bundleのtyped providerを解決する。Input Source factoryは呼び出さない。
 4. robot/environment semantic roleをtyped descriptorとして統合し、missing、attribute mismatch、
    ambiguous bindingを拒否する。
@@ -280,7 +283,9 @@ resolved mapping resultはruntimeがendpoint progressionへ適用する。
 
 viewer mappingの`keyboard_config`、`gamepad_speed_m_s`、`gamepad_deadzone`、`gamepad_max_delta_m`は
 typed Control Mapping parametersであり、finite / non-negativeおよびkeyboard bindingのaxis / direction
-validationをmapping boundaryで行う。frontend providerとbackend sourceはこれらを適用しない。
+validationをmapping boundaryで行う。selection / plan readinessで検証済みparameterを保持し、invalid
+parameterではmanaged sourceをstartせず、frameをreadしない。frontend providerとbackend sourceはこれらを
+適用しない。
 
 P4はprovider lifecycleとbackend source / mapping ownershipを成立させる。plugin-local test relocation、
 dummy onboarding、未移行legacy fallbackのretirementと残存symbolの最終監査は#462にhand offする。

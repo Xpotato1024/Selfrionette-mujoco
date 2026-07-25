@@ -168,6 +168,7 @@ def test_viewer_mapping_uses_canonical_sample_without_legacy_summary() -> None:
         gamepad_message(4.0, (0.4444444444444445, 0.0, 0.0), raw_axes=(0.5, 0.0, 0.0))
     )
     expected = map_frame(frame)
+    assert expected.values[0] == pytest.approx(0.4444444444444445, abs=1e-12)
     metadata = dict(frame.metadata)
     metadata.pop("viewer_control_message")
     summary_free = replace(frame, metadata=metadata)
@@ -185,6 +186,33 @@ def test_viewer_mapping_ignores_legacy_summary_when_it_disagrees_with_canonical_
     assert map_frame(replace(frame, metadata=metadata)).values == pytest.approx(
         expected.values, abs=1e-12
     )
+
+
+def test_raw_gamepad_sample_keeps_source_active_when_legacy_axes_are_zero() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(
+        gamepad_message(
+            4.0,
+            (0.0, 0.0, 0.0),
+            raw_axes=(0.05, 0.0, 0.0),
+            zero_state=True,
+        )
+    )
+
+    assert frame.metadata["source_active"] is True
+    assert frame.metadata["viewer_input_sample"]["zero_state"] is False
+    assert frame.metadata["viewer_input_sample"]["gamepad"]["raw_axes"] == (0.05, 0.0, 0.0)
+    assert map_frame(frame).values == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
+
+
+def test_legacy_gamepad_sample_without_raw_axes_keeps_zero_state_compatibility() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(
+        gamepad_message(4.0, (0.0, 0.0, 0.0), zero_state=True)
+    )
+
+    assert frame.metadata["source_active"] is False
+    assert map_frame(frame).values == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
 
 def test_viewer_mapping_applies_compatibility_parameters_and_preserves_defaults() -> None:
@@ -234,9 +262,18 @@ def test_viewer_gamepad_button_supplement_remains_mapping_owned(
     buttons: tuple[bool, ...], expected_z: float
 ) -> None:
     source = ViewerInputSource(clock=lambda: 0.0)
-    frame = source.ingest_control_message(gamepad_message(4.0, (0.0, 0.0, 0.0), buttons=buttons))
+    frame = source.ingest_control_message(
+        gamepad_message(
+            4.0,
+            (0.0, 0.0, 0.0),
+            buttons=buttons,
+            raw_axes=(0.0, 0.0, 0.0),
+            zero_state=True,
+        )
+    )
     assert frame.values == (0.0, 0.0, 0.0)
     assert "axis_values" not in frame.metadata
+    assert frame.metadata["source_active"] is True
     assert map_frame(frame).values[2] == pytest.approx(expected_z, abs=1e-12)
 
 
@@ -248,6 +285,24 @@ def test_viewer_source_health_covers_disconnect_and_stale_timeout() -> None:
     assert disconnected_frame.metadata["source_active"] is False
     assert disconnected_frame.metadata["stale_reason"] == "gamepad_inactive"
     assert health_from_frame(disconnected_frame).status is InputSourceHealthStatus.DISCONNECTED
+
+    raw_source = ViewerInputSource(clock=lambda: 30.0, timeout_ms=250)
+    raw_disconnected = raw_source.ingest_control_message(
+        gamepad_message(
+            4.1,
+            (0.0, 0.0, 0.0),
+            raw_axes=(0.8, 0.0, 0.0),
+            connected=False,
+            zero_state=False,
+        )
+    )
+    assert raw_disconnected.metadata["source_active"] is False
+    assert raw_disconnected.metadata["viewer_input_sample"]["gamepad"]["raw_axes"] == (
+        0.8,
+        0.0,
+        0.0,
+    )
+    assert health_from_frame(raw_disconnected).status is InputSourceHealthStatus.DISCONNECTED
 
     source = ViewerInputSource(clock=FakeClock((40.0, 40.301)), timeout_ms=250)
     source.ingest_control_message(keyboard_message(5.0, "KeyW"))
