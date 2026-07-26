@@ -19,7 +19,7 @@ from selfrionette.runtime.experiment.contracts import ParameterContract, Paramet
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceHealthStatus,
-    InputSourceMappingAdapter,
+    InputSourceMappingAdapterContract,
     InputSourcePlugin,
     InputSourceMode,
     InputSourceRuntimeDependencies,
@@ -158,7 +158,7 @@ def _plugin(
     health: InputSourceHealth,
     metadata: Mapping[str, object],
     *,
-    mapping_input_adapter: InputSourceMappingAdapter | None = None,
+    mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
 ) -> InputSourcePlugin:
     return InputSourcePlugin(
         identity=VersionedIdentity(name, 1),
@@ -170,6 +170,13 @@ def _plugin(
         initial_metadata=metadata,
         mapping_input_adapter=mapping_input_adapter,
     )
+
+
+LOADCELL_MAPPING_INPUT_ADAPTER = InputSourceMappingAdapterContract(
+    input_schema=VersionedIdentity("loadcell_vector_sample", 1),
+    output_schema=VersionedIdentity("loadcell_normalized_input_intent", 1),
+    adapt=loadcell_serial.normalize_loadcell_frame_for_mapping,
+)
 
 
 PROGRAMMED_TARGET_PLUGIN = _plugin(
@@ -195,12 +202,12 @@ VIEWER_PLUGIN = _plugin(
 LOADCELL_SERIAL_PLUGIN = _plugin(
     "loadcell_serial", "loadcell_vector_sample", InputSourceMode.LIVE, loadcell_serial.build_reader,
     ParameterContract((ParameterField("port", str, required=False), ParameterField("baud_rate", int, required=False), ParameterField("lines", tuple, required=False))), _disconnected_health(), {"source_kind": "loadcell_serial", "baud_rate": 115200},
-    mapping_input_adapter=loadcell_serial.normalize_loadcell_frame_for_mapping,
+    mapping_input_adapter=LOADCELL_MAPPING_INPUT_ADAPTER,
 )
 LOADCELL_FIXTURE_PLUGIN = _plugin(
     "loadcell_fixture", "loadcell_vector_sample", InputSourceMode.REPLAY, loadcell_fixture.build_reader,
     ParameterContract((ParameterField("lines", tuple),)), _active_health(), {"source_kind": "loadcell_serial", "fixture": True},
-    mapping_input_adapter=loadcell_serial.normalize_loadcell_frame_for_mapping,
+    mapping_input_adapter=LOADCELL_MAPPING_INPUT_ADAPTER,
 )
 ANALOG_FIXTURE_PLUGIN = _plugin(
     "analog_fixture", "analog_fixture_sample", InputSourceMode.REPLAY, analog_fixture.build_reader,

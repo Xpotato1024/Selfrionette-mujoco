@@ -181,7 +181,30 @@ class InputSourceFactory(Protocol):
     ) -> object: ...
 
 
-InputSourceMappingAdapter = Callable[[RawInputFrame], object]
+@dataclass(frozen=True, slots=True)
+class InputSourceMappingAdapterContract:
+    """Versioned source-owned adaptation at the mapping boundary."""
+
+    input_schema: VersionedIdentity
+    output_schema: VersionedIdentity
+    adapt: Callable[[RawInputFrame], object]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.input_schema, VersionedIdentity):
+            raise TypeError("input source mapping adapter input_schema must be versioned")
+        if not isinstance(self.output_schema, VersionedIdentity):
+            raise TypeError("input source mapping adapter output_schema must be versioned")
+        if not callable(self.adapt):
+            raise TypeError("input source mapping adapter adapt must be callable")
+
+    def __call__(self, frame: RawInputFrame) -> object:
+        if not isinstance(frame, RawInputFrame):
+            raise TypeError("input source mapping adapter requires RawInputFrame")
+        return self.adapt(frame)
+
+
+# Compatibility name for callers that used the P5 callable type alias.
+InputSourceMappingAdapter = InputSourceMappingAdapterContract
 
 
 class ValidatedInputSourceReader(InputSource, InputSourceHealthProvider):
@@ -242,7 +265,7 @@ class InputSourcePlugin:
     initial_health: InputSourceHealth
     initial_metadata: Mapping[str, object]
     produced_evidence: frozenset[VersionedIdentity] = field(default_factory=frozenset)
-    mapping_input_adapter: InputSourceMappingAdapter | None = None
+    mapping_input_adapter: InputSourceMappingAdapterContract | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.identity, VersionedIdentity):
@@ -270,10 +293,15 @@ class InputSourcePlugin:
         if any(not isinstance(identity, VersionedIdentity) for identity in evidence):
             raise TypeError("input source produced evidence must use VersionedIdentity")
         object.__setattr__(self, "produced_evidence", evidence)
-        if self.mapping_input_adapter is not None and not callable(
-            self.mapping_input_adapter
-        ):
-            raise TypeError("input source mapping_input_adapter must be callable")
+        if self.mapping_input_adapter is not None:
+            if not isinstance(self.mapping_input_adapter, InputSourceMappingAdapterContract):
+                raise TypeError(
+                    "input source mapping_input_adapter must use the versioned contract"
+                )
+            if self.mapping_input_adapter.input_schema != self.produced_sample_schema:
+                raise ValueError(
+                    "input source mapping adapter input_schema must match produced_sample_schema"
+                )
 
     def create_runtime_reader(
         self,
@@ -352,6 +380,14 @@ class InputSourcePlugin:
     def produced_sample_schema_identity(self) -> VersionedIdentity:
         return self.produced_sample_schema
 
+    @property
+    def effective_mapping_input_sample_schema(self) -> VersionedIdentity:
+        """Return the versioned representation consumed by the mapping strategy."""
+
+        if self.mapping_input_adapter is None:
+            return self.produced_sample_schema
+        return self.mapping_input_adapter.output_schema
+
     # Short compatibility spelling for callers that use the generic reader term.
     def create_reader(
         self,
@@ -368,6 +404,7 @@ class InputSourcePlugin:
 __all__ = [
     "InputSourceFactory",
     "InputSourceMappingAdapter",
+    "InputSourceMappingAdapterContract",
     "InputSourceHealth",
     "InputSourceHealthStatus",
     "InputSourceHealthProvider",

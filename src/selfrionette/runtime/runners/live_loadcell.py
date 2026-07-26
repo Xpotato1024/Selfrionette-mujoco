@@ -104,6 +104,21 @@ def run_live_loadcell_runtime_runner(
         if materialized_lines is not None
         else {"port": config.port, "baud_rate": config.baud_rate}
     )
+    mapping_plugin = resolve_control_mapping_plugin(
+        PluginSelection("loadcell_endpoint_mapping", 1)
+    )
+    effective_mapping_schema = registration.plugin.effective_mapping_input_sample_schema
+    if effective_mapping_schema not in mapping_plugin.accepted_input_sample_schemas:
+        raise ValueError(
+            "loadcell source/mapping schema compatibility mismatch: "
+            f"mapping input is {effective_mapping_schema.canonical_id!r}"
+        )
+    mapping_parameters = mapping_plugin.normalize_parameters(
+        {
+            "mapping_config": {},
+            "current_tip_position_m": config.current_tip_position_m,
+        }
+    )
     source = registration.plugin.create_runtime_reader(
         source_parameters,
         runtime_dependencies=(
@@ -112,14 +127,6 @@ def run_live_loadcell_runtime_runner(
             else None
         ),
     )
-    mapping_plugin = resolve_control_mapping_plugin(
-        PluginSelection("loadcell_endpoint_mapping", 1)
-    )
-    mapping_parameters = {
-        "mapping_config": {},
-        "current_tip_position_m": config.current_tip_position_m,
-    }
-
     payloads: list[Mapping[str, object]] = []
     start = getattr(source, "start", None)
     close = getattr(source, "close", None)

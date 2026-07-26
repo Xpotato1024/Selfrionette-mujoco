@@ -14,7 +14,15 @@ from selfrionette.runtime.runners.live_loadcell import (
 from selfrionette.schemas import RawInputFrame
 from selfrionette.input_sources.loadcell_serial import normalize_loadcell_frame_for_mapping
 from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
-from selfrionette.runtime.experiment.contracts import PluginSelection
+from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
+from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
+
+
+_TEST_MAPPING_ADAPTER = InputSourceMappingAdapterContract(
+    input_schema=VersionedIdentity("loadcell_vector_sample", 1),
+    output_schema=VersionedIdentity("loadcell_normalized_input_intent", 1),
+    adapt=normalize_loadcell_frame_for_mapping,
+)
 
 
 def _guard_serial_import(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -139,7 +147,10 @@ def test_live_loadcell_runtime_runner_preserves_primary_failure_when_close_fails
     registration = SimpleNamespace(
         plugin=SimpleNamespace(
             create_runtime_reader=lambda *args, **kwargs: reader,
-            mapping_input_adapter=normalize_loadcell_frame_for_mapping,
+            effective_mapping_input_sample_schema=VersionedIdentity(
+                "loadcell_normalized_input_intent", 1
+            ),
+            mapping_input_adapter=_TEST_MAPPING_ADAPTER,
         )
     )
     monkeypatch.setattr(
@@ -187,7 +198,10 @@ def test_live_loadcell_runtime_runner_surfaces_close_failure_after_success(
     registration = SimpleNamespace(
         plugin=SimpleNamespace(
             create_runtime_reader=lambda *args, **kwargs: reader,
-            mapping_input_adapter=normalize_loadcell_frame_for_mapping,
+            effective_mapping_input_sample_schema=VersionedIdentity(
+                "loadcell_normalized_input_intent", 1
+            ),
+            mapping_input_adapter=_TEST_MAPPING_ADAPTER,
         )
     )
     monkeypatch.setattr(

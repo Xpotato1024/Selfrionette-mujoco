@@ -83,6 +83,7 @@ class RuntimeInputSourceSelection:
     control_mapping: ControlMappingPlugin | None = None
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
     control_mapping_parameter_explicit_keys: frozenset[str] = field(default_factory=frozenset)
+    mapping_input_sample_schema: VersionedIdentity | None = None
     mapping_input_adapter: InputSourceMappingAdapter | None = None
 
     @property
@@ -92,6 +93,10 @@ class RuntimeInputSourceSelection:
     @property
     def produced_sample_schema_identity(self) -> VersionedIdentity | None:
         return self.produced_sample_schema
+
+    @property
+    def effective_mapping_input_sample_schema(self) -> VersionedIdentity | None:
+        return self.mapping_input_sample_schema
 
     @property
     def runtime_execution_adapter(self) -> RuntimeInputSourceExecutionAdapter | None:
@@ -124,22 +129,7 @@ def _normalize_control_mapping_parameters(
     if control_mapping is None:
         return MappingProxyType({})
 
-    if not isinstance(selected_parameters, Mapping):
-        raise TypeError("control mapping parameters must use a mapping")
-
-    # The generic contract owns the first gate; the optional plugin capability
-    # adds mapping-specific semantic validation and deterministic normalization.
-    control_mapping.parameter_contract.validate(selected_parameters)
-    normalizer = control_mapping.parameter_normalizer
-    normalized = (
-        normalizer(selected_parameters)
-        if normalizer is not None
-        else dict(selected_parameters)
-    )
-    if not isinstance(normalized, Mapping):
-        raise TypeError("control mapping parameter_normalizer must return a mapping")
-    control_mapping.parameter_contract.validate(normalized)
-    return MappingProxyType(dict(sorted(normalized.items())))
+    return control_mapping.normalize_parameters(selected_parameters)
 
 
 def _resolve_control_mapping_parameters(
@@ -230,10 +220,14 @@ def select_runtime_input_source(
         if resolved_mapping_selection is not None
         else None
     )
-    if control_mapping is not None and plugin.produced_sample_schema not in control_mapping.accepted_input_sample_schemas:
+    effective_mapping_schema = plugin.effective_mapping_input_sample_schema
+    if (
+        control_mapping is not None
+        and effective_mapping_schema not in control_mapping.accepted_input_sample_schemas
+    ):
         raise ValueError(
-            "input sample schema compatibility mismatch: source produces "
-            f"{plugin.produced_sample_schema.canonical_id!r}, mapping accepts "
+            "input sample schema compatibility mismatch: mapping input is "
+            f"{effective_mapping_schema.canonical_id!r}, mapping accepts "
             f"{tuple(sorted(item.canonical_id for item in control_mapping.accepted_input_sample_schemas))!r}"
         )
     resolved_mapping_parameters = _resolve_control_mapping_parameters(
@@ -293,6 +287,9 @@ def select_runtime_input_source(
         control_mapping=control_mapping,
         control_mapping_parameters=resolved_mapping_parameters,
         control_mapping_parameter_explicit_keys=explicit_mapping_parameter_keys,
+        mapping_input_sample_schema=(
+            effective_mapping_schema if control_mapping is not None else None
+        ),
         mapping_input_adapter=plugin.mapping_input_adapter,
     )
 

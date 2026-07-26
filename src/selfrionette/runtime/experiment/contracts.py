@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 
 
@@ -396,6 +397,25 @@ class ControlMappingPlugin:
                 )
         if self.parameter_normalizer is not None and not callable(self.parameter_normalizer):
             raise TypeError("control mapping parameter_normalizer must be callable")
+
+    def normalize_parameters(
+        self,
+        parameters: Mapping[str, object],
+    ) -> Mapping[str, object]:
+        """Validate and deterministically normalize mapping parameters once."""
+
+        if not isinstance(parameters, Mapping):
+            raise TypeError("control mapping parameters must use a mapping")
+        self.parameter_contract.validate(parameters)
+        normalized = (
+            self.parameter_normalizer(parameters)
+            if self.parameter_normalizer is not None
+            else dict(parameters)
+        )
+        if not isinstance(normalized, Mapping):
+            raise TypeError("control mapping parameter_normalizer must return a mapping")
+        self.parameter_contract.validate(normalized)
+        return MappingProxyType(dict(sorted(normalized.items())))
 
 
 @dataclass(frozen=True, slots=True)

@@ -91,12 +91,14 @@ def test_production_loadcell_source_declares_explicit_mapping_input_adapter() ->
         for mapping in CONTROL_MAPPING_PLUGINS
         if mapping.identity.name == "loadcell_endpoint_mapping"
     )
-    assert "loadcell_vector_sample" in {
+    assert "loadcell_normalized_input_intent" in {
         schema.name for schema in loadcell_mapping.accepted_input_sample_schemas
     }
     for source_id in ("loadcell_serial", "loadcell_fixture"):
         source = INPUT_SOURCE_CATALOG.resolve(source_id).plugin
-        assert callable(source.mapping_input_adapter), source_id
+        assert source.mapping_input_adapter is not None, source_id
+        assert source.mapping_input_adapter.input_schema == source.produced_sample_schema
+        assert source.mapping_input_adapter.output_schema in loadcell_mapping.accepted_input_sample_schemas
 
 
 def test_mapping_tests_use_canonical_mapping_owners() -> None:

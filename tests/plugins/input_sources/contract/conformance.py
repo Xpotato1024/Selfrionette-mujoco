@@ -82,6 +82,9 @@ def assert_input_source_plugin_conforms(case: InputSourceConformanceCase) -> Non
     assert plugin.identity.name
     assert plugin.identity.version >= 1
     assert plugin.produced_sample_schema.canonical_id
+    if plugin.mapping_input_adapter is not None:
+        assert plugin.mapping_input_adapter.input_schema == plugin.produced_sample_schema
+        assert plugin.mapping_input_adapter.output_schema.canonical_id
     assert isinstance(plugin.initial_health, InputSourceHealth)
     assert isinstance(plugin.initial_metadata, MappingProxyType)
     plugin.parameter_contract.validate(case.parameters)
@@ -165,10 +168,16 @@ def assert_sample_schema_compatible(
     plugin: InputSourcePlugin,
     mapping: ControlMappingPlugin,
 ) -> None:
-    """Keep the source-produced / mapping-accepted schema gate explicit."""
+    """Keep the effective source-to-mapping schema gate explicit."""
 
     assert mapping.accepted_input_sample_schemas
-    assert plugin.produced_sample_schema in mapping.accepted_input_sample_schemas
+    effective_schema = plugin.effective_mapping_input_sample_schema
+    assert effective_schema in mapping.accepted_input_sample_schemas
+    if plugin.mapping_input_adapter is None:
+        assert effective_schema == plugin.produced_sample_schema
+    else:
+        assert plugin.mapping_input_adapter.input_schema == plugin.produced_sample_schema
+        assert plugin.mapping_input_adapter.output_schema == effective_schema
 
 
 __all__ = [

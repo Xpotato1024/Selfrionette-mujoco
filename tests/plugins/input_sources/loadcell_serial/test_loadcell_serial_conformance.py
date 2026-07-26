@@ -1,7 +1,9 @@
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
+from selfrionette.plugins.mappings.loadcell import LOADCELL_ENDPOINT_MAPPING_PLUGIN
 from tests.plugins.input_sources.contract.conformance import (
     InputSourceConformanceCase,
     TimestampSequencePolicy,
+    assert_sample_schema_compatible,
     assert_input_source_plugin_conforms,
 )
 
@@ -12,6 +14,7 @@ _SECOND_VALID_LINE = "vector,2,2,3,4,5,6,7,8"
 
 def test_loadcell_serial_plugin_conforms_with_injected_lines() -> None:
     plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+    assert_sample_schema_compatible(plugin, LOADCELL_ENDPOINT_MAPPING_PLUGIN)
     assert_input_source_plugin_conforms(
         InputSourceConformanceCase(
             plugin=plugin,

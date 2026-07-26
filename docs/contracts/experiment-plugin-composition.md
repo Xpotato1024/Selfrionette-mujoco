@@ -281,7 +281,7 @@ safetyを証明しない。
 
 Control Mapping Plugin の production catalog は viewerだけに限定されず、replay、analog fixture、loadcell endpoint mappingをdeterministic IDで登録する。source parser、provider acquisition、intrinsic normalizationはsource ownerに残し、axis assignment、sign、gain、scale、deadzone、control frame、endpoint/command conversionはmapping ownerに置く。
 
-loadcell は serial source pluginが生成する raw `loadcell_vector_sample/v1`を、source pluginのtyped `mapping_input_adapter` capabilityでsource-owned normalizationへ通した後、normalized intent objectとしてendpoint mapping strategyへ渡す。Control Mapping catalogはsource-produced raw schemaをaccepted boundaryとして宣言し、runtimeはadapter後のnormalized objectだけをstrategyへ渡す。adapter不在、別mapping選択、schema mismatchはfail-closedであり、raw frameのmapping package内implicit re-normalizationやfallbackは行わない。
+loadcell は serial source pluginが生成する acquisition schema `loadcell_vector_sample/v1`を、source pluginのtyped/versioned `mapping_input_adapter` contract（input `loadcell_vector_sample/v1`、output `loadcell_normalized_input_intent/v1`）でsource-owned normalizationへ通す。adapter後のeffective mapping-input schema `loadcell_normalized_input_intent/v1`をControl Mapping Pluginのaccepted schemaと比較し、strategyへは`NormalizedLoadcellInputIntent`だけを渡す。adapter不在、adapter input/output schema mismatch、別mapping選択はstartup readinessでfail-closedとなり、raw frameのmapping package内implicit re-normalizationやfallbackは行わない。
 
 既存public importを保つためのsource facadeは5 moduleに限定する。facadeはcanonical `plugins/mappings/` implementationをreexportするだけで、mapping algorithmのsecond SoTではない。architecture guardはallowlist外のreverse dependency、mapping testからのmapping-owned source import、source-name dispatchを拒否する。
 

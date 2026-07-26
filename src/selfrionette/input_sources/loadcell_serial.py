@@ -260,7 +260,6 @@ def run_loadcell_serial_dry_run_smoke(
     if max_vectors < 1:
         raise ValueError("max_vectors must be a positive integer")
 
-    source = SerialInputSource.from_lines(lines)
     normalized_converter = LoadcellNormalizedInputIntentConverter(normalization_config)
     endpoint_converter = LoadcellEndpointMotionCommandConverter(endpoint_config)
     selected_mapping_parameters = (
@@ -271,6 +270,12 @@ def run_loadcell_serial_dry_run_smoke(
         if mapping_parameters is None
         else mapping_parameters
     )
+    if mapping_plugin is not None:
+        normalize_parameters = getattr(mapping_plugin, "normalize_parameters", None)
+        if not callable(normalize_parameters):
+            raise TypeError("loadcell mapping plugin must expose normalize_parameters")
+        selected_mapping_parameters = normalize_parameters(selected_mapping_parameters)
+    source = SerialInputSource.from_lines(lines)
 
     frames_read = 0
     vectors_read = 0

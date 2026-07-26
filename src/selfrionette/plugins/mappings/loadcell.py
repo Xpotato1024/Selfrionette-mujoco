@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite
+from types import MappingProxyType
 from typing import Protocol, cast, runtime_checkable
 
 from selfrionette.runtime.experiment.contracts import (
@@ -61,28 +62,46 @@ class LoadcellEndpointMappingConfig:
     def __post_init__(self) -> None:
         if len(self.channel_axis_weights) != 7:
             raise ValueError("channel_axis_weights must contain exactly 7 channel weights")
-        for channel_index, weight in enumerate(self.channel_axis_weights):
+        weights = tuple(
             _coerce_vector3(f"channel_axis_weights[{channel_index}]", weight)
-        if not isfinite(self.gain_m):
-            raise ValueError("gain_m must be finite")
-        if self.gain_m < 0.0:
+            for channel_index, weight in enumerate(self.channel_axis_weights)
+        )
+        object.__setattr__(self, "channel_axis_weights", weights)
+        gain_m = _coerce_finite_number("gain_m", self.gain_m)
+        if gain_m < 0.0:
             raise ValueError("gain_m must be non-negative")
-        if not isfinite(self.max_delta_m):
-            raise ValueError("max_delta_m must be finite")
-        if self.max_delta_m <= 0.0:
+        object.__setattr__(self, "gain_m", gain_m)
+        max_delta_m = _coerce_finite_number("max_delta_m", self.max_delta_m)
+        if max_delta_m <= 0.0:
             raise ValueError("max_delta_m must be positive")
+        object.__setattr__(self, "max_delta_m", max_delta_m)
+
+
+def _coerce_finite_number(name: str, value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite number")
+    result = float(value)
+    if not isfinite(result):
+        raise ValueError(f"{name} must be finite")
+    return result
 
 
 def _coerce_vector3(name: str, value: object) -> Vector3:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError(f"{name} must contain exactly three values")
-    components = tuple(float(component) for component in value)
+    if len(value) != 3:
+        raise ValueError(f"{name} must contain exactly three values")
+    components = []
+    for component in value:
+        if isinstance(component, bool) or not isinstance(component, (int, float)):
+            raise ValueError(f"{name} must contain only finite values")
+        converted = float(component)
+        if not isfinite(converted):
+            raise ValueError(f"{name} must contain only finite values")
+        components.append(converted)
     if len(components) != 3:
         raise ValueError(f"{name} must contain exactly three values")
-    for component_index, component in enumerate(components):
-        if not isfinite(component):
-            raise ValueError(f"{name} must contain only finite values at index {component_index}")
-    return cast(Vector3, components)
+    return cast(Vector3, tuple(components))
 
 
 def _coerce_normalized_values(
@@ -215,6 +234,28 @@ def _current_tip_from_parameters(parameters: Mapping[str, object]) -> Vector3:
     return _coerce_vector3("current_tip_position_m", parameters.get("current_tip_position_m"))
 
 
+def normalize_loadcell_endpoint_mapping_parameters(
+    parameters: Mapping[str, object],
+) -> Mapping[str, object]:
+    """Validate and canonicalize loadcell mapping parameters before source use."""
+
+    if not isinstance(parameters, Mapping):
+        raise TypeError("loadcell mapping parameters must use a mapping")
+    mapping_config = parameters.get("mapping_config")
+    if isinstance(mapping_config, LoadcellEndpointMappingConfig):
+        normalized_config = mapping_config
+    elif isinstance(mapping_config, Mapping):
+        normalized_config = LoadcellEndpointMappingConfig(**dict(mapping_config))
+    else:
+        raise ValueError("loadcell mapping requires mapping_config")
+    return MappingProxyType(
+        {
+            "mapping_config": normalized_config,
+            "current_tip_position_m": _current_tip_from_parameters(parameters),
+        }
+    )
+
+
 class LoadcellEndpointMappingStrategy:
     mapping_semantics_identity = LOADCELL_MAPPING_SEMANTICS_IDENTITY
 
@@ -223,10 +264,11 @@ class LoadcellEndpointMappingStrategy:
             raise TypeError(
                 "loadcell endpoint mapping requires the source-normalized intent boundary"
             )
+        normalized_parameters = normalize_loadcell_endpoint_mapping_parameters(parameters)
         command = build_motion_command_from_normalized_loadcell_intent(
             input_intent,
-            current_tip_position_m=_current_tip_from_parameters(parameters),
-            config=_config_from_parameters(parameters),
+            current_tip_position_m=_current_tip_from_parameters(normalized_parameters),
+            config=_config_from_parameters(normalized_parameters),
         )
         return InputIntent(
             source=input_intent.source,
@@ -239,7 +281,7 @@ class LoadcellEndpointMappingStrategy:
 LOADCELL_ENDPOINT_MAPPING_PLUGIN = ControlMappingPlugin(
     identity=LOADCELL_ENDPOINT_MAPPING_IDENTITY,
     strategy=LoadcellEndpointMappingStrategy(),
-    accepted_input_sample_schemas=frozenset({LOADCELL_VECTOR_SAMPLE_SCHEMA}),
+    accepted_input_sample_schemas=frozenset({LOADCELL_NORMALIZED_SAMPLE_SCHEMA}),
     parameter_contract=ParameterContract(
         (
             ParameterField("mapping_config", object),
@@ -248,6 +290,7 @@ LOADCELL_ENDPOINT_MAPPING_PLUGIN = ControlMappingPlugin(
     ),
     comparison_family_identity=VersionedIdentity("loadcell_comparison", 1),
     mapping_semantics_identity=LOADCELL_MAPPING_SEMANTICS_IDENTITY,
+    parameter_normalizer=normalize_loadcell_endpoint_mapping_parameters,
 )
 
 
@@ -263,4 +306,5 @@ __all__ = [
     "NormalizedLoadcellInputIntentLike",
     "build_motion_command_from_normalized_loadcell_intent",
     "build_r7_a_lite_smoke_endpoint_mapping_config",
+    "normalize_loadcell_endpoint_mapping_parameters",
 ]

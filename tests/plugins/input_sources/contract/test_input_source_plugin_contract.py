@@ -20,6 +20,7 @@ from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceHealthStatus,
     InputSourceHealthProvider,
+    InputSourceMappingAdapterContract,
     InputSourceMode,
     InputSourcePlugin,
     ManagedInputSource,
@@ -102,6 +103,35 @@ def test_factory_output_and_parameters_are_validated_without_fallback() -> None:
         parameter_plugin.create_runtime_reader({})
     with pytest.raises(ValueError, match="not bool"):
         parameter_plugin.create_runtime_reader({"gain": True})
+
+
+def test_mapping_adapter_contract_is_versioned_and_uses_effective_schema() -> None:
+    output_schema = VersionedIdentity("normalized_conformance_sample", 1)
+    plugin = replace(
+        build_conformance_input_source(),
+        mapping_input_adapter=InputSourceMappingAdapterContract(
+            input_schema=CONFORMANCE_SAMPLE_SCHEMA,
+            output_schema=output_schema,
+            adapt=lambda frame: frame,
+        ),
+    )
+
+    assert plugin.mapping_input_adapter is not None
+    assert plugin.mapping_input_adapter.input_schema == CONFORMANCE_SAMPLE_SCHEMA
+    assert plugin.mapping_input_adapter.output_schema == output_schema
+    assert plugin.effective_mapping_input_sample_schema == output_schema
+
+
+def test_mapping_adapter_input_schema_mismatch_fails_closed() -> None:
+    with pytest.raises(ValueError, match="input_schema must match"):
+        replace(
+            build_conformance_input_source(),
+            mapping_input_adapter=InputSourceMappingAdapterContract(
+                input_schema=VersionedIdentity("wrong_raw_sample", 1),
+                output_schema=VersionedIdentity("normalized_conformance_sample", 1),
+                adapt=lambda frame: frame,
+            ),
+        )
 
 
 def test_offline_does_not_require_lifecycle_and_live_does() -> None:
@@ -386,6 +416,58 @@ def test_composition_rejects_schema_mismatch_and_empty_mapping_acceptance() -> N
     empty = replace(build_test_mapping(), accepted_input_sample_schemas=frozenset())
     with pytest.raises(ValueError, match="at least one accepted"):
         compose_experiment(build_test_manifest(), build_test_registries(input_source=source, mapping=empty))
+
+
+def test_composition_uses_effective_mapping_schema_and_rejects_missing_or_wrong_adapter() -> None:
+    normalized_schema = VersionedIdentity("normalized_conformance_sample", 1)
+    mapping = replace(
+        build_test_mapping(),
+        accepted_input_sample_schemas=frozenset({normalized_schema}),
+    )
+    adapter = InputSourceMappingAdapterContract(
+        input_schema=CONFORMANCE_SAMPLE_SCHEMA,
+        output_schema=normalized_schema,
+        adapt=lambda frame: frame,
+    )
+
+    resolved = compose_experiment(
+        build_test_manifest(),
+        build_test_registries(
+            input_source=replace(build_conformance_input_source(), mapping_input_adapter=adapter),
+            mapping=mapping,
+        ),
+    )
+    assert resolved.resolved_input_sample_schema == CONFORMANCE_SAMPLE_SCHEMA
+    assert resolved.resolved_mapping_input_sample_schema == normalized_schema
+
+    with pytest.raises(ValueError, match="schema compatibility mismatch"):
+        compose_experiment(
+            build_test_manifest(),
+            build_test_registries(
+                input_source=build_conformance_input_source(),
+                mapping=mapping,
+            ),
+        )
+
+    wrong_output = replace(
+        build_conformance_input_source(),
+        mapping_input_adapter=InputSourceMappingAdapterContract(
+            input_schema=CONFORMANCE_SAMPLE_SCHEMA,
+            output_schema=VersionedIdentity("other_normalized_sample", 1),
+            adapt=lambda frame: frame,
+        ),
+    )
+    with pytest.raises(ValueError, match="schema compatibility mismatch"):
+        compose_experiment(
+            build_test_manifest(),
+            build_test_registries(input_source=wrong_output, mapping=mapping),
+        )
+
+
+def test_no_mapping_adapter_uses_produced_schema_directly() -> None:
+    source = build_conformance_input_source()
+    assert source.mapping_input_adapter is None
+    assert source.effective_mapping_input_sample_schema == CONFORMANCE_SAMPLE_SCHEMA
 
 
 def test_composition_rejects_unselected_source_parameters_and_wrong_registry_type() -> None:

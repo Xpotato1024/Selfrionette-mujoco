@@ -220,6 +220,20 @@ def test_production_loadcell_selection_adapts_raw_frame_before_mapping_strategy(
         PluginSelection("loadcell_endpoint_mapping", 1)
     )
     assert selection.mapping_input_adapter is not None
+    assert selection.mapping_input_adapter.input_schema == VersionedIdentity(
+        "loadcell_vector_sample", 1
+    )
+    assert selection.mapping_input_adapter.output_schema == VersionedIdentity(
+        "loadcell_normalized_input_intent", 1
+    )
+    assert selection.effective_mapping_input_sample_schema == VersionedIdentity(
+        "loadcell_normalized_input_intent", 1
+    )
+    assert selection.effective_mapping_input_sample_schema in (
+        selection.control_mapping.accepted_input_sample_schemas
+        if selection.control_mapping is not None
+        else ()
+    )
     assert selection.runtime_reader is not None
     raw_frame = selection.runtime_reader.read_frame()
     normalized_intent = selection.mapping_input_adapter(raw_frame)
@@ -244,3 +258,57 @@ def test_production_loadcell_selection_rejects_incompatible_mapping_before_reade
                 "viewer_keyboard_gamepad_mapping", 1
             ),
         )
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    (
+        {
+            "mapping_config": {"gain_m": -0.01},
+            "current_tip_position_m": (0.1, 0.2, 0.3),
+        },
+        {
+            "mapping_config": {"max_delta_m": 0.0},
+            "current_tip_position_m": (0.1, 0.2, 0.3),
+        },
+        {
+            "mapping_config": {
+                "channel_axis_weights": (
+                    (0.0, 0.0, 0.0),
+                    (0.0, 0.0, 0.0),
+                    (0.0, 0.0, 0.0),
+                    (0.0, 0.0, 0.0),
+                    (0.0, 0.0, 0.0),
+                    (0.0, 0.0, 0.0),
+                )
+            },
+            "current_tip_position_m": (0.1, 0.2, 0.3),
+        },
+        {
+            "mapping_config": {},
+            "current_tip_position_m": (0.1, 0.2),
+        },
+    ),
+)
+def test_invalid_loadcell_mapping_parameters_fail_before_source_reader_creation(
+    monkeypatch: pytest.MonkeyPatch,
+    parameters: dict[str, object],
+) -> None:
+    create_calls: list[str] = []
+    original = InputSourcePlugin.create_runtime_reader
+
+    def spy(self, *args, **kwargs):
+        create_calls.append(self.identity.canonical_id)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(InputSourcePlugin, "create_runtime_reader", spy)
+    with pytest.raises((TypeError, ValueError)):
+        select_runtime_input_source(
+            "loadcell_serial",
+            steps=1,
+            line_source=("vector,1000,1,0,0,0,0,0,0",),
+            control_mapping_selection=PluginSelection("loadcell_endpoint_mapping", 1),
+            control_mapping_parameters=parameters,
+        )
+
+    assert create_calls == []
