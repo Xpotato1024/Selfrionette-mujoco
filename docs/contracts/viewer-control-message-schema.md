@@ -84,9 +84,9 @@ top-level field:
 - `stale`: optional boolean
 - `zero_state`: optional boolean
 
-`raw_axes`が存在するgamepadでは、source activityは`connected`、provider lifecycle、`stale`、disconnectなど
-source-owned stateから決まり、legacy normalized `axes`やmapping deadzoneからは決まらない。`zero_state`は
-providerのraw neutral / legacy wire stateであり、mapping後のcommand zeroやsource healthの代替ではない。
+`raw_axes`が存在するgamepadでも、publicなsource activityはlegacy projected `axes`とbuttonsから生成された
+`zero_state`、`connected`、provider lifecycle、`stale`、disconnectなど既存observable semanticsを維持する。
+`zero_state`はproviderのlegacy wire stateであり、mapping後のcommand zeroやsource healthの代替ではない。
 raw axisがzeroでもbutton pressはactive command sampleとして扱う。`raw_axes`がないlegacy messageは旧
 `axes` / `zero_state`解釈を維持する。
 
@@ -150,6 +150,6 @@ source of truthを変更してはならない。
 
 ## #461 final audit correction (2026-07-26)
 
-gamepad `raw_axes`はbrowser raw axisを保持するcanonical inputであり、`axes`は既存wire / overlay compatibility projectionである。default `gamepad_deadzone=0.1`では、frontend deadzone projection後のbackend thresholdまでをControl Mapping Pluginが同じ順序で適用するため、raw `0.15` / `0.19`はzero、raw `0.20`はlegacyと一致する。custom deadzone `0.0`ではraw `0.05`をmappingが処理できる。source activityはconnection、focus、visibility、stale、disconnectから決まり、button pressはraw axis zeroでもactive sampleである。
+gamepad `raw_axes`はbrowser raw axisを保持するcanonical inputであり、`axes`は既存wire / overlay compatibility projectionである。default `gamepad_deadzone=0.1`では、fixed frontend `0.1` projection後のbackend thresholdまでをControl Mapping Pluginが同じ順序で適用するため、raw `0.15` / `0.19`はzero、raw `0.20`はlegacyと一致する。custom deadzone `0.0`でもraw `0.05`はprojected `axes=[0.0]`とlegacy `zero_state=true`によりhold、raw `0.15`は`1/18`になる。source activity、heartbeat、overlayのpublic semanticsはgamepad/v1のlegacy zero-state projection、connection、focus、visibility、stale、disconnectを維持し、button pressはraw axis zeroでもactive sampleである。
 
 mapping parametersはsource lifecycle / frame read前に検証される。解決順位は `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` であり、legacy message without `raw_axes`は旧解釈を維持する。malformed ingressは即時`INVALID`となり、real browser / network / hardwareの動作はこのschemaからは主張しない。

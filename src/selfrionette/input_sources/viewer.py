@@ -59,13 +59,11 @@ def _gamepad_zero_state(message: ViewerControlMessage) -> bool:
     gamepad = message.gamepad
     if gamepad is None:
         return True
-    if gamepad.raw_axes is None:
-        # Preserve the legacy wire interpretation when raw_axes is absent.
-        return gamepad.zero_state is True or not gamepad.connected
-    return all(axis == 0.0 for axis in gamepad.raw_axes) and all(
-        not button.pressed and (button.value is None or button.value == 0.0)
-        for button in gamepad.buttons
-    )
+    # ``zero_state`` is a provider-owned compatibility projection of the
+    # frontend-normalized axes and buttons. It must remain the observable
+    # gamepad/v1 source-activity signal for both raw and legacy messages;
+    # canonical raw_axes is reserved for mapping.
+    return gamepad.zero_state is True or not gamepad.connected
 
 
 def _provider_contract(message: ViewerControlMessage) -> tuple[str, str, bool]:
@@ -499,22 +497,14 @@ class ViewerInputSource:
                 )
                 stale_reason = None if source_active else _VIEWER_KEYBOARD_INACTIVE_STALE_REASON
             elif message.gamepad is not None:
-                if message.gamepad.raw_axes is not None:
-                    # raw_axes is the canonical mapping input. Its numeric
-                    # value, and the legacy zero_state projection, must not
-                    # make a connected provider inactive before mapping.
-                    source_active = not (
-                        message.gamepad.stale is True
-                        or message.gamepad.connected is False
-                    )
-                else:
-                    # Keep the established interpretation for legacy messages
-                    # that predate the raw_axes extension.
-                    source_active = not (
-                        message.gamepad.zero_state is True
-                        or message.gamepad.stale is True
-                        or message.gamepad.connected is False
-                    )
+                # Preserve the established gamepad/v1 observable activity
+                # semantics. raw_axes is an authoritative mapping sample, not
+                # a replacement for the provider's zero_state projection.
+                source_active = not (
+                    _gamepad_zero_state(message)
+                    or message.gamepad.stale is True
+                    or message.gamepad.connected is False
+                )
                 stale_reason = None if source_active else _VIEWER_GAMEPAD_INACTIVE_STALE_REASON
             else:
                 raise ViewerControlMessageError("viewer control payload is required")

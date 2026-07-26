@@ -81,7 +81,8 @@ browser input, serial open, OSC, hardware access は scope 外である。
 
 frontend providerのfocus / visibility / disconnect処理はzero / inactive sampleをpublicationし、backend sourceの
 latest sampleを非activeまたはstaleへ遷移させる。raw gamepad sampleのconnected activityはlegacy normalized
-axesやmapping deadzoneと独立し、command zeroはmappingの責務としてhealthへ混ぜない。provider ID / schema
+axesとbuttonsから生成されたlegacy `zero_state`を含む既存observable semanticsを維持し、mapping deadzoneと
+command zeroはmappingの責務としてhealthへ混ぜない。provider ID / schema
 不一致は別のproviderやnoopに置き換えない。lifecycle dispose後はkeyboard listener、gamepad polling、heartbeat、
 WebSocket senderを停止する。再activationでは古いactive sampleを再利用せず、最初にzero / safe stateから開始する。
 
@@ -97,6 +98,6 @@ runtimeはhold-currentへ移行する。valid viewer sampleが届いた場合だ
 
 ## #461 final audit correction (2026-07-26)
 
-raw gamepadのsource activityはconnection、focus、visibility、stale、disconnectなどprovider / source-owned stateから決める。legacy normalized `axes`やdeadzone内raw axisでhealthをinactiveにせず、mappingがcommand zeroを決める。default deadzoneはlegacy two-stage transfer functionをmapping plugin内で再現し、`gamepad_deadzone=0.0`のraw `0.05`は非zero intentへ進む。
+raw gamepadのmapping inputは`raw_axes`とするが、gamepad/v1のsource activityはlegacy projected `axes`とbuttonsから生成された`zero_state`、connection、focus、visibility、stale、disconnectなどprovider / source-owned stateのobservable semanticsを維持する。したがって`gamepad_deadzone=0.0`でもraw `0.05`かつprojected `axes=[0.0]`の`zero_state=true`はholdとなり、raw `0.15`はfixed frontend projection後の`1/18`をmappingへ渡す。mapping command zeroとsource healthは別の診断層として扱う。
 
 mapping parametersはsource start / frame readより前に検証される。explicit runtime mapping parametersをdirect `ViewerInputSource` compatibility parametersより優先し、それ以外はregistration / plugin defaultsを使う。invalid、stale、inactive、disconnectedは既存hold-current policyを維持する。

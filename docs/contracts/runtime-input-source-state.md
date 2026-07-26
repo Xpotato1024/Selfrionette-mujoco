@@ -92,9 +92,10 @@ conversion、desired endpointを含むmapping resultではない。
 legacy viewer messageにprovider fieldがない場合も、sourceはknown provider contractへcanonicalize
 して同じsample schemaを作る。provider identity / schemaの不一致、malformed payload、sequence / timestamp
 不正はinvalidとして扱い、別providerまたはnoopへfallbackしない。keyboard blur / hidden、gamepad
-disconnect、staleはinactiveまたはfailureへ遷移させる。raw gamepad sampleではlegacy normalized `axes`の
-zeroやmapping deadzone内のraw axisだけではsourceをinactiveにせず、command zeroはmappingが判定する。
-`raw_axes`を持たないlegacy messageだけは旧`zero_state`解釈を維持する。
+disconnect、staleはinactiveまたはfailureへ遷移させる。gamepad/v1ではproviderがprojected `axes`とbuttons
+から生成したlegacy `zero_state`を`source_active`とheartbeatのobservable compatibility条件として維持する。
+raw axisのmapping deadzone結果はcommand zeroとしてmappingが判定し、source healthの代替にはしない。`raw_axes`
+を持たないlegacy messageも旧`axes` / `zero_state`解釈を維持する。
 
 viewer sourceのhealthはlatest sampleと250 ms timeoutを正本とする。runtimeはtyped healthとframeに
 存在するstate keyを比較し、mapping後のintentをsource healthの代替にしない。
@@ -106,6 +107,6 @@ legacy compatibility summaryをauthoritative inputにしない。
 
 ## #461 final audit correction (2026-07-26)
 
-viewer canonical sampleでは、raw `raw_axes`、legacy normalized `axes`、provider / source lifecycle state、legacy `zero_state`、mapping結果としてのcommand zeroを別field / 別概念として扱う。raw axisがdeadzone内でもconnectedかつlifecycle上activeならsource healthはactiveを維持でき、button-only inputもactive command sampleとなる。hidden、blur、disconnect、stale、invalidは既存のinactive / failure / hold projectionを維持する。
+viewer canonical sampleでは、raw `raw_axes`、legacy normalized `axes`、provider / source lifecycle state、legacy `zero_state`、mapping結果としてのcommand zeroを別field / 別概念として扱う。gamepad/v1の`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsに基づくobservable compatibilityを維持するため、raw axisがdeadzone内の`zero_state=true` sampleはsource inactive / holdとなる。button-only inputはactive command sampleとなり、hidden、blur、disconnect、stale、invalidは既存のinactive / failure / hold projectionを維持する。
 
 mapping parameterはselection / plan readinessで検証・正規化・freezeされ、source lifecycle開始前に実行可能性を確定する。explicit runtime parameter、direct source compatibility parameter、plugin defaultの順序をprovenance付きで保持し、source healthとmapping command zeroを混同しない。

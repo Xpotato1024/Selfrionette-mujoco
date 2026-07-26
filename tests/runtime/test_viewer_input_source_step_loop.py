@@ -52,6 +52,14 @@ def _run_single_viewer_step(plan, *, dt_s: float) -> object:
     return asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=dt_s))[0]
 
 
+def _legacy_frontend_gamepad_projection(value: float) -> float:
+    clamped = max(-1.0, min(1.0, value))
+    magnitude = abs(clamped)
+    if magnitude <= 0.1:
+        return 0.0
+    return (1.0 if clamped > 0.0 else -1.0) * ((magnitude - 0.1) / 0.9)
+
+
 def _build_viewer_plan(clock: _ClockSequence, *, steps: int = 1):
     source = ViewerInputSource(clock=clock.monotonic)
     plan = build_runtime_input_source_step_loop_plan(
@@ -134,9 +142,61 @@ def test_actual_provider_raw_gamepad_axis_reaches_custom_mapping_and_motion_stat
                 connected=True,
                 index=0,
                 id="provider-pad",
+                raw_axes=(0.15, 0.0, 0.0),
+                axes=(_legacy_frontend_gamepad_projection(0.15), 0.0, 0.0),
+                buttons=(ViewerControlGamepadButtonMessage(pressed=False, value=0.0),),
+                stale=False,
+                zero_state=False,
+            ),
+        ),
+    )
+
+    record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
+
+    assert record.frame.metadata["source_active"] is True
+    assert record.frame.metadata["viewer_input_sample"]["gamepad"]["raw_axes"] == (0.15, 0.0, 0.0)
+    assert record.intent.values[0] == pytest.approx(1.0 / 18.0, abs=1e-12)
+    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"][0] == pytest.approx(
+        1.0 / 180.0, abs=1e-12
+    )
+    assert record.motion_command.metadata["endpoint_delta_m"][0] > 0.0
+    assert record.state.metadata["source_kind"] == "viewer_gamepad"
+    assert record.state.metadata["actual_tip_delta_m"] != pytest.approx(
+        (0.0, 0.0, 0.0), abs=1e-12
+    )
+
+
+def test_actual_provider_custom_zero_deadzone_keeps_legacy_neutral_raw_axis_at_hold() -> None:
+    clock = _ClockSequence((0.0, 0.0))
+    selection = select_runtime_input_source(
+        "viewer",
+        steps=1,
+        control_mapping_parameters={
+            "gamepad_speed_m_s": 0.1,
+            "gamepad_deadzone": 0.0,
+            "gamepad_max_delta_m": 0.03,
+        },
+    )
+    source = ViewerInputSource(clock=clock.monotonic)
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        viewer_clock=clock.monotonic,
+        viewer_input_source=source,
+        publisher=NoOpStatePublisher(),
+    )
+    ingest_viewer_control_message(
+        source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=1.0,
+            source_kind="gamepad",
+            gamepad=ViewerControlGamepadMessage(
+                connected=True,
+                index=0,
+                id="neutral-pad",
                 raw_axes=(0.05, 0.0, 0.0),
                 axes=(0.0, 0.0, 0.0),
-                buttons=(ViewerControlGamepadButtonMessage(pressed=False, value=0.0),),
+                buttons=(),
                 stale=False,
                 zero_state=True,
             ),
@@ -145,15 +205,12 @@ def test_actual_provider_raw_gamepad_axis_reaches_custom_mapping_and_motion_stat
 
     record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
 
-    assert record.frame.metadata["source_active"] is True
-    assert record.frame.metadata["viewer_input_sample"]["gamepad"]["raw_axes"] == (0.05, 0.0, 0.0)
-    assert record.intent.values[0] == pytest.approx(0.05, abs=1e-12)
-    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"][0] == pytest.approx(
-        0.005, abs=1e-12
+    assert record.frame.metadata["source_active"] is False
+    assert record.intent.values == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
+    assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx(
+        (0.0, 0.0, 0.0), abs=1e-12
     )
-    assert record.motion_command.metadata["endpoint_delta_m"][0] > 0.0
-    assert record.state.metadata["source_kind"] == "viewer_gamepad"
-    assert record.state.metadata["actual_tip_delta_m"] != pytest.approx(
+    assert record.state.metadata["actual_tip_delta_m"] == pytest.approx(
         (0.0, 0.0, 0.0), abs=1e-12
     )
 
@@ -184,10 +241,10 @@ def test_actual_provider_default_gamepad_transfer_preserves_legacy_motion_bounda
                 index=0,
                 id="default-pad",
                 raw_axes=(raw_axis, 0.0, 0.0),
-                axes=(0.0, 0.0, 0.0),
+                axes=(_legacy_frontend_gamepad_projection(raw_axis), 0.0, 0.0),
                 buttons=(),
                 stale=False,
-                zero_state=True,
+                zero_state=_legacy_frontend_gamepad_projection(raw_axis) == 0.0,
             ),
         ),
     )
@@ -246,22 +303,22 @@ def test_direct_viewer_source_compatibility_parameters_reach_runtime_mapping() -
                 connected=True,
                 index=0,
                 id="compat-pad",
-                raw_axes=(0.05, 0.0, 0.0),
-                axes=(0.0, 0.0, 0.0),
+                raw_axes=(0.15, 0.0, 0.0),
+                axes=(_legacy_frontend_gamepad_projection(0.15), 0.0, 0.0),
                 buttons=(),
                 stale=False,
-                zero_state=True,
+                zero_state=False,
             ),
         ),
     )
     record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
 
-    assert record.intent.values[0] == pytest.approx(0.05, abs=1e-12)
+    assert record.intent.values[0] == pytest.approx(1.0 / 18.0, abs=1e-12)
     assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"][0] == pytest.approx(
-        0.01, abs=1e-12
+        0.2 / 18.0, abs=1e-12
     )
     assert record.motion_command.metadata["endpoint_delta_requested_m"][0] == pytest.approx(
-        0.01 / 60.0, abs=1e-12
+        (0.2 / 18.0) / 60.0, abs=1e-12
     )
     assert record.state.metadata["actual_tip_delta_m"] != pytest.approx(
         (0.0, 0.0, 0.0), abs=1e-12
@@ -320,17 +377,17 @@ def test_explicit_runtime_mapping_parameters_override_direct_source_compatibilit
                 index=0,
                 id="explicit-pad",
                 raw_axes=(0.5, 0.0, 0.0),
-                axes=(0.0, 0.0, 0.0),
+                axes=(_legacy_frontend_gamepad_projection(0.5), 0.0, 0.0),
                 buttons=(),
                 stale=False,
-                zero_state=True,
+                zero_state=False,
             ),
         ),
     )
     gamepad_record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
-    assert gamepad_record.intent.values[0] == pytest.approx(0.375, abs=1e-12)
+    assert gamepad_record.intent.values[0] == pytest.approx(4.0 / 9.0, abs=1e-12)
     assert gamepad_record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"][0] == pytest.approx(
-        0.1125, abs=1e-12
+        0.3 * 4.0 / 9.0, abs=1e-12
     )
 
     ingest_viewer_control_message(source, _keyboard_message(1.0, "KeyE"))

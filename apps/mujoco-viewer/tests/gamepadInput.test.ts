@@ -184,7 +184,7 @@ function testSampleViewerGamepadSnapshotUsesFirstConnectedPad(): void {
   });
 }
 
-function testRawAxisBelowLegacyDeadzoneRemainsAProviderActivitySample(): void {
+function testRawAxisBelowLegacyDeadzonePublishesZeroStateWithoutHeartbeat(): void {
   const snapshot = sampleViewerGamepadSnapshot([
     {
       connected: true,
@@ -197,7 +197,7 @@ function testRawAxisBelowLegacyDeadzoneRemainsAProviderActivitySample(): void {
 
   assert.deepEqual(snapshot.raw_axes, [0.05]);
   assert.deepEqual(snapshot.axes, [0]);
-  assert.equal(snapshot.zero_state, false);
+  assert.equal(snapshot.zero_state, true);
 
   const timer = new FakeTimer();
   const published: ReturnType<typeof activeSnapshot>[] = [];
@@ -207,8 +207,8 @@ function testRawAxisBelowLegacyDeadzoneRemainsAProviderActivitySample(): void {
     clearTimeoutFn: timer.clearTimeoutFn,
   });
   controller.update(snapshot);
-  assert.equal(published.length, 1, "raw activity must publish even when legacy axes normalize to zero");
-  assert.equal(timer.pendingCount, 1, "connected provider activity must own the heartbeat");
+  assert.equal(published.length, 1, "the initial zero-state transition must be published");
+  assert.equal(timer.pendingCount, 0, "legacy zero state must stop the heartbeat");
   controller.dispose();
 }
 
@@ -410,16 +410,14 @@ function testViewerGamepadPublicationControllerSeparatesReleaseFromDisconnectHea
   controller.update(zeroSnapshot());
   assert.equal(published.length, 2, "zero/release transition must publish immediately");
   assert.equal(published.at(-1)?.zero_state, true);
-  assert.equal(timer.pendingCount, 1, "connected neutral provider must keep the heartbeat");
-  timer.runNext();
-  assert.equal(published.length, 3, "connected neutral provider must publish its heartbeat");
+  assert.equal(timer.pendingCount, 0, "legacy zero state must stop the heartbeat");
 
   controller.update(zeroSnapshot());
-  assert.equal(published.length, 3, "unchanged neutral sample must stay suppressed until heartbeat");
+  assert.equal(published.length, 2, "unchanged neutral sample must stay suppressed");
 
   controller.update(activeSnapshot());
   controller.update(sampleViewerGamepadSnapshot(null));
-  assert.equal(published.length, 5, "disconnect transition must publish immediately");
+  assert.equal(published.length, 4, "disconnect transition must publish immediately");
   assert.equal(published.at(-1)?.connected, false);
   assert.equal(timer.pendingCount, 0, "disconnect must stop heartbeat");
 }
@@ -528,7 +526,7 @@ function testHeartbeatPublicationAdvancesSequenceAndTimestamp(): void {
 testNormalizeViewerGamepadAxis();
 testSampleViewerGamepadSnapshotReturnsZeroSnapshotWhenNoPad();
 testSampleViewerGamepadSnapshotUsesFirstConnectedPad();
-testRawAxisBelowLegacyDeadzoneRemainsAProviderActivitySample();
+testRawAxisBelowLegacyDeadzonePublishesZeroStateWithoutHeartbeat();
 testButtonOnlyInputRemainsAProviderActivitySample();
 testBuildViewerGamepadControlMessageBuildsSchemaPayload();
 testViewerGamepadControlSenderQueuesUntilOpen();

@@ -232,11 +232,12 @@ canonicalizationに限定され、mapping algorithmの二重実装にならな�
 
 keyboard providerはcapture対象keyのallowlistとpressed key lifecycleだけを保持し、disable / dispose時に
 capture stateをresetする。gamepad providerはbrowserから取得したfiniteな`raw_axes`をcanonical sampleへ
-保持し、既存のnormalized `axes`はwire / overlay互換projectionとして残す。providerのactivityは
-connection、focus、visibility、stale、disconnectなどsource-owned lifecycleから決まり、normalized axesや
-mapping deadzoneからは決まらない。axis assignment、binding direction、speed / gain、deadzone、button
-supplement、requested control frame、command zero判定はControl Mappingのtyped parametersとcanonical
-sampleが所有する。
+保持し、既存のnormalized `axes`はwire / overlay互換projectionとして残す。gamepad/v1のpublicな
+`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsを反映する既存observable
+semanticsを維持し、connection、focus、visibility、stale、disconnectなどprovider / source-owned stateと
+合わせて扱う。raw axisのmapping deadzone結果やcommand zeroはsource healthの代替にしない。axis assignment、
+binding direction、speed / gain、deadzone、button supplement、requested control frame、command zero判定は
+Control Mappingのtyped parametersとcanonical sampleが所有する。
 
 viewer sourceはtyped ingress failureを受けてlatest canonical sampleを`source_active=false`、healthを
 `invalid`へ遷移させる。runtimeはinvalid / stale / inactive / disconnectedでhold-currentを適用し、valid

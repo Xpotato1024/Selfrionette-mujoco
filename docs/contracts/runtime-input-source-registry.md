@@ -254,9 +254,10 @@ managed sourceをstartせず、frameをreadしない。
   `viewer_control_message`のlegacy summary、frontend module、transport implementation detailを読まない。
 - runtime step loop: mapping resultの適用、desired endpoint progression、endpoint rebase、MuJoCo command composition。
 
-raw gamepad sampleではconnection / focus / visibility / stale / disconnectがsource activityを決め、mapping
-deadzoneの結果はsource healthと別のcommand zero semanticsとして扱う。button-only inputはraw axisがzeroでも
-mappingへ渡す。`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。
+raw gamepad sampleでは`raw_axes`をmappingのauthoritative inputとして保持するが、gamepad/v1の`zero_state`、
+`source_active`、heartbeatはlegacy projected `axes`とbuttonsに基づくobservable semanticsを維持する。
+mapping deadzoneの結果はsource healthと別のcommand zero semanticsとして扱う。button-only inputはraw axisが
+zeroでもmappingへ渡す。`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。
 
 frontend registryはarbitrary dynamic importを行わない。lifecycleが選択providerを一括activate / disposeし、
 unknownまたはduplicate provider IDは安全なdefaultへ置換せずrejectする。provider disposal後は
@@ -273,6 +274,6 @@ P4後のtest-layout migration、dummy onboarding、legacy fallback retirementは
 
 ## #461 final audit correction (2026-07-26)
 
-`raw_axes`はnew provider pathのcanonical mapping inputであり、frontend normalized `axes`はwire / overlay compatibility projectionである。source activity / healthはmapping deadzoneと分離し、button-only sampleもmappingへ渡す。`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。default `0.1`のfrontend projection + backend thresholdはmapping plugin内で一元化し、default behavior parityとcustom deadzone `0.0`のraw `0.05`非zeroをgolden testで固定する。
+`raw_axes`はnew provider pathのcanonical mapping inputであり、frontend normalized `axes`はwire / overlay compatibility projectionである。gamepad/v1の`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsに基づくobservable semanticsを維持し、mapping deadzoneのcommand zeroとは分離する。button-only sampleもmappingへ渡し、`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。fixed frontend `0.1` projection + configurable backend thresholdはmapping plugin内で一元化し、default parity、custom `0.0`のraw `0.05` hold、raw `0.15`の`1/18`をgolden testで固定する。
 
 runtime parameter precedenceは `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` とする。selectionはexplicit keyをprovenanceとして保持し、plan readinessでtyped compatibilityを正規化・freezeしてからruntimeへ渡す。remaining input_sources facadeとtest ownership、dummy onboarding、legacy fallback retirementは#462へhandoffする。

@@ -158,8 +158,9 @@ runtime step loop
 provider registryは`keyboard/v1`と`gamepad/v1`の静的known-IDだけを解決する。frontend providerは
 browser raw acquisitionとlifecycleを所有し、gamepadのnormalized `axes`はwire / overlay compatibility
 projectionに限る。backend sourceはparse、schema、latest canonical sample、health、timeout、cleanupを
-所有する。raw `raw_axes`がある場合のsource activityはconnection / focus / visibility / stale / disconnect
-などsource-owned stateで決まり、mapping deadzoneやcommand zeroとは別概念である。mappingはtransportや
+所有する。raw `raw_axes`がある場合もgamepad/v1のpublicな`zero_state`、`source_active`、heartbeatはlegacy
+projected axesとbuttonsを反映し、connection / focus / visibility / stale / disconnectなどsource-owned stateと
+合わせて決まる。mapping deadzoneやcommand zeroとは別概念である。mappingはtransportや
 frontend APIをimportせず、canonical sampleから既存keyboard / gamepad semanticsを一度だけ実行する。
 runtimeはmapping resultを適用し、publish-before-rebase orderingと同一source/capability instanceのidentityを維持する。
 
@@ -175,11 +176,13 @@ legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping
 `src/selfrionette/input_sources/`全体を削除せず、未移行consumerがあるkeyboard、continuous velocity、
 viewer compatibility symbolだけをthin facadeとして残す。残存symbolの最終retirementは#462で監査する。
 
-raw gamepad sampleでは`raw_axes=[0.05]`、legacy `axes=[0.0]`でもsourceを先にinactiveにせず、default
-mapping deadzone `0.1`ならcommandはzero、mapping deadzone `0.0`ならnon-zero intentへ進む。button-only
-sampleもactive provider sampleとしてmappingへ渡す。`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`
-解釈を維持する。default behavior parity、disconnected / hidden / blurred / staleのhold safety、malformed
-ingressの即時`invalid`遷移を維持する。
+raw gamepad sampleでは`raw_axes`をmappingのauthoritative inputとして保持する一方、gamepad/v1の
+`zero_state`、`source_active`、heartbeatはlegacy projected `axes`とbuttonsに基づくobservable semanticsを
+維持する。したがって`raw_axes=[0.05]`、legacy `axes=[0.0]`、`zero_state=true`では、mapping deadzoneが
+`0.0`でもsourceはinactiveのholdとなる。raw `0.15`はfixed frontend projection後の`1/18`をmappingへ渡し、
+button-only sampleはactive provider sampleとしてmappingへ渡す。`raw_axes`を持たないlegacy messageは旧
+`axes` / `zero_state`解釈を維持する。default behavior parity、disconnected / hidden / blurred / staleの
+hold safety、malformed ingressの即時`invalid`遷移を維持する。
 
 ## failureとordering
 
@@ -204,8 +207,10 @@ pre-audit composition chronologyとrefactor proposalは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
 ### #461 final audit correction (2026-07-26)
 
-gamepadのraw pathは、`raw_axes`をmappingのauthoritative inputとして保持する。default `gamepad_deadzone=0.1`では、legacy frontendのdeadzone投影とbackendの第二thresholdをControl Mapping Plugin内で同じ順序に適用し、raw `0.15` / `0.19`はzero、raw `0.20`はlegacyと同じ非zero結果になる。`gamepad_deadzone=0.0`ではraw `0.05`を非zeroとして扱う。normalized `axes`はwire / overlay compatibility projectionに限る。
+gamepadのraw pathは、`raw_axes`をmappingのauthoritative inputとして保持する。default `gamepad_deadzone=0.1`では、fixed frontend deadzone `0.1`のprojectionとbackendの第二thresholdをControl Mapping Plugin内で同じ順序に適用し、raw `0.15` / `0.19`はzero、raw `0.20`はlegacyと同じ非zero結果になる。`gamepad_deadzone=0.0`でもraw `0.05`はfrontend projectionとlegacy `zero_state=true`によりholdとなり、raw `0.15`は`1/18`の非zero結果になる。normalized `axes`はwire / overlay compatibility projectionに限る。
 
-source activity / healthとmappingが生成するcommand zeroは別概念である。button-only sample、disconnect、hidden、blur、stale、invalidの既存hold safetyも維持する。
+source activity / healthとmappingが生成するcommand zeroは別概念である。gamepad/v1のlegacy zero-state
+projectionはobservable source activityの互換条件として維持し、button-only sample、disconnect、hidden、
+blur、stale、invalidの既存hold safetyも維持する。
 
 Control Mapping parametersの優先順位は、`explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults`である。selectionはcallerが明示したparameter keyを保持し、暗黙defaultと区別したうえでplan readiness時にtyped compatibility capabilityを合成する。#462のtest relocation、dummy onboarding、legacy fallback retirementは後続scopeとして実施しない。

@@ -35,6 +35,7 @@ VIEWER_CONTROL_SAMPLE_IDENTITY = VersionedIdentity("viewer_control_sample", 1)
 _DEFAULT_GAMEPAD_SPEED_M_S = 0.1
 _DEFAULT_GAMEPAD_DEADZONE = 0.1
 _DEFAULT_GAMEPAD_MAX_DELTA_M = 0.03
+_LEGACY_FRONTEND_GAMEPAD_DEADZONE = 0.1
 
 
 def _as_json_wire_value(value: object) -> object:
@@ -138,14 +139,16 @@ def _coerce_axis_vector3(axes: Sequence[float]) -> tuple[float, float, float]:
     )
 
 
-def _normalize_gamepad_axis_for_mapping(value: float, deadzone: float) -> float:
-    """Apply the selected mapping deadzone to one canonical raw axis."""
+def _normalize_gamepad_axis_for_legacy_frontend(value: float) -> float:
+    """Reproduce gamepad/v1's fixed frontend compatibility projection."""
 
     clamped = max(-1.0, min(1.0, value))
     magnitude = abs(clamped)
-    if magnitude <= deadzone:
+    if magnitude <= _LEGACY_FRONTEND_GAMEPAD_DEADZONE:
         return 0.0
-    scaled = (magnitude - deadzone) / max(1.0 - deadzone, 1e-12)
+    scaled = (magnitude - _LEGACY_FRONTEND_GAMEPAD_DEADZONE) / max(
+        1.0 - _LEGACY_FRONTEND_GAMEPAD_DEADZONE, 1e-12
+    )
     return (1.0 if clamped > 0.0 else -1.0) * max(0.0, min(1.0, scaled))
 
 
@@ -316,10 +319,7 @@ class ViewerKeyboardGamepadMappingStrategy:
             )
             mapping_axes = (
                 tuple(
-                    _normalize_gamepad_axis_for_mapping(
-                        value,
-                        mapping_parameters.gamepad_deadzone,
-                    )
+                    _normalize_gamepad_axis_for_legacy_frontend(value)
                     for value in source_axes
                 )
                 if sample.gamepad.raw_axes is not None
@@ -332,12 +332,11 @@ class ViewerKeyboardGamepadMappingStrategy:
                 source_kind="viewer_gamepad",
                 source_timestamp_s=sample.timestamp_s,
                 speed_m_s=mapping_parameters.gamepad_speed_m_s,
-                # Raw gamepad axes have already received the selected mapping
-                # deadzone above. The legacy transfer function had a second
-                # backend threshold after that projection; keep that stage in
-                # the mapping plugin so raw input and the old wire projection
-                # have the same observable result. Legacy axes already carry
-                # the frontend projection and retain their existing threshold.
+                # Raw gamepad axes received the fixed legacy frontend
+                # projection above. The selected gamepad deadzone is the
+                # configurable legacy backend threshold and remains the
+                # mapping-owned second stage. Legacy axes already carry the
+                # frontend projection and therefore skip that first stage.
                 deadzone=mapping_parameters.gamepad_deadzone,
                 max_delta_m=mapping_parameters.gamepad_max_delta_m,
                 control_frame=control_frame,

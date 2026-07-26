@@ -83,18 +83,31 @@ def map_frame(frame):
     return VIEWER_CONTROL_MAPPING_PLUGIN.strategy.map_input(frame, {})
 
 
-def _baseline_gamepad_transfer(value: float, deadzone: float = 0.1) -> float:
-    """Reproduce main's frontend projection plus backend threshold."""
+_LEGACY_FRONTEND_GAMEPAD_DEADZONE = 0.1
+
+
+def _baseline_frontend_gamepad_projection(value: float) -> float:
+    """Independent reference for main's fixed frontend projection."""
 
     clamped = max(-1.0, min(1.0, value))
     magnitude = abs(clamped)
-    if magnitude <= deadzone:
-        projected = 0.0
-    else:
-        projected = (1.0 if clamped > 0.0 else -1.0) * (
-            (magnitude - deadzone) / max(1.0 - deadzone, 1e-12)
-        )
-    return 0.0 if abs(projected) <= deadzone else projected
+    if magnitude <= _LEGACY_FRONTEND_GAMEPAD_DEADZONE:
+        return 0.0
+    return (1.0 if clamped > 0.0 else -1.0) * (
+        (magnitude - _LEGACY_FRONTEND_GAMEPAD_DEADZONE)
+        / max(1.0 - _LEGACY_FRONTEND_GAMEPAD_DEADZONE, 1e-12)
+    )
+
+
+def _baseline_gamepad_transfer(value: float, backend_deadzone: float = 0.1) -> float:
+    """Reproduce main's fixed frontend projection plus backend threshold."""
+
+    projected = _baseline_frontend_gamepad_projection(value)
+    return 0.0 if abs(projected) <= backend_deadzone else projected
+
+
+def _provider_zero_state_for_raw_axis(value: float) -> bool:
+    return _baseline_frontend_gamepad_projection(value) == 0.0
 
 
 @pytest.mark.parametrize(
@@ -126,7 +139,7 @@ def test_raw_gamepad_transfer_matches_complete_legacy_default_function(
             4.0,
             (0.0, 0.0, 0.0),
             raw_axes=(raw_axis, 0.0, 0.0),
-            zero_state=True,
+            zero_state=_provider_zero_state_for_raw_axis(raw_axis),
         )
     )
 
@@ -141,18 +154,33 @@ def test_raw_gamepad_transfer_matches_complete_legacy_default_function(
     )
 
 
-@pytest.mark.parametrize("deadzone", (0.0, 0.2))
+@pytest.mark.parametrize(
+    ("deadzone", "raw_axis"),
+    (
+        (0.0, 0.05),
+        (0.0, 0.10),
+        (0.0, 0.15),
+        (0.0, 0.20),
+        (0.0, -0.15),
+        (0.2, 0.05),
+        (0.2, 0.20),
+        (0.2, 0.279),
+        (0.2, 0.28),
+        (0.2, 0.30),
+        (0.2, -0.30),
+    ),
+)
 def test_raw_gamepad_custom_deadzone_preserves_parameterized_legacy_composition(
     deadzone: float,
+    raw_axis: float,
 ) -> None:
     source = ViewerInputSource(clock=lambda: 0.0, gamepad_deadzone=deadzone)
-    raw_axis = 0.05 if deadzone == 0.0 else 0.3
     frame = source.ingest_control_message(
         gamepad_message(
             4.0,
             (0.0, 0.0, 0.0),
             raw_axes=(raw_axis, 0.0, 0.0),
-            zero_state=True,
+            zero_state=_provider_zero_state_for_raw_axis(raw_axis),
         )
     )
 
@@ -275,7 +303,7 @@ def test_viewer_mapping_ignores_legacy_summary_when_it_disagrees_with_canonical_
     )
 
 
-def test_raw_gamepad_sample_keeps_source_active_when_legacy_axes_are_zero() -> None:
+def test_raw_gamepad_sample_preserves_legacy_zero_state_when_projected_axes_are_zero() -> None:
     source = ViewerInputSource(clock=lambda: 0.0)
     frame = source.ingest_control_message(
         gamepad_message(
@@ -286,8 +314,8 @@ def test_raw_gamepad_sample_keeps_source_active_when_legacy_axes_are_zero() -> N
         )
     )
 
-    assert frame.metadata["source_active"] is True
-    assert frame.metadata["viewer_input_sample"]["zero_state"] is False
+    assert frame.metadata["source_active"] is False
+    assert frame.metadata["viewer_input_sample"]["zero_state"] is True
     assert frame.metadata["viewer_input_sample"]["gamepad"]["raw_axes"] == (0.05, 0.0, 0.0)
     assert map_frame(frame).values == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
@@ -355,12 +383,12 @@ def test_viewer_gamepad_button_supplement_remains_mapping_owned(
             (0.0, 0.0, 0.0),
             buttons=buttons,
             raw_axes=(0.0, 0.0, 0.0),
-            zero_state=True,
+            zero_state=not any(buttons),
         )
     )
     assert frame.values == (0.0, 0.0, 0.0)
     assert "axis_values" not in frame.metadata
-    assert frame.metadata["source_active"] is True
+    assert frame.metadata["source_active"] is any(buttons)
     assert map_frame(frame).values[2] == pytest.approx(expected_z, abs=1e-12)
 
 
