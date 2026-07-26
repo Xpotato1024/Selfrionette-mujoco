@@ -246,3 +246,9 @@ sampleが来るまで古いactive intentを再開しない。source registration
 mapping-specific parameter normalizationはreaderのlifecycle開始・frame read・mapping execution前に検証する。
 検証済みparametersはdeterministicなfrozen mappingとしてplanへ渡し、invalid parameterではmanaged sourceを
 startせず、frameもreadしない。
+
+## #461 final audit correction (2026-07-26)
+
+frontend providerはbrowser raw acquisitionとlifecycleを所有し、normalized gamepad `axes`はwire / overlay compatibility projectionとして残す。canonical `raw_axes`、source lifecycle / activity、backend health、Control Mappingのcommand zeroを同じ責務に戻さない。gamepadのlegacy two-stage transfer functionはControl Mapping Plugin内で一元化し、frontendまたはsourceへmapping semanticsを戻さない。
+
+sourceとmappingは別identityでruntimeがcomposeする。mapping parametersはexecution / source start前にgeneric contractとmapping-specific semantic validatorで検証し、explicit runtime parameters、direct source compatibility parameters、registration / plugin defaultsの順に解決する。#462のtest relocation、dummy onboarding、legacy fallback retirementはこのboundaryのscope外である。

@@ -289,3 +289,9 @@ parameterではmanaged sourceをstartせず、frameをreadしない。frontend p
 
 P4はprovider lifecycleとbackend source / mapping ownershipを成立させる。plugin-local test relocation、
 dummy onboarding、未移行legacy fallbackのretirementと残存symbolの最終監査は#462にhand offする。
+
+## #461 final audit correction (2026-07-26)
+
+viewer providerはraw acquisitionとlifecycle、backend sourceはcanonical sample・health・timeout、Control Mapping Pluginはaxis/sign・gain・deadzone・button supplement・control frame・command intentを所有する。raw `raw_axes`はauthoritative mapping inputであり、normalized `axes`はlegacy wire / overlay compatibility projectionである。default `gamepad_deadzone=0.1`のlegacy frontend projection + backend thresholdはmapping plugin内で同じ順序に再現し、custom `0.0`ではraw `0.05`を非zeroとして扱う。
+
+mapping parameterの解決順位は `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` とする。selectionは明示されたkeyのprovenanceを失わず、typed compatibility capabilityをplan readiness時に合成する。parameter validationはsource lifecycle開始とframe readより前に完了し、malformed ingressは即時`INVALID`へ遷移する。

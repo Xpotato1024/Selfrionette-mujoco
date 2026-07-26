@@ -21,6 +21,7 @@ from selfrionette.schemas import (
     ViewerControlMessage,
 )
 from selfrionette.runtime.experiment.contracts import PluginSelection
+from selfrionette.plugins.mappings.keyboard import KeyboardBinding, KeyboardInputConfig
 from tests.support.transport_doubles import NoOpStatePublisher
 
 
@@ -154,6 +155,193 @@ def test_actual_provider_raw_gamepad_axis_reaches_custom_mapping_and_motion_stat
     assert record.state.metadata["source_kind"] == "viewer_gamepad"
     assert record.state.metadata["actual_tip_delta_m"] != pytest.approx(
         (0.0, 0.0, 0.0), abs=1e-12
+    )
+
+
+@pytest.mark.parametrize(
+    ("raw_axis", "expected_axis"),
+    ((0.15, 0.0), (0.19, 0.0), (0.2, 1.0 / 9.0)),
+)
+def test_actual_provider_default_gamepad_transfer_preserves_legacy_motion_boundary(
+    raw_axis: float,
+    expected_axis: float,
+) -> None:
+    clock = _ClockSequence((0.0, 0.0))
+    source = ViewerInputSource(clock=clock.monotonic)
+    plan = build_runtime_input_source_step_loop_plan(
+        select_runtime_input_source("viewer", steps=1),
+        publisher=NoOpStatePublisher(),
+        viewer_input_source=source,
+    )
+    ingest_viewer_control_message(
+        source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=1.0,
+            source_kind="gamepad",
+            gamepad=ViewerControlGamepadMessage(
+                connected=True,
+                index=0,
+                id="default-pad",
+                raw_axes=(raw_axis, 0.0, 0.0),
+                axes=(0.0, 0.0, 0.0),
+                buttons=(),
+                stale=False,
+                zero_state=True,
+            ),
+        ),
+    )
+
+    record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
+
+    assert record.intent.values[0] == pytest.approx(expected_axis, abs=1e-12)
+    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"][0] == pytest.approx(
+        expected_axis * 0.1, abs=1e-12
+    )
+    if expected_axis == 0.0:
+        assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx(
+            (0.0, 0.0, 0.0), abs=1e-12
+        )
+        assert record.state.metadata["actual_tip_delta_m"] == pytest.approx(
+            (0.0, 0.0, 0.0), abs=1e-12
+        )
+    else:
+        assert record.state.metadata["actual_tip_delta_m"] != pytest.approx(
+            (0.0, 0.0, 0.0), abs=1e-12
+        )
+
+
+def test_direct_viewer_source_compatibility_parameters_reach_runtime_mapping() -> None:
+    clock = _ClockSequence((0.0, 0.0))
+    source = ViewerInputSource(
+        clock=clock.monotonic,
+        keyboard_config=KeyboardInputConfig(
+            bindings={"KeyQ": KeyboardBinding(axis="z", direction=-1)},
+            speed_m_s=0.2,
+            deadzone=0.0,
+            max_delta_m=0.05,
+        ),
+        gamepad_speed_m_s=0.2,
+        gamepad_deadzone=0.0,
+        gamepad_max_delta_m=0.05,
+    )
+    plan = build_runtime_input_source_step_loop_plan(
+        select_runtime_input_source("viewer", steps=1),
+        publisher=NoOpStatePublisher(),
+        viewer_input_source=source,
+    )
+
+    assert plan.control_mapping_parameters["gamepad_speed_m_s"] == pytest.approx(0.2)
+    assert plan.control_mapping_parameters["gamepad_deadzone"] == pytest.approx(0.0)
+    assert plan.control_mapping_parameters["gamepad_max_delta_m"] == pytest.approx(0.05)
+    assert plan.control_mapping_parameters["keyboard_config"].bindings["KeyQ"].direction == -1
+
+    ingest_viewer_control_message(
+        source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=1.0,
+            source_kind="gamepad",
+            gamepad=ViewerControlGamepadMessage(
+                connected=True,
+                index=0,
+                id="compat-pad",
+                raw_axes=(0.05, 0.0, 0.0),
+                axes=(0.0, 0.0, 0.0),
+                buttons=(),
+                stale=False,
+                zero_state=True,
+            ),
+        ),
+    )
+    record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
+
+    assert record.intent.values[0] == pytest.approx(0.05, abs=1e-12)
+    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"][0] == pytest.approx(
+        0.01, abs=1e-12
+    )
+    assert record.motion_command.metadata["endpoint_delta_requested_m"][0] == pytest.approx(
+        0.01 / 60.0, abs=1e-12
+    )
+    assert record.state.metadata["actual_tip_delta_m"] != pytest.approx(
+        (0.0, 0.0, 0.0), abs=1e-12
+    )
+
+
+def test_explicit_runtime_mapping_parameters_override_direct_source_compatibility() -> None:
+    clock = _ClockSequence((0.0, 0.0, 0.0, 0.0, 0.0))
+    source = ViewerInputSource(
+        clock=clock.monotonic,
+        keyboard_config=KeyboardInputConfig(
+            bindings={"KeyQ": KeyboardBinding(axis="z", direction=-1)},
+            speed_m_s=0.2,
+            deadzone=0.0,
+            max_delta_m=0.05,
+        ),
+        gamepad_speed_m_s=0.2,
+        gamepad_deadzone=0.0,
+        gamepad_max_delta_m=0.05,
+    )
+    selection = select_runtime_input_source(
+        "viewer",
+        steps=1,
+        control_mapping_parameters={
+            "gamepad_speed_m_s": 0.3,
+            "gamepad_deadzone": 0.2,
+            "gamepad_max_delta_m": 0.01,
+            "keyboard_config": {
+                "bindings": {"KeyE": {"axis": "x", "direction": 1}},
+                "speed_m_s": 0.3,
+                "deadzone": 0.0,
+                "max_delta_m": 0.01,
+            },
+        },
+    )
+    plan = build_runtime_input_source_step_loop_plan(
+        selection,
+        publisher=NoOpStatePublisher(),
+        viewer_input_source=source,
+    )
+
+    assert plan.control_mapping_parameters["gamepad_speed_m_s"] == pytest.approx(0.3)
+    assert plan.control_mapping_parameters["gamepad_deadzone"] == pytest.approx(0.2)
+    assert plan.control_mapping_parameters["gamepad_max_delta_m"] == pytest.approx(0.01)
+    assert plan.control_mapping_parameters["keyboard_config"].bindings["KeyE"].direction == 1
+    assert "KeyQ" not in plan.control_mapping_parameters["keyboard_config"].bindings
+
+    ingest_viewer_control_message(
+        source,
+        ViewerControlMessage(
+            type="viewer_control_message",
+            timestamp_s=1.0,
+            source_kind="gamepad",
+            gamepad=ViewerControlGamepadMessage(
+                connected=True,
+                index=0,
+                id="explicit-pad",
+                raw_axes=(0.5, 0.0, 0.0),
+                axes=(0.0, 0.0, 0.0),
+                buttons=(),
+                stale=False,
+                zero_state=True,
+            ),
+        ),
+    )
+    gamepad_record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
+    assert gamepad_record.intent.values[0] == pytest.approx(0.375, abs=1e-12)
+    assert gamepad_record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"][0] == pytest.approx(
+        0.1125, abs=1e-12
+    )
+
+    ingest_viewer_control_message(source, _keyboard_message(1.0, "KeyE"))
+    record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
+
+    assert record.intent.values == pytest.approx((1.0, 0.0, 0.0), abs=1e-12)
+    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"][0] == pytest.approx(
+        0.3, abs=1e-12
+    )
+    assert record.motion_command.metadata["endpoint_delta_requested_m"][0] == pytest.approx(
+        0.3 / 60.0, abs=1e-12
     )
 
 

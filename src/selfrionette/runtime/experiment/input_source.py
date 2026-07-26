@@ -76,6 +76,14 @@ class ViewerBridgeRuntimeCapability(Protocol):
 
 
 @runtime_checkable
+class ViewerMappingCompatibilityCapability(Protocol):
+    """Optional typed handoff for explicit legacy source mapping parameters."""
+
+    def mapping_compatibility_parameters(self) -> Mapping[str, object]:
+        ...
+
+
+@runtime_checkable
 class ViewerEndpointRebaseCapability(Protocol):
     """Narrow typed capability used only by endpoint continuity code."""
 
@@ -362,6 +370,7 @@ __all__ = [
     "RawInputFrame",
     "SourceMode",
     "ViewerBridgeRuntimeCapability",
+    "ViewerMappingCompatibilityCapability",
     "ViewerEndpointRebaseCapability",
     "ValidatedInputSourceReader",
     "ValidatedManagedInputSourceReader",

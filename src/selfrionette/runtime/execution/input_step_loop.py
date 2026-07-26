@@ -19,7 +19,10 @@ from selfrionette.runtime.control.input_step_diagnostics import (
     annotate_runtime_input_state,
     measure_post_step_endpoint,
 )
-from selfrionette.runtime.control.input_source_selection import RuntimeInputSourceSelection
+from selfrionette.runtime.control.input_source_selection import (
+    RuntimeInputSourceSelection,
+    merge_control_mapping_compatibility_parameters,
+)
 from selfrionette.runtime.control.input_source_state import (
     annotate_raw_input_frame,
     build_runtime_input_source_state_from_metadata,
@@ -27,6 +30,7 @@ from selfrionette.runtime.control.input_source_state import (
 )
 from selfrionette.runtime.experiment.input_source import (
     ViewerBridgeRuntimeCapability,
+    ViewerMappingCompatibilityCapability,
     ViewerEndpointRebaseCapability,
 )
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
@@ -257,6 +261,13 @@ def build_runtime_input_source_step_loop_plan(
         if viewer_capability is None:
             raise ValueError("viewer input source is missing its runtime bridge capability")
 
+        control_mapping_parameters = selection.control_mapping_parameters
+        if isinstance(viewer_capability, ViewerMappingCompatibilityCapability):
+            control_mapping_parameters = merge_control_mapping_compatibility_parameters(
+                selection,
+                viewer_capability.mapping_compatibility_parameters(),
+            )
+
         pipeline = build_concrete_mujoco_pipeline(
             frames=selection.frames,
             config=runtime_config,
@@ -286,7 +297,7 @@ def build_runtime_input_source_step_loop_plan(
             **plan_providers,
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
-            control_mapping_parameters=selection.control_mapping_parameters,
+            control_mapping_parameters=control_mapping_parameters,
             viewer_bridge_capability=viewer_capability,
         )
 

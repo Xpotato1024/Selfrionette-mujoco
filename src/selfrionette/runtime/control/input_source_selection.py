@@ -81,6 +81,7 @@ class RuntimeInputSourceSelection:
     control_mapping_selection: PluginSelection | None = None
     control_mapping: ControlMappingPlugin | None = None
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
+    control_mapping_parameter_explicit_keys: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def plugin(self) -> InputSourcePlugin | None:
@@ -114,19 +115,13 @@ def _canonicalize_selected_frame(
     return annotate_raw_input_frame(frame, state)
 
 
-def _resolve_control_mapping_parameters(
-    registration,
+def _normalize_control_mapping_parameters(
     control_mapping: ControlMappingPlugin | None,
-    control_mapping_parameters: Mapping[str, object] | None,
+    selected_parameters: Mapping[str, object],
 ) -> Mapping[str, object]:
     if control_mapping is None:
         return MappingProxyType({})
 
-    selected_parameters = (
-        registration.control_mapping_parameters
-        if control_mapping_parameters is None
-        else control_mapping_parameters
-    )
     if not isinstance(selected_parameters, Mapping):
         raise TypeError("control mapping parameters must use a mapping")
 
@@ -143,6 +138,40 @@ def _resolve_control_mapping_parameters(
         raise TypeError("control mapping parameter_normalizer must return a mapping")
     control_mapping.parameter_contract.validate(normalized)
     return MappingProxyType(dict(sorted(normalized.items())))
+
+
+def _resolve_control_mapping_parameters(
+    registration,
+    control_mapping: ControlMappingPlugin | None,
+    control_mapping_parameters: Mapping[str, object] | None,
+) -> Mapping[str, object]:
+    selected_parameters = (
+        registration.control_mapping_parameters
+        if control_mapping_parameters is None
+        else control_mapping_parameters
+    )
+    return _normalize_control_mapping_parameters(control_mapping, selected_parameters)
+
+
+def merge_control_mapping_compatibility_parameters(
+    selection: RuntimeInputSourceSelection,
+    compatibility_parameters: Mapping[str, object],
+) -> Mapping[str, object]:
+    """Overlay explicit source compatibility values over implicit selection defaults."""
+
+    if selection.control_mapping is None:
+        return MappingProxyType({})
+    if not isinstance(compatibility_parameters, Mapping):
+        raise TypeError("mapping compatibility parameters must use a mapping")
+    merged = dict(selection.control_mapping_parameters)
+    merged.update(
+        {
+            key: value
+            for key, value in compatibility_parameters.items()
+            if key not in selection.control_mapping_parameter_explicit_keys
+        }
+    )
+    return _normalize_control_mapping_parameters(selection.control_mapping, merged)
 
 
 def select_runtime_input_source(
@@ -206,6 +235,11 @@ def select_runtime_input_source(
         control_mapping,
         control_mapping_parameters,
     )
+    explicit_mapping_parameter_keys = frozenset(
+        control_mapping_parameters.keys()
+        if isinstance(control_mapping_parameters, Mapping)
+        else ()
+    )
 
     # No managed reader is created until source/mapping schema and all mapping
     # parameters have passed readiness. In particular, invalid mapping input
@@ -252,11 +286,13 @@ def select_runtime_input_source(
         control_mapping_selection=resolved_mapping_selection,
         control_mapping=control_mapping,
         control_mapping_parameters=resolved_mapping_parameters,
+        control_mapping_parameter_explicit_keys=explicit_mapping_parameter_keys,
     )
 
 
 __all__ = [
     "RuntimeInputSourceSelection",
     "SUPPORTED_INPUT_SOURCE_NAMES",
+    "merge_control_mapping_compatibility_parameters",
     "select_runtime_input_source",
 ]

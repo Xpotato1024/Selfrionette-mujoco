@@ -103,3 +103,9 @@ parse / schema / provider identity failureがsource objectへの到達前に起�
 としてsourceへ通知する。sourceはlatest sampleを非active化し、healthを`invalid`へ遷移させ、diagnosticsへ
 invalid reasonを保存する。valid sampleの後だけactiveへ戻る。mappingはこのcanonical sampleだけを入力とし、
 legacy compatibility summaryをauthoritative inputにしない。
+
+## #461 final audit correction (2026-07-26)
+
+viewer canonical sampleでは、raw `raw_axes`、legacy normalized `axes`、provider / source lifecycle state、legacy `zero_state`、mapping結果としてのcommand zeroを別field / 別概念として扱う。raw axisがdeadzone内でもconnectedかつlifecycle上activeならsource healthはactiveを維持でき、button-only inputもactive command sampleとなる。hidden、blur、disconnect、stale、invalidは既存のinactive / failure / hold projectionを維持する。
+
+mapping parameterはselection / plan readinessで検証・正規化・freezeされ、source lifecycle開始前に実行可能性を確定する。explicit runtime parameter、direct source compatibility parameter、plugin defaultの順序をprovenance付きで保持し、source healthとmapping command zeroを混同しない。

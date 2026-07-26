@@ -270,3 +270,9 @@ retained symbolのconsumer、canonical owner、facade status、#462または後�
 P5 completion auditで再確認する。programmed target、replay、noop、loadcell、analog fixtureはP4で移動しない。
 
 P4後のtest-layout migration、dummy onboarding、legacy fallback retirementは#462へhandoffする。
+
+## #461 final audit correction (2026-07-26)
+
+`raw_axes`はnew provider pathのcanonical mapping inputであり、frontend normalized `axes`はwire / overlay compatibility projectionである。source activity / healthはmapping deadzoneと分離し、button-only sampleもmappingへ渡す。`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。default `0.1`のfrontend projection + backend thresholdはmapping plugin内で一元化し、default behavior parityとcustom deadzone `0.0`のraw `0.05`非zeroをgolden testで固定する。
+
+runtime parameter precedenceは `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` とする。selectionはexplicit keyをprovenanceとして保持し、plan readinessでtyped compatibilityを正規化・freezeしてからruntimeへ渡す。remaining input_sources facadeとtest ownership、dummy onboarding、legacy fallback retirementは#462へhandoffする。

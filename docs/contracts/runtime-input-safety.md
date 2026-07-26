@@ -94,3 +94,9 @@ viewerのmalformed JSON、schema validation failure、provider identity mismatch
 前の失敗でも`ViewerBridgeRuntimeCapability.record_ingress_failure()`を通じてsource-owned healthへ伝える。
 sourceは即時`invalid`へ遷移し、`invalid_reason`をdiagnosticsへ残す。timeoutまで旧active frameを継続せず、
 runtimeはhold-currentへ移行する。valid viewer sampleが届いた場合だけactiveへrecoveryする。
+
+## #461 final audit correction (2026-07-26)
+
+raw gamepadのsource activityはconnection、focus、visibility、stale、disconnectなどprovider / source-owned stateから決める。legacy normalized `axes`やdeadzone内raw axisでhealthをinactiveにせず、mappingがcommand zeroを決める。default deadzoneはlegacy two-stage transfer functionをmapping plugin内で再現し、`gamepad_deadzone=0.0`のraw `0.05`は非zero intentへ進む。
+
+mapping parametersはsource start / frame readより前に検証される。explicit runtime mapping parametersをdirect `ViewerInputSource` compatibility parametersより優先し、それ以外はregistration / plugin defaultsを使う。invalid、stale、inactive、disconnectedは既存hold-current policyを維持する。

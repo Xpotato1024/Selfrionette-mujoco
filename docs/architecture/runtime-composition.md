@@ -202,3 +202,10 @@ plugin discovery entry pointからeager importしない。generic `RuntimePipeli
 test-only wiringは`tests/support/`が所有する。
 pre-audit composition chronologyとrefactor proposalは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
+### #461 final audit correction (2026-07-26)
+
+gamepadのraw pathは、`raw_axes`をmappingのauthoritative inputとして保持する。default `gamepad_deadzone=0.1`では、legacy frontendのdeadzone投影とbackendの第二thresholdをControl Mapping Plugin内で同じ順序に適用し、raw `0.15` / `0.19`はzero、raw `0.20`はlegacyと同じ非zero結果になる。`gamepad_deadzone=0.0`ではraw `0.05`を非zeroとして扱う。normalized `axes`はwire / overlay compatibility projectionに限る。
+
+source activity / healthとmappingが生成するcommand zeroは別概念である。button-only sample、disconnect、hidden、blur、stale、invalidの既存hold safetyも維持する。
+
+Control Mapping parametersの優先順位は、`explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults`である。selectionはcallerが明示したparameter keyを保持し、暗黙defaultと区別したうえでplan readiness時にtyped compatibility capabilityを合成する。#462のtest relocation、dummy onboarding、legacy fallback retirementは後続scopeとして実施しない。

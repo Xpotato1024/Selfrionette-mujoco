@@ -83,6 +83,93 @@ def map_frame(frame):
     return VIEWER_CONTROL_MAPPING_PLUGIN.strategy.map_input(frame, {})
 
 
+def _baseline_gamepad_transfer(value: float, deadzone: float = 0.1) -> float:
+    """Reproduce main's frontend projection plus backend threshold."""
+
+    clamped = max(-1.0, min(1.0, value))
+    magnitude = abs(clamped)
+    if magnitude <= deadzone:
+        projected = 0.0
+    else:
+        projected = (1.0 if clamped > 0.0 else -1.0) * (
+            (magnitude - deadzone) / max(1.0 - deadzone, 1e-12)
+        )
+    return 0.0 if abs(projected) <= deadzone else projected
+
+
+@pytest.mark.parametrize(
+    "raw_axis",
+    (
+        0.00,
+        0.05,
+        0.10,
+        0.15,
+        0.19,
+        0.20,
+        0.50,
+        1.00,
+        -0.05,
+        -0.10,
+        -0.15,
+        -0.19,
+        -0.20,
+        -0.50,
+        -1.00,
+    ),
+)
+def test_raw_gamepad_transfer_matches_complete_legacy_default_function(
+    raw_axis: float,
+) -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(
+        gamepad_message(
+            4.0,
+            (0.0, 0.0, 0.0),
+            raw_axes=(raw_axis, 0.0, 0.0),
+            zero_state=True,
+        )
+    )
+
+    intent = map_frame(frame)
+    expected_axis = _baseline_gamepad_transfer(raw_axis)
+    assert intent.values[0] == pytest.approx(expected_axis, abs=1e-12)
+    assert intent.metadata["deadzone_applied_axis_values"][0] == pytest.approx(
+        expected_axis, abs=1e-12
+    )
+    assert intent.metadata["local_endpoint_velocity_m_s"][0] == pytest.approx(
+        expected_axis * 0.1, abs=1e-12
+    )
+
+
+@pytest.mark.parametrize("deadzone", (0.0, 0.2))
+def test_raw_gamepad_custom_deadzone_preserves_parameterized_legacy_composition(
+    deadzone: float,
+) -> None:
+    source = ViewerInputSource(clock=lambda: 0.0, gamepad_deadzone=deadzone)
+    raw_axis = 0.05 if deadzone == 0.0 else 0.3
+    frame = source.ingest_control_message(
+        gamepad_message(
+            4.0,
+            (0.0, 0.0, 0.0),
+            raw_axes=(raw_axis, 0.0, 0.0),
+            zero_state=True,
+        )
+    )
+
+    intent = map_frame(frame)
+    assert intent.values[0] == pytest.approx(
+        _baseline_gamepad_transfer(raw_axis, deadzone), abs=1e-12
+    )
+
+
+def test_viewer_source_compatibility_capability_preserves_explicitness() -> None:
+    assert ViewerInputSource(clock=lambda: 0.0).mapping_compatibility_parameters() == {}
+    explicit_default = ViewerInputSource(clock=lambda: 0.0, gamepad_deadzone=0.1)
+    assert explicit_default.mapping_compatibility_parameters() == {
+        "gamepad_deadzone": 0.1
+    }
+
+
 def test_viewer_input_source_emits_raw_canonical_sample_before_ingest() -> None:
     source = ViewerInputSource(clock=lambda: 0.0)
 

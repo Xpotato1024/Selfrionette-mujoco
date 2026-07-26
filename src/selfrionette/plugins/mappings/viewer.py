@@ -333,14 +333,12 @@ class ViewerKeyboardGamepadMappingStrategy:
                 source_timestamp_s=sample.timestamp_s,
                 speed_m_s=mapping_parameters.gamepad_speed_m_s,
                 # Raw gamepad axes have already received the selected mapping
-                # deadzone above. Legacy axes are already normalized by the
-                # old provider projection and retain the existing threshold
-                # semantics through their compatibility path.
-                deadzone=(
-                    0.0
-                    if sample.gamepad.raw_axes is not None
-                    else mapping_parameters.gamepad_deadzone
-                ),
+                # deadzone above. The legacy transfer function had a second
+                # backend threshold after that projection; keep that stage in
+                # the mapping plugin so raw input and the old wire projection
+                # have the same observable result. Legacy axes already carry
+                # the frontend projection and retain their existing threshold.
+                deadzone=mapping_parameters.gamepad_deadzone,
                 max_delta_m=mapping_parameters.gamepad_max_delta_m,
                 control_frame=control_frame,
                 source_active=sample.source_active,

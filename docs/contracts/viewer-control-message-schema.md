@@ -147,3 +147,9 @@ mappingへ渡す。
 gamepad stateを取得してこのmessageをserializeしてよいが、このmessageを使って
 simulation state、physics state、FK / IK、qpos、またはbrowser-sideの
 source of truthを変更してはならない。
+
+## #461 final audit correction (2026-07-26)
+
+gamepad `raw_axes`はbrowser raw axisを保持するcanonical inputであり、`axes`は既存wire / overlay compatibility projectionである。default `gamepad_deadzone=0.1`では、frontend deadzone projection後のbackend thresholdまでをControl Mapping Pluginが同じ順序で適用するため、raw `0.15` / `0.19`はzero、raw `0.20`はlegacyと一致する。custom deadzone `0.0`ではraw `0.05`をmappingが処理できる。source activityはconnection、focus、visibility、stale、disconnectから決まり、button pressはraw axis zeroでもactive sampleである。
+
+mapping parametersはsource lifecycle / frame read前に検証される。解決順位は `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` であり、legacy message without `raw_axes`は旧解釈を維持する。malformed ingressは即時`INVALID`となり、real browser / network / hardwareの動作はこのschemaからは主張しない。
