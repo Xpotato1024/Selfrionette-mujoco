@@ -26,13 +26,14 @@ from selfrionette.runtime.experiment.input_source import (
     ValidatedInputSourceReader,
     ValidatedManagedInputSourceReader,
 )
+from selfrionette.plugins.input_sources.registration import InputSourcePluginRegistration
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from selfrionette.schemas import RawInputFrame
 from tests.runtime.test_experiment_plugin_composition import (
-    _manifest,
-    _mapping,
-    _registries,
-    _task,
+    build_test_manifest,
+    build_test_mapping,
+    build_test_registries,
+    build_test_task,
 )
 from tests.support.input_source_plugin_doubles import (
     CONFORMANCE_INPUT_SOURCE,
@@ -318,13 +319,29 @@ def test_registry_resolve_and_ids_are_deterministic() -> None:
         VersionedPluginRegistry((alpha, alpha), kind="input source plugin")
 
 
+def test_registration_requires_typed_execution_adapter() -> None:
+    from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
+
+    registration = INPUT_SOURCE_CATALOG.resolve("replay")
+    with pytest.raises(TypeError, match="typed execution adapter"):
+        InputSourcePluginRegistration(
+            plugin=registration.plugin,
+            cli_aliases=registration.cli_aliases,
+            generic_cli_exposed=registration.generic_cli_exposed,
+            request_builder=registration.request_builder,
+            execution_adapter=object(),  # type: ignore[arg-type]
+            default_control_mapping_selection=registration.default_control_mapping_selection,
+            control_mapping_parameters=registration.control_mapping_parameters,
+        )
+
+
 def test_composition_resolves_source_schema_and_evidence_without_factory_call() -> None:
     evidence = VersionedIdentity("source.diagnostic", 1)
     source = build_conformance_input_source(produced_evidence=frozenset({evidence}))
     resolved = compose_experiment(
-        _manifest(
+        build_test_manifest(
             parameters=(
-                *_manifest().parameters,
+                *build_test_manifest().parameters,
                 PluginParameters(
                     PluginParameterOwner(
                         PluginAxis.INPUT_SOURCE,
@@ -334,7 +351,7 @@ def test_composition_resolves_source_schema_and_evidence_without_factory_call() 
                 ),
             )
         ),
-        _registries(input_source=source),
+        build_test_registries(input_source=source),
     )
     assert resolved.input_source is source
     assert resolved.resolved_input_sample_schema == CONFORMANCE_SAMPLE_SCHEMA
@@ -350,7 +367,7 @@ def test_composition_does_not_invoke_input_source_factory() -> None:
         return ConformanceInputSourceReader(parameters)
 
     source = build_conformance_input_source(factory_override=factory)
-    compose_experiment(_manifest(), _registries(input_source=source))
+    compose_experiment(build_test_manifest(), build_test_registries(input_source=source))
 
     assert calls == 0
 
@@ -358,17 +375,17 @@ def test_composition_does_not_invoke_input_source_factory() -> None:
 def test_composition_rejects_schema_mismatch_and_empty_mapping_acceptance() -> None:
     source = build_conformance_input_source()
     incompatible = replace(
-        _mapping(),
+        build_test_mapping(),
         accepted_input_sample_schemas=frozenset(
             {VersionedIdentity("other_sample", 1)}
         ),
     )
     with pytest.raises(ValueError, match="input sample schema compatibility mismatch"):
-        compose_experiment(_manifest(), _registries(input_source=source, mapping=incompatible))
+        compose_experiment(build_test_manifest(), build_test_registries(input_source=source, mapping=incompatible))
 
-    empty = replace(_mapping(), accepted_input_sample_schemas=frozenset())
+    empty = replace(build_test_mapping(), accepted_input_sample_schemas=frozenset())
     with pytest.raises(ValueError, match="at least one accepted"):
-        compose_experiment(_manifest(), _registries(input_source=source, mapping=empty))
+        compose_experiment(build_test_manifest(), build_test_registries(input_source=source, mapping=empty))
 
 
 def test_composition_rejects_unselected_source_parameters_and_wrong_registry_type() -> None:
@@ -380,22 +397,22 @@ def test_composition_rejects_unselected_source_parameters_and_wrong_registry_typ
     )
     with pytest.raises(ValueError, match="unselected plugins"):
         compose_experiment(
-            _manifest(parameters=(PluginParameters(unselected_owner, {}),)),
-            _registries(),
+            build_test_manifest(parameters=(PluginParameters(unselected_owner, {}),)),
+            build_test_registries(),
         )
     resolved = compose_experiment(
-        _manifest(
-            parameters=(*_manifest().parameters, PluginParameters(source_owner, {}))
+        build_test_manifest(
+            parameters=(*build_test_manifest().parameters, PluginParameters(source_owner, {}))
         ),
-        _registries(),
+        build_test_registries(),
     )
     assert resolved.input_source.identity == CONFORMANCE_INPUT_SOURCE
 
     wrong = replace(
-        _registries(),
-        input_sources=VersionedPluginRegistry((_task(),), kind="input source plugin"),
+        build_test_registries(),
+        input_sources=VersionedPluginRegistry((build_test_task(),), kind="input source plugin"),
     )
     with pytest.raises(ValueError, match="registry-set type mismatch for input source"):
         compose_experiment(
-            _manifest(input_source=PluginSelection("dummy_reach_task", 1)), wrong
+        build_test_manifest(input_source=PluginSelection("dummy_reach_task", 1)), wrong
         )

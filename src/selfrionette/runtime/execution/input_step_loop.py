@@ -55,7 +55,6 @@ from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local
 from selfrionette.runtime.execution.pipeline import RuntimePipeline
 from selfrionette.runtime.execution.input_source_adapters import (
     RuntimeInputSourceExecutionAdapter,
-    compatibility_execution_adapter,
 )
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInputFrame
@@ -140,7 +139,11 @@ def build_runtime_input_source_step_loop_plan(
     viewer_input_source: ViewerInputSource | None = None,
 ) -> RuntimeInputSourceStepLoopPlan:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
-    execution_adapter = selection.execution_adapter or compatibility_execution_adapter(selection.source_name)
+    execution_adapter = selection.execution_adapter
+    if execution_adapter is None:
+        raise ValueError(
+            "plugin-backed runtime input source selection requires an execution adapter"
+        )
     if runtime_config.robot_profile_id is None:
         raise ValueError("production input step-loop requires robot_profile_id")
     profile = resolve_robot_profile(

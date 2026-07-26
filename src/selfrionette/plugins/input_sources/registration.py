@@ -53,6 +53,10 @@ class InputSourcePluginRegistration:
             raise ValueError("input source registration requires at least one CLI alias")
         if len(set(self.cli_aliases)) != len(self.cli_aliases):
             raise ValueError("input source registration aliases must be unique")
+        if not isinstance(self.execution_adapter, RuntimeInputSourceExecutionAdapter):
+            raise TypeError(
+                "input source registration requires a typed execution adapter"
+            )
         if self.default_control_mapping_selection is not None and not isinstance(
             self.default_control_mapping_selection, PluginSelection
         ):

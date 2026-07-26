@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-26
+last_verified: 2026-07-27
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -190,7 +190,13 @@ source-owned healthから既存payload metadataへのprojection、typed executio
 P4ではviewer frontend provider、backend source、keyboard / gamepad mappingを分離し、mappingの
 `ParameterContract`とoptional semantic validation / normalizationをsource lifecycle開始、frame read、
 mapping executionより前に実行する。plugin-local test ownershipとonboarding / completion auditはP5として
-#462へhand offする。
+#462で固定した。generic conformanceはsource固有parametersをcaseへ注入するだけでproduction / test-only
+pluginへ再利用でき、test-only dummy sourceはproduction catalog / CLIを変更せずにsource schema compatibility、
+reader creation、composition readinessを検証する。
+
+P5のfocused validationはgeneric conformance、対象plugin-local tests、catalog / registry、source-mapping schema
+compatibility、minimal runtime integration smoke、architecture guardsを含む。full Python suiteとviewer test /
+typecheck / buildはmerge gateとして維持し、CI change-detection matrixは追加しない。
 
 ## composition readiness
 

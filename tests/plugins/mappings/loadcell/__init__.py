@@ -1,0 +1,1 @@
+"""Loadcell mapping test owner."""

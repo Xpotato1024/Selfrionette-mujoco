@@ -15,7 +15,7 @@ from selfrionette.input_sources import (
 from selfrionette.schemas import MotionSampleRecord
 
 
-FIXTURE = Path(__file__).parents[1] / "fixtures" / "analog_input_samples.json"
+FIXTURE = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "analog_input_samples.json"
 
 
 def config(**changes: object) -> AnalogFixtureMappingConfig:

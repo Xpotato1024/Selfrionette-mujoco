@@ -10,7 +10,7 @@ from selfrionette.input_sources import ProgrammedTargetInputSource, build_sweep_
 from selfrionette.input_sources.programmed_target import build_sweep_x_trajectory
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[4]
 PROGRAMMED_TARGET_MODULE = ROOT / "src" / "selfrionette" / "input_sources" / "programmed_target.py"
 
 

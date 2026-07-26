@@ -445,6 +445,40 @@ def _manifest(**overrides) -> ExperimentPluginManifest:
     return ExperimentPluginManifest(**values)
 
 
+# Public test builders are shared by the generic input-source contract tests.
+# Keeping these builders here avoids importing another test module's private
+# helpers while preserving the existing composition fixture ownership.
+def build_test_manifest(**overrides) -> ExperimentPluginManifest:
+    return _manifest(**overrides)
+
+
+def build_test_registries(
+    *,
+    bundle: RobotBundle | None = None,
+    environment: EnvironmentPlugin | None = None,
+    mapping: ControlMappingPlugin | None = None,
+    task: TaskPlugin | None = None,
+    evaluator: EvaluationPlugin | None = None,
+    input_source=None,
+) -> ExperimentPluginRegistries:
+    return _registries(
+        bundle=bundle,
+        environment=environment,
+        mapping=mapping,
+        task=task,
+        evaluator=evaluator,
+        input_source=input_source,
+    )
+
+
+def build_test_mapping(**overrides) -> ControlMappingPlugin:
+    return _mapping(**overrides)
+
+
+def build_test_task(**overrides) -> TaskPlugin:
+    return _task(**overrides)
+
+
 def test_non_fast_arm_conformance_composition_resolves_all_axes_before_startup() -> None:
     resolved = compose_experiment(_manifest(), _registries())
 

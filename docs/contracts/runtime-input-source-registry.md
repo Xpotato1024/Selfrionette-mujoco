@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-26
+last_verified: 2026-07-27
 canonical_for:
   - runtime input source registry
   - Input Source Plugin v1 ownership boundary
@@ -137,9 +137,60 @@ new sourceを構築し、real serialではportを再openする。close failure�
 7. produced sample schema、execution adapter、optional viewer capabilityをselectionへ保持する。
 
 `RuntimeInputSourceSelection`は既存observable fieldsである`source_name`、`frames`、`loop`、
-`initial_metadata`を維持する。plugin-backed primary pathはregistrationが保持するexecution adapterを使用する。
-`compatibility_execution_adapter(source_name)`はlegacy hand-built selectionだけのbounded fallbackであり、
-撤去可否は#462で監査する。
+`initial_metadata`を維持する。plugin-backed selectionはregistrationが保持するtyped execution adapterを必須とし、
+adapter欠落はruntime plan生成時にfail-closedで拒否する。repo内にproduction/public callerがないことを確認したため、
+source-name tableを持つ`compatibility_execution_adapter()`は退役した。stale safety testもplugin-backed selectionを
+`dataclasses.replace()`で変更するcanonical pathへ更新し、source-name fallbackを再導入しない。
+
+## Test ownershipとreusable conformance
+
+current test ownerはproduction packageの責務を鏡写しにし、cross-layerの挙動はintegration ownerへ残す。
+
+| 責務 | current owner |
+|---|---|
+| generic contract / conformance | `tests/plugins/input_sources/contract/` |
+| source-local reader / parser / health / lifecycle | `tests/plugins/input_sources/<plugin_id>/` |
+| mapping algorithm / parameter / frame | `tests/plugins/mappings/` |
+| catalog / registry / composition | `tests/runtime/test_input_source_plugin_catalog.py`、`tests/runtime/test_experiment_plugin_composition.py` |
+| source -> mapping -> runtime / stale hold | `tests/runtime/` |
+| viewer browser provider | `apps/mujoco-viewer/tests/` |
+| low-level retained compatibility registry | `tests/input_sources/test_runtime_input_source_registry.py` |
+| hardware/manual gate | `tests/loadcell_serial/`、manual runner tests |
+
+`tests/plugins/input_sources/contract/conformance.py`の`InputSourceConformanceCase`は、plugin固有のvalid
+parametersとinjected dependencyだけを受け取り、identity / contract version、produced sample、parameter
+contract、factory、initial health、read-frame type、mode、lifecycle、health vocabulary、deterministic readを
+共通検証する。production 7 sourceは各plugin-local ownerからこのhelperを再利用する。generic testはproduction
+sourceのprivate implementationや別test moduleのprivate helperを参照しない。
+
+test-only `test_dummy_input_source/v1`は`tests/plugins/input_sources/fixtures/`のcatalogへだけ登録する。
+production catalog / generic CLIには登録せず、compatible / incompatible mappingを含むcatalog resolve、reader
+creation、composition readinessを検証する。不一致schemaはstartupでfail-closedとなる。
+
+## New source onboarding contract
+
+新しいsource追加は次の順で行う。source固有parameter/specはplugin-local ownerへ置き、runtime coreへsource IDの
+conditionalを追加しない。
+
+1. acquisition/source責務とmapping責務を分離する。
+2. versioned plugin ID、contract version、produced sample schema IDを定義する。
+3. typed parameter contractとsource-specific validationを定義する。
+4. reader、lifecycle、initial/current health、cleanupを実装する。
+5. deterministic known-ID catalog registrationとCLI aliasを宣言する。
+6. compatible Mapping Pluginのaccepted sample schemaを宣言する。
+7. generic conformanceとplugin-local source testsを追加する。
+8. registry / schema compatibilityとminimal runtime/composition smokeを追加する。
+9. hardware deviceはserial openを含めず、manual-gated別Issueへ分離する。
+10. canonical docs、catalog、test ownerを更新する。
+11. focused validationを通した後、full regressionとviewer validationをmerge gateとして実行する。
+
+focused feedback loopの標準commandは次である。
+
+```bash
+uv run pytest tests/plugins/input_sources/contract tests/plugins/input_sources/<plugin_id> tests/plugins/mappings tests/runtime/test_input_source_plugin_catalog.py tests/runtime/test_experiment_plugin_composition.py tests/runtime/test_runtime_input_source_step_loop.py tests/runtime/test_live_input_stale_command_safety.py tests/architecture/test_input_source_plugin_p5_boundaries.py -q
+```
+
+これはfull suiteの代替ではない。CI change-detection matrixや新しいlauncher体系は追加しない。
 
 runtime step-loopのsource-state解決:
 
@@ -267,10 +318,11 @@ publication、polling、heartbeatを停止し、再activationはzero / safe stat
 `viewer.py`は既存consumerのためのcompatibility facadeまたは低位boundaryとして残す。keyboardと
 continuous mappingのcanonical implementationは`src/selfrionette/plugins/mappings/`にあり、viewer
 source facadeはmapping algorithm、desired endpoint integration、command generationを持たない。
-retained symbolのconsumer、canonical owner、facade status、#462または後続cleanup review pointは
-P5 completion auditで再確認する。programmed target、replay、noop、loadcell、analog fixtureはP4で移動しない。
-
-P4後のtest-layout migration、dummy onboarding、legacy fallback retirementは#462へhandoffする。
+retained symbolのconsumer、canonical owner、facade statusはP5 completion auditで確定した。low-level
+`input_sources/registry.py`は`InputSourceDescriptor`のsignature、public export、frame behaviorを使うrepo内
+compatibility consumerと専用testがあるため retained とする。production runtime selectionはこのregistryを参照せず、
+catalogを再投影せず、reverse dependencyも作らない。keyboard / continuous mapping facadeは既存consumer向けに残し、
+canonical mapping ownerは`plugins/mappings/`とする。
 
 ## #461 final audit correction (2026-07-26)
 

@@ -39,23 +39,6 @@ class RuntimeInputSourceExecutionAdapter:
         return self.semantics is InputSourceExecutionSemantics.REPLAY_COMPATIBILITY
 
 
-def compatibility_execution_adapter(source_name: str) -> RuntimeInputSourceExecutionAdapter:
-    """Resolve legacy hand-built selections without runtime source dispatch."""
-
-    from selfrionette.runtime.experiment.contracts import VersionedIdentity
-
-    adapters = {
-        "programmed_target": TARGET_METADATA_EXECUTION_ADAPTER,
-        "replay": REPLAY_COMPATIBILITY_EXECUTION_ADAPTER,
-        "noop": REPLAY_COMPATIBILITY_EXECUTION_ADAPTER,
-        "viewer": VIEWER_LOCAL_ENDPOINT_EXECUTION_ADAPTER,
-    }
-    try:
-        return adapters[source_name]
-    except KeyError as exc:
-        raise ValueError(f"unsupported input source execution adapter: {source_name!r}") from exc
-
-
 TARGET_METADATA_EXECUTION_ADAPTER = RuntimeInputSourceExecutionAdapter(
     VersionedIdentity("target_metadata_input_execution", 1),
     InputSourceExecutionSemantics.TARGET_METADATA,
@@ -86,5 +69,4 @@ __all__ = [
     "RuntimeInputSourceExecutionAdapter",
     "TARGET_METADATA_EXECUTION_ADAPTER",
     "VIEWER_LOCAL_ENDPOINT_EXECUTION_ADAPTER",
-    "compatibility_execution_adapter",
 ]

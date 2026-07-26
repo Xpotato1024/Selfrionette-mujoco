@@ -45,7 +45,10 @@ registrationは`plugins/input_sources/`が所有する。既存`input_sources.ba
 signatureとframe behaviorだけを保持し、production catalogをimportまたは再登録しない。
 source contractからfast_arm、task / evaluation実装、viewer TypeScript、serial transportをimportしない。
 Control Mapping Pluginはproduced / accepted sample schemaのversioned identityだけを参照し、device handle、
-serial、browser eventを所有しない。
+serial、browser eventを所有しない。P5の`tests/architecture/test_input_source_plugin_p5_boundaries.py`は
+catalog identity、duplicate alias、source-name dispatch、source/mapping schema declaration、plugin-local owner、
+source pluginの禁止import、mapping pluginのdevice/browser禁止import、低位registryのsecond SoT化をAST / registry
+introspectionで検査する。単純grepだけをboundaryの根拠にしない。
 
 `schemas/`内はwire domain間の依存も一方向に固定する。`input`、`command`、`state`、`endpoint`は
 `types`だけへ依存でき、`experiment_log`は`endpoint`だけへ依存できる。`viewer_control`と`types`は
