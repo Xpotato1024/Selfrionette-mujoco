@@ -19,6 +19,7 @@ from selfrionette.runtime.experiment.contracts import ParameterContract, Paramet
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceHealthStatus,
+    InputSourceMappingAdapter,
     InputSourcePlugin,
     InputSourceMode,
     InputSourceRuntimeDependencies,
@@ -148,7 +149,17 @@ def _disconnected_health() -> InputSourceHealth:
     return InputSourceHealth(InputSourceHealthStatus.DISCONNECTED, reason="not_started", age_ms=0)
 
 
-def _plugin(name: str, schema: str, mode: InputSourceMode, factory, contract: ParameterContract, health: InputSourceHealth, metadata: Mapping[str, object]) -> InputSourcePlugin:
+def _plugin(
+    name: str,
+    schema: str,
+    mode: InputSourceMode,
+    factory,
+    contract: ParameterContract,
+    health: InputSourceHealth,
+    metadata: Mapping[str, object],
+    *,
+    mapping_input_adapter: InputSourceMappingAdapter | None = None,
+) -> InputSourcePlugin:
     return InputSourcePlugin(
         identity=VersionedIdentity(name, 1),
         produced_sample_schema=VersionedIdentity(schema, 1),
@@ -157,6 +168,7 @@ def _plugin(name: str, schema: str, mode: InputSourceMode, factory, contract: Pa
         parameter_contract=contract,
         initial_health=health,
         initial_metadata=metadata,
+        mapping_input_adapter=mapping_input_adapter,
     )
 
 
@@ -183,10 +195,12 @@ VIEWER_PLUGIN = _plugin(
 LOADCELL_SERIAL_PLUGIN = _plugin(
     "loadcell_serial", "loadcell_vector_sample", InputSourceMode.LIVE, loadcell_serial.build_reader,
     ParameterContract((ParameterField("port", str, required=False), ParameterField("baud_rate", int, required=False), ParameterField("lines", tuple, required=False))), _disconnected_health(), {"source_kind": "loadcell_serial", "baud_rate": 115200},
+    mapping_input_adapter=loadcell_serial.normalize_loadcell_frame_for_mapping,
 )
 LOADCELL_FIXTURE_PLUGIN = _plugin(
     "loadcell_fixture", "loadcell_vector_sample", InputSourceMode.REPLAY, loadcell_fixture.build_reader,
     ParameterContract((ParameterField("lines", tuple),)), _active_health(), {"source_kind": "loadcell_serial", "fixture": True},
+    mapping_input_adapter=loadcell_serial.normalize_loadcell_frame_for_mapping,
 )
 ANALOG_FIXTURE_PLUGIN = _plugin(
     "analog_fixture", "analog_fixture_sample", InputSourceMode.REPLAY, analog_fixture.build_reader,

@@ -14,6 +14,7 @@ from selfrionette.runtime.experiment.contracts import PluginSelection, Versioned
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
+    InputSourceMappingAdapter,
     InputSourceMode,
     InputSourcePlugin,
     ValidatedInputSourceReader,
@@ -82,6 +83,7 @@ class RuntimeInputSourceSelection:
     control_mapping: ControlMappingPlugin | None = None
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
     control_mapping_parameter_explicit_keys: frozenset[str] = field(default_factory=frozenset)
+    mapping_input_adapter: InputSourceMappingAdapter | None = None
 
     @property
     def plugin(self) -> InputSourcePlugin | None:
@@ -179,6 +181,8 @@ def select_runtime_input_source(
     *,
     steps: int,
     frames: Sequence[RawInputFrame] | None = None,
+    line_source: Sequence[str] | None = None,
+    samples: Sequence[Mapping[str, object]] | None = None,
     preset: str | None = None,
     replay_initial_metadata: Mapping[str, object] | None = None,
     control_mapping_selection: PluginSelection | None = None,
@@ -193,6 +197,8 @@ def select_runtime_input_source(
     request = registration.request_builder(
         steps=steps,
         frames=frames,
+        line_source=line_source,
+        samples=samples,
         preset=preset,
         replay_initial_metadata=replay_initial_metadata,
     )
@@ -287,6 +293,7 @@ def select_runtime_input_source(
         control_mapping=control_mapping,
         control_mapping_parameters=resolved_mapping_parameters,
         control_mapping_parameter_explicit_keys=explicit_mapping_parameter_keys,
+        mapping_input_adapter=plugin.mapping_input_adapter,
     )
 
 

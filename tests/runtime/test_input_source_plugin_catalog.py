@@ -17,6 +17,8 @@ from selfrionette.runtime.experiment.input_source import InputSourceHealthStatus
 from selfrionette.runtime.execution.input_source_adapters import (
     REPLAY_COMPATIBILITY_EXECUTION_ADAPTER,
 )
+from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
+from selfrionette.schemas import InputIntent
 
 
 def test_production_input_source_catalog_is_versioned_and_deterministic() -> None:
@@ -181,3 +183,64 @@ def test_replay_uses_typed_runtime_dependency_for_custom_frames() -> None:
     assert selection.runtime_reader is not None
     assert selection.runtime_reader.read_frame().timestamp_s == 3.0
     assert selection.execution_adapter is REPLAY_COMPATIBILITY_EXECUTION_ADAPTER
+
+
+def _loadcell_mapping_parameters() -> dict[str, object]:
+    return {
+        "mapping_config": {
+            "channel_axis_weights": (
+                (1.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+            ),
+            "gain_m": 0.01,
+            "max_delta_m": 0.03,
+        },
+        "current_tip_position_m": (0.1, 0.2, 0.3),
+    }
+
+
+def test_production_loadcell_selection_adapts_raw_frame_before_mapping_strategy() -> None:
+    selection = select_runtime_input_source(
+        "loadcell_fixture",
+        steps=1,
+        line_source=("vector,1000,1,0,0,0,0,0,0",),
+        control_mapping_selection=PluginSelection("loadcell_endpoint_mapping", 1),
+        control_mapping_parameters=_loadcell_mapping_parameters(),
+    )
+
+    assert selection.produced_sample_schema_identity == VersionedIdentity(
+        "loadcell_vector_sample", 1
+    )
+    assert selection.control_mapping is CONTROL_MAPPING_REGISTRY.resolve(
+        PluginSelection("loadcell_endpoint_mapping", 1)
+    )
+    assert selection.mapping_input_adapter is not None
+    assert selection.runtime_reader is not None
+    raw_frame = selection.runtime_reader.read_frame()
+    normalized_intent = selection.mapping_input_adapter(raw_frame)
+    assert isinstance(normalized_intent, NormalizedLoadcellInputIntent)
+    mapped_intent = selection.control_mapping.strategy.map_input(
+        normalized_intent,
+        selection.control_mapping_parameters,
+    )
+    assert isinstance(mapped_intent, InputIntent)
+    assert mapped_intent.metadata["desired_endpoint_m"] == pytest.approx(
+        (0.11, 0.2, 0.3)
+    )
+
+
+def test_production_loadcell_selection_rejects_incompatible_mapping_before_reader_use() -> None:
+    with pytest.raises(ValueError, match="schema compatibility mismatch"):
+        select_runtime_input_source(
+            "loadcell_fixture",
+            steps=1,
+            line_source=("vector,1000,1,0,0,0,0,0,0",),
+            control_mapping_selection=PluginSelection(
+                "viewer_keyboard_gamepad_mapping", 1
+            ),
+        )

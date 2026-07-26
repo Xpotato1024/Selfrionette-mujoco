@@ -11,6 +11,8 @@ from selfrionette.input_sources.loadcell_serial import (
     run_loadcell_serial_dry_run_smoke,
 )
 from selfrionette.plugins.mappings.loadcell import build_r7_a_lite_smoke_endpoint_mapping_config
+from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
+from selfrionette.runtime.experiment.contracts import PluginSelection
 
 ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "r7_a_lite_serial_frames" / "minimal_valid.txt"
@@ -136,6 +138,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         normalization_config=normalization_config,
         endpoint_config=endpoint_config,
         current_tip_position_m=args.current_tip_position_m,
+        mapping_plugin=resolve_control_mapping_plugin(
+            PluginSelection("loadcell_endpoint_mapping", 1)
+        ),
+        mapping_parameters={
+            "mapping_config": endpoint_config,
+            "current_tip_position_m": args.current_tip_position_m,
+        },
     )
 
     for line in _build_report_lines(result):

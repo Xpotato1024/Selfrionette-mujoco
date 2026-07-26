@@ -85,6 +85,20 @@ def test_input_source_is_the_sixth_composition_axis_and_catalog_is_singleton() -
     }
 
 
+def test_production_loadcell_source_declares_explicit_mapping_input_adapter() -> None:
+    loadcell_mapping = next(
+        mapping
+        for mapping in CONTROL_MAPPING_PLUGINS
+        if mapping.identity.name == "loadcell_endpoint_mapping"
+    )
+    assert "loadcell_vector_sample" in {
+        schema.name for schema in loadcell_mapping.accepted_input_sample_schemas
+    }
+    for source_id in ("loadcell_serial", "loadcell_fixture"):
+        source = INPUT_SOURCE_CATALOG.resolve(source_id).plugin
+        assert callable(source.mapping_input_adapter), source_id
+
+
 def test_mapping_tests_use_canonical_mapping_owners() -> None:
     violations: list[str] = []
     for path in MAPPING_TEST_ROOT.rglob("*.py"):

@@ -14,6 +14,8 @@ from selfrionette.plugins.mappings.loadcell import (
     LoadcellEndpointMotionCommandConverter,
     build_r7_a_lite_smoke_endpoint_mapping_config,
 )
+from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
+from selfrionette.runtime.experiment.contracts import PluginSelection
 from selfrionette.runtime.runners.loadcell_serial_dry_run import DEFAULT_FIXTURE_PATH, main as run_loadcell_serial_dry_run_main
 
 
@@ -123,6 +125,44 @@ def test_r7_a_lite_serial_dry_run_smoke_uses_injected_lines_instead_of_opening_a
 
     assert called["from_lines"] is True
     assert result.frames_read == 1
+
+
+def test_r7_a_lite_serial_dry_run_canonical_mapping_path_preserves_golden_output() -> None:
+    endpoint_config = build_r7_a_lite_smoke_endpoint_mapping_config(
+        gain_m=1.0,
+        max_delta_m=0.03,
+    )
+    common = {
+        "max_vectors": 1,
+        "normalization_config": LoadcellNormalizationConfig(
+            deadzone=0.0,
+            scale=100000.0,
+            clamp_abs=1.0,
+        ),
+        "endpoint_config": endpoint_config,
+        "current_tip_position_m": (0.25, 0.5, 0.75),
+    }
+
+    compatibility_result = run_loadcell_serial_dry_run_smoke(
+        read_fixture_lines("minimal_valid.txt"),
+        **common,
+    )
+    canonical_result = run_loadcell_serial_dry_run_smoke(
+        read_fixture_lines("minimal_valid.txt"),
+        mapping_plugin=resolve_control_mapping_plugin(
+            PluginSelection("loadcell_endpoint_mapping", 1)
+        ),
+        mapping_parameters={
+            "mapping_config": endpoint_config,
+            "current_tip_position_m": common["current_tip_position_m"],
+        },
+        **common,
+    )
+
+    assert canonical_result.raw_frame == compatibility_result.raw_frame
+    assert canonical_result.normalized_intent == compatibility_result.normalized_intent
+    assert canonical_result.motion_command == compatibility_result.motion_command
+    assert canonical_result.diagnostics == compatibility_result.diagnostics
 
 
 def test_r7_a_lite_serial_dry_run_cli_fixture_mode_outputs_endpoint_metadata(capsys: pytest.CaptureFixture[str]) -> None:

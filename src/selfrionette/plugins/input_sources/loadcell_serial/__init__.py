@@ -2,7 +2,10 @@
 
 from collections.abc import Iterator, Mapping
 
-from selfrionette.input_sources.loadcell_serial import SerialInputSource
+from selfrionette.input_sources.loadcell_serial import (
+    SerialInputSource,
+    normalize_loadcell_frame_for_mapping,
+)
 from selfrionette.plugins.input_sources._common import ManagedFrameHealthReader
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,

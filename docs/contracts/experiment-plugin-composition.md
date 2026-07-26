@@ -281,7 +281,7 @@ safetyを証明しない。
 
 Control Mapping Plugin の production catalog は viewerだけに限定されず、replay、analog fixture、loadcell endpoint mappingをdeterministic IDで登録する。source parser、provider acquisition、intrinsic normalizationはsource ownerに残し、axis assignment、sign、gain、scale、deadzone、control frame、endpoint/command conversionはmapping ownerに置く。
 
-loadcell は serial source が生成する raw `loadcell_vector_sample/v1`をsource-owned normalizationへ通した後、`loadcell_normalized_input_intent/v1`としてendpoint mappingへ渡す bounded compatibility pathである。generic `ControlMappingPlugin`はこの normalized boundaryをaccepted schemaとして宣言し、raw frameのimplicit re-normalizationやfallbackは行わない。
+loadcell は serial source pluginが生成する raw `loadcell_vector_sample/v1`を、source pluginのtyped `mapping_input_adapter` capabilityでsource-owned normalizationへ通した後、normalized intent objectとしてendpoint mapping strategyへ渡す。Control Mapping catalogはsource-produced raw schemaをaccepted boundaryとして宣言し、runtimeはadapter後のnormalized objectだけをstrategyへ渡す。adapter不在、別mapping選択、schema mismatchはfail-closedであり、raw frameのmapping package内implicit re-normalizationやfallbackは行わない。
 
 既存public importを保つためのsource facadeは5 moduleに限定する。facadeはcanonical `plugins/mappings/` implementationをreexportするだけで、mapping algorithmのsecond SoTではない。architecture guardはallowlist外のreverse dependency、mapping testからのmapping-owned source import、source-name dispatchを拒否する。
 
@@ -301,8 +301,8 @@ validationをmapping boundaryで行う。selection / plan readinessで検証済�
 parameterではmanaged sourceをstartせず、frameをreadしない。frontend providerとbackend sourceはこれらを
 適用しない。
 
-P4はprovider lifecycleとbackend source / mapping ownershipを成立させる。plugin-local test relocation、
-dummy onboarding、未移行legacy fallbackのretirementと残存symbolの最終監査は#462にhand offする。
+P4はprovider lifecycleとbackend source / mapping ownershipを成立させた。plugin-local test relocation、
+dummy onboarding、legacy fallbackのretirementと残存symbolの最終監査は#462 completion auditで確定済みである。
 
 ## #461 final audit correction (2026-07-26)
 

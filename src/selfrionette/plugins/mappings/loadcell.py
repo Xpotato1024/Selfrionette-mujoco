@@ -239,7 +239,7 @@ class LoadcellEndpointMappingStrategy:
 LOADCELL_ENDPOINT_MAPPING_PLUGIN = ControlMappingPlugin(
     identity=LOADCELL_ENDPOINT_MAPPING_IDENTITY,
     strategy=LoadcellEndpointMappingStrategy(),
-    accepted_input_sample_schemas=frozenset({LOADCELL_NORMALIZED_SAMPLE_SCHEMA}),
+    accepted_input_sample_schemas=frozenset({LOADCELL_VECTOR_SAMPLE_SCHEMA}),
     parameter_contract=ParameterContract(
         (
             ParameterField("mapping_config", object),

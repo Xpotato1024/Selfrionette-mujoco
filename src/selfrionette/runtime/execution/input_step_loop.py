@@ -29,6 +29,7 @@ from selfrionette.runtime.control.input_source_state import (
     build_runtime_input_source_state_from_health,
 )
 from selfrionette.runtime.experiment.input_source import (
+    InputSourceMappingAdapter,
     ViewerBridgeRuntimeCapability,
     ViewerMappingCompatibilityCapability,
     ViewerEndpointRebaseCapability,
@@ -85,6 +86,7 @@ class RuntimeInputSourceStepLoopPlan:
     execution_adapter: RuntimeInputSourceExecutionAdapter
     control_mapping: ControlMappingPlugin | None = None
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
+    mapping_input_adapter: InputSourceMappingAdapter | None = None
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
 
 
@@ -201,6 +203,7 @@ def build_runtime_input_source_step_loop_plan(
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
+            mapping_input_adapter=selection.mapping_input_adapter,
         )
 
     if execution_adapter.uses_replay_pipeline:
@@ -232,6 +235,7 @@ def build_runtime_input_source_step_loop_plan(
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
+            mapping_input_adapter=selection.mapping_input_adapter,
         )
 
     if execution_adapter.uses_viewer_endpoint_compatibility:
@@ -301,6 +305,7 @@ def build_runtime_input_source_step_loop_plan(
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
             control_mapping_parameters=control_mapping_parameters,
+            mapping_input_adapter=selection.mapping_input_adapter,
             viewer_bridge_capability=viewer_capability,
         )
 
@@ -442,8 +447,13 @@ async def _run_runtime_input_source_step_loop(
         if plan.control_mapping is None:
             intent = plan.pipeline.input_interpreter.interpret(frame)
         else:
+            mapping_input = (
+                plan.mapping_input_adapter(frame)
+                if plan.mapping_input_adapter is not None
+                else frame
+            )
             mapped_intent = plan.control_mapping.strategy.map_input(
-                frame,
+                mapping_input,
                 plan.control_mapping_parameters,
             )
             if not isinstance(mapped_intent, InputIntent):

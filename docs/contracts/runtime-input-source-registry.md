@@ -261,13 +261,13 @@ mapping semanticsを意図的に変更しない。
 `scripts/compatibility/run_replay_mujoco_websocket_publisher.py`で`--input-source`を指定した経路はproduction
 catalogをresolveする。一方、`--input-source`未指定時に呼ばれる`runtime/runners/dry_run.py`と
 `runtime/runners/websocket_publisher.py`のdirect programmed-target / replay構築は、既存default CLI behaviorを
-維持するbounded legacy compatibility pathであり、production catalogの第二のSoTではない。統合または撤去の可否は
-#462のcompletion auditで判定する。
+維持するbounded legacy compatibility pathであり、production catalogの第二のSoTではない。#462 completion auditで
+このretained判断とguardを確定した。
 
 ## Remaining scope
 
-- #461: viewer frontend provider、backend source、keyboard / gamepad mappingの分離を本PRで成立させる。
-- #462: plugin-local test ownership、dummy onboarding、legacy compatibility fallback、retained symbolのcompletion audit
+このRoundのInput Source Plugin scopeに未完了のcanonical contract移行項目はない。追加のdevice実装、hardware gate、
+experiment evidenceは別scopeで扱う。
 
 ## 関連canonical文書
 
@@ -333,9 +333,9 @@ production Control Mapping catalog は次の deterministic registrations を持�
 | `viewer_keyboard_gamepad_mapping/v1` | `viewer_control_sample/v1` | viewer keyboard/gamepad mapping |
 | `replay_mapping/v1` | `replay_raw_input_frame/v1` | replay intent/command compatibility |
 | `analog_fixture_mapping/v1` | `analog_fixture_sample/v1` | analog axis/sign/scale/deadzone/frame/endpoint intent |
-| `loadcell_endpoint_mapping/v1` | `loadcell_normalized_input_intent/v1` | loadcell endpoint delta and `MotionCommand` metadata |
+| `loadcell_endpoint_mapping/v1` | `loadcell_vector_sample/v1`（source-owned adapter後にnormalized intent） | loadcell endpoint delta and `MotionCommand` metadata |
 
-analog の parser、timestamp、raw values、health は source-owned で、mapping implementation は `src/selfrionette/plugins/mappings/analog_fixture.py` にある。loadcell の serial parser、diagnostic、intrinsic normalization は `input_sources/loadcell_serial.py` に残し、channel-axis weights、gain、max delta、endpoint delta、command conversion は `src/selfrionette/plugins/mappings/loadcell.py` に移した。loadcell mapping は source-normalized intent boundaryを受けるため、raw `loadcell_vector_sample/v1`とのgeneric runtime selectionを暗黙に成立させず、schema mismatchはfail-closedにする。
+analog の parser、timestamp、raw values、health は source-owned で、mapping implementation は `src/selfrionette/plugins/mappings/analog_fixture.py` にある。loadcell の serial parser、diagnostic、intrinsic normalization は `input_sources/loadcell_serial.py` に残し、channel-axis weights、gain、max delta、endpoint delta、command conversion は `src/selfrionette/plugins/mappings/loadcell.py` に移した。loadcell source pluginは`mapping_input_adapter` capabilityでraw `RawInputFrame`をsource-owned normalized intentへ明示変換し、generic runtimeはそのadapter結果だけをmapping strategyへ渡す。production mappingはraw `loadcell_vector_sample/v1`をaccepted source schemaとして宣言し、adapter不在や別mappingとのschema mismatchはfail-closedにする。
 
 `input_sources/keyboard.py`、`continuous_endpoint_velocity.py`、`analog_fixture.py`、`loadcell_serial.py`、`replay.py` は既存public importのthin compatibility facadeである。canonical mapping testsは `plugins/mappings/` ownerを直接importし、source-owned parser/normalization typeだけをsource moduleから参照する。
 
@@ -345,4 +345,4 @@ generic conformance は source-specific valid parameters に加え、frame/metad
 
 `raw_axes`はnew provider pathのcanonical mapping inputであり、frontend normalized `axes`はwire / overlay compatibility projectionである。gamepad/v1の`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsに基づくobservable semanticsを維持し、mapping deadzoneのcommand zeroとは分離する。button-only sampleもmappingへ渡し、`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。fixed frontend `0.1` projection + configurable backend thresholdはmapping plugin内で一元化し、default parity、custom `0.0`のraw `0.05` hold、raw `0.15`の`1/18`をgolden testで固定する。
 
-runtime parameter precedenceは `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` とする。selectionはexplicit keyをprovenanceとして保持し、plan readinessでtyped compatibilityを正規化・freezeしてからruntimeへ渡す。remaining input_sources facadeとtest ownership、dummy onboarding、legacy fallback retirementは#462へhandoffする。
+runtime parameter precedenceは `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` とする。selectionはexplicit keyをprovenanceとして保持し、plan readinessでtyped compatibilityを正規化・freezeしてからruntimeへ渡す。source-owned mapping input adapterはsource plugin capabilityとして明示し、runtime coreはsource identityを解釈しない。

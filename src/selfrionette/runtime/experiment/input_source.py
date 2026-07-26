@@ -181,6 +181,9 @@ class InputSourceFactory(Protocol):
     ) -> object: ...
 
 
+InputSourceMappingAdapter = Callable[[RawInputFrame], object]
+
+
 class ValidatedInputSourceReader(InputSource, InputSourceHealthProvider):
     """Read-time validation adapter for offline and replay source instances."""
 
@@ -239,6 +242,7 @@ class InputSourcePlugin:
     initial_health: InputSourceHealth
     initial_metadata: Mapping[str, object]
     produced_evidence: frozenset[VersionedIdentity] = field(default_factory=frozenset)
+    mapping_input_adapter: InputSourceMappingAdapter | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.identity, VersionedIdentity):
@@ -266,6 +270,10 @@ class InputSourcePlugin:
         if any(not isinstance(identity, VersionedIdentity) for identity in evidence):
             raise TypeError("input source produced evidence must use VersionedIdentity")
         object.__setattr__(self, "produced_evidence", evidence)
+        if self.mapping_input_adapter is not None and not callable(
+            self.mapping_input_adapter
+        ):
+            raise TypeError("input source mapping_input_adapter must be callable")
 
     def create_runtime_reader(
         self,
@@ -359,6 +367,7 @@ class InputSourcePlugin:
 
 __all__ = [
     "InputSourceFactory",
+    "InputSourceMappingAdapter",
     "InputSourceHealth",
     "InputSourceHealthStatus",
     "InputSourceHealthProvider",

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 from typing import cast
 
+from selfrionette.schemas import InputIntent
 from selfrionette.schemas import MotionCommand
 from selfrionette.schemas import RawInputFrame
 from selfrionette.plugins.mappings.loadcell import (
@@ -246,13 +247,30 @@ def run_loadcell_serial_dry_run_smoke(
     normalization_config: LoadcellNormalizationConfig | None = None,
     endpoint_config: LoadcellEndpointMappingConfig | None = None,
     current_tip_position_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    mapping_plugin: object | None = None,
+    mapping_parameters: Mapping[str, object] | None = None,
 ) -> LoadcellSerialDryRunSmokeResult:
+    """Run the recorded-frame smoke through the canonical mapping when supplied.
+
+    ``mapping_plugin=None`` preserves the public recorded-fixture compatibility
+    helper and delegates to the canonical mapping converter. Production runner
+    entry points resolve and pass the versioned Control Mapping Plugin.
+    """
+
     if max_vectors < 1:
         raise ValueError("max_vectors must be a positive integer")
 
     source = SerialInputSource.from_lines(lines)
     normalized_converter = LoadcellNormalizedInputIntentConverter(normalization_config)
     endpoint_converter = LoadcellEndpointMotionCommandConverter(endpoint_config)
+    selected_mapping_parameters = (
+        {
+            "mapping_config": endpoint_config or {},
+            "current_tip_position_m": current_tip_position_m,
+        }
+        if mapping_parameters is None
+        else mapping_parameters
+    )
 
     frames_read = 0
     vectors_read = 0
@@ -270,10 +288,26 @@ def run_loadcell_serial_dry_run_smoke(
         vectors_read += 1
         last_raw_frame = raw_frame
         last_normalized_intent = normalized_converter.convert(raw_frame)
-        last_motion_command = endpoint_converter.convert(
-            last_normalized_intent,
-            current_tip_position_m=current_tip_position_m,
-        )
+        if mapping_plugin is None:
+            last_motion_command = endpoint_converter.convert(
+                last_normalized_intent,
+                current_tip_position_m=current_tip_position_m,
+            )
+        else:
+            strategy = getattr(mapping_plugin, "strategy", None)
+            map_input = getattr(strategy, "map_input", None)
+            if not callable(map_input):
+                raise TypeError("loadcell mapping plugin must expose strategy.map_input")
+            mapped_intent = map_input(
+                last_normalized_intent,
+                selected_mapping_parameters,
+            )
+            if not isinstance(mapped_intent, InputIntent):
+                raise TypeError("loadcell mapping strategy returned an invalid input intent")
+            last_motion_command = MotionCommand(
+                timestamp_s=mapped_intent.timestamp_s,
+                metadata=mapped_intent.metadata,
+            )
 
     return LoadcellSerialDryRunSmokeResult(
         frames_read=frames_read,
@@ -336,6 +370,14 @@ class LoadcellNormalizedInputIntentConverter:
         )
 
 
+def normalize_loadcell_frame_for_mapping(
+    frame: RawInputFrame,
+) -> NormalizedLoadcellInputIntent:
+    """Adapt one raw source frame at the explicit source-to-mapping boundary."""
+
+    return LoadcellNormalizedInputIntentConverter().convert(frame)
+
+
 __all__ = [
     "LoadcellNormalizationConfig",
     "LoadcellEndpointMappingConfig",
@@ -343,6 +385,7 @@ __all__ = [
     "build_motion_command_from_normalized_loadcell_intent",
     "build_r7_a_lite_smoke_endpoint_mapping_config",
     "LoadcellNormalizedInputIntentConverter",
+    "normalize_loadcell_frame_for_mapping",
     "LoadcellSerialDryRunSmokeResult",
     "NormalizedLoadcellInputIntent",
     "RawLoadcellVectorRecord",

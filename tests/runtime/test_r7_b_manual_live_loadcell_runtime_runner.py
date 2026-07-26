@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,9 @@ from selfrionette.runtime.runners.live_loadcell import (
     run_live_loadcell_runtime_runner,
 )
 from selfrionette.schemas import RawInputFrame
+from selfrionette.input_sources.loadcell_serial import normalize_loadcell_frame_for_mapping
+from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
+from selfrionette.runtime.experiment.contracts import PluginSelection
 
 
 def _guard_serial_import(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -55,6 +59,44 @@ def test_live_loadcell_runtime_runner_processes_injected_lines_without_opening_s
     assert "target_position_m" not in payload["metadata"]
 
 
+def test_live_loadcell_runtime_runner_resolves_mapping_plugin_at_normalized_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _guard_serial_import(monkeypatch)
+    production_mapping = live_loadcell.resolve_control_mapping_plugin(
+        PluginSelection("loadcell_endpoint_mapping", 1)
+    )
+    seen_inputs: list[object] = []
+
+    class SpyStrategy:
+        mapping_semantics_identity = production_mapping.strategy.mapping_semantics_identity
+
+        def map_input(self, input_intent: object, parameters):
+            seen_inputs.append(input_intent)
+            return production_mapping.strategy.map_input(input_intent, parameters)
+
+    spy_mapping = replace(production_mapping, strategy=SpyStrategy())
+    resolved_selections: list[PluginSelection] = []
+
+    def resolve(selection: PluginSelection):
+        resolved_selections.append(selection)
+        return spy_mapping
+
+    monkeypatch.setattr(live_loadcell, "resolve_control_mapping_plugin", resolve)
+    payloads = run_live_loadcell_runtime_runner(
+        LiveLoadcellRuntimeRunnerConfig(port=None, max_frames=1),
+        line_source=(
+            "status,setup_start",
+            "vector,1000,1,0,0,0,0,0,0",
+        ),
+    )
+
+    assert len(payloads) == 1
+    assert resolved_selections == [PluginSelection("loadcell_endpoint_mapping", 1)]
+    assert len(seen_inputs) == 1
+    assert isinstance(seen_inputs[0], NormalizedLoadcellInputIntent)
+
+
 def test_live_loadcell_runtime_runner_consumes_one_shot_generator_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -95,7 +137,10 @@ def test_live_loadcell_runtime_runner_preserves_primary_failure_when_close_fails
 
     reader = Reader()
     registration = SimpleNamespace(
-        plugin=SimpleNamespace(create_runtime_reader=lambda *args, **kwargs: reader)
+        plugin=SimpleNamespace(
+            create_runtime_reader=lambda *args, **kwargs: reader,
+            mapping_input_adapter=normalize_loadcell_frame_for_mapping,
+        )
     )
     monkeypatch.setattr(
         live_loadcell,
@@ -140,7 +185,10 @@ def test_live_loadcell_runtime_runner_surfaces_close_failure_after_success(
 
     reader = Reader()
     registration = SimpleNamespace(
-        plugin=SimpleNamespace(create_runtime_reader=lambda *args, **kwargs: reader)
+        plugin=SimpleNamespace(
+            create_runtime_reader=lambda *args, **kwargs: reader,
+            mapping_input_adapter=normalize_loadcell_frame_for_mapping,
+        )
     )
     monkeypatch.setattr(
         live_loadcell,
