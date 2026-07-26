@@ -1,4 +1,4 @@
-"""Loadcell serial source adapter; mapping remains outside this package."""
+"""Loadcell serial source adapter; endpoint mapping is owned by plugins.mappings."""
 
 from collections.abc import Iterator, Mapping
 

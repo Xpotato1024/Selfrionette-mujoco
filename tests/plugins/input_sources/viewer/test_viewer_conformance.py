@@ -2,6 +2,7 @@ from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.runtime.experiment.input_source import InputSourceRuntimeDependencies
 from tests.plugins.input_sources.contract.conformance import (
     InputSourceConformanceCase,
+    TimestampSequencePolicy,
     assert_input_source_plugin_conforms,
 )
 
@@ -17,5 +18,7 @@ def test_viewer_plugin_conforms_without_browser_or_network() -> None:
             },
             runtime_dependencies=InputSourceRuntimeDependencies(clock=lambda: 0.0),
             expected_frame_source="viewer",
+            reads_per_instance=2,
+            timestamp_sequence_policy=TimestampSequencePolicy.CONSTANT_TIMESTAMP,
         )
     )

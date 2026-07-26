@@ -18,6 +18,26 @@ SRC = ROOT / "src" / "selfrionette"
 PRODUCTION_SOURCE_IDS = set(INPUT_SOURCE_CATALOG.ids)
 SOURCE_PACKAGE_ROOT = SRC / "plugins" / "input_sources"
 TEST_SOURCE_PACKAGE_ROOT = ROOT / "tests" / "plugins" / "input_sources"
+MAPPING_TEST_ROOT = ROOT / "tests" / "plugins" / "mappings"
+MAPPING_COMPATIBILITY_FACADES = {
+    "keyboard.py",
+    "continuous_endpoint_velocity.py",
+    "analog_fixture.py",
+    "loadcell_serial.py",
+    "replay.py",
+}
+SOURCE_OWNED_MAPPING_TEST_IMPORTS = {
+    "selfrionette.input_sources.analog_fixture": {
+        "AnalogFixtureSample",
+        "parse_analog_fixture_sample",
+    },
+    "selfrionette.input_sources.loadcell_serial": {
+        "LoadcellNormalizationConfig",
+        "LoadcellNormalizedInputIntentConverter",
+        "NormalizedLoadcellInputIntent",
+        "RawLoadcellVectorRecord",
+    },
+}
 
 
 def _modules(tree: ast.AST) -> tuple[str, ...]:
@@ -55,6 +75,58 @@ def test_input_source_is_the_sixth_composition_axis_and_catalog_is_singleton() -
         mapping.accepted_input_sample_schemas
         for mapping in CONTROL_MAPPING_PLUGINS
     )
+    assert {
+        mapping.identity.name for mapping in CONTROL_MAPPING_PLUGINS
+    } == {
+        "analog_fixture_mapping",
+        "loadcell_endpoint_mapping",
+        "replay_mapping",
+        "viewer_keyboard_gamepad_mapping",
+    }
+
+
+def test_mapping_tests_use_canonical_mapping_owners() -> None:
+    violations: list[str] = []
+    for path in MAPPING_TEST_ROOT.rglob("*.py"):
+        tree = _parse(path)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or node.module is None:
+                continue
+            if node.module.startswith("selfrionette.input_sources"):
+                allowed = SOURCE_OWNED_MAPPING_TEST_IMPORTS.get(node.module, set())
+                imported = {alias.name for alias in node.names}
+                if not imported.issubset(allowed):
+                    violations.append(f"{path}:{node.lineno}:{node.module}:{sorted(imported)}")
+    for relative, module in (
+        ("analog_fixture", "selfrionette.plugins.mappings.analog_fixture"),
+        ("loadcell", "selfrionette.plugins.mappings.loadcell"),
+        ("viewer", "selfrionette.plugins.mappings.keyboard"),
+    ):
+        owner_tests = tuple((MAPPING_TEST_ROOT / relative).rglob("test_*.py"))
+        assert owner_tests, relative
+        assert any(module in _modules(_parse(path)) for path in owner_tests), module
+    assert not violations
+
+
+def test_input_source_to_mapping_reverse_dependency_is_allowlisted_to_facades() -> None:
+    violations: list[str] = []
+    facade_paths = {
+        SRC / "input_sources" / name for name in MAPPING_COMPATIBILITY_FACADES
+    }
+    for path in (SRC / "input_sources").rglob("*.py"):
+        for module in _modules(_parse(path)):
+            if module.startswith("selfrionette.plugins.mappings") and path not in facade_paths:
+                violations.append(f"{path}:{module}")
+    assert not violations
+    expected_facade_imports = {
+        "analog_fixture.py": "selfrionette.plugins.mappings.analog_fixture",
+        "continuous_endpoint_velocity.py": "selfrionette.plugins.mappings.continuous_endpoint_velocity",
+        "keyboard.py": "selfrionette.plugins.mappings.keyboard",
+        "loadcell_serial.py": "selfrionette.plugins.mappings.loadcell",
+        "replay.py": "selfrionette.plugins.mappings.replay",
+    }
+    for filename, canonical_module in expected_facade_imports.items():
+        assert canonical_module in (SRC / "input_sources" / filename).read_text(encoding="utf-8")
 
 
 def test_each_production_source_has_a_plugin_local_test_owner() -> None:
@@ -67,28 +139,44 @@ def test_each_production_source_has_a_plugin_local_test_owner() -> None:
     assert tuple(contract_owner.glob("test_*.py"))
 
 
+def test_generic_conformance_helper_does_not_depend_on_production_private_sources() -> None:
+    conformance_path = TEST_SOURCE_PACKAGE_ROOT / "contract" / "conformance.py"
+    conformance_text = conformance_path.read_text(encoding="utf-8")
+    assert "selfrionette.input_sources" not in conformance_text
+    assert "selfrionette.plugins.input_sources" not in conformance_text
+
+
 def test_runtime_has_no_source_name_dispatch() -> None:
+    def source_name_expr(node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Name)
+            and node.id == "source_name"
+        ) or (
+            isinstance(node, ast.Attribute)
+            and node.attr == "source_name"
+        )
+
+    def contains_known_source_literal(node: ast.AST) -> bool:
+        return any(
+            isinstance(item, ast.Constant)
+            and isinstance(item.value, str)
+            and item.value in PRODUCTION_SOURCE_IDS
+            for item in ast.walk(node)
+        )
+
     violations: list[str] = []
     for path in (SRC / "runtime").rglob("*.py"):
         tree = _parse(path)
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Compare):
-                continue
-            source_name_access = (
-                isinstance(node.left, ast.Name) and node.left.id == "source_name"
-            ) or (
-                isinstance(node.left, ast.Attribute)
-                and node.left.attr == "source_name"
-            )
-            if not source_name_access:
-                continue
-            constants = [
-                item.value
-                for item in node.comparators
-                if isinstance(item, ast.Constant) and isinstance(item.value, str)
-            ]
-            if any(value in PRODUCTION_SOURCE_IDS for value in constants):
+            if isinstance(node, ast.Compare) and (
+                source_name_expr(node.left)
+                or any(source_name_expr(item) for item in node.comparators)
+            ) and contains_known_source_literal(node):
                 violations.append(f"{path}:{node.lineno}")
+            if isinstance(node, ast.Match) and source_name_expr(node.subject):
+                for case in node.cases:
+                    if contains_known_source_literal(case.pattern):
+                        violations.append(f"{path}:{node.lineno}")
     assert not violations
 
 

@@ -6,13 +6,15 @@ from math import sqrt
 
 import pytest
 
-from selfrionette.input_sources import (
+from selfrionette.plugins.mappings.continuous_endpoint_velocity import (
     build_continuous_endpoint_velocity_intent,
-    build_keyboard_continuous_velocity_intent,
-    build_keyboard_motion_command,
     build_normalized_analog_fixture_intent,
 )
-from selfrionette.input_sources.keyboard import KeyboardBinding, KeyboardInputConfig
+from selfrionette.plugins.mappings.keyboard import (
+    build_keyboard_continuous_velocity_intent,
+    build_keyboard_motion_command,
+)
+from selfrionette.plugins.mappings.keyboard import KeyboardBinding, KeyboardInputConfig
 
 
 def _build(**overrides: object):

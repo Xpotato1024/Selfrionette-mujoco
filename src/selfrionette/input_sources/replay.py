@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from selfrionette.schemas import MotionCommand, RawInputFrame
+from selfrionette.plugins.mappings.replay import build_motion_command_from_replay_frame
+from selfrionette.schemas import RawInputFrame
 
 
 class ReplayInputSource:
@@ -29,13 +30,6 @@ class ReplayInputSource:
         frame = self._frames[self._index]
         self._index += 1
         return frame
-
-
-def build_motion_command_from_replay_frame(frame: RawInputFrame) -> MotionCommand:
-    return MotionCommand(
-        timestamp_s=frame.timestamp_s,
-        metadata=dict(frame.metadata),
-    )
 
 
 __all__ = [

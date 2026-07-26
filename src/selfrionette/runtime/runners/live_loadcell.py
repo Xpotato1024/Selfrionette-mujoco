@@ -6,10 +6,10 @@ from math import isfinite
 from typing import cast
 
 from selfrionette.input_sources.loadcell_serial import (
-    LoadcellEndpointMotionCommandConverter,
     LoadcellNormalizedInputIntentConverter,
     NormalizedLoadcellInputIntent,
 )
+from selfrionette.plugins.mappings.loadcell import LoadcellEndpointMotionCommandConverter
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.runtime.experiment.input_source import InputSourceRuntimeDependencies
 from selfrionette.runtime.runners.offline_input_smoke import run_offline_input_runtime_stepping_smoke

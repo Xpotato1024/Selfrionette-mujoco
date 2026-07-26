@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-26
+last_verified: 2026-07-27
 canonical_for:
   - import boundaries
 related:
@@ -41,7 +41,8 @@ runtime             -> all layers
 Input Source Pluginのgeneric contractは`runtime/experiment/input_source.py`が所有し、production source
 registrationは`plugins/input_sources/`が所有する。既存`input_sources.base.InputSource`の
 `read_frame() -> RawInputFrame`をreader compatibility boundaryとして再利用するが、低位の
-`input_sources/`から`plugins/`または`runtime/`へ逆依存しない。`input_sources.registry`は既存descriptor
+`input_sources/`から`plugins/`または`runtime/`へ逆依存しない。ただし#462で定義した5つのthin compatibility facadeだけは
+`plugins/mappings/`への明示的な例外とする。`input_sources.registry`は既存descriptor
 signatureとframe behaviorだけを保持し、production catalogをimportまたは再登録しない。
 source contractからfast_arm、task / evaluation実装、viewer TypeScript、serial transportをimportしない。
 Control Mapping Pluginはproduced / accepted sample schemaのversioned identityだけを参照し、device handle、
@@ -167,6 +168,18 @@ transport           -> runtime
 
 `apps/mujoco-viewer/src`は`tests/architecture/test_layer_import_boundaries.py`で
 検査する。rendering-onlyを維持し、MuJoCo、IK/FK、Rapier layerをimportしてはならない。
+
+## Input Source compatibility facade exception (#462)
+
+`input_sources/` は原則として `schemas` と source-owned acquisition に依存する。既存 public import を壊さないため、次の5 moduleだけは canonical mapping owner を thin facade として再exportする narrow exception とする。
+
+- `input_sources/keyboard.py`
+- `input_sources/continuous_endpoint_velocity.py`
+- `input_sources/analog_fixture.py`
+- `input_sources/loadcell_serial.py`
+- `input_sources/replay.py`
+
+この例外は mapping algorithm の複製を許可しない。algorithm、parameter config、command conversion の canonical owner は `plugins/mappings/` であり、facade以外の `input_sources/` から `plugins.mappings` への import は architecture guard で拒否する。loadcell の parser と intrinsic normalization は source-owned のまま、endpoint mapping は `plugins/mappings/loadcell.py` が所有する。`loadcell_endpoint_mapping` は source-normalized intent boundary を受け、raw serial frame を再正規化しない。
 
 ## Input Source runtime validation boundary
 

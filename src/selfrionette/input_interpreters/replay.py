@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from selfrionette.plugins.mappings.replay import build_input_intent_from_replay_frame
 from selfrionette.schemas import InputIntent, RawInputFrame
 
 
@@ -11,13 +12,7 @@ class ReplayInputInterpreter:
     """
 
     def interpret(self, frame: RawInputFrame) -> InputIntent:
-        return InputIntent(
-            source=frame.source,
-            timestamp_s=frame.timestamp_s,
-            values=frame.values,
-            buttons=frame.buttons,
-            metadata=dict(frame.metadata),
-        )
+        return build_input_intent_from_replay_frame(frame)
 
 
 __all__ = ["ReplayInputInterpreter"]

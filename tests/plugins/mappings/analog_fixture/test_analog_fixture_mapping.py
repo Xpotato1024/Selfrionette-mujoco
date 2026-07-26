@@ -6,11 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.input_sources import (
-    AnalogFixtureMappingConfig,
+from selfrionette.input_sources.analog_fixture import (
     AnalogFixtureSample,
-    map_analog_fixture_sample,
     parse_analog_fixture_sample,
+)
+from selfrionette.plugins.mappings.analog_fixture import (
+    AnalogFixtureMappingConfig,
+    map_analog_fixture_sample,
 )
 from selfrionette.schemas import MotionSampleRecord
 

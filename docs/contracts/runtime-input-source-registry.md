@@ -324,6 +324,23 @@ compatibility consumerと専用testがあるため retained とする。producti
 catalogを再投影せず、reverse dependencyも作らない。keyboard / continuous mapping facadeは既存consumer向けに残し、
 canonical mapping ownerは`plugins/mappings/`とする。
 
+## #462 mapping ownership and conformance correction (2026-07-27)
+
+production Control Mapping catalog は次の deterministic registrations を持つ。
+
+| mapping plugin | accepted sample boundary | owner |
+|---|---|---|
+| `viewer_keyboard_gamepad_mapping/v1` | `viewer_control_sample/v1` | viewer keyboard/gamepad mapping |
+| `replay_mapping/v1` | `replay_raw_input_frame/v1` | replay intent/command compatibility |
+| `analog_fixture_mapping/v1` | `analog_fixture_sample/v1` | analog axis/sign/scale/deadzone/frame/endpoint intent |
+| `loadcell_endpoint_mapping/v1` | `loadcell_normalized_input_intent/v1` | loadcell endpoint delta and `MotionCommand` metadata |
+
+analog の parser、timestamp、raw values、health は source-owned で、mapping implementation は `src/selfrionette/plugins/mappings/analog_fixture.py` にある。loadcell の serial parser、diagnostic、intrinsic normalization は `input_sources/loadcell_serial.py` に残し、channel-axis weights、gain、max delta、endpoint delta、command conversion は `src/selfrionette/plugins/mappings/loadcell.py` に移した。loadcell mapping は source-normalized intent boundaryを受けるため、raw `loadcell_vector_sample/v1`とのgeneric runtime selectionを暗黙に成立させず、schema mismatchはfail-closedにする。
+
+`input_sources/keyboard.py`、`continuous_endpoint_velocity.py`、`analog_fixture.py`、`loadcell_serial.py`、`replay.py` は既存public importのthin compatibility facadeである。canonical mapping testsは `plugins/mappings/` ownerを直接importし、source-owned parser/normalization typeだけをsource moduleから参照する。
+
+generic conformance は source-specific valid parameters に加え、frame/metadata validator、timestamp/sequence policy、sequence validator、optional typed health transition cases を受け付ける。production 7 source cases は constant timestamp、monotonic/indexed、preserved replay order、terminal hold のいずれかを明示する。
+
 ## #461 final audit correction (2026-07-26)
 
 `raw_axes`はnew provider pathのcanonical mapping inputであり、frontend normalized `axes`はwire / overlay compatibility projectionである。gamepad/v1の`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsに基づくobservable semanticsを維持し、mapping deadzoneのcommand zeroとは分離する。button-only sampleもmappingへ渡し、`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。fixed frontend `0.1` projection + configurable backend thresholdはmapping plugin内で一元化し、default parity、custom `0.0`のraw `0.05` hold、raw `0.15`の`1/18`をgolden testで固定する。

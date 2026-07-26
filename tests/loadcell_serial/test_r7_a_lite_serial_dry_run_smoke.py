@@ -8,8 +8,11 @@ from selfrionette.input_sources.loadcell_serial import (
     LoadcellNormalizationConfig,
     SerialFrameParseError,
     SerialInputSource,
-    build_r7_a_lite_smoke_endpoint_mapping_config,
     run_loadcell_serial_dry_run_smoke,
+)
+from selfrionette.plugins.mappings.loadcell import (
+    LoadcellEndpointMotionCommandConverter,
+    build_r7_a_lite_smoke_endpoint_mapping_config,
 )
 from selfrionette.runtime.runners.loadcell_serial_dry_run import DEFAULT_FIXTURE_PATH, main as run_loadcell_serial_dry_run_main
 
@@ -153,7 +156,8 @@ def test_r7_a_lite_serial_dry_run_cli_fixture_mode_outputs_endpoint_metadata(cap
 
 
 def test_default_endpoint_mapping_is_no_op_and_explicit_mapping_changes_desired_endpoint_m() -> None:
-    from selfrionette.input_sources.loadcell_serial import LoadcellEndpointMotionCommandConverter, NormalizedLoadcellInputIntent
+    from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
+    from selfrionette.plugins.mappings.loadcell import LoadcellEndpointMotionCommandConverter
 
     intent = NormalizedLoadcellInputIntent(
         source="loadcell_serial",

@@ -277,6 +277,14 @@ virtual reaction force、viewer feature、hardware/serial/Arduino/OSC/robot outp
 conformance testはcontractとreadinessの成立を示すが、実験結果、metric妥当性、接触物理、physical
 safetyを証明しない。
 
+## #462 mapping ownership and compatibility facades
+
+Control Mapping Plugin の production catalog は viewerだけに限定されず、replay、analog fixture、loadcell endpoint mappingをdeterministic IDで登録する。source parser、provider acquisition、intrinsic normalizationはsource ownerに残し、axis assignment、sign、gain、scale、deadzone、control frame、endpoint/command conversionはmapping ownerに置く。
+
+loadcell は serial source が生成する raw `loadcell_vector_sample/v1`をsource-owned normalizationへ通した後、`loadcell_normalized_input_intent/v1`としてendpoint mappingへ渡す bounded compatibility pathである。generic `ControlMappingPlugin`はこの normalized boundaryをaccepted schemaとして宣言し、raw frameのimplicit re-normalizationやfallbackは行わない。
+
+既存public importを保つためのsource facadeは5 moduleに限定する。facadeはcanonical `plugins/mappings/` implementationをreexportするだけで、mapping algorithmのsecond SoTではない。architecture guardはallowlist外のreverse dependency、mapping testからのmapping-owned source import、source-name dispatchを拒否する。
+
 ## viewer input composition handoff (#461)
 
 Input Sourceが提供する`viewer_control_sample/v1`とControl Mappingが受け付けるsample identityは

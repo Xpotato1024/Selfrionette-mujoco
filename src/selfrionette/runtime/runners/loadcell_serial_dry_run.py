@@ -8,9 +8,9 @@ from typing import Sequence
 
 from selfrionette.input_sources.loadcell_serial import (
     LoadcellNormalizationConfig,
-    build_r7_a_lite_smoke_endpoint_mapping_config,
     run_loadcell_serial_dry_run_smoke,
 )
+from selfrionette.plugins.mappings.loadcell import build_r7_a_lite_smoke_endpoint_mapping_config
 
 ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "r7_a_lite_serial_frames" / "minimal_valid.txt"
