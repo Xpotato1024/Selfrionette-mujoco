@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-26
 canonical_for:
   - import boundaries
 related:
@@ -215,3 +215,41 @@ package-root exportとmodule-level exportは別のpublic surfaceである。
 
 このpublic surfaceを変更する場合は、`tests/architecture/test_public_export_policy.py`と
 該当packageの`__all__` contract testを同じ変更で更新する。
+
+## viewer provider / source / mapping direction (#461)
+
+viewer frontend providerはbrowser-only boundaryであり、physics、robot、task、FK、IKをimportしない。
+backend viewer sourceはtransport messageとviewer sample schemaを扱うが、keyboard axis assignment、
+gamepad normalization semantics、gain、deadzone、control-frame command conversion、desired endpoint
+progressionを持たない。Control Mapping Pluginはfrontend DOM、Gamepad API、WebSocket lifecycle、
+source healthをimportしない。runtimeだけがsourceとmappingをtyped registrationからcomposeし、mapping
+resultをendpoint runtimeへ渡す。
+
+provider ID / sample schema、source produced schema / mapping accepted schema、provider lifecycle stateは
+各boundaryで検証する。unknown、duplicate、version mismatch、missing capability、malformed provider
+payloadはimplicit fallbackなしでfail-closedとする。これによりlegacy message compatibilityはsourceの
+canonicalizationに限定され、mapping algorithmの二重実装にならない。
+
+keyboard providerはcapture対象keyのallowlistとpressed key lifecycleだけを保持し、disable / dispose時に
+capture stateをresetする。gamepad providerはbrowserから取得したfiniteな`raw_axes`をcanonical sampleへ
+保持し、既存のnormalized `axes`はwire / overlay互換projectionとして残す。gamepad/v1のpublicな
+`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsを反映する既存observable
+semanticsを維持し、connection、focus、visibility、stale、disconnectなどprovider / source-owned stateと
+合わせて扱う。raw axisのmapping deadzone結果やcommand zeroはsource healthの代替にしない。axis assignment、
+binding direction、speed / gain、deadzone、button supplement、requested control frame、command zero判定は
+Control Mappingのtyped parametersとcanonical sampleが所有する。
+
+viewer sourceはtyped ingress failureを受けてlatest canonical sampleを`source_active=false`、healthを
+`invalid`へ遷移させる。runtimeはinvalid / stale / inactive / disconnectedでhold-currentを適用し、valid
+sampleが来るまで古いactive intentを再開しない。source registrationはconcrete mapping objectを保持せず、
+`PluginSelection`をdefaultとして宣言するだけであり、explicit mapping selectionはruntime compositionで
+優先される。produced sample schemaとaccepted sample schema、mapping `ParameterContract`、optionalな
+mapping-specific parameter normalizationはreaderのlifecycle開始・frame read・mapping execution前に検証する。
+検証済みparametersはdeterministicなfrozen mappingとしてplanへ渡し、invalid parameterではmanaged sourceを
+startせず、frameもreadしない。
+
+## #461 final audit correction (2026-07-26)
+
+frontend providerはbrowser raw acquisitionとlifecycleを所有し、normalized gamepad `axes`はwire / overlay compatibility projectionとして残す。canonical `raw_axes`、source lifecycle / activity、backend health、Control Mappingのcommand zeroを同じ責務に戻さない。gamepadのlegacy two-stage transfer functionはControl Mapping Plugin内で一元化し、frontendまたはsourceへmapping semanticsを戻さない。
+
+sourceとmappingは別identityでruntimeがcomposeする。mapping parametersはexecution / source start前にgeneric contractとmapping-specific semantic validatorで検証し、explicit runtime parameters、direct source compatibility parameters、registration / plugin defaultsの順に解決する。#462のtest relocation、dummy onboarding、legacy fallback retirementはこのboundaryのscope外である。

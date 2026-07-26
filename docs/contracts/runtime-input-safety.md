@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-21
+last_verified: 2026-07-26
 canonical_for:
   - runtime input stale-command safety
 related:
@@ -76,3 +76,28 @@ publisher が同じ値を参照できるようにする。`runtime_input_safety_
 この contract は live / replay input の stale safety に限定する。
 IK / FK solver は変更しない。
 browser input, serial open, OSC, hardware access は scope 外である。
+
+## viewer provider lifecycle safety (#461)
+
+frontend providerのfocus / visibility / disconnect処理はzero / inactive sampleをpublicationし、backend sourceの
+latest sampleを非activeまたはstaleへ遷移させる。raw gamepad sampleのconnected activityはlegacy normalized
+axesとbuttonsから生成されたlegacy `zero_state`を含む既存observable semanticsを維持し、mapping deadzoneと
+command zeroはmappingの責務としてhealthへ混ぜない。provider ID / schema
+不一致は別のproviderやnoopに置き換えない。lifecycle dispose後はkeyboard listener、gamepad polling、heartbeat、
+WebSocket senderを停止する。再activationでは古いactive sampleを再利用せず、最初にzero / safe stateから開始する。
+
+mappingがstaleまたはinactive sampleからintent metadataを生成しても、runtime safetyがsource healthを
+確認してhold-current-qposへ変換する。従って古いaxis値、button supplement、desired endpoint metadata
+がstale commandを再開させることはない。provider acquisition、backend source health、mapping intent、
+runtime holdは別の診断層としてpayloadに残す。
+
+viewerのmalformed JSON、schema validation failure、provider identity mismatchは、source objectへ到達する
+前の失敗でも`ViewerBridgeRuntimeCapability.record_ingress_failure()`を通じてsource-owned healthへ伝える。
+sourceは即時`invalid`へ遷移し、`invalid_reason`をdiagnosticsへ残す。timeoutまで旧active frameを継続せず、
+runtimeはhold-currentへ移行する。valid viewer sampleが届いた場合だけactiveへrecoveryする。
+
+## #461 final audit correction (2026-07-26)
+
+raw gamepadのmapping inputは`raw_axes`とするが、gamepad/v1のsource activityはlegacy projected `axes`とbuttonsから生成された`zero_state`、connection、focus、visibility、stale、disconnectなどprovider / source-owned stateのobservable semanticsを維持する。したがって`gamepad_deadzone=0.0`でもraw `0.05`かつprojected `axes=[0.0]`の`zero_state=true`はholdとなり、raw `0.15`はfixed frontend projection後の`1/18`をmappingへ渡す。mapping command zeroとsource healthは別の診断層として扱う。
+
+mapping parametersはsource start / frame readより前に検証される。explicit runtime mapping parametersをdirect `ViewerInputSource` compatibility parametersより優先し、それ以外はregistration / plugin defaultsを使う。invalid、stale、inactive、disconnectedは既存hold-current policyを維持する。

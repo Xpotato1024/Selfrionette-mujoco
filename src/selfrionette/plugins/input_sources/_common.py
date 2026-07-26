@@ -7,7 +7,7 @@ They do not interpret frames or create robot commands.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from enum import Enum
 from typing import Any
 
@@ -32,6 +32,25 @@ def health_from_frame(
     health_metadata: dict[str, object] = {"source": frame.source}
     if "source_kind" in metadata:
         health_metadata["source_kind"] = metadata["source_kind"]
+    if metadata.get("source_health_status") == "invalid":
+        return InputSourceHealth(
+            InputSourceHealthStatus.INVALID,
+            reason=str(reason or "invalid_input_source_frame"),
+            age_ms=age_ms,
+            metadata=health_metadata,
+        )
+    if (
+        metadata.get("viewer_source_kind") == "gamepad"
+        and isinstance(metadata.get("viewer_control_message"), Mapping)
+        and isinstance(metadata["viewer_control_message"].get("gamepad"), Mapping)
+        and metadata["viewer_control_message"]["gamepad"].get("connected") is False
+    ):
+        return InputSourceHealth(
+            InputSourceHealthStatus.DISCONNECTED,
+            reason=str(reason or "gamepad_disconnected"),
+            age_ms=age_ms,
+            metadata=health_metadata,
+        )
     if reason is not None:
         return InputSourceHealth(
             InputSourceHealthStatus.STALE,
@@ -55,20 +74,49 @@ def health_from_frame(
 class FrameHealthReader:
     """Add typed health to an existing frame reader without changing frames."""
 
-    def __init__(self, delegate: Any, initial_health: InputSourceHealth) -> None:
+    def __init__(
+        self,
+        delegate: Any,
+        initial_health: InputSourceHealth,
+        *,
+        health_reader: Callable[[], InputSourceHealth] | None = None,
+    ) -> None:
         self._delegate = delegate
         self._initial_health = initial_health
         self._health = initial_health
+        self._health_reader = health_reader
 
     def read_frame(self) -> RawInputFrame:
         frame = self._delegate.read_frame()
-        self._health = health_from_frame(
-            frame,
-            default_status=InputSourceHealthStatus.ACTIVE,
-        )
+        delegate_health = getattr(self._delegate, "current_health", None)
+        if not callable(delegate_health):
+            delegate_health = self._health_reader
+        if callable(delegate_health):
+            health = delegate_health()
+            if not isinstance(health, InputSourceHealth):
+                raise TypeError("input source delegate current_health() returned invalid health")
+            self._health = health
+        else:
+            self._health = health_from_frame(
+                frame,
+                default_status=InputSourceHealthStatus.ACTIVE,
+            )
         return frame
 
     def current_health(self) -> InputSourceHealth:
+        delegate_health = getattr(self._delegate, "current_health", None)
+        if not callable(delegate_health):
+            delegate_health = self._health_reader
+        if callable(delegate_health):
+            health = delegate_health()
+            if not isinstance(health, InputSourceHealth):
+                raise TypeError("input source delegate current_health() returned invalid health")
+            self._health = health
+        else:
+            # Keep current_health side-effect free for replay and managed
+            # sources that intentionally reject read-before-start. Viewer
+            # sources expose their own typed health capability.
+            return self._health
         return self._health
 
 
@@ -93,8 +141,9 @@ class ManagedFrameHealthReader(FrameHealthReader):
         started_health: InputSourceHealth | None = None,
         start_failure_health: InputSourceHealth | None = None,
         closed_health: InputSourceHealth | None = None,
+        health_reader: Callable[[], InputSourceHealth] | None = None,
     ) -> None:
-        super().__init__(delegate, initial_health)
+        super().__init__(delegate, initial_health, health_reader=health_reader)
         self._viewer_bridge_capability = viewer_bridge_capability
         self._started_health = started_health
         self._start_failure_health = start_failure_health

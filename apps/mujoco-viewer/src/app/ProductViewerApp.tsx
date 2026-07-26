@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { readViewerEndpointConfig } from "../config/websocketEndpoint.js";
 import {
   createViewerKeyboardCapture,
-  DEFAULT_VIEWER_KEYBOARD_BINDINGS,
+  DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS,
 } from "../input/keyboardInput.js";
 import type { ViewerGamepadLike } from "../input/gamepadInput.js";
 import { createViewerInputLifecycle } from "./viewerInputLifecycle.js";
@@ -119,7 +119,7 @@ export function ProductViewerApp() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const keyboardCaptureRef = useRef(
     createViewerKeyboardCapture(
-      DEFAULT_VIEWER_KEYBOARD_BINDINGS,
+      DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS,
       typeof document !== "undefined" && document.hasFocus() ? "focused" : "blurred",
     ),
   );

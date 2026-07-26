@@ -37,18 +37,22 @@ def ingest_viewer_control_message(
     source: ViewerBridgeRuntimeCapability,
     message: ViewerControlMessage | str | Mapping[str, object],
 ) -> RawInputFrame:
-    if isinstance(message, str):
-        validated_message = parse_viewer_control_message_json(message)
-    elif isinstance(message, ViewerControlMessage):
-        validated_message = message
-    else:
-        validated_message = coerce_viewer_control_message(message)
+    try:
+        if isinstance(message, str):
+            validated_message = parse_viewer_control_message_json(message)
+        elif isinstance(message, ViewerControlMessage):
+            validated_message = message
+        else:
+            validated_message = coerce_viewer_control_message(message)
+    except Exception as exc:
+        source.record_ingress_failure(str(exc))
+        raise
 
     return source.ingest_control_message(validated_message)
 
 
 def ingest_viewer_control_message_json(source: ViewerBridgeRuntimeCapability, message: str) -> RawInputFrame:
-    return source.ingest_control_message(parse_viewer_control_message_json(message))
+    return ingest_viewer_control_message(source, message)
 
 
 __all__ = [

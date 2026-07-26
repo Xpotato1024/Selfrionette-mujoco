@@ -3,7 +3,7 @@ import {
   buildViewerKeyboardControlMessage,
   createViewerKeyboardCapture,
   createViewerKeyboardControlSender,
-  DEFAULT_VIEWER_KEYBOARD_BINDINGS,
+  DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS,
   type ViewerKeyboardControlSender,
   type ViewerKeyboardControlSocketLike,
 } from "../src/input/keyboardInput.js";
@@ -101,10 +101,10 @@ function testViewerKeyboardCaptureMapsDefaultBindings(): void {
   });
 }
 
-function testViewerKeyboardDefaultZAxisBindings(): void {
-  assert.deepEqual(DEFAULT_VIEWER_KEYBOARD_BINDINGS.Space, { axis: "z", direction: 1 });
-  assert.deepEqual(DEFAULT_VIEWER_KEYBOARD_BINDINGS.ShiftLeft, { axis: "z", direction: -1 });
-  assert.deepEqual(DEFAULT_VIEWER_KEYBOARD_BINDINGS.ShiftRight, { axis: "z", direction: -1 });
+function testViewerKeyboardCaptureAllowlistHasNoMappingSemantics(): void {
+  assert.equal(DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS.Space, true);
+  assert.equal(DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS.ShiftLeft, true);
+  assert.equal(DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS.ShiftRight, true);
 }
 
 function testViewerKeyboardCaptureClearsOnBlurAndVisibilityLoss(): void {
@@ -134,6 +134,10 @@ function testViewerKeyboardCaptureClearsOnBlurAndVisibilityLoss(): void {
     focus_state: "blurred",
     zero_state: true,
   });
+
+  capture.handleKeyDown("KeyW");
+  capture.reset();
+  assert.equal(capture.snapshot().zero_state, true);
 }
 
 function testViewerKeyboardControlMessageBuildsSchemaPayload(): void {
@@ -155,6 +159,8 @@ function testViewerKeyboardControlMessageBuildsSchemaPayload(): void {
     type: "viewer_control_message",
     timestamp_s: 12.5,
     source_kind: "keyboard",
+    provider_id: "keyboard/v1",
+    provider_schema: "viewer_keyboard_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",
@@ -208,6 +214,8 @@ function testViewerKeyboardControlSenderQueuesUntilOpen(): void {
     type: "viewer_control_message",
     timestamp_s: 9.5,
     source_kind: "keyboard",
+    provider_id: "keyboard/v1",
+    provider_schema: "viewer_keyboard_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",
@@ -241,6 +249,8 @@ function testViewerKeyboardControlSenderHandlesMissingBackendGracefully(): void 
     type: "viewer_control_message",
     timestamp_s: 4.25,
     source_kind: "keyboard",
+    provider_id: "keyboard/v1",
+    provider_schema: "viewer_keyboard_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",
@@ -317,7 +327,7 @@ function testViewerKeyboardControlSenderSwallowsConstructorAndSendFailures(): vo
 }
 
 testViewerKeyboardCaptureMapsDefaultBindings();
-testViewerKeyboardDefaultZAxisBindings();
+testViewerKeyboardCaptureAllowlistHasNoMappingSemantics();
 testViewerKeyboardCaptureClearsOnBlurAndVisibilityLoss();
 testViewerKeyboardControlMessageBuildsSchemaPayload();
 testViewerKeyboardControlSenderQueuesUntilOpen();

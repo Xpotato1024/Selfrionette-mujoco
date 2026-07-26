@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-import math
+from dataclasses import replace
+from math import inf, nan
 
 import pytest
 
-from selfrionette.input_sources import KeyboardBinding, KeyboardInputConfig, ViewerInputSource
+from selfrionette.input_sources import ViewerInputSource
+from selfrionette.plugins.input_sources._common import health_from_frame
+from selfrionette.plugins.mappings.keyboard import KeyboardBinding, KeyboardInputConfig
+from selfrionette.plugins.mappings.viewer import VIEWER_CONTROL_MAPPING_PLUGIN
+from selfrionette.runtime.experiment.input_source import InputSourceHealthStatus
 from selfrionette.schemas import (
     ViewerControlGamepadButtonMessage,
     ViewerControlGamepadMessage,
@@ -21,7 +26,179 @@ class FakeClock:
         return next(self._values)
 
 
-def test_viewer_input_source_returns_safe_inactive_frame_before_ingest() -> None:
+def keyboard_message(
+    timestamp_s: float,
+    *key_codes: str,
+    focus_state: str = "focused",
+    zero_state: bool | None = None,
+    control_frame: str = "world",
+) -> ViewerControlMessage:
+    return ViewerControlMessage(
+        type="viewer_control_message",
+        timestamp_s=timestamp_s,
+        source_kind="keyboard",
+        keyboard=ViewerControlKeyboardMessage(
+            active_key_codes=key_codes,
+            key_state={key_code: True for key_code in key_codes},
+            focus_state=focus_state,  # type: ignore[arg-type]
+            zero_state=not key_codes if zero_state is None else zero_state,
+        ),
+        metadata={"control_frame": control_frame},
+    )
+
+
+def gamepad_message(
+    timestamp_s: float,
+    axes: tuple[float, ...],
+    *,
+    buttons: tuple[bool, ...] = (),
+    connected: bool = True,
+    stale: bool = False,
+    zero_state: bool = False,
+    control_frame: str = "world",
+    raw_axes: tuple[float, ...] | None = None,
+) -> ViewerControlMessage:
+    return ViewerControlMessage(
+        type="viewer_control_message",
+        timestamp_s=timestamp_s,
+        source_kind="gamepad",
+        gamepad=ViewerControlGamepadMessage(
+            connected=connected,
+            index=0,
+            id="pad-1",
+            raw_axes=raw_axes,
+            axes=axes,
+            buttons=tuple(
+                ViewerControlGamepadButtonMessage(pressed=pressed, value=float(pressed))
+                for pressed in buttons
+            ),
+            stale=stale,
+            zero_state=zero_state,
+        ),
+        metadata={"control_frame": control_frame},
+    )
+
+
+def map_frame(frame):
+    return VIEWER_CONTROL_MAPPING_PLUGIN.strategy.map_input(frame, {})
+
+
+_LEGACY_FRONTEND_GAMEPAD_DEADZONE = 0.1
+
+
+def _baseline_frontend_gamepad_projection(value: float) -> float:
+    """Independent reference for main's fixed frontend projection."""
+
+    clamped = max(-1.0, min(1.0, value))
+    magnitude = abs(clamped)
+    if magnitude <= _LEGACY_FRONTEND_GAMEPAD_DEADZONE:
+        return 0.0
+    return (1.0 if clamped > 0.0 else -1.0) * (
+        (magnitude - _LEGACY_FRONTEND_GAMEPAD_DEADZONE)
+        / max(1.0 - _LEGACY_FRONTEND_GAMEPAD_DEADZONE, 1e-12)
+    )
+
+
+def _baseline_gamepad_transfer(value: float, backend_deadzone: float = 0.1) -> float:
+    """Reproduce main's fixed frontend projection plus backend threshold."""
+
+    projected = _baseline_frontend_gamepad_projection(value)
+    return 0.0 if abs(projected) <= backend_deadzone else projected
+
+
+def _provider_zero_state_for_raw_axis(value: float) -> bool:
+    return _baseline_frontend_gamepad_projection(value) == 0.0
+
+
+@pytest.mark.parametrize(
+    "raw_axis",
+    (
+        0.00,
+        0.05,
+        0.10,
+        0.15,
+        0.19,
+        0.20,
+        0.50,
+        1.00,
+        -0.05,
+        -0.10,
+        -0.15,
+        -0.19,
+        -0.20,
+        -0.50,
+        -1.00,
+    ),
+)
+def test_raw_gamepad_transfer_matches_complete_legacy_default_function(
+    raw_axis: float,
+) -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(
+        gamepad_message(
+            4.0,
+            (0.0, 0.0, 0.0),
+            raw_axes=(raw_axis, 0.0, 0.0),
+            zero_state=_provider_zero_state_for_raw_axis(raw_axis),
+        )
+    )
+
+    intent = map_frame(frame)
+    expected_axis = _baseline_gamepad_transfer(raw_axis)
+    assert intent.values[0] == pytest.approx(expected_axis, abs=1e-12)
+    assert intent.metadata["deadzone_applied_axis_values"][0] == pytest.approx(
+        expected_axis, abs=1e-12
+    )
+    assert intent.metadata["local_endpoint_velocity_m_s"][0] == pytest.approx(
+        expected_axis * 0.1, abs=1e-12
+    )
+
+
+@pytest.mark.parametrize(
+    ("deadzone", "raw_axis"),
+    (
+        (0.0, 0.05),
+        (0.0, 0.10),
+        (0.0, 0.15),
+        (0.0, 0.20),
+        (0.0, -0.15),
+        (0.2, 0.05),
+        (0.2, 0.20),
+        (0.2, 0.279),
+        (0.2, 0.28),
+        (0.2, 0.30),
+        (0.2, -0.30),
+    ),
+)
+def test_raw_gamepad_custom_deadzone_preserves_parameterized_legacy_composition(
+    deadzone: float,
+    raw_axis: float,
+) -> None:
+    source = ViewerInputSource(clock=lambda: 0.0, gamepad_deadzone=deadzone)
+    frame = source.ingest_control_message(
+        gamepad_message(
+            4.0,
+            (0.0, 0.0, 0.0),
+            raw_axes=(raw_axis, 0.0, 0.0),
+            zero_state=_provider_zero_state_for_raw_axis(raw_axis),
+        )
+    )
+
+    intent = map_frame(frame)
+    assert intent.values[0] == pytest.approx(
+        _baseline_gamepad_transfer(raw_axis, deadzone), abs=1e-12
+    )
+
+
+def test_viewer_source_compatibility_capability_preserves_explicitness() -> None:
+    assert ViewerInputSource(clock=lambda: 0.0).mapping_compatibility_parameters() == {}
+    explicit_default = ViewerInputSource(clock=lambda: 0.0, gamepad_deadzone=0.1)
+    assert explicit_default.mapping_compatibility_parameters() == {
+        "gamepad_deadzone": 0.1
+    }
+
+
+def test_viewer_input_source_emits_raw_canonical_sample_before_ingest() -> None:
     source = ViewerInputSource(clock=lambda: 0.0)
 
     frame = source.read_frame()
@@ -31,274 +208,270 @@ def test_viewer_input_source_returns_safe_inactive_frame_before_ingest() -> None
     assert frame.metadata["source_active"] is False
     assert frame.metadata["command_age_ms"] == 0
     assert frame.metadata["stale_reason"] == "source_inactive"
-    assert frame.metadata["control_frame"] == "world"
-    assert frame.metadata["desired_endpoint_m"] == (0.6, 0.0, 0.1)
-    assert frame.metadata["target_position_m"] == (0.6, 0.0, 0.1)
-    assert frame.metadata["intent_kind"] is None
-    assert frame.metadata["input_continuity"] is None
     assert frame.values == ()
     assert frame.buttons == ()
-
-
-def test_viewer_input_source_converts_keyboard_message_to_continuous_axis_frame() -> None:
-    clock = FakeClock((10.0, 10.0))
-    source = ViewerInputSource(clock=clock)
-    message = ViewerControlMessage(
-        type="viewer_control_message",
-        timestamp_s=2.5,
-        source_kind="keyboard",
-        keyboard=ViewerControlKeyboardMessage(
-            active_key_codes=("KeyW", "KeyD"),
-            key_state={"KeyW": True, "KeyD": True},
-            focus_state="focused",
-            zero_state=False,
-        ),
-    )
-
-    frame = source.ingest_control_message(message)
-    axis_scale = math.sqrt(2.0)
-    expected_axis_values = (1.0 / axis_scale, 1.0 / axis_scale, 0.0)
-
-    assert frame.source == "viewer"
-    assert frame.metadata["source_kind"] == "viewer_keyboard"
-    assert frame.metadata["viewer_source_kind"] == "keyboard"
-    assert frame.metadata["intent_kind"] == "local_endpoint_velocity"
-    assert frame.metadata["input_continuity"] == "continuous"
-    assert frame.metadata["source_active"] is True
-    assert frame.metadata["command_age_ms"] == 0
-    assert frame.metadata["stale_reason"] is None
-    assert frame.metadata["control_frame"] == "world"
-    assert frame.metadata["axis_values"] == pytest.approx(expected_axis_values, abs=1e-12)
-    assert frame.metadata["endpoint_velocity_m_s"] == pytest.approx(
-        tuple(component * 0.1 for component in expected_axis_values),
-        abs=1e-12,
-    )
-    assert frame.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx(
-        tuple(component * 0.1 for component in expected_axis_values),
-        abs=1e-12,
-    )
-    assert frame.metadata["local_endpoint_velocity_m_s"] == pytest.approx(
-        tuple(component * 0.1 for component in expected_axis_values),
-        abs=1e-12,
-    )
-    assert frame.metadata["local_endpoint_velocity_frame"] == "world"
-    assert frame.metadata["endpoint_velocity_frame"] == "mujoco_world"
-    assert frame.metadata["local_endpoint_speed_m_s"] == pytest.approx(0.1, abs=1e-12)
-    assert frame.metadata["local_endpoint_max_delta_m"] == pytest.approx(0.03, abs=1e-12)
-    assert frame.metadata["viewer_control_message"]["keyboard"]["active_key_codes"] == ("KeyW", "KeyD")
-    assert frame.values == pytest.approx(expected_axis_values, abs=1e-12)
-    assert frame.buttons == (True, True)
+    assert "axis_values" not in frame.metadata
+    assert "endpoint_velocity_m_s" not in frame.metadata
 
 
 @pytest.mark.parametrize(
-    ("key_codes", "expected_axis_values"),
+    ("key_code", "expected_axis"),
     (
-        (("KeyA", "KeyD"), (0.0, 0.0, 0.0)),
-        (("KeyW", "KeyS"), (0.0, 0.0, 0.0)),
-        (("Space", "ShiftLeft"), (0.0, 0.0, 0.0)),
-        (("KeyD",), (1.0, 0.0, 0.0)),
-        (("KeyA",), (-1.0, 0.0, 0.0)),
-        (("KeyW",), (0.0, 1.0, 0.0)),
-        (("KeyS",), (0.0, -1.0, 0.0)),
-        (("Space",), (0.0, 0.0, 1.0)),
-        (("ShiftLeft",), (0.0, 0.0, -1.0)),
+        ("KeyD", (1.0, 0.0, 0.0)),
+        ("KeyA", (-1.0, 0.0, 0.0)),
+        ("KeyW", (0.0, 1.0, 0.0)),
+        ("KeyS", (0.0, -1.0, 0.0)),
+        ("Space", (0.0, 0.0, 1.0)),
+        ("ShiftLeft", (0.0, 0.0, -1.0)),
     ),
 )
-def test_viewer_input_source_keyboard_digital_axis_semantics(
-    key_codes: tuple[str, ...],
-    expected_axis_values: tuple[float, float, float],
+def test_viewer_mapping_preserves_keyboard_axis_sign_and_speed(
+    key_code: str, expected_axis: tuple[float, float, float]
 ) -> None:
     source = ViewerInputSource(clock=lambda: 0.0)
-    key_state = {key_code: True for key_code in key_codes}
+    frame = source.ingest_control_message(keyboard_message(2.5, key_code))
 
+    assert frame.metadata["viewer_input_sample"]["schema"] == "viewer_control_sample/v1"
+    assert frame.metadata["viewer_input_sample"]["provider_id"] == "keyboard/v1"
+    assert frame.metadata["viewer_input_sample"]["provider_schema"] == "viewer_keyboard_sample/v1"
+    assert frame.values == ()
+    assert "axis_values" not in frame.metadata
+
+    intent = map_frame(frame)
+    assert intent.values == pytest.approx(expected_axis, abs=1e-12)
+    assert intent.metadata["local_endpoint_velocity_m_s"] == pytest.approx(
+        tuple(component * 0.1 for component in expected_axis), abs=1e-12
+    )
+    assert intent.metadata["source_kind"] == "viewer_keyboard"
+    assert intent.metadata["control_frame"] == "world"
+
+
+def test_viewer_source_preserves_key_up_blur_and_zero_state_for_mapping() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    for message in (
+        keyboard_message(1.0, "KeyW"),
+        keyboard_message(1.1, focus_state="blurred", zero_state=True),
+    ):
+        frame = source.ingest_control_message(message)
+        assert frame.metadata["source_active"] is (message.keyboard.focus_state == "focused" and not message.keyboard.zero_state)
+        intent = map_frame(frame)
+        assert intent.metadata["source_active"] is frame.metadata["source_active"]
+        assert intent.metadata["stale_reason"] is not None if not frame.metadata["source_active"] else intent.metadata["stale_reason"] is None
+
+
+def test_viewer_mapping_preserves_gamepad_axes_deadzone_and_button_supplement() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
     frame = source.ingest_control_message(
-        ViewerControlMessage(
-            type="viewer_control_message",
-            timestamp_s=7.0,
-            source_kind="keyboard",
-            keyboard=ViewerControlKeyboardMessage(
-                active_key_codes=key_codes,
-                key_state=key_state,
-                focus_state="focused",
-                zero_state=False,
-            ),
+        gamepad_message(4.0, (1.0, 0.0, -0.5), buttons=(True, False))
+    )
+    assert frame.values == (1.0, 0.0, -0.5)
+    assert frame.metadata["viewer_input_sample"]["provider_id"] == "gamepad/v1"
+    intent = map_frame(frame)
+    assert intent.values == pytest.approx((0.85065080835204, 0.0, 0.5257311121191337), abs=1e-12)
+    assert intent.metadata["local_endpoint_velocity_m_s"] == pytest.approx(
+        (0.085065080835204, 0.0, 0.0525731112119134), abs=1e-12
+    )
+
+    for axis, expected in ((0.1, 0.0), (0.2, 0.2), (-0.1, 0.0), (-0.2, -0.2)):
+        boundary_intent = map_frame(source.ingest_control_message(gamepad_message(5.0, (axis, 0.0, 0.0))))
+        assert boundary_intent.values[0] == pytest.approx(expected, abs=1e-12)
+
+
+def test_viewer_mapping_uses_canonical_sample_without_legacy_summary() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(
+        gamepad_message(4.0, (0.4444444444444445, 0.0, 0.0), raw_axes=(0.5, 0.0, 0.0))
+    )
+    expected = map_frame(frame)
+    assert expected.values[0] == pytest.approx(0.4444444444444445, abs=1e-12)
+    metadata = dict(frame.metadata)
+    metadata.pop("viewer_control_message")
+    summary_free = replace(frame, metadata=metadata)
+    assert map_frame(summary_free).values == pytest.approx(expected.values, abs=1e-12)
+
+
+def test_viewer_mapping_ignores_legacy_summary_when_it_disagrees_with_canonical_sample() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(
+        gamepad_message(4.0, (0.4444444444444445, 0.0, 0.0), raw_axes=(0.5, 0.0, 0.0))
+    )
+    expected = map_frame(frame)
+    metadata = dict(frame.metadata)
+    metadata["viewer_control_message"] = {"gamepad": {"axes": (0.0, 0.0, 0.0), "buttons": ()}}
+    assert map_frame(replace(frame, metadata=metadata)).values == pytest.approx(
+        expected.values, abs=1e-12
+    )
+
+
+def test_raw_gamepad_sample_preserves_legacy_zero_state_when_projected_axes_are_zero() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(
+        gamepad_message(
+            4.0,
+            (0.0, 0.0, 0.0),
+            raw_axes=(0.05, 0.0, 0.0),
+            zero_state=True,
         )
     )
 
-    assert frame.metadata["axis_values"] == pytest.approx(expected_axis_values, abs=1e-12)
-    assert frame.values == pytest.approx(expected_axis_values, abs=1e-12)
-    assert frame.metadata["control_frame"] == "world"
+    assert frame.metadata["source_active"] is False
+    assert frame.metadata["viewer_input_sample"]["zero_state"] is True
+    assert frame.metadata["viewer_input_sample"]["gamepad"]["raw_axes"] == (0.05, 0.0, 0.0)
+    assert map_frame(frame).values == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
 
-def test_viewer_input_source_converts_gamepad_message_to_continuous_axis_frame() -> None:
-    clock = FakeClock((20.0, 20.0))
-    source = ViewerInputSource(clock=clock)
-    message = ViewerControlMessage(
-        type="viewer_control_message",
-        timestamp_s=4.0,
-        source_kind="gamepad",
-        gamepad=ViewerControlGamepadMessage(
-            connected=True,
-            index=0,
-            id="pad-1",
-            axes=(1.0, 0.0, -0.5),
-            buttons=(
-                ViewerControlGamepadButtonMessage(pressed=True, value=1.0),
-                ViewerControlGamepadButtonMessage(pressed=False, value=0.0),
-            ),
-            stale=False,
-            zero_state=False,
-        ),
+def test_legacy_gamepad_sample_without_raw_axes_keeps_zero_state_compatibility() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(
+        gamepad_message(4.0, (0.0, 0.0, 0.0), zero_state=True)
     )
 
-    frame = source.ingest_control_message(message)
+    assert frame.metadata["source_active"] is False
+    assert map_frame(frame).values == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
-    assert frame.source == "viewer"
-    assert frame.metadata["source_kind"] == "viewer_gamepad"
-    assert frame.metadata["viewer_source_kind"] == "gamepad"
-    assert frame.metadata["intent_kind"] == "local_endpoint_velocity"
-    assert frame.metadata["input_continuity"] == "continuous"
-    assert frame.metadata["source_active"] is True
-    assert frame.metadata["command_age_ms"] == 0
-    assert frame.metadata["stale_reason"] is None
-    assert frame.metadata["control_frame"] == "world"
-    assert frame.metadata["viewer_control_message"]["gamepad"]["axes"] == (1.0, 0.0, -0.5)
-    assert frame.metadata["local_endpoint_speed_m_s"] == pytest.approx(0.1, abs=1e-12)
-    assert frame.metadata["local_endpoint_max_delta_m"] == pytest.approx(0.03, abs=1e-12)
-    assert frame.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx(frame.metadata["endpoint_velocity_m_s"], abs=1e-12)
-    assert frame.metadata["local_endpoint_velocity_frame"] == "world"
-    assert frame.metadata["endpoint_velocity_frame"] == "mujoco_world"
-    assert frame.values == pytest.approx((0.85065080835204, 0.0, 0.5257311121191337), abs=1e-12)
-    assert frame.buttons == (True, False)
+
+def test_viewer_mapping_applies_compatibility_parameters_and_preserves_defaults() -> None:
+    keyboard_config = KeyboardInputConfig(
+        bindings={"KeyQ": KeyboardBinding(axis="z", direction=-1)},
+        speed_m_s=0.2,
+        deadzone=0.0,
+        max_delta_m=0.05,
+    )
+    source = ViewerInputSource(
+        clock=lambda: 0.0,
+        keyboard_config=keyboard_config,
+        gamepad_speed_m_s=0.2,
+        gamepad_deadzone=0.2,
+        gamepad_max_delta_m=0.05,
+    )
+    keyboard_intent = map_frame(source.ingest_control_message(keyboard_message(1.0, "KeyQ")))
+    assert keyboard_intent.values == pytest.approx((0.0, 0.0, -1.0), abs=1e-12)
+    assert keyboard_intent.metadata["local_endpoint_velocity_m_s"] == pytest.approx(
+        (0.0, 0.0, -0.2), abs=1e-12
+    )
+    assert keyboard_intent.metadata["local_endpoint_max_delta_m"] == pytest.approx(0.05)
+
+    gamepad_intent = map_frame(
+        source.ingest_control_message(gamepad_message(2.0, (0.3, 0.0, 0.0)))
+    )
+    assert gamepad_intent.values[0] == pytest.approx(0.3, abs=1e-12)
+    assert gamepad_intent.metadata["local_endpoint_velocity_m_s"][0] == pytest.approx(0.06)
 
 
 @pytest.mark.parametrize(
-    ("pressed_buttons", "expected_axis", "expected_zero"),
-    [
-        ((True, False), (0.0, 0.0, 1.0), False),
-        ((False, True), (0.0, 0.0, -1.0), False),
-        ((True, True), (0.0, 0.0, 0.0), True),
-        ((False, False), (0.0, 0.0, 0.0), True),
-    ],
+    "field",
+    ("gamepad_speed_m_s", "gamepad_deadzone", "gamepad_max_delta_m"),
 )
-def test_viewer_gamepad_zero_input_uses_final_button_supplemented_axis(
-    pressed_buttons: tuple[bool, bool],
-    expected_axis: tuple[float, float, float],
-    expected_zero: bool,
+def test_viewer_input_source_rejects_negative_or_non_finite_mapping_parameters(field: str) -> None:
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        ViewerInputSource(**{field: -1.0})
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        ViewerInputSource(**{field: inf if field == "gamepad_speed_m_s" else nan})
+
+
+@pytest.mark.parametrize(
+    ("buttons", "expected_z"),
+    (((True, False), 1.0), ((False, True), -1.0), ((True, True), 0.0), ((False, False), 0.0)),
+)
+def test_viewer_gamepad_button_supplement_remains_mapping_owned(
+    buttons: tuple[bool, ...], expected_z: float
 ) -> None:
     source = ViewerInputSource(clock=lambda: 0.0)
     frame = source.ingest_control_message(
-        ViewerControlMessage(
-            type="viewer_control_message",
-            timestamp_s=4.0,
-            source_kind="gamepad",
-            gamepad=ViewerControlGamepadMessage(
-                connected=True,
-                index=0,
-                id="pad-1",
-                axes=(0.0, 0.0, 0.0),
-                buttons=tuple(
-                    ViewerControlGamepadButtonMessage(pressed=pressed, value=float(pressed))
-                    for pressed in pressed_buttons
-                ),
-                stale=False,
-                zero_state=False,
-            ),
+        gamepad_message(
+            4.0,
+            (0.0, 0.0, 0.0),
+            buttons=buttons,
+            raw_axes=(0.0, 0.0, 0.0),
+            zero_state=not any(buttons),
         )
     )
-    assert frame.metadata["axis_values"] == expected_axis
-    assert frame.metadata["zero_input"] is expected_zero
-    assert frame.metadata["local_endpoint_velocity_m_s"] == pytest.approx(
-        tuple(component * 0.1 for component in expected_axis), abs=1e-12
-    )
+    assert frame.values == (0.0, 0.0, 0.0)
+    assert "axis_values" not in frame.metadata
+    assert frame.metadata["source_active"] is any(buttons)
+    assert map_frame(frame).values[2] == pytest.approx(expected_z, abs=1e-12)
 
 
-def test_viewer_keyboard_preserves_legacy_clamp_before_deadzone() -> None:
-    config = KeyboardInputConfig(
-        bindings={
-            "KeyD": KeyboardBinding("x", 1),
-            "KeyW": KeyboardBinding("y", 1),
-        },
-        speed_m_s=0.1,
-        deadzone=0.8,
-        max_delta_m=0.03,
-    )
-    source = ViewerInputSource(clock=lambda: 0.0, keyboard_config=config)
-    frame = source.ingest_control_message(
-        ViewerControlMessage(
-            type="viewer_control_message",
-            timestamp_s=2.5,
-            source_kind="keyboard",
-            keyboard=ViewerControlKeyboardMessage(
-                active_key_codes=("KeyD", "KeyW"),
-                key_state={"KeyD": True, "KeyW": True},
-                focus_state="focused",
-                zero_state=False,
-            ),
-        )
-    )
-    assert frame.metadata["axis_values"] == (0.0, 0.0, 0.0)
-    assert frame.metadata["local_endpoint_velocity_m_s"] == (0.0, 0.0, 0.0)
-    assert frame.metadata["zero_input"] is True
-    assert frame.metadata["norm_clamped"] is True
-
-
-def test_viewer_input_source_marks_frame_stale_after_timeout() -> None:
-    clock = FakeClock((30.0, 30.301))
+def test_viewer_source_health_covers_disconnect_and_stale_timeout() -> None:
+    clock = FakeClock((30.0, 30.0))
     source = ViewerInputSource(clock=clock, timeout_ms=250)
-    message = ViewerControlMessage(
-        type="viewer_control_message",
-        timestamp_s=5.0,
-        source_kind="keyboard",
-        keyboard=ViewerControlKeyboardMessage(
-            active_key_codes=("KeyW",),
-            key_state={"KeyW": True},
-            focus_state="focused",
+    source.ingest_control_message(gamepad_message(4.0, (0.8, 0.0, 0.0), connected=False, zero_state=True))
+    disconnected_frame = source.read_frame()
+    assert disconnected_frame.metadata["source_active"] is False
+    assert disconnected_frame.metadata["stale_reason"] == "gamepad_inactive"
+    assert health_from_frame(disconnected_frame).status is InputSourceHealthStatus.DISCONNECTED
+
+    raw_source = ViewerInputSource(clock=lambda: 30.0, timeout_ms=250)
+    raw_disconnected = raw_source.ingest_control_message(
+        gamepad_message(
+            4.1,
+            (0.0, 0.0, 0.0),
+            raw_axes=(0.8, 0.0, 0.0),
+            connected=False,
             zero_state=False,
-        ),
+        )
     )
+    assert raw_disconnected.metadata["source_active"] is False
+    assert raw_disconnected.metadata["viewer_input_sample"]["gamepad"]["raw_axes"] == (
+        0.8,
+        0.0,
+        0.0,
+    )
+    assert health_from_frame(raw_disconnected).status is InputSourceHealthStatus.DISCONNECTED
 
-    source.ingest_control_message(message)
+    source = ViewerInputSource(clock=FakeClock((40.0, 40.301)), timeout_ms=250)
+    source.ingest_control_message(keyboard_message(5.0, "KeyW"))
     stale_frame = source.read_frame()
-
-    assert stale_frame.metadata["source_kind"] == "viewer_keyboard"
     assert stale_frame.metadata["source_active"] is False
     assert stale_frame.metadata["command_age_ms"] == 301
     assert stale_frame.metadata["stale_reason"] == "command_age_ms_exceeded_timeout_250"
-    assert stale_frame.metadata["control_frame"] == "world"
-    assert stale_frame.metadata["axis_values"] == (0.0, 1.0, 0.0)
-    assert stale_frame.metadata["endpoint_velocity_m_s"] == pytest.approx((0.0, 0.1, 0.0), abs=1e-12)
 
 
-def test_viewer_input_source_can_rebase_current_endpoint() -> None:
+def test_viewer_source_invalid_provider_is_reported_as_invalid_health() -> None:
     source = ViewerInputSource(clock=lambda: 0.0)
-
-    source.rebase_current_endpoint_m((0.2, 0.3, 0.4))
-
-    assert source.current_endpoint_m == (0.2, 0.3, 0.4)
-
-
-def test_viewer_input_source_uses_rebased_endpoint_for_first_keyboard_command() -> None:
-    source = ViewerInputSource(clock=lambda: 0.0)
-    initial_tip_site_position_m = (0.622, 0.0, 0.7)
-    source.rebase_current_endpoint_m(initial_tip_site_position_m)
-
-    frame = source.ingest_control_message(
-        ViewerControlMessage(
-            type="viewer_control_message",
-            timestamp_s=6.0,
-            source_kind="keyboard",
-            keyboard=ViewerControlKeyboardMessage(
-                active_key_codes=("Space",),
-                key_state={"Space": True},
-                focus_state="focused",
-                zero_state=False,
-            ),
+    with pytest.raises(ValueError, match="provider"):
+        source.ingest_control_message(
+            ViewerControlMessage(
+                type="viewer_control_message",
+                timestamp_s=1.0,
+                source_kind="keyboard",
+                provider_id="gamepad/v1",
+                provider_schema="viewer_gamepad_sample/v1",
+                keyboard=ViewerControlKeyboardMessage(
+                    active_key_codes=("KeyW",),
+                    key_state={"KeyW": True},
+                    focus_state="focused",
+                    zero_state=False,
+                ),
+            )
         )
-    )
+    assert health_from_frame(source.read_frame()).status is InputSourceHealthStatus.INVALID
 
-    assert frame.metadata["current_tip_position_m"] == initial_tip_site_position_m
-    assert frame.metadata["axis_values"] == (0.0, 0.0, 1.0)
-    assert frame.metadata["endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, 0.1), abs=1e-12)
-    assert frame.metadata["desired_endpoint_m"] == initial_tip_site_position_m
-    assert frame.metadata["desired_endpoint_m"] != (0.6, 0.0, 0.11)
+
+def test_viewer_source_rejects_malformed_provider_identity_without_fallback() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    with pytest.raises(ValueError, match="provider"):
+        source.ingest_control_message(
+            ViewerControlMessage(
+                type="viewer_control_message",
+                timestamp_s=1.0,
+                source_kind="keyboard",
+                provider_id="gamepad/v1",
+                provider_schema="viewer_gamepad_sample/v1",
+                keyboard=ViewerControlKeyboardMessage(
+                    active_key_codes=("KeyW",),
+                    key_state={"KeyW": True},
+                    focus_state="focused",
+                    zero_state=False,
+                ),
+            )
+        )
+
+
+def test_viewer_source_endpoint_accessor_is_only_compatibility_state() -> None:
+    source = ViewerInputSource(clock=lambda: 0.0)
+    source.rebase_current_endpoint_m((0.2, 0.3, 0.4))
+    assert source.current_endpoint_m == (0.2, 0.3, 0.4)
+    frame = source.ingest_control_message(keyboard_message(6.0, "Space"))
+    assert "desired_endpoint_m" not in frame.metadata
+    assert "current_tip_position_m" not in frame.metadata

@@ -65,10 +65,21 @@ class ViewerBridgeRuntimeCapability(Protocol):
     def ingest_control_message_json(self, message: str) -> RawInputFrame:
         ...
 
+    def record_ingress_failure(self, reason: str) -> None:
+        ...
+
     def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
         ...
 
     def rebind_clock(self, clock: Callable[[], float]) -> None:
+        ...
+
+
+@runtime_checkable
+class ViewerMappingCompatibilityCapability(Protocol):
+    """Optional typed handoff for explicit legacy source mapping parameters."""
+
+    def mapping_compatibility_parameters(self) -> Mapping[str, object]:
         ...
 
 
@@ -359,6 +370,7 @@ __all__ = [
     "RawInputFrame",
     "SourceMode",
     "ViewerBridgeRuntimeCapability",
+    "ViewerMappingCompatibilityCapability",
     "ViewerEndpointRebaseCapability",
     "ValidatedInputSourceReader",
     "ValidatedManagedInputSourceReader",

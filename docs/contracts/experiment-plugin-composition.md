@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-21
+last_verified: 2026-07-26
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -187,8 +187,10 @@ runtime readerは`ValidatedInputSourceReader`で`read_frame()`と`current_health
 offline / replayにはmanaged lifecycleを要求せず、live / viewer_bridgeだけがmanaged adapterを通じて
 `start()` / `close()`を委譲する。P3ではproduction backend source catalog、concrete source migration、
 source-owned healthから既存payload metadataへのprojection、typed execution adapterを実装済みである。
-viewer frontend providerとkeyboard / gamepad mappingの分離はP4、plugin-local test ownershipとonboarding /
-completion auditはP5の範囲であり、このcomposition readiness contractでは実行しない。
+P4ではviewer frontend provider、backend source、keyboard / gamepad mappingを分離し、mappingの
+`ParameterContract`とoptional semantic validation / normalizationをsource lifecycle開始、frame read、
+mapping executionより前に実行する。plugin-local test ownershipとonboarding / completion auditはP5として
+#462へhand offする。
 
 ## composition readiness
 
@@ -196,7 +198,8 @@ completion auditはP5の範囲であり、このcomposition readiness contract�
 
 1. 6軸すべてをknown-ID registryからversion一致でresolveする。
 2. parameter ownerのaxis / ID / versionがselectionと完全一致することと、required field、unknown
-   field、runtime typeを検証する。
+   field、runtime typeを検証する。Control Mappingはgeneric contractに加えてoptionalなsemantic
+   validator / normalizerを実行し、結果をdeterministicなfrozen parameter mappingとして保持する。
 3. environment / mapping / taskのrequired capabilityをunionし、Robot Bundleのtyped providerを解決する。Input Source factoryは呼び出さない。
 4. robot/environment semantic roleをtyped descriptorとして統合し、missing、attribute mismatch、
    ambiguous bindingを拒否する。
@@ -267,3 +270,28 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
 virtual reaction force、viewer feature、hardware/serial/Arduino/OSC/robot outputを実装しない。
 conformance testはcontractとreadinessの成立を示すが、実験結果、metric妥当性、接触物理、physical
 safetyを証明しない。
+
+## viewer input composition handoff (#461)
+
+Input Sourceが提供する`viewer_control_sample/v1`とControl Mappingが受け付けるsample identityは
+composition boundaryでexact compatibilityを検証する。viewer providerの`keyboard/v1` / `gamepad/v1`
+はfrontendのacquisition IDであり、backend source plugin identityやmapping identityを暗黙に選択する
+source-name dispatchではない。source registrationはconcrete mapping objectではなくdefaultの
+`PluginSelection`を宣言し、runtimeがsource selectionとは独立したmapping selectionをresolveする。callerが
+指定したmapping selectionをdefaultで上書きせず、runtimeはschema compatibilityをmapping実行前に検証する。
+resolved mapping resultはruntimeがendpoint progressionへ適用する。
+
+viewer mappingの`keyboard_config`、`gamepad_speed_m_s`、`gamepad_deadzone`、`gamepad_max_delta_m`は
+typed Control Mapping parametersであり、finite / non-negativeおよびkeyboard bindingのaxis / direction
+validationをmapping boundaryで行う。selection / plan readinessで検証済みparameterを保持し、invalid
+parameterではmanaged sourceをstartせず、frameをreadしない。frontend providerとbackend sourceはこれらを
+適用しない。
+
+P4はprovider lifecycleとbackend source / mapping ownershipを成立させる。plugin-local test relocation、
+dummy onboarding、未移行legacy fallbackのretirementと残存symbolの最終監査は#462にhand offする。
+
+## #461 final audit correction (2026-07-26)
+
+viewer providerはraw acquisitionとlifecycle、backend sourceはcanonical sample・health・timeout、Control Mapping Pluginはaxis/sign・gain・deadzone・button supplement・control frame・command intentを所有する。raw `raw_axes`はauthoritative mapping inputであり、normalized `axes`はlegacy wire / overlay compatibility projectionである。default `gamepad_deadzone=0.1`のfixed frontend `0.1` projection + backend thresholdはmapping plugin内で同じ順序に再現し、custom `0.0`でもraw `0.05`はlegacy `zero_state=true`のholdとなり、raw `0.15`はfrontend projection後の`1/18`になる。
+
+mapping parameterの解決順位は `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` とする。selectionは明示されたkeyのprovenanceを失わず、typed compatibility capabilityをplan readiness時に合成する。parameter validationはsource lifecycle開始とframe readより前に完了し、malformed ingressは即時`INVALID`へ遷移する。

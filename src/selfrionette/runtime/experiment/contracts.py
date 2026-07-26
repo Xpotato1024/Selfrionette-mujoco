@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol, runtime_checkable
@@ -368,6 +368,7 @@ class ControlMappingPlugin:
     control_frame: str | None = None
     comparison_family_identity: VersionedIdentity | None = None
     mapping_semantics_identity: VersionedIdentity | None = None
+    parameter_normalizer: Callable[[Mapping[str, object]], Mapping[str, object]] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.strategy, ControlMappingStrategy):
@@ -393,6 +394,8 @@ class ControlMappingPlugin:
                     "mapping strategy semantic identity mismatch: "
                     "strategy and plugin must declare the same VersionedIdentity"
                 )
+        if self.parameter_normalizer is not None and not callable(self.parameter_normalizer):
+            raise TypeError("control mapping parameter_normalizer must be callable")
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-26
 canonical_for:
   - runtime input source registry
   - Input Source Plugin v1 ownership boundary
@@ -181,7 +181,9 @@ runtime step-loopのsource-state解決:
 - rebind前のcontrol messageとendpoint stateを維持し、clock domain間で既存command ageを連続させる。
 - initial FK endpointとpublish後endpointを同じcapabilityへrebaseする。
 - `viewer_keyboard` / `viewer_gamepad` subtypeをactive / staleの両経路でframe、command、payloadへ維持する。
-- frontend capture / mapping redesignは#461へ残す。
+- frontend providerはbrowser raw acquisitionとlifecycleを所有し、backend sourceはcanonical sampleとhealth、
+  Control Mappingはdeadzone、axis/sign、button supplement、command intentを所有する。frontendのnormalized
+  gamepad `axes`はcompatibility projectionであり、`raw_axes`がmappingのauthoritative inputである。
 
 ### Loadcell serial / fixture
 
@@ -213,8 +215,8 @@ catalogをresolveする。一方、`--input-source`未指定時に呼ばれる`r
 
 ## Remaining scope
 
-- #461: viewer frontend provider、backend source、keyboard / gamepad mappingの分離
-- #462: plugin-local test ownership、dummy onboarding、legacy compatibility fallbackのcompletion audit
+- #461: viewer frontend provider、backend source、keyboard / gamepad mappingの分離を本PRで成立させる。
+- #462: plugin-local test ownership、dummy onboarding、legacy compatibility fallback、retained symbolのcompletion audit
 
 ## 関連canonical文書
 
@@ -228,3 +230,50 @@ catalogをresolveする。一方、`--input-source`未指定時に呼ばれる`r
 棚卸しの根拠と時点別の詳細は
 [Issue #458 input source ownership inventory](../reports/inventories/input-source-plugin-ownership-inventory.md)を参照する。
 inventoryはhistorical evidenceでありcurrent contractの正本ではない。
+
+## P4 viewer provider / source / mapping boundary (#461)
+
+viewer pluginの`viewer_control_sample/v1`は、browser providerが送ったraw payloadをbackend
+viewer sourceが検証済みcanonical sampleへ投影したschemaである。source registrationはconcrete
+Control Mapping objectを所有せず、optionalなdefault mapping `PluginSelection`だけを宣言する。
+runtimeはsourceとは独立してmapping selectionをresolveし、callerのexplicit selectionをdefaultで上書きしない。
+selection時にproduced sample schemaとmappingのaccepted schemaをexact matchで検証し、未知schemaやidentity
+mismatchはmapping実行前にfail-closedとする。
+
+mappingの`ParameterContract`とoptional semantic validator / normalizerもselection / plan readinessで実行する。
+unknown parameter、negative / non-finite speed・deadzone・max delta、invalid keyboard axis / directionは
+source lifecycle開始前にrejectし、normalized / frozen parameter mappingをstep loopへ渡す。invalid parameterでは
+managed sourceをstartせず、frameをreadしない。
+
+責務は次の通り固定する。
+
+- frontend `ViewerInputProviderRegistry`: known static IDs、provider lifecycle、browser event / Gamepad API、focus / visibility / disconnect、raw device neutral state、timestamp / sequence、raw payload。normalized `axes`はwire / overlay compatibility projectionである。
+- backend `ViewerInputSource`: parse / validation、provider identity / schema、latest sample、active / stale / invalid / disconnected health、250 ms timeout、cleanup、canonical sample、legacy metadata projection。
+- `ViewerKeyboardGamepadMappingStrategy`: canonical sampleのkeyboard binding、gamepad raw axis、sign、speed /
+  gain、deadzone、button 0/1 supplement、world / tool frame、typed endpoint-velocity intent。mappingは
+  `viewer_control_message`のlegacy summary、frontend module、transport implementation detailを読まない。
+- runtime step loop: mapping resultの適用、desired endpoint progression、endpoint rebase、MuJoCo command composition。
+
+raw gamepad sampleでは`raw_axes`をmappingのauthoritative inputとして保持するが、gamepad/v1の`zero_state`、
+`source_active`、heartbeatはlegacy projected `axes`とbuttonsに基づくobservable semanticsを維持する。
+mapping deadzoneの結果はsource healthと別のcommand zero semanticsとして扱う。button-only inputはraw axisが
+zeroでもmappingへ渡す。`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。
+
+frontend registryはarbitrary dynamic importを行わない。lifecycleが選択providerを一括activate / disposeし、
+unknownまたはduplicate provider IDは安全なdefaultへ置換せずrejectする。provider disposal後は
+publication、polling、heartbeatを停止し、再activationはzero / safe stateから開始する。
+
+`src/selfrionette/input_sources/keyboard.py`、`continuous_endpoint_velocity.py`、
+`viewer.py`は既存consumerのためのcompatibility facadeまたは低位boundaryとして残す。keyboardと
+continuous mappingのcanonical implementationは`src/selfrionette/plugins/mappings/`にあり、viewer
+source facadeはmapping algorithm、desired endpoint integration、command generationを持たない。
+retained symbolのconsumer、canonical owner、facade status、#462または後続cleanup review pointは
+P5 completion auditで再確認する。programmed target、replay、noop、loadcell、analog fixtureはP4で移動しない。
+
+P4後のtest-layout migration、dummy onboarding、legacy fallback retirementは#462へhandoffする。
+
+## #461 final audit correction (2026-07-26)
+
+`raw_axes`はnew provider pathのcanonical mapping inputであり、frontend normalized `axes`はwire / overlay compatibility projectionである。gamepad/v1の`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsに基づくobservable semanticsを維持し、mapping deadzoneのcommand zeroとは分離する。button-only sampleもmappingへ渡し、`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。fixed frontend `0.1` projection + configurable backend thresholdはmapping plugin内で一元化し、default parity、custom `0.0`のraw `0.05` hold、raw `0.15`の`1/18`をgolden testで固定する。
+
+runtime parameter precedenceは `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` とする。selectionはexplicit keyをprovenanceとして保持し、plan readinessでtyped compatibilityを正規化・freezeしてからruntimeへ渡す。remaining input_sources facadeとtest ownership、dummy onboarding、legacy fallback retirementは#462へhandoffする。

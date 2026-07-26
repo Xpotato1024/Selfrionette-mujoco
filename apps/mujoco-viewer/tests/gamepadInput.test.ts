@@ -173,6 +173,7 @@ function testSampleViewerGamepadSnapshotUsesFirstConnectedPad(): void {
     connected: true,
     index: 2,
     id: "Browser Gamepad",
+    raw_axes: [0.05, 0.8, -1.2],
     axes: [0, 0.7777777777777778, -1],
     buttons: [
       { pressed: true, value: 0.75 },
@@ -183,12 +184,68 @@ function testSampleViewerGamepadSnapshotUsesFirstConnectedPad(): void {
   });
 }
 
+function testRawAxisBelowLegacyDeadzonePublishesZeroStateWithoutHeartbeat(): void {
+  const snapshot = sampleViewerGamepadSnapshot([
+    {
+      connected: true,
+      index: 0,
+      id: "Small-axis pad",
+      axes: [0.05],
+      buttons: [{ pressed: false, value: 0 }],
+    },
+  ]);
+
+  assert.deepEqual(snapshot.raw_axes, [0.05]);
+  assert.deepEqual(snapshot.axes, [0]);
+  assert.equal(snapshot.zero_state, true);
+
+  const timer = new FakeTimer();
+  const published: ReturnType<typeof activeSnapshot>[] = [];
+  const controller = createViewerGamepadPublicationController({
+    publish: (sample) => published.push(sample),
+    setTimeoutFn: timer.setTimeoutFn,
+    clearTimeoutFn: timer.clearTimeoutFn,
+  });
+  controller.update(snapshot);
+  assert.equal(published.length, 1, "the initial zero-state transition must be published");
+  assert.equal(timer.pendingCount, 0, "legacy zero state must stop the heartbeat");
+  controller.dispose();
+}
+
+function testButtonOnlyInputRemainsAProviderActivitySample(): void {
+  const snapshot = sampleViewerGamepadSnapshot([
+    {
+      connected: true,
+      index: 0,
+      id: "Button-only pad",
+      axes: [0, 0, 0],
+      buttons: [{ pressed: true, value: 1 }],
+    },
+  ]);
+
+  assert.deepEqual(snapshot.raw_axes, [0, 0, 0]);
+  assert.equal(snapshot.zero_state, false);
+
+  const timer = new FakeTimer();
+  const published: ReturnType<typeof activeSnapshot>[] = [];
+  const controller = createViewerGamepadPublicationController({
+    publish: (sample) => published.push(sample),
+    setTimeoutFn: timer.setTimeoutFn,
+    clearTimeoutFn: timer.clearTimeoutFn,
+  });
+  controller.update(snapshot);
+  assert.equal(published.length, 1);
+  assert.equal(timer.pendingCount, 1);
+  controller.dispose();
+}
+
 function testBuildViewerGamepadControlMessageBuildsSchemaPayload(): void {
   const message = buildViewerGamepadControlMessage(
     {
       connected: true,
       index: 0,
       id: "Pad",
+      raw_axes: [0.25, 0.5],
       axes: [0, 0.5],
       buttons: [
         { pressed: true, value: 1 },
@@ -205,6 +262,8 @@ function testBuildViewerGamepadControlMessageBuildsSchemaPayload(): void {
     type: "viewer_control_message",
     timestamp_s: 42.5,
     source_kind: "gamepad",
+    provider_id: "gamepad/v1",
+    provider_schema: "viewer_gamepad_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",
@@ -218,6 +277,7 @@ function testBuildViewerGamepadControlMessageBuildsSchemaPayload(): void {
       connected: true,
       index: 0,
       id: "Pad",
+      raw_axes: [0.25, 0.5],
       axes: [0, 0.5],
       buttons: [
         { pressed: true, value: 1 },
@@ -268,6 +328,8 @@ function testViewerGamepadControlSenderQueuesUntilOpen(): void {
     type: "viewer_control_message",
     timestamp_s: 7.5,
     source_kind: "gamepad",
+    provider_id: "gamepad/v1",
+    provider_schema: "viewer_gamepad_sample/v1",
     metadata: {
       intent_kind: "local_endpoint_velocity",
       input_continuity: "continuous",
@@ -333,7 +395,7 @@ function testViewerGamepadPublicationControllerPublishesChangesAndHeldHeartbeat(
   assert.equal(timer.pendingCount, 1, "change must restart one heartbeat timer");
 }
 
-function testViewerGamepadPublicationControllerPublishesReleaseAndDisconnectWithoutIdleHeartbeat(): void {
+function testViewerGamepadPublicationControllerSeparatesReleaseFromDisconnectHeartbeat(): void {
   const timer = new FakeTimer();
   const published: ReturnType<typeof activeSnapshot>[] = [];
   const controller = createViewerGamepadPublicationController({
@@ -348,10 +410,10 @@ function testViewerGamepadPublicationControllerPublishesReleaseAndDisconnectWith
   controller.update(zeroSnapshot());
   assert.equal(published.length, 2, "zero/release transition must publish immediately");
   assert.equal(published.at(-1)?.zero_state, true);
-  assert.equal(timer.pendingCount, 0, "zero state must stop heartbeat");
+  assert.equal(timer.pendingCount, 0, "legacy zero state must stop the heartbeat");
 
   controller.update(zeroSnapshot());
-  assert.equal(published.length, 2, "unchanged zero state must stay suppressed");
+  assert.equal(published.length, 2, "unchanged neutral sample must stay suppressed");
 
   controller.update(activeSnapshot());
   controller.update(sampleViewerGamepadSnapshot(null));
@@ -464,11 +526,13 @@ function testHeartbeatPublicationAdvancesSequenceAndTimestamp(): void {
 testNormalizeViewerGamepadAxis();
 testSampleViewerGamepadSnapshotReturnsZeroSnapshotWhenNoPad();
 testSampleViewerGamepadSnapshotUsesFirstConnectedPad();
+testRawAxisBelowLegacyDeadzonePublishesZeroStateWithoutHeartbeat();
+testButtonOnlyInputRemainsAProviderActivitySample();
 testBuildViewerGamepadControlMessageBuildsSchemaPayload();
 testViewerGamepadControlSenderQueuesUntilOpen();
 testViewerGamepadControlSenderHandlesMissingBackendGracefully();
 testViewerGamepadPublicationControllerPublishesChangesAndHeldHeartbeat();
-testViewerGamepadPublicationControllerPublishesReleaseAndDisconnectWithoutIdleHeartbeat();
+testViewerGamepadPublicationControllerSeparatesReleaseFromDisconnectHeartbeat();
 testViewerGamepadPublicationControllerSuspendsPollingUpdatesUntilFocusedResume();
 testViewerGamepadPublicationControllerDoesNotReviveAfterDispose();
 testViewerGamepadPublicationControllerDisposeAndRecreateAvoidDuplicateHeartbeats();

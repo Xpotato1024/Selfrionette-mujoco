@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 
 from selfrionette.plugins.input_sources.catalog import (
     INPUT_SOURCE_CATALOG,
     SUPPORTED_INPUT_SOURCE_NAMES,
 )
+from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
+from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceMode,
@@ -75,6 +78,10 @@ class RuntimeInputSourceSelection:
     execution_adapter: RuntimeInputSourceExecutionAdapter | None = None
     validated_parameters: Mapping[str, object] | None = None
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
+    control_mapping_selection: PluginSelection | None = None
+    control_mapping: ControlMappingPlugin | None = None
+    control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
+    control_mapping_parameter_explicit_keys: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def plugin(self) -> InputSourcePlugin | None:
@@ -108,6 +115,65 @@ def _canonicalize_selected_frame(
     return annotate_raw_input_frame(frame, state)
 
 
+def _normalize_control_mapping_parameters(
+    control_mapping: ControlMappingPlugin | None,
+    selected_parameters: Mapping[str, object],
+) -> Mapping[str, object]:
+    if control_mapping is None:
+        return MappingProxyType({})
+
+    if not isinstance(selected_parameters, Mapping):
+        raise TypeError("control mapping parameters must use a mapping")
+
+    # The generic contract owns the first gate; the optional plugin capability
+    # adds mapping-specific semantic validation and deterministic normalization.
+    control_mapping.parameter_contract.validate(selected_parameters)
+    normalizer = control_mapping.parameter_normalizer
+    normalized = (
+        normalizer(selected_parameters)
+        if normalizer is not None
+        else dict(selected_parameters)
+    )
+    if not isinstance(normalized, Mapping):
+        raise TypeError("control mapping parameter_normalizer must return a mapping")
+    control_mapping.parameter_contract.validate(normalized)
+    return MappingProxyType(dict(sorted(normalized.items())))
+
+
+def _resolve_control_mapping_parameters(
+    registration,
+    control_mapping: ControlMappingPlugin | None,
+    control_mapping_parameters: Mapping[str, object] | None,
+) -> Mapping[str, object]:
+    selected_parameters = (
+        registration.control_mapping_parameters
+        if control_mapping_parameters is None
+        else control_mapping_parameters
+    )
+    return _normalize_control_mapping_parameters(control_mapping, selected_parameters)
+
+
+def merge_control_mapping_compatibility_parameters(
+    selection: RuntimeInputSourceSelection,
+    compatibility_parameters: Mapping[str, object],
+) -> Mapping[str, object]:
+    """Overlay explicit source compatibility values over implicit selection defaults."""
+
+    if selection.control_mapping is None:
+        return MappingProxyType({})
+    if not isinstance(compatibility_parameters, Mapping):
+        raise TypeError("mapping compatibility parameters must use a mapping")
+    merged = dict(selection.control_mapping_parameters)
+    merged.update(
+        {
+            key: value
+            for key, value in compatibility_parameters.items()
+            if key not in selection.control_mapping_parameter_explicit_keys
+        }
+    )
+    return _normalize_control_mapping_parameters(selection.control_mapping, merged)
+
+
 def select_runtime_input_source(
     source_name: str,
     *,
@@ -115,6 +181,8 @@ def select_runtime_input_source(
     frames: Sequence[RawInputFrame] | None = None,
     preset: str | None = None,
     replay_initial_metadata: Mapping[str, object] | None = None,
+    control_mapping_selection: PluginSelection | None = None,
+    control_mapping_parameters: Mapping[str, object] | None = None,
 ) -> RuntimeInputSourceSelection:
     registration = INPUT_SOURCE_CATALOG.resolve(source_name)
     plugin_selection = PluginSelection(
@@ -146,6 +214,36 @@ def select_runtime_input_source(
             runtime_dependencies,
             replay_frames=selected_frames,
         )
+    resolved_mapping_selection = (
+        control_mapping_selection
+        if control_mapping_selection is not None
+        else registration.default_control_mapping_selection
+    )
+    control_mapping = (
+        resolve_control_mapping_plugin(resolved_mapping_selection)
+        if resolved_mapping_selection is not None
+        else None
+    )
+    if control_mapping is not None and plugin.produced_sample_schema not in control_mapping.accepted_input_sample_schemas:
+        raise ValueError(
+            "input sample schema compatibility mismatch: source produces "
+            f"{plugin.produced_sample_schema.canonical_id!r}, mapping accepts "
+            f"{tuple(sorted(item.canonical_id for item in control_mapping.accepted_input_sample_schemas))!r}"
+        )
+    resolved_mapping_parameters = _resolve_control_mapping_parameters(
+        registration,
+        control_mapping,
+        control_mapping_parameters,
+    )
+    explicit_mapping_parameter_keys = frozenset(
+        control_mapping_parameters.keys()
+        if isinstance(control_mapping_parameters, Mapping)
+        else ()
+    )
+
+    # No managed reader is created until source/mapping schema and all mapping
+    # parameters have passed readiness. In particular, invalid mapping input
+    # cannot reach source start or the first frame read.
     reader = plugin.create_runtime_reader(
         request.parameters,
         runtime_dependencies=runtime_dependencies,
@@ -185,11 +283,16 @@ def select_runtime_input_source(
         execution_adapter=registration.execution_adapter,
         validated_parameters=request.parameters,
         viewer_bridge_capability=viewer_bridge_capability,
+        control_mapping_selection=resolved_mapping_selection,
+        control_mapping=control_mapping,
+        control_mapping_parameters=resolved_mapping_parameters,
+        control_mapping_parameter_explicit_keys=explicit_mapping_parameter_keys,
     )
 
 
 __all__ = [
     "RuntimeInputSourceSelection",
     "SUPPORTED_INPUT_SOURCE_NAMES",
+    "merge_control_mapping_compatibility_parameters",
     "select_runtime_input_source",
 ]

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-26
 canonical_for:
   - viewer control message schema
 related:
@@ -13,9 +13,9 @@ related:
 
 # Viewer Control Messageのschema
 
-P3ではこのmessageを受けるbackend `viewer` sourceをcompatibility pluginとしてcatalogへ登録する。
-keyboard / gamepad capture、provider lifecycle、binding、gain、deadzone、control-frame mappingは変更せず、
-frontend providerとbackend source / mappingの分離は#461で扱う。
+P3ではこのmessageを受けるbackend `viewer` sourceをcompatibility pluginとしてcatalogへ登録した。
+P4では既存wire shapeを維持したまま、frontend provider、backend source、Control Mapping、runtimeの
+責務境界を分離する。
 
 この文書はviewer-to-backend control messageのcanonical contractを定義する。
 
@@ -23,6 +23,30 @@ frontend providerとbackend source / mappingの分離は#461で扱う。
 gamepad stateを取得してこのenvelopeをserializeしてよいが、このmessageを使って
 simulation state、physics state、FK / IK、qpos、またはbrowser-sideの
 source of truthを変更してはならない。
+
+## P4 provider extension (#461)
+
+P4では既存envelopeを維持したまま、frontend provider identityをoptionalに追加した。
+
+- `provider_id`: `keyboard/v1`または`gamepad/v1`
+- `provider_schema`: `viewer_keyboard_sample/v1`または`viewer_gamepad_sample/v1`
+
+2 fieldは指定する場合は必ず同時に指定する。`source_kind=keyboard`は
+`keyboard/v1` + `viewer_keyboard_sample/v1`、`source_kind=gamepad`は
+`gamepad/v1` + `viewer_gamepad_sample/v1`だけを受け付ける。未知・重複・組合せ不一致は
+keyboard、gamepad、noopへfallbackせずrejectする。provider fieldを持たない従来messageは
+backend viewer sourceが`source_kind`から既知providerへcanonicalizeして受け付ける。
+
+frontendのknown-ID registryは`keyboard/v1`と`gamepad/v1`を静的に登録し、providerごとに
+attach/start、dispose、timestamp、sequence、focus / visibility / connected state、raw device neutral state、
+provider固有raw payloadを所有する。backend viewer sourceはmessage parse、canonical sample、latest sample、
+health、250 ms timeout、cleanupだけを所有する。mappingはcanonical
+`viewer_control_sample/v1`を受け、axis/sign/gain/speed/deadzone/button supplement/control frameを
+typed continuous endpoint-velocity intentへ変換する。
+
+runtimeはmapping resultを適用し、desired endpoint progression、publish-before-rebase、
+MuJoCo command compositionを所有する。従ってlegacy `metadata`のoverlay fieldを保持しても、
+messageやsourceがmapping algorithmまたはendpoint progressionのSoTになることはない。
 
 ## Envelope仕様
 
@@ -53,10 +77,18 @@ top-level field:
 - `id`: optional string
 - `connected`: boolean
 - `axes`: finite number array
+- `raw_axes`: optional finite number array。browserから取得したunprocessed raw axisであり、存在する場合は
+  mappingのauthoritative gamepad inputとする。`axes`は既存wire互換projectionとして保持できる。
 - `buttons`: button-state object array。各itemは
   `{"pressed": boolean, "value": optional finite number}`
 - `stale`: optional boolean
 - `zero_state`: optional boolean
+
+`raw_axes`が存在するgamepadでも、publicなsource activityはlegacy projected `axes`とbuttonsから生成された
+`zero_state`、`connected`、provider lifecycle、`stale`、disconnectなど既存observable semanticsを維持する。
+`zero_state`はproviderのlegacy wire stateであり、mapping後のcommand zeroやsource healthの代替ではない。
+raw axisがzeroでもbutton pressはactive command sampleとして扱う。`raw_axes`がないlegacy messageは旧
+`axes` / `zero_state`解釈を維持する。
 
 ## Backend viewer bridge
 
@@ -74,7 +106,26 @@ plugin-backed selectionでもdirect source pathと同じframe metadata、health�
 rebase semanticsを維持する。viewer capabilityが欠落したplugin-backed selectionはfail-closedとする。
 
 generic source readerへ任意attribute forwardingを追加せず、viewer固有capabilityだけをselectionとruntime
-continuity codeへ渡す。frontend provider、keyboard / gamepad mapping、message schema自体はP3で変更しない。
+continuity codeへ渡す。frontend providerはraw acquisitionとlifecycle、backend sourceはvalidation・canonical
+sample・health、mappingはsample interpretationを所有する。
+
+## Canonical sampleとlegacy compatibility
+
+backend sourceがframe metadataへ出力する`viewer_input_sample`（schema identity
+`viewer_control_sample/v1`）がmappingのauthoritative inputである。sample単体でprovider identity / schema、
+source kind、timestamp / sequence、keyboardまたはgamepad payload、requested control frame、active / zero /
+stale state、raw provider value、diagnosticsを復元できる。legacy `viewer_control_message` summaryはwire
+compatibilityまたはdiagnosticsとして残せるが、mappingは参照しない。両者が矛盾する場合はcanonical sampleを
+使用し、canonical sample自体が不正ならfail-closedとする。
+
+malformed JSON、schema validation、provider identity mismatchはsource-owned typed ingress failureへ伝え、
+source healthを即時`invalid`にする。timeoutまで旧active sampleを保持せず、valid sample受信後にだけrecover
+する。
+
+Control Mapping parametersはsource lifecycle開始とframe readの前にgeneric `ParameterContract`および
+mapping-specific semantic validation / normalizationを通過する。unknown parameter、negative / non-finite
+speed・deadzone・max delta、invalid keyboard axis / directionはrejectし、検証済みのdeterministic parameterを
+mappingへ渡す。
 
 ## Validation規則
 
@@ -96,3 +147,9 @@ continuity codeへ渡す。frontend provider、keyboard / gamepad mapping、mess
 gamepad stateを取得してこのmessageをserializeしてよいが、このmessageを使って
 simulation state、physics state、FK / IK、qpos、またはbrowser-sideの
 source of truthを変更してはならない。
+
+## #461 final audit correction (2026-07-26)
+
+gamepad `raw_axes`はbrowser raw axisを保持するcanonical inputであり、`axes`は既存wire / overlay compatibility projectionである。default `gamepad_deadzone=0.1`では、fixed frontend `0.1` projection後のbackend thresholdまでをControl Mapping Pluginが同じ順序で適用するため、raw `0.15` / `0.19`はzero、raw `0.20`はlegacyと一致する。custom deadzone `0.0`でもraw `0.05`はprojected `axes=[0.0]`とlegacy `zero_state=true`によりhold、raw `0.15`は`1/18`になる。source activity、heartbeat、overlayのpublic semanticsはgamepad/v1のlegacy zero-state projection、connection、focus、visibility、stale、disconnectを維持し、button pressはraw axis zeroでもactive sampleである。
+
+mapping parametersはsource lifecycle / frame read前に検証される。解決順位は `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` であり、legacy message without `raw_axes`は旧解釈を維持する。malformed ingressは即時`INVALID`となり、real browser / network / hardwareの動作はこのschemaからは主張しない。

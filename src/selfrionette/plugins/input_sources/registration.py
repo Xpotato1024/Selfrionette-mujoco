@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from selfrionette.plugins.input_sources import analog_fixture, loadcell_fixture, loadcell_serial, noop, programmed_target, replay, viewer
 from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
@@ -15,7 +15,7 @@ from selfrionette.runtime.execution.input_source_adapters import (
     VIEWER_LOCAL_ENDPOINT_EXECUTION_ADAPTER,
     RuntimeInputSourceExecutionAdapter,
 )
-from selfrionette.runtime.experiment.contracts import ParameterContract, ParameterField, VersionedIdentity
+from selfrionette.runtime.experiment.contracts import ParameterContract, ParameterField, PluginSelection, VersionedIdentity
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceHealthStatus,
@@ -45,12 +45,18 @@ class InputSourcePluginRegistration:
     generic_cli_exposed: bool
     request_builder: RequestBuilder
     execution_adapter: RuntimeInputSourceExecutionAdapter
+    default_control_mapping_selection: PluginSelection | None = None
+    control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.cli_aliases:
             raise ValueError("input source registration requires at least one CLI alias")
         if len(set(self.cli_aliases)) != len(self.cli_aliases):
             raise ValueError("input source registration aliases must be unique")
+        if self.default_control_mapping_selection is not None and not isinstance(
+            self.default_control_mapping_selection, PluginSelection
+        ):
+            raise TypeError("input source registration default mapping must use PluginSelection")
 
 
 _TARGET_POSITION = (0.6, 0.0, 0.1)
@@ -188,7 +194,14 @@ INPUT_SOURCE_REGISTRATIONS = (
     InputSourcePluginRegistration(PROGRAMMED_TARGET_PLUGIN, ("programmed_target",), True, _programmed_request, TARGET_METADATA_EXECUTION_ADAPTER),
     InputSourcePluginRegistration(REPLAY_PLUGIN, ("replay",), True, _replay_request, REPLAY_COMPATIBILITY_EXECUTION_ADAPTER),
     InputSourcePluginRegistration(NOOP_PLUGIN, ("noop",), True, _noop_request, REPLAY_COMPATIBILITY_EXECUTION_ADAPTER),
-    InputSourcePluginRegistration(VIEWER_PLUGIN, ("viewer",), True, _viewer_request, VIEWER_LOCAL_ENDPOINT_EXECUTION_ADAPTER),
+    InputSourcePluginRegistration(
+        VIEWER_PLUGIN,
+        ("viewer",),
+        True,
+        _viewer_request,
+        VIEWER_LOCAL_ENDPOINT_EXECUTION_ADAPTER,
+        PluginSelection("viewer_keyboard_gamepad_mapping", 1),
+    ),
     InputSourcePluginRegistration(LOADCELL_SERIAL_PLUGIN, ("loadcell_serial",), False, _loadcell_request, LOADCELL_EXECUTION_ADAPTER),
     InputSourcePluginRegistration(LOADCELL_FIXTURE_PLUGIN, ("loadcell_fixture",), False, _loadcell_request, LOADCELL_EXECUTION_ADAPTER),
     InputSourcePluginRegistration(ANALOG_FIXTURE_PLUGIN, ("analog_fixture",), False, _analog_request, ANALOG_FIXTURE_EXECUTION_ADAPTER),

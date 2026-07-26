@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-26
 canonical_for:
   - runtime composition root
 related:
@@ -130,19 +130,68 @@ P3のexecution adapterは`target_metadata`、`replay_compatibility`、
 `viewer_local_endpoint_compatibility`、loadcell、analog fixtureのversioned semanticsを明示する。
 viewer backendは`ViewerBridgeRuntimeCapability`を介してingress、endpoint rebase、clock rebindを同一underlying
 sourceへ結線し、generic readerへ任意attribute forwardingを追加しない。clock rebindはreader / capability identityと
-既存message / endpoint stateを保持する。viewer adapterはP4までendpoint coercion、local motion、orientation metadata、
-post-step measurement、publish後rebaseをcompatibility責務として保持する。
+既存message / endpoint stateを保持する。P4後のviewer adapterはsource ingress、health、timeout、canonical
+sample projectionを保持し、local motion、orientation metadata、post-step measurement、publish後rebaseは
+runtime composition側で保持する。
 
 step-loopはreplay compatibilityではrecorded frame metadataをsource-state truthとして使用し、その他のsourceでは
 typed healthをsource-state truthとして使用する。live frameにstate fieldがある場合は存在するkeyだけhealthと照合し、
 省略keyをhealth projectionで補完する。canonical projection後の同じframeをinterpreter、record、diagnosticsへ渡す。
-frontend keyboard / gamepad providerとmappingの分離は#461のscopeである。
+frontend keyboard / gamepad provider、backend source、mappingの分離とmapping readinessは#461で成立し、
+P5のtest-layout migration、dummy onboarding、legacy fallback retirement、retained symbolの最終監査は#462で行う。
+
+### P4 viewer source and mapping composition
+
+P4ではviewerを次のtyped compositionとして扱う。
+
+```text
+ViewerInputProviderRegistry
+        -> provider raw message
+backend ViewerInputSource
+        -> viewer_control_sample/v1 + typed health
+ViewerKeyboardGamepadMappingPlugin
+        -> typed endpoint-velocity intent
+runtime step loop
+        -> desired endpoint progression / rebase / MuJoCo command
+```
+
+provider registryは`keyboard/v1`と`gamepad/v1`の静的known-IDだけを解決する。frontend providerは
+browser raw acquisitionとlifecycleを所有し、gamepadのnormalized `axes`はwire / overlay compatibility
+projectionに限る。backend sourceはparse、schema、latest canonical sample、health、timeout、cleanupを
+所有する。raw `raw_axes`がある場合もgamepad/v1のpublicな`zero_state`、`source_active`、heartbeatはlegacy
+projected axesとbuttonsを反映し、connection / focus / visibility / stale / disconnectなどsource-owned stateと
+合わせて決まる。mapping deadzoneやcommand zeroとは別概念である。mappingはtransportや
+frontend APIをimportせず、canonical sampleから既存keyboard / gamepad semanticsを一度だけ実行する。
+runtimeはmapping resultを適用し、publish-before-rebase orderingと同一source/capability instanceのidentityを維持する。
+
+source selectionとmapping selectionは別の`PluginSelection`として解決する。source registrationが持つのは
+optionalなdefault mapping identityであり、callerが指定したmapping identityを上書きしない。runtimeは
+resolved sourceのproduced sample schemaとmappingのaccepted schemaをexact matchで検証し、mappingのgeneric
+parameter contractとoptional semantic validator / normalizerをsource lifecycle開始前に実行してからmappingを
+実行する。unknown parameter、negative / non-finite speed・deadzone・max delta、invalid keyboard axis / directionは
+selection / plan readinessでrejectし、normalized / frozen parametersをstep loopへ渡す。unknown、duplicate、
+version mismatch、schema mismatch、missing mapping capabilityはimplicit fallbackなしでfail-closedとする。
+
+legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping実装へ分岐しない。P4は
+`src/selfrionette/input_sources/`全体を削除せず、未移行consumerがあるkeyboard、continuous velocity、
+viewer compatibility symbolだけをthin facadeとして残す。残存symbolの最終retirementは#462で監査する。
+
+raw gamepad sampleでは`raw_axes`をmappingのauthoritative inputとして保持する一方、gamepad/v1の
+`zero_state`、`source_active`、heartbeatはlegacy projected `axes`とbuttonsに基づくobservable semanticsを
+維持する。したがって`raw_axes=[0.05]`、legacy `axes=[0.0]`、`zero_state=true`では、mapping deadzoneが
+`0.0`でもsourceはinactiveのholdとなる。raw `0.15`はfixed frontend projection後の`1/18`をmappingへ渡し、
+button-only sampleはactive provider sampleとしてmappingへ渡す。`raw_axes`を持たないlegacy messageは旧
+`axes` / `zero_state`解釈を維持する。default behavior parity、disconnected / hidden / blurred / staleの
+hold safety、malformed ingressの即時`invalid`遷移を維持する。
 
 ## failureとordering
 
 - unknown profile、incompatible model、invalid joint orderはcomposition前に失敗する。
 - qpos feasibilityはcandidate全体を検証し、invalid candidateを部分適用しない。
 - stale / inactive sourceはhold-current semanticsを優先し、新しいactive targetを捏造しない。
+- malformed JSON、schema不一致、provider identity不一致はsource-owned typed ingress failureとして即時
+  `invalid` healthへ反映し、timeout待ちで旧active frameを継続しない。次のvalid sampleだけが明示的な
+  recoveryとなる。
 - unavailable diagnostic fieldは欠落のままとし、stale値を保持しない。
 - `publish-before-ViewerInputSource-rebase` orderingを維持する。
 - transport failureをphysics successへ読み替えず、viewer failureをbackend stateへ反映しない。
@@ -156,3 +205,12 @@ plugin discovery entry pointからeager importしない。generic `RuntimePipeli
 test-only wiringは`tests/support/`が所有する。
 pre-audit composition chronologyとrefactor proposalは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
+### #461 final audit correction (2026-07-26)
+
+gamepadのraw pathは、`raw_axes`をmappingのauthoritative inputとして保持する。default `gamepad_deadzone=0.1`では、fixed frontend deadzone `0.1`のprojectionとbackendの第二thresholdをControl Mapping Plugin内で同じ順序に適用し、raw `0.15` / `0.19`はzero、raw `0.20`はlegacyと同じ非zero結果になる。`gamepad_deadzone=0.0`でもraw `0.05`はfrontend projectionとlegacy `zero_state=true`によりholdとなり、raw `0.15`は`1/18`の非zero結果になる。normalized `axes`はwire / overlay compatibility projectionに限る。
+
+source activity / healthとmappingが生成するcommand zeroは別概念である。gamepad/v1のlegacy zero-state
+projectionはobservable source activityの互換条件として維持し、button-only sample、disconnect、hidden、
+blur、stale、invalidの既存hold safetyも維持する。
+
+Control Mapping parametersの優先順位は、`explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults`である。selectionはcallerが明示したparameter keyを保持し、暗黙defaultと区別したうえでplan readiness時にtyped compatibility capabilityを合成する。#462のtest relocation、dummy onboarding、legacy fallback retirementは後続scopeとして実施しない。
