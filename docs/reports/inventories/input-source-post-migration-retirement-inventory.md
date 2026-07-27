@@ -29,7 +29,7 @@ production codeの削除、move、public API変更、behavior変更は行わな�
 | production change | なし |
 | hardware / external runtime side effect | なし |
 
-この文書はsupporting inventoryであり、current architecture / contract / operationの正本ではない。
+この文書はhistorical inventoryであり、current architecture / contract / operationの正本ではない。
 現在仕様はfront matterの関連canonical documentsを正とする。
 
 ## 2. 結論
@@ -48,14 +48,19 @@ production importしているためである。
 keyboard、continuous endpoint velocity、analog mapping、loadcell endpoint mapping、replay mappingの
 exportはcompatibility facadeであり、algorithmのsecond SoTではない。
 
+分類単位はsymbol / physical pathである。`InputSource.read_frame() -> RawInputFrame`のcontract semanticsは
+今後も必要だが、`input_sources/base.py`というold definition pathはC2の移動後に退役するため
+`MOVE_THEN_REMOVE`とする。contract semanticsの維持とold pathのretirementを同じ`RETAIN`判定へ
+混在させない。
+
 分類結果は次のとおりである。
 
 | classification | count | judgment |
 |---|---:|---|
 | `REMOVE_NOW` | 0 | public surface、repo内consumer、behavior ownershipのいずれかが残り、C1直後に無条件削除できる候補はない |
-| `MOVE_THEN_REMOVE` | 8 | source-owned production implementationをcanonical source ownerへ移してから旧pathを削除する |
-| `COMPATIBILITY_THEN_REMOVE` | 19 | consumer、public export、wrapper、fallback、test / docs exceptionを先に移行する |
-| `RETAIN` | 9 | generic contract、canonical plugin / mapping / runtime、canonical CLIの責務を維持する |
+| `MOVE_THEN_REMOVE` | 9 | 必要なcontract / source-owned implementationをcanonical ownerへ移してから旧pathを退役する |
+| `COMPATIBILITY_THEN_REMOVE` | 20 | internal consumerを移行し、public compatibility policyを満たしてから旧surfaceを退役する |
+| `RETAIN` | 7 | canonical plugin / mapping / runtime、canonical CLIのphysical ownerを維持する |
 | **total** | **36** | 下表のcandidate数 |
 
 ## 3. Audit method
@@ -93,26 +98,26 @@ runtime introspectionで次を確認した。
 
 | ID | symbol/path | current responsibility | callers | public surface | canonical replacement | classification | proposed action | risk |
 |---|---|---|---|---|---|---|---|---|
-| C1-001 | `input_sources/base.py::InputSource` | `read_frame() -> RawInputFrame` generic reader Protocol | `runtime/experiment/input_source.py`、`runtime/execution/pipeline.py`、package root | `selfrionette.input_sources.InputSource`、runtime experiment re-export | generic runtime Input Source contract | `RETAIN` | contract semanticsを維持し、C2でruntime-owned contractへdefinitionを移して旧pathはcompatibility alias化する | runtime factoryの`isinstance`、external import |
-| C1-002 | `input_sources/registry.py`の`InputSourceDescriptor`、`INPUT_SOURCE_REGISTRY`、`SUPPORTED_INPUT_SOURCE_NAMES`、`get_input_source_descriptor()` | 旧4-source frame-builder / initial metadata registry | 専用registry test、package root。production runtime / plugin caller 0 | package rootとmodule import | `plugins/input_sources/catalog.py` + registration request | `COMPATIBILITY_THEN_REMOVE` | C3でpublic consumer移行を告知し、snapshot testをcatalog testへ置換して削除する | error text、frame/default metadata、external import |
-| C1-003 | `input_sources/__init__.py` | 23 namesのlegacy package-root re-export | production 17 files相当のimport経路、tests、scripts | package root public API | canonical plugin / mapping / runtime modules | `COMPATIBILITY_THEN_REMOVE` | C2/C3で内部consumerをdirect canonical importへ統一し、C4で残存exportをcaller 0確認後に削除する | broad external import surface |
-| C1-004 | `input_sources/keyboard.py` | keyboard mappingのthin re-export | package root、`viewer_control_ingress.py` | 5 mapping symbols | `plugins/mappings/keyboard.py` | `COMPATIBILITY_THEN_REMOVE` | C3でruntime/test importをcanonical mappingへ移しfacadeを削除する | binding/default parity。backend keyboard pluginは作らない |
-| C1-005 | `input_sources/continuous_endpoint_velocity.py` | continuous velocity mapping primitiveのthin re-export | package rootのみ | 2 helper symbols | `plugins/mappings/continuous_endpoint_velocity.py` | `COMPATIBILITY_THEN_REMOVE` | C3でpackage-root exportを廃止してmoduleを削除する | external direct import |
+| C1-001 | `input_sources/base.py::InputSource` | `read_frame() -> RawInputFrame` generic reader Protocol | `runtime/experiment/input_source.py`、`runtime/execution/pipeline.py`、package root | `selfrionette.input_sources.InputSource`、runtime experiment re-export | generic runtime Input Source contract | `MOVE_THEN_REMOVE` | C2でdefinitionをcanonical runtime contractへ移し、repo内部consumerを移行する。public compatibility aliasの削除はC4 policy後に行う | runtime factoryの`isinstance`、object/type semantics、external import |
+| C1-002 | `input_sources/registry.py`の`InputSourceDescriptor`、`INPUT_SOURCE_REGISTRY`、`SUPPORTED_INPUT_SOURCE_NAMES`、`get_input_source_descriptor()` | 旧4-source frame-builder / initial metadata registry | 専用registry test、package root。production runtime / plugin caller 0 | package rootとmodule import | `plugins/input_sources/catalog.py` + registration request | `COMPATIBILITY_THEN_REMOVE` | C3でrepository内部consumerをcatalogへ移してcaller 0にする。module / public exportの削除はC4 policy後に行う | error text、frame/default metadata、external import |
+| C1-003 | `input_sources/__init__.py` | 22 namesのlegacy package-root re-export | production 17 files相当のimport経路、tests、scripts | package root public API | canonical plugin / mapping / runtime modules | `COMPATIBILITY_THEN_REMOVE` | C2/C3で内部consumerをdirect canonical importへ統一する。新behaviorを足さずbounded facadeとしてC4まで残し、public policy後に削除する | broad external import surface |
+| C1-004 | `input_sources/keyboard.py` | keyboard mappingのthin re-export | package root、`viewer_control_ingress.py` | 5 mapping symbols | `plugins/mappings/keyboard.py` | `COMPATIBILITY_THEN_REMOVE` | C3でruntime/test importをcanonical mappingへ移して内部caller 0にする。facade削除はC4 policy後に行う | binding/default parity。backend keyboard pluginは作らない |
+| C1-005 | `input_sources/continuous_endpoint_velocity.py` | continuous velocity mapping primitiveのthin re-export | package rootのみ | 2 helper symbols | `plugins/mappings/continuous_endpoint_velocity.py` | `COMPATIBILITY_THEN_REMOVE` | C3でrepository内部package-root consumerを解消する。module / export削除はC4 policy後に行う | external direct import |
 | C1-006 | `input_sources/analog_fixture.py::AnalogFixtureSample`、`parse_analog_fixture_sample()` | recorded source sampleのstrict parse / validation | plugin `_common.py`、mapping tests | package root / module | `plugins/input_sources/analog_fixture/`配下のsource-owned component | `MOVE_THEN_REMOVE` | C2でsample/parserをanalog source plugin ownerへ移し、pluginとtestsをcanonical importへ統一する | validation literal、sample schema |
-| C1-007 | `input_sources/analog_fixture.py`の`AnalogFixtureMappingConfig`、`map_analog_fixture_sample` | analog mapping re-export | package root | package root / module | `plugins/mappings/analog_fixture.py` | `COMPATIBILITY_THEN_REMOVE` | C3でpublic/test consumer移行後にre-exportを削除する | config/default parity |
+| C1-007 | `input_sources/analog_fixture.py`の`AnalogFixtureMappingConfig`、`map_analog_fixture_sample` | analog mapping re-export | package root | package root / module | `plugins/mappings/analog_fixture.py` | `COMPATIBILITY_THEN_REMOVE` | C3でrepository内部consumerをcanonical mappingへ移してcaller 0にする。re-export削除はC4 policy後に行う | config/default parity |
 | C1-008 | `input_sources/loadcell_serial.py`の`RawLoadcellVectorRecord`、`SerialDiagnosticEvent`、`SerialFrameParseError`、`parse_serial_frame_line()` | 7ch raw representation、parser、source-local diagnostic | loadcell source tests、normalization tests、dry-run helper | module `__all__` | shared source-owned loadcell component | `MOVE_THEN_REMOVE` | C2で`plugins/input_sources/_loadcell/`等の明示shared ownerへ移す | parser exception / message、raw line evidence |
 | C1-009 | `LoadcellNormalizationConfig`、`NormalizedLoadcellInputIntent`、`LoadcellNormalizedInputIntentConverter`、`normalize_loadcell_frame_for_mapping()` | intrinsic channel validation / normalizationとmapping input adaptation | plugin registration、live/dry runners、plugin / runtime tests | module `__all__` | shared source-owned loadcell component + source mapping adapter | `MOVE_THEN_REMOVE` | C2でserial / fixture両pluginが使うshared source ownerへ移す | deadzone名称はintrinsic normalization。mapping operational deadzoneと混同しない |
 | C1-010 | `input_sources/loadcell_serial.py::SerialInputSource` | injected-line acquisition、vector filtering、diagnostic collection | loadcell serial / fixture plugin、tests | package root / module | shared source-owned loadcell component | `MOVE_THEN_REMOVE` | C2でshared componentへ移し、serial / fixture private cross-importを避ける | EOF text、diagnostic ordering、serial portを開かない性質 |
-| C1-011 | loadcell moduleの`LoadcellEndpointMappingConfig`、`LoadcellEndpointMotionCommandConverter`、endpoint helper re-exports | channel / axis assignment、weights、gain、operational deadzone、endpoint conversionのcompatibility export | testsとlegacy callers | module `__all__` | `plugins/mappings/loadcell.py` | `COMPATIBILITY_THEN_REMOVE` | C3でconsumerをmapping ownerへ移しre-exportを削除する | source normalizationとのowner混同 |
-| C1-012 | `run_loadcell_serial_dry_run_smoke()`、`LoadcellSerialDryRunSmokeResult`、`mapping_plugin=None` branch | recorded converter-only public smoke compatibility | canonical dry-run runnerとlegacy tests | module `__all__` | `runtime/runners/loadcell_serial_dry_run.py` + resolved mapping plugin | `COMPATIBILITY_THEN_REMOVE` | C3でrunner/testをresolved plugin pathへ統一し、`mapping_plugin=None` caller 0後にhelperを退役する | golden output、exception、hardware no-open gate |
+| C1-011 | loadcell moduleの`LoadcellEndpointMappingConfig`、`LoadcellEndpointMotionCommandConverter`、endpoint helper re-exports | channel / axis assignment、weights、gain、operational deadzone、endpoint conversionのcompatibility export | testsとlegacy callers | module `__all__` | `plugins/mappings/loadcell.py` | `COMPATIBILITY_THEN_REMOVE` | C3でrepository内部consumerをmapping ownerへ移してcaller 0にする。re-export削除はC4 policy後に行う | source normalizationとのowner混同 |
+| C1-012 | `run_loadcell_serial_dry_run_smoke()`、`LoadcellSerialDryRunSmokeResult`、`mapping_plugin=None` branch | recorded converter-only public smoke compatibility | canonical dry-run runnerとlegacy tests | module `__all__` | `runtime/runners/loadcell_serial_dry_run.py` + resolved mapping plugin | `COMPATIBILITY_THEN_REMOVE` | C3で内部runner/testをresolved plugin pathへ統一する。public helper / converter-only pathの削除はC4 policy後に行う | golden output、exception、hardware no-open gate |
 | C1-013 | `input_sources/replay.py::ReplayInputSource` | frozen replay frames、index、EOF / loop | replay plugin、2 runtime composition、diagnostics、tests | package root / module | `plugins/input_sources/replay/` | `MOVE_THEN_REMOVE` | C2でreader implementationをplugin ownerへ移し内部consumerをcanonical pathへ統一する | `StopIteration` text、loop ordering |
-| C1-014 | `input_sources/replay.py::build_motion_command_from_replay_frame` | replay mapping helper re-export | legacy runtime tests | package root / module | `plugins/mappings/replay.py` | `COMPATIBILITY_THEN_REMOVE` | C3でtests / callersをcanonical mappingへ移してre-exportを削除する | metadata projection |
+| C1-014 | `input_sources/replay.py::build_motion_command_from_replay_frame` | replay mapping helper re-export | legacy runtime tests | package root / module | `plugins/mappings/replay.py` | `COMPATIBILITY_THEN_REMOVE` | C3でrepository内部tests / callersをcanonical mappingへ移してcaller 0にする。re-export削除はC4 policy後に行う | metadata projection |
 | C1-015 | `input_sources/programmed_target.py` | trajectory、frame、reader、sweep defaults / factory | programmed source plugin、old registry、runners、tests | package root / module | `plugins/input_sources/programmed_target/` | `MOVE_THEN_REMOVE` | C2で全source-owned implementationとdefaultsをplugin ownerへ移す | trajectory byte/float parity、terminal hold、loop |
 | C1-016 | `input_sources/viewer.py::ViewerInputSource` | backend message ingestion、canonical sample、clock、lifecycle、health、stale / invalid、rebase、diagnostics | viewer plugin、runtime ingress / step loop、diagnostic script、tests | package root / module | `plugins/input_sources/viewer/` | `MOVE_THEN_REMOVE` | C2でbackend source implementationをviewer pluginへ移し、runtimeはtyped capabilityだけを参照する | 250ms、invalid recovery、stale / focus / visibility behavior |
 | C1-017 | `DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS`、`DEFAULT_VIEWER_SAFE_ENDPOINT_M` | viewer source-local safety/default values | runtime control / step loop、registration、plugin | module `__all__` | viewer source plugin-owned constants / typed defaults | `MOVE_THEN_REMOVE` | C2でviewer pluginへ唯一のdefinitionを移しconsumerを更新する | second SoT化、initial endpoint drift |
-| C1-018 | `input_interpreters/base.py::InputInterpreter` | `RawInputFrame -> InputIntent` generic Protocol | `RuntimePipeline`、package root | `selfrionette.input_interpreters.InputInterpreter` | generic runtime execution / mapping contract | `RETAIN` | contract semanticsを維持し、C2でruntime-owned contractへの配置を決める | old pipeline type contract、external import |
-| C1-019 | `input_interpreters/replay.py::ReplayInputInterpreter` | canonical replay intent builderへのone-method adapter | 2 runtime composition modules、tests | interpreter package root | `plugins/mappings/replay.py::build_input_intent_from_replay_frame`またはtyped mapping strategy | `COMPATIBILITY_THEN_REMOVE` | C3でold `RuntimePipeline` consumerをtyped mappingへ移してadapterを削除する | legacy pipeline output parity |
-| C1-020 | `input_interpreters/__init__.py` / package | 2 interpreter public exports | runtime composition / pipeline、tests | package root | runtime contract + replay mapping plugin | `COMPATIBILITY_THEN_REMOVE` | C3でrepo consumer 0、C4でpublic surface / directory退役を判断する | external imports、old architecture docs |
+| C1-018 | `input_interpreters/base.py::InputInterpreter` | `RawInputFrame -> InputIntent` generic Protocol | legacy `RuntimePipeline`、package root。独立した非legacy production caller 0 | `selfrionette.input_interpreters.InputInterpreter` | Control Mapping Plugin + typed runtime boundary | `COMPATIBILITY_THEN_REMOVE` | C2では移動しない。C3でlegacy pipelineをtyped mappingへ移行し、内部caller 0にする。Protocol / public export削除はC4 policy後に行う | obsolete abstractionの延命、external import |
+| C1-019 | `input_interpreters/replay.py::ReplayInputInterpreter` | canonical replay intent builderへのone-method adapter | 2 legacy runtime composition modules、tests | interpreter package root | `plugins/mappings/replay.py::build_input_intent_from_replay_frame`またはtyped mapping strategy | `COMPATIBILITY_THEN_REMOVE` | C3でlegacy `RuntimePipeline` consumerをtyped mappingへ移し内部caller 0にする。adapter / public export削除はC4 policy後に行う | legacy pipeline output parity |
+| C1-020 | `input_interpreters/__init__.py` / package | 2 interpreter public exports | runtime composition / pipeline、tests | package root | Control Mapping Plugin + typed runtime boundary | `COMPATIBILITY_THEN_REMOVE` | C3でrepo内部consumer 0にし、bounded public facadeとして残す。C4 policy後にpublic surface / directoryを退役する | external imports、old architecture docs |
 | C1-021 | `plugins/input_sources/catalog.py` | production catalog SoT、resolve、aliases、registry identity | runtime selection / tests / compatibility CLI | plugin package public API | 同path | `RETAIN` | no action。C2〜C4のcaller 0判定はこのcatalogを基準にする | duplicate / alias drift |
 | C1-022 | `plugins/input_sources/registration.py` | source identity、mode、schema、factory、execution / mapping adapter、request validation | catalog、runtime tests | module API | 同path | `RETAIN` | no action。source-name dispatchを追加しない | registration metadata / defaults |
 | C1-023 | 7 source plugin packages | plugin-local factory / lifecycle adapter / health owner | registration / catalog / plugin-local tests | known static plugin IDs | 同path | `RETAIN` | C2で旧source implementationを吸収し、private cross-source importを作らない | behavior preservation |
@@ -162,7 +167,8 @@ plugins/mappings/
   loadcell.py  replay.py  viewer.py
 
 runtime/
-  generic reader / interpreter or mapping contract
+  generic Input Source reader contract
+  typed Control Mapping Plugin boundary
   resolution / lifecycle / stale safety / payload composition
 ```
 
@@ -170,8 +176,10 @@ requested target treeの`plugins/mappings/gamepad.py`はcurrent mainに存在し
 `plugins/mappings/viewer.py`の`viewer_keyboard_gamepad_mapping/v1`が所有する。C1ではfile splitを
 retirement条件にしない。browser keyboard / gamepad backend pluginも追加しない。
 
-`input_interpreters/` directoryも、`RuntimePipeline`のgeneric contractとreplay consumerを移行できれば
-C4で退役可能である。
+`input_interpreters/`のproduction callerはlegacy `RuntimePipeline`だけであり、独立したnonlegacy
+consumerは実測されなかった。`InputInterpreter`を別runtime moduleへ移して新しいcanonical abstractionとして
+延命せず、C3で`ReplayInputInterpreter`とlegacy pipeline consumerをControl Mapping Plugin / typed runtime
+boundaryへ収束させる。public surfaceはC4 policy後に削除し、directoryを退役する。
 
 ## 8. C2〜C4 implementation Issue proposals
 
@@ -179,13 +187,15 @@ C4で退役可能である。
 
 **Scope**
 
-- `InputSource` generic reader contractをruntime-owned contractへ移し、旧pathは一時re-exportにする。
+- `InputSource` generic reader contractをruntime-owned contractへ移し、repo内部consumerを移行する。
+  旧pathは新behaviorを持たないbounded public compatibility aliasとしてC4まで残す。
 - programmed target、replay reader、viewer backend sourceを各`plugins/input_sources/<id>/`へ移す。
 - analog sample / parserをanalog source plugin ownerへ移す。
 - loadcell raw/parser/normalization/injected reader/diagnosticsを
   `loadcell_serial` / `loadcell_fixture`が共有できるsource-owned componentへ移す。
 - plugin、runtime、runner、diagnostic script、source-local / mapping-local testsのrepo内部importを
   canonical pathへ統一する。
+- `InputInterpreter`は移動せず、legacy interpreter retirementをC3へ送る。
 - old path側へ新behaviorを追加しない。
 
 **Acceptance**
@@ -195,28 +205,37 @@ C4で退役可能である。
   loadcell no-port-open behaviorのfocused parity testsが通る。
 - production plugin packageから`selfrionette.input_sources.{programmed_target,replay,viewer,analog_fixture,loadcell_serial}`
   importが0になる。
+- generic runtime reader contractのobject / type semanticsがbaselineと一致する。
 - loadcell plugin private cross-importが0である。
 
-### C3: compatibility consumer and wrapper retirement
+### C3: repository-internal compatibility consumer and wrapper retirement
 
 **Depends on:** C2。
 
 **Scope**
 
-- old registry / descriptorsを使うtestとpublic consumerをcatalogへ移行する。
-- keyboard、continuous velocity、analog、loadcell、replay mapping facade consumerをcanonical mappingへ移す。
-- `ReplayInputInterpreter`とlegacy composition consumerをtyped mapping pathへ移行する。
+- old registry / descriptorsを使うrepository内部consumerをcatalogへ移行する。
+- keyboard、continuous velocity、analog、loadcell、replay mapping facadeのrepository内部consumerを
+  canonical mappingへ移す。
+- `InputInterpreter`、`ReplayInputInterpreter`、legacy composition consumerをtyped mapping pathへ移行する。
 - `mapping_plugin=None` loadcell converter-only helperをcaller 0後に退役する。
 - canonical CLIへexplicit source selectionを統合し、2 compatibility scripts、runner fallback、
   browser smoke launcher / operator procedure callerを移行する。
 - CLI options、default、error、NDJSON、viewer ingress / cadence / grace periodを変更しない。
+- `selfrionette.input_sources`、旧registry / mapping facade modules、
+  `selfrionette.input_interpreters`等のpublic compatibility surfaceは、必要に応じて新behavior /
+  config / algorithmを持たないthin facadeとしてC4まで残す。別facadeへ移植しない。
 
 **Acceptance**
 
-- compatibility script / fallback / mapping facade / old registryのrepository callerが0である。
+- old registry / mapping facade / interpreterへのrepository内部production callerが0である。
+- compatibility scripts / runner fallbackはcanonical CLIのoptions、default、exit status、NDJSON、
+  viewer ingress、cadence、grace periodのgolden parity成立後に退役する。
 - canonical CLI golden testsが旧observable behaviorを固定する。
-- wrapper pathsを参照するcurrent operations docsが0である。
-- `selfrionette.input_sources` / `input_interpreters` importは一時public compatibility test以外0である。
+- retired wrapper pathsを参照するcurrent operator docsが0である。
+- old package importはbounded public facadeのself-wiringとexplicit public compatibility tests以外0である。
+- public facade / moduleの存在自体はC3 failureとしない。
+- C4まで残すfacadeへ新behavior / config / algorithmを追加しない。
 
 ### C4: package and public surface retirement
 
@@ -224,25 +243,30 @@ C4で退役可能である。
 
 **Scope**
 
-- external/public compatibility policyを確認し、必要ならdeprecation windowを完了する。
-- `input_sources/__init__.py`、`input_interpreters/__init__.py`、残存facade、READMEを整理する。
+- current public export policyを確認する。repository外consumerの有無はrepository auditだけでは
+  証明不能であることを判断材料へ明記する。
+- project policyとしてimmediate removalまたはdeprecation windowのどちらを採るか明示し、
+  policyを満たしてから`input_sources/__init__.py`、`input_interpreters/__init__.py`、残存facade、
+  module、READMEを削除または整理する。
 - compatibility-only tests / guardsを削除またはold-import禁止guardへ反転する。
 - canonical docsをactual stateへ更新し、historical reportsは改稿しない。
-- caller 0とpackage build内容を確認後、可能なら両directoryを削除する。
+- caller 0とpackage build内容を確認後、両directoryを退役する。
 
 **Acceptance**
 
-- source distribution / wheelに旧packageが含まれない。
+- selected public compatibility policyが明示され、immediate removalまたはdeprecation windowの条件を満たす。
+- wheel / sdistに旧packageが含まれない。
 - `src/`、`scripts/`、`tests/`の旧import 0。
 - production catalog 7 IDs、4 CLI aliases、4 mapping identitiesが維持される。
 - architecture、strict Markdown / SoT / link、package build、focused runtime / CLI testsが通る。
 
-実装順は**C2 → C3 → C4**とする。C3を先行するとbehavior ownerを削除し、C4を先行するとpublic
-surfaceを無告知で破壊するためである。
+実装順は**C2 → C3 → C4**とする。C2はphysical ownerを移し、C3はrepository内部consumerと
+operator wrapperを解消し、C4だけがpublic surfaceを削除する。C3を先行するとbehavior ownerを削除し、
+C4を先行するとpublic surfaceを無告知で破壊するためである。
 
 ## 9. Documentation / research / experiment impact
 
-- Documentation impact: 本supporting inventoryとreports indexだけを更新する。canonical docsのcurrent
+- Documentation impact: 本historical inventoryとreports indexだけを更新する。canonical docsのcurrent
   factsはbaselineと一致しており、C1では更新しない。
 - Research log impact: production behavior、研究能力、実験条件、評価可能性、研究判断を変更しないため
   `research/logs/2026-07.md`は更新しない。
@@ -259,3 +283,12 @@ surfaceを無告知で破壊するためである。
   retirement blockerにしない。
 - loadcell shared componentの最終名はC2で既存private-module conventionとimport guardに合わせて決める。
   一方のplugin private implementationを他方からimportする案は不採用とする。
+
+## 11. C1 correction self-audit
+
+- P0: production source、tests、runtime / CLI / viewer behavior、public APIを変更していない。facadeも削除していない。
+- P1: classification unitをphysical pathへ統一し、`InputSource` old pathを`MOVE_THEN_REMOVE`、
+  `InputInterpreter` old abstractionを`COMPATIBILITY_THEN_REMOVE`とした。C3は内部consumer退役、
+  C4はpublic surface退役のgateとして分離した。
+- P2: 36 rowsからaggregateを再計算し、path / symbol、caller、public export、catalog / mapping identity、
+  Markdown / encoding evidenceをcurrent diffで再検証する。
