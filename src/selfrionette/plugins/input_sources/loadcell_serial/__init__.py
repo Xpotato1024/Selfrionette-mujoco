@@ -1,8 +1,11 @@
-"""Loadcell serial source adapter; mapping remains outside this package."""
+"""Loadcell serial source adapter; endpoint mapping is owned by plugins.mappings."""
 
 from collections.abc import Iterator, Mapping
 
-from selfrionette.input_sources.loadcell_serial import SerialInputSource
+from selfrionette.input_sources.loadcell_serial import (
+    SerialInputSource,
+    normalize_loadcell_frame_for_mapping,
+)
 from selfrionette.plugins.input_sources._common import ManagedFrameHealthReader
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,

@@ -5,14 +5,13 @@ from dataclasses import dataclass, replace
 from math import isfinite
 from typing import cast
 
-from selfrionette.input_sources.loadcell_serial import (
-    LoadcellEndpointMotionCommandConverter,
-    LoadcellNormalizedInputIntentConverter,
-    NormalizedLoadcellInputIntent,
-)
+from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
+from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
+from selfrionette.runtime.experiment.contracts import PluginSelection
 from selfrionette.runtime.experiment.input_source import InputSourceRuntimeDependencies
 from selfrionette.runtime.runners.offline_input_smoke import run_offline_input_runtime_stepping_smoke
+from selfrionette.schemas import InputIntent, MotionCommand
 
 DEFAULT_LIVE_LOADCELL_BAUD_RATE = 115200
 DEFAULT_LIVE_LOADCELL_MAX_FRAMES = 300
@@ -105,6 +104,21 @@ def run_live_loadcell_runtime_runner(
         if materialized_lines is not None
         else {"port": config.port, "baud_rate": config.baud_rate}
     )
+    mapping_plugin = resolve_control_mapping_plugin(
+        PluginSelection("loadcell_endpoint_mapping", 1)
+    )
+    effective_mapping_schema = registration.plugin.effective_mapping_input_sample_schema
+    if effective_mapping_schema not in mapping_plugin.accepted_input_sample_schemas:
+        raise ValueError(
+            "loadcell source/mapping schema compatibility mismatch: "
+            f"mapping input is {effective_mapping_schema.canonical_id!r}"
+        )
+    mapping_parameters = mapping_plugin.normalize_parameters(
+        {
+            "mapping_config": {},
+            "current_tip_position_m": config.current_tip_position_m,
+        }
+    )
     source = registration.plugin.create_runtime_reader(
         source_parameters,
         runtime_dependencies=(
@@ -113,9 +127,6 @@ def run_live_loadcell_runtime_runner(
             else None
         ),
     )
-    normalized_converter = LoadcellNormalizedInputIntentConverter(source="loadcell_serial")
-    endpoint_converter = LoadcellEndpointMotionCommandConverter()
-
     payloads: list[Mapping[str, object]] = []
     start = getattr(source, "start", None)
     close = getattr(source, "close", None)
@@ -131,16 +142,31 @@ def run_live_loadcell_runtime_runner(
             except StopIteration:
                 break
 
-            normalized_intent = normalized_converter.convert(raw_frame)
+            mapping_adapter = registration.plugin.mapping_input_adapter
+            if mapping_adapter is None:
+                raise ValueError(
+                    "loadcell input source is missing its mapping input adapter"
+                )
+            normalized_intent = mapping_adapter(raw_frame)
+            if not isinstance(normalized_intent, NormalizedLoadcellInputIntent):
+                raise TypeError(
+                    "loadcell mapping input adapter returned an invalid normalized intent"
+                )
             runtime_intent = _build_runtime_intent(
                 normalized_intent,
                 frame_index=frame_index,
                 serial_timestamp_s=raw_frame.timestamp_s,
                 config=config,
             )
-            motion_command = endpoint_converter.convert(
+            mapped_intent = mapping_plugin.strategy.map_input(
                 runtime_intent,
-                current_tip_position_m=config.current_tip_position_m,
+                mapping_parameters,
+            )
+            if not isinstance(mapped_intent, InputIntent):
+                raise TypeError("loadcell mapping strategy returned an invalid input intent")
+            motion_command = MotionCommand(
+                timestamp_s=mapped_intent.timestamp_s,
+                metadata=mapped_intent.metadata,
             )
             runtime_result = run_offline_input_runtime_stepping_smoke(
                 motion_command,

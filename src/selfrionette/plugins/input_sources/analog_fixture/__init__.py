@@ -1,4 +1,4 @@
-"""Analog fixture acquisition; normalization and mapping stay in input_sources."""
+"""Analog fixture acquisition; mapping is selected from plugins.mappings."""
 
 from collections.abc import Mapping
 

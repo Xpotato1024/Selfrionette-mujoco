@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-26
+last_verified: 2026-07-27
 canonical_for:
   - runtime composition root
 related:
@@ -115,9 +115,8 @@ validated reader、typed execution adapterへ一度だけ解決する。
 `input_sources/registry.py`は既存低位descriptor APIのsignatureとframe behaviorだけを維持する独立compatibility
 boundaryであり、plugin catalogをimportまたはprojectionしない。source固有のpreset、custom frame、factory
 parameterはproduction registrationのrequest builderが所有する。plugin-backed primary pathはsource IDを比較せず、
-registrationが保持するexecution adapterを使用する。`compatibility_execution_adapter()`のsource-name tableは
-plugin metadataを持たないlegacy hand-built `RuntimeInputSourceSelection`だけのbounded fallbackであり、新規sourceの
-production registrationには使用しない。撤去可否は#462のcompletion auditで確認する。
+registrationが保持するexecution adapterを必須とする。adapter欠落はfail-closedであり、source-name tableを持つ
+`compatibility_execution_adapter()`はproduction/public callerがないことを確認して退役した。
 
 composition readinessはfactory、frame read、lifecycle startを実行しない。offline / replayにmanaged lifecycleを
 要求せず、live / viewer_bridgeのruntime instanceだけがmanaged adapterを持つ。execution開始前に`steps`等の
@@ -137,8 +136,11 @@ runtime composition側で保持する。
 step-loopはreplay compatibilityではrecorded frame metadataをsource-state truthとして使用し、その他のsourceでは
 typed healthをsource-state truthとして使用する。live frameにstate fieldがある場合は存在するkeyだけhealthと照合し、
 省略keyをhealth projectionで補完する。canonical projection後の同じframeをinterpreter、record、diagnosticsへ渡す。
-frontend keyboard / gamepad provider、backend source、mappingの分離とmapping readinessは#461で成立し、
-P5のtest-layout migration、dummy onboarding、legacy fallback retirement、retained symbolの最終監査は#462で行う。
+frontend keyboard / gamepad provider、backend source、mappingの分離とmapping readinessは#461で成立し、#462で
+plugin-local test ownership、reusable conformance、test-only dummy onboarding、retained compatibilityの境界を
+architecture guardとfocused validation contractへ固定した。source pluginからrobot / task / evaluationへの禁止
+import、mapping pluginからdevice acquisitionへの禁止import、runtime source-name dispatchはAST / import graph
+guardで検出する。
 
 ### P4 viewer source and mapping composition
 

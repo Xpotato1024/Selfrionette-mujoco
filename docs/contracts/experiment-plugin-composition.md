@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-26
+last_verified: 2026-07-27
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -190,7 +190,13 @@ source-owned healthから既存payload metadataへのprojection、typed executio
 P4ではviewer frontend provider、backend source、keyboard / gamepad mappingを分離し、mappingの
 `ParameterContract`とoptional semantic validation / normalizationをsource lifecycle開始、frame read、
 mapping executionより前に実行する。plugin-local test ownershipとonboarding / completion auditはP5として
-#462へhand offする。
+#462で固定した。generic conformanceはsource固有parametersをcaseへ注入するだけでproduction / test-only
+pluginへ再利用でき、test-only dummy sourceはproduction catalog / CLIを変更せずにsource schema compatibility、
+reader creation、composition readinessを検証する。
+
+P5のfocused validationはgeneric conformance、対象plugin-local tests、catalog / registry、source-mapping schema
+compatibility、minimal runtime integration smoke、architecture guardsを含む。full Python suiteとviewer test /
+typecheck / buildはmerge gateとして維持し、CI change-detection matrixは追加しない。
 
 ## composition readiness
 
@@ -271,6 +277,14 @@ virtual reaction force、viewer feature、hardware/serial/Arduino/OSC/robot outp
 conformance testはcontractとreadinessの成立を示すが、実験結果、metric妥当性、接触物理、physical
 safetyを証明しない。
 
+## #462 mapping ownership and compatibility facades
+
+Control Mapping Plugin の production catalog は viewerだけに限定されず、replay、analog fixture、loadcell endpoint mappingをdeterministic IDで登録する。source parser、provider acquisition、intrinsic normalizationはsource ownerに残し、axis assignment、sign、gain、scale、deadzone、control frame、endpoint/command conversionはmapping ownerに置く。
+
+loadcell は serial source pluginが生成する acquisition schema `loadcell_vector_sample/v1`を、source pluginのtyped/versioned `mapping_input_adapter` contract（input `loadcell_vector_sample/v1`、output `loadcell_normalized_input_intent/v1`）でsource-owned normalizationへ通す。adapter後のeffective mapping-input schema `loadcell_normalized_input_intent/v1`をControl Mapping Pluginのaccepted schemaと比較し、strategyへは`NormalizedLoadcellInputIntent`だけを渡す。adapter不在、adapter input/output schema mismatch、別mapping選択はstartup readinessでfail-closedとなり、raw frameのmapping package内implicit re-normalizationやfallbackは行わない。
+
+既存public importを保つためのsource facadeは5 moduleに限定する。facadeはcanonical `plugins/mappings/` implementationをreexportするだけで、mapping algorithmのsecond SoTではない。architecture guardはallowlist外のreverse dependency、mapping testからのmapping-owned source import、source-name dispatchを拒否する。
+
 ## viewer input composition handoff (#461)
 
 Input Sourceが提供する`viewer_control_sample/v1`とControl Mappingが受け付けるsample identityは
@@ -287,8 +301,8 @@ validationをmapping boundaryで行う。selection / plan readinessで検証済�
 parameterではmanaged sourceをstartせず、frameをreadしない。frontend providerとbackend sourceはこれらを
 適用しない。
 
-P4はprovider lifecycleとbackend source / mapping ownershipを成立させる。plugin-local test relocation、
-dummy onboarding、未移行legacy fallbackのretirementと残存symbolの最終監査は#462にhand offする。
+P4はprovider lifecycleとbackend source / mapping ownershipを成立させた。plugin-local test relocation、
+dummy onboarding、legacy fallbackのretirementと残存symbolの最終監査は#462 completion auditで確定済みである。
 
 ## #461 final audit correction (2026-07-26)
 

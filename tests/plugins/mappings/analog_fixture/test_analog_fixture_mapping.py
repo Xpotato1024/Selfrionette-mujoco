@@ -6,16 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.input_sources import (
-    AnalogFixtureMappingConfig,
+from selfrionette.input_sources.analog_fixture import (
     AnalogFixtureSample,
-    map_analog_fixture_sample,
     parse_analog_fixture_sample,
+)
+from selfrionette.plugins.mappings.analog_fixture import (
+    AnalogFixtureMappingConfig,
+    map_analog_fixture_sample,
 )
 from selfrionette.schemas import MotionSampleRecord
 
 
-FIXTURE = Path(__file__).parents[1] / "fixtures" / "analog_input_samples.json"
+FIXTURE = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "analog_input_samples.json"
 
 
 def config(**changes: object) -> AnalogFixtureMappingConfig:

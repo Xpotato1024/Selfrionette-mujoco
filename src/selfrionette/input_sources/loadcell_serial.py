@@ -1,14 +1,21 @@
-"""Load-cell serial protocol and input-source integration."""
+"""Load-cell serial acquisition with a mapping compatibility facade."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from math import isfinite
 from typing import cast
 
+from selfrionette.schemas import InputIntent
 from selfrionette.schemas import MotionCommand
 from selfrionette.schemas import RawInputFrame
+from selfrionette.plugins.mappings.loadcell import (
+    LoadcellEndpointMappingConfig,
+    LoadcellEndpointMotionCommandConverter,
+    build_motion_command_from_normalized_loadcell_intent,
+    build_r7_a_lite_smoke_endpoint_mapping_config,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,46 +57,6 @@ class NormalizedLoadcellInputIntent:
     values: tuple[float, float, float, float, float, float, float]
     active_channels: tuple[int, ...] = ()
     metadata: Mapping[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class LoadcellEndpointMappingConfig:
-    channel_axis_weights: tuple[
-        tuple[float, float, float],
-        tuple[float, float, float],
-        tuple[float, float, float],
-        tuple[float, float, float],
-        tuple[float, float, float],
-        tuple[float, float, float],
-        tuple[float, float, float],
-    ] = (
-        (0.0, 0.0, 0.0),
-        (0.0, 0.0, 0.0),
-        (0.0, 0.0, 0.0),
-        (0.0, 0.0, 0.0),
-        (0.0, 0.0, 0.0),
-        (0.0, 0.0, 0.0),
-        (0.0, 0.0, 0.0),
-    )
-    max_delta_m: float = 0.03
-    gain_m: float = 0.01
-
-    def __post_init__(self) -> None:
-        if len(self.channel_axis_weights) != 7:
-            raise ValueError("channel_axis_weights must contain exactly 7 channel weights")
-
-        for channel_index, weight in enumerate(self.channel_axis_weights):
-            _coerce_vector3(f"channel_axis_weights[{channel_index}]", weight)
-
-        if not isfinite(self.gain_m):
-            raise ValueError("gain_m must be finite")
-        if self.gain_m < 0.0:
-            raise ValueError("gain_m must be non-negative")
-
-        if not isfinite(self.max_delta_m):
-            raise ValueError("max_delta_m must be finite")
-        if self.max_delta_m <= 0.0:
-            raise ValueError("max_delta_m must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,21 +227,6 @@ def _coerce_loadcell_values(
     )
 
 
-def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
-    if not isinstance(value, Sequence):
-        raise ValueError(f"{name} must contain exactly three values")
-
-    components = tuple(float(component) for component in value)
-    if len(components) != 3:
-        raise ValueError(f"{name} must contain exactly three values")
-
-    for component_index, component in enumerate(components):
-        if not isfinite(component):
-            raise ValueError(f"{name} must contain only finite values at index {component_index}")
-
-    return components
-
-
 def _normalize_channel_value(raw_value: float, config: LoadcellNormalizationConfig) -> float:
     normalized_value = raw_value / config.scale
     if abs(normalized_value) < config.deadzone:
@@ -288,124 +240,6 @@ def _normalize_channel_value(raw_value: float, config: LoadcellNormalizationConf
     return normalized_value
 
 
-def _clamp_vector3_components(value: tuple[float, float, float], *, limit: float) -> tuple[float, float, float]:
-    return cast(
-        tuple[float, float, float],
-        tuple(
-            max(-limit, min(limit, component))
-            for component in value
-        ),
-    )
-
-
-def _add_vector3(
-    left: tuple[float, float, float],
-    right: tuple[float, float, float],
-) -> tuple[float, float, float]:
-    return cast(
-        tuple[float, float, float],
-        tuple(left[index] + right[index] for index in range(3)),
-    )
-
-
-def _compute_endpoint_delta_m(
-    values: tuple[float, float, float, float, float, float, float],
-    config: LoadcellEndpointMappingConfig,
-) -> tuple[float, float, float]:
-    endpoint_delta_m = [0.0, 0.0, 0.0]
-    for channel_value, channel_weights in zip(values, config.channel_axis_weights):
-        endpoint_delta_m[0] += channel_value * channel_weights[0]
-        endpoint_delta_m[1] += channel_value * channel_weights[1]
-        endpoint_delta_m[2] += channel_value * channel_weights[2]
-
-    scaled_delta_m = cast(
-        tuple[float, float, float],
-        tuple(component * config.gain_m for component in endpoint_delta_m),
-    )
-    return _clamp_vector3_components(scaled_delta_m, limit=config.max_delta_m)
-
-
-def _build_loadcell_motion_metadata(
-    *,
-    intent: NormalizedLoadcellInputIntent,
-    current_tip_position_m: tuple[float, float, float],
-    endpoint_delta_m: tuple[float, float, float],
-    desired_endpoint_m: tuple[float, float, float],
-) -> dict[str, object]:
-    metadata = dict(intent.metadata)
-    metadata["active_channels"] = intent.active_channels
-    metadata["current_tip_position_m"] = current_tip_position_m
-    metadata["endpoint_delta_m"] = endpoint_delta_m
-    metadata["desired_endpoint_m"] = desired_endpoint_m
-    return metadata
-
-
-def build_r7_a_lite_smoke_endpoint_mapping_config(
-    *,
-    gain_m: float,
-    max_delta_m: float,
-) -> LoadcellEndpointMappingConfig:
-    return LoadcellEndpointMappingConfig(
-        channel_axis_weights=(
-            (1.0, 0.0, 0.0),
-            (0.0, 1.0, 0.0),
-            (0.0, 0.0, 1.0),
-            (0.0, 0.0, 0.0),
-            (0.0, 0.0, 0.0),
-            (0.0, 0.0, 0.0),
-            (0.0, 0.0, 0.0),
-        ),
-        gain_m=gain_m,
-        max_delta_m=max_delta_m,
-    )
-
-
-def build_motion_command_from_normalized_loadcell_intent(
-    intent: NormalizedLoadcellInputIntent,
-    *,
-    current_tip_position_m: tuple[float, float, float],
-    config: LoadcellEndpointMappingConfig | None = None,
-) -> MotionCommand:
-    endpoint_config = LoadcellEndpointMappingConfig() if config is None else config
-    normalized_values = _coerce_loadcell_values(intent.values, expected_channel_count=7)
-    current_tip_position_m = _coerce_vector3("current_tip_position_m", current_tip_position_m)
-    endpoint_delta_m = _compute_endpoint_delta_m(normalized_values, endpoint_config)
-    desired_endpoint_m = _add_vector3(current_tip_position_m, endpoint_delta_m)
-
-    return MotionCommand(
-        timestamp_s=intent.timestamp_s,
-        metadata=_build_loadcell_motion_metadata(
-            intent=intent,
-            current_tip_position_m=current_tip_position_m,
-            endpoint_delta_m=endpoint_delta_m,
-            desired_endpoint_m=desired_endpoint_m,
-        ),
-    )
-
-
-class LoadcellEndpointMotionCommandConverter:
-    """Convert normalized loadcell intent into a desired-endpoint MotionCommand."""
-
-    def __init__(self, config: LoadcellEndpointMappingConfig | None = None) -> None:
-        self._config = LoadcellEndpointMappingConfig() if config is None else config
-
-    @property
-    def config(self) -> LoadcellEndpointMappingConfig:
-        return self._config
-
-    def convert(
-        self,
-        intent: NormalizedLoadcellInputIntent,
-        *,
-        current_tip_position_m: tuple[float, float, float],
-    ) -> MotionCommand:
-        return build_motion_command_from_normalized_loadcell_intent(
-            intent,
-            current_tip_position_m=current_tip_position_m,
-            config=self._config,
-        )
-
-
 def run_loadcell_serial_dry_run_smoke(
     lines: Iterable[str],
     *,
@@ -413,13 +247,35 @@ def run_loadcell_serial_dry_run_smoke(
     normalization_config: LoadcellNormalizationConfig | None = None,
     endpoint_config: LoadcellEndpointMappingConfig | None = None,
     current_tip_position_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    mapping_plugin: object | None = None,
+    mapping_parameters: Mapping[str, object] | None = None,
 ) -> LoadcellSerialDryRunSmokeResult:
+    """Run the recorded-frame smoke through the canonical mapping when supplied.
+
+    ``mapping_plugin=None`` preserves the public recorded-fixture compatibility
+    helper and delegates to the canonical mapping converter. Production runner
+    entry points resolve and pass the versioned Control Mapping Plugin.
+    """
+
     if max_vectors < 1:
         raise ValueError("max_vectors must be a positive integer")
 
-    source = SerialInputSource.from_lines(lines)
     normalized_converter = LoadcellNormalizedInputIntentConverter(normalization_config)
     endpoint_converter = LoadcellEndpointMotionCommandConverter(endpoint_config)
+    selected_mapping_parameters = (
+        {
+            "mapping_config": endpoint_config or {},
+            "current_tip_position_m": current_tip_position_m,
+        }
+        if mapping_parameters is None
+        else mapping_parameters
+    )
+    if mapping_plugin is not None:
+        normalize_parameters = getattr(mapping_plugin, "normalize_parameters", None)
+        if not callable(normalize_parameters):
+            raise TypeError("loadcell mapping plugin must expose normalize_parameters")
+        selected_mapping_parameters = normalize_parameters(selected_mapping_parameters)
+    source = SerialInputSource.from_lines(lines)
 
     frames_read = 0
     vectors_read = 0
@@ -437,10 +293,26 @@ def run_loadcell_serial_dry_run_smoke(
         vectors_read += 1
         last_raw_frame = raw_frame
         last_normalized_intent = normalized_converter.convert(raw_frame)
-        last_motion_command = endpoint_converter.convert(
-            last_normalized_intent,
-            current_tip_position_m=current_tip_position_m,
-        )
+        if mapping_plugin is None:
+            last_motion_command = endpoint_converter.convert(
+                last_normalized_intent,
+                current_tip_position_m=current_tip_position_m,
+            )
+        else:
+            strategy = getattr(mapping_plugin, "strategy", None)
+            map_input = getattr(strategy, "map_input", None)
+            if not callable(map_input):
+                raise TypeError("loadcell mapping plugin must expose strategy.map_input")
+            mapped_intent = map_input(
+                last_normalized_intent,
+                selected_mapping_parameters,
+            )
+            if not isinstance(mapped_intent, InputIntent):
+                raise TypeError("loadcell mapping strategy returned an invalid input intent")
+            last_motion_command = MotionCommand(
+                timestamp_s=mapped_intent.timestamp_s,
+                metadata=mapped_intent.metadata,
+            )
 
     return LoadcellSerialDryRunSmokeResult(
         frames_read=frames_read,
@@ -503,6 +375,14 @@ class LoadcellNormalizedInputIntentConverter:
         )
 
 
+def normalize_loadcell_frame_for_mapping(
+    frame: RawInputFrame,
+) -> NormalizedLoadcellInputIntent:
+    """Adapt one raw source frame at the explicit source-to-mapping boundary."""
+
+    return LoadcellNormalizedInputIntentConverter().convert(frame)
+
+
 __all__ = [
     "LoadcellNormalizationConfig",
     "LoadcellEndpointMappingConfig",
@@ -510,6 +390,7 @@ __all__ = [
     "build_motion_command_from_normalized_loadcell_intent",
     "build_r7_a_lite_smoke_endpoint_mapping_config",
     "LoadcellNormalizedInputIntentConverter",
+    "normalize_loadcell_frame_for_mapping",
     "LoadcellSerialDryRunSmokeResult",
     "NormalizedLoadcellInputIntent",
     "RawLoadcellVectorRecord",

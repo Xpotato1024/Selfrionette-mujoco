@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: input contract
-last_verified: 2026-07-21
+last_verified: 2026-07-27
 canonical_for:
   - recorded analog fixture mapping
 related:
@@ -11,6 +11,8 @@ related:
 ---
 
 # 記録済みanalog fixture mapping
+
+Current canonical mapping owner: `src/selfrionette/plugins/mappings/analog_fixture.py`. `src/selfrionette/input_sources/analog_fixture.py` owns sample parsing and remains a thin compatibility facade for the public mapping symbols.
 
 P3では`AnalogFixtureSample`のstrict parsing、timestamp、raw values、active / inactive / stale state、
 sequence readerを`analog_fixture` source pluginが所有する。center、half-range、axis weights、sign、scale、

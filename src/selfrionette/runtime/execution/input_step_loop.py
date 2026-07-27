@@ -29,6 +29,7 @@ from selfrionette.runtime.control.input_source_state import (
     build_runtime_input_source_state_from_health,
 )
 from selfrionette.runtime.experiment.input_source import (
+    InputSourceMappingAdapter,
     ViewerBridgeRuntimeCapability,
     ViewerMappingCompatibilityCapability,
     ViewerEndpointRebaseCapability,
@@ -55,7 +56,6 @@ from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local
 from selfrionette.runtime.execution.pipeline import RuntimePipeline
 from selfrionette.runtime.execution.input_source_adapters import (
     RuntimeInputSourceExecutionAdapter,
-    compatibility_execution_adapter,
 )
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.schemas import InputIntent, MotionCommand, MuJoCoState, RawInputFrame
@@ -86,6 +86,7 @@ class RuntimeInputSourceStepLoopPlan:
     execution_adapter: RuntimeInputSourceExecutionAdapter
     control_mapping: ControlMappingPlugin | None = None
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
+    mapping_input_adapter: InputSourceMappingAdapter | None = None
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
 
 
@@ -140,7 +141,11 @@ def build_runtime_input_source_step_loop_plan(
     viewer_input_source: ViewerInputSource | None = None,
 ) -> RuntimeInputSourceStepLoopPlan:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
-    execution_adapter = selection.execution_adapter or compatibility_execution_adapter(selection.source_name)
+    execution_adapter = selection.execution_adapter
+    if execution_adapter is None:
+        raise ValueError(
+            "plugin-backed runtime input source selection requires an execution adapter"
+        )
     if runtime_config.robot_profile_id is None:
         raise ValueError("production input step-loop requires robot_profile_id")
     profile = resolve_robot_profile(
@@ -198,6 +203,7 @@ def build_runtime_input_source_step_loop_plan(
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
+            mapping_input_adapter=selection.mapping_input_adapter,
         )
 
     if execution_adapter.uses_replay_pipeline:
@@ -229,6 +235,7 @@ def build_runtime_input_source_step_loop_plan(
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
+            mapping_input_adapter=selection.mapping_input_adapter,
         )
 
     if execution_adapter.uses_viewer_endpoint_compatibility:
@@ -298,6 +305,7 @@ def build_runtime_input_source_step_loop_plan(
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
             control_mapping_parameters=control_mapping_parameters,
+            mapping_input_adapter=selection.mapping_input_adapter,
             viewer_bridge_capability=viewer_capability,
         )
 
@@ -439,8 +447,13 @@ async def _run_runtime_input_source_step_loop(
         if plan.control_mapping is None:
             intent = plan.pipeline.input_interpreter.interpret(frame)
         else:
+            mapping_input = (
+                plan.mapping_input_adapter(frame)
+                if plan.mapping_input_adapter is not None
+                else frame
+            )
             mapped_intent = plan.control_mapping.strategy.map_input(
-                frame,
+                mapping_input,
                 plan.control_mapping_parameters,
             )
             if not isinstance(mapped_intent, InputIntent):

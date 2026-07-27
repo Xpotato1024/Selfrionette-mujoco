@@ -12,7 +12,7 @@ from selfrionette.input_sources.loadcell_serial import (
 )
 
 
-FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "r7_a_lite_serial_frames"
+FIXTURE_ROOT = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "r7_a_lite_serial_frames"
 
 
 def read_fixture_lines(name: str) -> list[str]:

@@ -141,6 +141,7 @@ class ResolvedExperimentComposition:
     task: TaskPlugin
     input_source: InputSourcePlugin
     resolved_input_sample_schema: VersionedIdentity
+    resolved_mapping_input_sample_schema: VersionedIdentity
     evaluators: tuple[EvaluationPlugin, ...]
     resolved_capabilities: frozenset[VersionedIdentity]
     resolved_roles: frozenset[SemanticRole]
@@ -155,6 +156,12 @@ class ResolvedExperimentComposition:
     @property
     def produced_sample_schema_identity(self) -> VersionedIdentity:
         return self.resolved_input_sample_schema
+
+    @property
+    def effective_mapping_input_sample_schema(self) -> VersionedIdentity:
+        """Return the versioned representation consumed by the mapping strategy."""
+
+        return self.resolved_mapping_input_sample_schema
 
     def evidence_producer(
         self, evidence_identity: VersionedIdentity
@@ -334,16 +341,21 @@ def compose_experiment(
             f"parameters supplied for unselected plugins: {unknown_parameter_owners}"
         )
     for owner, plugin in selected_plugins:
-        plugin.parameter_contract.validate(parameter_values.get(owner, {}))
+        values = parameter_values.get(owner, {})
+        if isinstance(plugin, ControlMappingPlugin):
+            plugin.normalize_parameters(values)
+        else:
+            plugin.parameter_contract.validate(values)
 
     if not mapping.accepted_input_sample_schemas:
         raise ValueError(
             "control mapping must declare at least one accepted input sample schema"
         )
-    if input_source.produced_sample_schema not in mapping.accepted_input_sample_schemas:
+    effective_mapping_schema = input_source.effective_mapping_input_sample_schema
+    if effective_mapping_schema not in mapping.accepted_input_sample_schemas:
         raise ValueError(
-            "input sample schema compatibility mismatch: source produces "
-            f"{input_source.produced_sample_schema.canonical_id!r}, mapping accepts "
+            "input sample schema compatibility mismatch: mapping input is "
+            f"{effective_mapping_schema.canonical_id!r}, mapping accepts "
             f"{tuple(sorted(item.canonical_id for item in mapping.accepted_input_sample_schemas))!r}"
         )
 
@@ -426,6 +438,7 @@ def compose_experiment(
         task=task,
         input_source=input_source,
         resolved_input_sample_schema=input_source.produced_sample_schema,
+        resolved_mapping_input_sample_schema=effective_mapping_schema,
         evaluators=evaluators,
         resolved_capabilities=robot.provided_capabilities,
         resolved_roles=resolved_roles,
