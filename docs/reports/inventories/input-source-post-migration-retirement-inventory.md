@@ -109,7 +109,7 @@ runtime introspectionで次を確認した。
 | C1-009 | `LoadcellNormalizationConfig`、`NormalizedLoadcellInputIntent`、`LoadcellNormalizedInputIntentConverter`、`normalize_loadcell_frame_for_mapping()` | intrinsic channel validation / normalizationとmapping input adaptation | plugin registration、live/dry runners、plugin / runtime tests | module `__all__` | shared source-owned loadcell component + source mapping adapter | `MOVE_THEN_REMOVE` | C2でserial / fixture両pluginが使うshared source ownerへ移す | deadzone名称はintrinsic normalization。mapping operational deadzoneと混同しない |
 | C1-010 | `input_sources/loadcell_serial.py::SerialInputSource` | injected-line acquisition、vector filtering、diagnostic collection | loadcell serial / fixture plugin、tests | package root / module | shared source-owned loadcell component | `MOVE_THEN_REMOVE` | C2でshared componentへ移し、serial / fixture private cross-importを避ける | EOF text、diagnostic ordering、serial portを開かない性質 |
 | C1-011 | loadcell moduleの`LoadcellEndpointMappingConfig`、`LoadcellEndpointMotionCommandConverter`、endpoint helper re-exports | channel / axis assignment、weights、gain、operational deadzone、endpoint conversionのcompatibility export | testsとlegacy callers | module `__all__` | `plugins/mappings/loadcell.py` | `COMPATIBILITY_THEN_REMOVE` | C3でrepository内部consumerをmapping ownerへ移してcaller 0にする。re-export削除はC4 policy後に行う | source normalizationとのowner混同 |
-| C1-012 | `run_loadcell_serial_dry_run_smoke()`、`LoadcellSerialDryRunSmokeResult`、`mapping_plugin=None` branch | recorded converter-only public smoke compatibility | canonical dry-run runnerとlegacy tests | module `__all__` | `runtime/runners/loadcell_serial_dry_run.py` + resolved mapping plugin | `COMPATIBILITY_THEN_REMOVE` | C3で内部runner/testをresolved plugin pathへ統一する。public helper / converter-only pathの削除はC4 policy後に行う | golden output、exception、hardware no-open gate |
+| C1-012 | `run_loadcell_serial_dry_run_smoke()`、`LoadcellSerialDryRunSmokeResult`、`mapping_plugin=None` branch | recorded converter-only public smoke compatibility | canonical dry-run runnerとlegacy tests | module `__all__` | `runtime/runners/loadcell_serial_dry_run.py` + resolved mapping plugin | `COMPATIBILITY_THEN_REMOVE` | C3でrepository内部の`mapping_plugin=None` callerを0にし、runner / testをresolved plugin pathへ統一する。public helperとoptional compatibility pathの退役はC4 policy後に行う | golden output、exception、hardware no-open gate |
 | C1-013 | `input_sources/replay.py::ReplayInputSource` | frozen replay frames、index、EOF / loop | replay plugin、2 runtime composition、diagnostics、tests | package root / module | `plugins/input_sources/replay/` | `MOVE_THEN_REMOVE` | C2でreader implementationをplugin ownerへ移し内部consumerをcanonical pathへ統一する | `StopIteration` text、loop ordering |
 | C1-014 | `input_sources/replay.py::build_motion_command_from_replay_frame` | replay mapping helper re-export | legacy runtime tests | package root / module | `plugins/mappings/replay.py` | `COMPATIBILITY_THEN_REMOVE` | C3でrepository内部tests / callersをcanonical mappingへ移してcaller 0にする。re-export削除はC4 policy後に行う | metadata projection |
 | C1-015 | `input_sources/programmed_target.py` | trajectory、frame、reader、sweep defaults / factory | programmed source plugin、old registry、runners、tests | package root / module | `plugins/input_sources/programmed_target/` | `MOVE_THEN_REMOVE` | C2で全source-owned implementationとdefaultsをplugin ownerへ移す | trajectory byte/float parity、terminal hold、loop |
@@ -218,7 +218,10 @@ boundaryへ収束させる。public surfaceはC4 policy後に削除し、directo
 - keyboard、continuous velocity、analog、loadcell、replay mapping facadeのrepository内部consumerを
   canonical mappingへ移す。
 - `InputInterpreter`、`ReplayInputInterpreter`、legacy composition consumerをtyped mapping pathへ移行する。
-- `mapping_plugin=None` loadcell converter-only helperをcaller 0後に退役する。
+- repository内部の`mapping_plugin=None` callerを0にし、production runner / testsをresolved
+  versioned Mapping Plugin pathへ移行する。
+- C3では`run_loadcell_serial_dry_run_smoke()` public helperと`mapping_plugin=None` public
+  compatibility behaviorを変更・削除せず、behavior-preservingな互換境界としてC4まで残す。
 - canonical CLIへexplicit source selectionを統合し、2 compatibility scripts、runner fallback、
   browser smoke launcher / operator procedure callerを移行する。
 - CLI options、default、error、NDJSON、viewer ingress / cadence / grace periodを変更しない。
@@ -229,6 +232,9 @@ boundaryへ収束させる。public surfaceはC4 policy後に削除し、directo
 **Acceptance**
 
 - old registry / mapping facade / interpreterへのrepository内部production callerが0である。
+- repository内部の`mapping_plugin=None` callerが0である。
+- `run_loadcell_serial_dry_run_smoke()` public helperとoptional compatibility pathが
+  behavior-preservingにC4まで保持される。
 - compatibility scripts / runner fallbackはcanonical CLIのoptions、default、exit status、NDJSON、
   viewer ingress、cadence、grace periodのgolden parity成立後に退役する。
 - canonical CLI golden testsが旧observable behaviorを固定する。
@@ -248,6 +254,8 @@ boundaryへ収束させる。public surfaceはC4 policy後に削除し、directo
 - project policyとしてimmediate removalまたはdeprecation windowのどちらを採るか明示し、
   policyを満たしてから`input_sources/__init__.py`、`input_interpreters/__init__.py`、残存facade、
   module、READMEを削除または整理する。
+- policy充足後に`run_loadcell_serial_dry_run_smoke()` public helperと`mapping_plugin=None`
+  optional compatibility pathを退役する。
 - compatibility-only tests / guardsを削除またはold-import禁止guardへ反転する。
 - canonical docsをactual stateへ更新し、historical reportsは改稿しない。
 - caller 0とpackage build内容を確認後、両directoryを退役する。
