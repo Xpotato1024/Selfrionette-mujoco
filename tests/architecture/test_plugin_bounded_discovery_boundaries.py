@@ -55,6 +55,23 @@ def test_catalogs_and_generic_registration_do_not_list_concrete_plugins() -> Non
         ), path
 
 
+def test_mapping_root_compatibility_exports_are_not_discovery_inputs() -> None:
+    compatibility = (PLUGINS / "mappings" / "__init__.py").read_text(
+        encoding="utf-8"
+    )
+    discovery = (PLUGINS / "control_mapping_discovery.py").read_text(
+        encoding="utf-8"
+    )
+    catalog = (PLUGINS / "mappings" / "catalog.py").read_text(encoding="utf-8")
+
+    assert "_PUBLIC_EXPORTS" in compatibility
+    assert "__getattr__" in compatibility
+    for production_source in (discovery, catalog):
+        assert "_PUBLIC_EXPORTS" not in production_source
+        assert "mappings.__all__" not in production_source
+        assert "REPLAY_CONTROL_MAPPING_PLUGIN" not in production_source
+
+
 def test_discovery_is_bounded_and_axis_validation_stays_typed() -> None:
     helper = (PLUGINS / "bounded_discovery.py").read_text(encoding="utf-8")
     assert "pkgutil.iter_modules(namespace.__path__)" in helper

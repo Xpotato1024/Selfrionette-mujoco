@@ -95,6 +95,12 @@ Robot resourceは従来どおりplugin declarationが所有する。Input Source
 trajectory、Control Mappingのalgorithm / parameterはowning packageが所有し、generic resolverが
 logical IDからresource pathを推測しない。
 
+Control Mappingの旧flat module importはcanonical packageへのthin re-exportとして維持する。加えて、
+baselineのpackage-root 5 exportsは要求されたsymbolのcanonical packageだけをloadするlazy compatibility
+facadeとして維持する。このfacadeはproduction discoveryのSoTではなく、新規plugin onboardingでexport
+mapの変更を要求しない。production catalogは引き続きdirect child packageの
+`plugin.py::CONTROL_MAPPING_PLUGIN`から構築する。
+
 新しいfirst-party plugin onboardingは、owning packageと明示所有resource / config、plugin-local
 testsの追加だけでproduction discoveryへ接続する。central catalog、generic runtime、viewer、
 unrelated pluginへ具体ID/importを追加しない。test-only packageは明示したtest namespaceからだけ
