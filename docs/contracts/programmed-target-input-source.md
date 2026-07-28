@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-21
+last_verified: 2026-07-28
 canonical_for:
   - programmed target input source contract
   - RawInputFrame.metadata bridge for deterministic programmed target trajectories
@@ -14,8 +14,8 @@ related:
 # ProgrammedTargetInputSource Contract
 
 P3ではこのbehaviorを`plugins/input_sources/programmed_target/`のversioned registrationがfactoryへ
-接続する。`selfrionette.input_sources.programmed_target`は既存public importを維持するcompatibility
-boundaryであり、trajectory、preset validation、terminal hold、loop semanticsを変更しない。
+接続した。C4後はこのcanonical ownerを直接使用し、旧public compatibility importは退役済みである。
+trajectory、preset validation、terminal hold、loop semanticsは変更しない。
 
 ## Versioned plugin parameter contract
 

@@ -8,7 +8,6 @@ import selfrionette.runtime as runtime
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_ROOT = ROOT / "src" / "selfrionette" / "runtime"
-INPUT_SOURCE_ROOT = ROOT / "src" / "selfrionette" / "input_sources"
 EXPECTED_MODULES = {
     "composition": {
         "config",
@@ -93,30 +92,9 @@ def test_retired_flat_runtime_imports_have_no_repository_consumers() -> None:
             assert _imports(path).isdisjoint(retired_imports), path.relative_to(ROOT)
 
 
-def test_low_level_input_source_registry_only_delegates_to_canonical_source_owners() -> None:
-    imports = _imports(INPUT_SOURCE_ROOT / "registry.py")
-
-    plugin_imports = {
-        module
-        for module in imports
-        if module == "selfrionette.plugins"
-        or module.startswith("selfrionette.plugins.")
-    }
-    assert plugin_imports == {
-        "selfrionette.plugins.input_sources.programmed_target",
-        "selfrionette.plugins.input_sources.viewer",
-    }
-    assert "selfrionette.plugins.input_sources.catalog" not in imports
-    assert not any(
-        module == "selfrionette.runtime" or module.startswith("selfrionette.runtime.")
-        for module in imports
-    )
-
-
 def test_runtime_package_root_is_a_minimal_lazy_facade() -> None:
     assert set(runtime.__all__) == {
         "RuntimeConfig",
-        "RuntimePipeline",
         "registered_robot_bundle_ids",
         "registered_robot_runtime_plugin_ids",
         "resolve_robot_bundle",

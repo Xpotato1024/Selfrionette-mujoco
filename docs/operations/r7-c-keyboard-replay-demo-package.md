@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-07-16
+last_verified: 2026-07-28
 canonical_for:
   - R7-C keyboard / replay demo package
 related:
@@ -40,7 +40,7 @@ keyboard demo は `build_keyboard_motion_command()` が作る `MotionCommand` �
 確認方法:
 
 ```powershell
-uv run pytest tests/input_sources/test_r7_b_keyboard_input_source_smoke.py
+uv run pytest tests/plugins/mappings/viewer/test_keyboard_mapping.py
 ```
 
 補足:

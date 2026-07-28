@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-07-16
+last_verified: 2026-07-28
 canonical_for:
   - R7-C viewer fixture demo procedure
 related:
@@ -73,7 +73,7 @@ manual demo ではなく contract smoke として扱い、次の tests を確認
 
 ```powershell
 uv run pytest `
-  tests/input_sources/test_r7_b_keyboard_input_source_smoke.py `
+  tests/plugins/mappings/viewer/test_keyboard_mapping.py `
   tests/runtime/test_r7_b_offline_input_runtime_stepping_smoke.py `
   tests/runtime/test_r7_b_input_driven_payload_smoke.py
 ```

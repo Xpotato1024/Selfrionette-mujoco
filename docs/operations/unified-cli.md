@@ -37,9 +37,9 @@ commandごとの`--input-source` choicesは次のとおりである。
 
 `viewer` sourceはviewer ingressとruntime readerを必要とするため、`replay --input-source viewer`では受理しない。
 
-repository内部とcurrent operator手順はinstallable CLIだけを使用する。旧compatibility scriptは
-error/help surfaceの完全parityが未成立のpublic compatibilityとしてC4まで残すが、新しいcallerを追加しない。
-既存 Python API の既定値もcompatibilityのため変更しない。
+repository内部とcurrent operator手順はinstallable CLIだけを使用する。旧compatibility scriptはC4で退役した。
+wrapperのimplicit robot selectionや旧validation wordingは取り込まず、`--robot` requiredを含むcanonical
+CLI behaviorを維持する。
 
 ## 今回採用しない候補
 

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-28
 canonical_for:
   - schema contracts
 related:
@@ -48,8 +48,8 @@ domain間依存は`input / command / state / endpoint -> types`、`experiment_lo
 
 - `Vector3`、`QuaternionWXYZ`、`JointVector`、`ScalarVector`: layer contractで
   共有するtuple alias。
-- `RawInputFrame`: `input_sources`が取得するdevice/replayのraw input。
-- `InputIntent`: `input_interpreters`から次のlayerへ渡す、解釈済みの
+- `RawInputFrame`: Input Source Pluginが取得するdevice/replayのraw input。
+- `InputIntent`: versioned Control Mapping Pluginから次のlayerへ渡す、解釈済みの
   replay/input-layer contract。`MotionCommand`ではない。
 - `TargetCommand`: motion generationで使用するtarget-space command。
 - `JointCommand`: solver output / joint command boundaryの入力。

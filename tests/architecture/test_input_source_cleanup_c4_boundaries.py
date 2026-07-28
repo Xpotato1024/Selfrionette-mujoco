@@ -1,4 +1,4 @@
-"""C3 guards for canonical internal Input Source and Mapping Plugin paths."""
+"""C4 guards for final Input Source public compatibility retirement."""
 
 from __future__ import annotations
 
@@ -20,21 +20,6 @@ OLD_PACKAGE_PREFIXES = (
     "selfrionette.input_sources",
     "selfrionette.input_interpreters",
 )
-COMPATIBILITY_PACKAGE_ROOTS = (
-    SRC / "input_sources",
-    SRC / "input_interpreters",
-)
-PUBLIC_COMPATIBILITY_TEST_ROOTS = (
-    ROOT / "tests" / "compatibility",
-    ROOT / "tests" / "input_interpreters",
-)
-MAPPING_FACADES = (
-    SRC / "input_sources" / "keyboard.py",
-    SRC / "input_sources" / "continuous_endpoint_velocity.py",
-    SRC / "input_sources" / "analog_fixture.py",
-    SRC / "input_sources" / "loadcell_serial.py",
-    SRC / "input_sources" / "replay.py",
-)
 
 
 def _parse(path: Path) -> ast.Module:
@@ -47,13 +32,7 @@ def _imported_modules(path: Path) -> tuple[str, ...]:
         if isinstance(node, ast.Import):
             modules.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
-            module = node.module or ""
-            modules.append(module)
-            modules.extend(
-                f"{module}.{alias.name}"
-                for alias in node.names
-                if alias.name != "*"
-            )
+            modules.append(node.module or "")
     return tuple(modules)
 
 
@@ -64,68 +43,86 @@ def _uses_old_package(module: str) -> bool:
     )
 
 
-def _is_public_compatibility_test(path: Path) -> bool:
-    return any(path.is_relative_to(root) for root in PUBLIC_COMPATIBILITY_TEST_ROOTS)
+def test_old_package_directories_and_compatibility_wrappers_do_not_exist() -> None:
+    assert not (SRC / "input_sources").exists()
+    assert not (SRC / "input_interpreters").exists()
+    assert not (ROOT / "scripts" / "compatibility").exists()
 
 
-def _is_compatibility_package_internal(path: Path) -> bool:
-    return any(path.is_relative_to(root) for root in COMPATIBILITY_PACKAGE_ROOTS)
-
-
-def test_old_package_imports_are_bounded_to_package_internals_and_public_compatibility_tests() -> None:
+def test_old_package_imports_are_completely_forbidden() -> None:
     violations: list[str] = []
     for root in (ROOT / "src", ROOT / "scripts", ROOT / "tests"):
         for path in root.rglob("*.py"):
-            if _is_compatibility_package_internal(path) or _is_public_compatibility_test(path):
-                continue
             for module in _imported_modules(path):
                 if _uses_old_package(module):
                     violations.append(f"{path.relative_to(ROOT)}:{module}")
     assert not violations, "\n".join(violations)
 
 
-def test_production_runtime_has_no_old_package_dependency() -> None:
-    violations: list[str] = []
-    for path in (SRC / "runtime").rglob("*.py"):
-        for module in _imported_modules(path):
-            if _uses_old_package(module):
-                violations.append(f"{path.relative_to(ROOT)}:{module}")
-    assert not violations, "\n".join(violations)
+def test_legacy_runtime_pipeline_is_not_defined_or_exported() -> None:
+    pipeline = SRC / "runtime" / "execution" / "pipeline.py"
+    runtime_root = SRC / "runtime" / "__init__.py"
+    pipeline_classes = {
+        node.name for node in _parse(pipeline).body if isinstance(node, ast.ClassDef)
+    }
+    assert pipeline_classes == {"ControlMappedRuntimePipeline"}
+    assert "RuntimePipeline" not in runtime_root.read_text(encoding="utf-8")
 
 
-def test_mapping_facades_remain_definition_free_re_exports() -> None:
-    for path in MAPPING_FACADES:
-        tree = _parse(path)
-        definitions = [
-            node.name
-            for node in tree.body
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-        ]
-        assigned_names = {
-            target.id
-            for node in tree.body
-            if isinstance(node, ast.Assign)
-            for target in node.targets
-            if isinstance(target, ast.Name)
-        }
-        assert definitions == [], path.relative_to(ROOT)
-        assert assigned_names <= {"__all__"}, path.relative_to(ROOT)
+def test_no_production_compatibility_registry_or_mapping_facade_exists() -> None:
+    production_source = "\n".join(
+        path.read_text(encoding="utf-8") for path in SRC.rglob("*.py")
+    )
+    assert "InputSourceDescriptor" not in production_source
+    assert "compatibility_execution_adapter" not in production_source
 
 
-def test_internal_loadcell_runner_resolves_versioned_mapping_explicitly() -> None:
+def test_loadcell_runner_requires_an_explicit_versioned_mapping() -> None:
     runner = SRC / "runtime" / "runners" / "loadcell_serial_dry_run.py"
+    tree = _parse(runner)
+    function = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "run_loadcell_serial_dry_run_smoke"
+    )
+    keyword_defaults = dict(
+        zip(
+            (argument.arg for argument in function.args.kwonlyargs),
+            function.args.kw_defaults,
+            strict=True,
+        )
+    )
+    assert keyword_defaults["mapping_plugin"] is None
     source = runner.read_text(encoding="utf-8")
     assert 'PluginSelection("loadcell_endpoint_mapping", 1)' in source
     assert "mapping_plugin=resolve_control_mapping_plugin(" in source
+    assert "if mapping_plugin is None" not in source
+    assert "LoadcellEndpointMotionCommandConverter" not in source
 
 
-def test_current_operator_docs_do_not_reference_compatibility_scripts() -> None:
-    violations = [
-        path.relative_to(ROOT)
-        for path in (ROOT / "docs" / "operations").rglob("*.md")
-        if "scripts/compatibility/" in path.read_text(encoding="utf-8")
-    ]
-    assert not violations
+def test_current_operator_docs_do_not_reference_retired_compatibility_surfaces() -> None:
+    forbidden = (
+        "scripts/compatibility/",
+        "C4まで残",
+        "C4までのpublic compatibility",
+        "compatibility package exists",
+        "legacy RuntimePipeline public compatibility",
+    )
+    violations: list[str] = []
+    for root in (
+        ROOT / "README.md",
+        ROOT / "docs" / "architecture",
+        ROOT / "docs" / "contracts",
+        ROOT / "docs" / "operations",
+    ):
+        paths = (root,) if root.is_file() else root.rglob("*.md")
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            for phrase in forbidden:
+                if phrase in text:
+                    violations.append(f"{path.relative_to(ROOT)}:{phrase}")
+    assert not violations, "\n".join(violations)
 
 
 def test_current_cli_docs_match_command_specific_input_source_choices() -> None:
@@ -141,6 +138,7 @@ def test_current_cli_docs_match_command_specific_input_source_choices() -> None:
     assert replay_choices in unified_cli
     assert viewer_choices in unified_cli
     assert "`replay --input-source viewer`は受理しない" in runtime_dry_run
+    assert "--robot" in unified_cli
 
 
 def test_catalog_and_mapping_identities_remain_canonical() -> None:
@@ -185,49 +183,56 @@ def test_catalog_and_mapping_identities_remain_canonical() -> None:
     )
 
 
-def test_source_contracts_are_preserved_while_c3_adapters_are_explicit() -> None:
+def test_source_contracts_and_explicit_mappings_are_preserved() -> None:
     expected = {
         "programmed_target": (
             VersionedIdentity("programmed_target_sample", 1),
             InputSourceMode.OFFLINE,
             VersionedIdentity("target_metadata_input_execution", 1),
             VersionedIdentity("replay_raw_input_frame", 1),
+            "replay_mapping/v1",
         ),
         "replay": (
             VersionedIdentity("replay_raw_input_frame", 1),
             InputSourceMode.REPLAY,
             VersionedIdentity("replay_compatibility_input_execution", 1),
             VersionedIdentity("replay_raw_input_frame", 1),
+            "replay_mapping/v1",
         ),
         "noop": (
             VersionedIdentity("noop_sample", 1),
             InputSourceMode.OFFLINE,
             VersionedIdentity("replay_compatibility_input_execution", 1),
             VersionedIdentity("replay_raw_input_frame", 1),
+            "replay_mapping/v1",
         ),
         "viewer": (
             VersionedIdentity("viewer_control_sample", 1),
             InputSourceMode.VIEWER_BRIDGE,
             VersionedIdentity("viewer_local_endpoint_input_execution", 1),
             VersionedIdentity("viewer_control_sample", 1),
+            "viewer_keyboard_gamepad_mapping/v1",
         ),
         "loadcell_serial": (
             VersionedIdentity("loadcell_vector_sample", 1),
             InputSourceMode.LIVE,
             VersionedIdentity("loadcell_input_execution", 1),
             VersionedIdentity("loadcell_normalized_input_intent", 1),
+            "loadcell_endpoint_mapping/v1",
         ),
         "loadcell_fixture": (
             VersionedIdentity("loadcell_vector_sample", 1),
             InputSourceMode.REPLAY,
             VersionedIdentity("loadcell_input_execution", 1),
             VersionedIdentity("loadcell_normalized_input_intent", 1),
+            "loadcell_endpoint_mapping/v1",
         ),
         "analog_fixture": (
             VersionedIdentity("analog_fixture_sample", 1),
             InputSourceMode.REPLAY,
             VersionedIdentity("analog_fixture_input_execution", 1),
             VersionedIdentity("analog_fixture_sample", 1),
+            "analog_fixture_mapping/v1",
         ),
     }
     actual = {
@@ -236,39 +241,10 @@ def test_source_contracts_are_preserved_while_c3_adapters_are_explicit() -> None
             registration.plugin.source_mode,
             registration.execution_adapter.identity,
             registration.plugin.effective_mapping_input_sample_schema,
-        )
-        for registration in INPUT_SOURCE_CATALOG.registrations
-    }
-    assert actual == expected
-
-    registrations = {
-        registration.plugin.identity.name: registration
-        for registration in INPUT_SOURCE_CATALOG.registrations
-    }
-    assert registrations["programmed_target"].plugin.mapping_input_adapter is not None
-    assert registrations["noop"].plugin.mapping_input_adapter is not None
-    assert registrations["replay"].plugin.mapping_input_adapter is None
-    assert registrations["viewer"].plugin.mapping_input_adapter is None
-
-
-def test_each_production_source_has_an_explicit_versioned_mapping_selection() -> None:
-    expected = {
-        "analog_fixture": "analog_fixture_mapping/v1",
-        "loadcell_fixture": "loadcell_endpoint_mapping/v1",
-        "loadcell_serial": "loadcell_endpoint_mapping/v1",
-        "noop": "replay_mapping/v1",
-        "programmed_target": "replay_mapping/v1",
-        "replay": "replay_mapping/v1",
-        "viewer": "viewer_keyboard_gamepad_mapping/v1",
-    }
-    actual = {
-        registration.plugin.identity.name: (
-            None
-            if registration.default_control_mapping_selection is None
-            else (
+            (
                 f"{registration.default_control_mapping_selection.plugin_id}/"
                 f"v{registration.default_control_mapping_selection.contract_version}"
-            )
+            ),
         )
         for registration in INPUT_SOURCE_CATALOG.registrations
     }

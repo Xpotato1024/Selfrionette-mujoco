@@ -159,7 +159,9 @@ def test_package_root_and_robot_namespace_keep_canonical_ownership() -> None:
     assert not tuple((SRC / "robots").glob("*.py"))
     assert (SRC / "runtime" / "composition" / "robot_profile.py").is_file()
     assert (SRC / "runtime" / "composition" / "viewer_robot_declaration.py").is_file()
-    assert (SRC / "input_sources" / "loadcell_serial.py").is_file()
+    assert (
+        SRC / "plugins" / "input_sources" / "_loadcell" / "__init__.py"
+    ).is_file()
 
 
 def test_repository_has_no_import_consumers_of_removed_modules() -> None:
@@ -201,8 +203,6 @@ def test_diagnostic_scripts_import_plugin_owned_entrypoints() -> None:
 
 def test_public_packages_export_no_test_doubles_or_fast_arm_generic_symbols() -> None:
     for module_name in (
-        "selfrionette.input_sources",
-        "selfrionette.input_interpreters",
         "selfrionette.kinematics",
         "selfrionette.motion",
         "selfrionette.mujoco_backend",

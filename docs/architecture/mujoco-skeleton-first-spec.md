@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-28
 canonical_for:
   - MuJoCo skeleton and layer ownership
 related:
@@ -25,8 +25,8 @@ schemaはlayer間contractである。複数layerの接続、lifecycle、failure 
 | layer | 現在の責務 | 禁止事項 |
 | --- | --- | --- |
 | `schemas/` | immutableなlayer contract | runtime composition、I/O |
-| `input_sources/` | operator / replay / viewer inputの取得 | motion生成、backend更新 |
-| `input_interpreters/` | raw inputから`InputIntent`への変換 | qpos更新 |
+| `plugins/input_sources/` | operator / replay / viewer inputの取得 | mapping、motion生成、backend更新 |
+| `plugins/mappings/` | raw inputから`InputIntent`への変換 | device I/O、qpos更新 |
 | `motion/` | intentからcommandを生成 | MuJoCo stateの直接変更 |
 | `kinematics/` | robot pluginが選ぶFK / IK | viewerへのsolver複製 |
 | `mujoco_backend/` | model load、forward / step、state measurement | UI所有 |

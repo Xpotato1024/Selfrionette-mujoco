@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 canonical_for:
   - runtime input source registry
   - Input Source Plugin v1 ownership boundary
@@ -24,19 +24,9 @@ composition軸である。production runtime selectionの正本は
 `src/selfrionette/plugins/input_sources/catalog.py`であり、source identity、contract version、sample schema、
 mode、factory、health、lifecycle、CLI alias、execution adapterを登録する。
 
-`src/selfrionette/input_sources/registry.py`は既存低位descriptor APIの互換境界であり、次を維持する。
-
-- `InputSourceDescriptor(name, build_frames, initial_metadata)`
-- `SUPPORTED_INPUT_SOURCE_NAMES == ("programmed_target", "replay", "noop", "viewer")`
-- programmed targetのcaller指定`initial_position_m`
-- replayのcaller指定frames / metadata
-- noop / viewerのcaller指定metadata
-
-低位registryはproduction plugin catalogをimport、遅延projection、再登録しない。compatibility registry自身が
-historical descriptor、frame construction、initial metadata / default behaviorをC4まで維持する。C2で移動した
-programmed targetのconcrete trajectory implementationやviewer safe endpointなどを必要とする箇所は、
-それぞれのcanonical source ownerを直接参照する。registry自体のretirementまたは全面委譲はC4 scopeである。
-frontend keyboard / gamepad providerとmappingの分離は#461の範囲である。
+C4で旧`src/selfrionette/input_sources/registry.py`を退役した。production source selectionの正本は
+`plugins/input_sources/catalog.py`だけであり、historical descriptor、frame/default registry、mapping lookup
+facadeを別moduleへ移植しない。frontend keyboard / gamepad providerとmappingの分離は#461で成立している。
 
 ## Production plugin catalog
 
@@ -93,7 +83,7 @@ viewer
 factory outputは`InputSource`と`InputSourceHealthProvider`を満たす。
 generic `InputSource` Protocolのcanonical definitionは
 `src/selfrionette/runtime/experiment/input_source.py`に置く。
-`src/selfrionette/input_sources/base.py`は同一objectのpublic compatibility re-exportだけを持つ。
+旧`src/selfrionette/input_sources/base.py`はC4で退役し、consumerはcanonical contractを直接参照する。
 
 - `read_frame()`は毎回`RawInputFrame`を返す。
 - `current_health()`は毎回`InputSourceHealth`を返す。
@@ -159,7 +149,6 @@ current test ownerはproduction packageの責務を鏡写しにし、cross-layer
 | catalog / registry / composition | `tests/runtime/test_input_source_plugin_catalog.py`、`tests/runtime/test_experiment_plugin_composition.py` |
 | source -> mapping -> runtime / stale hold | `tests/runtime/` |
 | viewer browser provider | `apps/mujoco-viewer/tests/` |
-| low-level retained compatibility registry | `tests/input_sources/test_runtime_input_source_registry.py` |
 | hardware/manual gate | `tests/loadcell_serial/`、manual runner tests |
 
 `tests/plugins/input_sources/contract/conformance.py`の`InputSourceConformanceCase`は、plugin固有のvalid
@@ -256,7 +245,7 @@ runtime step-loopのsource-state解決:
 - frame / health parity、sequence ordering、terminal holdを維持する。
 - normalizationとmapping semanticsはmapping側に残す。
 
-## Compatibility
+## Public compatibility policy
 
 source-owned implementationのphysical ownerは次である。
 
@@ -269,25 +258,31 @@ source-owned implementationのphysical ownerは次である。
 | analog fixture sample / strict parser | `plugins/input_sources/analog_fixture/source.py` |
 | shared loadcell records / parser / intrinsic normalization / injected-line reader / diagnostics | `plugins/input_sources/_loadcell/` |
 
-既存public `input_sources` modulesはC4まで同一canonical objectをre-exportするthin compatibility facadeとして
-残す。loadcellのrecorded dry-run helperと`mapping_plugin=None` branchはpublic compatibilityとして残すが、
-parser、normalization、readerを再定義しない。CLI options、source alias、preset、custom replay frame、loop、
-payload、stale safety、viewer message schema、loadcell protocol、baud 115200、mapping semanticsを意図的に
-変更しない。
+C4ではimmediate removalを採用した。root version `0.0.0`、release/tag 0件、PyPI publish workflowなし、
+READMEに旧APIのinstall/usageなし、C1–C3でtemporary compatibilityと明示、というrepository evidenceに対し、
+stable external API、published compatibility commitment、released package contractのevidenceはなかった。
+repository外consumer不在の証明とは扱わないが、available evidenceではdeprecation windowよりimmediate removalが
+妥当である。
+
+このpolicyに基づき、旧`input_sources/`、`input_interpreters/`、descriptor registry、source / mapping facade、
+interpreter-based `RuntimePipeline`、old-path loadcell re-export、`mapping_plugin=None` fallback、
+compatibility CLI wrapperをretained surfaceなしで退役した。canonical helper
+`runtime.runners.loadcell_serial_dry_run.run_loadcell_serial_dry_run_smoke()`はoffline fixture capabilityとして残すが、
+versioned `loadcell_endpoint_mapping/v1`の明示指定を必須とする。
 
 production/internal commandはcatalogからsourceとversioned mappingを解決する。
 `selfrionette replay --input-source`は`programmed_target`、`replay`、`noop`だけを受理し、
 `selfrionette viewer --input-source`はgeneric alias 4件すべてを受理する。`viewer` sourceはviewer commandの
 ingress lifecycleを必要とし、replay commandへinitial frameとして投影しない。
-`scripts/compatibility/`の2 scriptはcanonical CLIとerror/help surfaceの完全parityが
-未成立のためC3で削除せず、current operator callerを0にしてC4へ残す。既存default CLI behaviorを維持するdirect
-runner APIもcatalogの第二のSoTではなく、production source selectionはcatalog経由だけである。
+旧wrapperのimplicit robot selection、validation wording差はcanonical CLIへ吸収しない。
+`selfrionette replay ...`と`selfrionette viewer ...`が唯一のcurrent operator entry pointであり、
+`--robot` required、exit status、stdout / stderr、NDJSON、viewer ingress behaviorを維持する。
 
-## Remaining scope
+## Cleanup end state
 
-C2のsource implementation ownership移行とC3のrepository内部consumer移行は完了している。
-public compatibility surfaceと非同一parity scriptのretirement policyはC4で扱う。追加のdevice実装、
-hardware gate、experiment evidenceは別scopeで扱う。
+C2のsource implementation ownership移行、C3のrepository内部consumer移行、C4のpublic compatibility
+retirementは完了している。旧package importは`src/`、`scripts/`、`tests/`で禁止し、wheel / sdistにも
+収録しない。追加のdevice実装、hardware gate、experiment evidenceは別scopeで扱う。
 
 ## 関連canonical文書
 
@@ -334,16 +329,9 @@ frontend registryはarbitrary dynamic importを行わない。lifecycleが選択
 unknownまたはduplicate provider IDは安全なdefaultへ置換せずrejectする。provider disposal後は
 publication、polling、heartbeatを停止し、再activationはzero / safe stateから開始する。
 
-`src/selfrionette/input_sources/keyboard.py`、`continuous_endpoint_velocity.py`、`viewer.py`は
-既存consumerのためのcompatibility facadeとして残す。keyboardとcontinuous mappingのcanonical
-implementationは`src/selfrionette/plugins/mappings/`、viewer sourceのcanonical implementationは
-`src/selfrionette/plugins/input_sources/viewer/`にある。viewer source facadeはmapping algorithm、
-desired endpoint integration、command generationを持たない。
-retained symbolのconsumer、canonical owner、facade statusはP5 completion auditで確定した。low-level
-`input_sources/registry.py`は`InputSourceDescriptor`のsignature、public export、frame behaviorを使うrepo内
-compatibility consumerと専用testがあるため retained とする。production runtime selectionはこのregistryを参照せず、
-catalogを再投影せず、reverse dependencyも作らない。keyboard / continuous mapping facadeは既存consumer向けに残し、
-canonical mapping ownerは`plugins/mappings/`とする。
+C4後はkeyboard / continuous mappingのcanonical implementationを`src/selfrionette/plugins/mappings/`、
+viewer sourceのcanonical implementationを`src/selfrionette/plugins/input_sources/viewer/`から直接使用する。
+旧facade、low-level registry、retained compatibility symbolは存在しない。
 
 ## #462 mapping ownership and conformance correction (2026-07-27)
 
@@ -356,7 +344,7 @@ production Control Mapping catalog は次の deterministic registrations を持�
 | `analog_fixture_mapping/v1` | `analog_fixture_sample/v1` | analog axis/sign/scale/deadzone/frame/endpoint intent |
 | `loadcell_endpoint_mapping/v1` | `loadcell_normalized_input_intent/v1` | loadcell endpoint delta and `MotionCommand` metadata |
 
-analog の parser、timestamp、raw values、health は source-owned で、mapping implementation は `src/selfrionette/plugins/mappings/analog_fixture.py` にある。loadcell の serial parser、diagnostic、intrinsic normalization は `input_sources/loadcell_serial.py` に残し、channel-axis weights、gain、max delta、endpoint delta、command conversion は `src/selfrionette/plugins/mappings/loadcell.py` に移した。loadcellのacquisition schemaはraw `loadcell_vector_sample/v1`、source-owned `mapping_input_adapter`のoutputはeffective mapping-input schema `loadcell_normalized_input_intent/v1`である。generic runtimeはadapter contractを検証してその結果だけをmapping strategyへ渡し、Control Mapping Pluginはnormalized schemaをaccepted schemaとして宣言する。adapter不在・input/output schema mismatch・別mappingとのschema mismatchはfail-closedにする。
+analog の parser、timestamp、raw values、health は source-owned で、mapping implementation は `src/selfrionette/plugins/mappings/analog_fixture.py` にある。loadcell の serial parser、diagnostic、intrinsic normalization は `src/selfrionette/plugins/input_sources/_loadcell/` が所有し、channel-axis weights、gain、max delta、endpoint delta、command conversion は `src/selfrionette/plugins/mappings/loadcell.py` が所有する。loadcellのacquisition schemaはraw `loadcell_vector_sample/v1`、source-owned `mapping_input_adapter`のoutputはeffective mapping-input schema `loadcell_normalized_input_intent/v1`である。generic runtimeはadapter contractを検証してその結果だけをmapping strategyへ渡し、Control Mapping Pluginはnormalized schemaをaccepted schemaとして宣言する。adapter不在・input/output schema mismatch・別mappingとのschema mismatchはfail-closedにする。
 
 C3ではimplicit `ReplayInputInterpreter` fallbackを除去するため、`programmed_target`と`noop`へ
 `replay_mapping/v1`のdefault `PluginSelection`を追加した。両sourceのproduced sample schemaはそれぞれ
@@ -368,7 +356,7 @@ C3ではimplicit `ReplayInputInterpreter` fallbackを除去するため、`progr
 produced sample schema、source mode、health、execution adapter identity、Control Mapping Plugin identity、
 public observable behaviorの変更ではない。loadcell / viewerの既存adapter semanticsは変更しない。
 
-`input_sources/keyboard.py`、`continuous_endpoint_velocity.py`、`analog_fixture.py`、`loadcell_serial.py`、`replay.py` は既存public importのthin compatibility facadeである。canonical mapping testsは `plugins/mappings/` ownerを直接importし、source-owned parser/normalization typeだけをsource moduleから参照する。
+canonical mapping testsは`plugins/mappings/` ownerを直接importし、source-owned parser/normalization typeは`plugins/input_sources/`のcanonical ownerから参照する。
 
 generic conformance は source-specific valid parameters に加え、frame/metadata validator、timestamp/sequence policy、sequence validator、optional typed health transition cases を受け付ける。production 7 source cases は constant timestamp、monotonic/indexed、preserved replay order、terminal hold のいずれかを明示する。
 

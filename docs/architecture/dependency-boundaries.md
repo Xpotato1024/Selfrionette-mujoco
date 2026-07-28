@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 canonical_for:
   - import boundaries
 related:
@@ -17,8 +17,8 @@ viewer/transport contractはarchitecture文書とcontract文書で定義し、im
 
 ```text
 schemas
-  -> input_sources
-input_interpreters
+  -> plugins/input_sources
+plugins/mappings
 kinematics
 motion
 mujoco_backend
@@ -29,8 +29,8 @@ transport
 許可する例:
 
 ```text
-input_sources       -> schemas
-input_interpreters  -> schemas
+plugins/input_sources -> schemas, runtime input-source contract
+plugins/mappings      -> schemas, runtime mapping contract
 motion              -> schemas, kinematics
 kinematics          -> schemas
 mujoco_backend      -> schemas
@@ -40,17 +40,16 @@ runtime             -> all layers
 
 Input Source Pluginのgeneric `InputSource.read_frame() -> RawInputFrame` contractは
 `runtime/experiment/input_source.py`がdefinitionを所有し、production source implementationとregistrationは
-`plugins/input_sources/`が所有する。`input_sources/`はC4までのpublic compatibility facadeであり、
-canonical runtime contract、source implementation、mapping symbolを再exportするが、definitionやalgorithmを
-複製しない。明示的なcompatibility exceptionとして、`input_sources.registry`はhistorical descriptor、
-frame construction、initial metadata / default behaviorをC3まで保持するが、production catalogをimportまたは
-再登録しない。C2で移動したconcrete source behaviorはcanonical ownerを直接参照する。
+`plugins/input_sources/`が所有する。Control Mappingのcanonical ownerは`plugins/mappings/`である。
+C4で旧`input_sources/`、`input_interpreters/`、descriptor registry、source / mapping facadeを退役した。
+これらの旧packageを再作成せず、consumerはcanonical ownerを直接参照する。
 source contractからfast_arm、task / evaluation実装、viewer TypeScript、serial transportをimportしない。
 Control Mapping Pluginはproduced / accepted sample schemaのversioned identityだけを参照し、device handle、
 serial、browser eventを所有しない。P5の`tests/architecture/test_input_source_plugin_p5_boundaries.py`は
 catalog identity、duplicate alias、source-name dispatch、source/mapping schema declaration、plugin-local owner、
-source pluginの禁止import、mapping pluginのdevice/browser禁止import、低位registryのsecond SoT化をAST / registry
-introspectionで検査する。単純grepだけをboundaryの根拠にしない。
+source pluginの禁止import、mapping pluginのdevice/browser禁止importをAST / registry introspectionで検査する。
+C4 guardは旧package directoryと旧import、legacy pipeline、registry、facade、CLI wrapperの不存在も検査する。
+単純grepだけをboundaryの根拠にしない。
 
 `schemas/`内はwire domain間の依存も一方向に固定する。`input`、`command`、`state`、`endpoint`は
 `types`だけへ依存でき、`experiment_log`は`endpoint`だけへ依存できる。`viewer_control`と`types`は
@@ -89,7 +88,7 @@ generic schema / domain / Protocol
 - generic Robot Profile contractは`selfrionette.runtime.composition.robot_profile`、viewer向けrobot declaration
   contractは`selfrionette.runtime.composition.viewer_robot_declaration`が所有する。旧flat moduleは退役済みである。
 - loadcell serial parser、normalization、`SerialInputSource`は
-  `selfrionette.input_sources.loadcell_serial`が所有する。package rootの旧moduleは退役済みである。
+  `selfrionette.plugins.input_sources._loadcell`が所有する。旧compatibility moduleは退役済みである。
 - fast_arm固有implementationは`plugins/robots/fast_arm/`だけが所有する。旧`robots/fast_arm.py`、
   `robot_registry.py`、`runtime/fast_arm_*.py`、旧registry moduleは退役済みであり、再作成しない。
 - fast_arm package内のshared coreは、`plugins/robots/fast_arm/core/`を物理mount pointとする独立Python
@@ -107,8 +106,8 @@ generic schema / domain / Protocol
 - generic `kinematics`はsolver Protocolだけ、generic `mujoco_backend`はnamed reference / site extraction、
   model load / reset、simulation primitiveだけを公開する。fast_arm固有solver、name contract、endpoint wrapper、
   diagnosticはplugin packageから公開する。
-- package root `selfrionette.runtime`はpublic compatibility surfaceをlazy resolveするが、package importだけで
-  concrete catalogをloadしない。
+- package root `selfrionette.runtime`は`RuntimeConfig`とcatalog resolverだけをlazy resolveし、package importだけで
+  concrete catalogをloadしない。interpreter-based `RuntimePipeline`はexportしない。
 - package root `selfrionette/`は`__init__.py`だけを持つ。空の`selfrionette.robots` namespaceと、
   `robot_profile.py`、`viewer_robot_declaration.py`、`loadcell_serial.py`をrootへ再導入しない。
 - production discoveryを起動できるgeneric moduleはcatalogだけとする。test fixtureはproduction namespaceへ
@@ -170,22 +169,20 @@ transport           -> runtime
 `apps/mujoco-viewer/src`は`tests/architecture/test_layer_import_boundaries.py`で
 検査する。rendering-onlyを維持し、MuJoCo、IK/FK、Rapier layerをimportしてはならない。
 
-## Input Source compatibility facade exception (#472)
+## Input Source public compatibility retirement (#474)
 
-`input_sources/`は既存public importを壊さないためのcompatibility packageである。次の5 moduleは
-canonical mapping ownerをthin facadeとして再exportする。
+C4ではpublic compatibility policyとしてimmediate removalを採用した。判断根拠は次の通りである。
 
-- `input_sources/keyboard.py`
-- `input_sources/continuous_endpoint_velocity.py`
-- `input_sources/analog_fixture.py`
-- `input_sources/loadcell_serial.py`
-- `input_sources/replay.py`
+- root distributionのversionは`0.0.0`であり、repositoryにrelease、tag、PyPI publish workflowがない。
+- root READMEとcurrent operator docsは旧package APIをinstall / usage entryとして案内していない。
+- C1–C3のcanonical migration contractは旧surfaceをC4までの一時compatibilityとして限定している。
+- production/internal callerはC3でcanonical catalog、versioned mapping、`ControlMappedRuntimePipeline`へ移行済みである。
 
-この例外はmapping algorithmの複製を許可しない。algorithm、parameter config、command conversionの
-canonical ownerは`plugins/mappings/`であり、facade以外の`input_sources/`から`plugins.mappings`へのimportは
-architecture guardで拒否する。loadcellのparserとintrinsic normalizationは
-`plugins/input_sources/_loadcell/`、endpoint mappingは`plugins/mappings/loadcell.py`が所有する。
-`loadcell_endpoint_mapping`はsource-normalized intent boundaryを受け、raw serial frameを再正規化しない。
+repository外consumerが存在しないとは断定しない。ただしstable external API、published compatibility
+commitment、released package contractのevidenceがないため、deprecation windowを設ける根拠よりも
+temporary migration surfaceを退役する根拠が強い。したがって旧package、registry、facade、interpreter、
+legacy `RuntimePipeline`、loadcell optional mapping fallback、compatibility CLI wrapperをretained allowlistなしで
+退役した。canonical source / mapping identityとobservable runtime behaviorは変更しない。
 
 ## Input Source runtime validation boundary
 
@@ -211,7 +208,7 @@ legacyの責務を移行する場合は、script全体をcopyせず、次のowne
 |---|---|---|
 | MuJoCo XML / STL asset | typed robot package resource（logical namespaceは`assets/mujoco/fast_arm/`） | canonical assetを参照し、legacy codeを実行しない |
 | device input読取 | `plugins/input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
-| inputの意味付けとscale | `plugins/mappings/` | mapping semanticsのcanonical owner。`input_interpreters/`とlegacy `RuntimePipeline`はpublic compatibilityとしてC4まで残るが、production/internal consumerは持たない |
+| inputの意味付けとscale | `plugins/mappings/` | mapping semanticsのcanonical owner。`input_interpreters/`とlegacy `RuntimePipeline`は退役済み |
 | target更新とsafety limit | `motion/` | `MotionCommand`を生成する |
 | FK / IK / joint limit | `kinematics/`またはrobot-specific plugin | kinematics責務に限定する |
 | MJCF model state | `mujoco_backend/` | MuJoCoをphysical stateのsource of truthとする |
@@ -270,16 +267,13 @@ mapping-specific parameter normalizationはreaderのlifecycle開始・frame read
 検証済みparametersはdeterministicなfrozen mappingとしてplanへ渡し、invalid parameterではmanaged sourceを
 startせず、frameもreadしない。
 
-C3以降、`src/`、`scripts/`、`tests/`からold input-source moduleをimportできるのは、public packageの
-facade self-wiringと明示的なpublic compatibility testだけである。production runtimeは
-`input_sources.registry`、`input_interpreters`、old mapping facadeをimportせず、catalogとversioned
-Control Mapping Pluginを直接composeする。compatibility facadeへalgorithm、config、defaultを追加しない。
-public `run_loadcell_serial_dry_run_smoke()`はC4まで同じsignatureと`mapping_plugin=None` behaviorを保つため、
-`input_sources/loadcell_serial.py`からcanonical runtime runner実装をre-exportする。この1 edgeは
-compatibility self-wiringに限定し、source acquisition ownerへruntime behaviorを戻さない。
+C4以降、`src/`、`scripts/`、`tests/`から旧Input Source / interpreter packageをimportしてはならない。
+production runtimeはcatalogとversioned Control Mapping Pluginを直接composeする。canonical
+`run_loadcell_serial_dry_run_smoke()`はoffline fixture validation用に残すが、
+`loadcell_endpoint_mapping/v1`の明示指定を必須とし、optional fallbackやold-path re-exportを持たない。
 
 ## #461 final audit correction (2026-07-26)
 
 frontend providerはbrowser raw acquisitionとlifecycleを所有し、normalized gamepad `axes`はwire / overlay compatibility projectionとして残す。canonical `raw_axes`、source lifecycle / activity、backend health、Control Mappingのcommand zeroを同じ責務に戻さない。gamepadのlegacy two-stage transfer functionはControl Mapping Plugin内で一元化し、frontendまたはsourceへmapping semanticsを戻さない。
 
-sourceとmappingは別identityでruntimeがcomposeする。mapping parametersはexecution / source start前にgeneric contractとmapping-specific semantic validatorで検証し、explicit runtime parameters、direct source compatibility parameters、registration / plugin defaultsの順に解決する。C3ではinternal legacy fallbackを退役し、public facade / helper / package policyはC4へ残す。
+sourceとmappingは別identityでruntimeがcomposeする。mapping parametersはexecution / source start前にgeneric contractとmapping-specific semantic validatorで検証し、explicit runtime parameters、direct source compatibility parameters、registration / plugin defaultsの順に解決する。C4でpublic facade / helper fallback / old packageも退役済みである。

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-07-16
+last_verified: 2026-07-28
 canonical_for:
   - R7-C axis sanity check protocol
 related:
@@ -38,7 +38,7 @@ live loadcell の観測は #235 の template に記録された human-run eviden
 keyboard path は no-hardware contract smoke として扱う。
 
 ```powershell
-uv run pytest tests/input_sources/test_r7_b_keyboard_input_source_smoke.py
+uv run pytest tests/plugins/mappings/viewer/test_keyboard_mapping.py
 ```
 
 確認すること:
