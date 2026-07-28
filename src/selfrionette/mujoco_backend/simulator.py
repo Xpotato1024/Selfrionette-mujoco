@@ -12,7 +12,7 @@ from selfrionette.mujoco_backend.model_loader import (
     reset_mujoco_data_to_initial_state,
 )
 from selfrionette.mujoco_backend.snapshot import snapshot_mujoco_state
-from selfrionette.schemas import JointCommand
+from selfrionette.schemas import JointCommand, JointPositionCommand
 from selfrionette.schemas import MotionCommand, MuJoCoState
 
 
@@ -25,6 +25,8 @@ class HeadlessMuJoCoSimulator:
     _last_dt_s: float | None = None
     _last_command: MotionCommand | None = None
     _pending_command: MotionCommand | None = None
+    _last_joint_position_command: JointPositionCommand | None = None
+    _pending_joint_position_command: JointPositionCommand | None = None
     initial_keyframe_name: str | None = None
 
     @classmethod
@@ -70,6 +72,29 @@ class HeadlessMuJoCoSimulator:
     def apply_command(self, command: MotionCommand) -> None:
         self._last_command = command
         self._pending_command = command
+        self._last_joint_position_command = None
+        self._pending_joint_position_command = None
+
+    def apply_joint_position_command(
+        self, command: JointPositionCommand
+    ) -> None:
+        if not isinstance(command, JointPositionCommand):
+            raise TypeError(
+                "joint-position backend requires JointPositionCommand"
+            )
+        self._last_command = None
+        self._pending_command = None
+        self._last_joint_position_command = command
+        self._pending_joint_position_command = command
+
+    def record_motion_command_envelope(
+        self, command: MotionCommand
+    ) -> None:
+        if not isinstance(command, MotionCommand):
+            raise TypeError(
+                "motion diagnostics boundary requires MotionCommand"
+            )
+        self._last_command = command
 
     def apply_qpos_command(self, joint_command: JointCommand) -> None:
         """qpos command を直接受け取り、backend state に反映する。"""
@@ -87,10 +112,18 @@ class HeadlessMuJoCoSimulator:
         self._last_dt_s = None
         self._last_command = None
         self._pending_command = None
+        self._last_joint_position_command = None
+        self._pending_joint_position_command = None
 
     @property
     def last_command(self) -> MotionCommand | None:
         return self._last_command
+
+    @property
+    def last_joint_position_command(
+        self,
+    ) -> JointPositionCommand | None:
+        return self._last_joint_position_command
 
     @property
     def last_dt_s(self) -> float | None:
@@ -149,7 +182,15 @@ class HeadlessMuJoCoSimulator:
         if dt_s <= 0.0:
             raise ValueError("dt_s must be positive")
 
-        if self._pending_command is not None:
+        if self._pending_joint_position_command is not None:
+            self._apply_joint_command(
+                JointCommand(
+                    joint_angles_rad=(
+                        self._pending_joint_position_command.joint_angles_rad
+                    )
+                )
+            )
+        elif self._pending_command is not None:
             joint_command = motion_command_to_qpos_command(self._pending_command)
             if joint_command is not None:
                 self._apply_joint_command(joint_command)
@@ -157,7 +198,15 @@ class HeadlessMuJoCoSimulator:
         self.model.opt.timestep = dt_s
         mujoco.mj_step(self.model, self.data)
 
-        if self._pending_command is not None and self._pending_command.joint is not None:
+        if self._pending_joint_position_command is not None:
+            self._apply_joint_command(
+                JointCommand(
+                    joint_angles_rad=(
+                        self._pending_joint_position_command.joint_angles_rad
+                    )
+                )
+            )
+        elif self._pending_command is not None and self._pending_command.joint is not None:
             # Keep the backend snapshot aligned with the commanded qpos path.
             self._apply_joint_command(self._pending_command.joint)
 

@@ -12,8 +12,9 @@ related:
 
 # MotionCommand契約
 
-`MotionCommand` は command object であり、state snapshot ではない。
-motion generationは`motion` / IK layerで行う。`MotionCommand.joint`はMuJoCo backendへ渡すqpos command boundaryである。
+`MotionCommand` はruntime内部のmotion / safety envelopeであり、state snapshotでも
+Robot/backend commandそのものでもない。motion generationは`motion` / IK layerで行う。
+`MotionCommand.joint`はjoint-position projectionへの入力である。
 `JointCommand` / `MotionCommand.joint` / `target_position_m` / MuJoCo `qpos`
 の boundary は `docs/contracts/kinematics-command-contract.md` を正とする。
 
@@ -27,6 +28,18 @@ motion generationは`motion` / IK layerで行う。`MotionCommand.joint`はMuJoC
 - `metadata`
 
 新しいcommand familyはschema reviewなしに追加せず、既存shapeを破壊的に拡張しない。
+
+## Robot command semantic boundary
+
+- `MotionCommand`はmotion generator output、metadata/evidence、desired endpoint diagnostics、
+  safety / qpos feasibility projectionを保持するruntime内部envelopeである。
+- `JointPositionCommand`は`joint_position_command/v1`専用のRobot/backend commandであり、
+  finite timestampと1個以上のfinite joint anglesだけを持つ。
+- `EndpointVelocityCommand`は`endpoint_velocity_command/v1`専用のRobot/backend commandである。
+- joint-position routeはsafety後の`MotionCommand.joint.joint_angles_rad`を
+  `JointPositionCommand`へ明示projectionする。missing joint、empty angles、
+  joint velocityだけのcommandはprovider到達前にrejectする。
+- `MotionCommand.target`やmetadataはruntime diagnosticsに残し、Robot commandへ混入させない。
 
 ## endpoint vocabulary
 
@@ -65,12 +78,11 @@ motion generationは`motion` / IK layerで行う。`MotionCommand.joint`はMuJoC
   `target_position_m` compatibility metadataまたはattributeへfallbackする。
   runtime pathは必要に応じてsolver outputをbackend qpos contractに合わせてpadする。
 - actuator commandは現在のschemaに含めない。追加にはschema reviewを必要とする。
-- backend application boundaryでは、`MotionCommand.joint` を qpos command boundary として
-  MuJoCo backend に渡し、backend 側で MuJoCo `qpos` に反映する。
+- backend application boundaryでは、`MotionCommand.joint`を
+  `JointPositionCommand`へprojectionし、typed provider経由でMuJoCo `qpos`へ反映する。
 - 現在の fast-arm backend は既存の joint tuple shape のみを受け付け、
   MuJoCo model joint order に従って qpos に反映する。
-- `MotionCommand.target` は qpos command boundary ではないため、
-  backend 境界で明示的に拒否する。
+- `MotionCommand.target`だけのenvelopeはjoint-position projectionで明示的に拒否する。
 - `target_position_m` を viewer feedback と command target の境界として
   扱い、viewer が FK / IK / qpos を再計算しないことを前提にする。
 - unsupported target command、unknown joint contract、unsupported joint shapeは、
@@ -85,4 +97,4 @@ wiring checkで使用するno-op stubはcommandを適用しないため、comman
 ## 注記
 
 - `metadata`はdiagnostic専用である。
-- `MotionCommand`は`mujoco_backend`が消費する。
+- `MotionCommand`はruntimeが保持し、typed Robot commandへのprojection元とdiagnosticsに使用する。

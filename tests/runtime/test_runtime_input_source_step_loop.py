@@ -53,6 +53,7 @@ from selfrionette.runtime.composition.robot_bundle import (
 from selfrionette.schemas import (
     EndpointVelocityCommand,
     InputIntent,
+    JointPositionCommand,
     MuJoCoState,
     RawInputFrame,
     ViewerControlKeyboardMessage,
@@ -361,6 +362,7 @@ def test_production_plan_binds_existing_joint_position_execution_path() -> None:
     )
     assert plan.command_execution.requires_motion_generator is True
     assert plan.endpoint_command_provider is not None
+    assert plan.command_execution.provider.command_type is JointPositionCommand
 
 
 def test_runtime_first_state_payload_rebase_and_marker_share_canonical_pose() -> None:
@@ -459,8 +461,6 @@ def test_runtime_step_loop_holds_keyboard_z_binding_and_updates_target_metadata(
     clock = _ClockSequence((0.0, 0.0))
     viewer_input_source, plan = _build_plan(clock)
     initial_state = plan.pipeline.simulator.snapshot()
-    initial_tip_site_position_m = extract_fast_arm_tip_site_endpoint_from_state(initial_state).position_m
-
     ingest_viewer_control_message(viewer_input_source, _keyboard_message(3.0, "ShiftLeft"))
     record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))[0]
 
@@ -717,6 +717,10 @@ def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monke
         def apply_command(self, command):
             events.append("apply")
             return self.simulator.apply_command(command)
+
+        def apply_joint_position_command(self, command):
+            events.append("apply")
+            return self.simulator.apply_joint_position_command(command)
 
         def step(self, dt_s):
             events.append("step")

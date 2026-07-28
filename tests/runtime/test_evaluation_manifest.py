@@ -46,9 +46,6 @@ from selfrionette.plugins.mappings._command_routes import (
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from tests.support.input_source_plugin_doubles import CONFORMANCE_SAMPLE_SCHEMA
 from selfrionette.runtime.composition.robot_bundle import CONTACT_EVIDENCE_V1, InitialStateContract
-from selfrionette.plugins.robots.catalog import (
-    resolve_robot_bundle as resolve_robot_bundle_from_compatibility_facade,
-)
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.plugins.robots.fast_arm.adapter.initial_state import (
     FAST_ARM_INITIAL_STATE_CONTRACT,
@@ -893,10 +890,6 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
         _evaluator(identity=fast_evaluator_identity)
     )
     bundle = resolve_robot_bundle_from_catalog("fast_arm")
-    compatibility_bundle = resolve_robot_bundle_from_compatibility_facade(
-        "fast_arm"
-    )
-    assert compatibility_bundle is bundle
     registries = _readiness_registries(
         bundle=bundle,
         environment=fast_environment,
@@ -939,26 +932,14 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
     )
 
     readiness = _build_readiness(manifest, registries)
-    compatibility_readiness = _build_readiness(
-        manifest,
-        _readiness_registries(
-            bundle=compatibility_bundle,
-            environment=fast_environment,
-            mapping=fast_mapping,
-            task=fast_task,
-            evaluator=fast_evaluator,
-        ),
-    )
-
     # Golden values include the evaluation-manifest/v3 command semantics condition.
-    for candidate in (readiness, compatibility_readiness):
-        assert candidate.freeze_record.manifest_digest == (
-            BASELINE_FAST_ARM_MANIFEST_DIGEST
-        )
-        assert candidate.resolved_identity == (
-            BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST
-        )
-        assert candidate.freeze_identity == BASELINE_FAST_ARM_FREEZE_DIGEST
+    assert readiness.freeze_record.manifest_digest == (
+        BASELINE_FAST_ARM_MANIFEST_DIGEST
+    )
+    assert readiness.resolved_identity == (
+        BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST
+    )
+    assert readiness.freeze_identity == BASELINE_FAST_ARM_FREEZE_DIGEST
 
     assert readiness.composition.robot_bundle is bundle
     assert readiness.robot_profile_identity == VersionedIdentity("fast_arm", 1)
@@ -969,14 +950,6 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
         encode_evaluation_manifest(manifest)
     )
     assert (
-        compatibility_readiness.freeze_record.canonical_manifest_bytes
-        == readiness.freeze_record.canonical_manifest_bytes
-    )
-    assert (
-        compatibility_readiness.freeze_record.canonical_resolved_identity_bytes
-        == readiness.freeze_record.canonical_resolved_identity_bytes
-    )
-    assert (
         b"selfrionette.plugins"
         not in readiness.freeze_record.canonical_resolved_identity_bytes
     )
@@ -984,5 +957,3 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
         b"fast_arm_bundle.py"
         not in readiness.freeze_record.canonical_resolved_identity_bytes
     )
-    assert compatibility_readiness.resolved_identity == readiness.resolved_identity
-    assert compatibility_readiness.freeze_identity == readiness.freeze_identity

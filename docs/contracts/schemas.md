@@ -26,7 +26,7 @@ ownerとし、1型1fileの旧pathはcompatibility facadeなしで退役する。
 | wire domain | canonical module | 主な型 |
 |---|---|---|
 | input frame / intent | `schemas.input` | `RawInputFrame`、`InputIntent`、`ContinuousEndpointVelocityIntent` |
-| command | `schemas.command` | `TargetCommand`、`JointCommand`、`MotionCommand` |
+| command | `schemas.command` | `TargetCommand`、`JointCommand`、`MotionCommand`、`JointPositionCommand`、`EndpointVelocityCommand` |
 | MuJoCo / render state | `schemas.state` | `BodyTransform`、`SiteTransform`、`MuJoCoState`、`RenderState` |
 | endpoint metadata | `schemas.endpoint` | `EndpointMetadata`とframe / status vocabulary |
 | viewer control message | `schemas.viewer_control` | viewer-to-backend control envelopeとstrict decoder |
@@ -54,9 +54,13 @@ domain間依存は`input / command / state / endpoint -> types`、`experiment_lo
 - `TargetCommand`: motion generationで使用するtarget-space command。
 - `JointCommand`: solver output / joint command boundaryの入力。
   `docs/contracts/kinematics-command-contract.md`を参照する。
-- `MotionCommand`: `mujoco_backend`が消費するmotion-layer command。
+- `MotionCommand`: runtime内部のmotion / safety envelope。
   `docs/contracts/motion-command.md`と
   `docs/contracts/kinematics-command-contract.md`を参照する。
+- `JointPositionCommand`: `joint_position_command/v1` providerが受理する
+  joint-position専用Robot/backend command。
+- `EndpointVelocityCommand`: `endpoint_velocity_command/v1` providerが受理する
+  endpoint-velocity専用Robot/backend command。
 - `BodyTransform`、`SiteTransform`: backendが抽出するrigid transform。
 - `MuJoCoState`: transport layerとviewer layerへ渡すbackend snapshot。
   `docs/contracts/mujoco-state.md`を参照する。
@@ -85,7 +89,7 @@ domain間依存は`input / command / state / endpoint -> types`、`experiment_lo
   command-side endpoint termである。`target_position_m`はcompatibility /
   viewer feedback metadataのままとする。
 - `MotionCommand.target`はtarget-side command bucketであり、qpos boundaryではない。
-- `MotionCommand.joint`はqpos command boundaryの入力であり、viewer feedbackではない。
+- `MotionCommand.joint`は`JointPositionCommand` projectionの入力であり、viewer feedbackではない。
 - `ViewerControlMessage`はschema-onlyのcontrol intentである。viewer-sideの
   simulation mutation、FK / IK recompute、physics mutationを許可しない。
 - `MuJoCoState.target_position_m`はviewer-visible feedbackであり、command sourceではない。

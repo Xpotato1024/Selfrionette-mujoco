@@ -162,7 +162,10 @@ providerなしのidentity宣言はできない。
 fast_arm / MuJoCoの現行motion generatorはendpoint targetまたはvelocity由来deltaをJacobianで
 candidate qposへ変換し、MuJoCo adapterへ`JointCommand(joint_angles_rad=...)`を渡す。したがって
 fast_armが実行providerを持つcommand semanticは`joint_position_command/v1`だけである。このproviderは
-既存MotionGenerator / safety後の`MotionCommand`をMuJoCo command applicationへ渡す。
+既存MotionGenerator / safety後の`MotionCommand.joint`をfiniteかつnon-emptyな
+`JointPositionCommand`へprojectionし、typed backend boundaryへ渡す。providerは`MotionCommand`、
+TargetCommand-only、joint-velocity-only envelopeを受理しない。MuJoCo backendはtyped commandを
+model joint orderのqposへ適用し、既存どおりqvelをzeroにしてstep前後のcommanded qposを維持する。
 `endpoint_velocity_command/v1`、`endpoint_position_command/v1`、`joint_velocity_command/v1`は
 versioned identityとして区別できるが、未実装のfast_arm capabilityとして宣言しない。
 

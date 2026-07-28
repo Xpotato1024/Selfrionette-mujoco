@@ -64,7 +64,10 @@ def test_replay_smoke_keeps_endpoint_evaluation_optional() -> None:
     records = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0))
 
     assert len(records) == 1
-    assert records[0].motion_command.joint is None
+    assert records[0].motion_command.joint is not None
+    assert records[0].motion_command.joint.joint_angles_rad == (
+        plan.pipeline.simulator.last_joint_position_command.joint_angles_rad
+    )
     assert records[0].state.target_position_m is None
     assert records[0].state.metadata["desired_endpoint_m"] == (0.6, 0.0, 0.1)
     assert "endpoint_evaluation" not in publisher.states[0].metadata

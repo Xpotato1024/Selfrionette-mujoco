@@ -3,6 +3,7 @@ from __future__ import annotations
 from selfrionette.schemas.command import (
     EndpointVelocityCommand,
     JointCommand,
+    JointPositionCommand,
     MotionCommand,
     RobotCommand,
     TargetCommand,
@@ -72,6 +73,7 @@ __all__ = [
     "ExperimentMotionLogRecord",
     "InputIntent",
     "JointCommand",
+    "JointPositionCommand",
     "JointVector",
     "MotionCommand",
     "MotionStatus",

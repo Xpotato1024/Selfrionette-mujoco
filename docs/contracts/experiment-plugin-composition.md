@@ -244,6 +244,10 @@ Mappingはconcrete Robot IDを、Robotはconcrete Mapping IDを参照しない�
 routeの最終semanticに対応する`RobotCommandSemanticProviderBinding`をRobot Bundleから解決し、route
 strategyが返すtyped execution bindingのroute / control / Robot semantic identityが一致することを
 検証する。Robot Bundleのsupported semantic集合はprovider bindingから導出し、identityだけを宣言できない。
+実装済みsemanticではsemantic identity、providerの`command_type`、実際に渡すtyped commandを一致させる。
+`joint_position_command/v1`は`JointPositionCommand`だけを、
+`endpoint_velocity_command/v1`は`EndpointVelocityCommand`だけを受理する。
+`MotionCommand`はruntime内部のmotion / safety envelopeであり、Robot command typeとしてbindしない。
 
 productionの4 Mapping分類は次のとおりである。
 
@@ -256,7 +260,7 @@ productionの4 Mapping分類は次のとおりである。
 
 continuous endpoint velocityを出力するMappingでも、現行routeはvelocityを`dt`で積分し、
 endpoint delta / desired endpoint position、Jacobian allocation、qpos feasibilityを経て
-`JointCommand(joint_angles_rad=...)`へ変換する。この経路をnative
+`MotionCommand.joint`を生成し、safety後に`JointPositionCommand`へprojectionする。この経路をnative
 `endpoint_velocity_command/v1` supportとは呼ばない。`endpoint_command/v1`もtarget / local endpoint
 motion generatorを構築する上位capabilityであり、`endpoint_position_command/v1`または
 `endpoint_velocity_command/v1`と同一ではない。

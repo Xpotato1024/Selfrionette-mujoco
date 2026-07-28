@@ -23,7 +23,7 @@ from selfrionette.runtime.composition.robot_bundle import (
     SemanticRoleBinding,
 )
 from selfrionette.runtime.experiment.contracts import JOINT_POSITION_COMMAND_V1
-from selfrionette.schemas import MotionCommand, RobotCommand
+from selfrionette.schemas import JointPositionCommand, RobotCommand
 from selfrionette.runtime.composition.robot_plugin import RobotRuntimePlugin
 from selfrionette.schemas import MuJoCoState
 
@@ -114,7 +114,7 @@ class RuntimeJointPositionCommandProvider:
     plugin: RobotRuntimePlugin
     robot_identity: VersionedIdentity | None = None
     command_semantics_identity = JOINT_POSITION_COMMAND_V1
-    command_type = MotionCommand
+    command_type = JointPositionCommand
 
     @property
     def assembly_binding(self) -> ProviderAssemblyBinding:
@@ -125,17 +125,20 @@ class RuntimeJointPositionCommandProvider:
         return ProviderAssemblyBinding(identity, self.plugin)
 
     def execute(self, command: RobotCommand, *, backend: object) -> None:
-        if not isinstance(command, MotionCommand):
+        if not isinstance(command, JointPositionCommand):
             raise TypeError(
-                "joint_position_command/v1 provider requires a MotionCommand "
-                "projection"
+                "joint_position_command/v1 provider requires "
+                "JointPositionCommand"
             )
-        apply_command = getattr(backend, "apply_command", None)
-        if not callable(apply_command):
+        apply_joint_position_command = getattr(
+            backend, "apply_joint_position_command", None
+        )
+        if not callable(apply_joint_position_command):
             raise TypeError(
-                "joint_position_command/v1 backend must provide apply_command()"
+                "joint_position_command/v1 backend must provide "
+                "apply_joint_position_command()"
             )
-        apply_command(command)
+        apply_joint_position_command(command)
 
 
 @dataclass(frozen=True, slots=True)

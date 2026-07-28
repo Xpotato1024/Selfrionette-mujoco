@@ -226,8 +226,11 @@ source lifecycle開始前にfail-closedとする。provider不在は
 `RuntimeInputSourceStepLoopPlan`はresolved routeをmetadataとして保持するだけでなく、同じidentityへ
 bindされた`CommandExecutionBinding`を必須保持し、run loopはそのbindingの`execute()`だけをcommand
 application入口として使用する。現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
-desired endpoint positionからJacobianでjoint-position commandを構築する。このconversionはruntime /
-controller ownerであり、fast_arm backendのnative endpoint-velocity能力ではない。
+desired endpoint positionからJacobianで`MotionCommand`を構築し、safety / qpos feasibility後に
+`JointPositionCommand`へprojectionする。missing joint、joint-velocity-only、empty positionは
+provider/backend到達前にrejectする。`MotionCommand`はdiagnostics用runtime envelopeとして保持し、
+Robot command semantic typeには使用しない。このconversionはruntime / controller ownerであり、
+fast_arm backendのnative endpoint-velocity能力ではない。
 
 - unknown profile、incompatible model、invalid joint orderはcomposition前に失敗する。
 - qpos feasibilityはcandidate全体を検証し、invalid candidateを部分適用しない。

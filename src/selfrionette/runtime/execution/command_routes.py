@@ -21,6 +21,7 @@ from selfrionette.runtime.safety.input_safety import (
 from selfrionette.schemas import (
     EndpointVelocityCommand,
     InputIntent,
+    JointPositionCommand,
     MotionCommand,
     MuJoCoState,
 )
@@ -88,6 +89,29 @@ def _validate_provider(
     return provider
 
 
+def project_joint_position_command(
+    command: MotionCommand,
+) -> JointPositionCommand:
+    """Project a validated runtime envelope onto the Robot command boundary."""
+
+    if not isinstance(command, MotionCommand):
+        raise TypeError(
+            "joint-position projection requires a MotionCommand envelope"
+        )
+    if command.joint is None:
+        raise ValueError(
+            "joint_position_command/v1 requires MotionCommand.joint"
+        )
+    if command.joint.joint_velocities_rad_s:
+        raise ValueError(
+            "joint_position_command/v1 does not accept joint velocities"
+        )
+    return JointPositionCommand(
+        timestamp_s=command.timestamp_s,
+        joint_angles_rad=command.joint.joint_angles_rad,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class JointPositionCommandExecutionBinding:
     route_identity: VersionedIdentity
@@ -120,10 +144,17 @@ class JointPositionCommandExecutionBinding:
             current_state=pre_step_state,
             qpos_feasibility_guard=pipeline.qpos_feasibility_guard,
         )
-        self.provider.execute(
-            safety_result.motion_command,
-            backend=pipeline.simulator,
+        robot_command = project_joint_position_command(
+            safety_result.motion_command
         )
+        self.provider.execute(robot_command, backend=pipeline.simulator)
+        record_motion_envelope = getattr(
+            pipeline.simulator,
+            "record_motion_command_envelope",
+            None,
+        )
+        if callable(record_motion_envelope):
+            record_motion_envelope(safety_result.motion_command)
         return safety_result
 
 
@@ -209,7 +240,7 @@ class JointPositionCommandRouteExecutionStrategy:
         typed_provider = _validate_provider(
             provider,
             semantic_identity=self.robot_command_semantics_identity,
-            command_type=MotionCommand,
+            command_type=JointPositionCommand,
         )
         return JointPositionCommandExecutionBinding(
             route_identity=self.route_identity,
@@ -247,5 +278,6 @@ __all__ = [
     "JointPositionCommandRouteExecutionStrategy",
     "NativeEndpointVelocityCommandExecutionBinding",
     "NativeEndpointVelocityCommandRouteExecutionStrategy",
+    "project_joint_position_command",
     "ResolvedCommandExecution",
 ]

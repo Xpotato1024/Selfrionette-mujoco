@@ -55,7 +55,6 @@ from selfrionette.runtime.experiment.contracts import (
     NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
 )
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
-from selfrionette.runtime.experiment.input_source import InputSourceMode
 from tests.support.input_source_plugin_doubles import (
     CONFORMANCE_INPUT_SOURCE,
     CONFORMANCE_SAMPLE_SCHEMA,
@@ -78,7 +77,11 @@ from selfrionette.runtime.composition.robot_bundle import (
     RobotBundle,
 )
 from selfrionette.plugins.robots.catalog import resolve_robot_bundle
-from selfrionette.schemas import EndpointVelocityCommand, MotionCommand
+from selfrionette.schemas import (
+    EndpointVelocityCommand,
+    JointPositionCommand,
+    MotionCommand,
+)
 
 
 TARGET_ROLE = SemanticRole("environment.target_object")
@@ -331,7 +334,7 @@ def _dummy_bundle(
                     (
                         EndpointVelocityCommand
                         if semantic_identity == ENDPOINT_VELOCITY_COMMAND_V1
-                        else MotionCommand
+                        else JointPositionCommand
                     ),
                 ),
             )
@@ -966,6 +969,29 @@ def test_robot_bundle_rejects_command_semantic_without_provider() -> None:
         match="bind at least one executable command semantic provider",
     ):
         _dummy_bundle(command_semantics=frozenset())
+
+
+def test_joint_position_route_rejects_broad_motion_command_provider() -> None:
+    bundle = _dummy_bundle()
+    provider_binding = bundle.command_semantic_providers[0]
+    mismatched_bundle = replace(
+        bundle,
+        command_semantic_providers=(
+            RobotCommandSemanticProviderBinding(
+                provider_binding.identity,
+                replace(
+                    provider_binding.provider,
+                    command_type=MotionCommand,
+                ),
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        TypeError,
+        match="command type mismatch",
+    ):
+        compose_experiment(_manifest(), _registries(bundle=mismatched_bundle))
 
 
 def test_selected_route_and_execution_binding_mismatch_fails_closed() -> None:

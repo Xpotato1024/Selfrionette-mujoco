@@ -204,10 +204,23 @@ def test_command_route_execution_is_provider_bound_without_central_id_dispatch()
         / "composition"
         / "robot_bundle.py"
     ).read_text(encoding="utf-8")
+    robot_provider_adapters = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "runtime"
+        / "composition"
+        / "robot_provider_adapters.py"
+    ).read_text(encoding="utf-8")
 
     assert "plan.command_execution.execute(" in step_loop
     assert "command_semantic_providers" in robot_bundle
     assert "supported_command_semantics:" not in robot_bundle
+    assert "command_type=JointPositionCommand" in command_routes
+    assert "command_type=MotionCommand" not in command_routes
+    assert "command_type=EndpointVelocityCommand" in command_routes
+    assert "command_type = JointPositionCommand" in robot_provider_adapters
+    assert "command_type = MotionCommand" not in robot_provider_adapters
     for concrete_route_constant in (
         "LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1",
         "ENDPOINT_DELTA_TO_JOINT_POSITION_V1",
