@@ -213,14 +213,19 @@ resolve Input Source / Mapping / Robot selections
 -> validate source-produced / Mapping-accepted schemas
 -> normalize and validate Mapping parameters
 -> resolve Mapping control semantics / runtime conversion route
--> validate final Robot command semantic
+-> resolve final Robot command semantic provider
+-> bind and validate typed command execution
 -> readiness / freeze
 -> source start
 -> serial / viewer / network I/O and MuJoCo stepping
 ```
 
-不一致は`mapping/Robot command semantics compatibility mismatch`としてsource lifecycle開始前に
-fail-closedとする。現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
+semantic provider不在、provider command type不一致、selected route / execution binding identity不一致は
+source lifecycle開始前にfail-closedとする。provider不在は
+`mapping/Robot command semantics compatibility mismatch`としてrejectする。
+`RuntimeInputSourceStepLoopPlan`はresolved routeをmetadataとして保持するだけでなく、同じidentityへ
+bindされた`CommandExecutionBinding`を必須保持し、run loopはそのbindingの`execute()`だけをcommand
+application入口として使用する。現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
 desired endpoint positionからJacobianでjoint-position commandを構築する。このconversionはruntime /
 controller ownerであり、fast_arm backendのnative endpoint-velocity能力ではない。
 

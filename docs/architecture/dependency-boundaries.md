@@ -91,8 +91,9 @@ Mappingに追加registration情報がない限り`mappings/registration.py`は�
   `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
 - Mapping packageとRobot packageは互いのconcrete IDをimportしない。Mappingのcontrol semantics、
-  selected runtime conversion route、Robotのsupported command semanticsを
-  `VersionedIdentity`で照合し、class名やmetadata keyによるcompatibility判定を行わない。
+  selected runtime conversion route、Robotのcommand semantic providerを`VersionedIdentity`で照合する。
+  routeはtyped executable strategy、Robotはtyped providerを所有し、generic runtimeが両者をbindする。
+  class名やmetadata keyによるcompatibility判定、generic runtime内のconcrete route ID dispatchを行わない。
 - generic Robot Profile contractは`selfrionette.runtime.composition.robot_profile`、viewer向けrobot declaration
   contractは`selfrionette.runtime.composition.viewer_robot_declaration`が所有する。旧flat moduleは退役済みである。
 - Selfrionetteの7-channel protocol、intrinsic normalization、typed health、serial / injected backendは

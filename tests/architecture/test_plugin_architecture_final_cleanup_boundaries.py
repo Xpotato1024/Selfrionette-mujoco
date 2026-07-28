@@ -179,6 +179,88 @@ def test_temporary_plugin_compatibility_facades_are_absent() -> None:
         assert retired_name not in runtime_contract
 
 
+def test_command_route_execution_is_provider_bound_without_central_id_dispatch() -> None:
+    command_routes = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "runtime"
+        / "execution"
+        / "command_routes.py"
+    ).read_text(encoding="utf-8")
+    step_loop = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "runtime"
+        / "execution"
+        / "input_step_loop.py"
+    ).read_text(encoding="utf-8")
+    robot_bundle = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "runtime"
+        / "composition"
+        / "robot_bundle.py"
+    ).read_text(encoding="utf-8")
+
+    assert "plan.command_execution.execute(" in step_loop
+    assert "command_semantic_providers" in robot_bundle
+    assert "supported_command_semantics:" not in robot_bundle
+    for concrete_route_constant in (
+        "LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1",
+        "ENDPOINT_DELTA_TO_JOINT_POSITION_V1",
+        "REPLAY_COMMAND_TO_JOINT_POSITION_V1",
+        "NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1",
+    ):
+        assert concrete_route_constant not in command_routes
+
+
+def test_endpoint_motion_capability_is_not_a_robot_command_semantic() -> None:
+    contracts = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "runtime"
+        / "experiment"
+        / "contracts.py"
+    ).read_text(encoding="utf-8")
+    bundle = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "runtime"
+        / "composition"
+        / "robot_bundle.py"
+    ).read_text(encoding="utf-8")
+    assert 'ENDPOINT_COMMAND_V1 = VersionedIdentity("endpoint_command", 1)' in bundle
+    assert (
+        'ENDPOINT_POSITION_COMMAND_V1 = VersionedIdentity("endpoint_position_command", 1)'
+        in contracts
+    )
+    assert (
+        'ENDPOINT_VELOCITY_COMMAND_V1 = VersionedIdentity("endpoint_velocity_command", 1)'
+        in contracts
+    )
+
+
+def test_evaluation_manifest_v3_has_no_misnamed_command_semantics_field() -> None:
+    manifest = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "runtime"
+        / "evaluation"
+        / "manifest.py"
+    ).read_text(encoding="utf-8")
+    assert '"command_semantics_route_identity"' in manifest
+    assert '"requested_command_semantics_route_identity"' in manifest
+    assert '"resolved_command_semantics_route"' in manifest
+    assert '"command_semantics_identity"' not in manifest
+    assert '"requested_command_semantics_identity"' not in manifest
+
+
 def test_first_party_package_basename_matches_logical_identity() -> None:
     for registration in INPUT_SOURCE_CATALOG.registrations:
         identity = registration.plugin.identity.name

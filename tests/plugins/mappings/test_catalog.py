@@ -107,7 +107,7 @@ def test_production_loadcell_source_and_mapping_compose_with_raw_schema_boundary
     manifest = build_test_manifest(
         input_source=PluginSelection("selfrionette", 1),
         control_mapping=PluginSelection("loadcell_endpoint_mapping", 1),
-        command_semantics=ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
+        command_semantics_route=ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
         parameters=(
             *build_test_manifest().parameters,
             PluginParameters(

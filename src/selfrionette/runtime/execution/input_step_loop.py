@@ -11,7 +11,11 @@ from selfrionette.plugins.input_sources.viewer import (
     ViewerInputSource,
     ViewerManagedInputSourceReader,
 )
-from selfrionette.plugins.robots.catalog import resolve_robot_bundle, resolve_robot_profile
+from selfrionette.plugins.robots.catalog import (
+    RobotCatalog,
+    resolve_robot_bundle,
+    resolve_robot_profile,
+)
 from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
@@ -34,16 +38,16 @@ from selfrionette.runtime.experiment.input_source import (
     ViewerBridgeRuntimeCapability,
     ViewerEndpointRebaseCapability,
 )
-from selfrionette.runtime.experiment.composition import resolve_command_semantics_route
+from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import (
     CommandSemanticsRoute,
     ControlMappingPlugin,
 )
-from selfrionette.runtime.safety.input_safety import build_runtime_input_safety_result
 from selfrionette.runtime.execution.live_timing import (
     AbsoluteDeadlinePacer,
     LiveRuntimeTimingMetrics,
 )
+from selfrionette.runtime.execution.command_routes import CommandExecutionBinding
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -84,15 +88,29 @@ class RuntimeInputSourceStepLoopPlan:
     pipeline: ControlMappedRuntimePipeline
     annotate_target_position_m: bool
     endpoint_pose_provider: EndpointPoseProvider
-    endpoint_command_provider: EndpointCommandProvider
+    endpoint_command_provider: EndpointCommandProvider | None
     qpos_feasibility_provider: QposFeasibilityProvider
     endpoint_site_name: str | None
     execution_adapter: RuntimeInputSourceExecutionAdapter
     control_mapping: ControlMappingPlugin
-    command_semantics: CommandSemanticsRoute
+    command_semantics_route: CommandSemanticsRoute
+    command_execution: CommandExecutionBinding
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.command_execution.route_identity
+            != self.command_semantics_route.identity
+            or self.command_execution.control_semantics_identity
+            != self.command_semantics_route.control_semantics_identity
+            or self.command_execution.robot_command_semantics_identity
+            != self.command_semantics_route.robot_command_semantics_identity
+        ):
+            raise ValueError(
+                "runtime plan command route/execution binding mismatch"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +162,7 @@ def build_runtime_input_source_step_loop_plan(
     model_path: str | Path | None = None,
     viewer_clock: Callable[[], float] | None = None,
     viewer_input_source: ViewerInputSource | None = None,
+    robot_catalog: RobotCatalog | None = None,
 ) -> RuntimeInputSourceStepLoopPlan:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     execution_adapter = selection.execution_adapter
@@ -157,33 +176,46 @@ def build_runtime_input_source_step_loop_plan(
         )
     if runtime_config.robot_profile_id is None:
         raise ValueError("production input step-loop requires robot_profile_id")
-    profile = resolve_robot_profile(
-        runtime_config.robot_profile_id,
-        robot_logical_version=runtime_config.robot_logical_version,
-    )
-    robot_bundle = resolve_robot_bundle(
-        runtime_config.robot_profile_id,
-        robot_logical_version=runtime_config.robot_logical_version,
-    )
+    robot_selection = runtime_config.robot_selection
+    assert robot_selection is not None
+    if robot_catalog is None:
+        profile = resolve_robot_profile(
+            runtime_config.robot_profile_id,
+            robot_logical_version=runtime_config.robot_logical_version,
+        )
+        robot_bundle = resolve_robot_bundle(
+            runtime_config.robot_profile_id,
+            robot_logical_version=runtime_config.robot_logical_version,
+        )
+    else:
+        profile = robot_catalog.resolve_profile(robot_selection)
+        robot_bundle = robot_catalog.resolve_bundle(robot_selection)
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
-    command_semantics = resolve_command_semantics_route(
+    resolved_command_execution = resolve_command_execution(
         selection.control_mapping,
         robot_bundle,
-        selection.command_semantics_selection,
+        selection.command_semantics_route_selection,
     )
+    command_semantics_route = resolved_command_execution.route
+    command_execution = resolved_command_execution.binding
     if (
-        selection.resolved_command_semantics is not None
-        and selection.resolved_command_semantics != command_semantics
+        selection.resolved_command_semantics_route is not None
+        and selection.resolved_command_semantics_route != command_semantics_route
     ):
         raise ValueError("runtime command semantics selection changed after source readiness")
     plugin = robot_bundle.runtime_plugin
     endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
-    endpoint_command_provider = robot_bundle.provider(ENDPOINT_COMMAND_V1)
+    endpoint_command_provider = (
+        robot_bundle.provider(ENDPOINT_COMMAND_V1)
+        if command_execution.requires_motion_generator
+        else None
+    )
     qpos_feasibility_provider = robot_bundle.provider(QPOS_FEASIBILITY_V1)
     initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
     assert isinstance(endpoint_pose_provider, EndpointPoseProvider)
-    assert isinstance(endpoint_command_provider, EndpointCommandProvider)
+    if endpoint_command_provider is not None:
+        assert isinstance(endpoint_command_provider, EndpointCommandProvider)
     assert isinstance(qpos_feasibility_provider, QposFeasibilityProvider)
     assert isinstance(initial_state_provider, ResetInitialStateProvider)
     initial_state = initial_state_provider.resolve_initial_state()
@@ -197,7 +229,8 @@ def build_runtime_input_source_step_loop_plan(
         "endpoint_command_provider": endpoint_command_provider,
         "qpos_feasibility_provider": qpos_feasibility_provider,
         "endpoint_site_name": robot_bundle.profile.endpoint.site_name,
-        "command_semantics": command_semantics,
+        "command_semantics_route": command_semantics_route,
+        "command_execution": command_execution,
     }
 
     if viewer_input_source is not None and not execution_adapter.uses_viewer_endpoint_compatibility:
@@ -215,6 +248,8 @@ def build_runtime_input_source_step_loop_plan(
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
             mapping_input_adapter=selection.mapping_input_adapter,
+            robot_catalog=robot_catalog,
+            build_motion_generator=command_execution.requires_motion_generator,
         )
         if selection.runtime_reader is not None:
             pipeline.input_source = selection.runtime_reader
@@ -312,11 +347,15 @@ def build_runtime_input_source_step_loop_plan(
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
             mapping_input_adapter=selection.mapping_input_adapter,
+            robot_catalog=robot_catalog,
+            build_motion_generator=command_execution.requires_motion_generator,
         )
         pipeline.input_source = pipeline_input_source
-        pipeline.motion_generator = (
-            endpoint_command_provider.build_local_endpoint_motion_generator()
-        )
+        if command_execution.requires_motion_generator:
+            assert endpoint_command_provider is not None
+            pipeline.motion_generator = (
+                endpoint_command_provider.build_local_endpoint_motion_generator()
+            )
         initial_tip_site_position_m = _extract_current_endpoint_m(
             pipeline, endpoint_pose_provider
         )
@@ -368,15 +407,12 @@ async def run_runtime_input_source_step_loop(
     reader = plan.pipeline.input_source
     managed_reader = reader if isinstance(reader, ManagedInputSource) else None
     start_attempted = False
-    start_completed = False
     close_attempted = False
-    close_completed = False
     primary_failure: BaseException | None = None
     try:
         if managed_reader is not None:
             start_attempted = True
             managed_reader.start()
-            start_completed = True
         return await _run_runtime_input_source_step_loop(
             plan,
             steps=steps,
@@ -394,7 +430,6 @@ async def run_runtime_input_source_step_loop(
             close_attempted = True
             try:
                 managed_reader.close()
-                close_completed = True
             except BaseException as cleanup_failure:
                 if primary_failure is not None:
                     primary_failure.add_note(
@@ -519,16 +554,12 @@ async def _run_runtime_input_source_step_loop(
                 intent,
                 metadata=build_viewer_local_motion_metadata(motion_intent_metadata, dt_s=dt),
             )
-        current_qpos_rad = tuple(pre_step_state.qpos)
-        set_current_qpos = getattr(plan.pipeline.motion_generator, "set_current_qpos_rad", None)
-        if callable(set_current_qpos):
-            set_current_qpos(current_qpos_rad)
-        motion_command = plan.pipeline.motion_generator.update(motion_intent, dt)
-        safety_result = build_runtime_input_safety_result(
-            motion_command,
+        safety_result = plan.command_execution.execute(
+            motion_intent,
+            dt_s=dt,
+            pre_step_state=pre_step_state,
             source_state=source_state,
-            current_state=pre_step_state,
-            qpos_feasibility_guard=plan.pipeline.qpos_feasibility_guard,
+            pipeline=plan.pipeline,
         )
         step_endpoint_m = last_valid_endpoint_m
         if (
@@ -541,7 +572,6 @@ async def _run_runtime_input_source_step_loop(
 
         compute_finished_s = timing_metrics.clock() if timing_metrics is not None else 0.0
         simulation_started_s = compute_finished_s
-        plan.pipeline.simulator.apply_command(safety_result.motion_command)
         plan.pipeline.simulator.step(dt)
 
         state = plan.pipeline.simulator.snapshot()

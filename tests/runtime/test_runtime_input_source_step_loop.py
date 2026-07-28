@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from math import dist
 
 import pytest
 
 import selfrionette.runtime.execution.input_step_loop as input_step_loop
 from selfrionette.plugins.input_sources.viewer import ViewerInputSource
-from selfrionette.plugins.robots.catalog import resolve_robot_bundle
+from selfrionette.plugins.robots.catalog import (
+    registered_robot_bundle_ids,
+    resolve_robot_bundle,
+)
+from selfrionette.plugins.robots.fast_arm.adapter.initial_state import (
+    FAST_ARM_INITIAL_STATE_CONTRACT,
+)
 from selfrionette.plugins.robots.fast_arm.adapter.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime.execution.input_step_loop import (
@@ -20,14 +26,34 @@ from selfrionette.runtime.control.input_source_selection import select_runtime_i
 from selfrionette.runtime.experiment.contracts import (
     CommandSemanticsRoute,
     ENDPOINT_VELOCITY_COMMAND_V1,
+    JOINT_POSITION_COMMAND_V1,
     NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+    VersionedIdentity,
+)
+from selfrionette.runtime.execution.command_routes import (
+    JointPositionCommandExecutionBinding,
+    NativeEndpointVelocityCommandRouteExecutionStrategy,
+)
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.composition.robot_provider_adapters import (
+    NamedKeyframeInitialStateProvider,
+    RuntimeEndpointPoseProvider,
+    RuntimeQposFeasibilityProvider,
 )
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
+    RESET_INITIAL_STATE_V1,
+    CapabilityProviderBinding,
+    ProviderAssemblyBinding,
+    RobotBundle,
+    RobotCommandSemanticProviderBinding,
 )
 from selfrionette.schemas import (
+    EndpointVelocityCommand,
+    InputIntent,
+    MuJoCoState,
     RawInputFrame,
     ViewerControlKeyboardMessage,
     ViewerControlMessage,
@@ -72,6 +98,13 @@ def test_incompatible_command_semantics_rejects_before_source_start() -> None:
         identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
         control_semantics_identity=selection.control_mapping.mapping_semantics_identity,
         robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+        execution_strategy=NativeEndpointVelocityCommandRouteExecutionStrategy(
+            route_identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+            control_semantics_identity=(
+                selection.control_mapping.mapping_semantics_identity
+            ),
+            robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+        ),
     )
     native_mapping = replace(
         selection.control_mapping,
@@ -89,8 +122,8 @@ def test_incompatible_command_semantics_rejects_before_source_start() -> None:
         selection,
         runtime_reader=source,
         control_mapping=native_mapping,
-        command_semantics_selection=native_route.identity,
-        resolved_command_semantics=native_route,
+        command_semantics_route_selection=native_route.identity,
+        resolved_command_semantics_route=native_route,
     )
 
     with pytest.raises(
@@ -102,6 +135,205 @@ def test_incompatible_command_semantics_rejects_before_source_start() -> None:
     assert source.start_count == 0
 
 
+def test_native_endpoint_velocity_route_executes_provider_without_joint_path() -> None:
+    selection = select_runtime_input_source(
+        "replay",
+        steps=1,
+        frames=(
+            RawInputFrame(
+                source="native_velocity_fixture",
+                timestamp_s=1.25,
+                metadata={
+                    "source_active": True,
+                    "command_age_ms": 0,
+                    "stale_reason": None,
+                },
+            ),
+        ),
+    )
+    assert selection.control_mapping is not None
+    control_semantics = selection.control_mapping.mapping_semantics_identity
+    assert control_semantics is not None
+
+    class _NativeVelocityMappingStrategy:
+        mapping_semantics_identity = control_semantics
+
+        def map_input(self, input_intent, parameters):
+            _ = parameters
+            assert isinstance(input_intent, RawInputFrame)
+            return InputIntent(
+                source=input_intent.source,
+                timestamp_s=input_intent.timestamp_s,
+                metadata={
+                    **dict(input_intent.metadata),
+                    "local_endpoint_velocity_m_s": (0.1, -0.2, 0.3),
+                    "local_endpoint_velocity_frame": "world",
+                },
+            )
+
+    native_route = CommandSemanticsRoute(
+        identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+        control_semantics_identity=control_semantics,
+        robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+        execution_strategy=NativeEndpointVelocityCommandRouteExecutionStrategy(
+            route_identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+            control_semantics_identity=control_semantics,
+            robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+        ),
+    )
+    native_mapping = replace(
+        selection.control_mapping,
+        strategy=_NativeVelocityMappingStrategy(),
+        command_semantics_routes=frozenset({native_route}),
+    )
+
+    class _FakeSimulator:
+        def __init__(self) -> None:
+            self.model = object()
+            self.commands: list[EndpointVelocityCommand] = []
+            self.frame_index = 0
+
+        def apply_endpoint_velocity_command(
+            self, command: EndpointVelocityCommand
+        ) -> None:
+            self.commands.append(command)
+
+        def step(self, dt_s: float) -> None:
+            _ = dt_s
+            self.frame_index += 1
+
+        def snapshot(self) -> MuJoCoState:
+            return MuJoCoState(
+                frame_index=self.frame_index,
+                time_s=float(self.frame_index) / 60.0,
+                qpos=FAST_ARM_INITIAL_STATE_CONTRACT.qpos_rad,
+                qvel=(0.0,) * len(FAST_ARM_INITIAL_STATE_CONTRACT.qpos_rad),
+            )
+
+    class _TestRuntimePlugin:
+        profile = FAST_ARM_ROBOT_PROFILE
+
+        @property
+        def profile_id(self) -> str:
+            return self.profile.profile_id
+
+        def build_simulator(self, **kwargs):
+            _ = kwargs
+            return _FakeSimulator()
+
+        def validate_model(self, model) -> None:
+            _ = model
+
+        def build_qpos_feasibility_guard(self, **kwargs):
+            _ = kwargs
+            from selfrionette.runtime.safety.qpos_feasibility import (
+                NoOpQposFeasibilityGuard,
+            )
+
+            return NoOpQposFeasibilityGuard()
+
+        def endpoint_position_from_state(self, state):
+            _ = state
+            return FAST_ARM_INITIAL_STATE_CONTRACT.tip_position_m
+
+        def endpoint_orientation_from_state(self, state):
+            _ = state
+            return FAST_ARM_INITIAL_STATE_CONTRACT.tool_orientation_wxyz
+
+    plugin = _TestRuntimePlugin()
+
+    @dataclass
+    class _NativeVelocityProvider:
+        received: list[EndpointVelocityCommand]
+        assembly_binding: ProviderAssemblyBinding
+        command_semantics_identity = ENDPOINT_VELOCITY_COMMAND_V1
+        command_type = EndpointVelocityCommand
+
+        def execute(self, command, *, backend) -> None:
+            assert isinstance(command, EndpointVelocityCommand)
+            self.received.append(command)
+            backend.apply_endpoint_velocity_command(command)
+
+    received: list[EndpointVelocityCommand] = []
+    provider = _NativeVelocityProvider(
+        received,
+        ProviderAssemblyBinding(
+            VersionedIdentity("fast_arm", 1),
+            plugin,
+        ),
+    )
+    bundle = RobotBundle(
+        identity=VersionedIdentity("fast_arm", 1),
+        profile=FAST_ARM_ROBOT_PROFILE,
+        runtime_plugin=plugin,
+        capability_providers=(
+            CapabilityProviderBinding(
+                RESET_INITIAL_STATE_V1,
+                NamedKeyframeInitialStateProvider(
+                    FAST_ARM_ROBOT_PROFILE,
+                    FAST_ARM_INITIAL_STATE_CONTRACT,
+                ),
+            ),
+            CapabilityProviderBinding(
+                ENDPOINT_POSE_V1,
+                RuntimeEndpointPoseProvider(plugin),
+            ),
+            CapabilityProviderBinding(
+                QPOS_FEASIBILITY_V1,
+                RuntimeQposFeasibilityProvider(plugin),
+            ),
+        ),
+        command_semantic_providers=(
+            RobotCommandSemanticProviderBinding(
+                ENDPOINT_VELOCITY_COMMAND_V1,
+                provider,
+            ),
+        ),
+    )
+
+    class _TestRobotCatalog:
+        def resolve_profile(self, robot_selection):
+            assert robot_selection.plugin_id == "fast_arm"
+            return bundle.profile
+
+        def resolve_bundle(self, robot_selection):
+            assert robot_selection.plugin_id == "fast_arm"
+            return bundle
+
+    native_selection = replace(
+        selection,
+        control_mapping=native_mapping,
+        command_semantics_route_selection=native_route.identity,
+        resolved_command_semantics_route=native_route,
+    )
+    plan = build_runtime_input_source_step_loop_plan(
+        native_selection,
+        config=RuntimeConfig(robot_profile_id="fast_arm"),
+        robot_catalog=_TestRobotCatalog(),
+    )
+
+    class _ForbiddenJointPositionGenerator:
+        def update(self, intent, dt_s):
+            raise AssertionError(
+                f"joint-position generator was invoked: {intent!r}, {dt_s!r}"
+            )
+
+    plan.pipeline.motion_generator = _ForbiddenJointPositionGenerator()
+    records = asyncio.run(
+        run_runtime_input_source_step_loop(plan, steps=1, dt_s=1.0 / 60.0)
+    )
+
+    assert plan.command_execution.route_identity == native_route.identity
+    assert plan.command_execution.requires_motion_generator is False
+    assert len(received) == 1
+    assert received[0].velocity_m_s == pytest.approx((0.1, -0.2, 0.3))
+    assert received[0].frame == "world"
+    assert plan.pipeline.simulator.commands == received
+    assert records[0].motion_command.joint is None
+    assert "endpoint_delta_m" not in records[0].motion_command.metadata
+    assert registered_robot_bundle_ids() == ("fast_arm",)
+
+
 def _build_plan(clock: _ClockSequence):
     viewer_input_source = ViewerInputSource(clock=clock.monotonic)
     plan = build_runtime_input_source_step_loop_plan(
@@ -111,6 +343,24 @@ def _build_plan(clock: _ClockSequence):
         viewer_input_source=viewer_input_source,
     )
     return viewer_input_source, plan
+
+
+def test_production_plan_binds_existing_joint_position_execution_path() -> None:
+    _, plan = _build_plan(_ClockSequence((0.0,)))
+
+    assert isinstance(
+        plan.command_execution,
+        JointPositionCommandExecutionBinding,
+    )
+    assert plan.command_execution.route_identity == (
+        plan.command_semantics_route.identity
+    )
+    assert (
+        plan.command_execution.robot_command_semantics_identity
+        == JOINT_POSITION_COMMAND_V1
+    )
+    assert plan.command_execution.requires_motion_generator is True
+    assert plan.endpoint_command_provider is not None
 
 
 def test_runtime_first_state_payload_rebase_and_marker_share_canonical_pose() -> None:

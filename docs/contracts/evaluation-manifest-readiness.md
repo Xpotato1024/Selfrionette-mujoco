@@ -38,8 +38,9 @@ software gateであり、model load、MuJoCo forward / step、hardware accessを
 - `schema_version=evaluation-manifest/v3`とcontract version。command semantics selection追加に伴う明示的なversion updateであり、v2以前へ暗黙補完しない。
 - repository、software revision、Robot Bundle、Robot Profile、Runtime Plugin、model contract、canonical initial-state contract
 - Environment、Control Mapping、Task、Input Source、Evaluatorの`PluginSelection`と各contract version
-- selected `command_semantics_identity`。同じInput Source / Mapping / Robot selectionでも
-  runtime conversionまたはnative command方式が異なる条件を区別する
+- selected `command_semantics_route_identity`。これはRobot command semanticではなくrequested
+  runtime/controller route identityである。同じInput Source / Mapping / Robot selectionでもruntime
+  conversionまたはnative command方式が異なる条件を区別する
 - axis-scoped `PluginParameterOwner`とrecursive canonical JSON parameter values
 - named initial keyframe、finite initial qpos、initial tip position / frame / unit、WXYZ unit quaternion
 - target family / identity / world position、initial-tip-to-target distance identity
@@ -91,7 +92,7 @@ requested identityはmanifestのcanonical bytesと`manifest_digest`が表す。r
 - versioned canonical initial-state contract identityとverification identity
 - actual `SoftwareExecutionIdentity`
 - resolved mapping comparison-family / mapping-semantics identityとcontrol frame
-- resolved command route identity、Mapping control semantics identity、final Robot command semantic
+- requested / resolved command route identity、Mapping control semantics identity、final Robot command semantic
 
 requested selectionは「何を要求したか」、resolved identityは「startupで何へ解決されたか」であり、
 同一視しない。registry lookup、compatibility、required capability、semantic role、evidence producer、
@@ -107,7 +108,8 @@ tip / orientationのframe・unit・quaternion、target geometry、manifestとact
 Robot Bundle providerのcanonical initial-state contract（identity、keyframe、qpos、tip、orientation、frame、
 unit、quaternion order）、mapping comparison family / semantics identityを検証する。
 さらにselected command routeがMapping declarationに存在し、そのcontrol semanticsがMappingの
-`mapping_semantics_identity`と一致し、final command semanticをRobot Bundleがsupportすることを
+`mapping_semantics_identity`と一致し、final command semanticのtyped providerをRobot Bundleが持ち、
+route strategyから解決したexecution bindingの3 identityがrouteと一致することを
 source start、model step、external I/Oより前に検証する。
 
 成功時だけ`EvaluationReadiness`を返す。resultはcanonical requested manifest identity、resolved
@@ -150,8 +152,10 @@ freeze digestを保持する。freeze digestはmanifestとresolved identityを`e
 evidence producer、semantic role descriptor、profile / model contract、initial-state contract identity、
 actual software execution identity、mapping comparison family / semantics identityの変更を
 検出できる。
-command route、control semantics、final Robot command semanticの変更もcanonical requested /
-resolved materialへ含まれ、freeze identityを変更する。
+requested fieldは`requested_command_semantics_route_identity`、resolved fieldは
+`resolved_command_semantics_route`とし、route identity、control semantics、final Robot command
+semanticを混同しない。これらの変更はcanonical requested / resolved materialへ含め、route差分が
+manifest digest、resolved identity digest、freeze identityを変更する。
 
 #423のpackage / import-direction migrationは、これらのlogical identityとcanonical bytesを維持する。
 source file path、package location、compatibility re-exportだけの変更はfreeze identityを変更しない。

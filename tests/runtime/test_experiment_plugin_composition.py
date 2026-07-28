@@ -11,6 +11,14 @@ from selfrionette.runtime.composition.robot_profile import (
     RobotProfile,
 )
 from selfrionette.runtime.composition.robot_provider_adapters import NamedKeyframeInitialStateProvider
+from selfrionette.plugins.mappings._command_routes import (
+    joint_position_command_route,
+)
+from selfrionette.runtime.execution.command_routes import (
+    JointPositionCommandExecutionBinding,
+    JointPositionCommandRouteExecutionStrategy,
+    NativeEndpointVelocityCommandRouteExecutionStrategy,
+)
 from selfrionette.runtime.experiment.composition import (
     EvidenceProducerBinding,
     ExperimentPluginManifest,
@@ -66,9 +74,11 @@ from selfrionette.runtime.composition.robot_bundle import (
     ROBOT_TOOL_ENDPOINT_ROLE,
     SCENE_ROLE_BINDING_V1,
     CapabilityProviderBinding,
+    RobotCommandSemanticProviderBinding,
     RobotBundle,
 )
 from selfrionette.plugins.robots.catalog import resolve_robot_bundle
+from selfrionette.schemas import EndpointVelocityCommand, MotionCommand
 
 
 TARGET_ROLE = SemanticRole("environment.target_object")
@@ -141,6 +151,17 @@ class _EndpointCommandProvider:
 
     def build_local_endpoint_motion_generator(self):
         return object()
+
+
+@dataclass(frozen=True)
+class _CommandSemanticProvider:
+    assembly_binding: ProviderAssemblyBinding
+    command_semantics_identity: VersionedIdentity
+    command_type: type
+
+    def execute(self, command, *, backend):
+        _ = command
+        _ = backend
 
 
 @dataclass(frozen=True)
@@ -242,7 +263,7 @@ def _dummy_bundle(
     duplicate_endpoint_pose: bool = False,
     parameter_contract: ParameterContract = ParameterContract(),
     initial_state_contract: InitialStateContract | None = None,
-    supported_command_semantics: frozenset[VersionedIdentity] = frozenset(
+    command_semantics: frozenset[VersionedIdentity] = frozenset(
         {JOINT_POSITION_COMMAND_V1}
     ),
 ) -> RobotBundle:
@@ -301,7 +322,21 @@ def _dummy_bundle(
         profile=profile,
         runtime_plugin=plugin,
         capability_providers=tuple(providers),
-        supported_command_semantics=supported_command_semantics,
+        command_semantic_providers=tuple(
+            RobotCommandSemanticProviderBinding(
+                semantic_identity,
+                _CommandSemanticProvider(
+                    ProviderAssemblyBinding(identity, plugin),
+                    semantic_identity,
+                    (
+                        EndpointVelocityCommand
+                        if semantic_identity == ENDPOINT_VELOCITY_COMMAND_V1
+                        else MotionCommand
+                    ),
+                ),
+            )
+            for semantic_identity in sorted(command_semantics)
+        ),
         parameter_contract=parameter_contract,
     )
 
@@ -354,12 +389,11 @@ def _mapping(
         mapping_semantics_identity=VersionedIdentity("dummy_mapping_semantics", 1),
         command_semantics_routes=frozenset(
             {
-                CommandSemanticsRoute(
-                    identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+                joint_position_command_route(
+                    route_identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
                     control_semantics_identity=VersionedIdentity(
                         "dummy_mapping_semantics", 1
                     ),
-                    robot_command_semantics_identity=JOINT_POSITION_COMMAND_V1,
                 )
             }
         ),
@@ -450,7 +484,7 @@ def _manifest(**overrides) -> ExperimentPluginManifest:
         "control_mapping": PluginSelection("dummy_mapping", 1),
         "task": PluginSelection("dummy_reach_task", 1),
         "input_source": PluginSelection(CONFORMANCE_INPUT_SOURCE.name, 1),
-        "command_semantics": LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+        "command_semantics_route": LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
         "evaluators": (PluginSelection("dummy_success_evaluator", 1),),
         "parameters": (
             PluginParameters(
@@ -870,21 +904,30 @@ def test_native_endpoint_velocity_route_composes_with_test_only_robot() -> None:
         identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
         control_semantics_identity=VersionedIdentity("dummy_mapping_semantics", 1),
         robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+        execution_strategy=NativeEndpointVelocityCommandRouteExecutionStrategy(
+            route_identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+            control_semantics_identity=VersionedIdentity(
+                "dummy_mapping_semantics", 1
+            ),
+            robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+        ),
     )
     mapping = replace(
         _mapping(),
         command_semantics_routes=frozenset({native_route}),
     )
     robot = _dummy_bundle(
-        supported_command_semantics=frozenset({ENDPOINT_VELOCITY_COMMAND_V1})
+        command_semantics=frozenset({ENDPOINT_VELOCITY_COMMAND_V1})
     )
 
     resolved = compose_experiment(
-        _manifest(command_semantics=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1),
+        _manifest(
+            command_semantics_route=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1
+        ),
         _registries(mapping=mapping, bundle=robot),
     )
 
-    assert resolved.resolved_command_semantics == native_route
+    assert resolved.resolved_command_semantics_route == native_route
 
 
 def test_native_endpoint_velocity_route_rejects_joint_position_only_robot() -> None:
@@ -892,6 +935,13 @@ def test_native_endpoint_velocity_route_rejects_joint_position_only_robot() -> N
         identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
         control_semantics_identity=VersionedIdentity("dummy_mapping_semantics", 1),
         robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+        execution_strategy=NativeEndpointVelocityCommandRouteExecutionStrategy(
+            route_identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+            control_semantics_identity=VersionedIdentity(
+                "dummy_mapping_semantics", 1
+            ),
+            robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+        ),
     )
     mapping = replace(
         _mapping(),
@@ -903,9 +953,60 @@ def test_native_endpoint_velocity_route_rejects_joint_position_only_robot() -> N
         match="mapping/Robot command semantics compatibility mismatch",
     ):
         compose_experiment(
-            _manifest(command_semantics=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1),
+            _manifest(
+                command_semantics_route=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1
+            ),
             _registries(mapping=mapping),
         )
+
+
+def test_robot_bundle_rejects_command_semantic_without_provider() -> None:
+    with pytest.raises(
+        ValueError,
+        match="bind at least one executable command semantic provider",
+    ):
+        _dummy_bundle(command_semantics=frozenset())
+
+
+def test_selected_route_and_execution_binding_mismatch_fails_closed() -> None:
+    control_semantics = VersionedIdentity("dummy_mapping_semantics", 1)
+
+    @dataclass(frozen=True)
+    class _MismatchedBindingStrategy:
+        route_identity = LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
+        control_semantics_identity = control_semantics
+        robot_command_semantics_identity = JOINT_POSITION_COMMAND_V1
+
+        def bind(self, provider):
+            valid = JointPositionCommandRouteExecutionStrategy(
+                route_identity=self.route_identity,
+                control_semantics_identity=self.control_semantics_identity,
+                robot_command_semantics_identity=(
+                    self.robot_command_semantics_identity
+                ),
+            ).bind(provider)
+            assert isinstance(valid, JointPositionCommandExecutionBinding)
+            return replace(
+                valid,
+                route_identity=VersionedIdentity("wrong_execution_route", 1),
+            )
+
+    route = CommandSemanticsRoute(
+        identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+        control_semantics_identity=control_semantics,
+        robot_command_semantics_identity=JOINT_POSITION_COMMAND_V1,
+        execution_strategy=_MismatchedBindingStrategy(),
+    )
+    mapping = replace(
+        _mapping(),
+        command_semantics_routes=frozenset({route}),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="selected command route and execution binding identity mismatch",
+    ):
+        compose_experiment(_manifest(), _registries(mapping=mapping))
 
 
 def test_cross_plugin_compatibility_rejects_robot_bundle_version_mismatch() -> None:

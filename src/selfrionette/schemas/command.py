@@ -2,8 +2,30 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from math import isfinite
 
 from selfrionette.schemas.types import Vector3
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointVelocityCommand:
+    timestamp_s: float
+    velocity_m_s: Vector3
+    frame: str
+
+    def __post_init__(self) -> None:
+        velocity = tuple(float(component) for component in self.velocity_m_s)
+        if len(velocity) != 3 or not all(isfinite(component) for component in velocity):
+            raise ValueError(
+                "endpoint velocity command must contain exactly three finite values"
+            )
+        if self.frame not in {"world", "tool"}:
+            raise ValueError(
+                "endpoint velocity command frame must be 'world' or 'tool'"
+            )
+        if not isfinite(self.timestamp_s):
+            raise ValueError("endpoint velocity command timestamp must be finite")
+        object.__setattr__(self, "velocity_m_s", velocity)
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,4 +48,13 @@ class MotionCommand:
     metadata: Mapping[str, object] = field(default_factory=dict)
 
 
-__all__ = ["JointCommand", "MotionCommand", "TargetCommand"]
+RobotCommand = EndpointVelocityCommand | MotionCommand
+
+
+__all__ = [
+    "EndpointVelocityCommand",
+    "JointCommand",
+    "MotionCommand",
+    "RobotCommand",
+    "TargetCommand",
+]

@@ -229,18 +229,21 @@ mappingはrequired Robot capabilityを宣言し、利用不能時に別mapping�
 ### control semanticsとRobot command semantics
 
 Mapping output/control semantics、runtime/controller conversion semantics、Robot/backend command
-semanticsは別契約である。`CommandSemanticsRoute`は次の3 identityを一つのversioned experiment
-conditionとして保持する。
+semanticsは別契約である。`CommandSemanticsRoute`は次の3 identityとtyped executable strategyを
+一つのversioned experiment conditionとして保持する。
 
 - route identity: runtime/controller conversionまたはnative passthroughの方式
 - `control_semantics_identity`: operator inputをMappingが何として解釈したか
 - `robot_command_semantics_identity`: route後にRobot/backendが直接受理するcommand
+- executable strategy: selected routeとRobot command providerをbindし、runtimeが実際に実行する変換
 
 Robot command semanticは少なくとも`endpoint_position_command/v1`、
 `endpoint_velocity_command/v1`、`joint_position_command/v1`、
 `joint_velocity_command/v1`を区別する。class名、module名、metadata keyから推論しない。
-Mappingはconcrete Robot IDを、Robotはconcrete Mapping IDを参照せず、selected routeの最終semanticと
-`RobotBundle.supported_command_semantics`だけをgeneric compositionが照合する。
+Mappingはconcrete Robot IDを、Robotはconcrete Mapping IDを参照しない。generic compositionはselected
+routeの最終semanticに対応する`RobotCommandSemanticProviderBinding`をRobot Bundleから解決し、route
+strategyが返すtyped execution bindingのroute / control / Robot semantic identityが一致することを
+検証する。Robot Bundleのsupported semantic集合はprovider bindingから導出し、identityだけを宣言できない。
 
 productionの4 Mapping分類は次のとおりである。
 
@@ -254,8 +257,15 @@ productionの4 Mapping分類は次のとおりである。
 continuous endpoint velocityを出力するMappingでも、現行routeはvelocityを`dt`で積分し、
 endpoint delta / desired endpoint position、Jacobian allocation、qpos feasibilityを経て
 `JointCommand(joint_angles_rad=...)`へ変換する。この経路をnative
-`endpoint_velocity_command/v1` supportとは呼ばない。test-only namespaceではnative velocity
-passthrough routeとvelocity-capable dummy Robotをcomposeし、production catalogへ登録せず独立性を証明する。
+`endpoint_velocity_command/v1` supportとは呼ばない。`endpoint_command/v1`もtarget / local endpoint
+motion generatorを構築する上位capabilityであり、`endpoint_position_command/v1`または
+`endpoint_velocity_command/v1`と同一ではない。
+
+test-only namespaceではnative velocity passthrough strategyをvelocity-capable dummy Robot providerへbindし、
+generic runtime planを実行する。typed `EndpointVelocityCommand`がprovider/backendへ到達し、joint-position
+MotionGenerator、`dt`積分、endpoint delta、Jacobian allocationを通らないことを検証する。このdummy
+provider / Robotはproduction catalogへ登録しない。composition compatibilityだけではexecution
+swappabilityの証拠としない。
 
 `TaskPlugin`は次を宣言する。
 

@@ -43,6 +43,15 @@ NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1 = VersionedIdentity(
 )
 
 
+@runtime_checkable
+class CommandRouteExecutionStrategy(Protocol):
+    route_identity: VersionedIdentity
+    control_semantics_identity: VersionedIdentity
+    robot_command_semantics_identity: VersionedIdentity
+
+    def bind(self, provider: object) -> object: ...
+
+
 @dataclass(frozen=True, slots=True, order=True)
 class CommandSemanticsRoute:
     """Versioned control-to-backend command condition selected for composition."""
@@ -50,6 +59,10 @@ class CommandSemanticsRoute:
     identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
+    execution_strategy: CommandRouteExecutionStrategy = field(
+        compare=False,
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -59,6 +72,20 @@ class CommandSemanticsRoute:
         ):
             if not isinstance(value, VersionedIdentity):
                 raise TypeError(f"command semantics route {name} must use VersionedIdentity")
+        if not isinstance(self.execution_strategy, CommandRouteExecutionStrategy):
+            raise TypeError(
+                "command semantics route requires a typed execution strategy"
+            )
+        if (
+            self.execution_strategy.route_identity != self.identity
+            or self.execution_strategy.control_semantics_identity
+            != self.control_semantics_identity
+            or self.execution_strategy.robot_command_semantics_identity
+            != self.robot_command_semantics_identity
+        ):
+            raise ValueError(
+                "command semantics route/execution strategy identity mismatch"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -638,6 +665,7 @@ __all__ = [
     "CanonicalEvidence",
     "CanonicalEvidenceSet",
     "CommandSemanticsRoute",
+    "CommandRouteExecutionStrategy",
     "ControlMappingPlugin",
     "ControlMappingStrategy",
     "EnvironmentPlugin",

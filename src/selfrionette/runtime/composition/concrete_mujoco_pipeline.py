@@ -5,7 +5,6 @@ from pathlib import Path
 
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.catalog import (
     RobotCatalog,
     resolve_robot_bundle,
@@ -70,6 +69,7 @@ def build_concrete_mujoco_pipeline(
     control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
     control_mapping_parameters: Mapping[str, object] | None = None,
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
+    build_motion_generator: bool = True,
 ) -> ControlMappedRuntimePipeline:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
@@ -92,11 +92,16 @@ def build_concrete_mujoco_pipeline(
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
     plugin = robot_bundle.runtime_plugin
     initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
-    endpoint_command_provider = robot_bundle.provider(ENDPOINT_COMMAND_V1)
+    endpoint_command_provider = (
+        robot_bundle.provider(ENDPOINT_COMMAND_V1)
+        if build_motion_generator
+        else None
+    )
     endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
     qpos_feasibility_provider = robot_bundle.provider(QPOS_FEASIBILITY_V1)
     assert isinstance(initial_state_provider, ResetInitialStateProvider)
-    assert isinstance(endpoint_command_provider, EndpointCommandProvider)
+    if endpoint_command_provider is not None:
+        assert isinstance(endpoint_command_provider, EndpointCommandProvider)
     assert isinstance(endpoint_pose_provider, EndpointPoseProvider)
     assert isinstance(qpos_feasibility_provider, QposFeasibilityProvider)
     initial_state = initial_state_provider.resolve_initial_state()
@@ -123,10 +128,14 @@ def build_concrete_mujoco_pipeline(
             else control_mapping_parameters
         ),
         mapping_input_adapter=mapping_input_adapter,
-        motion_generator=endpoint_command_provider.build_target_motion_generator(
-            seed_joint_angles_rad=seed_joint_angles_rad,
-            discontinuity_threshold_rad=discontinuity_threshold_rad,
-            discontinuity_threshold_label=discontinuity_threshold_label,
+        motion_generator=(
+            endpoint_command_provider.build_target_motion_generator(
+                seed_joint_angles_rad=seed_joint_angles_rad,
+                discontinuity_threshold_rad=discontinuity_threshold_rad,
+                discontinuity_threshold_label=discontinuity_threshold_label,
+            )
+            if endpoint_command_provider is not None
+            else None
         ),
         simulator=simulator,
         publisher=build_endpoint_evaluation_state_publisher(

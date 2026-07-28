@@ -12,6 +12,7 @@ from selfrionette.runtime.composition.robot_bundle import (
     SCENE_ROLE_BINDING_V1,
     CapabilityProviderBinding,
     InitialStateContract,
+    RobotCommandSemanticProviderBinding,
     RobotBundle,
 )
 from selfrionette.runtime.composition.robot_provider_adapters import (
@@ -19,6 +20,7 @@ from selfrionette.runtime.composition.robot_provider_adapters import (
     ProfileEndpointSceneRoleProvider,
     RuntimeEndpointCommandProvider,
     RuntimeEndpointPoseProvider,
+    RuntimeJointPositionCommandProvider,
     RuntimeQposFeasibilityProvider,
 )
 from test_robot_plugins.fixture_bot.profile import FIXTURE_ROBOT_PROFILE
@@ -42,7 +44,12 @@ FIXTURE_ROBOT_BUNDLE = RobotBundle(
     identity=VersionedIdentity("fixture_bot", 2),
     profile=FIXTURE_ROBOT_PROFILE,
     runtime_plugin=FIXTURE_RUNTIME_PLUGIN,
-    supported_command_semantics=frozenset({JOINT_POSITION_COMMAND_V1}),
+    command_semantic_providers=(
+        RobotCommandSemanticProviderBinding(
+            JOINT_POSITION_COMMAND_V1,
+            RuntimeJointPositionCommandProvider(FIXTURE_RUNTIME_PLUGIN),
+        ),
+    ),
     capability_providers=(
         CapabilityProviderBinding(
             RESET_INITIAL_STATE_V1,

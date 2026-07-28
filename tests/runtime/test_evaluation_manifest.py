@@ -29,6 +29,7 @@ from selfrionette.runtime.experiment.composition import (
     PluginParameters,
 )
 from selfrionette.runtime.experiment.contracts import (
+    ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
     EnvironmentRole,
     ControlMappingPlugin,
     LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
@@ -38,6 +39,9 @@ from selfrionette.runtime.experiment.contracts import (
     PluginParameterOwner,
     PluginSelection,
     VersionedIdentity,
+)
+from selfrionette.plugins.mappings._command_routes import (
+    joint_position_command_route,
 )
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from tests.support.input_source_plugin_doubles import CONFORMANCE_SAMPLE_SCHEMA
@@ -65,13 +69,13 @@ from tests.runtime.test_experiment_plugin_composition import (
 
 
 BASELINE_FAST_ARM_MANIFEST_DIGEST = (
-    "sha256:1c647601b539db25ccf945a74cdabcfe5e81529f5dcf45ef93d89beba4a73f66"
+    "sha256:2125da9cf092fcd33bb57df5cbd1fdf129b054fd2eba3b4f5d01872493a6caeb"
 )
 BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST = (
-    "sha256:540d77f4e1889d7ce3962246af3192025feef0c79a5dbfd3d817ef8afcfb2ea9"
+    "sha256:5c184f295fc6c8fe5371dfbfd0c85b65467360b784c4a9490a983ec9197fc8f3"
 )
 BASELINE_FAST_ARM_FREEZE_DIGEST = (
-    "sha256:0b5b07e2d680bd205a7dd99cd56c6b7ec18b79cc3761a92c01c99bdf04bbb40a"
+    "sha256:7b7d77a441539026aec1eee0642236fdb1b85f876262815c8f20d0ac3521ab06"
 )
 
 
@@ -106,7 +110,7 @@ def _manifest(**overrides: object) -> EvaluationManifest:
         "control_mapping": PluginSelection("dummy_mapping", 1),
         "task": PluginSelection("dummy_reach_task", 1),
         "input_source": PluginSelection("conformance_input_source", 1),
-        "command_semantics_identity": (
+        "command_semantics_route_identity": (
             LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
         ),
         "evaluators": (PluginSelection("dummy_success_evaluator", 1),),
@@ -221,17 +225,49 @@ def test_command_semantics_are_preserved_in_manifest_readiness_and_freeze() -> N
         _readiness_registries(mapping=replace(_mapping(), control_frame="world")),
     )
 
-    assert manifest.to_document()["command_semantics_identity"] == {
+    assert manifest.to_document()["command_semantics_route_identity"] == {
         "name": "local_endpoint_velocity_to_joint_position",
         "version": 1,
     }
-    assert readiness.command_semantics.identity == (
+    assert readiness.command_semantics_route.identity == (
         LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
     )
     resolved = readiness.freeze_record.canonical_resolved_identity_bytes
     assert b"local_endpoint_velocity_to_joint_position" in resolved
     assert b"dummy_mapping_semantics" in resolved
     assert b"joint_position_command" in resolved
+
+
+def test_command_route_difference_changes_resolved_and_freeze_identity() -> None:
+    baseline_mapping = replace(_mapping(), control_frame="world")
+    control_semantics = baseline_mapping.mapping_semantics_identity
+    assert control_semantics is not None
+    alternate_route = joint_position_command_route(
+        route_identity=ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
+        control_semantics_identity=control_semantics,
+    )
+    alternate_mapping = replace(
+        baseline_mapping,
+        command_semantics_routes=frozenset({alternate_route}),
+    )
+    baseline = _build_readiness(
+        _manifest(),
+        _readiness_registries(mapping=baseline_mapping),
+    )
+    alternate = _build_readiness(
+        _manifest(
+            command_semantics_route_identity=ENDPOINT_DELTA_TO_JOINT_POSITION_V1
+        ),
+        _readiness_registries(mapping=alternate_mapping),
+    )
+
+    assert baseline.manifest_digest != alternate.manifest_digest
+    assert baseline.resolved_identity_digest != alternate.resolved_identity_digest
+    assert baseline.freeze_identity != alternate.freeze_identity
+    assert (
+        b"endpoint_delta_to_joint_position"
+        in alternate.freeze_record.canonical_resolved_identity_bytes
+    )
 
 
 def test_one_semantic_field_changes_the_manifest_digest() -> None:

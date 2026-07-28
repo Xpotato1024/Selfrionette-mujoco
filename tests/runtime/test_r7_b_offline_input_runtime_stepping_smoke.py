@@ -12,11 +12,13 @@ from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
     CapabilityProviderBinding,
+    RobotCommandSemanticProviderBinding,
     RobotBundle,
 )
 from selfrionette.runtime.composition.robot_provider_adapters import (
     RuntimeEndpointCommandProvider,
     RuntimeEndpointPoseProvider,
+    RuntimeJointPositionCommandProvider,
     RuntimeQposFeasibilityProvider,
 )
 from selfrionette.schemas import MuJoCoState, RawInputFrame
@@ -200,6 +202,13 @@ def test_offline_input_runtime_uses_resolved_plugin_components_and_home_seed(mon
                 replacement_providers.get(binding.identity, binding.provider),
             )
             for binding in resolved.capability_providers
+        ),
+        command_semantic_providers=tuple(
+            RobotCommandSemanticProviderBinding(
+                binding.identity,
+                RuntimeJointPositionCommandProvider(plugin),
+            )
+            for binding in resolved.command_semantic_providers
         ),
     )
 

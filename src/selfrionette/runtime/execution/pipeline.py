@@ -24,7 +24,7 @@ class ControlMappedRuntimePipeline:
     config: RuntimeConfig
     input_source: HealthyInputSource
     control_mapping: ControlMappingPlugin
-    motion_generator: MotionGenerator
+    motion_generator: MotionGenerator | None
     simulator: MuJoCoSimulator
     publisher: StatePublisher
     control_mapping_parameters: Mapping[str, object]
@@ -51,6 +51,10 @@ class ControlMappedRuntimePipeline:
         dt = self.config.dt_s if dt_s is None else dt_s
         frame = self.input_source.read_frame()
         intent = self.map_input(frame)
+        if self.motion_generator is None:
+            raise RuntimeError(
+                "pipeline.run_once requires a bound MotionGenerator command route"
+            )
         command = self.motion_generator.update(intent, dt)
         pre_step_state = self.simulator.snapshot()
         qpos_guard = self.qpos_feasibility_guard or NoOpQposFeasibilityGuard()

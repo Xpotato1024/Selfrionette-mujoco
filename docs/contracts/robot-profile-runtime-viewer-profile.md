@@ -155,11 +155,14 @@ pluginをrejectする。production defaultではcatalogのBundleを一度assembl
 Robot Bundleのtyped provider capabilityとbackend accepted command semanticsは別集合である。
 `endpoint_command/v1`はtarget / local endpoint motion generatorを構築するprovider能力を表し、
 backendがendpoint positionまたはendpoint velocityをnative受理するという宣言ではない。
-`supported_command_semantics`は最終backend boundaryだけを列挙する。
+最終backend boundaryは`RobotCommandSemanticProviderBinding`でsemantic identityとtyped execution
+providerを一対一にbindする。`supported_command_semantics`はこのbindingから導出されるprojectionであり、
+providerなしのidentity宣言はできない。
 
 fast_arm / MuJoCoの現行motion generatorはendpoint targetまたはvelocity由来deltaをJacobianで
 candidate qposへ変換し、MuJoCo adapterへ`JointCommand(joint_angles_rad=...)`を渡す。したがって
-fast_armが宣言するcommand semanticは`joint_position_command/v1`だけである。
+fast_armが実行providerを持つcommand semanticは`joint_position_command/v1`だけである。このproviderは
+既存MotionGenerator / safety後の`MotionCommand`をMuJoCo command applicationへ渡す。
 `endpoint_velocity_command/v1`、`endpoint_position_command/v1`、`joint_velocity_command/v1`は
 versioned identityとして区別できるが、未実装のfast_arm capabilityとして宣言しない。
 
