@@ -13,25 +13,6 @@ from selfrionette.runtime.runners.live_websocket_delivery import LiveLatestState
 
 ROOT = Path(__file__).resolve().parents[2]
 WEBSOCKET_RUNNER_MODULE = ROOT / "src" / "selfrionette" / "runtime" / "runners" / "websocket_publisher.py"
-WEBSOCKET_SCRIPT_MODULE = ROOT / "scripts" / "compatibility" / "run_replay_mujoco_websocket_publisher.py"
-
-
-def _load_script_module(path: Path, module_name: str):
-    import importlib.util
-    import sys
-
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-WEBSOCKET_SCRIPT_ENTRY = _load_script_module(
-    WEBSOCKET_SCRIPT_MODULE,
-    "run_replay_mujoco_websocket_publisher_entry_test",
-)
 
 
 class _FakeWebSocketPublisherServer:
@@ -120,7 +101,7 @@ def test_websocket_runner_module_uses_programmed_input_source_and_not_noop_motio
     assert "build_sweep_x_input_source" in imported_names
 
 
-def test_websocket_script_programmed_target_uses_runtime_step_loop_helper() -> None:
+def test_websocket_runner_programmed_target_uses_runtime_step_loop_helper() -> None:
     created_servers: list[object] = []
 
     class FakeWebSocketPublisherServer:
@@ -145,9 +126,9 @@ def test_websocket_script_programmed_target_uses_runtime_step_loop_helper() -> N
         async def send(self, message: str) -> None:
             self.messages.append(message)
 
-    with patch.object(WEBSOCKET_SCRIPT_ENTRY, "WebSocketPublisherServer", FakeWebSocketPublisherServer):
+    with patch.object(websocket_runner_module, "WebSocketPublisherServer", FakeWebSocketPublisherServer):
         asyncio.run(
-            WEBSOCKET_SCRIPT_ENTRY._run_input_source_websocket_publisher_async(
+            websocket_runner_module._run_input_source_websocket_publisher_async(
                 host="127.0.0.1",
                 port=8766,
                 steps=2,
@@ -156,6 +137,7 @@ def test_websocket_script_programmed_target_uses_runtime_step_loop_helper() -> N
                 grace_period_s=0.0,
                 preset="sweep_x",
                 input_source="programmed_target",
+                robot_profile_id="fast_arm",
             )
         )
 
@@ -168,26 +150,7 @@ def test_websocket_script_programmed_target_uses_runtime_step_loop_helper() -> N
     assert payloads[0]["endpoint_evaluation"]["desired_endpoint_m"] == payloads[0]["target_position_m"]
 
 
-def test_websocket_script_uses_default_replay_fallback_when_input_source_is_unselected() -> None:
-    with patch.object(WEBSOCKET_SCRIPT_ENTRY, "run_replay_mujoco_websocket_publisher") as run_publisher:
-        exit_code = WEBSOCKET_SCRIPT_ENTRY.main(
-            [
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8766",
-                "--steps",
-                "1",
-            ]
-        )
-
-    assert exit_code == 0
-    run_publisher.assert_called_once()
-    _, kwargs = run_publisher.call_args
-    assert kwargs["preset"] is None
-
-
-def test_websocket_script_viewer_path_uses_live_latest_delivery_and_interval_zero_compatibility() -> None:
+def test_websocket_runner_viewer_path_uses_live_latest_delivery_and_interval_zero_compatibility() -> None:
     created_servers: list[object] = []
 
     class FakeWebSocketPublisherServer:
@@ -211,9 +174,9 @@ def test_websocket_script_viewer_path_uses_live_latest_delivery_and_interval_zer
         async def send(self, message: str) -> None:
             self.messages.append(message)
 
-    with patch.object(WEBSOCKET_SCRIPT_ENTRY, "WebSocketPublisherServer", FakeWebSocketPublisherServer):
+    with patch.object(websocket_runner_module, "WebSocketPublisherServer", FakeWebSocketPublisherServer):
         asyncio.run(
-            WEBSOCKET_SCRIPT_ENTRY._run_input_source_websocket_publisher_async(
+            websocket_runner_module._run_input_source_websocket_publisher_async(
                 host="127.0.0.1",
                 port=8766,
                 steps=2,
@@ -222,6 +185,7 @@ def test_websocket_script_viewer_path_uses_live_latest_delivery_and_interval_zer
                 grace_period_s=0.0,
                 preset=None,
                 input_source="viewer",
+                robot_profile_id="fast_arm",
             )
         )
 
@@ -231,7 +195,7 @@ def test_websocket_script_viewer_path_uses_live_latest_delivery_and_interval_zer
     assert payloads[-1]["version"] == 0
 
 
-def test_websocket_script_viewer_path_has_bounded_final_flush(capsys) -> None:
+def test_websocket_runner_viewer_path_has_bounded_final_flush(capsys) -> None:
     never_released = asyncio.Event()
 
     class BlockedWebSocketPublisherServer:
@@ -261,11 +225,11 @@ def test_websocket_script_viewer_path_has_bounded_final_flush(capsys) -> None:
             return await super().close(flush_timeout_s=flush_timeout_s)
 
     with (
-        patch.object(WEBSOCKET_SCRIPT_ENTRY, "WebSocketPublisherServer", BlockedWebSocketPublisherServer),
-        patch.object(WEBSOCKET_SCRIPT_ENTRY, "LiveLatestStateWebSocketPublisher", ShortTimeoutPublisher),
+        patch.object(websocket_runner_module, "WebSocketPublisherServer", BlockedWebSocketPublisherServer),
+        patch.object(websocket_runner_module, "LiveLatestStateWebSocketPublisher", ShortTimeoutPublisher),
     ):
         asyncio.run(
-            WEBSOCKET_SCRIPT_ENTRY._run_input_source_websocket_publisher_async(
+            websocket_runner_module._run_input_source_websocket_publisher_async(
                 host="127.0.0.1",
                 port=8766,
                 steps=1,
@@ -274,6 +238,7 @@ def test_websocket_script_viewer_path_has_bounded_final_flush(capsys) -> None:
                 grace_period_s=0.0,
                 preset=None,
                 input_source="viewer",
+                robot_profile_id="fast_arm",
             )
         )
 

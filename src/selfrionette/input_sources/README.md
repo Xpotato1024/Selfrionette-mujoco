@@ -8,10 +8,10 @@ mapping implementationは`plugins/mappings/`がcanonical ownerである。この
 re-exportし、原則としてcontract、source algorithm、parser、normalization、default、lifecycleを複製しない。
 
 明示的なretained compatibility exceptionとして、`input_sources.registry`はhistorical descriptor API、
-frame construction、initial metadata / default behaviorをC3まで維持する。ただしproduction selectionの
-正本ではなく、C2で移動したconcrete source implementationはcanonical ownerを直接参照する。registry自体の
-retirementまたは全面委譲はC3 scopeである。loadcellのrecorded dry-run helperと
-`mapping_plugin=None` optional compatibility behaviorはC3/C4のcompatibility scopeとして残る。
+frame construction、initial metadata / default behaviorをC4まで維持する。ただしproduction selectionの
+正本ではなく、production/internal consumerはcanonical catalog、typed selection、versioned Control Mapping
+Pluginを直接使用する。registry、mapping facade、loadcellのrecorded dry-run helperと
+`mapping_plugin=None` optional behaviorのpublic retirement policyはC4 scopeである。
 
 ## 入力
 

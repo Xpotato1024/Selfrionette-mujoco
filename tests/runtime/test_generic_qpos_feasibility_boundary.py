@@ -5,11 +5,11 @@ from pathlib import Path
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.composition.config import RuntimeConfig
-from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.runtime.execution.input_step_loop import build_runtime_input_source_step_loop_plan
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
-from tests.support.runtime_pipeline_builders import build_test_mujoco_pipeline
+from tests.support.mapped_pipeline_builders import build_test_mujoco_pipeline
 from selfrionette.plugins.robots.fast_arm.adapter.feasibility import FastArmJointLimitGuard
 from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
 from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
@@ -41,7 +41,7 @@ def test_generic_pipeline_accepts_non_fast_arm_model_without_fast_arm_config(tmp
 
     pipeline = build_test_mujoco_pipeline(model_path=model_path, config=config)
 
-    assert isinstance(pipeline, RuntimePipeline)
+    assert isinstance(pipeline, ControlMappedRuntimePipeline)
     assert isinstance(pipeline.simulator, HeadlessMuJoCoSimulator)
     assert pipeline.qpos_feasibility_guard is None
     state = asyncio.run(pipeline.run_once())

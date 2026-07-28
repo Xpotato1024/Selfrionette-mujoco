@@ -270,23 +270,21 @@ source-owned implementationのphysical ownerは次である。
 | shared loadcell records / parser / intrinsic normalization / injected-line reader / diagnostics | `plugins/input_sources/_loadcell/` |
 
 既存public `input_sources` modulesはC4まで同一canonical objectをre-exportするthin compatibility facadeとして
-残す。loadcellのrecorded dry-run helperと`mapping_plugin=None` branchはC3/C4分類のため残すが、
+残す。loadcellのrecorded dry-run helperと`mapping_plugin=None` branchはpublic compatibilityとして残すが、
 parser、normalization、readerを再定義しない。CLI options、source alias、preset、custom replay frame、loop、
 payload、stale safety、viewer message schema、loadcell protocol、baud 115200、mapping semanticsを意図的に
 変更しない。
 
-`scripts/compatibility/run_replay_mujoco_dry_run.py`と
-`scripts/compatibility/run_replay_mujoco_websocket_publisher.py`で`--input-source`を指定した経路はproduction
-catalogをresolveする。一方、`--input-source`未指定時に呼ばれる`runtime/runners/dry_run.py`と
-`runtime/runners/websocket_publisher.py`のdirect programmed-target / replay構築は、既存default CLI behaviorを
-維持するbounded legacy compatibility pathであり、production catalogの第二のSoTではない。#462 completion auditで
-このretained判断とguardを確定した。
+production/internal commandは`selfrionette replay|viewer --input-source <alias>`を使用し、catalogからsourceと
+versioned mappingを解決する。`scripts/compatibility/`の2 scriptはcanonical CLIとerror/help surfaceの完全parityが
+未成立のためC3で削除せず、current operator callerを0にしてC4へ残す。既存default CLI behaviorを維持するdirect
+runner APIもcatalogの第二のSoTではなく、production source selectionはcatalog経由だけである。
 
 ## Remaining scope
 
-C2のsource implementation ownership移行は完了している。CLI / runner compatibility cleanupはC3、
-public compatibility surfaceのretirementはC4で扱う。追加のdevice実装、hardware gate、experiment evidenceは
-別scopeで扱う。
+C2のsource implementation ownership移行とC3のrepository内部consumer移行は完了している。
+public compatibility surfaceと非同一parity scriptのretirement policyはC4で扱う。追加のdevice実装、
+hardware gate、experiment evidenceは別scopeで扱う。
 
 ## 関連canonical文書
 

@@ -1,11 +1,29 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
+from selfrionette.plugins.input_sources.catalog import get_input_source_registration
 from selfrionette.plugins.input_sources.programmed_target import build_sweep_x_input_source
 from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.control.viewer_control_ingress import (
+    build_viewer_input_source,
+    ingest_viewer_control_message_json,
+)
+from selfrionette.runtime.execution.input_step_loop import (
+    build_runtime_input_source_step_loop_plan,
+    run_runtime_input_source_step_loop,
+)
+from selfrionette.runtime.execution.live_timing import (
+    AbsoluteDeadlinePacer,
+    LiveRuntimeTimingMetrics,
+)
+from selfrionette.runtime.runners.live_websocket_delivery import (
+    LiveLatestStateWebSocketPublisher,
+)
 from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityResult
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.schemas import RawInputFrame
@@ -97,6 +115,139 @@ def _annotate_sweep_x_state(pipeline, state, intent, qpos_result: QposFeasibilit
     )
 
 
+async def _run_input_source_websocket_publisher_async(
+    *,
+    host: str,
+    port: int,
+    steps: int,
+    dt_s: float,
+    interval_s: float,
+    grace_period_s: float,
+    preset: str | None,
+    input_source: str,
+    robot_profile_id: str,
+) -> None:
+    runtime_config = RuntimeConfig(
+        dt_s=dt_s,
+        robot_profile_id=robot_profile_id,
+    )
+    registration = get_input_source_registration(input_source)
+    viewer_input_source = None
+    on_message = None
+    if registration.execution_adapter.uses_viewer_endpoint_compatibility:
+        viewer_input_source = build_viewer_input_source()
+
+        def handle_viewer_message(message: str) -> None:
+            assert viewer_input_source is not None
+            ingest_viewer_control_message_json(viewer_input_source, message)
+
+        on_message = handle_viewer_message
+
+    server_kwargs = {"host": host, "port": port}
+    if on_message is not None:
+        server_kwargs["on_message"] = on_message
+    async with WebSocketPublisherServer(**server_kwargs) as server:
+        _log(f"serving on ws://{server.host}:{server.bound_port}")
+        _log(f"Waiting for viewer during grace period ({grace_period_s:.2f}s)")
+
+        has_client = await server.wait_for_client(timeout_s=grace_period_s)
+        if not has_client:
+            _log("No viewer connected during grace period; no payloads published.")
+            _log("Completed without publishing because no viewer connected.")
+            return
+
+        _log("Viewer connected; publishing started.")
+        selection = select_runtime_input_source(
+            input_source,
+            steps=steps,
+            preset=preset,
+        )
+
+        if viewer_input_source is not None:
+            timing_metrics = LiveRuntimeTimingMetrics()
+            pacer = (
+                AbsoluteDeadlinePacer(interval_s, metrics=timing_metrics)
+                if interval_s > 0.0
+                else None
+            )
+            async with LiveLatestStateWebSocketPublisher(server) as publisher:
+                plan = build_runtime_input_source_step_loop_plan(
+                    selection,
+                    config=runtime_config,
+                    publisher=publisher,
+                    viewer_input_source=viewer_input_source,
+                )
+                await run_runtime_input_source_step_loop(
+                    plan,
+                    steps=steps,
+                    dt_s=dt_s,
+                    interval_s=interval_s,
+                    pacer=pacer,
+                    timing_metrics=timing_metrics,
+                    collect_records=False,
+                )
+                await publisher.drain()
+                delivery_summary = publisher.summary().to_dict()
+            _log(
+                "live runtime timing summary: "
+                + json.dumps(
+                    {
+                        **timing_metrics.summary(dt_s=dt_s).to_dict(),
+                        **delivery_summary,
+                    },
+                    sort_keys=True,
+                )
+            )
+        else:
+            plan = build_runtime_input_source_step_loop_plan(
+                selection,
+                config=runtime_config,
+                publisher=WebSocketStatePublisher(server),
+            )
+            await run_runtime_input_source_step_loop(
+                plan,
+                steps=steps,
+                dt_s=dt_s,
+                interval_s=interval_s,
+            )
+
+        _log(f"Completed after publishing {steps} frame(s).")
+
+
+def run_input_source_websocket_publisher(
+    *,
+    input_source: str,
+    host: str = DEFAULT_WEBSOCKET_PUBLISHER_HOST,
+    port: int = DEFAULT_WEBSOCKET_PUBLISHER_PORT,
+    steps: int = DEFAULT_WEBSOCKET_PUBLISHER_STEPS,
+    dt_s: float = DEFAULT_WEBSOCKET_PUBLISHER_DT_S,
+    interval_s: float = DEFAULT_WEBSOCKET_PUBLISHER_INTERVAL_S,
+    grace_period_s: float = DEFAULT_WEBSOCKET_PUBLISHER_GRACE_PERIOD_S,
+    preset: str | None = None,
+    robot_profile_id: str = "fast_arm",
+) -> None:
+    _validate_host(host)
+    _validate_port(port)
+    _validate_steps(steps)
+    _validate_dt_s(dt_s)
+    _validate_interval_s(interval_s)
+    _validate_grace_period_s(grace_period_s)
+    get_input_source_registration(input_source)
+    asyncio.run(
+        _run_input_source_websocket_publisher_async(
+            host=host,
+            port=port,
+            steps=steps,
+            dt_s=dt_s,
+            interval_s=interval_s,
+            grace_period_s=grace_period_s,
+            preset=preset,
+            input_source=input_source,
+            robot_profile_id=robot_profile_id,
+        )
+    )
+
+
 async def _run_replay_mujoco_websocket_publisher_async(
     *,
     host: str,
@@ -132,7 +283,7 @@ async def _run_replay_mujoco_websocket_publisher_async(
         if preset == "sweep_x":
             for index in range(steps):
                 frame = pipeline.input_source.read_frame()
-                intent = pipeline.input_interpreter.interpret(frame)
+                intent = pipeline.map_input(frame)
                 command = pipeline.motion_generator.update(intent, dt_s)
                 pre_step_state = pipeline.simulator.snapshot()
                 qpos_guard = pipeline.qpos_feasibility_guard or NoOpQposFeasibilityGuard()
@@ -197,5 +348,6 @@ def run_replay_mujoco_websocket_publisher(
 
 __all__ = [
     "SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS",
+    "run_input_source_websocket_publisher",
     "run_replay_mujoco_websocket_publisher",
 ]

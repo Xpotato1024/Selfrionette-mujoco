@@ -1,34 +1,18 @@
 from __future__ import annotations
 
-import importlib.util
 import inspect
+import importlib
 import io
-import sys
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
+import selfrionette.runtime.runners.websocket_publisher as WEBSOCKET_RUNNER
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 
 
-ROOT = Path(__file__).resolve().parents[2]
-DRY_RUN_SCRIPT_PATH = ROOT / "scripts" / "compatibility" / "run_replay_mujoco_dry_run.py"
-WEBSOCKET_SCRIPT_PATH = ROOT / "scripts" / "compatibility" / "run_replay_mujoco_websocket_publisher.py"
-
-
-def _load_script_module(path: Path, module_name: str):
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-DRY_RUN_SCRIPT = _load_script_module(DRY_RUN_SCRIPT_PATH, "run_replay_mujoco_dry_run_test")
-WEBSOCKET_SCRIPT = _load_script_module(WEBSOCKET_SCRIPT_PATH, "run_replay_mujoco_websocket_publisher_test")
+CLI = importlib.import_module("selfrionette.cli.main")
 
 
 def test_select_runtime_input_source_reports_initial_metadata_contract() -> None:
@@ -66,9 +50,9 @@ def test_select_runtime_input_source_rejects_unknown_source() -> None:
 
 def test_dry_run_cli_default_source_remains_backward_compatible() -> None:
     stdout = io.StringIO()
-    with patch.object(DRY_RUN_SCRIPT, "run_replay_mujoco_dry_run") as run_dry_run:
-        with patch.object(DRY_RUN_SCRIPT.sys, "stdout", stdout):
-            exit_code = DRY_RUN_SCRIPT.main(["--steps", "1"])
+    with patch.object(CLI, "run_replay_mujoco_dry_run") as run_dry_run:
+        with patch.object(CLI.sys, "stdout", stdout):
+            exit_code = CLI.main(["replay", "--robot", "fast_arm", "--steps", "1"])
 
     assert exit_code == 0
     run_dry_run.assert_called_once()
@@ -78,8 +62,18 @@ def test_dry_run_cli_default_source_remains_backward_compatible() -> None:
 
 
 def test_dry_run_cli_programmed_target_selection_preserves_existing_path() -> None:
-    with patch.object(DRY_RUN_SCRIPT, "run_replay_mujoco_dry_run") as run_dry_run:
-        exit_code = DRY_RUN_SCRIPT.main(["--steps", "2", "--input-source", "programmed_target"])
+    with patch.object(CLI, "run_replay_mujoco_dry_run") as run_dry_run:
+        exit_code = CLI.main(
+            [
+                "replay",
+                "--robot",
+                "fast_arm",
+                "--steps",
+                "2",
+                "--input-source",
+                "programmed_target",
+            ]
+        )
 
     assert exit_code == 0
     run_dry_run.assert_called_once()
@@ -89,8 +83,18 @@ def test_dry_run_cli_programmed_target_selection_preserves_existing_path() -> No
 
 
 def test_dry_run_cli_replay_selection_preserves_default_path() -> None:
-    with patch.object(DRY_RUN_SCRIPT, "run_replay_mujoco_dry_run") as run_dry_run:
-        exit_code = DRY_RUN_SCRIPT.main(["--steps", "1", "--input-source", "replay"])
+    with patch.object(CLI, "run_replay_mujoco_dry_run") as run_dry_run:
+        exit_code = CLI.main(
+            [
+                "replay",
+                "--robot",
+                "fast_arm",
+                "--steps",
+                "1",
+                "--input-source",
+                "replay",
+            ]
+        )
 
     assert exit_code == 0
     run_dry_run.assert_called_once()
@@ -101,14 +105,26 @@ def test_dry_run_cli_replay_selection_preserves_default_path() -> None:
 
 
 def test_dry_run_cli_exposes_input_source_and_forwards_it_to_runtime() -> None:
-    help_text = DRY_RUN_SCRIPT.build_parser().format_help()
+    help_text = CLI.build_parser()._subparsers._group_actions[0].choices[
+        "replay"
+    ].format_help()
     assert "--input-source" in help_text
     assert "programmed_target" in help_text
 
     stdout = io.StringIO()
-    with patch.object(DRY_RUN_SCRIPT, "run_replay_mujoco_dry_run") as run_dry_run:
-        with patch.object(DRY_RUN_SCRIPT.sys, "stdout", stdout):
-            exit_code = DRY_RUN_SCRIPT.main(["--steps", "1", "--input-source", "noop"])
+    with patch.object(CLI, "run_replay_mujoco_dry_run") as run_dry_run:
+        with patch.object(CLI.sys, "stdout", stdout):
+            exit_code = CLI.main(
+                [
+                    "replay",
+                    "--robot",
+                    "fast_arm",
+                    "--steps",
+                    "1",
+                    "--input-source",
+                    "noop",
+                ]
+            )
 
     assert exit_code == 0
     run_dry_run.assert_called_once()
@@ -119,13 +135,18 @@ def test_dry_run_cli_exposes_input_source_and_forwards_it_to_runtime() -> None:
 
 
 def test_websocket_cli_exposes_input_source_and_forwards_it_to_runtime() -> None:
-    help_text = WEBSOCKET_SCRIPT.build_parser().format_help()
+    help_text = CLI.build_parser()._subparsers._group_actions[0].choices[
+        "viewer"
+    ].format_help()
     assert "--input-source" in help_text
     assert "programmed_target" in help_text
 
-    with patch.object(WEBSOCKET_SCRIPT, "_run_input_source_websocket_publisher_async", new_callable=AsyncMock) as run_publisher:
-        exit_code = WEBSOCKET_SCRIPT.main(
+    with patch.object(CLI, "run_input_source_websocket_publisher") as run_publisher:
+        exit_code = CLI.main(
             [
+                "viewer",
+                "--robot",
+                "fast_arm",
                 "--host",
                 "127.0.0.1",
                 "--port",
@@ -138,7 +159,7 @@ def test_websocket_cli_exposes_input_source_and_forwards_it_to_runtime() -> None
         )
 
     assert exit_code == 0
-    run_publisher.assert_awaited_once()
+    run_publisher.assert_called_once()
     _, kwargs = run_publisher.call_args
     assert kwargs["input_source"] == "replay"
 
@@ -164,21 +185,18 @@ def test_websocket_cli_input_source_no_client_path_runs_without_real_server() ->
             self.wait_for_client_calls.append(timeout_s)
             return False
 
-    with patch.object(WEBSOCKET_SCRIPT, "WebSocketPublisherServer", FakeWebSocketPublisherServer):
-        exit_code = WEBSOCKET_SCRIPT.main(
-            [
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8766",
-                "--steps",
-                "1",
-                "--input-source",
-                "replay",
-            ]
+    with patch.object(
+        WEBSOCKET_RUNNER,
+        "WebSocketPublisherServer",
+        FakeWebSocketPublisherServer,
+    ):
+        WEBSOCKET_RUNNER.run_input_source_websocket_publisher(
+            host="127.0.0.1",
+            port=8766,
+            steps=1,
+            input_source="replay",
         )
 
-    assert exit_code == 0
     assert len(created_servers) == 1
     assert created_servers[0].wait_for_client_calls == [0.05]
 
@@ -238,38 +256,31 @@ def test_websocket_cli_viewer_source_wires_inbound_messages_into_the_same_viewer
         return ()
 
     with (
-        patch.object(WEBSOCKET_SCRIPT, "WebSocketPublisherServer", FakeWebSocketPublisherServer),
-        patch.object(WEBSOCKET_SCRIPT, "build_viewer_input_source", return_value=viewer_input_source),
+        patch.object(WEBSOCKET_RUNNER, "WebSocketPublisherServer", FakeWebSocketPublisherServer),
+        patch.object(WEBSOCKET_RUNNER, "build_viewer_input_source", return_value=viewer_input_source),
         patch.object(
-            WEBSOCKET_SCRIPT,
+            WEBSOCKET_RUNNER,
             "ingest_viewer_control_message_json",
             side_effect=lambda source, message: ingested_messages.append((source, message)),
         ),
         patch.object(
-            WEBSOCKET_SCRIPT,
+            WEBSOCKET_RUNNER,
             "build_runtime_input_source_step_loop_plan",
             return_value=SimpleNamespace(selection="viewer-selection", pipeline=SimpleNamespace()),
         ) as build_plan,
         patch.object(
-            WEBSOCKET_SCRIPT,
+            WEBSOCKET_RUNNER,
             "run_runtime_input_source_step_loop",
             side_effect=fake_run_runtime_input_source_step_loop,
         ),
     ):
-        exit_code = WEBSOCKET_SCRIPT.main(
-            [
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8766",
-                "--steps",
-                "1",
-                "--input-source",
-                "viewer",
-            ]
+        WEBSOCKET_RUNNER.run_input_source_websocket_publisher(
+            host="127.0.0.1",
+            port=8766,
+            steps=1,
+            input_source="viewer",
         )
 
-    assert exit_code == 0
     assert len(created_servers) == 1
     assert created_servers[0].wait_for_client_calls == [0.05]
     assert ingested_messages == [

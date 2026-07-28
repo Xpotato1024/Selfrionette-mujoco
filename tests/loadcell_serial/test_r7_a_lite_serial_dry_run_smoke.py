@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.input_sources.loadcell_serial import run_loadcell_serial_dry_run_smoke
+from selfrionette.runtime.runners.loadcell_serial_dry_run import (
+    run_loadcell_serial_dry_run_smoke as _run_canonical_loadcell_smoke,
+)
 from selfrionette.plugins.input_sources._loadcell import (
     LoadcellNormalizationConfig,
     SerialFrameParseError,
@@ -22,12 +24,22 @@ from selfrionette.runtime.runners.loadcell_serial_dry_run import DEFAULT_FIXTURE
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "r7_a_lite_serial_frames"
 
 
+def _run_resolved_loadcell_smoke(*args, **kwargs):
+    kwargs.setdefault(
+        "mapping_plugin",
+        resolve_control_mapping_plugin(
+            PluginSelection("loadcell_endpoint_mapping", 1)
+        ),
+    )
+    return _run_canonical_loadcell_smoke(*args, **kwargs)
+
+
 def read_fixture_lines(name: str) -> list[str]:
     return FIXTURE_ROOT.joinpath(name).read_text(encoding="utf-8").splitlines()
 
 
 def test_r7_a_lite_serial_dry_run_smoke_runs_recorded_fixture_through_command_chain() -> None:
-    result = run_loadcell_serial_dry_run_smoke(
+    result = _run_resolved_loadcell_smoke(
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
@@ -60,7 +72,7 @@ def test_r7_a_lite_serial_dry_run_smoke_runs_recorded_fixture_through_command_ch
 
 
 def test_r7_a_lite_serial_dry_run_smoke_preserves_diagnostics_and_stops_before_max_vectors() -> None:
-    result = run_loadcell_serial_dry_run_smoke(
+    result = _run_resolved_loadcell_smoke(
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
@@ -82,7 +94,7 @@ def test_r7_a_lite_serial_dry_run_smoke_preserves_diagnostics_and_stops_before_m
 
 def test_r7_a_lite_serial_dry_run_smoke_rejects_malformed_fixture_deterministically() -> None:
     with pytest.raises(SerialFrameParseError):
-        run_loadcell_serial_dry_run_smoke(
+        _run_resolved_loadcell_smoke(
             read_fixture_lines("malformed.txt"),
             max_vectors=1,
             normalization_config=LoadcellNormalizationConfig(
@@ -108,7 +120,7 @@ def test_r7_a_lite_serial_dry_run_smoke_uses_injected_lines_instead_of_opening_a
 
     monkeypatch.setattr(SerialInputSource, "from_lines", classmethod(tracking_from_lines))
 
-    result = run_loadcell_serial_dry_run_smoke(
+    result = _run_resolved_loadcell_smoke(
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
@@ -127,44 +139,6 @@ def test_r7_a_lite_serial_dry_run_smoke_uses_injected_lines_instead_of_opening_a
     assert result.frames_read == 1
 
 
-def test_r7_a_lite_serial_dry_run_canonical_mapping_path_preserves_golden_output() -> None:
-    endpoint_config = build_r7_a_lite_smoke_endpoint_mapping_config(
-        gain_m=1.0,
-        max_delta_m=0.03,
-    )
-    common = {
-        "max_vectors": 1,
-        "normalization_config": LoadcellNormalizationConfig(
-            deadzone=0.0,
-            scale=100000.0,
-            clamp_abs=1.0,
-        ),
-        "endpoint_config": endpoint_config,
-        "current_tip_position_m": (0.25, 0.5, 0.75),
-    }
-
-    compatibility_result = run_loadcell_serial_dry_run_smoke(
-        read_fixture_lines("minimal_valid.txt"),
-        **common,
-    )
-    canonical_result = run_loadcell_serial_dry_run_smoke(
-        read_fixture_lines("minimal_valid.txt"),
-        mapping_plugin=resolve_control_mapping_plugin(
-            PluginSelection("loadcell_endpoint_mapping", 1)
-        ),
-        mapping_parameters={
-            "mapping_config": endpoint_config,
-            "current_tip_position_m": common["current_tip_position_m"],
-        },
-        **common,
-    )
-
-    assert canonical_result.raw_frame == compatibility_result.raw_frame
-    assert canonical_result.normalized_intent == compatibility_result.normalized_intent
-    assert canonical_result.motion_command == compatibility_result.motion_command
-    assert canonical_result.diagnostics == compatibility_result.diagnostics
-
-
 def test_r7_a_lite_serial_dry_run_rejects_invalid_mapping_before_reading_fixture(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -178,7 +152,7 @@ def test_r7_a_lite_serial_dry_run_rejects_invalid_mapping_before_reading_fixture
     monkeypatch.setattr(SerialInputSource, "from_lines", classmethod(tracking_from_lines))
 
     with pytest.raises(ValueError, match="gain_m must be non-negative"):
-        run_loadcell_serial_dry_run_smoke(
+        _run_resolved_loadcell_smoke(
             read_fixture_lines("minimal_valid.txt"),
             max_vectors=1,
             mapping_plugin=resolve_control_mapping_plugin(
@@ -224,7 +198,7 @@ def test_r7_a_lite_serial_dry_run_cli_fixture_mode_outputs_endpoint_metadata(cap
 
 
 def test_default_endpoint_mapping_is_no_op_and_explicit_mapping_changes_desired_endpoint_m() -> None:
-    from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
+    from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
     from selfrionette.plugins.mappings.loadcell import LoadcellEndpointMotionCommandConverter
 
     intent = NormalizedLoadcellInputIntent(
@@ -242,7 +216,7 @@ def test_default_endpoint_mapping_is_no_op_and_explicit_mapping_changes_desired_
         gain_m=1.0,
         max_delta_m=0.03,
     )
-    mapped_command = run_loadcell_serial_dry_run_smoke(
+    mapped_command = _run_resolved_loadcell_smoke(
         ["vector,1000,40000,0,0,0,0,0,0"],
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(

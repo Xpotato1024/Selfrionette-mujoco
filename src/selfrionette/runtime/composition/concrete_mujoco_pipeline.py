@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
+from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.catalog import (
     RobotCatalog,
@@ -14,7 +14,9 @@ from selfrionette.plugins.catalog import (
 from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.evaluation.endpoint_metrics import build_endpoint_evaluation_state_publisher
-from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
+from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapter
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -65,7 +67,10 @@ def build_concrete_mujoco_pipeline(
     discontinuity_threshold_rad: float | None = None,
     discontinuity_threshold_label: str = "global safety threshold",
     robot_catalog: RobotCatalog | None = None,
-) -> RuntimePipeline:
+    control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
+    control_mapping_parameters: Mapping[str, object] | None = None,
+    mapping_input_adapter: InputSourceMappingAdapter | None = None,
+) -> ControlMappedRuntimePipeline:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
         raise ValueError("production concrete composition requires robot_profile_id")
@@ -108,10 +113,16 @@ def build_concrete_mujoco_pipeline(
     plugin.validate_model(simulator.model)
     fk_solver = plugin.build_forward_kinematics()
 
-    return RuntimePipeline(
+    return ControlMappedRuntimePipeline(
         config=runtime_config,
         input_source=ReplayInputSource(replay_frames, loop=loop),
-        input_interpreter=ReplayInputInterpreter(),
+        control_mapping=control_mapping,
+        control_mapping_parameters=(
+            {}
+            if control_mapping_parameters is None
+            else control_mapping_parameters
+        ),
+        mapping_input_adapter=mapping_input_adapter,
         motion_generator=endpoint_command_provider.build_target_motion_generator(
             seed_joint_angles_rad=seed_joint_angles_rad,
             discontinuity_threshold_rad=discontinuity_threshold_rad,

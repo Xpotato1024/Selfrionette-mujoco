@@ -58,6 +58,10 @@ ALLOWED_COMPATIBILITY_IMPORTS = {
         Path("input_sources/base.py"),
         "selfrionette.runtime.experiment.input_source",
     ),
+    (
+        Path("input_sources/loadcell_serial.py"),
+        "selfrionette.runtime.runners.loadcell_serial_dry_run",
+    ),
 }
 
 

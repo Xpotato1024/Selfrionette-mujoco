@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-18
+last_verified: 2026-07-28
 canonical_for:
   - runtime dry-run entry
 related:
@@ -25,6 +25,8 @@ uv run selfrionette replay --robot fast_arm --steps 1
 uv run selfrionette replay --robot fast_arm --steps 3 --dt-s 0.0166666667
 uv run selfrionette replay --robot fast_arm --steps 3 --output /tmp/selfrionette_payload.ndjson
 uv run selfrionette replay --robot fast_arm --steps 3 --preset sweep_x
+uv run selfrionette replay --robot fast_arm --steps 1 --input-source replay
+uv run selfrionette replay --robot fast_arm --steps 1 --input-source noop
 ```
 
 stdout または `--output` には、1 step につき payload v0 JSON object を1行出力する。
@@ -39,7 +41,7 @@ file は JSON array ではなく UTF-8、LF の NDJSON である。`frame_index`
 `--preset` と Python API の custom `frames` は同時指定できない。steps は正整数、`dt-s` は
 正数でなければならず、違反時の failure semantics は変更しない。
 
-## Compatibility
+## Internal pathとpublic compatibility
 
-`scripts/compatibility/run_replay_mujoco_dry_run.py` は specialized `--input-source` consumer の移行が
-完了するまで thin wrapper として維持する。標準操作の正本は installable CLI とする。
+production/internal source selectionはinstallable CLIからcatalogとversioned mappingを解決する。
+旧scriptはpublic compatibilityとしてC4まで残るが、current operator手順では使用しない。

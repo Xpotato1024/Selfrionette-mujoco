@@ -4,15 +4,15 @@ import asyncio
 
 from tests.support.mujoco_doubles import NoOpMuJoCoSimulator
 from selfrionette.runtime.composition.config import RuntimeConfig
-from selfrionette.runtime.execution.pipeline import RuntimePipeline
-from tests.support.runtime_pipeline_builders import build_noop_pipeline
+from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from tests.support.mapped_pipeline_builders import build_noop_pipeline
 from selfrionette.schemas import MuJoCoState, RawInputFrame
 
 
-def test_build_noop_pipeline_returns_runtime_pipeline() -> None:
+def test_build_noop_pipeline_returns_control_mapped_pipeline() -> None:
     pipeline = build_noop_pipeline()
 
-    assert isinstance(pipeline, RuntimePipeline)
+    assert isinstance(pipeline, ControlMappedRuntimePipeline)
 
 
 def test_run_once_returns_mujoco_state() -> None:

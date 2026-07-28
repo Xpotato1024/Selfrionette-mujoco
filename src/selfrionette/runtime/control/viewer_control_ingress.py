@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from time import monotonic
 
-from selfrionette.input_sources.keyboard import KeyboardInputConfig
+from selfrionette.plugins.mappings.keyboard import KeyboardInputConfig
 from selfrionette.plugins.input_sources.viewer import (
     DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS,
     DEFAULT_VIEWER_SAFE_ENDPOINT_M,

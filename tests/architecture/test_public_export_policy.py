@@ -19,7 +19,6 @@ FORBIDDEN_PREFIXES = ("NoOp", "Zero", "Static")
 
 STUB_EXPORTS = {
     "tests.support.input_source_doubles": ("StaticInputSource",),
-    "tests.support.input_interpreter_doubles": ("NoOpInputInterpreter",),
     "tests.support.kinematics_solver_doubles": ("ZeroForwardKinematicsSolver", "ZeroInverseKinematicsSolver"),
     "tests.support.motion_doubles": ("NoOpMotionGenerator",),
     "tests.support.mujoco_doubles": ("NoOpMuJoCoSimulator",),

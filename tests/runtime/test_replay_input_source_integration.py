@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.input_interpreters import ReplayInputInterpreter
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
-from selfrionette.plugins.mappings.replay import build_motion_command_from_replay_frame
+from selfrionette.plugins.mappings.replay import (
+    REPLAY_CONTROL_MAPPING_PLUGIN,
+    build_motion_command_from_replay_frame,
+)
 from selfrionette.runtime.control.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.schemas import RawInputFrame
 
@@ -22,7 +24,7 @@ def test_replay_fixture_motion_command_resolves_desired_endpoint() -> None:
     source = ReplayInputSource((frame,))
 
     replay_frame = source.read_frame()
-    intent = ReplayInputInterpreter().interpret(replay_frame)
+    intent = REPLAY_CONTROL_MAPPING_PLUGIN.strategy.map_input(replay_frame, {})
     command = build_motion_command_from_replay_frame(
         RawInputFrame(
             source=intent.source,

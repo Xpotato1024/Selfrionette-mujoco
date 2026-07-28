@@ -70,9 +70,9 @@ viewer page URL と WebSocket endpoint URL は別である。`0.0.0.0` はbind�
 
 ## Specialized input
 
-viewer keyboard/gamepad inputなど `--input-source` を必要とする既存procedureは、移行完了まで
-`scripts/compatibility/run_replay_mujoco_websocket_publisher.py` thin wrapperを使う。標準 replay publisher は
-installable CLIを正本とする。
+viewer keyboard/gamepad inputはinstallable CLIの
+`uv run selfrionette viewer --robot fast_arm --input-source viewer`を使う。sourceとmappingはproduction
+catalogから解決し、viewer ingress lifecycleも同じcanonical runnerが所有する。
 
 ## 非目標
 

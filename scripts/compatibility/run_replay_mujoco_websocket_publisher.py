@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -13,22 +11,11 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from selfrionette.plugins.input_sources.catalog import SUPPORTED_INPUT_SOURCE_NAMES
-from selfrionette.plugins.input_sources.catalog import get_input_source_registration
-from selfrionette.runtime.composition.config import RuntimeConfig
-from selfrionette.runtime.execution.input_step_loop import (
-    build_runtime_input_source_step_loop_plan,
-    run_runtime_input_source_step_loop,
+from selfrionette.runtime.runners.websocket_publisher import (
+    SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS,
+    run_input_source_websocket_publisher,
+    run_replay_mujoco_websocket_publisher,
 )
-from selfrionette.runtime.control.viewer_control_ingress import (
-    build_viewer_input_source,
-    ingest_viewer_control_message_json,
-)
-from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
-from selfrionette.runtime.execution.live_timing import AbsoluteDeadlinePacer, LiveRuntimeTimingMetrics
-from selfrionette.runtime.runners.live_websocket_delivery import LiveLatestStateWebSocketPublisher
-from selfrionette.runtime.runners.websocket_publisher import run_replay_mujoco_websocket_publisher
-from selfrionette.runtime.runners.websocket_publisher import SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS
-from selfrionette.transport import WebSocketPublisherServer, WebSocketStatePublisher
 
 DEFAULT_WEBSOCKET_PUBLISHER_HOST = "127.0.0.1"
 DEFAULT_WEBSOCKET_PUBLISHER_PORT = 8766
@@ -36,10 +23,6 @@ DEFAULT_WEBSOCKET_PUBLISHER_STEPS = 1
 DEFAULT_WEBSOCKET_PUBLISHER_DT_S = 1.0 / 60.0
 DEFAULT_WEBSOCKET_PUBLISHER_INTERVAL_S = 0.0
 DEFAULT_WEBSOCKET_PUBLISHER_GRACE_PERIOD_S = 0.05
-
-
-def _log(message: str) -> None:
-    print(message, flush=True)
 
 
 def _host(value: str) -> str:
@@ -67,104 +50,6 @@ def _positive_float(value: str) -> float:
     if parsed <= 0.0:
         raise argparse.ArgumentTypeError("dt-s must be positive")
     return parsed
-
-
-async def _run_input_source_websocket_publisher_async(
-    *,
-    host: str,
-    port: int,
-    steps: int,
-    dt_s: float,
-    interval_s: float,
-    grace_period_s: float,
-    preset: str | None,
-    input_source: str,
-) -> None:
-    runtime_config = RuntimeConfig(dt_s=dt_s, robot_profile_id="fast_arm")
-
-    registration = get_input_source_registration(input_source)
-    if registration.execution_adapter.uses_viewer_endpoint_compatibility:
-        viewer_input_source = build_viewer_input_source()
-
-        def handle_viewer_message(message: str) -> None:
-            ingest_viewer_control_message_json(viewer_input_source, message)
-
-        async with WebSocketPublisherServer(host=host, port=port, on_message=handle_viewer_message) as server:
-            _log(f"serving on ws://{server.host}:{server.bound_port}")
-            _log(f"Waiting for viewer during grace period ({grace_period_s:.2f}s)")
-
-            has_client = await server.wait_for_client(timeout_s=grace_period_s)
-            if not has_client:
-                _log("No viewer connected during grace period; no payloads published.")
-                _log("Completed without publishing because no viewer connected.")
-                return
-
-            _log("Viewer connected; publishing started.")
-
-            timing_metrics = LiveRuntimeTimingMetrics()
-            pacer = None
-            if interval_s > 0.0:
-                pacer = AbsoluteDeadlinePacer(interval_s, metrics=timing_metrics)
-            async with LiveLatestStateWebSocketPublisher(server) as publisher:
-                selection = select_runtime_input_source(input_source, steps=steps, preset=preset)
-                plan = build_runtime_input_source_step_loop_plan(
-                    selection,
-                    config=runtime_config,
-                    publisher=publisher,
-                    viewer_input_source=viewer_input_source,
-                )
-                await run_runtime_input_source_step_loop(
-                    plan,
-                    steps=steps,
-                    dt_s=dt_s,
-                    interval_s=interval_s,
-                    pacer=pacer,
-                    timing_metrics=timing_metrics,
-                    collect_records=False,
-                )
-                await publisher.drain()
-                delivery_summary = publisher.summary().to_dict()
-
-            _log(
-                "live runtime timing summary: "
-                + json.dumps(
-                    {
-                        **timing_metrics.summary(dt_s=dt_s).to_dict(),
-                        **delivery_summary,
-                    },
-                    sort_keys=True,
-                )
-            )
-
-            _log(f"Completed after publishing {steps} frame(s).")
-        return
-
-    async with WebSocketPublisherServer(host=host, port=port) as server:
-        _log(f"serving on ws://{server.host}:{server.bound_port}")
-        _log(f"Waiting for viewer during grace period ({grace_period_s:.2f}s)")
-
-        has_client = await server.wait_for_client(timeout_s=grace_period_s)
-        if not has_client:
-            _log("No viewer connected during grace period; no payloads published.")
-            _log("Completed without publishing because no viewer connected.")
-            return
-
-        _log("Viewer connected; publishing started.")
-
-        selection = select_runtime_input_source(input_source, steps=steps, preset=preset)
-        plan = build_runtime_input_source_step_loop_plan(
-            selection,
-            config=runtime_config,
-            publisher=WebSocketStatePublisher(server),
-        )
-        await run_runtime_input_source_step_loop(
-            plan,
-            steps=steps,
-            dt_s=dt_s,
-            interval_s=interval_s,
-        )
-
-        _log(f"Completed after publishing {steps} frame(s).")
 
 
 def _non_negative_float(value: str) -> float:
@@ -226,17 +111,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
 
-    asyncio.run(
-        _run_input_source_websocket_publisher_async(
-            host=args.host,
-            port=args.port,
-            steps=args.steps,
-            dt_s=args.dt_s,
-            interval_s=args.interval_s,
-            grace_period_s=args.grace_period_s,
-            preset=args.preset,
-            input_source=args.input_source,
-        )
+    run_input_source_websocket_publisher(
+        host=args.host,
+        port=args.port,
+        steps=args.steps,
+        dt_s=args.dt_s,
+        interval_s=args.interval_s,
+        grace_period_s=args.grace_period_s,
+        preset=args.preset,
+        input_source=args.input_source,
     )
     return 0
 

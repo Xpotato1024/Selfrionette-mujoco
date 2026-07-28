@@ -1,3 +1,5 @@
+"""Explicit public compatibility tests retained until C4."""
+
 from __future__ import annotations
 
 from selfrionette.input_interpreters import ReplayInputInterpreter

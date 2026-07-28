@@ -53,7 +53,7 @@ from selfrionette.runtime.composition.robot_bundle import (
 )
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local_motion_metadata
-from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.execution.input_source_adapters import (
     RuntimeInputSourceExecutionAdapter,
 )
@@ -77,14 +77,14 @@ class _InputLoopStatePublisher:
 @dataclass(frozen=True, slots=True)
 class RuntimeInputSourceStepLoopPlan:
     selection: RuntimeInputSourceSelection
-    pipeline: RuntimePipeline
+    pipeline: ControlMappedRuntimePipeline
     annotate_target_position_m: bool
     endpoint_pose_provider: EndpointPoseProvider
     endpoint_command_provider: EndpointCommandProvider
     qpos_feasibility_provider: QposFeasibilityProvider
     endpoint_site_name: str | None
     execution_adapter: RuntimeInputSourceExecutionAdapter
-    control_mapping: ControlMappingPlugin | None = None
+    control_mapping: ControlMappingPlugin
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
     mapping_input_adapter: InputSourceMappingAdapter | None = None
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
@@ -120,7 +120,7 @@ def _coerce_viewer_endpoint_m(value: object) -> tuple[float, float, float]:
 
 
 def _extract_current_endpoint_m(
-    pipeline: RuntimePipeline, provider: EndpointPoseProvider
+    pipeline: ControlMappedRuntimePipeline, provider: EndpointPoseProvider
 ) -> tuple[float, float, float] | None:
     return provider.observe_endpoint_pose(pipeline.simulator.snapshot()).position_m
 
@@ -145,6 +145,10 @@ def build_runtime_input_source_step_loop_plan(
     if execution_adapter is None:
         raise ValueError(
             "plugin-backed runtime input source selection requires an execution adapter"
+        )
+    if selection.control_mapping is None:
+        raise ValueError(
+            "plugin-backed runtime input source selection requires a Control Mapping Plugin"
         )
     if runtime_config.robot_profile_id is None:
         raise ValueError("production input step-loop requires robot_profile_id")
@@ -192,6 +196,9 @@ def build_runtime_input_source_step_loop_plan(
             model_path=resolved_model_path,
             loop=selection.loop,
             publisher=publisher if publisher is not None else _InputLoopStatePublisher(),
+            control_mapping=selection.control_mapping,
+            control_mapping_parameters=selection.control_mapping_parameters,
+            mapping_input_adapter=selection.mapping_input_adapter,
         )
         if selection.runtime_reader is not None:
             pipeline.input_source = selection.runtime_reader
@@ -219,6 +226,9 @@ def build_runtime_input_source_step_loop_plan(
             publisher=publisher,
             initial_keyframe_name=initial_state.source_id,
             robot_profile_metadata=robot_profile_runtime_metadata(robot_bundle.profile),
+            control_mapping=selection.control_mapping,
+            control_mapping_parameters=selection.control_mapping_parameters,
+            mapping_input_adapter=selection.mapping_input_adapter,
         )
         plugin.validate_model(pipeline.simulator.model)
         pipeline.qpos_feasibility_guard = qpos_feasibility_provider.build_guard(
@@ -283,6 +293,9 @@ def build_runtime_input_source_step_loop_plan(
             publisher=publisher if publisher is not None else _InputLoopStatePublisher(),
             discontinuity_threshold_rad=VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
             discontinuity_threshold_label="viewer endpoint continuity threshold",
+            control_mapping=selection.control_mapping,
+            control_mapping_parameters=control_mapping_parameters,
+            mapping_input_adapter=selection.mapping_input_adapter,
         )
         pipeline.input_source = pipeline_input_source
         pipeline.motion_generator = (
@@ -444,33 +457,30 @@ async def _run_runtime_input_source_step_loop(
                     default_source_kind=plan.selection.source_name,
                 )
         frame = annotate_raw_input_frame(raw_frame, source_state)
-        if plan.control_mapping is None:
-            intent = plan.pipeline.input_interpreter.interpret(frame)
-        else:
-            mapping_input = (
-                plan.mapping_input_adapter(frame)
-                if plan.mapping_input_adapter is not None
-                else frame
+        mapping_input = (
+            plan.mapping_input_adapter(frame)
+            if plan.mapping_input_adapter is not None
+            else frame
+        )
+        mapped_intent = plan.control_mapping.strategy.map_input(
+            mapping_input,
+            plan.control_mapping_parameters,
+        )
+        if not isinstance(mapped_intent, InputIntent):
+            raise TypeError(
+                "control mapping strategy must return a typed InputIntent"
             )
-            mapped_intent = plan.control_mapping.strategy.map_input(
-                mapping_input,
-                plan.control_mapping_parameters,
-            )
-            if not isinstance(mapped_intent, InputIntent):
-                raise TypeError(
-                    "control mapping strategy must return a typed InputIntent"
-                )
-            intent = mapped_intent
-            # The frame remains the source record, but expose the canonical
-            # mapping result in its compatibility metadata for existing
-            # viewer diagnostics and runtime records. The source itself never
-            # computes these fields.
-            frame = replace(
-                frame,
-                values=intent.values,
-                buttons=intent.buttons,
-                metadata={**frame.metadata, **intent.metadata},
-            )
+        intent = mapped_intent
+        # The frame remains the source record, but expose the canonical
+        # mapping result in its compatibility metadata for existing
+        # viewer diagnostics and runtime records. The source itself never
+        # computes these fields.
+        frame = replace(
+            frame,
+            values=intent.values,
+            buttons=intent.buttons,
+            metadata={**frame.metadata, **intent.metadata},
+        )
         pre_step_state = plan.pipeline.simulator.snapshot()
         pre_step_tip_site_orientation_wxyz = None
         if plan.execution_adapter.uses_viewer_endpoint_compatibility:

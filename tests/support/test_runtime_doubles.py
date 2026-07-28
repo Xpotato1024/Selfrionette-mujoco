@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 
-from tests.support.input_interpreter_doubles import NoOpInputInterpreter
 from tests.support.input_source_doubles import StaticInputSource
 from tests.support.kinematics_solver_doubles import ZeroForwardKinematicsSolver, ZeroInverseKinematicsSolver
 from tests.support.motion_doubles import NoOpMotionGenerator
@@ -22,27 +21,6 @@ def test_static_input_source_double_returns_provided_frame() -> None:
     source = StaticInputSource(frame)
 
     assert source.read_frame() is frame
-
-
-def test_noop_input_interpreter_returns_intent() -> None:
-    frame = RawInputFrame(
-        source="gamepad",
-        timestamp_s=4.5,
-        values=(0.25, -0.5),
-        buttons=(True, False),
-        metadata={"origin": "test"},
-    )
-    interpreter = NoOpInputInterpreter()
-    intent = interpreter.interpret(frame)
-
-    assert isinstance(intent, InputIntent)
-    assert intent.source == "gamepad"
-    assert intent.timestamp_s == 4.5
-    assert intent.values == (0.25, -0.5)
-    assert intent.target_delta_m == (0.0, 0.0, 0.0)
-    assert intent.joint_delta_rad == ()
-    assert intent.buttons == (True, False)
-    assert intent.metadata == {"origin": "test"}
 
 
 def test_noop_motion_generator_returns_command() -> None:
