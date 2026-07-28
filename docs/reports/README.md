@@ -1,7 +1,7 @@
 ---
 status: supporting
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-27
 canonical_for: []
 related:
   - docs/README.md
@@ -36,6 +36,9 @@ contract、反復operationのsource of truthにはしない。現在仕様は`do
 - [#458 Input Source Plugin ownership inventory](inventories/input-source-plugin-ownership-inventory.md):
   baseline `5ce12be54038d2a5b9d33d1ba91ac7b36bfb4dc9`に対する現行source、mapping、lifecycle、
   test ownershipと、Issue #458のhistorical snapshot。current contractの正本ではない。
+- [#468 Input Source post-migration retirement inventory](inventories/input-source-post-migration-retirement-inventory.md):
+  baseline `82415f5a9a62c557bdfe53afd2f1e78d61ed6a4c`に残る旧path、compatibility facade、
+  wrapper、fallbackのcaller / owner分類とC2〜C4 handoff。current contractの正本ではない。
 - [2026-07-16 canonical content / history separation audit](audits/canonical-content-history-separation-2026-07-16.md):
   全canonical文書のcontent review、history extraction、status再分類、抽出元commitを記録する。
   追加抽出本文は[separation supplement](audits/canonical-content-history-separation-supplement-2026-07-16.md)へ
