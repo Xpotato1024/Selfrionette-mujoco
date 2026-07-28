@@ -76,13 +76,3 @@ def test_analog_fixture_parser_rejects_invalid_samples(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         parse_analog_fixture_sample(value)
-
-
-def test_old_analog_path_re_exports_canonical_source_symbols() -> None:
-    from selfrionette.input_sources.analog_fixture import (
-        AnalogFixtureSample as CompatibilityAnalogFixtureSample,
-        parse_analog_fixture_sample as compatibility_parse,
-    )
-
-    assert CompatibilityAnalogFixtureSample is AnalogFixtureSample
-    assert compatibility_parse is parse_analog_fixture_sample

@@ -4,12 +4,12 @@ import asyncio
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.schemas import MuJoCoState
-from tests.support.input_interpreter_doubles import NoOpInputInterpreter
 from tests.support.input_source_doubles import StaticInputSource
 from tests.support.motion_doubles import NoOpMotionGenerator
-from tests.support.runtime_pipeline_builders import (
+from tests.support.mapped_pipeline_builders import (
     build_noop_pipeline,
     build_test_mujoco_pipeline,
 )
@@ -19,15 +19,15 @@ from tests.support.transport_doubles import NoOpStatePublisher
 def test_build_noop_pipeline_still_works() -> None:
     pipeline = build_noop_pipeline()
 
-    assert isinstance(pipeline, RuntimePipeline)
+    assert isinstance(pipeline, ControlMappedRuntimePipeline)
 
 
 def test_build_mujoco_pipeline_returns_runtime_pipeline_and_state() -> None:
     pipeline = build_test_mujoco_pipeline(model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
-    assert isinstance(pipeline, RuntimePipeline)
+    assert isinstance(pipeline, ControlMappedRuntimePipeline)
     assert isinstance(pipeline.input_source, StaticInputSource)
-    assert isinstance(pipeline.input_interpreter, NoOpInputInterpreter)
+    assert pipeline.control_mapping is REPLAY_CONTROL_MAPPING_PLUGIN
     assert isinstance(pipeline.motion_generator, NoOpMotionGenerator)
     assert isinstance(pipeline.simulator, HeadlessMuJoCoSimulator)
     assert isinstance(pipeline.publisher, NoOpStatePublisher)

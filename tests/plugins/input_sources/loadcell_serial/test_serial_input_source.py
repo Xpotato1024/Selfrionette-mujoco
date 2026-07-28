@@ -4,12 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette import input_sources
 from selfrionette.plugins.input_sources._loadcell import (
-    LoadcellNormalizationConfig,
-    LoadcellNormalizedInputIntentConverter,
-    NormalizedLoadcellInputIntent,
-    RawLoadcellVectorRecord,
     SerialFrameParseError,
     SerialInputSource,
 )
@@ -21,30 +16,6 @@ FIXTURE_ROOT = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "r7_
 
 def read_fixture_lines(name: str) -> list[str]:
     return FIXTURE_ROOT.joinpath(name).read_text(encoding="utf-8").splitlines()
-
-
-def test_serial_input_source_is_exported_from_input_sources_package() -> None:
-    from selfrionette.input_sources import (
-        SerialInputSource as CompatibilitySerialInputSource,
-    )
-
-    assert CompatibilitySerialInputSource is SerialInputSource
-    assert SerialInputSource is input_sources.SerialInputSource
-    assert "SerialInputSource" in input_sources.__all__
-    assert not hasattr(SerialInputSource, "from_port")
-    assert not hasattr(SerialInputSource, "open_port")
-
-
-def test_old_loadcell_path_re_exports_canonical_source_symbols() -> None:
-    from selfrionette.input_sources import loadcell_serial as compatibility
-
-    assert compatibility.LoadcellNormalizationConfig is LoadcellNormalizationConfig
-    assert (
-        compatibility.LoadcellNormalizedInputIntentConverter
-        is LoadcellNormalizedInputIntentConverter
-    )
-    assert compatibility.NormalizedLoadcellInputIntent is NormalizedLoadcellInputIntent
-    assert compatibility.RawLoadcellVectorRecord is RawLoadcellVectorRecord
 
 
 def test_serial_input_source_from_lines_reads_first_valid_vector_record() -> None:

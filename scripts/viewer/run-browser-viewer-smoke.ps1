@@ -215,8 +215,10 @@ $startupWaitSeconds = [Math]::Max(5, [Math]::Min($GracePeriodS, 20))
 try {
     $publisherArgs = @(
         "run"
-        "python"
-        "scripts/compatibility/run_replay_mujoco_websocket_publisher.py"
+        "selfrionette"
+        "viewer"
+        "--robot"
+        "fast_arm"
         "--host"
         $HostName
         "--port"

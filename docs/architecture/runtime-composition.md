@@ -22,14 +22,15 @@ related:
 | owner | canonical responsibility |
 |---|---|
 | `composition/` | config、Robot Profile / Plugin / Bundle、typed provider adapter、pipeline assembly |
-| `execution/` | `RuntimePipeline`、input step loop、typed input-source execution adapters、timing / pacing |
+| `execution/` | `ControlMappedRuntimePipeline`、input step loop、typed input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness-only composition |
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
 | `runners/` | 現行operational dry-run / smoke / publisher entry point |
 
-`runtime.__init__`は`RuntimeConfig`、`RuntimePipeline`、既存catalog resolver 5件だけをlazy exportする。
+`runtime.__init__`は`RuntimeConfig`、C4までのpublic compatibility objectである`RuntimePipeline`、
+既存catalog resolver 5件だけをlazy exportする。
 contractやrunnerをpackage rootからre-exportしない。catalog access前のlazy-load、resolved Bundleのtyped
 provider identity、plugin identityはこの移動で変更しない。
 
@@ -136,7 +137,9 @@ runtime composition側で保持する。
 
 step-loopはreplay compatibilityではrecorded frame metadataをsource-state truthとして使用し、その他のsourceでは
 typed healthをsource-state truthとして使用する。live frameにstate fieldがある場合は存在するkeyだけhealthと照合し、
-省略keyをhealth projectionで補完する。canonical projection後の同じframeをinterpreter、record、diagnosticsへ渡す。
+省略keyをhealth projectionで補完する。canonical projection後の同じframeをversioned Control Mapping Plugin、
+record、diagnosticsへ渡す。mapping selectionまたはtyped adapterが欠落するproduction planはfail-closedとし、
+`InputInterpreter`へfallbackしない。
 frontend keyboard / gamepad provider、backend source、mappingの分離とmapping readinessは#461で成立し、#462で
 plugin-local test ownership、reusable conformance、test-only dummy onboarding、retained compatibilityの境界を
 architecture guardとfocused validation contractへ固定した。source pluginからrobot / task / evaluationへの禁止
@@ -175,10 +178,17 @@ parameter contractとoptional semantic validator / normalizerをsource lifecycle
 selection / plan readinessでrejectし、normalized / frozen parametersをstep loopへ渡す。unknown、duplicate、
 version mismatch、schema mismatch、missing mapping capabilityはimplicit fallbackなしでfail-closedとする。
 
+C3のinterpreter fallback退役では、`programmed_target`と`noop`の既存`RawInputFrame` semanticsを
+`replay_mapping/v1`へ明示的に接続するdefault mapping selectionとidentity mapping adapterを追加した。
+adapterはframe representationを変更せず同一objectを返し、sourceのproduced sample schemaも変更しない。
+effective mapping-input schemaだけを`replay_raw_input_frame/v1`としてversioned contractに表し、
+旧`ReplayInputInterpreter`と同じ`InputIntent` shallow-copy semanticsを維持する。
+
 legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping実装へ分岐しない。C2では
-source-owned implementationを`plugins/input_sources/`へ集約し、`src/selfrionette/input_sources/`は
-public compatibility facadeとして残す。CLI / runner compatibility cleanupはC3、public surfaceのretirementは
-C4で扱う。
+source-owned implementationを`plugins/input_sources/`へ集約した。C3ではproduction/internal consumerを
+catalog、typed mapping selection、`ControlMappedRuntimePipeline`へ収束させた。
+`src/selfrionette/input_sources/`、`input_interpreters/`、interpreter-based `RuntimePipeline`、public helper、
+observable parityが未成立のcompatibility scriptはpublic compatibilityとしてC4まで残す。
 
 raw gamepad sampleでは`raw_axes`をmappingのauthoritative inputとして保持する一方、gamepad/v1の
 `zero_state`、`source_active`、heartbeatはlegacy projected `axes`とbuttonsに基づくobservable semanticsを
@@ -205,8 +215,8 @@ hold safety、malformed ingressの即時`invalid`遷移を維持する。
 
 この文書はcurrent responsibility boundaryを固定し、does not perform a broad runtime rewrite。
 fast_arm固有diagnosticsは`plugins/robots/fast_arm/adapter/diagnostics/`が所有し、generic runtime public surfaceや
-plugin discovery entry pointからeager importしない。generic `RuntimePipeline`はtest doubleを構築せず、
-test-only wiringは`tests/support/`が所有する。
+plugin discovery entry pointからeager importしない。production builderは`ControlMappedRuntimePipeline`を構築し、
+interpreter-based `RuntimePipeline`を使わない。test-only mapped wiringは`tests/support/`が所有する。
 pre-audit composition chronologyとrefactor proposalは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
 ### #461 final audit correction (2026-07-26)
@@ -217,4 +227,4 @@ source activity / healthとmappingが生成するcommand zeroは別概念であ�
 projectionはobservable source activityの互換条件として維持し、button-only sample、disconnect、hidden、
 blur、stale、invalidの既存hold safetyも維持する。
 
-Control Mapping parametersの優先順位は、`explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults`である。selectionはcallerが明示したparameter keyを保持し、暗黙defaultと区別したうえでplan readiness時にtyped compatibility capabilityを合成する。#462のtest relocation、dummy onboarding、legacy fallback retirementは後続scopeとして実施しない。
+Control Mapping parametersの優先順位は、`explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults`である。selectionはcallerが明示したparameter keyを保持し、暗黙defaultと区別したうえでplan readiness時にtyped compatibility capabilityを合成する。C3ではrepository内部のlegacy interpreter / mapping facade fallbackを退役し、public compatibility retirementだけをC4へ残す。

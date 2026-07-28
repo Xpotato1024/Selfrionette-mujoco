@@ -7,7 +7,7 @@ import pytest
 
 from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
 
@@ -15,7 +15,7 @@ from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
 def test_build_replay_mujoco_pipeline_returns_runtime_pipeline() -> None:
     pipeline = build_replay_mujoco_pipeline(model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
-    assert isinstance(pipeline, RuntimePipeline)
+    assert isinstance(pipeline, ControlMappedRuntimePipeline)
     assert isinstance(pipeline.motion_generator, InputIntentMotionGenerator)
     assert isinstance(pipeline.simulator, HeadlessMuJoCoSimulator)
     assert hasattr(pipeline.publisher, "last_state")

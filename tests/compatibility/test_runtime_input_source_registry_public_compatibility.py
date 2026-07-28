@@ -1,3 +1,5 @@
+"""Public low-level registry compatibility retained until C4."""
+
 from __future__ import annotations
 
 import pytest

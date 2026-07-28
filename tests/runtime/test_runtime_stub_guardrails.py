@@ -6,8 +6,7 @@ import json
 from pathlib import Path
 
 import selfrionette.runtime.runners.websocket_publisher as websocket_runner_module
-from selfrionette.input_interpreters import ReplayInputInterpreter
-from tests.support.input_interpreter_doubles import NoOpInputInterpreter
+from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from tests.support.input_source_doubles import StaticInputSource
 from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmEndpointInverseKinematicsSolver
@@ -28,7 +27,6 @@ ROOT = Path(__file__).resolve().parents[2]
 PRODUCTION_SOURCE_MODULES = tuple((ROOT / "src" / "selfrionette").rglob("*.py"))
 FORBIDDEN_RUNTIME_SYMBOLS = (
     "StaticInputSource",
-    "NoOpInputInterpreter",
     "NoOpMotionGenerator",
     "NoOpMuJoCoSimulator",
     "NoOpStatePublisher",
@@ -37,7 +35,6 @@ FORBIDDEN_RUNTIME_SYMBOLS = (
 )
 FORBIDDEN_RUNTIME_MODULES = {
     "tests.support.input_source_doubles",
-    "tests.support.input_interpreter_doubles",
     "tests.support.kinematics_solver_doubles",
     "tests.support.motion_doubles",
     "tests.support.mujoco_doubles",
@@ -106,8 +103,7 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_components() -> None:
 
     assert isinstance(pipeline.input_source, ReplayInputSource)
     assert not isinstance(pipeline.input_source, StaticInputSource)
-    assert isinstance(pipeline.input_interpreter, ReplayInputInterpreter)
-    assert not isinstance(pipeline.input_interpreter, NoOpInputInterpreter)
+    assert pipeline.control_mapping is REPLAY_CONTROL_MAPPING_PLUGIN
     assert isinstance(pipeline.motion_generator, TargetToJointMotionGenerator)
     assert isinstance(pipeline.motion_generator._ik_solver, FastArmEndpointInverseKinematicsSolver)
     assert not isinstance(pipeline.motion_generator._ik_solver, ZeroInverseKinematicsSolver)
@@ -122,7 +118,7 @@ def test_build_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_four_d
     publisher = RecordingPublisher()
     command_pipeline = build_concrete_mujoco_pipeline(publisher=publisher)
     frame = command_pipeline.input_source.read_frame()
-    intent = command_pipeline.input_interpreter.interpret(frame)
+    intent = command_pipeline.map_input(frame)
     command = command_pipeline.motion_generator.update(intent, dt_s=1.0 / 60.0)
 
     state_pipeline = build_concrete_mujoco_pipeline(publisher=publisher)

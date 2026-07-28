@@ -11,7 +11,7 @@ from selfrionette.plugins.robots.fast_arm.adapter.endpoint import extract_fast_a
 from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmEndpointInverseKinematicsSolver
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime.evaluation.endpoint_metrics import EndpointEvaluationStatePublisher
-from selfrionette.runtime.execution.pipeline import RuntimePipeline
+from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.schemas import JointCommand, MuJoCoState, RawInputFrame
 from generic_qpos_test_doubles import RejectingGenericQposGuard
@@ -29,7 +29,7 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_solver_path() -> None:
     publisher = RecordingPublisher()
     pipeline = build_concrete_mujoco_pipeline(publisher=publisher)
 
-    assert isinstance(pipeline, RuntimePipeline)
+    assert isinstance(pipeline, ControlMappedRuntimePipeline)
     assert isinstance(pipeline.motion_generator, TargetToJointMotionGenerator)
     assert isinstance(pipeline.motion_generator._ik_solver, FastArmEndpointInverseKinematicsSolver)
     assert isinstance(pipeline.publisher, EndpointEvaluationStatePublisher)

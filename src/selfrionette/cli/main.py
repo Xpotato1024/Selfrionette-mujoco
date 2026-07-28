@@ -8,6 +8,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from selfrionette.plugins.catalog import resolve_robot_bundle
+from selfrionette.plugins.input_sources.catalog import (
+    INPUT_SOURCE_CATALOG,
+    SUPPORTED_INPUT_SOURCE_NAMES,
+)
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -17,14 +21,23 @@ from selfrionette.runtime.composition.robot_bundle import (
 from selfrionette.runtime.runners.dry_run import run_replay_mujoco_dry_run
 from selfrionette.runtime.runners.websocket_publisher import (
     SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS,
+    run_input_source_websocket_publisher,
     run_replay_mujoco_websocket_publisher,
 )
+from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.experiment.input_source import InputSourceMode
 
 _RUNTIME_CAPABILITIES = (
     RESET_INITIAL_STATE_V1,
     ENDPOINT_POSE_V1,
     ENDPOINT_COMMAND_V1,
     QPOS_FEASIBILITY_V1,
+)
+REPLAY_INPUT_SOURCE_NAMES = tuple(
+    source_name
+    for source_name in SUPPORTED_INPUT_SOURCE_NAMES
+    if INPUT_SOURCE_CATALOG.resolve(source_name).plugin.source_mode
+    in {InputSourceMode.OFFLINE, InputSourceMode.REPLAY}
 )
 
 
@@ -74,6 +87,11 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--dt-s", type=_positive_float, default=None)
     replay.add_argument("--preset", choices=("sweep_x",), default=None)
     replay.add_argument("--output", type=Path, default=None)
+    replay.add_argument(
+        "--input-source",
+        choices=REPLAY_INPUT_SOURCE_NAMES,
+        default=None,
+    )
 
     viewer = commands.add_parser(
         "viewer",
@@ -91,6 +109,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=SUPPORTED_WEBSOCKET_PUBLISHER_PRESETS,
         default=None,
     )
+    viewer.add_argument(
+        "--input-source",
+        choices=SUPPORTED_INPUT_SOURCE_NAMES,
+        default=None,
+    )
     return parser
 
 
@@ -104,25 +127,56 @@ def _run(args: argparse.Namespace) -> int:
     _resolve_runtime_capabilities(args.robot)
     if args.command == "replay":
         output = args.output if args.output is not None else sys.stdout
-        run_replay_mujoco_dry_run(
-            steps=args.steps,
-            dt_s=args.dt_s,
-            output=output,
-            preset=args.preset,
-            robot_profile_id=args.robot,
-        )
+        if args.input_source is None:
+            run_replay_mujoco_dry_run(
+                steps=args.steps,
+                dt_s=args.dt_s,
+                output=output,
+                preset=args.preset,
+                robot_profile_id=args.robot,
+            )
+        else:
+            selection = select_runtime_input_source(
+                args.input_source,
+                steps=args.steps,
+                preset=args.preset,
+            )
+            run_kwargs = {
+                "steps": args.steps,
+                "dt_s": args.dt_s,
+                "output": output,
+                "robot_profile_id": args.robot,
+            }
+            adapter = selection.execution_adapter
+            if (
+                adapter is not None
+                and adapter.annotates_target_position
+                and not adapter.uses_viewer_endpoint_compatibility
+            ):
+                run_kwargs["preset"] = "sweep_x"
+            else:
+                run_kwargs["frames"] = selection.frames
+            run_replay_mujoco_dry_run(**run_kwargs)
         return 0
     if args.command == "viewer":
-        run_replay_mujoco_websocket_publisher(
-            host=args.host,
-            port=args.port,
-            steps=args.steps,
-            dt_s=args.dt_s,
-            interval_s=args.interval_s,
-            grace_period_s=args.grace_period_s,
-            preset=args.preset,
-            robot_profile_id=args.robot,
+        runner = (
+            run_replay_mujoco_websocket_publisher
+            if args.input_source is None
+            else run_input_source_websocket_publisher
         )
+        run_kwargs = {
+            "host": args.host,
+            "port": args.port,
+            "steps": args.steps,
+            "dt_s": args.dt_s,
+            "interval_s": args.interval_s,
+            "grace_period_s": args.grace_period_s,
+            "preset": args.preset,
+            "robot_profile_id": args.robot,
+        }
+        if args.input_source is not None:
+            run_kwargs["input_source"] = args.input_source
+        runner(**run_kwargs)
         return 0
     raise AssertionError(f"unhandled command {args.command!r}")
 

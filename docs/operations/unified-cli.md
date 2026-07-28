@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-07-18
+last_verified: 2026-07-28
 canonical_for:
   - installable unified CLI
 related:
@@ -19,17 +19,27 @@ typed provider が Bundle に一意に存在することを検証する。
 ```bash
 uv run selfrionette replay --robot fast_arm --steps 1
 uv run selfrionette viewer --robot fast_arm --steps 1
+uv run selfrionette replay --robot fast_arm --steps 1 --input-source noop
+uv run selfrionette viewer --robot fast_arm --steps 18000 --input-source viewer
 ```
 
 ## 採用した entry point
 
 | command | 既存処理 | 用途 |
 | --- | --- | --- |
-| `replay` | `run_replay_mujoco_dry_run` | deterministic replay と payload v0 NDJSON 出力 |
-| `viewer` | `run_replay_mujoco_websocket_publisher` | replay payload の WebSocket 配信 |
+| `replay` | `run_replay_mujoco_dry_run` | deterministic replay と payload v0 NDJSON 出力。`--input-source`で`programmed_target` / `replay` / `noop`をcatalog解決する |
+| `viewer` | `run_replay_mujoco_websocket_publisher` / `run_input_source_websocket_publisher` | replay payloadまたはtyped source step loopのWebSocket配信。`--input-source viewer`はviewer ingress lifecycleを有効にする |
 
-旧 script は #436 の inventory と consumer migration が完了するまで wrapper として維持する。
-既存 Python API の既定値も compatibility のため変更しない。
+commandごとの`--input-source` choicesは次のとおりである。
+
+- `replay`: `programmed_target` / `replay` / `noop`
+- `viewer`: `programmed_target` / `replay` / `noop` / `viewer`
+
+`viewer` sourceはviewer ingressとruntime readerを必要とするため、`replay --input-source viewer`では受理しない。
+
+repository内部とcurrent operator手順はinstallable CLIだけを使用する。旧compatibility scriptは
+error/help surfaceの完全parityが未成立のpublic compatibilityとしてC4まで残すが、新しいcallerを追加しない。
+既存 Python API の既定値もcompatibilityのため変更しない。
 
 ## 今回採用しない候補
 

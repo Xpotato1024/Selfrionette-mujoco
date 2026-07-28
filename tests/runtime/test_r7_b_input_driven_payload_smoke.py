@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
-from selfrionette.input_sources import build_keyboard_motion_command
+from selfrionette.plugins.mappings.keyboard import build_keyboard_motion_command
 from selfrionette.runtime.runners.offline_input_smoke import run_offline_input_runtime_stepping_smoke
 
 

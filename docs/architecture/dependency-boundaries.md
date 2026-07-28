@@ -170,7 +170,7 @@ transport           -> runtime
 `apps/mujoco-viewer/src`は`tests/architecture/test_layer_import_boundaries.py`で
 検査する。rendering-onlyを維持し、MuJoCo、IK/FK、Rapier layerをimportしてはならない。
 
-## Input Source compatibility facade exception (#462)
+## Input Source compatibility facade exception (#472)
 
 `input_sources/`は既存public importを壊さないためのcompatibility packageである。次の5 moduleは
 canonical mapping ownerをthin facadeとして再exportする。
@@ -211,7 +211,7 @@ legacyの責務を移行する場合は、script全体をcopyせず、次のowne
 |---|---|---|
 | MuJoCo XML / STL asset | typed robot package resource（logical namespaceは`assets/mujoco/fast_arm/`） | canonical assetを参照し、legacy codeを実行しない |
 | device input読取 | `plugins/input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
-| inputの意味付けとscale | `plugins/mappings/` | mapping semanticsのcanonical owner。`input_interpreters/`はlegacy `RuntimePipeline` compatibilityとしてC3まで残る |
+| inputの意味付けとscale | `plugins/mappings/` | mapping semanticsのcanonical owner。`input_interpreters/`とlegacy `RuntimePipeline`はpublic compatibilityとしてC4まで残るが、production/internal consumerは持たない |
 | target更新とsafety limit | `motion/` | `MotionCommand`を生成する |
 | FK / IK / joint limit | `kinematics/`またはrobot-specific plugin | kinematics責務に限定する |
 | MJCF model state | `mujoco_backend/` | MuJoCoをphysical stateのsource of truthとする |
@@ -270,8 +270,16 @@ mapping-specific parameter normalizationはreaderのlifecycle開始・frame read
 検証済みparametersはdeterministicなfrozen mappingとしてplanへ渡し、invalid parameterではmanaged sourceを
 startせず、frameもreadしない。
 
+C3以降、`src/`、`scripts/`、`tests/`からold input-source moduleをimportできるのは、public packageの
+facade self-wiringと明示的なpublic compatibility testだけである。production runtimeは
+`input_sources.registry`、`input_interpreters`、old mapping facadeをimportせず、catalogとversioned
+Control Mapping Pluginを直接composeする。compatibility facadeへalgorithm、config、defaultを追加しない。
+public `run_loadcell_serial_dry_run_smoke()`はC4まで同じsignatureと`mapping_plugin=None` behaviorを保つため、
+`input_sources/loadcell_serial.py`からcanonical runtime runner実装をre-exportする。この1 edgeは
+compatibility self-wiringに限定し、source acquisition ownerへruntime behaviorを戻さない。
+
 ## #461 final audit correction (2026-07-26)
 
 frontend providerはbrowser raw acquisitionとlifecycleを所有し、normalized gamepad `axes`はwire / overlay compatibility projectionとして残す。canonical `raw_axes`、source lifecycle / activity、backend health、Control Mappingのcommand zeroを同じ責務に戻さない。gamepadのlegacy two-stage transfer functionはControl Mapping Plugin内で一元化し、frontendまたはsourceへmapping semanticsを戻さない。
 
-sourceとmappingは別identityでruntimeがcomposeする。mapping parametersはexecution / source start前にgeneric contractとmapping-specific semantic validatorで検証し、explicit runtime parameters、direct source compatibility parameters、registration / plugin defaultsの順に解決する。#462のtest relocation、dummy onboarding、legacy fallback retirementはこのboundaryのscope外である。
+sourceとmappingは別identityでruntimeがcomposeする。mapping parametersはexecution / source start前にgeneric contractとmapping-specific semantic validatorで検証し、explicit runtime parameters、direct source compatibility parameters、registration / plugin defaultsの順に解決する。C3ではinternal legacy fallbackを退役し、public facade / helper / package policyはC4へ残す。

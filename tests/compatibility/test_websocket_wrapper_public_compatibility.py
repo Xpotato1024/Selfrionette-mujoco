@@ -61,3 +61,39 @@ def test_cli_accepts_sweep_x_and_passes_it_to_runtime() -> None:
     assert kwargs["preset"] == "sweep_x"
     assert kwargs["host"] == "127.0.0.1"
     assert kwargs["port"] == 8766
+
+
+def test_cli_input_source_delegates_to_canonical_runner() -> None:
+    with patch.object(MODULE, "run_input_source_websocket_publisher") as run_publisher:
+        exit_code = MODULE.main(
+            [
+                "--steps",
+                "1",
+                "--input-source",
+                "viewer",
+            ]
+        )
+
+    assert exit_code == 0
+    run_publisher.assert_called_once()
+    _, kwargs = run_publisher.call_args
+    assert kwargs["input_source"] == "viewer"
+
+
+def test_cli_uses_default_replay_fallback_when_input_source_is_unselected() -> None:
+    with patch.object(MODULE, "run_replay_mujoco_websocket_publisher") as run_publisher:
+        exit_code = MODULE.main(
+            [
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8766",
+                "--steps",
+                "1",
+            ]
+        )
+
+    assert exit_code == 0
+    run_publisher.assert_called_once()
+    _, kwargs = run_publisher.call_args
+    assert kwargs["preset"] is None

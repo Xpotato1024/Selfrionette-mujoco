@@ -89,7 +89,7 @@ async def _run_replay_mujoco_dry_run_async(
         lines: list[str] = []
         for _ in range(steps):
             frame = pipeline.input_source.read_frame()
-            intent = pipeline.input_interpreter.interpret(frame)
+            intent = pipeline.map_input(frame)
             command = pipeline.motion_generator.update(intent, dt)
             pre_step_state = pipeline.simulator.snapshot()
             qpos_guard = pipeline.qpos_feasibility_guard or NoOpQposFeasibilityGuard()

@@ -179,11 +179,30 @@ LOADCELL_MAPPING_INPUT_ADAPTER = InputSourceMappingAdapterContract(
 )
 
 
+def _adapt_raw_frame_to_replay_mapping(frame: object) -> object:
+    if not isinstance(frame, RawInputFrame):
+        raise TypeError("replay mapping input adapter requires RawInputFrame")
+    return frame
+
+
+PROGRAMMED_TARGET_MAPPING_INPUT_ADAPTER = InputSourceMappingAdapterContract(
+    input_schema=VersionedIdentity("programmed_target_sample", 1),
+    output_schema=VersionedIdentity("replay_raw_input_frame", 1),
+    adapt=_adapt_raw_frame_to_replay_mapping,
+)
+NOOP_MAPPING_INPUT_ADAPTER = InputSourceMappingAdapterContract(
+    input_schema=VersionedIdentity("noop_sample", 1),
+    output_schema=VersionedIdentity("replay_raw_input_frame", 1),
+    adapt=_adapt_raw_frame_to_replay_mapping,
+)
+
+
 PROGRAMMED_TARGET_PLUGIN = _plugin(
     "programmed_target", "programmed_target_sample", InputSourceMode.OFFLINE,
     programmed_target.build_reader,
     ParameterContract((ParameterField("steps", int), ParameterField("initial_position_m", tuple), ParameterField("preset", str, required=False), ParameterField("loop", bool, required=False))),
     _active_health(), {"source_kind": "programmed_target", "trajectory_name": "sweep_x"},
+    mapping_input_adapter=PROGRAMMED_TARGET_MAPPING_INPUT_ADAPTER,
 )
 REPLAY_PLUGIN = _plugin(
     "replay", "replay_raw_input_frame", InputSourceMode.REPLAY,
@@ -194,6 +213,7 @@ REPLAY_PLUGIN = _plugin(
 NOOP_PLUGIN = _plugin(
     "noop", "noop_sample", InputSourceMode.OFFLINE, noop.build_reader,
     ParameterContract((ParameterField("metadata", dict),)), _active_health(), {"preset": "noop", "source_kind": "noop"},
+    mapping_input_adapter=NOOP_MAPPING_INPUT_ADAPTER,
 )
 VIEWER_PLUGIN = _plugin(
     "viewer", "viewer_control_sample", InputSourceMode.VIEWER_BRIDGE, viewer.build_reader,
@@ -216,9 +236,30 @@ ANALOG_FIXTURE_PLUGIN = _plugin(
 
 
 INPUT_SOURCE_REGISTRATIONS = (
-    InputSourcePluginRegistration(PROGRAMMED_TARGET_PLUGIN, ("programmed_target",), True, _programmed_request, TARGET_METADATA_EXECUTION_ADAPTER),
-    InputSourcePluginRegistration(REPLAY_PLUGIN, ("replay",), True, _replay_request, REPLAY_COMPATIBILITY_EXECUTION_ADAPTER),
-    InputSourcePluginRegistration(NOOP_PLUGIN, ("noop",), True, _noop_request, REPLAY_COMPATIBILITY_EXECUTION_ADAPTER),
+    InputSourcePluginRegistration(
+        PROGRAMMED_TARGET_PLUGIN,
+        ("programmed_target",),
+        True,
+        _programmed_request,
+        TARGET_METADATA_EXECUTION_ADAPTER,
+        PluginSelection("replay_mapping", 1),
+    ),
+    InputSourcePluginRegistration(
+        REPLAY_PLUGIN,
+        ("replay",),
+        True,
+        _replay_request,
+        REPLAY_COMPATIBILITY_EXECUTION_ADAPTER,
+        PluginSelection("replay_mapping", 1),
+    ),
+    InputSourcePluginRegistration(
+        NOOP_PLUGIN,
+        ("noop",),
+        True,
+        _noop_request,
+        REPLAY_COMPATIBILITY_EXECUTION_ADAPTER,
+        PluginSelection("replay_mapping", 1),
+    ),
     InputSourcePluginRegistration(
         VIEWER_PLUGIN,
         ("viewer",),
@@ -227,9 +268,30 @@ INPUT_SOURCE_REGISTRATIONS = (
         VIEWER_LOCAL_ENDPOINT_EXECUTION_ADAPTER,
         PluginSelection("viewer_keyboard_gamepad_mapping", 1),
     ),
-    InputSourcePluginRegistration(LOADCELL_SERIAL_PLUGIN, ("loadcell_serial",), False, _loadcell_request, LOADCELL_EXECUTION_ADAPTER),
-    InputSourcePluginRegistration(LOADCELL_FIXTURE_PLUGIN, ("loadcell_fixture",), False, _loadcell_request, LOADCELL_EXECUTION_ADAPTER),
-    InputSourcePluginRegistration(ANALOG_FIXTURE_PLUGIN, ("analog_fixture",), False, _analog_request, ANALOG_FIXTURE_EXECUTION_ADAPTER),
+    InputSourcePluginRegistration(
+        LOADCELL_SERIAL_PLUGIN,
+        ("loadcell_serial",),
+        False,
+        _loadcell_request,
+        LOADCELL_EXECUTION_ADAPTER,
+        PluginSelection("loadcell_endpoint_mapping", 1),
+    ),
+    InputSourcePluginRegistration(
+        LOADCELL_FIXTURE_PLUGIN,
+        ("loadcell_fixture",),
+        False,
+        _loadcell_request,
+        LOADCELL_EXECUTION_ADAPTER,
+        PluginSelection("loadcell_endpoint_mapping", 1),
+    ),
+    InputSourcePluginRegistration(
+        ANALOG_FIXTURE_PLUGIN,
+        ("analog_fixture",),
+        False,
+        _analog_request,
+        ANALOG_FIXTURE_EXECUTION_ADAPTER,
+        PluginSelection("analog_fixture_mapping", 1),
+    ),
 )
 
 

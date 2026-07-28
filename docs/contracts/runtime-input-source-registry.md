@@ -33,9 +33,9 @@ mode、factory、health、lifecycle、CLI alias、execution adapterを登録す�
 - noop / viewerのcaller指定metadata
 
 低位registryはproduction plugin catalogをimport、遅延projection、再登録しない。compatibility registry自身が
-historical descriptor、frame construction、initial metadata / default behaviorをC3まで維持する。C2で移動した
+historical descriptor、frame construction、initial metadata / default behaviorをC4まで維持する。C2で移動した
 programmed targetのconcrete trajectory implementationやviewer safe endpointなどを必要とする箇所は、
-それぞれのcanonical source ownerを直接参照する。registry自体のretirementまたは全面委譲はC3 scopeである。
+それぞれのcanonical source ownerを直接参照する。registry自体のretirementまたは全面委譲はC4 scopeである。
 frontend keyboard / gamepad providerとmappingの分離は#461の範囲である。
 
 ## Production plugin catalog
@@ -270,23 +270,24 @@ source-owned implementationのphysical ownerは次である。
 | shared loadcell records / parser / intrinsic normalization / injected-line reader / diagnostics | `plugins/input_sources/_loadcell/` |
 
 既存public `input_sources` modulesはC4まで同一canonical objectをre-exportするthin compatibility facadeとして
-残す。loadcellのrecorded dry-run helperと`mapping_plugin=None` branchはC3/C4分類のため残すが、
+残す。loadcellのrecorded dry-run helperと`mapping_plugin=None` branchはpublic compatibilityとして残すが、
 parser、normalization、readerを再定義しない。CLI options、source alias、preset、custom replay frame、loop、
 payload、stale safety、viewer message schema、loadcell protocol、baud 115200、mapping semanticsを意図的に
 変更しない。
 
-`scripts/compatibility/run_replay_mujoco_dry_run.py`と
-`scripts/compatibility/run_replay_mujoco_websocket_publisher.py`で`--input-source`を指定した経路はproduction
-catalogをresolveする。一方、`--input-source`未指定時に呼ばれる`runtime/runners/dry_run.py`と
-`runtime/runners/websocket_publisher.py`のdirect programmed-target / replay構築は、既存default CLI behaviorを
-維持するbounded legacy compatibility pathであり、production catalogの第二のSoTではない。#462 completion auditで
-このretained判断とguardを確定した。
+production/internal commandはcatalogからsourceとversioned mappingを解決する。
+`selfrionette replay --input-source`は`programmed_target`、`replay`、`noop`だけを受理し、
+`selfrionette viewer --input-source`はgeneric alias 4件すべてを受理する。`viewer` sourceはviewer commandの
+ingress lifecycleを必要とし、replay commandへinitial frameとして投影しない。
+`scripts/compatibility/`の2 scriptはcanonical CLIとerror/help surfaceの完全parityが
+未成立のためC3で削除せず、current operator callerを0にしてC4へ残す。既存default CLI behaviorを維持するdirect
+runner APIもcatalogの第二のSoTではなく、production source selectionはcatalog経由だけである。
 
 ## Remaining scope
 
-C2のsource implementation ownership移行は完了している。CLI / runner compatibility cleanupはC3、
-public compatibility surfaceのretirementはC4で扱う。追加のdevice実装、hardware gate、experiment evidenceは
-別scopeで扱う。
+C2のsource implementation ownership移行とC3のrepository内部consumer移行は完了している。
+public compatibility surfaceと非同一parity scriptのretirement policyはC4で扱う。追加のdevice実装、
+hardware gate、experiment evidenceは別scopeで扱う。
 
 ## 関連canonical文書
 
@@ -356,6 +357,16 @@ production Control Mapping catalog は次の deterministic registrations を持�
 | `loadcell_endpoint_mapping/v1` | `loadcell_normalized_input_intent/v1` | loadcell endpoint delta and `MotionCommand` metadata |
 
 analog の parser、timestamp、raw values、health は source-owned で、mapping implementation は `src/selfrionette/plugins/mappings/analog_fixture.py` にある。loadcell の serial parser、diagnostic、intrinsic normalization は `input_sources/loadcell_serial.py` に残し、channel-axis weights、gain、max delta、endpoint delta、command conversion は `src/selfrionette/plugins/mappings/loadcell.py` に移した。loadcellのacquisition schemaはraw `loadcell_vector_sample/v1`、source-owned `mapping_input_adapter`のoutputはeffective mapping-input schema `loadcell_normalized_input_intent/v1`である。generic runtimeはadapter contractを検証してその結果だけをmapping strategyへ渡し、Control Mapping Pluginはnormalized schemaをaccepted schemaとして宣言する。adapter不在・input/output schema mismatch・別mappingとのschema mismatchはfail-closedにする。
+
+C3ではimplicit `ReplayInputInterpreter` fallbackを除去するため、`programmed_target`と`noop`へ
+`replay_mapping/v1`のdefault `PluginSelection`を追加した。両sourceのproduced sample schemaはそれぞれ
+`programmed_target_sample/v1`、`noop_sample/v1`のまま維持し、source-owned identity adapterが
+`replay_raw_input_frame/v1`をeffective mapping-input schemaとして宣言する。adapterは同じ
+`RawInputFrame` objectを返し、source、timestamp、values、buttons、metadata、reader behaviorを変更しない。
+旧interpreterと新mappingは同じ`InputIntent`を生成し、metadataを同じshallow-copy規則で扱う。
+これはmapping adapter / default mapping configurationの意図的追加であり、Input Source identity/version、
+produced sample schema、source mode、health、execution adapter identity、Control Mapping Plugin identity、
+public observable behaviorの変更ではない。loadcell / viewerの既存adapter semanticsは変更しない。
 
 `input_sources/keyboard.py`、`continuous_endpoint_velocity.py`、`analog_fixture.py`、`loadcell_serial.py`、`replay.py` は既存public importのthin compatibility facadeである。canonical mapping testsは `plugins/mappings/` ownerを直接importし、source-owned parser/normalization typeだけをsource moduleから参照する。
 
