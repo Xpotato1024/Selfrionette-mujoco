@@ -42,8 +42,9 @@ Input Source Pluginのgeneric `InputSource.read_frame() -> RawInputFrame` contra
 `runtime/experiment/input_source.py`がdefinitionを所有し、production source implementationとregistrationは
 `plugins/input_sources/`が所有する。`input_sources/`はC4までのpublic compatibility facadeであり、
 canonical runtime contract、source implementation、mapping symbolを再exportするが、definitionやalgorithmを
-複製しない。`input_sources.registry`は既存descriptor signatureとframe behaviorだけを保持し、
-production catalogをimportまたは再登録しない。
+複製しない。明示的なcompatibility exceptionとして、`input_sources.registry`はhistorical descriptor、
+frame construction、initial metadata / default behaviorをC3まで保持するが、production catalogをimportまたは
+再登録しない。C2で移動したconcrete source behaviorはcanonical ownerを直接参照する。
 source contractからfast_arm、task / evaluation実装、viewer TypeScript、serial transportをimportしない。
 Control Mapping Pluginはproduced / accepted sample schemaのversioned identityだけを参照し、device handle、
 serial、browser eventを所有しない。P5の`tests/architecture/test_input_source_plugin_p5_boundaries.py`は
@@ -210,7 +211,7 @@ legacyの責務を移行する場合は、script全体をcopyせず、次のowne
 |---|---|---|
 | MuJoCo XML / STL asset | typed robot package resource（logical namespaceは`assets/mujoco/fast_arm/`） | canonical assetを参照し、legacy codeを実行しない |
 | device input読取 | `plugins/input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
-| inputの意味付けとscale | `input_interpreters/` | `RawInputFrame`を`InputIntent`へ変換する |
+| inputの意味付けとscale | `plugins/mappings/` | mapping semanticsのcanonical owner。`input_interpreters/`はlegacy `RuntimePipeline` compatibilityとしてC3まで残る |
 | target更新とsafety limit | `motion/` | `MotionCommand`を生成する |
 | FK / IK / joint limit | `kinematics/`またはrobot-specific plugin | kinematics責務に限定する |
 | MJCF model state | `mujoco_backend/` | MuJoCoをphysical stateのsource of truthとする |

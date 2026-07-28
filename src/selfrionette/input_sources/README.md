@@ -5,11 +5,13 @@
 既存public importのcompatibility boundaryを提供する。generic reader contractは
 `runtime/experiment/input_source.py`、source-owned implementationは`plugins/input_sources/`、
 mapping implementationは`plugins/mappings/`がcanonical ownerである。このpackageは同一objectを
-re-exportし、contract、source algorithm、parser、normalization、default、lifecycleを複製しない。
+re-exportし、原則としてcontract、source algorithm、parser、normalization、default、lifecycleを複製しない。
 
-`input_sources.registry`は既存descriptor APIのsignatureとframe behaviorだけを維持し、
-production plugin catalogの第二のregistration SoTにはしない。loadcellのrecorded dry-run helperは
-C3/C4のcompatibility scopeとして残る。
+明示的なretained compatibility exceptionとして、`input_sources.registry`はhistorical descriptor API、
+frame construction、initial metadata / default behaviorをC3まで維持する。ただしproduction selectionの
+正本ではなく、C2で移動したconcrete source implementationはcanonical ownerを直接参照する。registry自体の
+retirementまたは全面委譲はC3 scopeである。loadcellのrecorded dry-run helperと
+`mapping_plugin=None` optional compatibility behaviorはC3/C4のcompatibility scopeとして残る。
 
 ## 入力
 

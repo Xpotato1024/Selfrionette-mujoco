@@ -2,7 +2,9 @@
 
 The production runtime selection source of truth is
 ``selfrionette.plugins.input_sources.catalog``. This compatibility registry
-delegates moved source behavior and defaults to their canonical plugin owners.
+retains its historical descriptor, frame, metadata, and default behavior until
+C3 while directly using canonical owners for concrete source behavior moved in
+C2.
 """
 
 from __future__ import annotations

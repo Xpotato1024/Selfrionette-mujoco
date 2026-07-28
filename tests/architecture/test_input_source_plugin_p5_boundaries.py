@@ -35,6 +35,14 @@ MOVED_CONCRETE_OLD_MODULES = {
 }
 MOVED_IMPLEMENTATION_SYMBOLS = {
     "AnalogFixtureSample",
+    "DEFAULT_SWEEP_X_DT_S",
+    "DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES",
+    "DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES",
+    "DEFAULT_SWEEP_X_INITIAL_POSITION_M",
+    "DEFAULT_SWEEP_X_MOVE_FRAMES",
+    "DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M",
+    "DEFAULT_SWEEP_X_RETURN_FRAMES",
+    "DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES",
     "DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS",
     "DEFAULT_VIEWER_SAFE_ENDPOINT_M",
     "InputSource",
@@ -328,6 +336,28 @@ def test_viewer_defaults_have_one_definition_and_no_keyboard_gamepad_source_plug
     }
     assert not (SOURCE_PACKAGE_ROOT / "keyboard").exists()
     assert not (SOURCE_PACKAGE_ROOT / "gamepad").exists()
+
+
+def test_programmed_target_defaults_have_one_canonical_definition() -> None:
+    default_names = {
+        "DEFAULT_SWEEP_X_INITIAL_POSITION_M",
+        "DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M",
+        "DEFAULT_SWEEP_X_DT_S",
+        "DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES",
+        "DEFAULT_SWEEP_X_MOVE_FRAMES",
+        "DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES",
+        "DEFAULT_SWEEP_X_RETURN_FRAMES",
+        "DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES",
+    }
+    definitions = {name: [] for name in default_names}
+    for path in SRC.rglob("*.py"):
+        symbols = _defined_top_level_symbols(path)
+        for name in default_names:
+            if name in symbols:
+                definitions[name].append(path)
+
+    expected = SOURCE_PACKAGE_ROOT / "programmed_target" / "source.py"
+    assert definitions == {name: [expected] for name in default_names}
 
 
 def test_runtime_contract_does_not_import_old_input_source_definition() -> None:

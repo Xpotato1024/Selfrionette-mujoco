@@ -32,8 +32,11 @@ mode、factory、health、lifecycle、CLI alias、execution adapterを登録す�
 - replayのcaller指定frames / metadata
 - noop / viewerのcaller指定metadata
 
-低位registryはproduction plugin catalogをimport、遅延projection、再登録しない。frame behaviorとdefaultは
-canonical source ownerへ委譲する。frontend keyboard / gamepad providerとmappingの分離は#461の範囲である。
+低位registryはproduction plugin catalogをimport、遅延projection、再登録しない。compatibility registry自身が
+historical descriptor、frame construction、initial metadata / default behaviorをC3まで維持する。C2で移動した
+programmed targetのconcrete trajectory implementationやviewer safe endpointなどを必要とする箇所は、
+それぞれのcanonical source ownerを直接参照する。registry自体のretirementまたは全面委譲はC3 scopeである。
+frontend keyboard / gamepad providerとmappingの分離は#461の範囲である。
 
 ## Production plugin catalog
 
