@@ -16,19 +16,21 @@ from selfrionette.runtime.experiment.input_source import (
 from selfrionette.runtime.runners.offline_input_smoke import run_offline_input_runtime_stepping_smoke
 from selfrionette.schemas import InputIntent, MotionCommand
 
-DEFAULT_LIVE_LOADCELL_BAUD_RATE = 115200
-DEFAULT_LIVE_LOADCELL_MAX_FRAMES = 300
-DEFAULT_LIVE_LOADCELL_CURRENT_TIP_POSITION_M = (0.1, 0.0, 0.3)
-DEFAULT_LIVE_LOADCELL_STEPS_PER_FRAME = 1
+DEFAULT_LIVE_SELFRIONETTE_BAUD_RATE = 115200
+DEFAULT_LIVE_SELFRIONETTE_MAX_FRAMES = 300
+DEFAULT_LIVE_SELFRIONETTE_CURRENT_TIP_POSITION_M = (0.1, 0.0, 0.3)
+DEFAULT_LIVE_SELFRIONETTE_STEPS_PER_FRAME = 1
 
 
 @dataclass(frozen=True, slots=True)
-class LiveLoadcellRuntimeRunnerConfig:
+class LiveSelfrionetteRuntimeRunnerConfig:
     port: str | None
-    baud_rate: int = DEFAULT_LIVE_LOADCELL_BAUD_RATE
-    max_frames: int = DEFAULT_LIVE_LOADCELL_MAX_FRAMES
-    current_tip_position_m: tuple[float, float, float] = DEFAULT_LIVE_LOADCELL_CURRENT_TIP_POSITION_M
-    steps_per_frame: int = DEFAULT_LIVE_LOADCELL_STEPS_PER_FRAME
+    baud_rate: int = DEFAULT_LIVE_SELFRIONETTE_BAUD_RATE
+    max_frames: int = DEFAULT_LIVE_SELFRIONETTE_MAX_FRAMES
+    current_tip_position_m: tuple[
+        float, float, float
+    ] = DEFAULT_LIVE_SELFRIONETTE_CURRENT_TIP_POSITION_M
+    steps_per_frame: int = DEFAULT_LIVE_SELFRIONETTE_STEPS_PER_FRAME
 
     def __post_init__(self) -> None:
         if self.port is not None and not self.port.strip():
@@ -77,7 +79,7 @@ def _build_runtime_intent(
     *,
     frame_index: int,
     serial_timestamp_s: float,
-    config: LiveLoadcellRuntimeRunnerConfig,
+    config: LiveSelfrionetteRuntimeRunnerConfig,
 ) -> NormalizedLoadcellInputIntent:
     metadata = dict(intent.metadata)
     metadata.setdefault("source_kind", "selfrionette")
@@ -94,13 +96,13 @@ def _build_runtime_intent(
     return replace(intent, metadata=metadata)
 
 
-def run_live_loadcell_runtime_runner(
-    config: LiveLoadcellRuntimeRunnerConfig,
+def run_live_selfrionette_runtime_runner(
+    config: LiveSelfrionetteRuntimeRunnerConfig,
     *,
     line_source: Iterable[str] | None = None,
 ) -> list[Mapping[str, object]]:
     if config.port is None and line_source is None:
-        raise ValueError("port is required for live serial mode")
+        raise ValueError("port is required for live Selfrionette serial backend")
 
     materialized_lines = tuple(line_source) if line_source is not None else None
     registration = INPUT_SOURCE_CATALOG.resolve("selfrionette")
@@ -115,7 +117,7 @@ def run_live_loadcell_runtime_runner(
     effective_mapping_schema = registration.plugin.effective_mapping_input_sample_schema
     if effective_mapping_schema not in mapping_plugin.accepted_input_sample_schemas:
         raise ValueError(
-            "loadcell source/mapping schema compatibility mismatch: "
+            "Selfrionette source/mapping schema compatibility mismatch: "
             f"mapping input is {effective_mapping_schema.canonical_id!r}"
         )
     mapping_parameters = mapping_plugin.normalize_parameters(
@@ -149,7 +151,7 @@ def run_live_loadcell_runtime_runner(
             mapping_adapter = registration.plugin.mapping_input_adapter
             if mapping_adapter is None:
                 raise ValueError(
-                    "loadcell input source is missing its mapping input adapter"
+                    "Selfrionette input source is missing its mapping input adapter"
                 )
             normalized_intent = mapping_adapter(raw_frame)
             if not isinstance(normalized_intent, NormalizedLoadcellInputIntent):
@@ -198,10 +200,10 @@ def run_live_loadcell_runtime_runner(
 
 
 __all__ = [
-    "DEFAULT_LIVE_LOADCELL_BAUD_RATE",
-    "DEFAULT_LIVE_LOADCELL_CURRENT_TIP_POSITION_M",
-    "DEFAULT_LIVE_LOADCELL_MAX_FRAMES",
-    "DEFAULT_LIVE_LOADCELL_STEPS_PER_FRAME",
-    "LiveLoadcellRuntimeRunnerConfig",
-    "run_live_loadcell_runtime_runner",
+    "DEFAULT_LIVE_SELFRIONETTE_BAUD_RATE",
+    "DEFAULT_LIVE_SELFRIONETTE_CURRENT_TIP_POSITION_M",
+    "DEFAULT_LIVE_SELFRIONETTE_MAX_FRAMES",
+    "DEFAULT_LIVE_SELFRIONETTE_STEPS_PER_FRAME",
+    "LiveSelfrionetteRuntimeRunnerConfig",
+    "run_live_selfrionette_runtime_runner",
 ]

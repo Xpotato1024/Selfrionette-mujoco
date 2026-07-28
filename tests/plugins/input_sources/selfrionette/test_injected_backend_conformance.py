@@ -10,7 +10,7 @@ from tests.plugins.input_sources.contract.conformance import (
 )
 
 
-def test_loadcell_fixture_plugin_conforms_without_serial_io() -> None:
+def test_selfrionette_injected_backend_conforms_without_serial_io() -> None:
     plugin = INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin
     assert_sample_schema_compatible(plugin, LOADCELL_ENDPOINT_MAPPING_PLUGIN)
     assert_input_source_plugin_conforms(

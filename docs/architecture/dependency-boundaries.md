@@ -279,7 +279,7 @@ startせず、frameもreadしない。
 
 C4以降、`src/`、`scripts/`、`tests/`から旧Input Source / interpreter packageをimportしてはならない。
 production runtimeはcatalogとversioned Control Mapping Pluginを直接composeする。canonical
-`run_loadcell_serial_dry_run_smoke()`はoffline fixture validation用に残すが、
+`run_selfrionette_serial_dry_run_smoke()`はoffline fixture validation用に残すが、
 `loadcell_endpoint_mapping/v1`の明示指定を必須とし、optional fallbackやold-path re-exportを持たない。
 
 ## #461 final audit correction (2026-07-26)

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.runtime.runners.loadcell_serial_dry_run import (
-    run_loadcell_serial_dry_run_smoke as _run_canonical_loadcell_smoke,
+from selfrionette.runtime.runners.selfrionette_serial_dry_run import (
+    run_selfrionette_serial_dry_run_smoke as _run_canonical_selfrionette_smoke,
 )
 from selfrionette.plugins.input_sources.selfrionette import (
     LoadcellNormalizationConfig,
@@ -18,20 +18,23 @@ from selfrionette.plugins.mappings.loadcell_endpoint_mapping import (
 )
 from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
 from selfrionette.runtime.experiment.contracts import PluginSelection
-from selfrionette.runtime.runners.loadcell_serial_dry_run import DEFAULT_FIXTURE_PATH, main as run_loadcell_serial_dry_run_main
+from selfrionette.runtime.runners.selfrionette_serial_dry_run import (
+    DEFAULT_FIXTURE_PATH,
+    main as run_selfrionette_serial_dry_run_main,
+)
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "r7_a_lite_serial_frames"
 
 
-def _run_resolved_loadcell_smoke(*args, **kwargs):
+def _run_resolved_selfrionette_smoke(*args, **kwargs):
     kwargs.setdefault(
         "mapping_plugin",
         resolve_control_mapping_plugin(
             PluginSelection("loadcell_endpoint_mapping", 1)
         ),
     )
-    return _run_canonical_loadcell_smoke(*args, **kwargs)
+    return _run_canonical_selfrionette_smoke(*args, **kwargs)
 
 
 def read_fixture_lines(name: str) -> list[str]:
@@ -39,7 +42,7 @@ def read_fixture_lines(name: str) -> list[str]:
 
 
 def test_r7_a_lite_serial_dry_run_smoke_runs_recorded_fixture_through_command_chain() -> None:
-    result = _run_resolved_loadcell_smoke(
+    result = _run_resolved_selfrionette_smoke(
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
@@ -71,7 +74,7 @@ def test_r7_a_lite_serial_dry_run_smoke_runs_recorded_fixture_through_command_ch
 
 
 def test_r7_a_lite_serial_dry_run_smoke_preserves_diagnostics_and_stops_before_max_vectors() -> None:
-    result = _run_resolved_loadcell_smoke(
+    result = _run_resolved_selfrionette_smoke(
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
@@ -92,7 +95,7 @@ def test_r7_a_lite_serial_dry_run_smoke_preserves_diagnostics_and_stops_before_m
 
 def test_r7_a_lite_serial_dry_run_smoke_rejects_malformed_fixture_deterministically() -> None:
     with pytest.raises(SerialFrameParseError):
-        _run_resolved_loadcell_smoke(
+        _run_resolved_selfrionette_smoke(
             read_fixture_lines("malformed.txt"),
             max_vectors=1,
             normalization_config=LoadcellNormalizationConfig(
@@ -117,7 +120,7 @@ def test_r7_a_lite_serial_dry_run_smoke_uses_injected_lines_instead_of_opening_a
 
     monkeypatch.setattr(SerialInputSource, "from_lines", classmethod(tracking_from_lines))
 
-    result = _run_resolved_loadcell_smoke(
+    result = _run_resolved_selfrionette_smoke(
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
@@ -148,7 +151,7 @@ def test_r7_a_lite_serial_dry_run_rejects_invalid_mapping_before_reading_fixture
     monkeypatch.setattr(SerialInputSource, "from_lines", classmethod(tracking_from_lines))
 
     with pytest.raises(ValueError, match="gain_m must be non-negative"):
-        _run_resolved_loadcell_smoke(
+        _run_resolved_selfrionette_smoke(
             read_fixture_lines("minimal_valid.txt"),
             max_vectors=1,
             mapping_plugin=resolve_control_mapping_plugin(
@@ -164,7 +167,7 @@ def test_r7_a_lite_serial_dry_run_rejects_invalid_mapping_before_reading_fixture
 
 
 def test_r7_a_lite_serial_dry_run_cli_fixture_mode_outputs_endpoint_metadata(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = run_loadcell_serial_dry_run_main(
+    exit_code = run_selfrionette_serial_dry_run_main(
         [
             "--fixture",
             str(DEFAULT_FIXTURE_PATH),
@@ -212,7 +215,7 @@ def test_default_endpoint_mapping_is_no_op_and_explicit_mapping_changes_desired_
         gain_m=1.0,
         max_delta_m=0.03,
     )
-    mapped_command = _run_resolved_loadcell_smoke(
+    mapped_command = _run_resolved_selfrionette_smoke(
         ["vector,1000,40000,0,0,0,0,0,0"],
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(

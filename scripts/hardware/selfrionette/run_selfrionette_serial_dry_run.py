@@ -9,11 +9,13 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from selfrionette.runtime.runners.loadcell_serial_dry_run import main as run_loadcell_serial_dry_run_main
+from selfrionette.runtime.runners.selfrionette_serial_dry_run import (
+    main as run_selfrionette_serial_dry_run_main,
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    return run_loadcell_serial_dry_run_main(argv)
+    return run_selfrionette_serial_dry_run_main(argv)
 
 
 if __name__ == "__main__":

@@ -38,11 +38,11 @@ EXPECTED_MODULES = {
     "experiment": {"composition", "contracts", "input_source", "registry"},
     "runners": {
         "dry_run",
-        "live_loadcell",
+        "live_selfrionette",
         "live_viewer_smoke",
         "live_websocket_delivery",
-        "loadcell_serial_dry_run",
         "offline_input_smoke",
+        "selfrionette_serial_dry_run",
         "websocket_publisher",
     },
     "safety": {"input_safety", "qpos_feasibility"},
@@ -52,7 +52,9 @@ RETIRED_FLAT_MODULES = (frozenset().union(*EXPECTED_MODULES.values()) - set(EXPE
     "experiment_composition",
     "experiment_contracts",
     "experiment_registry",
+    "live_loadcell",
     "live_loadcell_runtime_runner",
+    "loadcell_serial_dry_run",
     "offline_input_runtime_smoke",
     "websocket_publisher_runner",
 }

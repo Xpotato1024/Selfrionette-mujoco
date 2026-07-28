@@ -193,7 +193,7 @@ def test_generic_runtime_uses_typed_health_and_lifecycle_contracts() -> None:
                 / "selfrionette"
                 / "runtime"
                 / "runners"
-                / "live_loadcell.py"
+                / "live_selfrionette.py"
             ).read_text(encoding="utf-8"),
         )
     )
@@ -207,3 +207,47 @@ def test_generic_runtime_uses_typed_health_and_lifecycle_contracts() -> None:
         assert migration_duck_surface not in generic_runtime
     assert "isinstance(reader, ManagedInputSource)" in generic_runtime
     assert "plan.pipeline.input_source.current_health()" in generic_runtime
+
+
+def test_current_device_facing_surfaces_use_selfrionette_identity() -> None:
+    runners = ROOT / "src" / "selfrionette" / "runtime" / "runners"
+    hardware = ROOT / "scripts" / "hardware"
+    operations = ROOT / "docs" / "operations"
+
+    assert (runners / "live_selfrionette.py").is_file()
+    assert (runners / "selfrionette_serial_dry_run.py").is_file()
+    assert not (runners / "live_loadcell.py").exists()
+    assert not (runners / "loadcell_serial_dry_run.py").exists()
+
+    assert (
+        hardware / "selfrionette" / "run_live_selfrionette_runtime.py"
+    ).is_file()
+    assert (
+        hardware / "selfrionette" / "run_selfrionette_serial_dry_run.py"
+    ).is_file()
+    assert (
+        hardware / "selfrionette" / "monitor_selfrionette_serial.ps1"
+    ).is_file()
+    assert not (hardware / "loadcell").exists()
+
+    canonical_docs = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in operations.rglob("*.md")
+        if "status: canonical" in path.read_text(encoding="utf-8")
+        or "status: supporting" in path.read_text(encoding="utf-8")
+    )
+    for retired_current_surface in (
+        "scripts/hardware/loadcell/",
+        "run_live_loadcell_runtime.py",
+        "run_loadcell_serial_dry_run.py",
+        "runtime.runners.live_loadcell",
+        "runtime.runners.loadcell_serial_dry_run",
+    ):
+        assert retired_current_surface not in canonical_docs
+
+    assert "selfrionette/v1" in (
+        SOURCE_ROOT / "selfrionette" / "plugin.py"
+    ).read_text(encoding="utf-8")
+    assert "loadcell_vector_sample" in (
+        SOURCE_ROOT / "selfrionette" / "plugin.py"
+    ).read_text(encoding="utf-8")

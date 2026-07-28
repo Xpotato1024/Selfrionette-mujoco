@@ -37,10 +37,10 @@ related:
 - `robot-runtime-plugin-conformance-tests.md`: Robot Runtime Plugin conformance suite
 - `r6-l-keyboard-gamepad-live-viewer-smoke.md`: keyboard / gamepad live viewer manual smoke
 - `r7-a-lite-serial-dry-run-smoke.md`: recorded fixtureによるserial dry-run
-- `r7-b-manual-live-loadcell-runtime-runner.md`: operator-gated live loadcell runner
+- `r7-b-manual-live-selfrionette-runtime-runner.md`: operator-gated live Selfrionette runner
 - `r7-c-viewer-fixture-demo-procedure.md`: viewer fixture demo
 - `r7-c-keyboard-replay-demo-package.md`: keyboard / replay demo package
-- `r7-c-live-loadcell-validation-log.md`: live loadcell validation procedure
+- `r7-c-live-selfrionette-validation-log.md`: live Selfrionette validation procedure
 - `r7-c-axis-sanity-check.md`: axis sanity protocol
 - `r7-d-p3-fast-arm-endpoint-command-check-procedure.md`: no-hardware endpoint command smoke
 - `r7-e-p1-fast-arm-endpoint-motion-sanity.md`: endpoint motion sanity gate

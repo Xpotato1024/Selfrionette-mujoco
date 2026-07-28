@@ -14,7 +14,7 @@ _VALID_LINE = "vector,1,1,2,3,4,5,6,7"
 _SECOND_VALID_LINE = "vector,2,2,3,4,5,6,7,8"
 
 
-def test_loadcell_serial_plugin_conforms_with_injected_lines() -> None:
+def test_selfrionette_plugin_conforms_with_injected_lines() -> None:
     plugin = INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin
     assert_sample_schema_compatible(plugin, LOADCELL_ENDPOINT_MAPPING_PLUGIN)
     assert_input_source_plugin_conforms(

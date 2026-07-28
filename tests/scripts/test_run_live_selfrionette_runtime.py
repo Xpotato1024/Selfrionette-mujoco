@@ -10,8 +10,16 @@ from unittest.mock import patch
 import pytest
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "hardware" / "loadcell" / "run_live_loadcell_runtime.py"
-SPEC = importlib.util.spec_from_file_location("run_live_loadcell_runtime", SCRIPT_PATH)
+SCRIPT_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "scripts"
+    / "hardware"
+    / "selfrionette"
+    / "run_live_selfrionette_runtime.py"
+)
+SPEC = importlib.util.spec_from_file_location(
+    "run_live_selfrionette_runtime", SCRIPT_PATH
+)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
@@ -29,7 +37,11 @@ def test_cli_live_mode_passes_required_live_config_and_prints_banner() -> None:
     stdout = io.StringIO()
     fixture_payload = {"version": 0, "metadata": {"source_kind": "selfrionette"}}
 
-    with patch.object(MODULE, "run_live_loadcell_runtime_runner", return_value=[fixture_payload]) as run_runner:
+    with patch.object(
+        MODULE,
+        "run_live_selfrionette_runtime_runner",
+        return_value=[fixture_payload],
+    ) as run_runner:
         with contextlib.redirect_stdout(stdout):
             exit_code = MODULE.main(
                 [
@@ -57,7 +69,7 @@ def test_cli_live_mode_passes_required_live_config_and_prints_banner() -> None:
     assert kwargs["line_source"] is None
 
     output = stdout.getvalue()
-    assert "manual gated live serial mode" in output
+    assert "manual gated live Selfrionette serial mode" in output
     assert "port=COM5 baud_rate=115200 max_frames=2" in output
     assert "\"version\":0" in output
     assert "frames_emitted=1" in output
@@ -68,7 +80,11 @@ def test_cli_fixture_mode_uses_line_source_without_opening_serial(tmp_path: Path
     fixture_path.write_text("status,setup_start\nvector,1000,40000,0,0,0,0,0,0\n", encoding="utf-8")
 
     stdout = io.StringIO()
-    with patch.object(MODULE, "run_live_loadcell_runtime_runner", return_value=[{"version": 0}]) as run_runner:
+    with patch.object(
+        MODULE,
+        "run_live_selfrionette_runtime_runner",
+        return_value=[{"version": 0}],
+    ) as run_runner:
         with contextlib.redirect_stdout(stdout):
             exit_code = MODULE.main(
                 [
@@ -90,6 +106,6 @@ def test_cli_fixture_mode_uses_line_source_without_opening_serial(tmp_path: Path
     ]
 
     output = stdout.getvalue()
-    assert "manual gated fixture mode: live serial is not opened" in output
+    assert "manual gated Selfrionette fixture mode: serial is not opened" in output
     assert "\"version\":0" in output
     assert "frames_emitted=1" in output

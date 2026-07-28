@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from selfrionette.runtime.runners.loadcell_serial_dry_run import (
-    run_loadcell_serial_dry_run_smoke as _run_canonical_loadcell_smoke,
+from selfrionette.runtime.runners.selfrionette_serial_dry_run import (
+    run_selfrionette_serial_dry_run_smoke as _run_canonical_selfrionette_smoke,
 )
 from selfrionette.plugins.input_sources.selfrionette import LoadcellNormalizationConfig
 from selfrionette.plugins.mappings.loadcell_endpoint_mapping import build_r7_a_lite_smoke_endpoint_mapping_config
@@ -17,11 +17,11 @@ from selfrionette.transport import mujoco_state_to_payload
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "r7_a_lite_serial_frames"
 
 
-def _run_resolved_loadcell_smoke(*args, **kwargs):
+def _run_resolved_selfrionette_smoke(*args, **kwargs):
     kwargs["mapping_plugin"] = resolve_control_mapping_plugin(
         PluginSelection("loadcell_endpoint_mapping", 1)
     )
-    return _run_canonical_loadcell_smoke(*args, **kwargs)
+    return _run_canonical_selfrionette_smoke(*args, **kwargs)
 
 
 def read_fixture_lines(name: str) -> list[str]:
@@ -29,7 +29,7 @@ def read_fixture_lines(name: str) -> list[str]:
 
 
 def test_r7_a_lite_websocket_viewer_smoke_preserves_command_metadata_without_endpoint_evaluation() -> None:
-    result = _run_resolved_loadcell_smoke(
+    result = _run_resolved_selfrionette_smoke(
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(

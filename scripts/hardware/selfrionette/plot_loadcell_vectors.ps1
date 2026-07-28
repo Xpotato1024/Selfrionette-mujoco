@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Plot loadcell vector lines from firmware logs.
+  Plot Selfrionette loadcell vector lines from firmware logs.
 
 .DESCRIPTION
   Reads `vector,...` lines from a log file, standard input, or the clipboard.
@@ -32,16 +32,16 @@
   Print help and exit.
 
 .EXAMPLE
-  Get-Content .\logs\loadcell.txt | .\scripts\hardware\loadcell\plot_loadcell_vectors.ps1
+  Get-Content .\logs\loadcell.txt | .\scripts\hardware\selfrionette\plot_loadcell_vectors.ps1
 
 .EXAMPLE
-  .\scripts\hardware\loadcell\plot_loadcell_vectors.ps1 -InputPath .\logs\loadcell.txt
+  .\scripts\hardware\selfrionette\plot_loadcell_vectors.ps1 -InputPath .\logs\loadcell.txt
 
 .EXAMPLE
-  .\scripts\hardware\loadcell\plot_loadcell_vectors.ps1 -Clipboard
+  .\scripts\hardware\selfrionette\plot_loadcell_vectors.ps1 -Clipboard
 
 .EXAMPLE
-  .\scripts\hardware\loadcell\plot_loadcell_vectors.ps1 -InputPath .\logs\loadcell.txt -OutputPath .\plots\loadcell.png
+  .\scripts\hardware\selfrionette\plot_loadcell_vectors.ps1 -InputPath .\logs\loadcell.txt -OutputPath .\plots\loadcell.png
 #>
 param(
   [string]$InputPath,

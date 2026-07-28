@@ -15,7 +15,7 @@ normalization、sensor clamp、health、lifecycleは
 `src/selfrionette/plugins/input_sources/selfrionette/`が所有する。operational deadzone、channel-axis
 weights、gain、sign、endpoint delta、MotionCommand conversionは
 `src/selfrionette/plugins/mappings/loadcell_endpoint_mapping/`が所有する。offline dry-run orchestrationは
-`src/selfrionette/runtime/runners/loadcell_serial_dry_run.py`が所有し、versioned Mappingを明示する。
+`src/selfrionette/runtime/runners/selfrionette_serial_dry_run.py`が所有し、versioned Mappingを明示する。
 
 current architectureではserial parserと7-channel `RawInputFrame` acquisitionを
 `selfrionette/v1`へ接続する。recorded / injected linesは別production identityではなく、同じdevice
@@ -257,7 +257,7 @@ parserは次のruleに従う。
 
 factory creationはserial moduleをimportせず、portをopenしない。managed runtimeのexplicit `start()`だけが
 live portをopenする。`read_frame()`は未start時に
-`loadcell serial input source is not started`でfail-closedし、暗黙startを行わない。
+`Selfrionette input source is not started`でfail-closedし、暗黙startを行わない。
 closeはnormal / failure / start failure後に最大1回試行し、primary failureをcleanup failureで置換しない。
 
 injected backendは同じparserと`loadcell_vector_sample/v1`を使用し、real serialをopenしない。

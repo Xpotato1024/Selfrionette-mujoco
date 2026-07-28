@@ -1,4 +1,4 @@
-"""Load-cell serial dry-run entry point."""
+"""Selfrionette 7-channel serial-protocol dry-run entry point."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ DEFAULT_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "r7_a_lite_serial_frames" /
 
 
 @dataclass(frozen=True, slots=True)
-class LoadcellSerialDryRunSmokeResult:
+class SelfrionetteSerialDryRunSmokeResult:
     frames_read: int
     vectors_read: int
     diagnostics: tuple[SerialDiagnosticEvent, ...]
@@ -37,7 +37,7 @@ class LoadcellSerialDryRunSmokeResult:
     motion_command: MotionCommand | None
 
 
-def run_loadcell_serial_dry_run_smoke(
+def run_selfrionette_serial_dry_run_smoke(
     lines: Iterable[str],
     *,
     max_vectors: int = 1,
@@ -46,8 +46,8 @@ def run_loadcell_serial_dry_run_smoke(
     current_tip_position_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
     mapping_plugin: ControlMappingPlugin,
     mapping_parameters: Mapping[str, object] | None = None,
-) -> LoadcellSerialDryRunSmokeResult:
-    """Run recorded loadcell frames with an explicit versioned mapping."""
+) -> SelfrionetteSerialDryRunSmokeResult:
+    """Run recorded Selfrionette protocol frames with an explicit mapping."""
 
     if max_vectors < 1:
         raise ValueError("max_vectors must be a positive integer")
@@ -93,7 +93,7 @@ def run_loadcell_serial_dry_run_smoke(
             metadata=mapped_intent.metadata,
         )
 
-    return LoadcellSerialDryRunSmokeResult(
+    return SelfrionetteSerialDryRunSmokeResult(
         frames_read=frames_read,
         vectors_read=vectors_read,
         diagnostics=source.diagnostics,
@@ -139,7 +139,10 @@ def _vector3_csv(value: str) -> tuple[float, float, float]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the offline R7-A-lite loadcell serial dry-run smoke from recorded fixture lines.",
+        description=(
+            "Run the offline R7-A-lite Selfrionette serial-protocol dry-run "
+            "from recorded fixture lines."
+        ),
     )
     parser.add_argument(
         "--fixture",
@@ -217,7 +220,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_delta_m=args.max_delta_m,
         operational_deadzone=args.deadzone,
     )
-    result = run_loadcell_serial_dry_run_smoke(
+    result = run_selfrionette_serial_dry_run_smoke(
         fixture_lines,
         max_vectors=args.max_vectors,
         normalization_config=normalization_config,

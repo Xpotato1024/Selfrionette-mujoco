@@ -125,7 +125,7 @@ offline / replay sourceへmanaged lifecycleを要求しない。live / viewer br
 
 loadcell liveはfactory直後と正常close後を`disconnected / not_started`、start成功後を`active`、start失敗後を
 `disconnected / start_failed`としてhealthへ反映する。explicit startだけがserial portをopenする。正常close後は
-portとsource参照を破棄し、read-after-closeを`loadcell serial input source is not started`で拒否する。restart時は
+portとsource参照を破棄し、read-after-closeを`Selfrionette input source is not started`で拒否する。restart時は
 new sourceを構築し、real serialではportを再openする。close failure時は参照と直前healthを保持してcleanup retryを
 可能にする。fixtureのone-shot `Iterable[str]`はrunner boundaryで一度だけtuple化する。
 
@@ -284,7 +284,7 @@ interpreter-based `RuntimePipeline`、old-path loadcell re-export、`mapping_plu
 compatibility CLI wrapperに加え、Mapping package-root lazy facade、旧flat Mapping modules、
 `plugins/input_sources/registration.py`、旧identity alias、runtime input-source移行aliasを退役した。
 canonical public APIとして維持するのは各concrete packageの`__all__`、catalog resolverとcanonical helper
-`runtime.runners.loadcell_serial_dry_run.run_loadcell_serial_dry_run_smoke()`はoffline fixture capabilityとして残すが、
+`runtime.runners.selfrionette_serial_dry_run.run_selfrionette_serial_dry_run_smoke()`はoffline fixture capabilityとして残すが、
 versioned `loadcell_endpoint_mapping/v1`の明示指定を必須とする。
 
 production/internal commandはcatalogからsourceとversioned mappingを解決する。

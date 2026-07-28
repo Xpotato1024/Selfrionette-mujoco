@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Measure one loadcell response against a baseline, or sweep all sensors.
+  Measure one Selfrionette loadcell response, or sweep all seven sensors.
 
 .DESCRIPTION
   Opens a serial port, captures a baseline window, then measures a selected
@@ -29,13 +29,13 @@
   Repeat the same sensor measurement this many times.
 
 .EXAMPLE
-  .\scripts\hardware\loadcell\measure_loadcell_channel_response.ps1 -Port COM5
+  .\scripts\hardware\selfrionette\measure_loadcell_channel_response.ps1 -Port COM5
 
 .EXAMPLE
-  .\scripts\hardware\loadcell\measure_loadcell_channel_response.ps1 -Port COM5 -AllSensors
+  .\scripts\hardware\selfrionette\measure_loadcell_channel_response.ps1 -Port COM5 -AllSensors
 
 .EXAMPLE
-  .\scripts\hardware\loadcell\measure_loadcell_channel_response.ps1 -Port COM5 -Sensor 4 -Repeats 3
+  .\scripts\hardware\selfrionette\measure_loadcell_channel_response.ps1 -Port COM5 -Sensor 4 -Repeats 3
 #>
 param(
   [string]$Port = 'COM5',

@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-import selfrionette.runtime.runners.live_loadcell as live_loadcell
-from selfrionette.runtime.runners.live_loadcell import (
-    LiveLoadcellRuntimeRunnerConfig,
-    run_live_loadcell_runtime_runner,
+import selfrionette.runtime.runners.live_selfrionette as live_selfrionette
+from selfrionette.runtime.runners.live_selfrionette import (
+    LiveSelfrionetteRuntimeRunnerConfig,
+    run_live_selfrionette_runtime_runner,
 )
 from selfrionette.schemas import RawInputFrame
 from selfrionette.plugins.input_sources.selfrionette import (
@@ -38,13 +38,13 @@ def _guard_serial_import(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(builtins, "__import__", guarded_import)
 
 
-def test_live_loadcell_runtime_runner_processes_injected_lines_without_opening_serial(
+def test_live_selfrionette_runtime_runner_processes_injected_lines_without_opening_serial(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _guard_serial_import(monkeypatch)
 
-    payloads = run_live_loadcell_runtime_runner(
-        LiveLoadcellRuntimeRunnerConfig(
+    payloads = run_live_selfrionette_runtime_runner(
+        LiveSelfrionetteRuntimeRunnerConfig(
             port=None,
             max_frames=1,
             current_tip_position_m=(0.1, 0.0, 0.3),
@@ -69,11 +69,11 @@ def test_live_loadcell_runtime_runner_processes_injected_lines_without_opening_s
     assert "target_position_m" not in payload["metadata"]
 
 
-def test_live_loadcell_runtime_runner_resolves_mapping_plugin_at_normalized_boundary(
+def test_live_selfrionette_runtime_runner_resolves_mapping_plugin_at_normalized_boundary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _guard_serial_import(monkeypatch)
-    production_mapping = live_loadcell.resolve_control_mapping_plugin(
+    production_mapping = live_selfrionette.resolve_control_mapping_plugin(
         PluginSelection("loadcell_endpoint_mapping", 1)
     )
     seen_inputs: list[object] = []
@@ -92,9 +92,9 @@ def test_live_loadcell_runtime_runner_resolves_mapping_plugin_at_normalized_boun
         resolved_selections.append(selection)
         return spy_mapping
 
-    monkeypatch.setattr(live_loadcell, "resolve_control_mapping_plugin", resolve)
-    payloads = run_live_loadcell_runtime_runner(
-        LiveLoadcellRuntimeRunnerConfig(port=None, max_frames=1),
+    monkeypatch.setattr(live_selfrionette, "resolve_control_mapping_plugin", resolve)
+    payloads = run_live_selfrionette_runtime_runner(
+        LiveSelfrionetteRuntimeRunnerConfig(port=None, max_frames=1),
         line_source=(
             "status,setup_start",
             "vector,1000,1,0,0,0,0,0,0",
@@ -107,7 +107,7 @@ def test_live_loadcell_runtime_runner_resolves_mapping_plugin_at_normalized_boun
     assert isinstance(seen_inputs[0], NormalizedLoadcellInputIntent)
 
 
-def test_live_loadcell_runtime_runner_consumes_one_shot_generator_once(
+def test_live_selfrionette_runtime_runner_consumes_one_shot_generator_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _guard_serial_import(monkeypatch)
@@ -119,8 +119,8 @@ def test_live_loadcell_runtime_runner_consumes_one_shot_generator_once(
         )
     )
 
-    payloads = run_live_loadcell_runtime_runner(
-        LiveLoadcellRuntimeRunnerConfig(port=None, max_frames=1),
+    payloads = run_live_selfrionette_runtime_runner(
+        LiveSelfrionetteRuntimeRunnerConfig(port=None, max_frames=1),
         line_source=lines,
     )
 
@@ -128,7 +128,7 @@ def test_live_loadcell_runtime_runner_consumes_one_shot_generator_once(
     assert payloads[0]["metadata"]["serial_timestamp_s"] == 1.0
 
 
-def test_live_loadcell_runtime_runner_preserves_primary_failure_when_close_fails(
+def test_live_selfrionette_runtime_runner_preserves_primary_failure_when_close_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class Reader:
@@ -156,7 +156,7 @@ def test_live_loadcell_runtime_runner_preserves_primary_failure_when_close_fails
         )
     )
     monkeypatch.setattr(
-        live_loadcell,
+        live_selfrionette,
         "INPUT_SOURCE_CATALOG",
         SimpleNamespace(resolve=lambda alias: registration),
     )
@@ -165,21 +165,21 @@ def test_live_loadcell_runtime_runner_preserves_primary_failure_when_close_fails
         raise RuntimeError("runtime failure")
 
     monkeypatch.setattr(
-        live_loadcell,
+        live_selfrionette,
         "run_offline_input_runtime_stepping_smoke",
         fail_runtime,
     )
 
     with pytest.raises(RuntimeError, match="runtime failure") as error:
-        run_live_loadcell_runtime_runner(
-            LiveLoadcellRuntimeRunnerConfig(port=None, max_frames=1),
+        run_live_selfrionette_runtime_runner(
+            LiveSelfrionetteRuntimeRunnerConfig(port=None, max_frames=1),
             line_source=("vector,1000,0,0,0,0,0,0,0",),
         )
 
     assert any("cleanup failed" in note for note in error.value.__notes__)
 
 
-def test_live_loadcell_runtime_runner_surfaces_close_failure_after_success(
+def test_live_selfrionette_runtime_runner_surfaces_close_failure_after_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class Reader:
@@ -207,24 +207,24 @@ def test_live_loadcell_runtime_runner_surfaces_close_failure_after_success(
         )
     )
     monkeypatch.setattr(
-        live_loadcell,
+        live_selfrionette,
         "INPUT_SOURCE_CATALOG",
         SimpleNamespace(resolve=lambda alias: registration),
     )
     monkeypatch.setattr(
-        live_loadcell,
+        live_selfrionette,
         "run_offline_input_runtime_stepping_smoke",
         lambda *args, **kwargs: SimpleNamespace(payload={"version": 0}),
     )
 
     with pytest.raises(RuntimeError, match="cleanup failure"):
-        run_live_loadcell_runtime_runner(
-            LiveLoadcellRuntimeRunnerConfig(port=None, max_frames=1),
+        run_live_selfrionette_runtime_runner(
+            LiveSelfrionetteRuntimeRunnerConfig(port=None, max_frames=1),
             line_source=("vector,1000,0,0,0,0,0,0,0",),
         )
 
 
-def test_live_loadcell_runtime_runner_rejects_live_mode_without_pyserial(
+def test_live_selfrionette_runtime_runner_rejects_live_mode_without_pyserial(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     original_import = builtins.__import__
@@ -237,8 +237,8 @@ def test_live_loadcell_runtime_runner_rejects_live_mode_without_pyserial(
     monkeypatch.setattr(builtins, "__import__", guarded_import)
 
     with pytest.raises(RuntimeError, match="serial module is required for live Selfrionette mode"):
-        run_live_loadcell_runtime_runner(
-            LiveLoadcellRuntimeRunnerConfig(
+        run_live_selfrionette_runtime_runner(
+            LiveSelfrionetteRuntimeRunnerConfig(
                 port="COM5",
                 max_frames=1,
                 current_tip_position_m=(0.1, 0.0, 0.3),
@@ -246,9 +246,9 @@ def test_live_loadcell_runtime_runner_rejects_live_mode_without_pyserial(
         )
 
 
-def test_live_loadcell_runtime_runner_rejects_non_finite_defaults() -> None:
+def test_live_selfrionette_runtime_runner_rejects_non_finite_defaults() -> None:
     with pytest.raises(ValueError, match="max_frames must be a positive integer"):
-        LiveLoadcellRuntimeRunnerConfig(
+        LiveSelfrionetteRuntimeRunnerConfig(
             port=None,
             max_frames=0,
         )

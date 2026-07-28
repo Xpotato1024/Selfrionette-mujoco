@@ -80,14 +80,14 @@ def test_no_production_compatibility_registry_or_mapping_facade_exists() -> None
     assert "compatibility_execution_adapter" not in production_source
 
 
-def test_loadcell_runner_requires_an_explicit_versioned_mapping() -> None:
-    runner = SRC / "runtime" / "runners" / "loadcell_serial_dry_run.py"
+def test_selfrionette_runner_requires_an_explicit_versioned_mapping() -> None:
+    runner = SRC / "runtime" / "runners" / "selfrionette_serial_dry_run.py"
     tree = _parse(runner)
     function = next(
         node
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name == "run_loadcell_serial_dry_run_smoke"
+        and node.name == "run_selfrionette_serial_dry_run_smoke"
     )
     keyword_defaults = dict(
         zip(
