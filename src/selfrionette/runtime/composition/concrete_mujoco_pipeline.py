@@ -6,7 +6,7 @@ from pathlib import Path
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     RobotCatalog,
     resolve_robot_bundle,
     resolve_robot_profile,

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType, ModuleType
 
-from selfrionette.plugins.robot_registration import RobotPluginRegistration
+from selfrionette.plugins.robots.registration import RobotPluginRegistration
 
 
 ROBOT_PLUGIN_ENTRY_MODULE = "plugin"

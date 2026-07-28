@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from selfrionette.runtime.experiment.contracts import (
+    CommandSemanticsRoute,
     ControlMappingPlugin,
     EnvironmentPlugin,
     EnvironmentRole,
@@ -106,10 +107,13 @@ class ExperimentPluginManifest:
     control_mapping: PluginSelection
     task: PluginSelection
     input_source: PluginSelection
+    command_semantics: VersionedIdentity
     evaluators: tuple[PluginSelection, ...]
     parameters: tuple[PluginParameters, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.command_semantics, VersionedIdentity):
+            raise TypeError("command_semantics must use VersionedIdentity")
         if not isinstance(self.evaluators, tuple):
             object.__setattr__(self, "evaluators", tuple(self.evaluators))
         if not isinstance(self.parameters, tuple):
@@ -142,6 +146,7 @@ class ResolvedExperimentComposition:
     input_source: InputSourcePlugin
     resolved_input_sample_schema: VersionedIdentity
     resolved_mapping_input_sample_schema: VersionedIdentity
+    resolved_command_semantics: CommandSemanticsRoute
     evaluators: tuple[EvaluationPlugin, ...]
     resolved_capabilities: frozenset[VersionedIdentity]
     resolved_roles: frozenset[SemanticRole]
@@ -209,6 +214,26 @@ def _validate_compatibility(
         raise ValueError("environment/task compatibility mismatch")
     if task.compatible_backend_kinds and backend_kind not in task.compatible_backend_kinds:
         raise ValueError("robot backend/task compatibility mismatch")
+
+
+def resolve_command_semantics_route(
+    mapping: ControlMappingPlugin,
+    robot: RobotBundle,
+    identity: VersionedIdentity | None,
+) -> CommandSemanticsRoute:
+    """Resolve one Mapping/controller route and validate the Robot backend boundary."""
+
+    route = mapping.resolve_command_semantics_route(identity)
+    if route.robot_command_semantics_identity not in robot.supported_command_semantics:
+        supported = tuple(
+            item.canonical_id for item in sorted(robot.supported_command_semantics)
+        )
+        raise ValueError(
+            "mapping/Robot command semantics compatibility mismatch: "
+            f"required={route.robot_command_semantics_identity.canonical_id!r}, "
+            f"supported={supported}"
+        )
+    return route
 
 
 def _validate_role_requirements(
@@ -351,6 +376,12 @@ def compose_experiment(
             f"{tuple(sorted(item.canonical_id for item in mapping.accepted_input_sample_schemas))!r}"
         )
 
+    command_semantics = resolve_command_semantics_route(
+        mapping,
+        robot,
+        manifest.command_semantics,
+    )
+
     required_capabilities = (
         environment.required_robot_capabilities
         | mapping.required_robot_capabilities
@@ -431,6 +462,7 @@ def compose_experiment(
         input_source=input_source,
         resolved_input_sample_schema=input_source.produced_sample_schema,
         resolved_mapping_input_sample_schema=effective_mapping_schema,
+        resolved_command_semantics=command_semantics,
         evaluators=evaluators,
         resolved_capabilities=robot.provided_capabilities,
         resolved_roles=resolved_roles,
@@ -447,6 +479,7 @@ __all__ = [
     "PluginParameters",
     "freeze_parameter_value",
     "parameter_value_to_document",
+    "resolve_command_semantics_route",
     "ResolvedExperimentComposition",
     "compose_experiment",
 ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from selfrionette.plugins.input_sources import viewer
-from selfrionette.plugins.input_source_registration import (
+from selfrionette.plugins.input_sources.registration import (
     InputSourcePluginRegistration,
     InputSourcePluginRequest,
 )

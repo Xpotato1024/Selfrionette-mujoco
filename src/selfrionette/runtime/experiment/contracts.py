@@ -25,6 +25,42 @@ class VersionedIdentity:
         return f"{self.name}/v{self.version}"
 
 
+ENDPOINT_POSITION_COMMAND_V1 = VersionedIdentity("endpoint_position_command", 1)
+ENDPOINT_VELOCITY_COMMAND_V1 = VersionedIdentity("endpoint_velocity_command", 1)
+JOINT_POSITION_COMMAND_V1 = VersionedIdentity("joint_position_command", 1)
+JOINT_VELOCITY_COMMAND_V1 = VersionedIdentity("joint_velocity_command", 1)
+LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1 = VersionedIdentity(
+    "local_endpoint_velocity_to_joint_position", 1
+)
+ENDPOINT_DELTA_TO_JOINT_POSITION_V1 = VersionedIdentity(
+    "endpoint_delta_to_joint_position", 1
+)
+REPLAY_COMMAND_TO_JOINT_POSITION_V1 = VersionedIdentity(
+    "replay_command_to_joint_position", 1
+)
+NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1 = VersionedIdentity(
+    "native_endpoint_velocity_passthrough", 1
+)
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class CommandSemanticsRoute:
+    """Versioned control-to-backend command condition selected for composition."""
+
+    identity: VersionedIdentity
+    control_semantics_identity: VersionedIdentity
+    robot_command_semantics_identity: VersionedIdentity
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("identity", self.identity),
+            ("control_semantics_identity", self.control_semantics_identity),
+            ("robot_command_semantics_identity", self.robot_command_semantics_identity),
+        ):
+            if not isinstance(value, VersionedIdentity):
+                raise TypeError(f"command semantics route {name} must use VersionedIdentity")
+
+
 @dataclass(frozen=True, slots=True)
 class PluginSelection:
     plugin_id: str
@@ -369,6 +405,9 @@ class ControlMappingPlugin:
     control_frame: str | None = None
     comparison_family_identity: VersionedIdentity | None = None
     mapping_semantics_identity: VersionedIdentity | None = None
+    command_semantics_routes: frozenset[CommandSemanticsRoute] = field(
+        default_factory=frozenset
+    )
     parameter_normalizer: Callable[[Mapping[str, object]], Mapping[str, object]] | None = None
 
     def __post_init__(self) -> None:
@@ -395,8 +434,56 @@ class ControlMappingPlugin:
                     "mapping strategy semantic identity mismatch: "
                     "strategy and plugin must declare the same VersionedIdentity"
                 )
+        routes = frozenset(self.command_semantics_routes)
+        if not routes:
+            raise ValueError(
+                "control mapping must declare at least one command semantics route"
+            )
+        route_identities = tuple(route.identity for route in routes)
+        if len(route_identities) != len(set(route_identities)):
+            raise ValueError("duplicate control mapping command semantics route identity")
+        if self.mapping_semantics_identity is None:
+            raise ValueError(
+                "control mapping command semantics routes require mapping_semantics_identity"
+            )
+        for route in routes:
+            if not isinstance(route, CommandSemanticsRoute):
+                raise TypeError(
+                    "control mapping command semantics routes must use CommandSemanticsRoute"
+                )
+            if route.control_semantics_identity != self.mapping_semantics_identity:
+                raise ValueError(
+                    "control mapping command route/control semantics identity mismatch"
+                )
+        object.__setattr__(self, "command_semantics_routes", routes)
         if self.parameter_normalizer is not None and not callable(self.parameter_normalizer):
             raise TypeError("control mapping parameter_normalizer must be callable")
+
+    def resolve_command_semantics_route(
+        self,
+        identity: VersionedIdentity | None = None,
+    ) -> CommandSemanticsRoute:
+        if identity is None:
+            if len(self.command_semantics_routes) != 1:
+                raise ValueError(
+                    "control mapping command semantics route selection is required"
+                )
+            return next(iter(self.command_semantics_routes))
+        if not isinstance(identity, VersionedIdentity):
+            raise TypeError("command semantics route selection must use VersionedIdentity")
+        matches = tuple(
+            route for route in self.command_semantics_routes if route.identity == identity
+        )
+        if not matches:
+            supported = tuple(
+                item.identity.canonical_id
+                for item in sorted(self.command_semantics_routes)
+            )
+            raise ValueError(
+                f"unsupported command semantics route {identity.canonical_id!r}; "
+                f"supported={supported}"
+            )
+        return matches[0]
 
     def normalize_parameters(
         self,
@@ -550,6 +637,7 @@ class EvaluationPlugin:
 __all__ = [
     "CanonicalEvidence",
     "CanonicalEvidenceSet",
+    "CommandSemanticsRoute",
     "ControlMappingPlugin",
     "ControlMappingStrategy",
     "EnvironmentPlugin",
@@ -559,8 +647,16 @@ __all__ = [
     "EvidenceDisposition",
     "EvidencePolicy",
     "EvidenceStatus",
+    "ENDPOINT_POSITION_COMMAND_V1",
+    "ENDPOINT_VELOCITY_COMMAND_V1",
+    "ENDPOINT_DELTA_TO_JOINT_POSITION_V1",
+    "JOINT_POSITION_COMMAND_V1",
+    "JOINT_VELOCITY_COMMAND_V1",
+    "LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1",
     "MetricDerivationStrategy",
     "MetricResult",
+    "NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1",
+    "REPLAY_COMMAND_TO_JOINT_POSITION_V1",
     "ParameterContract",
     "ParameterField",
     "PluginAxis",

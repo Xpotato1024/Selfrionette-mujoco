@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     resolve_robot_bundle as resolve_robot_bundle_from_catalog,
 )
 from selfrionette.runtime.evaluation.manifest import (
@@ -31,6 +31,7 @@ from selfrionette.runtime.experiment.composition import (
 from selfrionette.runtime.experiment.contracts import (
     EnvironmentRole,
     ControlMappingPlugin,
+    LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
     ParameterContract,
     ParameterField,
     PluginAxis,
@@ -41,7 +42,7 @@ from selfrionette.runtime.experiment.contracts import (
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from tests.support.input_source_plugin_doubles import CONFORMANCE_SAMPLE_SCHEMA
 from selfrionette.runtime.composition.robot_bundle import CONTACT_EVIDENCE_V1, InitialStateContract
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     resolve_robot_bundle as resolve_robot_bundle_from_compatibility_facade,
 )
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
@@ -64,13 +65,13 @@ from tests.runtime.test_experiment_plugin_composition import (
 
 
 BASELINE_FAST_ARM_MANIFEST_DIGEST = (
-    "sha256:55d2103e69f414bc0aa513ffa96287f0e56900ad2e5d286d6cdc5a8128eadb95"
+    "sha256:1c647601b539db25ccf945a74cdabcfe5e81529f5dcf45ef93d89beba4a73f66"
 )
 BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST = (
-    "sha256:208478963f6ae539c164feebc3a58876bbdce972106f21596aa6aff7fb2cc08c"
+    "sha256:540d77f4e1889d7ce3962246af3192025feef0c79a5dbfd3d817ef8afcfb2ea9"
 )
 BASELINE_FAST_ARM_FREEZE_DIGEST = (
-    "sha256:5f4ccbdebffd7d5c3919c66d1e51452809f373a459521283ae47e9531c08faaf"
+    "sha256:0b5b07e2d680bd205a7dd99cd56c6b7ec18b79cc3761a92c01c99bdf04bbb40a"
 )
 
 
@@ -91,7 +92,7 @@ def _manifest(**overrides: object) -> EvaluationManifest:
     environment = PluginSelection("dummy_environment", 1)
     values: dict[str, object] = {
         "schema_version": EVALUATION_MANIFEST_SCHEMA_VERSION,
-        "contract_version": 2,
+        "contract_version": 3,
         "repository_identity": "Xpotato1024/Selfrionette-mujoco",
         "software_revision_identity": EXECUTION_IDENTITY.software_revision_identity,
         "robot_bundle": PluginSelection("dummy_robot_bundle", 1),
@@ -105,6 +106,9 @@ def _manifest(**overrides: object) -> EvaluationManifest:
         "control_mapping": PluginSelection("dummy_mapping", 1),
         "task": PluginSelection("dummy_reach_task", 1),
         "input_source": PluginSelection("conformance_input_source", 1),
+        "command_semantics_identity": (
+            LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
+        ),
         "evaluators": (PluginSelection("dummy_success_evaluator", 1),),
         "parameters": (_environment_parameters(environment),),
         "initial_keyframe_name": "neutral",
@@ -208,6 +212,26 @@ def test_canonical_round_trip_and_field_insertion_order_are_stable() -> None:
 
     assert decode_evaluation_manifest(canonical) == manifest
     assert encode_evaluation_manifest(decode_evaluation_manifest(reordered)) == canonical
+
+
+def test_command_semantics_are_preserved_in_manifest_readiness_and_freeze() -> None:
+    manifest = _manifest()
+    readiness = _build_readiness(
+        manifest,
+        _readiness_registries(mapping=replace(_mapping(), control_frame="world")),
+    )
+
+    assert manifest.to_document()["command_semantics_identity"] == {
+        "name": "local_endpoint_velocity_to_joint_position",
+        "version": 1,
+    }
+    assert readiness.command_semantics.identity == (
+        LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
+    )
+    resolved = readiness.freeze_record.canonical_resolved_identity_bytes
+    assert b"local_endpoint_velocity_to_joint_position" in resolved
+    assert b"dummy_mapping_semantics" in resolved
+    assert b"joint_position_command" in resolved
 
 
 def test_one_semantic_field_changes_the_manifest_digest() -> None:
@@ -890,8 +914,7 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
         ),
     )
 
-    # Golden values were executed at baseline main
-    # e0311688f8d9738689434a82895616c42e965c0f with test-revision:abc123.
+    # Golden values include the evaluation-manifest/v3 command semantics condition.
     for candidate in (readiness, compatibility_readiness):
         assert candidate.freeze_record.manifest_digest == (
             BASELINE_FAST_ARM_MANIFEST_DIGEST

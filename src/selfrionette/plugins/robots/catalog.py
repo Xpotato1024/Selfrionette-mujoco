@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from selfrionette.plugins.robot_discovery import (
+from selfrionette.plugins.robots.discovery import (
     RobotPluginRegistry,
     discover_production_robot_plugins,
 )
-from selfrionette.plugins.robot_registration import RobotPluginRegistration
+from selfrionette.plugins.robots.registration import RobotPluginRegistration
 from selfrionette.runtime.composition.robot_profile import RobotProfile
 from selfrionette.runtime.experiment.contracts import PluginSelection
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 from pathlib import Path
 
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PLUGINS = ROOT / "src" / "selfrionette" / "plugins"
 SOURCE_ROOT = PLUGINS / "input_sources"
 MAPPING_ROOT = PLUGINS / "mappings"
+ROBOT_ROOT = PLUGINS / "robots"
 
 
 def _string_literals(path: Path) -> set[str]:
@@ -55,6 +57,48 @@ def test_final_source_identity_and_mixed_owners_are_retired() -> None:
     assert (SOURCE_ROOT / "selfrionette" / "protocol.py").is_file()
 
 
+def test_axis_local_infrastructure_and_retired_root_paths_are_exact() -> None:
+    assert {path.name for path in PLUGINS.glob("*.py")} == {
+        "__init__.py",
+        "bounded_discovery.py",
+    }
+    assert {
+        "catalog.py",
+        "discovery.py",
+        "registration.py",
+    } <= {path.name for path in ROBOT_ROOT.glob("*.py")}
+    assert {
+        "catalog.py",
+        "discovery.py",
+        "registration.py",
+    } <= {path.name for path in SOURCE_ROOT.glob("*.py")}
+    assert {"catalog.py", "discovery.py"} <= {
+        path.name for path in MAPPING_ROOT.glob("*.py")
+    }
+    assert not (MAPPING_ROOT / "registration.py").exists()
+    for retired_name in (
+        "catalog.py",
+        "robot_discovery.py",
+        "robot_registration.py",
+        "input_source_discovery.py",
+        "input_source_registration.py",
+        "control_mapping_discovery.py",
+    ):
+        assert not (PLUGINS / retired_name).exists()
+
+
+def test_retired_axis_infrastructure_modules_are_not_importable() -> None:
+    for module_name in (
+        "selfrionette.plugins.catalog",
+        "selfrionette.plugins.robot_discovery",
+        "selfrionette.plugins.robot_registration",
+        "selfrionette.plugins.input_source_discovery",
+        "selfrionette.plugins.input_source_registration",
+        "selfrionette.plugins.control_mapping_discovery",
+    ):
+        assert importlib.util.find_spec(module_name) is None
+
+
 def test_plugin_packages_do_not_own_cross_axis_concrete_ids() -> None:
     mapping_ids = set(CONTROL_MAPPING_REGISTRY.ids)
     source_ids = set(INPUT_SOURCE_CATALOG.ids)
@@ -92,7 +136,7 @@ def test_input_source_packages_do_not_project_mapping_parameters() -> None:
 
 def test_catalog_order_is_identity_derived_without_plugin_ordinals() -> None:
     registration = (
-        PLUGINS / "input_source_registration.py"
+        SOURCE_ROOT / "registration.py"
     ).read_text(encoding="utf-8")
     catalog = (SOURCE_ROOT / "catalog.py").read_text(encoding="utf-8")
     plugin_sources = "\n".join(
@@ -108,7 +152,6 @@ def test_catalog_order_is_identity_derived_without_plugin_ordinals() -> None:
 
 def test_temporary_plugin_compatibility_facades_are_absent() -> None:
     retired = (
-        SOURCE_ROOT / "registration.py",
         MAPPING_ROOT / "analog_fixture.py",
         MAPPING_ROOT / "continuous_endpoint_velocity.py",
         MAPPING_ROOT / "keyboard.py",

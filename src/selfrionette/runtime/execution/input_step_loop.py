@@ -11,7 +11,7 @@ from selfrionette.plugins.input_sources.viewer import (
     ViewerInputSource,
     ViewerManagedInputSourceReader,
 )
-from selfrionette.plugins.catalog import resolve_robot_bundle, resolve_robot_profile
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle, resolve_robot_profile
 from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
@@ -34,7 +34,11 @@ from selfrionette.runtime.experiment.input_source import (
     ViewerBridgeRuntimeCapability,
     ViewerEndpointRebaseCapability,
 )
-from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
+from selfrionette.runtime.experiment.composition import resolve_command_semantics_route
+from selfrionette.runtime.experiment.contracts import (
+    CommandSemanticsRoute,
+    ControlMappingPlugin,
+)
 from selfrionette.runtime.safety.input_safety import build_runtime_input_safety_result
 from selfrionette.runtime.execution.live_timing import (
     AbsoluteDeadlinePacer,
@@ -85,6 +89,7 @@ class RuntimeInputSourceStepLoopPlan:
     endpoint_site_name: str | None
     execution_adapter: RuntimeInputSourceExecutionAdapter
     control_mapping: ControlMappingPlugin
+    command_semantics: CommandSemanticsRoute
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
@@ -162,6 +167,16 @@ def build_runtime_input_source_step_loop_plan(
     )
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
+    command_semantics = resolve_command_semantics_route(
+        selection.control_mapping,
+        robot_bundle,
+        selection.command_semantics_selection,
+    )
+    if (
+        selection.resolved_command_semantics is not None
+        and selection.resolved_command_semantics != command_semantics
+    ):
+        raise ValueError("runtime command semantics selection changed after source readiness")
     plugin = robot_bundle.runtime_plugin
     endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
     endpoint_command_provider = robot_bundle.provider(ENDPOINT_COMMAND_V1)
@@ -182,6 +197,7 @@ def build_runtime_input_source_step_loop_plan(
         "endpoint_command_provider": endpoint_command_provider,
         "qpos_feasibility_provider": qpos_feasibility_provider,
         "endpoint_site_name": robot_bundle.profile.endpoint.site_name,
+        "command_semantics": command_semantics,
     }
 
     if viewer_input_source is not None and not execution_adapter.uses_viewer_endpoint_compatibility:

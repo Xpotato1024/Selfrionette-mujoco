@@ -6,11 +6,11 @@ import pytest
 
 from selfrionette.mujoco_backend.model_info import inspect_mujoco_model
 from selfrionette.mujoco_backend.snapshot import snapshot_mujoco_state
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     registered_robot_runtime_plugin_ids,
     resolve_robot_runtime,
 )
-from selfrionette.plugins.catalog import registered_robot_profile_ids
+from selfrionette.plugins.robots.catalog import registered_robot_profile_ids
 from tests.robots.robot_runtime_plugin_conformance_cases import (
     ROBOT_RUNTIME_PLUGIN_CONFORMANCE_CASES,
 )

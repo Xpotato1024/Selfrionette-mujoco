@@ -21,13 +21,17 @@ from selfrionette.runtime.experiment.composition import (
 from selfrionette.runtime.experiment.contracts import (
     CanonicalEvidence,
     CanonicalEvidenceSet,
+    CommandSemanticsRoute,
     ControlMappingPlugin,
+    ENDPOINT_VELOCITY_COMMAND_V1,
     EnvironmentPlugin,
     EnvironmentRole,
     EvaluationPlugin,
     EvidenceDisposition,
     EvidencePolicy,
     EvidenceStatus,
+    JOINT_POSITION_COMMAND_V1,
+    LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
     MetricResult,
     ParameterContract,
     ParameterField,
@@ -40,6 +44,7 @@ from selfrionette.runtime.experiment.contracts import (
     TaskPlugin,
     TaskTerminalClassification,
     VersionedIdentity,
+    NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
 )
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from selfrionette.runtime.experiment.input_source import InputSourceMode
@@ -63,7 +68,7 @@ from selfrionette.runtime.composition.robot_bundle import (
     CapabilityProviderBinding,
     RobotBundle,
 )
-from selfrionette.plugins.catalog import resolve_robot_bundle
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
 
 
 TARGET_ROLE = SemanticRole("environment.target_object")
@@ -237,6 +242,9 @@ def _dummy_bundle(
     duplicate_endpoint_pose: bool = False,
     parameter_contract: ParameterContract = ParameterContract(),
     initial_state_contract: InitialStateContract | None = None,
+    supported_command_semantics: frozenset[VersionedIdentity] = frozenset(
+        {JOINT_POSITION_COMMAND_V1}
+    ),
 ) -> RobotBundle:
     profile = _dummy_profile()
     plugin = _DummyRuntimePlugin(profile)
@@ -293,6 +301,7 @@ def _dummy_bundle(
         profile=profile,
         runtime_plugin=plugin,
         capability_providers=tuple(providers),
+        supported_command_semantics=supported_command_semantics,
         parameter_contract=parameter_contract,
     )
 
@@ -343,6 +352,17 @@ def _mapping(
         produced_evidence=produced_evidence,
         comparison_family_identity=VersionedIdentity("dummy_mapping_family", 1),
         mapping_semantics_identity=VersionedIdentity("dummy_mapping_semantics", 1),
+        command_semantics_routes=frozenset(
+            {
+                CommandSemanticsRoute(
+                    identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+                    control_semantics_identity=VersionedIdentity(
+                        "dummy_mapping_semantics", 1
+                    ),
+                    robot_command_semantics_identity=JOINT_POSITION_COMMAND_V1,
+                )
+            }
+        ),
     )
 
 
@@ -430,6 +450,7 @@ def _manifest(**overrides) -> ExperimentPluginManifest:
         "control_mapping": PluginSelection("dummy_mapping", 1),
         "task": PluginSelection("dummy_reach_task", 1),
         "input_source": PluginSelection(CONFORMANCE_INPUT_SOURCE.name, 1),
+        "command_semantics": LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
         "evaluators": (PluginSelection("dummy_success_evaluator", 1),),
         "parameters": (
             PluginParameters(
@@ -513,7 +534,7 @@ def test_discovered_logical_v2_fixture_uses_plugin_selection_in_resolved_composi
     import importlib
     import sys
 
-    from selfrionette.plugins.robot_discovery import (
+    from selfrionette.plugins.robots.discovery import (
         RobotDiscoveryRoot,
         discover_robot_plugins,
     )
@@ -824,6 +845,69 @@ def test_exact_versioned_cross_plugin_compatibility_accepts_v1() -> None:
     assert resolved.environment.identity == VersionedIdentity("dummy_environment", 1)
 
 
+def test_command_semantic_identities_are_versioned_and_distinct() -> None:
+    from selfrionette.runtime.experiment.contracts import (
+        ENDPOINT_POSITION_COMMAND_V1,
+        JOINT_VELOCITY_COMMAND_V1,
+    )
+
+    identities = {
+        ENDPOINT_POSITION_COMMAND_V1,
+        ENDPOINT_VELOCITY_COMMAND_V1,
+        JOINT_POSITION_COMMAND_V1,
+        JOINT_VELOCITY_COMMAND_V1,
+    }
+    assert {item.canonical_id for item in identities} == {
+        "endpoint_position_command/v1",
+        "endpoint_velocity_command/v1",
+        "joint_position_command/v1",
+        "joint_velocity_command/v1",
+    }
+
+
+def test_native_endpoint_velocity_route_composes_with_test_only_robot() -> None:
+    native_route = CommandSemanticsRoute(
+        identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+        control_semantics_identity=VersionedIdentity("dummy_mapping_semantics", 1),
+        robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+    )
+    mapping = replace(
+        _mapping(),
+        command_semantics_routes=frozenset({native_route}),
+    )
+    robot = _dummy_bundle(
+        supported_command_semantics=frozenset({ENDPOINT_VELOCITY_COMMAND_V1})
+    )
+
+    resolved = compose_experiment(
+        _manifest(command_semantics=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1),
+        _registries(mapping=mapping, bundle=robot),
+    )
+
+    assert resolved.resolved_command_semantics == native_route
+
+
+def test_native_endpoint_velocity_route_rejects_joint_position_only_robot() -> None:
+    native_route = CommandSemanticsRoute(
+        identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+        control_semantics_identity=VersionedIdentity("dummy_mapping_semantics", 1),
+        robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+    )
+    mapping = replace(
+        _mapping(),
+        command_semantics_routes=frozenset({native_route}),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="mapping/Robot command semantics compatibility mismatch",
+    ):
+        compose_experiment(
+            _manifest(command_semantics=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1),
+            _registries(mapping=mapping),
+        )
+
+
 def test_cross_plugin_compatibility_rejects_robot_bundle_version_mismatch() -> None:
     bundle_v2 = _dummy_bundle(
         identity=VersionedIdentity("dummy_robot_bundle", 2)
@@ -1026,6 +1110,10 @@ def test_fast_arm_bundle_reuses_existing_profile_plugin_and_home_contract() -> N
         }
     )
     assert CONTACT_EVIDENCE_V1 not in bundle.provided_capabilities
+    assert bundle.supported_command_semantics == frozenset(
+        {JOINT_POSITION_COMMAND_V1}
+    )
+    assert ENDPOINT_VELOCITY_COMMAND_V1 not in bundle.supported_command_semantics
 
 
 def test_manifest_rejects_duplicate_evaluator_and_unknown_parameter_owner() -> None:

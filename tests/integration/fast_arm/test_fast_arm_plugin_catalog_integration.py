@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     registered_robot_plugin_ids,
     registered_robot_bundle_ids,
     registered_robot_profile_ids,
@@ -22,8 +22,8 @@ from selfrionette.plugins.robots.fast_arm.adapter.runtime import (
 )
 from selfrionette.plugins.robots.fast_arm.adapter.viewer import FAST_ARM_VIEWER_DECLARATION
 from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN
-from selfrionette.plugins.catalog import resolve_robot_bundle as root_resolve_robot_bundle
-from selfrionette.plugins.catalog import resolve_robot_runtime as root_resolve_robot_runtime
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle as root_resolve_robot_bundle
+from selfrionette.plugins.robots.catalog import resolve_robot_runtime as root_resolve_robot_runtime
 from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.runtime.composition.viewer_robot_declaration import viewer_robot_declaration_digest

@@ -12,7 +12,7 @@ from selfrionette.runtime.composition.robot_profile import (
     RobotProfile,
     robot_profile_runtime_metadata,
 )
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     registered_robot_profile_ids,
     resolve_robot_profile,
 )
@@ -23,7 +23,7 @@ from selfrionette.plugins.robots.fast_arm.adapter.runtime import (
 )
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     resolve_robot_runtime,
     registered_robot_runtime_plugin_ids,
     resolve_robot_runtime_plugin,

@@ -12,14 +12,14 @@ from types import ModuleType
 import pytest
 
 from selfrionette.mujoco_backend.simulator import HeadlessMuJoCoSimulator
-from selfrionette.plugins.catalog import RobotCatalog
-from selfrionette.plugins.robot_discovery import (
+from selfrionette.plugins.robots.catalog import RobotCatalog
+from selfrionette.plugins.robots.discovery import (
     RobotDiscoveryRoot,
     RobotPluginDiscoveryError,
     RobotPluginRegistry,
     discover_robot_plugins,
 )
-from selfrionette.plugins.robot_registration import (
+from selfrionette.plugins.robots.registration import (
     RepositoryResource,
     RobotResourceDeclaration,
     _resolved_resource,
@@ -323,7 +323,7 @@ def test_package_identity_missing_resource_and_path_escape_fail_closed(
         plugin_source=(
             "from dataclasses import replace\n"
             "from test_robot_plugins.fixture_bot.plugin import ROBOT_PLUGIN as BASE\n"
-            "from selfrionette.plugins.robot_registration import RepositoryResource, RobotResourceDeclaration\n"
+            "from selfrionette.plugins.robots.registration import RepositoryResource, RobotResourceDeclaration\n"
             "ROBOT_PLUGIN = replace(BASE, resources=RobotResourceDeclaration("
             "model=RepositoryResource('assets/mujoco/fixture_bot/missing.xml'), "
             "configurations=BASE.resources.configurations, "

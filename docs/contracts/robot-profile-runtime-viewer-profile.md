@@ -124,7 +124,7 @@ repository-owned resource、またはdeclared Python package resource
 
 robot packageは少なくともside-effect-freeな`__init__.py`、固定entry pointの`plugin.py`、Profile、
 Runtime Plugin、Bundle assembly、viewer declarationを持つ。robot固有algorithmまたはmodel contractは同packageへ
-置き、generic `runtime/`、`kinematics/`、`mujoco_backend/`、`plugins/catalog.py`、viewer production source、
+置き、generic `runtime/`、`kinematics/`、`mujoco_backend/`、`plugins/robots/catalog.py`、viewer production source、
 root compatibility facadeへ新robot固有import、ID、fallbackを追加しない。
 
 registry IDとcanonical identity materialはlogical identityでsortし、candidate列挙順に依存しない。
@@ -136,7 +136,7 @@ catalogへ混入させない。
 runtime composition dependency、public APIではない。
 
 production concrete registrationのSoTは各robot packageの`plugin.py` / `ROBOT_PLUGIN`である。
-`selfrionette.plugins.catalog`はdiscovery結果だけからregistryとprojection resolverを構成し、具体robot
+`selfrionette.plugins.robots.catalog`はdiscovery結果だけからregistryとprojection resolverを構成し、具体robot
 package、具体robot ID、Bundle singletonをimportしない。`resolve_robot_profile()`、`resolve_robot_runtime_plugin()`、
 `resolve_robot_runtime()`、`resolve_robot_bundle()`は同じBundleのProfile / Runtime Plugin objectへ収束する。
 Profile、Runtime Plugin、Bundleを独立したconcrete registryへ重複登録しない。旧registry moduleは
@@ -151,6 +151,17 @@ pluginをrejectする。production defaultではcatalogのBundleを一度assembl
 加えてsemantic comparisonも維持する。
 
 ## Productionとgenericの選択
+
+Robot Bundleのtyped provider capabilityとbackend accepted command semanticsは別集合である。
+`endpoint_command/v1`はtarget / local endpoint motion generatorを構築するprovider能力を表し、
+backendがendpoint positionまたはendpoint velocityをnative受理するという宣言ではない。
+`supported_command_semantics`は最終backend boundaryだけを列挙する。
+
+fast_arm / MuJoCoの現行motion generatorはendpoint targetまたはvelocity由来deltaをJacobianで
+candidate qposへ変換し、MuJoCo adapterへ`JointCommand(joint_angles_rad=...)`を渡す。したがって
+fast_armが宣言するcommand semanticは`joint_position_command/v1`だけである。
+`endpoint_velocity_command/v1`、`endpoint_position_command/v1`、`joint_velocity_command/v1`は
+versioned identityとして区別できるが、未実装のfast_arm capabilityとして宣言しない。
 
 production fast_arm entry pointは`RuntimeConfig(robot_profile_id="fast_arm")`を
 明示的に構築するか、callerにそのIDの指定を要求する。解決済みprofile/plugin pairを通して、

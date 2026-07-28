@@ -16,9 +16,13 @@ from selfrionette.plugins.mappings.replay_mapping import (
 )
 from selfrionette.runtime.experiment.composition import PluginParameters, compose_experiment
 from selfrionette.runtime.experiment.contracts import (
+    ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
+    JOINT_POSITION_COMMAND_V1,
+    LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
     PluginAxis,
     PluginParameterOwner,
     PluginSelection,
+    REPLAY_COMMAND_TO_JOINT_POSITION_V1,
 )
 from selfrionette.schemas import RawInputFrame
 from tests.runtime.test_experiment_plugin_composition import (
@@ -34,6 +38,22 @@ def test_production_mapping_catalog_is_deterministic_and_source_compatible_where
         "replay_mapping",
         "viewer_keyboard_gamepad_mapping",
     )
+
+
+def test_production_mapping_command_semantics_classification_is_explicit() -> None:
+    expected_routes = {
+        "analog_fixture_mapping": LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+        "loadcell_endpoint_mapping": ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
+        "replay_mapping": REPLAY_COMMAND_TO_JOINT_POSITION_V1,
+        "viewer_keyboard_gamepad_mapping": (
+            LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
+        ),
+    }
+    for plugin in CONTROL_MAPPING_REGISTRY.entries:
+        route = plugin.resolve_command_semantics_route()
+        assert route.identity == expected_routes[plugin.identity.name]
+        assert route.control_semantics_identity == plugin.mapping_semantics_identity
+        assert route.robot_command_semantics_identity == JOINT_POSITION_COMMAND_V1
     analog = CONTROL_MAPPING_REGISTRY.resolve(PluginSelection("analog_fixture_mapping", 1))
     replay = CONTROL_MAPPING_REGISTRY.resolve(PluginSelection("replay_mapping", 1))
     assert INPUT_SOURCE_CATALOG.resolve("analog_fixture").plugin.produced_sample_schema in analog.accepted_input_sample_schemas
@@ -87,6 +107,7 @@ def test_production_loadcell_source_and_mapping_compose_with_raw_schema_boundary
     manifest = build_test_manifest(
         input_source=PluginSelection("selfrionette", 1),
         control_mapping=PluginSelection("loadcell_endpoint_mapping", 1),
+        command_semantics=ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
         parameters=(
             *build_test_manifest().parameters,
             PluginParameters(

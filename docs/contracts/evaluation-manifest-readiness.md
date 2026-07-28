@@ -20,7 +20,7 @@ related:
 ## ownershipとscope
 
 `src/selfrionette/runtime/evaluation/manifest.py`が、実行開始前に固定する
-`evaluation-manifest/v2`のtyped manifest、canonical serialization、software-only readiness、
+`evaluation-manifest/v3`のtyped manifest、canonical serialization、software-only readiness、
 world/tool condition-pair、freeze identityを所有する。manifestはimmutableなtyped modelであり、
 内部にmutable mappingやlistを保持しない。6軸のplugin contractはR7-G-P0 / #421の
 `ExperimentPluginManifest`、`PluginSelection`、`PluginAxis`、`PluginParameterOwner`、
@@ -35,9 +35,11 @@ software gateであり、model load、MuJoCo forward / step、hardware accessを
 
 `EvaluationManifest`は次のidentityとconfigurationを一つのcondition-level recordへ保持する。
 
-- `schema_version=evaluation-manifest/v2`とcontract version。Input Source selection追加に伴う明示的なversion updateであり、v1へ暗黙補完しない。
+- `schema_version=evaluation-manifest/v3`とcontract version。command semantics selection追加に伴う明示的なversion updateであり、v2以前へ暗黙補完しない。
 - repository、software revision、Robot Bundle、Robot Profile、Runtime Plugin、model contract、canonical initial-state contract
 - Environment、Control Mapping、Task、Input Source、Evaluatorの`PluginSelection`と各contract version
+- selected `command_semantics_identity`。同じInput Source / Mapping / Robot selectionでも
+  runtime conversionまたはnative command方式が異なる条件を区別する
 - axis-scoped `PluginParameterOwner`とrecursive canonical JSON parameter values
 - named initial keyframe、finite initial qpos、initial tip position / frame / unit、WXYZ unit quaternion
 - target family / identity / world position、initial-tip-to-target distance identity
@@ -89,6 +91,7 @@ requested identityはmanifestのcanonical bytesと`manifest_digest`が表す。r
 - versioned canonical initial-state contract identityとverification identity
 - actual `SoftwareExecutionIdentity`
 - resolved mapping comparison-family / mapping-semantics identityとcontrol frame
+- resolved command route identity、Mapping control semantics identity、final Robot command semantic
 
 requested selectionは「何を要求したか」、resolved identityは「startupで何へ解決されたか」であり、
 同一視しない。registry lookup、compatibility、required capability、semantic role、evidence producer、
@@ -103,6 +106,9 @@ evaluator evidence、profile / runtime / model identity、named neutral home、q
 tip / orientationのframe・unit・quaternion、target geometry、manifestとactual executionのsoftware identity、
 Robot Bundle providerのcanonical initial-state contract（identity、keyframe、qpos、tip、orientation、frame、
 unit、quaternion order）、mapping comparison family / semantics identityを検証する。
+さらにselected command routeがMapping declarationに存在し、そのcontrol semanticsがMappingの
+`mapping_semantics_identity`と一致し、final command semanticをRobot Bundleがsupportすることを
+source start、model step、external I/Oより前に検証する。
 
 成功時だけ`EvaluationReadiness`を返す。resultはcanonical requested manifest identity、resolved
 identity tuple、`EvidenceProducerBinding`、initial-state identity、`ReadinessStatus.READY`、
@@ -144,6 +150,8 @@ freeze digestを保持する。freeze digestはmanifestとresolved identityを`e
 evidence producer、semantic role descriptor、profile / model contract、initial-state contract identity、
 actual software execution identity、mapping comparison family / semantics identityの変更を
 検出できる。
+command route、control semantics、final Robot command semanticの変更もcanonical requested /
+resolved materialへ含まれ、freeze identityを変更する。
 
 #423のpackage / import-direction migrationは、これらのlogical identityとcanonical bytesを維持する。
 source file path、package location、compatibility re-exportだけの変更はfreeze identityを変更しない。
@@ -160,7 +168,7 @@ identityを変更する場合は、manifest contract versionまたは対象のve
 provider boundaryである。runnerはready resultとfreeze identityを受け取り、別のimplicit selectionや
 default補完を行わない。
 
-robot selectionが必要なcomposition rootは`selfrionette.plugins.catalog`のresolverを使用し、
+robot selectionが必要なcomposition rootは`selfrionette.plugins.robots.catalog`のresolverを使用し、
 resolved Bundleから必要なtyped providerをassembly時に取得する。`plugins.robots.fast_arm`のconcrete
 moduleと旧compatibility facadeは#406のimport boundaryではない。Bundleはprovider assemblyの境界であり、
 runner処理中のservice locatorとして使用しない。

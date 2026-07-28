@@ -1,6 +1,6 @@
 """Fixed discovery entry point for the first-party fast_arm Robot Plugin."""
 
-from selfrionette.plugins.robot_registration import (
+from selfrionette.plugins.robots.registration import (
     ROBOT_ONBOARDING_CONTRACT_VERSION,
     RobotPluginRegistration,
     RobotResourceDeclaration,

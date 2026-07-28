@@ -1,4 +1,4 @@
-"""Immutable first-party Robot Plugin onboarding declaration."""
+"""Immutable axis-local first-party Robot Plugin onboarding declaration."""
 
 from __future__ import annotations
 

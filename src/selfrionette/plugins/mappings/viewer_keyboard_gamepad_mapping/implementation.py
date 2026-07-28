@@ -17,8 +17,11 @@ from selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping.keyboard impo
     build_keyboard_continuous_velocity_intent,
 )
 from selfrionette.runtime.experiment.contracts import (
+    CommandSemanticsRoute,
     ControlMappingPlugin,
     ControlMappingStrategy,
+    JOINT_POSITION_COMMAND_V1,
+    LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
     ParameterContract,
     ParameterField,
     VersionedIdentity,
@@ -389,6 +392,15 @@ VIEWER_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(
     control_frame=None,
     comparison_family_identity=VersionedIdentity("viewer_keyboard_gamepad_comparison", 1),
     mapping_semantics_identity=VIEWER_MAPPING_SEMANTICS_IDENTITY,
+    command_semantics_routes=frozenset(
+        {
+            CommandSemanticsRoute(
+                identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+                control_semantics_identity=VIEWER_MAPPING_SEMANTICS_IDENTITY,
+                robot_command_semantics_identity=JOINT_POSITION_COMMAND_V1,
+            )
+        }
+    ),
     parameter_normalizer=normalize_viewer_control_mapping_parameters,
 )
 

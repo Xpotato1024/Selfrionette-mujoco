@@ -1,4 +1,4 @@
-"""Bounded deterministic discovery for first-party Control Mapping Plugins."""
+"""Axis-local bounded deterministic discovery for first-party Control Mapping Plugins."""
 
 from __future__ import annotations
 

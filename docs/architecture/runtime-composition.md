@@ -47,7 +47,7 @@ startup keyframe、IK / FK、motion policy、qpos feasibility guardの整合を�
 zero solver、退役したPlanar solverへ暗黙fallbackしない。
 
 production concrete registrationは、固定namespace直下の`plugin.py` / `ROBOT_PLUGIN`を読むbounded
-discoveryから`selfrionette.plugins.catalog`へ投影する。catalogは具体robot importや具体IDを持たず、
+discoveryから`selfrionette.plugins.robots.catalog`へ投影する。catalogは具体robot importや具体IDを持たず、
 discovered `RobotBundle`をknown IDでresolveし、ProfileとRuntime Plugin resolverは同じBundle objectの
 `profile` / `runtime_plugin`へprojectionする。application compositionはBundleから必要なtyped providerを
 assembly時に取得してconsumerへ渡し、処理中にBundleへ問い合わせるservice locatorにはしない。
@@ -66,7 +66,7 @@ Runtime Pluginを直接使用できるのはcomposition中のmodel validationと
 object identityを固定する。custom providerを含め、stale Profile、stale Runtime Plugin、別robot、別logical versionに
 bindされたproviderをregistration / assembly時に拒否する。
 旧profile / runtime / bundle registry moduleは退役済みである。application compositionとruntimeのdeliberate
-package-root resolverは`plugins/catalog.py`のcanonical resolverへ直接到達し、intermediate facadeを通らない。
+package-root resolverは`plugins/robots/catalog.py`のcanonical resolverへ直接到達し、intermediate facadeを通らない。
 
 discoveryはapplicationがcatalog resolverへ初めて到達した時点で同期的に完了し、duplicate identity、
 broken entry point、contract / capability不整合、missing / escaped resourceをpartial registryなしで拒否する。
@@ -205,6 +205,24 @@ button-only sampleはactive provider sampleとしてmappingへ渡す。`raw_axes
 hold safety、malformed ingressの即時`invalid`遷移を維持する。
 
 ## failureとordering
+
+command semanticsを含むstartup順序は次で固定する。
+
+```text
+resolve Input Source / Mapping / Robot selections
+-> validate source-produced / Mapping-accepted schemas
+-> normalize and validate Mapping parameters
+-> resolve Mapping control semantics / runtime conversion route
+-> validate final Robot command semantic
+-> readiness / freeze
+-> source start
+-> serial / viewer / network I/O and MuJoCo stepping
+```
+
+不一致は`mapping/Robot command semantics compatibility mismatch`としてsource lifecycle開始前に
+fail-closedとする。現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
+desired endpoint positionからJacobianでjoint-position commandを構築する。このconversionはruntime /
+controller ownerであり、fast_arm backendのnative endpoint-velocity能力ではない。
 
 - unknown profile、incompatible model、invalid joint orderはcomposition前に失敗する。
 - qpos feasibilityはcandidate全体を検証し、invalid candidateを部分適用しない。

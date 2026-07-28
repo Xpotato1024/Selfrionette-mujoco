@@ -39,7 +39,7 @@ def test_catalogs_and_generic_registration_do_not_list_concrete_plugins() -> Non
     guarded = (
         PLUGINS / "input_sources" / "catalog.py",
         PLUGINS / "mappings" / "catalog.py",
-        PLUGINS / "input_source_registration.py",
+        PLUGINS / "input_sources" / "registration.py",
     )
     concrete_ids = (
         *INPUT_SOURCE_CATALOG.ids,
@@ -54,9 +54,17 @@ def test_catalogs_and_generic_registration_do_not_list_concrete_plugins() -> Non
             if isinstance(node, ast.Constant) and isinstance(node.value, str)
         }
         assert not set(concrete_ids) & string_literals, path
+        allowed_axis_infrastructure = {
+            "selfrionette.plugins.input_sources.discovery",
+            "selfrionette.plugins.input_sources.registration",
+            "selfrionette.plugins.mappings.discovery",
+        }
         assert not any(
-            module.startswith("selfrionette.plugins.input_sources.")
-            or module.startswith("selfrionette.plugins.mappings.")
+            (
+                module.startswith("selfrionette.plugins.input_sources.")
+                or module.startswith("selfrionette.plugins.mappings.")
+            )
+            and module not in allowed_axis_infrastructure
             for module in _imports(path)
         ), path
 
@@ -65,7 +73,7 @@ def test_mapping_root_compatibility_exports_are_retired() -> None:
     compatibility = (PLUGINS / "mappings" / "__init__.py").read_text(
         encoding="utf-8"
     )
-    discovery = (PLUGINS / "control_mapping_discovery.py").read_text(
+    discovery = (PLUGINS / "mappings" / "discovery.py").read_text(
         encoding="utf-8"
     )
     catalog = (PLUGINS / "mappings" / "catalog.py").read_text(encoding="utf-8")
@@ -90,10 +98,10 @@ def test_discovery_is_bounded_and_axis_validation_stays_typed() -> None:
     assert "sys.path" not in helper
 
     input_discovery = (
-        PLUGINS / "input_source_discovery.py"
+        PLUGINS / "input_sources" / "discovery.py"
     ).read_text(encoding="utf-8")
     mapping_discovery = (
-        PLUGINS / "control_mapping_discovery.py"
+        PLUGINS / "mappings" / "discovery.py"
     ).read_text(encoding="utf-8")
     assert 'INPUT_SOURCE_PLUGIN_ENTRY_MODULE = "plugin"' in input_discovery
     assert (

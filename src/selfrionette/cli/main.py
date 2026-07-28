@@ -7,7 +7,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from selfrionette.plugins.catalog import resolve_robot_bundle
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
 from selfrionette.plugins.input_sources.catalog import (
     INPUT_SOURCE_CATALOG,
 )

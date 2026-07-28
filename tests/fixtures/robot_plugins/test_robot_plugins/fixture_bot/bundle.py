@@ -1,6 +1,9 @@
 """Typed provider assembly for the test-only fixture robot."""
 
-from selfrionette.runtime.experiment.contracts import VersionedIdentity
+from selfrionette.runtime.experiment.contracts import (
+    JOINT_POSITION_COMMAND_V1,
+    VersionedIdentity,
+)
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -39,6 +42,7 @@ FIXTURE_ROBOT_BUNDLE = RobotBundle(
     identity=VersionedIdentity("fixture_bot", 2),
     profile=FIXTURE_ROBOT_PROFILE,
     runtime_plugin=FIXTURE_RUNTIME_PLUGIN,
+    supported_command_semantics=frozenset({JOINT_POSITION_COMMAND_V1}),
     capability_providers=(
         CapabilityProviderBinding(
             RESET_INITIAL_STATE_V1,

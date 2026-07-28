@@ -274,6 +274,7 @@ class RobotBundle:
     profile: RobotProfile
     runtime_plugin: RobotRuntimePlugin
     capability_providers: tuple[CapabilityProviderBinding, ...]
+    supported_command_semantics: frozenset[VersionedIdentity]
     parameter_contract: ParameterContract = ParameterContract()
 
     def __post_init__(self) -> None:
@@ -283,6 +284,21 @@ class RobotBundle:
         identities = tuple(binding.identity for binding in self.capability_providers)
         if len(identities) != len(set(identities)):
             raise ValueError("ambiguous Robot Bundle capability provider registration")
+        command_semantics = frozenset(self.supported_command_semantics)
+        if not command_semantics:
+            raise ValueError(
+                "Robot Bundle must declare at least one supported command semantic"
+            )
+        if any(
+            not isinstance(identity, VersionedIdentity)
+            for identity in command_semantics
+        ):
+            raise TypeError(
+                "Robot Bundle supported command semantics must use VersionedIdentity"
+            )
+        object.__setattr__(
+            self, "supported_command_semantics", command_semantics
+        )
         for capability in self.capability_providers:
             assembly = capability.provider.assembly_binding
             if assembly.robot_identity != self.identity:

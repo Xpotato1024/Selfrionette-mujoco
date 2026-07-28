@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from selfrionette.plugins.control_mapping_discovery import (
+from selfrionette.plugins.mappings.discovery import (
     discover_production_control_mapping_plugins,
 )
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin, PluginSelection

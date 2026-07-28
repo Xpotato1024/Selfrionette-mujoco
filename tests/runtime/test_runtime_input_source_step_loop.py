@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from math import dist
 
 import pytest
 
 import selfrionette.runtime.execution.input_step_loop as input_step_loop
 from selfrionette.plugins.input_sources.viewer import ViewerInputSource
-from selfrionette.plugins.catalog import resolve_robot_bundle
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
 from selfrionette.plugins.robots.fast_arm.adapter.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime.execution.input_step_loop import (
@@ -16,6 +17,11 @@ from selfrionette.runtime.execution.input_step_loop import (
 )
 from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.experiment.contracts import (
+    CommandSemanticsRoute,
+    ENDPOINT_VELOCITY_COMMAND_V1,
+    NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+)
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -57,6 +63,43 @@ class RecordingPublisher:
 
     async def publish(self, state) -> None:
         self.states.append(state)
+
+
+def test_incompatible_command_semantics_rejects_before_source_start() -> None:
+    selection = select_runtime_input_source("viewer", steps=1)
+    assert selection.control_mapping is not None
+    native_route = CommandSemanticsRoute(
+        identity=NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
+        control_semantics_identity=selection.control_mapping.mapping_semantics_identity,
+        robot_command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+    )
+    native_mapping = replace(
+        selection.control_mapping,
+        command_semantics_routes=frozenset({native_route}),
+    )
+
+    class _StartSpy:
+        start_count = 0
+
+        def start(self) -> None:
+            self.start_count += 1
+
+    source = _StartSpy()
+    incompatible = replace(
+        selection,
+        runtime_reader=source,
+        control_mapping=native_mapping,
+        command_semantics_selection=native_route.identity,
+        resolved_command_semantics=native_route,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="mapping/Robot command semantics compatibility mismatch",
+    ):
+        build_runtime_input_source_step_loop_plan(incompatible)
+
+    assert source.start_count == 0
 
 
 def _build_plan(clock: _ClockSequence):

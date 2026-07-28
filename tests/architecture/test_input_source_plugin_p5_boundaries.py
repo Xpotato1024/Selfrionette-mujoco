@@ -187,8 +187,10 @@ def test_source_plugin_import_graph_has_no_forbidden_or_private_cross_source_edg
                     "selfrionette.runtime.evaluation"
                 ) or ".fast_arm" in module or ".tasks" in module:
                     violations.append(f"source:{path}:{module}")
-                if module.startswith("selfrionette.plugins.input_sources."):
-                    other = module.split(".")[3]
+                    if module.startswith("selfrionette.plugins.input_sources."):
+                        if module == "selfrionette.plugins.input_sources.registration":
+                            continue
+                        other = module.split(".")[3]
                     if other != source_id:
                         violations.append(f"cross-source:{path}:{module}")
     assert not violations

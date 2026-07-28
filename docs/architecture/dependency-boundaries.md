@@ -63,18 +63,23 @@ generic schema / domain / Protocol
   <- robot-specific profile / runtime / feasibility / initial state
   <- Robot Bundle assembly
   <- robot-specific plugin.py / ROBOT_PLUGIN registration
-  <- bounded first-party discovery / plugins/catalog.py
+  <- bounded first-party discovery / plugins/robots/catalog.py
   <- application composition root
 ```
 
-- `selfrionette.plugins.robot_discovery`は`selfrionette.plugins.robots`直下packageだけを列挙し、
+axis-specific catalog / discovery / registrationは`plugins/robots/`、
+`plugins/input_sources/`、`plugins/mappings/`の各ownerへ閉じる。root `plugins/`は
+cross-axis primitiveだけを所有し、旧root moduleをcompatibility aliasとして残さない。
+Mappingに追加registration情報がない限り`mappings/registration.py`は作らない。
+
+- `selfrionette.plugins.robots.discovery`は`selfrionette.plugins.robots`直下packageだけを列挙し、
   固定`plugin.py`の固定`ROBOT_PLUGIN`だけを読む。configuration値、robot ID、external entry pointを
   import pathとして使用しない。
 - 各robot packageの`ROBOT_PLUGIN`はBundle、viewer declaration、resource declaration、
   onboarding contract versionを一つのimmutable registrationへ束ねる。`__init__.py`の
   import副作用で自己登録しない。onboarding contract versionはregistration schema軸であり、
   Bundle / Profile / Viewerのrobot logical version軸とは独立させる。
-- `selfrionette.plugins.catalog`はproduction discovery結果の唯一のprojection入口であり、
+- `selfrionette.plugins.robots.catalog`はproduction discovery結果の唯一のprojection入口であり、
   concrete robot package、具体robot ID、Bundle singletonを直接importまたは列挙しない。
 - ProfileとRuntime Pluginのresolverは、別registryへ具体objectを重複登録せず、resolved Bundleの
   `profile`と`runtime_plugin`を返す。
@@ -85,6 +90,9 @@ generic schema / domain / Protocol
 - generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
   `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
+- Mapping packageとRobot packageは互いのconcrete IDをimportしない。Mappingのcontrol semantics、
+  selected runtime conversion route、Robotのsupported command semanticsを
+  `VersionedIdentity`で照合し、class名やmetadata keyによるcompatibility判定を行わない。
 - generic Robot Profile contractは`selfrionette.runtime.composition.robot_profile`、viewer向けrobot declaration
   contractは`selfrionette.runtime.composition.viewer_robot_declaration`が所有する。旧flat moduleは退役済みである。
 - Selfrionetteの7-channel protocol、intrinsic normalization、typed health、serial / injected backendは
