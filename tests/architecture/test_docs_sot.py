@@ -31,7 +31,7 @@ CANONICAL_DOCS = [
     "docs/operations/codex-workflow.md",
     "docs/operations/r7-c-viewer-fixture-demo-procedure.md",
     "docs/operations/r7-c-keyboard-replay-demo-package.md",
-    "docs/operations/r7-c-live-loadcell-validation-log.md",
+    "docs/operations/r7-c-live-selfrionette-validation-log.md",
     "docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md",
     "docs/operations/r7-c-axis-sanity-check.md",
     "docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md",
@@ -106,7 +106,7 @@ def test_current_contracts_are_registered_and_evidence_is_not_in_sot_map() -> No
     assert "native-mujoco-fast-arm-viewer-check.md" in archive
     assert "r7-c-viewer-fixture-demo-procedure.md" in operations
     assert "r7-c-keyboard-replay-demo-package.md" in operations
-    assert "r7-c-live-loadcell-validation-log.md" in operations
+    assert "r7-c-live-selfrionette-validation-log.md" in operations
     assert "r7-c-axis-sanity-check.md" in operations
     assert "docs/reports/implementation/r7-c-presentation-demo-notes.md" not in index
     assert "docs/reports/audits/r7-c-completion-audit.md" not in index

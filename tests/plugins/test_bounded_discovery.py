@@ -38,7 +38,7 @@ CONTROL_MAPPING_PLUGIN = build_test_mapping(
 """
 
 
-def _input_export(plugin_id: str, catalog_order: int) -> str:
+def _input_export(plugin_id: str) -> str:
     return f"""
 from dataclasses import replace
 from selfrionette.runtime.experiment.contracts import VersionedIdentity
@@ -50,7 +50,6 @@ INPUT_SOURCE_PLUGIN = replace(
     DUMMY_REGISTRATION,
     plugin=replace(DUMMY_PLUGIN, identity=VersionedIdentity("{plugin_id}", 1)),
     cli_aliases=("{plugin_id}",),
-    catalog_order={catalog_order},
 )
 """
 
@@ -132,8 +131,8 @@ def test_discovery_order_is_deterministic(
         monkeypatch,
         "ordered_input_plugins",
         {
-            "z_input": _input_export("z_input", 1),
-            "a_input": _input_export("a_input", 0),
+            "z_input": _input_export("z_input"),
+            "a_input": _input_export("a_input"),
         },
     )
     registrations = discover_input_source_plugins(

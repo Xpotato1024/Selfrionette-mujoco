@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
-from selfrionette.plugins.mappings.replay import (
+from selfrionette.plugins.mappings.replay_mapping import (
     REPLAY_CONTROL_MAPPING_PLUGIN,
     build_motion_command_from_replay_frame,
 )

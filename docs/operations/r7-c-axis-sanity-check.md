@@ -6,7 +6,7 @@ canonical_for:
   - R7-C axis sanity check protocol
 related:
   - docs/README.md
-  - docs/operations/r7-c-live-loadcell-validation-log.md
+  - docs/operations/r7-c-live-selfrionette-validation-log.md
   - docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md
   - docs/operations/r7-c-keyboard-replay-demo-package.md
   - docs/operations/r7-c-viewer-fixture-demo-procedure.md
@@ -22,13 +22,13 @@ related:
 force unit calibration、final mapping ではない。
 
 Codex / CI は browser、WebSocket server、serial、COM、hardware、OSC を実行しない。
-live loadcell の観測は #235 の template に記録された human-run evidence を読むだけである。
+live Selfrionette の観測は #235 のtemplateに記録されたhuman-run evidenceを読むだけである。
 
 ## 判定範囲
 
 - keyboard axis sanity check
 - replay / fixture sanity check
-- manual live loadcell observation checklist
+- manual live Selfrionette observation checklist
 - expected observation / actual observation の記録
 - sign inversion / axis mismatch の記録
 - pass / caution / fail の判定
@@ -38,7 +38,7 @@ live loadcell の観測は #235 の template に記録された human-run eviden
 keyboard path は no-hardware contract smoke として扱う。
 
 ```powershell
-uv run pytest tests/plugins/mappings/viewer/test_keyboard_mapping.py
+uv run pytest tests/plugins/mappings/viewer_keyboard_gamepad_mapping/test_keyboard_mapping.py
 ```
 
 確認すること:
@@ -65,14 +65,14 @@ uv run selfrionette replay --robot fast_arm --steps 6 --preset sweep_x --output 
 - payload v0 schema を変更していない
 - browser / WebSocket server をこの protocol では起動しない
 
-## live loadcell manual observation checklist
+## live Selfrionette manual observation checklist
 
-live loadcell は #235 の log template に記録された human-run observation だけを参照する。
+live Selfrionetteは#235のlog templateに記録されたhuman-run observationだけを参照する。
 Codex / CI は live serial を開かない。
 
 確認すること:
 
-- `metadata["source_kind"] == "loadcell_serial"`
+- `metadata["source_kind"] == "selfrionette"`
 - observed frame count が 0 ではない
 - `metadata["desired_endpoint_m"]` が存在する
 - no OSC / no robot output / no actuator command が確認済み
@@ -108,7 +108,7 @@ Codex / CI は live serial を開かない。
 ### caution
 
 - expected と actual は大きく矛盾しないが、operator confidence が低い
-- live loadcell で pyserial unavailable または frame count が少ない
+- live Selfrionetteでpyserial unavailableまたはframe countが少ない
 - sign inversion は未確定だが追加確認が必要
 - viewer / payload の観測はできるが browser E2E としては未実施
 

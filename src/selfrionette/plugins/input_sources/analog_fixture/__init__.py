@@ -2,8 +2,8 @@
 
 from collections.abc import Mapping
 
-from selfrionette.plugins.input_sources._common import AnalogFixtureInputSource
 from selfrionette.plugins.input_sources.analog_fixture.source import (
+    AnalogFixtureInputSource,
     AnalogFixtureSample,
     parse_analog_fixture_sample,
 )
@@ -18,6 +18,7 @@ def build_reader(parameters: Mapping[str, object]) -> AnalogFixtureInputSource:
 
 __all__ = [
     "AnalogFixtureSample",
+    "AnalogFixtureInputSource",
     "build_reader",
     "parse_analog_fixture_sample",
 ]

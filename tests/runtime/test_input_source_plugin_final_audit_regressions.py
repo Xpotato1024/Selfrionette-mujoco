@@ -6,10 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from selfrionette.plugins.input_sources.catalog import (
-    INPUT_SOURCE_CATALOG,
-    INPUT_SOURCE_PLUGIN_REGISTRY,
-)
+from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.runtime.control.input_source_selection import (
     select_runtime_input_source,
 )
@@ -99,7 +96,7 @@ def test_viewer_source_subtype_survives_frame_command_and_state_projection(
 
 
 def test_loadcell_health_tracks_start_read_close_and_restart() -> None:
-    plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+    plugin = INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin
     reader = plugin.create_runtime_reader(
         {"lines": ("vector,1000,1,2,3,4,5,6,7",)}
     )
@@ -131,7 +128,7 @@ def test_loadcell_start_failure_updates_health_and_cleanup_restores_not_started(
             raise RuntimeError("serial open failure")
 
     monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=FailingSerial))
-    plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+    plugin = INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin
     reader = plugin.create_runtime_reader(
         {"port": "COM-audit", "baud_rate": 115200}
     )
@@ -149,5 +146,5 @@ def test_loadcell_start_failure_updates_health_and_cleanup_restores_not_started(
     assert cleaned.reason == "not_started"
 
 
-def test_exported_registry_is_the_catalog_registry_instance() -> None:
-    assert INPUT_SOURCE_PLUGIN_REGISTRY is INPUT_SOURCE_CATALOG.registry
+def test_catalog_exposes_its_canonical_registry() -> None:
+    assert INPUT_SOURCE_CATALOG.registry.ids == INPUT_SOURCE_CATALOG.ids

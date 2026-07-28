@@ -14,12 +14,7 @@ from selfrionette.plugins.mappings._continuous_endpoint_velocity import (
 from selfrionette.schemas import ContinuousEndpointVelocityIntent, MotionCommand, RawInputFrame
 
 _VALID_AXES = {"x", "y", "z"}
-_DEFAULT_CONFIG_PATH = (
-    Path(__file__).resolve().parents[5]
-    / "configs"
-    / "input"
-    / "keyboard_default.json"
-)
+_DEFAULT_CONFIG_PATH = Path(__file__).with_name("resources") / "keyboard_default.json"
 
 
 @dataclass(frozen=True, slots=True)

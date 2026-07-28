@@ -87,8 +87,9 @@ generic schema / domain / Protocol
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
 - generic Robot Profile contractは`selfrionette.runtime.composition.robot_profile`、viewer向けrobot declaration
   contractは`selfrionette.runtime.composition.viewer_robot_declaration`が所有する。旧flat moduleは退役済みである。
-- loadcell serial parser、normalization、`SerialInputSource`は
-  `selfrionette.plugins.input_sources._loadcell`が所有する。旧compatibility moduleは退役済みである。
+- Selfrionetteの7-channel protocol、intrinsic normalization、typed health、serial / injected backendは
+  `selfrionette.plugins.input_sources.selfrionette`が所有する。旧`_loadcell`、`loadcell_serial`、
+  `loadcell_fixture` production ownerは退役済みである。
 - fast_arm固有implementationは`plugins/robots/fast_arm/`だけが所有する。旧`robots/fast_arm.py`、
   `robot_registry.py`、`runtime/fast_arm_*.py`、旧registry moduleは退役済みであり、再作成しない。
 - fast_arm package内のshared coreは、`plugins/robots/fast_arm/core/`を物理mount pointとする独立Python
@@ -184,18 +185,29 @@ legacy `RuntimePipeline`、loadcell optional mapping fallback、compatibility CL
 
 ## Input Source runtime validation boundary
 
-generic source contractのhealth providerとvalidated reader adapterは`runtime/experiment/input_source.py`が
+generic source contractの`HealthyInputSource`、`ManagedHealthyInputSource`、
+`ViewerBridgeInputSource`とvalidated reader adapterは`runtime/experiment/input_source.py`が
 所有する。adapterは`fast_arm`、serial transport、browser/viewer implementation、task/evaluation implementationを
 importせず、`RawInputFrame`とtyped `InputSourceHealth`だけをruntime boundaryで検証する。production source pluginは
 deterministic known-ID catalogからのみ解決し、source packageがrobot command、task/evaluation、viewer TypeScriptを
 importすることを禁止する。mappingはsource package外に残す。
 
 `ViewerBridgeRuntimeCapability`はviewer registrationとruntime ingress / endpoint continuityだけが使用する
-optional typed capabilityであり、generic `InputSource` readerの必須interfaceではない。source pluginはviewer
+mode-specific typed capabilityであり、generic `HealthyInputSource` readerの必須interfaceではない。source pluginはviewer
 control schemaを維持し、frontend providerやkeyboard / gamepad mappingを所有しない。
 Health-to-frame projectionはruntime-owned helperに集約する。source pluginはtyped health truthを提供し、runtimeは
-generic fieldsだけをprojectionする。loadcell pluginはfactory creation、invalid configuration、read-before-startで
+generic fieldsだけをprojectionする。Selfrionette pluginはfactory creation、invalid configuration、read-before-startで
 serial portをopenしない。direct factoryはport、baud、injected linesをI/O前にfail-closedで検証する。
+
+Input Source packageとControl Mapping packageは互いのconcrete logical identityを所有またはimportしない。
+source registrationはsource identity、produced schema、factory、source-local parameter、health / lifecycle、
+execution adapterだけを保持する。Mapping selectionのconvenience defaultは
+`runtime/control/input_source_mapping_policy.py`、CLI表示順は`cli/main.py`が所有する。compatibilityは
+source produced schemaとMapping accepted schemaのversioned identityでgenericに検証する。
+
+first-party bounded discoveryでは`plugins/<axis>/<logical_id>/plugin.py`を固定entry pointとし、package
+basenameと`logical identity.name`の一致をstructural invariantとして検証する。logical identityは
+manifest / readiness / freeze / provenanceのSoTであり、physical path自体をexperiment identityにはしない。
 
 ## legacy参照と移行境界
 
@@ -267,11 +279,14 @@ startせず、frameもreadしない。
 
 C4以降、`src/`、`scripts/`、`tests/`から旧Input Source / interpreter packageをimportしてはならない。
 production runtimeはcatalogとversioned Control Mapping Pluginを直接composeする。canonical
-`run_loadcell_serial_dry_run_smoke()`はoffline fixture validation用に残すが、
+`run_selfrionette_serial_dry_run_smoke()`はoffline fixture validation用に残すが、
 `loadcell_endpoint_mapping/v1`の明示指定を必須とし、optional fallbackやold-path re-exportを持たない。
 
 ## #461 final audit correction (2026-07-26)
 
 frontend providerはbrowser raw acquisitionとlifecycleを所有し、normalized gamepad `axes`はwire / overlay compatibility projectionとして残す。canonical `raw_axes`、source lifecycle / activity、backend health、Control Mappingのcommand zeroを同じ責務に戻さない。gamepadのlegacy two-stage transfer functionはControl Mapping Plugin内で一元化し、frontendまたはsourceへmapping semanticsを戻さない。
 
-sourceとmappingは別identityでruntimeがcomposeする。mapping parametersはexecution / source start前にgeneric contractとmapping-specific semantic validatorで検証し、explicit runtime parameters、direct source compatibility parameters、registration / plugin defaultsの順に解決する。C4でpublic facade / helper fallback / old packageも退役済みである。
+sourceとmappingは別identityでruntimeがcomposeする。mapping parametersはexecution / source start前に
+generic contractとmapping-specific semantic validatorで検証し、explicit Mapping selection parameters、
+Mapping plugin defaultsの順に解決する。Input Sourceからのparameter projectionは持たない。
+C4 / #478でpublic facade、helper fallback、old packageも退役済みである。

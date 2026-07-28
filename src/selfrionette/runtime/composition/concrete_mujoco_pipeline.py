@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
-from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.catalog import (
     RobotCatalog,
@@ -16,7 +16,7 @@ from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.evaluation.endpoint_metrics import build_endpoint_evaluation_state_publisher
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
-from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapter
+from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -69,7 +69,7 @@ def build_concrete_mujoco_pipeline(
     robot_catalog: RobotCatalog | None = None,
     control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
     control_mapping_parameters: Mapping[str, object] | None = None,
-    mapping_input_adapter: InputSourceMappingAdapter | None = None,
+    mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
 ) -> ControlMappedRuntimePipeline:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:

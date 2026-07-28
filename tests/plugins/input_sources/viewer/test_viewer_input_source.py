@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.plugins.input_sources._common import health_from_frame
 from selfrionette.plugins.input_sources.viewer import (
     DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS,
     DEFAULT_VIEWER_SAFE_ENDPOINT_M,
     ViewerInputSource,
+    viewer_health,
 )
 from selfrionette.runtime.experiment.input_source import InputSourceHealthStatus
 from selfrionette.schemas import (
@@ -76,12 +76,9 @@ def gamepad_message(
     )
 
 
-def test_viewer_source_compatibility_capability_preserves_explicitness() -> None:
-    assert ViewerInputSource(clock=lambda: 0.0).mapping_compatibility_parameters() == {}
-    explicit_default = ViewerInputSource(clock=lambda: 0.0, gamepad_deadzone=0.1)
-    assert explicit_default.mapping_compatibility_parameters() == {
-        "gamepad_deadzone": 0.1
-    }
+def test_viewer_source_frame_does_not_project_mapping_parameters() -> None:
+    frame = ViewerInputSource(clock=lambda: 0.0).read_frame()
+    assert "viewer_mapping_parameters" not in frame.metadata
 
 
 def test_viewer_input_source_emits_raw_canonical_sample_before_ingest() -> None:
@@ -109,7 +106,7 @@ def test_viewer_source_health_covers_disconnect_and_stale_timeout() -> None:
     disconnected_frame = source.read_frame()
     assert disconnected_frame.metadata["source_active"] is False
     assert disconnected_frame.metadata["stale_reason"] == "gamepad_inactive"
-    assert health_from_frame(disconnected_frame).status is InputSourceHealthStatus.DISCONNECTED
+    assert viewer_health(source).status is InputSourceHealthStatus.DISCONNECTED
 
     raw_source = ViewerInputSource(clock=lambda: 30.0, timeout_ms=250)
     raw_disconnected = raw_source.ingest_control_message(
@@ -127,7 +124,7 @@ def test_viewer_source_health_covers_disconnect_and_stale_timeout() -> None:
         0.0,
         0.0,
     )
-    assert health_from_frame(raw_disconnected).status is InputSourceHealthStatus.DISCONNECTED
+    assert viewer_health(raw_source).status is InputSourceHealthStatus.DISCONNECTED
 
     source = ViewerInputSource(clock=FakeClock((40.0, 40.301)), timeout_ms=250)
     source.ingest_control_message(keyboard_message(5.0, "KeyW"))
@@ -155,7 +152,8 @@ def test_viewer_source_invalid_provider_is_reported_as_invalid_health() -> None:
                 ),
             )
         )
-    assert health_from_frame(source.read_frame()).status is InputSourceHealthStatus.INVALID
+    source.read_frame()
+    assert viewer_health(source).status is InputSourceHealthStatus.INVALID
 
 
 def test_viewer_source_rejects_malformed_provider_identity_without_fallback() -> None:

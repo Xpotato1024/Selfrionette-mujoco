@@ -11,8 +11,8 @@ from selfrionette.transport import StatePublisher
 
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
-from selfrionette.runtime.experiment.input_source import InputSource
-from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapter
+from selfrionette.runtime.experiment.input_source import HealthyInputSource
+from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
 from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
 
@@ -22,13 +22,13 @@ class ControlMappedRuntimePipeline:
     """Production runtime pipeline using the versioned Control Mapping Plugin."""
 
     config: RuntimeConfig
-    input_source: InputSource
+    input_source: HealthyInputSource
     control_mapping: ControlMappingPlugin
     motion_generator: MotionGenerator
     simulator: MuJoCoSimulator
     publisher: StatePublisher
     control_mapping_parameters: Mapping[str, object]
-    mapping_input_adapter: InputSourceMappingAdapter | None = None
+    mapping_input_adapter: InputSourceMappingAdapterContract | None = None
     qpos_feasibility_guard: QposFeasibilityGuard | None = None
     state_metadata: Mapping[str, object] | None = None
     robot_profile_metadata: Mapping[str, object] | None = None

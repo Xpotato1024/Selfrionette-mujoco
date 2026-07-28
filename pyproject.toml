@@ -25,6 +25,9 @@ exclude = ["selfrionette.plugins.robots.fast_arm.core*"]
 namespaces = false
 
 [tool.setuptools.package-data]
+"selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping" = [
+    "resources/*.json",
+]
 "selfrionette.plugins.robots.fast_arm.adapter" = [
     "resources/mujoco/*.xml",
     "resources/*.json",

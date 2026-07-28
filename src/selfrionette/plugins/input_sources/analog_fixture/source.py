@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Mapping, Sequence
 
+from selfrionette.runtime.experiment.input_source import (
+    InputSourceHealth,
+    InputSourceHealthStatus,
+)
+from selfrionette.schemas import RawInputFrame
 Vector3 = tuple[float, float, float]
 
 
@@ -62,7 +67,43 @@ def parse_analog_fixture_sample(value: Mapping[str, object]) -> AnalogFixtureSam
     )
 
 
+class AnalogFixtureInputSource:
+    def __init__(self, samples: tuple[Mapping[str, object], ...]) -> None:
+        self._samples = tuple(parse_analog_fixture_sample(sample) for sample in samples)
+        if not self._samples:
+            raise ValueError("analog_fixture input source requires at least one sample")
+        self._index = 0
+        self._last: AnalogFixtureSample | None = None
+
+    def read_frame(self) -> RawInputFrame:
+        sample = self._samples[min(self._index, len(self._samples) - 1)]
+        self._index += 1
+        self._last = sample
+        return RawInputFrame(
+            source="analog_fixture",
+            timestamp_s=sample.timestamp_s,
+            values=tuple(float(value) for value in sample.raw_values),
+            metadata={
+                "source_kind": "analog_fixture",
+                "source_active": sample.active,
+                "stale_reason": sample.stale_reason,
+            },
+        )
+
+    def current_health(self) -> InputSourceHealth:
+        if self._last is None or self._last.active:
+            return InputSourceHealth(InputSourceHealthStatus.ACTIVE, age_ms=0)
+        if self._last.stale_reason is None:
+            return InputSourceHealth(InputSourceHealthStatus.INACTIVE, age_ms=0)
+        return InputSourceHealth(
+            InputSourceHealthStatus.STALE,
+            reason=self._last.stale_reason,
+            age_ms=0,
+        )
+
+
 __all__ = [
     "AnalogFixtureSample",
+    "AnalogFixtureInputSource",
     "parse_analog_fixture_sample",
 ]

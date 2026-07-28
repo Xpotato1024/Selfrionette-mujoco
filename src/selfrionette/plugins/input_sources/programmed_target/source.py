@@ -3,6 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from selfrionette.runtime.experiment.input_source import (
+    InputSourceHealth,
+    InputSourceHealthStatus,
+)
 from selfrionette.schemas import RawInputFrame
 from selfrionette.schemas.types import Vector3
 
@@ -108,6 +112,9 @@ class ProgrammedTargetInputSource:
         frame_index = self._next_frame_index()
         frame = self._trajectory.frames[frame_index]
         return frame.to_raw_input_frame(trajectory_name=self._trajectory.name, frame_index=frame_index)
+
+    def current_health(self) -> InputSourceHealth:
+        return InputSourceHealth(InputSourceHealthStatus.ACTIVE, age_ms=0)
 
 
 DEFAULT_SWEEP_X_INITIAL_POSITION_M: Vector3 = (0.0, 0.0, 0.0)

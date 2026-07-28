@@ -12,7 +12,10 @@ related:
 
 # 記録済みanalog fixture mapping
 
-Current canonical mapping owner: `src/selfrionette/plugins/mappings/analog_fixture.py`. Sample parsing is owned by `src/selfrionette/plugins/input_sources/analog_fixture/source.py`; the retired compatibility facade is not part of the current API.
+Current canonical mapping owner:
+`src/selfrionette/plugins/mappings/analog_fixture_mapping/`。sample parsingは
+`src/selfrionette/plugins/input_sources/analog_fixture/source.py`が所有し、退役済みflat facadeは
+current APIではない。
 
 P3では`AnalogFixtureSample`のstrict parsing、timestamp、raw values、active / inactive / stale state、
 sequence readerを`analog_fixture` source pluginが所有する。center、half-range、axis weights、sign、scale、

@@ -20,7 +20,10 @@ from selfrionette.runtime.execution.input_step_loop import (
     run_runtime_input_source_step_loop,
 )
 from selfrionette.runtime.control.input_source_state import build_runtime_input_source_state
-from selfrionette.plugins.input_sources._common import FrameHealthReader
+from selfrionette.runtime.experiment.input_source import (
+    InputSourceHealth,
+    InputSourceHealthStatus,
+)
 from selfrionette.schemas import MotionCommand
 from selfrionette.transport import mujoco_state_to_payload
 
@@ -171,14 +174,17 @@ def test_stale_programmed_target_does_not_update_target_marker_or_endpoint_evalu
         selection,
         frames=(stale_frame,),
         initial_metadata=dict(stale_frame.metadata),
-        runtime_reader=FrameHealthReader(
-            type(
-                "StaleFrameReader",
-                (),
-                {"read_frame": lambda self: stale_frame},
-            )(),
-            selection.initial_health,
-        ),
+        runtime_reader=type(
+            "StaleFrameReader",
+            (),
+            {
+                "read_frame": lambda self: stale_frame,
+                "current_health": lambda self: InputSourceHealth(
+                    InputSourceHealthStatus.INACTIVE,
+                    age_ms=0,
+                ),
+            },
+        )(),
     )
     publisher = RecordingPublisher()
     plan = build_runtime_input_source_step_loop_plan(stale_selection, publisher=publisher)

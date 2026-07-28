@@ -100,4 +100,6 @@ runtimeはhold-currentへ移行する。valid viewer sampleが届いた場合だ
 
 raw gamepadのmapping inputは`raw_axes`とするが、gamepad/v1のsource activityはlegacy projected `axes`とbuttonsから生成された`zero_state`、connection、focus、visibility、stale、disconnectなどprovider / source-owned stateのobservable semanticsを維持する。したがって`gamepad_deadzone=0.0`でもraw `0.05`かつprojected `axes=[0.0]`の`zero_state=true`はholdとなり、raw `0.15`はfixed frontend projection後の`1/18`をmappingへ渡す。mapping command zeroとsource healthは別の診断層として扱う。
 
-mapping parametersはsource start / frame readより前に検証される。explicit runtime mapping parametersをdirect `ViewerInputSource` compatibility parametersより優先し、それ以外はregistration / plugin defaultsを使う。invalid、stale、inactive、disconnectedは既存hold-current policyを維持する。
+mapping parametersはsource start / frame readより前に検証される。explicit runtime mapping parametersを
+Mapping plugin defaultsより優先し、Input Sourceからparameterを投影しない。invalid、stale、inactive、
+disconnectedは既存hold-current policyを維持する。

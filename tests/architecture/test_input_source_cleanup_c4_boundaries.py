@@ -12,6 +12,9 @@ from selfrionette.plugins.mappings.catalog import (
 )
 from selfrionette.runtime.experiment.contracts import VersionedIdentity
 from selfrionette.runtime.experiment.input_source import InputSourceMode
+from selfrionette.runtime.control.input_source_mapping_policy import (
+    default_control_mapping_selection,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -77,14 +80,14 @@ def test_no_production_compatibility_registry_or_mapping_facade_exists() -> None
     assert "compatibility_execution_adapter" not in production_source
 
 
-def test_loadcell_runner_requires_an_explicit_versioned_mapping() -> None:
-    runner = SRC / "runtime" / "runners" / "loadcell_serial_dry_run.py"
+def test_selfrionette_runner_requires_an_explicit_versioned_mapping() -> None:
+    runner = SRC / "runtime" / "runners" / "selfrionette_serial_dry_run.py"
     tree = _parse(runner)
     function = next(
         node
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name == "run_loadcell_serial_dry_run_smoke"
+        and node.name == "run_selfrionette_serial_dry_run_smoke"
     )
     keyword_defaults = dict(
         zip(
@@ -144,29 +147,29 @@ def test_current_cli_docs_match_command_specific_input_source_choices() -> None:
 def test_catalog_and_mapping_identities_remain_canonical() -> None:
     assert INPUT_SOURCE_CATALOG.ids == (
         "analog_fixture",
-        "loadcell_fixture",
-        "loadcell_serial",
         "noop",
         "programmed_target",
         "replay",
+        "selfrionette",
         "viewer",
     )
     assert tuple(
         registration.plugin.identity.canonical_id
         for registration in INPUT_SOURCE_CATALOG.registrations
     ) == (
+        "analog_fixture/v1",
+        "noop/v1",
         "programmed_target/v1",
         "replay/v1",
-        "noop/v1",
+        "selfrionette/v1",
         "viewer/v1",
-        "loadcell_serial/v1",
-        "loadcell_fixture/v1",
-        "analog_fixture/v1",
     )
     assert INPUT_SOURCE_CATALOG.aliases == (
+        "analog_fixture",
+        "noop",
         "programmed_target",
         "replay",
-        "noop",
+        "selfrionette",
         "viewer",
     )
     assert CONTROL_MAPPING_REGISTRY.ids == (
@@ -213,16 +216,9 @@ def test_source_contracts_and_explicit_mappings_are_preserved() -> None:
             VersionedIdentity("viewer_control_sample", 1),
             "viewer_keyboard_gamepad_mapping/v1",
         ),
-        "loadcell_serial": (
+        "selfrionette": (
             VersionedIdentity("loadcell_vector_sample", 1),
             InputSourceMode.LIVE,
-            VersionedIdentity("loadcell_input_execution", 1),
-            VersionedIdentity("loadcell_normalized_input_intent", 1),
-            "loadcell_endpoint_mapping/v1",
-        ),
-        "loadcell_fixture": (
-            VersionedIdentity("loadcell_vector_sample", 1),
-            InputSourceMode.REPLAY,
             VersionedIdentity("loadcell_input_execution", 1),
             VersionedIdentity("loadcell_normalized_input_intent", 1),
             "loadcell_endpoint_mapping/v1",
@@ -237,13 +233,13 @@ def test_source_contracts_and_explicit_mappings_are_preserved() -> None:
     }
     actual = {
         registration.plugin.identity.name: (
-            registration.plugin.produced_sample_schema_identity,
-            registration.plugin.source_mode,
+            registration.plugin.produced_sample_schema,
+            registration.plugin.mode,
             registration.execution_adapter.identity,
             registration.plugin.effective_mapping_input_sample_schema,
             (
-                f"{registration.default_control_mapping_selection.plugin_id}/"
-                f"v{registration.default_control_mapping_selection.contract_version}"
+                f"{default_control_mapping_selection(registration.plugin.identity.name).plugin_id}/"
+                f"v{default_control_mapping_selection(registration.plugin.identity.name).contract_version}"
             ),
         )
         for registration in INPUT_SOURCE_CATALOG.registrations

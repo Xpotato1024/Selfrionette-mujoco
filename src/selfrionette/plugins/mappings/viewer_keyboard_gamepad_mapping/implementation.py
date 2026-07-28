@@ -255,11 +255,7 @@ class ViewerKeyboardGamepadMappingStrategy:
     def map_input(self, input_intent: object, parameters: Mapping[str, object]) -> InputIntent:
         if not isinstance(input_intent, RawInputFrame):
             raise TypeError("viewer mapping accepts a canonical RawInputFrame sample")
-        embedded_parameters = input_intent.metadata.get("viewer_mapping_parameters")
-        effective_parameters = parameters or (
-            embedded_parameters if isinstance(embedded_parameters, Mapping) else {}
-        )
-        mapping_parameters = build_viewer_control_mapping_parameters(effective_parameters)
+        mapping_parameters = build_viewer_control_mapping_parameters(parameters)
         sample_payload = input_intent.metadata.get("viewer_input_sample")
         if not isinstance(sample_payload, Mapping):
             intent = build_continuous_endpoint_velocity_intent(

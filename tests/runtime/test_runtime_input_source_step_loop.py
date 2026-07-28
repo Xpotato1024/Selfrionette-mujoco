@@ -401,6 +401,7 @@ def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monke
     clock = _ClockSequence((0.0, 0.0))
     viewer_input_source, plan = _build_plan(clock)
     ingest_viewer_control_message(viewer_input_source, _keyboard_message(6.0, "Space"))
+    typed_input_source = plan.pipeline.input_source
 
     original_measure = input_step_loop.measure_post_step_endpoint
     original_annotate = input_step_loop.annotate_runtime_input_state
@@ -445,6 +446,9 @@ def test_runtime_step_order_publishes_annotated_state_before_viewer_rebase(monke
     class InputSourceRecorder:
         def read_frame(self):
             return viewer_input_source.read_frame()
+
+        def current_health(self):
+            return typed_input_source.current_health()
 
         def rebase_current_endpoint_m(self, endpoint_m):
             events.append("rebase")

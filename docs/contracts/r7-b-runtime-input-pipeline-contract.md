@@ -94,7 +94,9 @@ default keybind は次のとおり。
 
 keybind は config file で変更可能にする。
 
-reserved path は `configs/input/keyboard_default.json` とする。
+既定keybindはMapping plugin package内の
+`src/selfrionette/plugins/mappings/viewer_keyboard_gamepad_mapping/resources/keyboard_default.json`
+を正本とし、wheel / sdistへ同梱する。repository-rootのconfig pathには依存しない。
 
 ```json
 {
@@ -161,11 +163,12 @@ serial frame lines
 - `RawInputFrame.metadata` に入る command-side intent は、下流で再利用できるように保持する。
 - `NormalizedLoadcellInputIntent` は raw frame と command-side endpoint の橋渡しを担う。
 
-### existing loadcell bridge facts
+### existing Selfrionette bridge facts
 
-- `src/selfrionette/loadcell_serial.py` は injected lines のみを扱う。
-- current main には live serial port open の実装はない。
-- parser / normalization / endpoint mapping は dry-run chain として分離されている。
+- `plugins/input_sources/selfrionette/`はlive serialとinjected linesをbackendとして扱う。
+- module import、discovery、catalog、factory constructionではserial portをopenせず、明示的な
+  `start()`だけがlive serial acquisitionを開始する。
+- parser / intrinsic normalization / operational endpoint mappingはsource / mapping ownerへ分離されている。
 - WebSocket / viewer smoke は offline chain を前提にしている。
 
 ## viewer / transport contract

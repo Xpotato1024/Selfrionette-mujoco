@@ -1,1 +1,0 @@
-"""Viewer mapping test owner."""

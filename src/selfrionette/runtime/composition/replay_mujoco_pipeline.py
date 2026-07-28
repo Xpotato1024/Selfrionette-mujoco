@@ -4,14 +4,14 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
-from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.model_loader import ModelResourceBundle
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
-from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapter
+from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
 from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
@@ -59,7 +59,7 @@ def build_replay_mujoco_pipeline(
     simulator: HeadlessMuJoCoSimulator | None = None,
     control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
     control_mapping_parameters: Mapping[str, object] | None = None,
-    mapping_input_adapter: InputSourceMappingAdapter | None = None,
+    mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
 ) -> ControlMappedRuntimePipeline:
     runtime_config = RuntimeConfig() if config is None else config
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)

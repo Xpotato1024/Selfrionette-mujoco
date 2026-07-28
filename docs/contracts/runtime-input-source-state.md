@@ -109,4 +109,6 @@ legacy compatibility summaryをauthoritative inputにしない。
 
 viewer canonical sampleでは、raw `raw_axes`、legacy normalized `axes`、provider / source lifecycle state、legacy `zero_state`、mapping結果としてのcommand zeroを別field / 別概念として扱う。gamepad/v1の`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsに基づくobservable compatibilityを維持するため、raw axisがdeadzone内の`zero_state=true` sampleはsource inactive / holdとなる。button-only inputはactive command sampleとなり、hidden、blur、disconnect、stale、invalidは既存のinactive / failure / hold projectionを維持する。
 
-mapping parameterはselection / plan readinessで検証・正規化・freezeされ、source lifecycle開始前に実行可能性を確定する。explicit runtime parameter、direct source compatibility parameter、plugin defaultの順序をprovenance付きで保持し、source healthとmapping command zeroを混同しない。
+mapping parameterはselection / plan readinessで検証・正規化・freezeされ、source lifecycle開始前に
+実行可能性を確定する。explicit runtime parameter、Mapping plugin defaultの順で解決し、sourceから
+parameterを投影しない。source healthとmapping command zeroを混同しない。

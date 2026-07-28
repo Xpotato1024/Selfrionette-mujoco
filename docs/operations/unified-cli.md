@@ -45,7 +45,7 @@ CLI behaviorを維持する。
 
 | 候補 | 理由 |
 | --- | --- |
-| live loadcell runtime | hardware / serial operator gate を含み、generic CLI の対象外 |
+| live Selfrionette runtime | hardware / serial operator gate を含み、generic CLI の対象外 |
 | robot diagnostics | 現在は `fast_arm` 固有で、Robot Bundle に対応する typed capability がない |
 | evaluation | 統一対象となる既存の plugin-aware runner がない。将来 runner は #406 以降の範囲 |
 | fixture export | repository developer tool であり、production CLI の責務ではない |

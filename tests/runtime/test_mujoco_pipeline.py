@@ -4,7 +4,7 @@ import asyncio
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
-from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.schemas import MuJoCoState
 from tests.support.input_source_doubles import StaticInputSource

@@ -6,7 +6,7 @@ from selfrionette.runtime.control.viewer_control_ingress import (
     build_viewer_input_source,
     ingest_viewer_control_message,
 )
-from selfrionette.plugins.input_sources._common import health_from_frame
+from selfrionette.plugins.input_sources.viewer import viewer_health
 from selfrionette.runtime.experiment.input_source import InputSourceHealthStatus
 from selfrionette.schemas import ViewerControlMessageError, ViewerControlKeyboardMessage, ViewerControlMessage
 
@@ -43,12 +43,12 @@ def test_malformed_ingress_invalidates_active_source_and_recovers_on_valid_messa
     assert invalid.metadata["source_active"] is False
     assert invalid.metadata["source_health_status"] == "invalid"
     assert invalid.metadata["stale_reason"] == "Invalid viewer control message: malformed JSON"
-    assert health_from_frame(invalid).status is InputSourceHealthStatus.INVALID
+    assert viewer_health(source).status is InputSourceHealthStatus.INVALID
 
     recovered = ingest_viewer_control_message(source, active)
     assert recovered.metadata["source_active"] is True
     assert "source_health_status" not in recovered.metadata
-    assert health_from_frame(recovered).status is InputSourceHealthStatus.ACTIVE
+    assert viewer_health(source).status is InputSourceHealthStatus.ACTIVE
 
 
 def test_provider_schema_failure_invalidates_source_before_source_object_update() -> None:
@@ -68,4 +68,5 @@ def test_provider_schema_failure_invalidates_source_before_source_object_update(
                 },
             },
         )
-    assert health_from_frame(source.read_frame()).status is InputSourceHealthStatus.INVALID
+    source.read_frame()
+    assert viewer_health(source).status is InputSourceHealthStatus.INVALID

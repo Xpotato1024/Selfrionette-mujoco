@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
+from selfrionette.plugins.input_sources.selfrionette import NormalizedLoadcellInputIntent
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.plugins.mappings.catalog import CONTROL_MAPPING_REGISTRY
 from selfrionette.plugins.mappings.loadcell_endpoint_mapping import (
@@ -44,11 +44,11 @@ def test_production_mapping_catalog_is_deterministic_and_source_compatible_where
 
 def test_loadcell_mapping_consumes_source_normalized_intent_without_reimplementing_normalization() -> None:
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=1.0,
         values=(0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         active_channels=(0,),
-        metadata={"source_kind": "loadcell_serial"},
+        metadata={"source_kind": "selfrionette"},
     )
     mapped = LOADCELL_ENDPOINT_MAPPING_PLUGIN.strategy.map_input(
         intent,
@@ -83,16 +83,16 @@ def test_replay_mapping_is_a_typed_raw_frame_boundary() -> None:
 
 
 def test_production_loadcell_source_and_mapping_compose_with_raw_schema_boundary() -> None:
-    source = INPUT_SOURCE_CATALOG.resolve("loadcell_fixture").plugin
+    source = INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin
     manifest = build_test_manifest(
-        input_source=PluginSelection("loadcell_fixture", 1),
+        input_source=PluginSelection("selfrionette", 1),
         control_mapping=PluginSelection("loadcell_endpoint_mapping", 1),
         parameters=(
             *build_test_manifest().parameters,
             PluginParameters(
                 PluginParameterOwner(
                     PluginAxis.INPUT_SOURCE,
-                    PluginSelection("loadcell_fixture", 1),
+                    PluginSelection("selfrionette", 1),
                 ),
                 {"lines": ("vector,1000,1,0,0,0,0,0,0",)},
             ),
@@ -125,14 +125,14 @@ def test_production_loadcell_source_and_mapping_compose_with_raw_schema_boundary
 
 def test_production_loadcell_composition_rejects_semantically_invalid_mapping_parameters() -> None:
     manifest = build_test_manifest(
-        input_source=PluginSelection("loadcell_fixture", 1),
+        input_source=PluginSelection("selfrionette", 1),
         control_mapping=PluginSelection("loadcell_endpoint_mapping", 1),
         parameters=(
             *build_test_manifest().parameters,
             PluginParameters(
                 PluginParameterOwner(
                     PluginAxis.INPUT_SOURCE,
-                    PluginSelection("loadcell_fixture", 1),
+                    PluginSelection("selfrionette", 1),
                 ),
                 {"lines": ("vector,1000,1,0,0,0,0,0,0",)},
             ),
@@ -153,7 +153,7 @@ def test_production_loadcell_composition_rejects_semantically_invalid_mapping_pa
         compose_experiment(
             manifest,
             build_test_registries(
-                input_source=INPUT_SOURCE_CATALOG.resolve("loadcell_fixture").plugin,
+                input_source=INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin,
                 mapping=LOADCELL_ENDPOINT_MAPPING_PLUGIN,
             ),
         )

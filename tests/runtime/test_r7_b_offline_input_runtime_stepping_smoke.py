@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from selfrionette.plugins.catalog import resolve_robot_bundle
-from selfrionette.plugins.mappings.keyboard import build_keyboard_motion_command
-from selfrionette.plugins.mappings.replay import build_motion_command_from_replay_frame
+from selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping.keyboard import build_keyboard_motion_command
+from selfrionette.plugins.mappings.replay_mapping import build_motion_command_from_replay_frame
 from selfrionette.runtime.runners.offline_input_smoke import run_offline_input_runtime_stepping_smoke
 from selfrionette.runtime.runners import offline_input_smoke as offline_smoke_module
 from selfrionette.runtime.composition.robot_bundle import (

@@ -2,7 +2,7 @@
 
 This module owns message ingestion, canonical raw samples, lifecycle health,
 timeout, and the legacy metadata projection. Keyboard/gamepad interpretation
-is owned by ``plugins.mappings.viewer`` and endpoint continuity is owned by
+is owned by ``plugins.mappings.viewer_keyboard_gamepad_mapping`` and endpoint continuity is owned by
 the runtime step loop.
 """
 
@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from math import isfinite
 from time import monotonic
-from types import MappingProxyType
 
 from selfrionette.schemas import (
     RawInputFrame,
@@ -25,9 +24,6 @@ from selfrionette.schemas import (
 
 DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS = 250
 DEFAULT_VIEWER_SAFE_ENDPOINT_M: tuple[float, float, float] = (0.6, 0.0, 0.1)
-_DEFAULT_GAMEPAD_SPEED_M_S = 0.1
-_DEFAULT_GAMEPAD_DEADZONE = 0.1
-_DEFAULT_GAMEPAD_MAX_DELTA_M = 0.03
 _VIEWER_SOURCE_KIND = "viewer"
 _VIEWER_CONTROL_SUMMARY_KEY = "viewer_control_message"
 _SOURCE_INACTIVE_STALE_REASON = "source_inactive"
@@ -175,69 +171,11 @@ class ViewerInputSource:
         initial_endpoint_m: tuple[float, float, float] = DEFAULT_VIEWER_SAFE_ENDPOINT_M,
         timeout_ms: int = DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS,
         clock: Callable[[], float] = monotonic,
-        # These keyword arguments remain a compatibility composition handoff.
-        # The source stores them as opaque mapping parameters; it never applies
-        # keyboard/gamepad interpretation itself.
-        keyboard_config: object | None = None,
-        gamepad_speed_m_s: float | None = None,
-        gamepad_deadzone: float | None = None,
-        gamepad_max_delta_m: float | None = None,
     ) -> None:
         if timeout_ms < 0:
             raise ValueError("timeout_ms must be non-negative")
-        resolved_gamepad_speed_m_s = (
-            _DEFAULT_GAMEPAD_SPEED_M_S
-            if gamepad_speed_m_s is None
-            else gamepad_speed_m_s
-        )
-        resolved_gamepad_deadzone = (
-            _DEFAULT_GAMEPAD_DEADZONE
-            if gamepad_deadzone is None
-            else gamepad_deadzone
-        )
-        resolved_gamepad_max_delta_m = (
-            _DEFAULT_GAMEPAD_MAX_DELTA_M
-            if gamepad_max_delta_m is None
-            else gamepad_max_delta_m
-        )
-        for name, value in (
-            ("gamepad_speed_m_s", resolved_gamepad_speed_m_s),
-            ("gamepad_deadzone", resolved_gamepad_deadzone),
-            ("gamepad_max_delta_m", resolved_gamepad_max_delta_m),
-        ):
-            if not isfinite(value) or value < 0.0:
-                raise ValueError(f"{name} must be finite and non-negative")
         self._clock = clock
         self._timeout_ms = timeout_ms
-        self._viewer_mapping_parameters: dict[str, object] = {
-            "gamepad_speed_m_s": float(resolved_gamepad_speed_m_s),
-            "gamepad_deadzone": float(resolved_gamepad_deadzone),
-            "gamepad_max_delta_m": float(resolved_gamepad_max_delta_m),
-        }
-        self._viewer_mapping_parameter_overrides: dict[str, object] = {}
-        if gamepad_speed_m_s is not None:
-            self._viewer_mapping_parameter_overrides["gamepad_speed_m_s"] = float(gamepad_speed_m_s)
-        if gamepad_deadzone is not None:
-            self._viewer_mapping_parameter_overrides["gamepad_deadzone"] = float(gamepad_deadzone)
-        if gamepad_max_delta_m is not None:
-            self._viewer_mapping_parameter_overrides["gamepad_max_delta_m"] = float(gamepad_max_delta_m)
-        if keyboard_config is not None:
-            bindings = getattr(keyboard_config, "bindings", None)
-            self._viewer_mapping_parameters["keyboard_config"] = {
-                "bindings": {
-                    str(key): {
-                        "axis": getattr(binding, "axis", None),
-                        "direction": getattr(binding, "direction", None),
-                    }
-                    for key, binding in (bindings.items() if isinstance(bindings, Mapping) else ())
-                },
-                "speed_m_s": getattr(keyboard_config, "speed_m_s", None),
-                "deadzone": getattr(keyboard_config, "deadzone", None),
-                "max_delta_m": getattr(keyboard_config, "max_delta_m", None),
-            }
-            self._viewer_mapping_parameter_overrides["keyboard_config"] = (
-                self._viewer_mapping_parameters["keyboard_config"]
-            )
         self._compatibility_endpoint_m = _coerce_vector3("initial_endpoint_m", initial_endpoint_m)
         self._last_update_monotonic_s: float | None = None
         self._last_message_kind: str | None = None
@@ -278,17 +216,6 @@ class ViewerInputSource:
     def rebase_current_endpoint_m(self, endpoint_m: Sequence[float]) -> None:
         """Retain the old typed capability without integrating endpoint motion."""
         self._compatibility_endpoint_m = _coerce_vector3("endpoint_m", endpoint_m)
-
-    def mapping_compatibility_parameters(self) -> Mapping[str, object]:
-        """Expose only caller-supplied legacy mapping overrides.
-
-        Runtime composition uses this typed capability to distinguish explicit
-        source compatibility values from values filled by mapping defaults.
-        The source still stores the complete opaque compatibility projection
-        on emitted frames for direct legacy mapping callers.
-        """
-
-        return MappingProxyType(dict(self._viewer_mapping_parameter_overrides))
 
     def rebind_clock(self, clock: Callable[[], float]) -> None:
         if not callable(clock):
@@ -434,7 +361,6 @@ class ViewerInputSource:
                 _VIEWER_CONTROL_SUMMARY_KEY: dict(control_summary),
                 "intent_kind": None,
                 "input_continuity": None,
-                "viewer_mapping_parameters": dict(self._viewer_mapping_parameters),
                 "local_endpoint_velocity_frame": "world",
             },
         )
@@ -472,7 +398,6 @@ class ViewerInputSource:
             "control_frame": message.metadata.get("control_frame", "world"),
             "intent_kind": message.metadata.get("intent_kind"),
             "input_continuity": message.metadata.get("input_continuity"),
-            "viewer_mapping_parameters": dict(self._viewer_mapping_parameters),
             "local_endpoint_velocity_frame": message.metadata.get("control_frame", "world"),
             _VIEWER_CONTROL_SUMMARY_KEY: _control_summary(message),
             "viewer_input_sample": viewer_sample_to_metadata(sample),

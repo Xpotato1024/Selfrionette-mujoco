@@ -21,7 +21,6 @@ from selfrionette.schemas import (
     ViewerControlMessage,
 )
 from selfrionette.runtime.experiment.contracts import PluginSelection
-from selfrionette.plugins.mappings.keyboard import KeyboardBinding, KeyboardInputConfig
 from tests.support.transport_doubles import NoOpStatePublisher
 
 
@@ -268,22 +267,25 @@ def test_actual_provider_default_gamepad_transfer_preserves_legacy_motion_bounda
         )
 
 
-def test_direct_viewer_source_compatibility_parameters_reach_runtime_mapping() -> None:
+def test_explicit_mapping_parameters_reach_runtime_mapping_independently() -> None:
     clock = _ClockSequence((0.0, 0.0))
-    source = ViewerInputSource(
-        clock=clock.monotonic,
-        keyboard_config=KeyboardInputConfig(
-            bindings={"KeyQ": KeyboardBinding(axis="z", direction=-1)},
-            speed_m_s=0.2,
-            deadzone=0.0,
-            max_delta_m=0.05,
-        ),
-        gamepad_speed_m_s=0.2,
-        gamepad_deadzone=0.0,
-        gamepad_max_delta_m=0.05,
-    )
+    source = ViewerInputSource(clock=clock.monotonic)
     plan = build_runtime_input_source_step_loop_plan(
-        select_runtime_input_source("viewer", steps=1),
+        select_runtime_input_source(
+            "viewer",
+            steps=1,
+            control_mapping_parameters={
+                "keyboard_config": {
+                    "bindings": {"KeyQ": {"axis": "z", "direction": -1}},
+                    "speed_m_s": 0.2,
+                    "deadzone": 0.0,
+                    "max_delta_m": 0.05,
+                },
+                "gamepad_speed_m_s": 0.2,
+                "gamepad_deadzone": 0.0,
+                "gamepad_max_delta_m": 0.05,
+            },
+        ),
         publisher=NoOpStatePublisher(),
         viewer_input_source=source,
     )
@@ -325,20 +327,9 @@ def test_direct_viewer_source_compatibility_parameters_reach_runtime_mapping() -
     )
 
 
-def test_explicit_runtime_mapping_parameters_override_direct_source_compatibility() -> None:
+def test_explicit_runtime_mapping_parameters_are_not_affected_by_source() -> None:
     clock = _ClockSequence((0.0, 0.0, 0.0, 0.0, 0.0))
-    source = ViewerInputSource(
-        clock=clock.monotonic,
-        keyboard_config=KeyboardInputConfig(
-            bindings={"KeyQ": KeyboardBinding(axis="z", direction=-1)},
-            speed_m_s=0.2,
-            deadzone=0.0,
-            max_delta_m=0.05,
-        ),
-        gamepad_speed_m_s=0.2,
-        gamepad_deadzone=0.0,
-        gamepad_max_delta_m=0.05,
-    )
+    source = ViewerInputSource(clock=clock.monotonic)
     selection = select_runtime_input_source(
         "viewer",
         steps=1,

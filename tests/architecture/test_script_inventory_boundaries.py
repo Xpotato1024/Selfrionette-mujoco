@@ -9,11 +9,11 @@ INVENTORY = ROOT / "docs/reports/implementation/script-inventory-and-retirement.
 RETIRED_LAUNCHER = "run_mujoco_viewer_dev.py"
 TEXT_SUFFIXES = {".md", ".py", ".ps1", ".yml", ".yaml", ".toml", ".txt"}
 EXPECTED_SCRIPTS = {
-    "scripts/hardware/loadcell/measure_loadcell_channel_response.ps1",
-    "scripts/hardware/loadcell/monitor_loadcell_serial.ps1",
-    "scripts/hardware/loadcell/plot_loadcell_vectors.ps1",
-    "scripts/hardware/loadcell/run_live_loadcell_runtime.py",
-    "scripts/hardware/loadcell/run_loadcell_serial_dry_run.py",
+    "scripts/hardware/selfrionette/measure_loadcell_channel_response.ps1",
+    "scripts/hardware/selfrionette/monitor_selfrionette_serial.ps1",
+    "scripts/hardware/selfrionette/plot_loadcell_vectors.ps1",
+    "scripts/hardware/selfrionette/run_live_selfrionette_runtime.py",
+    "scripts/hardware/selfrionette/run_selfrionette_serial_dry_run.py",
     "scripts/diagnostics/fast_arm/plot_fast_arm_endpoint_trajectory_log.py",
     "scripts/diagnostics/fast_arm/run_fast_arm_endpoint_motion_sanity.py",
     "scripts/diagnostics/fast_arm/run_fast_arm_jacobian_mobility_diagnostics.py",
@@ -25,6 +25,13 @@ EXPECTED_SCRIPTS = {
     "scripts/viewer/run-browser-viewer-smoke.ps1",
     "scripts/repository/validate_github_body_structure.py",
     "scripts/repository/validate_markdown_docs.py",
+}
+HISTORICAL_SCRIPT_NAMES = {
+    "measure_loadcell_channel_response.ps1",
+    "monitor_loadcell_serial.ps1",
+    "plot_loadcell_vectors.ps1",
+    "run_live_loadcell_runtime.py",
+    "run_loadcell_serial_dry_run.py",
 }
 
 
@@ -62,8 +69,17 @@ def test_script_inventory_covers_the_exact_current_paths() -> None:
     )
 
     report = INVENTORY.read_text(encoding="utf-8")
-    for name in {Path(path).name for path in EXPECTED_SCRIPTS} | {RETIRED_LAUNCHER}:
+    current_non_migrated_names = {
+        Path(path).name
+        for path in EXPECTED_SCRIPTS
+        if not path.startswith("scripts/hardware/selfrionette/")
+    }
+    for name in current_non_migrated_names | HISTORICAL_SCRIPT_NAMES | {
+        RETIRED_LAUNCHER
+    }:
         assert f"`{name}`" in report
+
+    assert not (ROOT / "scripts" / "hardware" / "loadcell").exists()
 
 
 def test_old_root_script_paths_are_not_current_consumers() -> None:

@@ -1,53 +1,57 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-07-16
+last_verified: 2026-07-29
 canonical_for:
-  - R7-A-lite serial dry-run smoke
+  - R7-A-lite Selfrionette serial dry-run smoke
 related:
   - docs/contracts/r7-a-lite-serial-frame-contract.md
+  - docs/operations/r7-b-manual-live-selfrionette-runtime-runner.md
 ---
 
-# R7-A-lite serial dry-run smoke
+# R7-A-lite Selfrionette serial dry-run smoke
 
-## 目的
+## 目的とownership
 
-R7-A-lite の serial 取り込みについて、hardware access なしで次の chain が成立することを固定する。
+hardware accessなしでSelfrionette固有7 channel protocolのinjected backendを検証する。
+production Input Source identityは`selfrionette/v1`であり、recorded / injected linesは別の
+production identityではない。
 
 ```text
-serial frame lines
--> parse_serial_frame_line()
--> SerialInputSource
--> RawInputFrame
--> NormalizedLoadcellInputIntent
--> MotionCommand
--> metadata["desired_endpoint_m"]
+Selfrionette recorded serial lines
+-> protocol parser
+-> loadcell_vector_sample/v1
+-> loadcell_normalized_input_intent/v1
+-> loadcell_endpoint_mapping/v1
+-> MotionCommand.metadata["desired_endpoint_m"]
 ```
 
-この doc は offline fixture smoke の手順と、manual live serial を human-only に分離するための運用メモである。
+Selfrionette packageはserial framing、7 channel validation、intrinsic calibration /
+normalization、diagnostics、healthを所有する。Mappingはoperational deadzone、gain、sign、
+channel-to-axis assignment、endpoint conversionを所有する。
 
-## 正本
+## current implementation
 
-- `src/selfrionette/loadcell_serial.py`
+- `src/selfrionette/plugins/input_sources/selfrionette/`
+- `src/selfrionette/runtime/runners/selfrionette_serial_dry_run.py`
+- `src/selfrionette/plugins/mappings/loadcell_endpoint_mapping/`
 - `tests/fixtures/r7_a_lite_serial_frames/minimal_valid.txt`
 - `tests/fixtures/r7_a_lite_serial_frames/malformed.txt`
-- `docs/experiment-notes/2026-06-21-r7-a-lite-data/com5-calibrated-transcript.txt`
-- `docs/experiment-notes/2026-06-21-r7-a-lite-data/com5-calibrated-vectors.csv`
-- `docs/contracts/r7-a-lite-serial-frame-contract.md`
-- `scripts/hardware/loadcell/measure_loadcell_channel_response.ps1`: channel response測定
-- `scripts/hardware/loadcell/monitor_loadcell_serial.ps1`: serial monitor
-- `scripts/hardware/loadcell/plot_loadcell_vectors.ps1`: recorded vector evidenceの再表示
-- `scripts/hardware/loadcell/run_live_loadcell_runtime.py`: manual-gated live runtime
-- `scripts/hardware/loadcell/run_loadcell_serial_dry_run.py`: offline fixture dry-run
+- `scripts/hardware/selfrionette/run_selfrionette_serial_dry_run.py`
+- `scripts/hardware/selfrionette/run_live_selfrionette_runtime.py`
+- `scripts/hardware/selfrionette/monitor_selfrionette_serial.ps1`
+- `scripts/hardware/selfrionette/measure_loadcell_channel_response.ps1`
+- `scripts/hardware/selfrionette/plot_loadcell_vectors.ps1`
 
-`transcript.txt` と `vectors.csv` は背景証拠として残す。smoke 実行は小さな fixture を使う。
+`monitor_selfrionette_serial.ps1`は`status` / `warn` / `vector` protocolとcalibration
+commandを扱うためdevice-specificである。`measure_loadcell_channel_response.ps1`と
+`plot_loadcell_vectors.ps1`の`loadcell`はsensor response / recorded sample semanticsを
+表すためbasenameを維持するが、Selfrionette固有protocol owner配下に置く。
 
-## オフライン fixture smoke
-
-### Python CLI
+## offline fixture smoke
 
 ```powershell
-uv run python scripts/hardware/loadcell/run_loadcell_serial_dry_run.py `
+uv run python scripts/hardware/selfrionette/run_selfrionette_serial_dry_run.py `
   --fixture tests/fixtures/r7_a_lite_serial_frames/minimal_valid.txt `
   --max-vectors 1 `
   --current-tip-position-m 0.25,0.5,0.75 `
@@ -57,7 +61,7 @@ uv run python scripts/hardware/loadcell/run_loadcell_serial_dry_run.py `
   --max-delta-m 0.03
 ```
 
-### 期待出力
+期待するsummary:
 
 ```text
 frames_read=1
@@ -67,49 +71,30 @@ last_endpoint_delta_m=(...)
 last_desired_endpoint_m=(...)
 ```
 
-### 確認ポイント
+確認点:
 
-- `status` / `warn` の diagnostics が保持される
-- `vector` line が `RawInputFrame` になる
-- `RawInputFrame` が `NormalizedLoadcellInputIntent` になる
-- `NormalizedLoadcellInputIntent` が `MotionCommand` になる
-- `metadata["desired_endpoint_m"]` が入る
-- `metadata["endpoint_delta_m"]` が入る
-- `target_position_m` を primary command として追加しない
+- `status` / `warn` diagnosticsを保持する
+- `vector` lineを7 channel `RawInputFrame`へ変換する
+- intrinsic normalizationとMapping operational semanticsを順に適用する
+- `metadata["desired_endpoint_m"]`と`metadata["endpoint_delta_m"]`を生成する
+- `target_position_m`をprimary commandとして追加しない
+- serial portを開かない
 
-### malformed fixture
+malformed fixtureはdeterministic failureの確認に使用する。
 
 ```powershell
-uv run python scripts/hardware/loadcell/run_loadcell_serial_dry_run.py `
+uv run python scripts/hardware/selfrionette/run_selfrionette_serial_dry_run.py `
   --fixture tests/fixtures/r7_a_lite_serial_frames/malformed.txt
 ```
 
-`malformed.txt` は deterministic に失敗する。parser / smoke の失敗確認に使う。
+## manual live serial
 
-## 手動 live serial
-
-live serial は manual-only とし、Codex 実行・自動テスト・CI では COM port を開かない。
-
-必要な場合のみ、既存の PowerShell スクリプトを人手で実行する。
+live serialは人間のoperatorだけがhardware safety gate後に実行する。
 
 ```powershell
-.\scripts\hardware\loadcell\monitor_loadcell_serial.ps1 -Port COM5 -Calibrate
-.\scripts\hardware\loadcell\measure_loadcell_channel_response.ps1 -Port COM5 -AllSensors
+.\scripts\hardware\selfrionette\monitor_selfrionette_serial.ps1 -Port COM5 -Calibrate
+.\scripts\hardware\selfrionette\measure_loadcell_channel_response.ps1 -Port COM5 -AllSensors
 ```
 
-この PR では live option を追加しない。pyserial dependency も追加しない。
-
-## 非対象
-
-- 自動 COM port open
-- CI の hardware access
-- firmware upload
-- firmware modification
-- OSC send
-- actuator command
-- real robot output
-- runtime runner integration
-- WebSocket integration
-- viewer integration
-- MuJoCo backend integration
-- IK / FK implementation changes
+Codex / CIはCOM port open、firmware upload、OSC、actuator / robot output、hardware
+validationを行わない。
