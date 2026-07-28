@@ -6,9 +6,6 @@ import ast
 from pathlib import Path
 
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
-from selfrionette.plugins.input_sources.registration import (
-    INPUT_SOURCE_REGISTRATIONS,
-)
 from selfrionette.plugins.mappings.catalog import CONTROL_MAPPING_PLUGINS
 from selfrionette.runtime.experiment.contracts import PluginAxis
 
@@ -19,6 +16,9 @@ PRODUCTION_SOURCE_IDS = set(INPUT_SOURCE_CATALOG.ids)
 SOURCE_PACKAGE_ROOT = SRC / "plugins" / "input_sources"
 TEST_SOURCE_PACKAGE_ROOT = ROOT / "tests" / "plugins" / "input_sources"
 MAPPING_TEST_ROOT = ROOT / "tests" / "plugins" / "mappings"
+INPUT_SOURCE_REGISTRATIONS = INPUT_SOURCE_CATALOG.registrations
+
+
 def _modules(tree: ast.AST) -> tuple[str, ...]:
     values: list[str] = []
     for node in ast.walk(tree):
@@ -105,10 +105,19 @@ def test_mapping_tests_use_canonical_mapping_owners() -> None:
                 imported = {alias.name for alias in node.names}
                 violations.append(f"{path}:{node.lineno}:{node.module}:{sorted(imported)}")
     for relative, module in (
-        ("analog_fixture", "selfrionette.plugins.mappings.analog_fixture"),
-        ("loadcell", "selfrionette.plugins.mappings.loadcell"),
-        ("replay", "selfrionette.plugins.mappings.replay"),
-        ("viewer", "selfrionette.plugins.mappings.keyboard"),
+        (
+            "analog_fixture",
+            "selfrionette.plugins.mappings.analog_fixture_mapping",
+        ),
+        (
+            "loadcell",
+            "selfrionette.plugins.mappings.loadcell_endpoint_mapping",
+        ),
+        ("replay", "selfrionette.plugins.mappings.replay_mapping"),
+        (
+            "viewer",
+            "selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping.keyboard",
+        ),
     ):
         owner_tests = tuple((MAPPING_TEST_ROOT / relative).rglob("test_*.py"))
         assert owner_tests, relative

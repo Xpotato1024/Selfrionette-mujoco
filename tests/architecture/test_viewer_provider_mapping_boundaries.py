@@ -41,7 +41,15 @@ def test_backend_viewer_source_has_no_control_mapping_import_or_algorithm() -> N
 
 
 def test_mapping_does_not_read_legacy_viewer_control_summary() -> None:
-    path = ROOT / "src" / "selfrionette" / "plugins" / "mappings" / "viewer.py"
+    path = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "plugins"
+        / "mappings"
+        / "viewer_keyboard_gamepad_mapping"
+        / "implementation.py"
+    )
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     for node in ast.walk(tree):
         if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
@@ -49,7 +57,10 @@ def test_mapping_does_not_read_legacy_viewer_control_summary() -> None:
 
 
 def test_input_source_registration_selects_mapping_by_identity_not_object() -> None:
-    source = _text("src/selfrionette/plugins/input_sources/registration.py")
+    source = _text(
+        "src/selfrionette/plugins/input_sources/viewer/plugin.py"
+    )
     assert "ControlMappingPlugin" not in source
     assert "VIEWER_CONTROL_MAPPING_PLUGIN" not in source
-    assert "PluginSelection(\"viewer_keyboard_gamepad_mapping\", 1)" in source
+    assert "PluginSelection(" in source
+    assert '"viewer_keyboard_gamepad_mapping", 1' in source
