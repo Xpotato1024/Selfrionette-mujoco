@@ -10,7 +10,7 @@ from selfrionette.plugins.input_sources.analog_fixture import (
     AnalogFixtureSample,
     parse_analog_fixture_sample,
 )
-from selfrionette.plugins.mappings.analog_fixture import (
+from selfrionette.plugins.mappings.analog_fixture_mapping import (
     AnalogFixtureMappingConfig,
     map_analog_fixture_sample,
 )

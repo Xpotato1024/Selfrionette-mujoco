@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-28
+last_verified: 2026-07-29
 canonical_for:
   - runtime input source registry
   - Input Source Plugin v1 ownership boundary
@@ -22,7 +22,8 @@ related:
 Input SourceはRobot、Environment、Control / Mapping、Task、Evaluationに加わる第6のversioned
 composition軸である。production runtime selectionの正本は
 `src/selfrionette/plugins/input_sources/catalog.py`であり、source identity、contract version、sample schema、
-mode、factory、health、lifecycle、CLI alias、execution adapterを登録する。
+mode、factory、health、lifecycle、CLI alias、execution adapterを解決する。具体registrationの正本は
+各`plugins/input_sources/<source_id>/plugin.py::INPUT_SOURCE_PLUGIN`である。
 
 C4で旧`src/selfrionette/input_sources/registry.py`を退役した。production source selectionの正本は
 `plugins/input_sources/catalog.py`だけであり、historical descriptor、frame/default registry、mapping lookup
@@ -30,10 +31,15 @@ facadeを別moduleへ移植しない。frontend keyboard / gamepad providerとma
 
 ## Production plugin catalog
 
-catalogはknown-IDの`VersionedPluginRegistry[InputSourcePlugin]`とCLI alias mapを構築する。
+`input_source_discovery.py`は`plugins.input_sources`直下のpublic direct-child packageをsortし、固定
+`plugin.py::INPUT_SOURCE_PLUGIN`からtyped registrationを取得する。private packageは対象外であり、
+missing / wrong export、import failure、duplicate identity、package / logical identity mismatchを
+fail-closedで拒否する。catalogはdiscovery結果からknown-IDの
+`VersionedPluginRegistry[InputSourcePlugin]`とCLI alias mapを構築する。
 `INPUT_SOURCE_PLUGIN_REGISTRY`はcatalog内部の同一registry instanceをexportする互換名であり、別registryを
 再生成しない。duplicate plugin ID、duplicate alias、unknown alias、contract version mismatchをfail-closedで
-拒否する。external package discovery、arbitrary dynamic import、hot reload、implicit noop fallbackは持たない。
+拒否する。中央のconcrete import / tuple list、external package discovery、arbitrary dynamic import、
+hot reload、implicit noop fallbackは持たない。
 
 | plugin ID | contract | produced sample schema | mode | CLI alias | generic CLI | execution adapter |
 |---|---:|---|---|---|---|---|
@@ -170,12 +176,13 @@ conditionalを追加しない。
 2. versioned plugin ID、contract version、produced sample schema IDを定義する。
 3. typed parameter contractとsource-specific validationを定義する。
 4. reader、lifecycle、initial/current health、cleanupを実装する。
-5. deterministic known-ID catalog registrationとCLI aliasを宣言する。
+5. package-local `plugin.py::INPUT_SOURCE_PLUGIN`でtyped registration、CLI alias、既存CLI順序に必要な
+   projection metadataを宣言する。
 6. compatible Mapping Pluginのaccepted sample schemaを宣言する。
 7. generic conformanceとplugin-local source testsを追加する。
 8. registry / schema compatibilityとminimal runtime/composition smokeを追加する。
 9. hardware deviceはserial openを含めず、manual-gated別Issueへ分離する。
-10. canonical docs、catalog、test ownerを更新する。
+10. canonical docsとtest ownerを更新する。新source追加だけを理由にcentral catalogを編集しない。
 11. focused validationを通した後、full regressionとviewer validationをmerge gateとして実行する。
 
 focused feedback loopの標準commandは次である。

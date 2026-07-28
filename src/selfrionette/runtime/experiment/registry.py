@@ -33,6 +33,10 @@ class VersionedPluginRegistry(Generic[T]):
     def ids(self) -> tuple[str, ...]:
         return tuple(self._values)
 
+    @property
+    def entries(self) -> tuple[T, ...]:
+        return tuple(self._values.values())
+
     def resolve(self, selection: PluginSelection) -> T:
         try:
             plugin = self._values[selection.plugin_id]

@@ -5,7 +5,7 @@ import math
 import pytest
 
 from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
-from selfrionette.plugins.mappings.loadcell import (
+from selfrionette.plugins.mappings.loadcell_endpoint_mapping import (
     LoadcellEndpointMappingConfig,
     LoadcellEndpointMotionCommandConverter,
     build_motion_command_from_normalized_loadcell_intent,

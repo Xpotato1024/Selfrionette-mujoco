@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.plugins.mappings.keyboard import (
+from selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping.keyboard import (
     KeyboardBinding,
     KeyboardInputConfig,
     build_default_keyboard_input_config,

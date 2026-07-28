@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-27
+last_verified: 2026-07-29
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -58,6 +58,54 @@ parameter ownerは6軸のselection identity全体を所有者とし、raw plugin
 同じevaluatorの重複選択も拒否する。
 R7-G-P1 / #405とR7-H-P1 / #411は、software revision、condition、canonical serializationを
 含む上位manifestを追加できるが、この6軸selectionを別の暗黙規則へ置き換えない。
+
+## self-contained packageとbounded discovery（#476）
+
+plugin固有implementationは`plugins/<axis>/<plugin_id>/`の自己完結packageが所有し、generic
+contract、registry、composition primitiveだけをpackage外へ置く。package pathはimplementation
+detailであり、manifest、readiness、freeze、experiment provenanceでは既存のversioned logical
+identityを正本とする。discovery順やpackage移動をidentityへ含めない。
+
+6軸の#476実装前後inventoryは次のとおりである。
+
+| 軸 | #476前のconcrete owner / 列挙 | #476後のentry point / discovery | 判断 |
+|---|---|---|---|
+| Robot | `plugins/robots/fast_arm/`、既存`robot_discovery.py` | `fast_arm/plugin.py::ROBOT_PLUGIN`、direct-child bounded discovery | #426/#427のreference implementationを維持し、rewriteしない |
+| Input Source | 7 packageがimplementationを所有するが、中央`input_sources/registration.py`が具体pluginとrequestをimport / 列挙 | 各`plugins/input_sources/<source_id>/plugin.py::INPUT_SOURCE_PLUGIN`、`input_source_discovery.py` | 中央registrationをtyped contractだけへ縮小し、7 identityとCLI順序を維持 |
+| Control Mapping | `plugins/mappings/*.py`と中央`mappings/catalog.py`の4件手書き列挙 | logical IDと一致する4 packageの`plugin.py::CONTROL_MAPPING_PLUGIN`、`control_mapping_discovery.py` | algorithmをpackageへ移し、既存import pathはthin re-exportだけに限定 |
+| Environment / Scene | production concrete package / catalogなし。generic `EnvironmentPlugin`とcomposition test fixtureだけ | production discovery候補なし | second SoTがないため変更しない。最初のproduction plugin追加時に本sectionの規則を適用 |
+| Task | production concrete package / catalogなし。generic `TaskPlugin`とcomposition test fixtureだけ | production discovery候補なし | 同上 |
+| Evaluation | production concrete package / catalogなし。generic `EvaluationPlugin`とcomposition test fixtureだけ | production discovery候補なし | 同上 |
+
+discoverable first-party axisは、固定namespace直下のdirect child packageだけを対象にする。`_loadcell`
+等のprivate/shared packageを除外し、candidateをsortして`<package>.plugin`だけをimportする。
+configurationやuser inputからmodule pathを生成せず、Python packaging entry point、remote plugin、
+hot reload、import副作用によるself-registrationを使用しない。
+
+各axis layerはfixed exportの型とpackage名 / logical identity一致を検証する。missing export、wrong
+type、import failure、duplicate logical identity、package / declaration mismatchはwarningでskipせず
+startup前にfail-closedとする。共通helperはdirect-child enumeration、private除外、sort、fixed
+module import、import failure normalizationだけを所有し、Input Source registrationとControl Mapping
+contractの検証はtyped axis discoveryへ残す。
+
+Input Sourceの`_loadcell`とControl Mappingの`_continuous_endpoint_velocity.py`はaxis-local private
+shared ownerであり、plugin IDやfixed entry pointを持たずdiscoverしない。concrete pluginは他pluginの
+private implementationをimportせず、必要な共有処理だけをprivate shared owner経由で利用する。
+Robot resourceは従来どおりplugin declarationが所有する。Input Sourceのreader / parser /
+trajectory、Control Mappingのalgorithm / parameterはowning packageが所有し、generic resolverが
+logical IDからresource pathを推測しない。
+
+Control Mappingの旧flat module importはcanonical packageへのthin re-exportとして維持する。加えて、
+baselineのpackage-root 5 exportsは要求されたsymbolのcanonical packageだけをloadするlazy compatibility
+facadeとして維持する。このfacadeはproduction discoveryのSoTではなく、新規plugin onboardingでexport
+mapの変更を要求しない。production catalogは引き続きdirect child packageの
+`plugin.py::CONTROL_MAPPING_PLUGIN`から構築する。
+
+新しいfirst-party plugin onboardingは、owning packageと明示所有resource / config、plugin-local
+testsの追加だけでproduction discoveryへ接続する。central catalog、generic runtime、viewer、
+unrelated pluginへ具体ID/importを追加しない。test-only packageは明示したtest namespaceからだけ
+discoverし、production namespace / catalog / CLIへ混入させない。packageを除去した後のselectionは
+unknown logical identityとしてfailする。
 
 ## Robot Bundleとcapability provider
 

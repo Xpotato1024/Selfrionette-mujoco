@@ -3,7 +3,9 @@ from __future__ import annotations
 from selfrionette.plugins.input_sources.programmed_target import (
     build_sweep_x_input_source,
 )
-from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.mappings.replay_mapping import (
+    REPLAY_CONTROL_MAPPING_PLUGIN,
+)
 from selfrionette.schemas import InputIntent, RawInputFrame
 
 

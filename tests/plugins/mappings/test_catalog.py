@@ -5,13 +5,15 @@ import pytest
 from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.plugins.mappings.catalog import CONTROL_MAPPING_REGISTRY
-from selfrionette.plugins.mappings.loadcell import (
+from selfrionette.plugins.mappings.loadcell_endpoint_mapping import (
     LoadcellEndpointMappingConfig,
     LOADCELL_ENDPOINT_MAPPING_PLUGIN,
     LOADCELL_NORMALIZED_SAMPLE_SCHEMA,
     LOADCELL_VECTOR_SAMPLE_SCHEMA,
 )
-from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.mappings.replay_mapping import (
+    REPLAY_CONTROL_MAPPING_PLUGIN,
+)
 from selfrionette.runtime.experiment.composition import PluginParameters, compose_experiment
 from selfrionette.runtime.experiment.contracts import (
     PluginAxis,
