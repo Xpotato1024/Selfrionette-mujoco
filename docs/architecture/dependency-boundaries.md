@@ -38,12 +38,12 @@ transport           -> schemas
 runtime             -> all layers
 ```
 
-Input Source Pluginのgeneric contractは`runtime/experiment/input_source.py`が所有し、production source
-registrationは`plugins/input_sources/`が所有する。既存`input_sources.base.InputSource`の
-`read_frame() -> RawInputFrame`をreader compatibility boundaryとして再利用するが、低位の
-`input_sources/`から`plugins/`または`runtime/`へ逆依存しない。ただし#462で定義した5つのthin compatibility facadeだけは
-`plugins/mappings/`への明示的な例外とする。`input_sources.registry`は既存descriptor
-signatureとframe behaviorだけを保持し、production catalogをimportまたは再登録しない。
+Input Source Pluginのgeneric `InputSource.read_frame() -> RawInputFrame` contractは
+`runtime/experiment/input_source.py`がdefinitionを所有し、production source implementationとregistrationは
+`plugins/input_sources/`が所有する。`input_sources/`はC4までのpublic compatibility facadeであり、
+canonical runtime contract、source implementation、mapping symbolを再exportするが、definitionやalgorithmを
+複製しない。`input_sources.registry`は既存descriptor signatureとframe behaviorだけを保持し、
+production catalogをimportまたは再登録しない。
 source contractからfast_arm、task / evaluation実装、viewer TypeScript、serial transportをimportしない。
 Control Mapping Pluginはproduced / accepted sample schemaのversioned identityだけを参照し、device handle、
 serial、browser eventを所有しない。P5の`tests/architecture/test_input_source_plugin_p5_boundaries.py`は
@@ -171,7 +171,8 @@ transport           -> runtime
 
 ## Input Source compatibility facade exception (#462)
 
-`input_sources/` は原則として `schemas` と source-owned acquisition に依存する。既存 public import を壊さないため、次の5 moduleだけは canonical mapping owner を thin facade として再exportする narrow exception とする。
+`input_sources/`は既存public importを壊さないためのcompatibility packageである。次の5 moduleは
+canonical mapping ownerをthin facadeとして再exportする。
 
 - `input_sources/keyboard.py`
 - `input_sources/continuous_endpoint_velocity.py`
@@ -179,7 +180,11 @@ transport           -> runtime
 - `input_sources/loadcell_serial.py`
 - `input_sources/replay.py`
 
-この例外は mapping algorithm の複製を許可しない。algorithm、parameter config、command conversion の canonical owner は `plugins/mappings/` であり、facade以外の `input_sources/` から `plugins.mappings` への import は architecture guard で拒否する。loadcell の parser と intrinsic normalization は source-owned のまま、endpoint mapping は `plugins/mappings/loadcell.py` が所有する。`loadcell_endpoint_mapping` は source-normalized intent boundary を受け、raw serial frame を再正規化しない。
+この例外はmapping algorithmの複製を許可しない。algorithm、parameter config、command conversionの
+canonical ownerは`plugins/mappings/`であり、facade以外の`input_sources/`から`plugins.mappings`へのimportは
+architecture guardで拒否する。loadcellのparserとintrinsic normalizationは
+`plugins/input_sources/_loadcell/`、endpoint mappingは`plugins/mappings/loadcell.py`が所有する。
+`loadcell_endpoint_mapping`はsource-normalized intent boundaryを受け、raw serial frameを再正規化しない。
 
 ## Input Source runtime validation boundary
 
@@ -204,7 +209,7 @@ legacyの責務を移行する場合は、script全体をcopyせず、次のowne
 | legacyの責務 | current owner | 境界 |
 |---|---|---|
 | MuJoCo XML / STL asset | typed robot package resource（logical namespaceは`assets/mujoco/fast_arm/`） | canonical assetを参照し、legacy codeを実行しない |
-| device input読取 | `input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
+| device input読取 | `plugins/input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
 | inputの意味付けとscale | `input_interpreters/` | `RawInputFrame`を`InputIntent`へ変換する |
 | target更新とsafety limit | `motion/` | `MotionCommand`を生成する |
 | FK / IK / joint limit | `kinematics/`またはrobot-specific plugin | kinematics責務に限定する |

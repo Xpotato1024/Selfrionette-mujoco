@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from selfrionette.input_interpreters import ReplayInputInterpreter
-from selfrionette.input_sources import build_sweep_x_input_source
+from selfrionette.plugins.input_sources.programmed_target import build_sweep_x_input_source
 
 
 def test_programmed_target_metadata_is_preserved_through_input_interpreter() -> None:

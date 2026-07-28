@@ -8,8 +8,8 @@ from selfrionette.plugins.input_sources.catalog import (
     INPUT_SOURCE_CATALOG,
     SUPPORTED_INPUT_SOURCE_NAMES,
 )
+from selfrionette.plugins.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
-from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
 from selfrionette.runtime.experiment.input_source import (

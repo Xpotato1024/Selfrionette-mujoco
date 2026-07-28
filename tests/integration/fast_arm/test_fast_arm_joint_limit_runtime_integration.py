@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.input_sources import ViewerInputSource
+from selfrionette.plugins.input_sources.viewer import ViewerInputSource
 from selfrionette.plugins.robots.fast_arm.adapter.feasibility import (
     FastArmJointLimitGuard,
     load_and_validate_fast_arm_joint_limit_config,

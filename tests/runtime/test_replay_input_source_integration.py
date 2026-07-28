@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 
 from selfrionette.input_interpreters import ReplayInputInterpreter
-from selfrionette.input_sources import ReplayInputSource, build_motion_command_from_replay_frame
+from selfrionette.plugins.input_sources.replay import ReplayInputSource
+from selfrionette.plugins.mappings.replay import build_motion_command_from_replay_frame
 from selfrionette.runtime.control.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
 from selfrionette.schemas import RawInputFrame
 

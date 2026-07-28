@@ -26,17 +26,35 @@ MAPPING_COMPATIBILITY_FACADES = {
     "loadcell_serial.py",
     "replay.py",
 }
-SOURCE_OWNED_MAPPING_TEST_IMPORTS = {
-    "selfrionette.input_sources.analog_fixture": {
-        "AnalogFixtureSample",
-        "parse_analog_fixture_sample",
-    },
-    "selfrionette.input_sources.loadcell_serial": {
-        "LoadcellNormalizationConfig",
-        "LoadcellNormalizedInputIntentConverter",
-        "NormalizedLoadcellInputIntent",
-        "RawLoadcellVectorRecord",
-    },
+MOVED_CONCRETE_OLD_MODULES = {
+    "selfrionette.input_sources.analog_fixture",
+    "selfrionette.input_sources.loadcell_serial",
+    "selfrionette.input_sources.programmed_target",
+    "selfrionette.input_sources.replay",
+    "selfrionette.input_sources.viewer",
+}
+MOVED_IMPLEMENTATION_SYMBOLS = {
+    "AnalogFixtureSample",
+    "DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS",
+    "DEFAULT_VIEWER_SAFE_ENDPOINT_M",
+    "InputSource",
+    "LoadcellNormalizationConfig",
+    "LoadcellNormalizedInputIntentConverter",
+    "NormalizedLoadcellInputIntent",
+    "ProgrammedTargetFrame",
+    "ProgrammedTargetInputSource",
+    "ProgrammedTargetTrajectory",
+    "RawLoadcellVectorRecord",
+    "ReplayInputSource",
+    "SerialDiagnosticEvent",
+    "SerialFrameParseError",
+    "SerialInputSource",
+    "ViewerInputSource",
+    "build_sweep_x_input_source",
+    "build_sweep_x_trajectory",
+    "normalize_loadcell_frame_for_mapping",
+    "parse_analog_fixture_sample",
+    "parse_serial_frame_line",
 }
 
 
@@ -52,6 +70,20 @@ def _modules(tree: ast.AST) -> tuple[str, ...]:
 
 def _parse(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def _defined_top_level_symbols(path: Path) -> set[str]:
+    symbols: set[str] = set()
+    for node in _parse(path).body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            symbols.add(node.name)
+        elif isinstance(node, ast.Assign):
+            symbols.update(
+                target.id for target in node.targets if isinstance(target, ast.Name)
+            )
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            symbols.add(node.target.id)
+    return symbols
 
 
 def test_input_source_is_the_sixth_composition_axis_and_catalog_is_singleton() -> None:
@@ -109,10 +141,8 @@ def test_mapping_tests_use_canonical_mapping_owners() -> None:
             if not isinstance(node, ast.ImportFrom) or node.module is None:
                 continue
             if node.module.startswith("selfrionette.input_sources"):
-                allowed = SOURCE_OWNED_MAPPING_TEST_IMPORTS.get(node.module, set())
                 imported = {alias.name for alias in node.names}
-                if not imported.issubset(allowed):
-                    violations.append(f"{path}:{node.lineno}:{node.module}:{sorted(imported)}")
+                violations.append(f"{path}:{node.lineno}:{node.module}:{sorted(imported)}")
     for relative, module in (
         ("analog_fixture", "selfrionette.plugins.mappings.analog_fixture"),
         ("loadcell", "selfrionette.plugins.mappings.loadcell"),
@@ -209,9 +239,101 @@ def test_source_plugin_import_graph_has_no_forbidden_or_private_cross_source_edg
                     violations.append(f"source:{path}:{module}")
                 if module.startswith("selfrionette.plugins.input_sources."):
                     other = module.split(".")[3]
-                    if other not in {"_common", source_id}:
+                    if other not in {"_common", "_loadcell", source_id}:
                         violations.append(f"cross-source:{path}:{module}")
     assert not violations
+
+
+def test_canonical_source_code_has_no_robot_evaluation_or_mapping_dependency() -> None:
+    violations: list[str] = []
+    canonical_roots = (
+        SOURCE_PACKAGE_ROOT / "_loadcell",
+        SOURCE_PACKAGE_ROOT / "analog_fixture",
+        SOURCE_PACKAGE_ROOT / "programmed_target",
+        SOURCE_PACKAGE_ROOT / "replay",
+        SOURCE_PACKAGE_ROOT / "viewer",
+    )
+    for root in canonical_roots:
+        for path in root.rglob("*.py"):
+            for module in _modules(_parse(path)):
+                if (
+                    module.startswith("selfrionette.plugins.mappings")
+                    or module.startswith("selfrionette.plugins.robots")
+                    or module.startswith("selfrionette.runtime.evaluation")
+                    or ".fast_arm" in module
+                    or ".tasks" in module
+                ):
+                    violations.append(f"{path}:{module}")
+    assert not violations
+
+
+def test_plugin_packages_do_not_import_moved_concrete_old_source_modules() -> None:
+    violations: list[str] = []
+    for path in SOURCE_PACKAGE_ROOT.rglob("*.py"):
+        for module in _modules(_parse(path)):
+            if module in MOVED_CONCRETE_OLD_MODULES:
+                violations.append(f"{path}:{module}")
+    assert not violations
+
+
+def test_loadcell_plugins_share_deliberate_owner_without_private_cross_imports() -> None:
+    for source_id in ("loadcell_fixture", "loadcell_serial"):
+        modules = {
+            module
+            for path in (SOURCE_PACKAGE_ROOT / source_id).rglob("*.py")
+            for module in _modules(_parse(path))
+        }
+        assert "selfrionette.plugins.input_sources._loadcell" in modules
+        assert not any(
+            module.startswith(
+                f"selfrionette.plugins.input_sources.{'loadcell_serial' if source_id == 'loadcell_fixture' else 'loadcell_fixture'}"
+            )
+            for module in modules
+        )
+
+
+def test_old_source_modules_are_implementation_free_compatibility_facades() -> None:
+    facade_paths = (
+        SRC / "input_sources" / "analog_fixture.py",
+        SRC / "input_sources" / "base.py",
+        SRC / "input_sources" / "programmed_target.py",
+        SRC / "input_sources" / "replay.py",
+        SRC / "input_sources" / "viewer.py",
+        SRC / "input_sources" / "loadcell_serial.py",
+    )
+    for path in facade_paths:
+        duplicate_symbols = (
+            _defined_top_level_symbols(path) & MOVED_IMPLEMENTATION_SYMBOLS
+        )
+        assert not duplicate_symbols, f"{path}:{sorted(duplicate_symbols)}"
+
+
+def test_viewer_defaults_have_one_definition_and_no_keyboard_gamepad_source_plugins() -> None:
+    definitions = {
+        name: []
+        for name in (
+            "DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS",
+            "DEFAULT_VIEWER_SAFE_ENDPOINT_M",
+        )
+    }
+    for path in SRC.rglob("*.py"):
+        symbols = _defined_top_level_symbols(path)
+        for name in definitions:
+            if name in symbols:
+                definitions[name].append(path)
+    expected = SOURCE_PACKAGE_ROOT / "viewer" / "source.py"
+    assert definitions == {
+        "DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS": [expected],
+        "DEFAULT_VIEWER_SAFE_ENDPOINT_M": [expected],
+    }
+    assert not (SOURCE_PACKAGE_ROOT / "keyboard").exists()
+    assert not (SOURCE_PACKAGE_ROOT / "gamepad").exists()
+
+
+def test_runtime_contract_does_not_import_old_input_source_definition() -> None:
+    contract_path = SRC / "runtime" / "experiment" / "input_source.py"
+    assert "InputSource" in _defined_top_level_symbols(contract_path)
+    assert "selfrionette.input_sources.base" not in _modules(_parse(contract_path))
 
 
 def test_mapping_plugin_import_graph_does_not_acquire_devices_or_browser() -> None:

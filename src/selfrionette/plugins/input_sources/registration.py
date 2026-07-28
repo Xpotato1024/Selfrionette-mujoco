@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from selfrionette.plugins.input_sources import analog_fixture, loadcell_fixture, loadcell_serial, noop, programmed_target, replay, viewer
-from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
+from selfrionette.plugins.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.runtime.execution.input_source_adapters import (
     ANALOG_FIXTURE_EXECUTION_ADAPTER,
     LOADCELL_EXECUTION_ADAPTER,

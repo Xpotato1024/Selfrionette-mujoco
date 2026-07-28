@@ -2,15 +2,14 @@
 
 ## 責務
 
-既存public import、低位source-local algorithm、`RawInputFrame`生成の互換境界を提供する。
-production runtime selectionのcatalog、versioned identity、factory registration、health、lifecycleは
-`selfrionette/plugins/input_sources/`が所有する。ただし、この低位packageからplugin catalogまたは
-runtimeへ逆依存しない。
+既存public importのcompatibility boundaryを提供する。generic reader contractは
+`runtime/experiment/input_source.py`、source-owned implementationは`plugins/input_sources/`、
+mapping implementationは`plugins/mappings/`がcanonical ownerである。このpackageは同一objectを
+re-exportし、contract、source algorithm、parser、normalization、default、lifecycleを複製しない。
 
-Arduino / keyboard / gamepad / replay / OSC / mocapから値を読み、`RawInputFrame`を作る。
-loadcellのserial frame parser、normalization、`SerialInputSource`はP3でもこのpackageの同一実装を
-plugin adapterが参照する。`input_sources.registry`は既存descriptor APIのsignatureとframe behaviorだけを
-維持し、production plugin catalogの第二のregistration SoTにはしない。
+`input_sources.registry`は既存descriptor APIのsignatureとframe behaviorだけを維持し、
+production plugin catalogの第二のregistration SoTにはしない。loadcellのrecorded dry-run helperは
+C3/C4のcompatibility scopeとして残る。
 
 ## 入力
 
@@ -22,13 +21,14 @@ plugin adapterが参照する。`input_sources.registry`は既存descriptor API�
 
 ## 依存してよい層
 
-`schemas`
+canonical runtime contract、source plugin、mapping pluginのcompatibility export
 
 ## 依存してはいけない層
 
-`motion`, `kinematics`, `mujoco_backend`, `transport`, `runtime`, `plugins`
+`kinematics`, `mujoco_backend`, `transport`
 
-plugin catalogとのcomposition接続は`runtime`が所有する。
+plugin catalogとのcomposition接続は`runtime`が所有する。このpackageからproduction catalogを
+再登録または再投影しない。
 
 ## 禁止事項
 

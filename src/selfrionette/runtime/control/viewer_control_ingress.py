@@ -5,9 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from time import monotonic
 
-from selfrionette.input_sources import ViewerInputSource
-from selfrionette.input_sources.viewer import DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS, DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.input_sources.keyboard import KeyboardInputConfig
+from selfrionette.plugins.input_sources.viewer import (
+    DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS,
+    DEFAULT_VIEWER_SAFE_ENDPOINT_M,
+    ViewerInputSource,
+)
 from selfrionette.runtime.experiment.input_source import ViewerBridgeRuntimeCapability
 from selfrionette.schemas import RawInputFrame, ViewerControlMessage, coerce_viewer_control_message, parse_viewer_control_message_json
 

@@ -221,7 +221,7 @@ class NoopInputSource:
 
 class AnalogFixtureInputSource:
     def __init__(self, samples: tuple[Mapping[str, object], ...]) -> None:
-        from selfrionette.input_sources.analog_fixture import (
+        from selfrionette.plugins.input_sources.analog_fixture.source import (
             parse_analog_fixture_sample,
         )
 

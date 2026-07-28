@@ -5,7 +5,7 @@ from math import inf, nan
 
 import pytest
 
-from selfrionette.input_sources import ViewerInputSource
+from selfrionette.plugins.input_sources.viewer import ViewerInputSource
 from selfrionette.plugins.mappings.keyboard import KeyboardBinding, KeyboardInputConfig
 from selfrionette.plugins.mappings.viewer import VIEWER_CONTROL_MAPPING_PLUGIN
 from selfrionette.schemas import (

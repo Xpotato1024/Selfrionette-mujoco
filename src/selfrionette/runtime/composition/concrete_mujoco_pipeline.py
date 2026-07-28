@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from selfrionette.input_interpreters import ReplayInputInterpreter
-from selfrionette.input_sources import ReplayInputSource
+from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.plugins.catalog import (
     RobotCatalog,

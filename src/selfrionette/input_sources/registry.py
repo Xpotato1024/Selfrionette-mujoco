@@ -1,10 +1,8 @@
 """Backward-compatible low-level input-source descriptor registry.
 
 The production runtime selection source of truth is
-``selfrionette.plugins.input_sources.catalog``.  This module intentionally
-remains independent from ``plugins`` and ``runtime`` so existing low-level
-callers keep their historical frame-builder signatures without reversing the
-canonical layer dependency.
+``selfrionette.plugins.input_sources.catalog``. This compatibility registry
+delegates moved source behavior and defaults to their canonical plugin owners.
 """
 
 from __future__ import annotations
@@ -12,8 +10,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-from selfrionette.input_sources.programmed_target import build_sweep_x_input_source
-from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
+from selfrionette.plugins.input_sources.programmed_target import build_sweep_x_input_source
+from selfrionette.plugins.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.schemas import RawInputFrame
 from selfrionette.schemas.types import Vector3
 

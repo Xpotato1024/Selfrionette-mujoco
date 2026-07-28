@@ -32,9 +32,8 @@ mode、factory、health、lifecycle、CLI alias、execution adapterを登録す�
 - replayのcaller指定frames / metadata
 - noop / viewerのcaller指定metadata
 
-低位registryはproduction plugin catalogをimport、遅延projection、再登録しない。これによりcanonicalな
-`input_sources -> plugins/runtime`逆依存を作らない。frontend keyboard / gamepad providerとmappingの分離は
-#461の範囲である。
+低位registryはproduction plugin catalogをimport、遅延projection、再登録しない。frame behaviorとdefaultは
+canonical source ownerへ委譲する。frontend keyboard / gamepad providerとmappingの分離は#461の範囲である。
 
 ## Production plugin catalog
 
@@ -89,6 +88,9 @@ viewer
 ### Readerとhealth
 
 factory outputは`InputSource`と`InputSourceHealthProvider`を満たす。
+generic `InputSource` Protocolのcanonical definitionは
+`src/selfrionette/runtime/experiment/input_source.py`に置く。
+`src/selfrionette/input_sources/base.py`は同一objectのpublic compatibility re-exportだけを持つ。
 
 - `read_frame()`は毎回`RawInputFrame`を返す。
 - `current_health()`は毎回`InputSourceHealth`を返す。
@@ -149,7 +151,7 @@ current test ownerはproduction packageの責務を鏡写しにし、cross-layer
 | 責務 | current owner |
 |---|---|
 | generic contract / conformance | `tests/plugins/input_sources/contract/` |
-| source-local reader / parser / health / lifecycle | `tests/plugins/input_sources/<plugin_id>/` |
+| source-local reader / parser / health / lifecycle | `tests/plugins/input_sources/<plugin_id>/`、shared loadcellは`tests/plugins/input_sources/_loadcell/` |
 | mapping algorithm / parameter / frame | `tests/plugins/mappings/` |
 | catalog / registry / composition | `tests/runtime/test_input_source_plugin_catalog.py`、`tests/runtime/test_experiment_plugin_composition.py` |
 | source -> mapping -> runtime / stale hold | `tests/runtime/` |
@@ -253,9 +255,22 @@ runtime step-loopのsource-state解決:
 
 ## Compatibility
 
-既存public source modulesはsource-local implementationを維持する。CLI options、source alias、preset、
-custom replay frame、loop、payload、stale safety、viewer message schema、loadcell protocol、baud 115200、
-mapping semanticsを意図的に変更しない。
+source-owned implementationのphysical ownerは次である。
+
+| responsibility | canonical owner |
+|---|---|
+| generic `InputSource` reader contract | `runtime/experiment/input_source.py` |
+| programmed target trajectory / frame / reader / defaults | `plugins/input_sources/programmed_target/source.py` |
+| replay reader | `plugins/input_sources/replay/source.py` |
+| viewer ingestion / lifecycle / health / diagnostics / defaults | `plugins/input_sources/viewer/source.py` |
+| analog fixture sample / strict parser | `plugins/input_sources/analog_fixture/source.py` |
+| shared loadcell records / parser / intrinsic normalization / injected-line reader / diagnostics | `plugins/input_sources/_loadcell/` |
+
+既存public `input_sources` modulesはC4まで同一canonical objectをre-exportするthin compatibility facadeとして
+残す。loadcellのrecorded dry-run helperと`mapping_plugin=None` branchはC3/C4分類のため残すが、
+parser、normalization、readerを再定義しない。CLI options、source alias、preset、custom replay frame、loop、
+payload、stale safety、viewer message schema、loadcell protocol、baud 115200、mapping semanticsを意図的に
+変更しない。
 
 `scripts/compatibility/run_replay_mujoco_dry_run.py`と
 `scripts/compatibility/run_replay_mujoco_websocket_publisher.py`で`--input-source`を指定した経路はproduction
@@ -266,8 +281,9 @@ catalogをresolveする。一方、`--input-source`未指定時に呼ばれる`r
 
 ## Remaining scope
 
-このRoundのInput Source Plugin scopeに未完了のcanonical contract移行項目はない。追加のdevice実装、hardware gate、
-experiment evidenceは別scopeで扱う。
+C2のsource implementation ownership移行は完了している。CLI / runner compatibility cleanupはC3、
+public compatibility surfaceのretirementはC4で扱う。追加のdevice実装、hardware gate、experiment evidenceは
+別scopeで扱う。
 
 ## 関連canonical文書
 
@@ -314,10 +330,11 @@ frontend registryはarbitrary dynamic importを行わない。lifecycleが選択
 unknownまたはduplicate provider IDは安全なdefaultへ置換せずrejectする。provider disposal後は
 publication、polling、heartbeatを停止し、再activationはzero / safe stateから開始する。
 
-`src/selfrionette/input_sources/keyboard.py`、`continuous_endpoint_velocity.py`、
-`viewer.py`は既存consumerのためのcompatibility facadeまたは低位boundaryとして残す。keyboardと
-continuous mappingのcanonical implementationは`src/selfrionette/plugins/mappings/`にあり、viewer
-source facadeはmapping algorithm、desired endpoint integration、command generationを持たない。
+`src/selfrionette/input_sources/keyboard.py`、`continuous_endpoint_velocity.py`、`viewer.py`は
+既存consumerのためのcompatibility facadeとして残す。keyboardとcontinuous mappingのcanonical
+implementationは`src/selfrionette/plugins/mappings/`、viewer sourceのcanonical implementationは
+`src/selfrionette/plugins/input_sources/viewer/`にある。viewer source facadeはmapping algorithm、
+desired endpoint integration、command generationを持たない。
 retained symbolのconsumer、canonical owner、facade statusはP5 completion auditで確定した。low-level
 `input_sources/registry.py`は`InputSourceDescriptor`のsignature、public export、frame behaviorを使うrepo内
 compatibility consumerと専用testがあるため retained とする。production runtime selectionはこのregistryを参照せず、

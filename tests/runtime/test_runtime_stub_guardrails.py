@@ -8,7 +8,7 @@ from pathlib import Path
 import selfrionette.runtime.runners.websocket_publisher as websocket_runner_module
 from selfrionette.input_interpreters import ReplayInputInterpreter
 from tests.support.input_interpreter_doubles import NoOpInputInterpreter
-from selfrionette.input_sources import ReplayInputSource
+from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from tests.support.input_source_doubles import StaticInputSource
 from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmEndpointInverseKinematicsSolver
 from tests.support.kinematics_solver_doubles import ZeroInverseKinematicsSolver

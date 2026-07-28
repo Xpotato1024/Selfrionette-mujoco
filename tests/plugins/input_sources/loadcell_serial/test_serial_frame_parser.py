@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.input_sources.loadcell_serial import (
+from selfrionette.plugins.input_sources._loadcell import (
     RawLoadcellVectorRecord,
     SerialDiagnosticEvent,
     SerialFrameParseError,

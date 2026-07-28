@@ -6,12 +6,23 @@ from pathlib import Path
 import pytest
 
 from selfrionette import input_sources
-from selfrionette.input_sources import ProgrammedTargetInputSource, build_sweep_x_input_source
-from selfrionette.input_sources.programmed_target import build_sweep_x_trajectory
+from selfrionette.plugins.input_sources.programmed_target import (
+    ProgrammedTargetInputSource,
+    build_sweep_x_input_source,
+    build_sweep_x_trajectory,
+)
 
 
 ROOT = Path(__file__).resolve().parents[4]
-PROGRAMMED_TARGET_MODULE = ROOT / "src" / "selfrionette" / "input_sources" / "programmed_target.py"
+PROGRAMMED_TARGET_MODULE = (
+    ROOT
+    / "src"
+    / "selfrionette"
+    / "plugins"
+    / "input_sources"
+    / "programmed_target"
+    / "source.py"
+)
 
 
 def test_sweep_x_input_source_is_exported_from_package_root() -> None:
@@ -123,5 +134,7 @@ def test_sweep_x_programmed_target_module_does_not_import_noop_motion_generator(
 def test_sweep_x_trajectory_is_module_level_public_api() -> None:
     import selfrionette.input_sources.programmed_target as programmed_target_module
 
+    assert programmed_target_module.build_sweep_x_trajectory is build_sweep_x_trajectory
+    assert programmed_target_module.build_sweep_x_input_source is build_sweep_x_input_source
     assert "build_sweep_x_trajectory" in programmed_target_module.__all__
     assert "build_sweep_x_input_source" in programmed_target_module.__all__

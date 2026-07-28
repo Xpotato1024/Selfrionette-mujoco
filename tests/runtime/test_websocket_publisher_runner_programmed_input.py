@@ -111,7 +111,10 @@ def test_websocket_runner_module_uses_programmed_input_source_and_not_noop_motio
 
     imported_names: set[str] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "selfrionette.input_sources":
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "selfrionette.plugins.input_sources.programmed_target"
+        ):
             imported_names.update(alias.name for alias in node.names)
 
     assert "build_sweep_x_input_source" in imported_names

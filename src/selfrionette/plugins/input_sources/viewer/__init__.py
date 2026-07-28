@@ -3,8 +3,12 @@
 from collections.abc import Mapping
 from time import monotonic
 
-from selfrionette.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M, ViewerInputSource
 from selfrionette.plugins.input_sources._common import ManagedFrameHealthReader
+from selfrionette.plugins.input_sources.viewer.source import (
+    DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS,
+    DEFAULT_VIEWER_SAFE_ENDPOINT_M,
+    ViewerInputSource,
+)
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceHealthStatus,
@@ -44,4 +48,10 @@ def build_reader(parameters: Mapping[str, object], *, runtime_dependencies: Inpu
     )
 
 
-__all__ = ["build_frames", "build_reader"]
+__all__ = [
+    "DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS",
+    "DEFAULT_VIEWER_SAFE_ENDPOINT_M",
+    "ViewerInputSource",
+    "build_frames",
+    "build_reader",
+]

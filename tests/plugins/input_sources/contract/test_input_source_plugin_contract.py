@@ -17,6 +17,7 @@ from selfrionette.runtime.experiment.contracts import (
     VersionedIdentity,
 )
 from selfrionette.runtime.experiment.input_source import (
+    InputSource,
     InputSourceHealth,
     InputSourceHealthStatus,
     InputSourceHealthProvider,
@@ -47,6 +48,21 @@ from tests.support.input_source_plugin_doubles import (
     ReaderWithoutHealth,
     build_conformance_input_source,
 )
+
+
+def test_input_source_contract_is_runtime_checkable_and_structural() -> None:
+    from selfrionette.input_sources.base import (
+        InputSource as CompatibilityInputSource,
+    )
+
+    class StructuralReader:
+        def read_frame(self) -> RawInputFrame:
+            return RawInputFrame(source="structural", timestamp_s=0.0)
+
+    reader = StructuralReader()
+    assert isinstance(reader, InputSource)
+    assert isinstance(reader, CompatibilityInputSource)
+    assert CompatibilityInputSource is InputSource
 
 
 def test_valid_plugin_reader_and_metadata_are_detached() -> None:

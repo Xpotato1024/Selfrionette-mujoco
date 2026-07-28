@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 
-from selfrionette.input_sources.loadcell_serial import SerialInputSource
+from selfrionette.plugins.input_sources._loadcell import SerialInputSource
 from selfrionette.plugins.input_sources._common import ManagedFrameHealthReader
 from selfrionette.runtime.experiment.input_source import InputSourceHealth, InputSourceHealthStatus, InputSourceRuntimeDependencies
 

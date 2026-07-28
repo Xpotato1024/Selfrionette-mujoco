@@ -112,8 +112,9 @@ healthを呼出しごとに検証する。production runtime selectionのSoTは
 `plugins/input_sources/catalog.py`であり、selectionはaliasから`PluginSelection`、resolved plugin、sample schema、
 validated reader、typed execution adapterへ一度だけ解決する。
 
-`input_sources/registry.py`は既存低位descriptor APIのsignatureとframe behaviorだけを維持する独立compatibility
-boundaryであり、plugin catalogをimportまたはprojectionしない。source固有のpreset、custom frame、factory
+`input_sources/registry.py`は既存低位descriptor APIのsignatureとframe behaviorだけを維持するcompatibility
+boundaryであり、plugin catalogをimportまたはprojectionしない。source behaviorとdefaultはcanonical
+plugin source ownerを参照する。source固有のpreset、custom frame、factory
 parameterはproduction registrationのrequest builderが所有する。plugin-backed primary pathはsource IDを比較せず、
 registrationが保持するexecution adapterを必須とする。adapter欠落はfail-closedであり、source-name tableを持つ
 `compatibility_execution_adapter()`はproduction/public callerがないことを確認して退役した。
@@ -174,9 +175,10 @@ parameter contractとoptional semantic validator / normalizerをsource lifecycle
 selection / plan readinessでrejectし、normalized / frozen parametersをstep loopへ渡す。unknown、duplicate、
 version mismatch、schema mismatch、missing mapping capabilityはimplicit fallbackなしでfail-closedとする。
 
-legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping実装へ分岐しない。P4は
-`src/selfrionette/input_sources/`全体を削除せず、未移行consumerがあるkeyboard、continuous velocity、
-viewer compatibility symbolだけをthin facadeとして残す。残存symbolの最終retirementは#462で監査する。
+legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping実装へ分岐しない。C2では
+source-owned implementationを`plugins/input_sources/`へ集約し、`src/selfrionette/input_sources/`は
+public compatibility facadeとして残す。CLI / runner compatibility cleanupはC3、public surfaceのretirementは
+C4で扱う。
 
 raw gamepad sampleでは`raw_axes`をmappingのauthoritative inputとして保持する一方、gamepad/v1の
 `zero_state`、`source_active`、heartbeatはlegacy projected `axes`とbuttonsに基づくobservable semanticsを

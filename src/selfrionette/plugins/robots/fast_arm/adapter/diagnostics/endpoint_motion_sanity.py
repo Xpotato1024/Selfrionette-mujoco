@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from selfrionette.input_sources import ReplayInputSource
+from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from selfrionette.plugins.robots.fast_arm.adapter.kinematics import (
     FAST_ARM_ENDPOINT_BASE_POSITION_M,
     FAST_ARM_ENDPOINT_LINK_LENGTHS_M,
