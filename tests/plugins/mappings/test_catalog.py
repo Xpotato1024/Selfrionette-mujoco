@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
+from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.plugins.mappings.catalog import CONTROL_MAPPING_REGISTRY
 from selfrionette.plugins.mappings.loadcell import (

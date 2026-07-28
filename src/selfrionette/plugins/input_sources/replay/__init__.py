@@ -2,8 +2,8 @@
 
 from collections.abc import Mapping
 
-from selfrionette.input_sources.replay import ReplayInputSource
 from selfrionette.plugins.input_sources._common import FrameHealthReader
+from selfrionette.plugins.input_sources.replay.source import ReplayInputSource
 from selfrionette.runtime.experiment.input_source import InputSourceHealth, InputSourceHealthStatus, InputSourceRuntimeDependencies
 from selfrionette.schemas import RawInputFrame
 
@@ -26,4 +26,4 @@ def build_reader(parameters: Mapping[str, object], *, runtime_dependencies: Inpu
     return FrameHealthReader(delegate, initial)
 
 
-__all__ = ["build_frames", "build_reader"]
+__all__ = ["ReplayInputSource", "build_frames", "build_reader"]

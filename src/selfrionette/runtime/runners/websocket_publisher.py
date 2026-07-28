@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from selfrionette.input_sources import build_sweep_x_input_source
+from selfrionette.plugins.input_sources.programmed_target import build_sweep_x_input_source
 from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.composition.config import RuntimeConfig

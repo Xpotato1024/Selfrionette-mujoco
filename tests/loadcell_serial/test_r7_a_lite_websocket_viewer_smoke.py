@@ -3,10 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from selfrionette.input_sources.loadcell_serial import (
-    LoadcellNormalizationConfig,
-    run_loadcell_serial_dry_run_smoke,
-)
+from selfrionette.input_sources.loadcell_serial import run_loadcell_serial_dry_run_smoke
+from selfrionette.plugins.input_sources._loadcell import LoadcellNormalizationConfig
 from selfrionette.plugins.mappings.loadcell import build_r7_a_lite_smoke_endpoint_mapping_config
 from selfrionette.schemas import MuJoCoState
 from selfrionette.transport import mujoco_state_to_payload

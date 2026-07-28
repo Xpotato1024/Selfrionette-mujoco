@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.input_sources.loadcell_serial import (
+from selfrionette.input_sources.loadcell_serial import run_loadcell_serial_dry_run_smoke
+from selfrionette.plugins.input_sources._loadcell import (
     LoadcellNormalizationConfig,
     SerialFrameParseError,
     SerialInputSource,
-    run_loadcell_serial_dry_run_smoke,
 )
 from selfrionette.plugins.mappings.loadcell import (
     LoadcellEndpointMotionCommandConverter,

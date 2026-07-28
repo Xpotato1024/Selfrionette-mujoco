@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from selfrionette import input_sources
-from selfrionette.input_sources import ProgrammedTargetInputSource
-from selfrionette.input_sources.programmed_target import (
+from selfrionette.plugins.input_sources.programmed_target import (
     ProgrammedTargetFrame,
+    ProgrammedTargetInputSource,
     ProgrammedTargetTrajectory,
 )
 from selfrionette.schemas import RawInputFrame
@@ -29,6 +29,11 @@ def _build_trajectory() -> ProgrammedTargetTrajectory:
 
 
 def test_programmed_target_input_source_is_importable_from_package_root() -> None:
+    from selfrionette.input_sources import (
+        ProgrammedTargetInputSource as CompatibilityProgrammedTargetInputSource,
+    )
+
+    assert CompatibilityProgrammedTargetInputSource is ProgrammedTargetInputSource
     assert ProgrammedTargetInputSource is input_sources.ProgrammedTargetInputSource
     assert "ProgrammedTargetInputSource" in input_sources.__all__
     assert "StaticInputSource" not in input_sources.__all__

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from time import monotonic
 
-from selfrionette.input_sources.viewer import (
+from selfrionette.plugins.input_sources.viewer import (
     DEFAULT_VIEWER_SAFE_ENDPOINT_M,
     ViewerInputSource,
 )

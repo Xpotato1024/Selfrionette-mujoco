@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.input_sources.analog_fixture import (
+from selfrionette.plugins.input_sources.analog_fixture import (
     AnalogFixtureSample,
     parse_analog_fixture_sample,
 )

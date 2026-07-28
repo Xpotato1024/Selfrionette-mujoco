@@ -1,11 +1,5 @@
-from __future__ import annotations
+"""Public compatibility re-export for the canonical runtime reader contract."""
 
-from typing import Protocol, runtime_checkable
+from selfrionette.runtime.experiment.input_source import InputSource
 
-from selfrionette.schemas import RawInputFrame
-
-
-@runtime_checkable
-class InputSource(Protocol):
-    def read_frame(self) -> RawInputFrame:
-        ...
+__all__ = ["InputSource"]

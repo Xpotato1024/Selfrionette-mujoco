@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator, Mapping
 
-from selfrionette.input_sources.loadcell_serial import (
+from selfrionette.plugins.input_sources._loadcell import (
     SerialInputSource,
     normalize_loadcell_frame_for_mapping,
 )

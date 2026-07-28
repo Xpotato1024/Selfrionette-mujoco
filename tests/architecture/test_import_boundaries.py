@@ -53,6 +53,12 @@ FORBIDDEN_IMPORTS = {
         "selfrionette.runtime",
     ],
 }
+ALLOWED_COMPATIBILITY_IMPORTS = {
+    (
+        Path("input_sources/base.py"),
+        "selfrionette.runtime.experiment.input_source",
+    ),
+}
 
 
 def iter_imports(path: Path) -> list[str]:
@@ -76,6 +82,9 @@ def test_import_boundaries() -> None:
             for imported in iter_imports(path):
                 for forbidden in forbidden_prefixes:
                     if imported.startswith(forbidden):
+                        relative_path = path.relative_to(SRC_ROOT)
+                        if (relative_path, imported) in ALLOWED_COMPATIBILITY_IMPORTS:
+                            continue
                         violations.append(
                             f"{path.relative_to(ROOT)} imports {imported}; "
                             f"forbidden prefix: {forbidden}"

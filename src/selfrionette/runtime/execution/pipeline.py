@@ -6,13 +6,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from selfrionette.input_interpreters import InputInterpreter
-from selfrionette.input_sources import InputSource
 from selfrionette.motion import MotionGenerator
 from selfrionette.mujoco_backend import MuJoCoSimulator
 from selfrionette.schemas import MuJoCoState
 from selfrionette.transport import StatePublisher
 
 from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.experiment.input_source import InputSource
 from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
 

@@ -5,8 +5,8 @@ from dataclasses import dataclass, replace
 from math import isfinite
 from typing import cast
 
-from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
+from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
 from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
 from selfrionette.runtime.experiment.contracts import PluginSelection
 from selfrionette.runtime.experiment.input_source import InputSourceRuntimeDependencies

@@ -6,10 +6,8 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
-from selfrionette.input_sources.loadcell_serial import (
-    LoadcellNormalizationConfig,
-    run_loadcell_serial_dry_run_smoke,
-)
+from selfrionette.input_sources.loadcell_serial import run_loadcell_serial_dry_run_smoke
+from selfrionette.plugins.input_sources._loadcell import LoadcellNormalizationConfig
 from selfrionette.plugins.mappings.loadcell import build_r7_a_lite_smoke_endpoint_mapping_config
 from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
 from selfrionette.runtime.experiment.contracts import PluginSelection

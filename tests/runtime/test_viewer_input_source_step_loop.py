@@ -7,7 +7,7 @@ from math import dist
 
 import pytest
 
-from selfrionette.input_sources import ViewerInputSource
+from selfrionette.plugins.input_sources.viewer import ViewerInputSource
 from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
     run_runtime_input_source_step_loop,

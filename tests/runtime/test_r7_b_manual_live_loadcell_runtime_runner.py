@@ -12,8 +12,10 @@ from selfrionette.runtime.runners.live_loadcell import (
     run_live_loadcell_runtime_runner,
 )
 from selfrionette.schemas import RawInputFrame
-from selfrionette.input_sources.loadcell_serial import normalize_loadcell_frame_for_mapping
-from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
+from selfrionette.plugins.input_sources._loadcell import (
+    NormalizedLoadcellInputIntent,
+    normalize_loadcell_frame_for_mapping,
+)
 from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
 from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
 

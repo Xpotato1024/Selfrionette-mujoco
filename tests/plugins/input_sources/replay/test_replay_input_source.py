@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.input_sources import ReplayInputSource
+from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from selfrionette.schemas import RawInputFrame
 
 
@@ -23,7 +23,10 @@ def test_replay_input_source_raises_stop_iteration_at_eof() -> None:
 
     assert source.read_frame() == frame
 
-    with pytest.raises(StopIteration):
+    with pytest.raises(
+        StopIteration,
+        match="ReplayInputSource reached end of frames",
+    ):
         source.read_frame()
 
 
@@ -38,3 +41,11 @@ def test_replay_input_source_loops_back_to_start() -> None:
 def test_replay_input_source_rejects_empty_frames() -> None:
     with pytest.raises(ValueError, match="at least one frame"):
         ReplayInputSource(())
+
+
+def test_old_replay_path_re_exports_canonical_reader() -> None:
+    from selfrionette.input_sources import (
+        ReplayInputSource as CompatibilityReplayInputSource,
+    )
+
+    assert CompatibilityReplayInputSource is ReplayInputSource

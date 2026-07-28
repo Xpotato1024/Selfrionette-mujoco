@@ -17,7 +17,7 @@ from selfrionette.runtime.experiment.input_source import InputSourceHealthStatus
 from selfrionette.runtime.execution.input_source_adapters import (
     REPLAY_COMPATIBILITY_EXECUTION_ADAPTER,
 )
-from selfrionette.input_sources.loadcell_serial import NormalizedLoadcellInputIntent
+from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
 from selfrionette.schemas import InputIntent
 
 

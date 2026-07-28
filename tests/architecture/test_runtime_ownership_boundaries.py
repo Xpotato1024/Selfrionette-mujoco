@@ -93,13 +93,20 @@ def test_retired_flat_runtime_imports_have_no_repository_consumers() -> None:
             assert _imports(path).isdisjoint(retired_imports), path.relative_to(ROOT)
 
 
-def test_low_level_input_source_registry_has_no_plugin_or_runtime_reverse_dependency() -> None:
+def test_low_level_input_source_registry_only_delegates_to_canonical_source_owners() -> None:
     imports = _imports(INPUT_SOURCE_ROOT / "registry.py")
 
-    assert not any(
-        module == "selfrionette.plugins" or module.startswith("selfrionette.plugins.")
+    plugin_imports = {
+        module
         for module in imports
-    )
+        if module == "selfrionette.plugins"
+        or module.startswith("selfrionette.plugins.")
+    }
+    assert plugin_imports == {
+        "selfrionette.plugins.input_sources.programmed_target",
+        "selfrionette.plugins.input_sources.viewer",
+    }
+    assert "selfrionette.plugins.input_sources.catalog" not in imports
     assert not any(
         module == "selfrionette.runtime" or module.startswith("selfrionette.runtime.")
         for module in imports

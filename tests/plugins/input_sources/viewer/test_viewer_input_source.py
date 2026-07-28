@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from selfrionette.input_sources import ViewerInputSource
 from selfrionette.plugins.input_sources._common import health_from_frame
+from selfrionette.plugins.input_sources.viewer import (
+    DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS,
+    DEFAULT_VIEWER_SAFE_ENDPOINT_M,
+    ViewerInputSource,
+)
 from selfrionette.runtime.experiment.input_source import InputSourceHealthStatus
 from selfrionette.schemas import (
     ViewerControlGamepadButtonMessage,
@@ -19,6 +23,20 @@ class FakeClock:
 
     def __call__(self) -> float:
         return next(self._values)
+
+
+def test_old_viewer_path_re_exports_canonical_source_and_defaults() -> None:
+    from selfrionette.input_sources.viewer import (
+        DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS as CompatibilityTimeout,
+        DEFAULT_VIEWER_SAFE_ENDPOINT_M as CompatibilityEndpoint,
+        ViewerInputSource as CompatibilityViewerInputSource,
+    )
+
+    assert CompatibilityViewerInputSource is ViewerInputSource
+    assert CompatibilityTimeout is DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS
+    assert CompatibilityEndpoint is DEFAULT_VIEWER_SAFE_ENDPOINT_M
+    assert DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS == 250
+    assert DEFAULT_VIEWER_SAFE_ENDPOINT_M == (0.6, 0.0, 0.1)
 
 
 def keyboard_message(

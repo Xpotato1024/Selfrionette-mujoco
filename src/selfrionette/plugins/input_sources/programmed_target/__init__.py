@@ -2,8 +2,14 @@
 
 from collections.abc import Mapping
 
-from selfrionette.input_sources.programmed_target import build_sweep_x_input_source
 from selfrionette.plugins.input_sources._common import FrameHealthReader
+from selfrionette.plugins.input_sources.programmed_target.source import (
+    ProgrammedTargetFrame,
+    ProgrammedTargetInputSource,
+    ProgrammedTargetTrajectory,
+    build_sweep_x_input_source,
+    build_sweep_x_trajectory,
+)
 from selfrionette.runtime.experiment.input_source import InputSourceHealth, InputSourceHealthStatus
 from selfrionette.schemas import RawInputFrame
 
@@ -45,4 +51,12 @@ def build_reader(parameters: Mapping[str, object]) -> FrameHealthReader:
     )
 
 
-__all__ = ["build_frames", "build_reader"]
+__all__ = [
+    "ProgrammedTargetFrame",
+    "ProgrammedTargetInputSource",
+    "ProgrammedTargetTrajectory",
+    "build_frames",
+    "build_reader",
+    "build_sweep_x_input_source",
+    "build_sweep_x_trajectory",
+]

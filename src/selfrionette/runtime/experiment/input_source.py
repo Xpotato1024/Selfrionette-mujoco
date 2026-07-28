@@ -1,9 +1,9 @@
 """Generic versioned Input Source Plugin contracts.
 
 This module deliberately owns no concrete device, robot, task, or viewer
-implementation. Existing ``InputSource`` remains the runtime reader
-compatibility boundary; this module adds the versioned composition metadata
-and optional lifecycle capability around it.
+implementation. ``InputSource`` is the canonical generic runtime reader
+contract; this module also owns the versioned composition metadata and
+optional lifecycle capability around it.
 """
 
 from __future__ import annotations
@@ -15,12 +15,19 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 
-from selfrionette.input_sources.base import InputSource
 from selfrionette.runtime.experiment.contracts import (
     ParameterContract,
     VersionedIdentity,
 )
 from selfrionette.schemas import RawInputFrame, ViewerControlMessage
+
+
+@runtime_checkable
+class InputSource(Protocol):
+    """Structural runtime reader contract for raw input frames."""
+
+    def read_frame(self) -> RawInputFrame:
+        ...
 
 
 class InputSourceMode(str, Enum):
