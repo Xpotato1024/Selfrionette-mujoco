@@ -85,7 +85,6 @@ def test_runtime_public_surface_is_minimal_and_catalog_aware() -> None:
 
     assert set(runtime.__all__) == {
         "RuntimeConfig",
-        "RuntimePipeline",
         "registered_robot_bundle_ids",
         "registered_robot_runtime_plugin_ids",
         "resolve_robot_bundle",

@@ -6,8 +6,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOTS = (
-    "selfrionette.input_sources",
-    "selfrionette.input_interpreters",
     "selfrionette.kinematics",
     "selfrionette.motion",
     "selfrionette.mujoco_backend",
@@ -37,18 +35,6 @@ def test_package_root_all_excludes_stub_exports() -> None:
         exported = tuple(getattr(module, "__all__", ()))
         forbidden = [name for name in exported if name.startswith(FORBIDDEN_PREFIXES)]
         assert not forbidden, f"{module_name} exports stub names from package root: {forbidden}"
-
-
-def test_input_sources_package_root_exports_programmed_target_input_source() -> None:
-    module = importlib.import_module("selfrionette.input_sources")
-    assert "ProgrammedTargetInputSource" in module.__all__
-    assert "build_sweep_x_input_source" in module.__all__
-    assert "build_sweep_x_trajectory" not in module.__all__
-    assert hasattr(module, "ProgrammedTargetInputSource")
-    assert hasattr(module, "build_sweep_x_input_source")
-    assert not hasattr(module, "build_sweep_x_trajectory")
-    assert "StaticInputSource" not in module.__all__
-    assert not hasattr(module, "StaticInputSource")
 
 
 def test_stub_modules_export_only_stub_classes_in_all() -> None:

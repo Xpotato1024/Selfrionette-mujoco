@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 canonical_for:
   - R7-A-lite serial frame contract
 related:
@@ -10,7 +10,7 @@ related:
 
 # R7-A-lite Serial Frame契約
 
-Current ownership: serial parsing, diagnostic accumulation, 7-channel acquisition, and intrinsic normalization remain source-owned. Channel-axis weights, gain, endpoint delta, and MotionCommand conversion are canonical in `src/selfrionette/plugins/mappings/loadcell.py`; `input_sources/loadcell_serial.py` only preserves the public compatibility facade and dry-run orchestration.
+Current ownership: serial parsing, diagnostic accumulation, 7-channel acquisition, and intrinsic normalization are canonical in `src/selfrionette/plugins/input_sources/_loadcell/`. Channel-axis weights, gain, endpoint delta, and MotionCommand conversion are canonical in `src/selfrionette/plugins/mappings/loadcell.py`. Offline dry-run orchestration is owned by `src/selfrionette/runtime/runners/loadcell_serial_dry_run.py` and requires an explicit versioned mapping.
 
 P3ではserial parserと7-channel `RawInputFrame` acquisitionを`loadcell_serial` plugin registrationへ
 接続し、recorded linesは`loadcell_fixture`として同じparserと`loadcell_vector_sample/v1`を使用する。

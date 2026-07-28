@@ -7,7 +7,6 @@ from importlib import import_module
 
 _PUBLIC_EXPORTS = {
     "RuntimeConfig": ("selfrionette.runtime.composition.config", "RuntimeConfig"),
-    "RuntimePipeline": ("selfrionette.runtime.execution.pipeline", "RuntimePipeline"),
     "registered_robot_bundle_ids": (
         "selfrionette.plugins.catalog",
         "registered_robot_bundle_ids",

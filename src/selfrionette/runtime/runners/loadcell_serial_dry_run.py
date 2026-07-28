@@ -17,11 +17,10 @@ from selfrionette.plugins.input_sources._loadcell import (
 )
 from selfrionette.plugins.mappings.loadcell import (
     LoadcellEndpointMappingConfig,
-    LoadcellEndpointMotionCommandConverter,
     build_r7_a_lite_smoke_endpoint_mapping_config,
 )
 from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
-from selfrionette.runtime.experiment.contracts import PluginSelection
+from selfrionette.runtime.experiment.contracts import ControlMappingPlugin, PluginSelection
 from selfrionette.schemas import InputIntent, MotionCommand, RawInputFrame
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -45,16 +44,15 @@ def run_loadcell_serial_dry_run_smoke(
     normalization_config: LoadcellNormalizationConfig | None = None,
     endpoint_config: LoadcellEndpointMappingConfig | None = None,
     current_tip_position_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    mapping_plugin: object | None = None,
+    mapping_plugin: ControlMappingPlugin,
     mapping_parameters: Mapping[str, object] | None = None,
 ) -> LoadcellSerialDryRunSmokeResult:
-    """Run recorded loadcell frames with a canonical mapping or public fallback."""
+    """Run recorded loadcell frames with an explicit versioned mapping."""
 
     if max_vectors < 1:
         raise ValueError("max_vectors must be a positive integer")
 
     normalized_converter = LoadcellNormalizedInputIntentConverter(normalization_config)
-    endpoint_converter = LoadcellEndpointMotionCommandConverter(endpoint_config)
     selected_mapping_parameters = (
         {
             "mapping_config": endpoint_config or {},
@@ -63,11 +61,9 @@ def run_loadcell_serial_dry_run_smoke(
         if mapping_parameters is None
         else mapping_parameters
     )
-    if mapping_plugin is not None:
-        normalize_parameters = getattr(mapping_plugin, "normalize_parameters", None)
-        if not callable(normalize_parameters):
-            raise TypeError("loadcell mapping plugin must expose normalize_parameters")
-        selected_mapping_parameters = normalize_parameters(selected_mapping_parameters)
+    selected_mapping_parameters = mapping_plugin.normalize_parameters(
+        selected_mapping_parameters
+    )
     source = SerialInputSource.from_lines(lines)
 
     frames_read = 0
@@ -86,26 +82,16 @@ def run_loadcell_serial_dry_run_smoke(
         vectors_read += 1
         last_raw_frame = raw_frame
         last_normalized_intent = normalized_converter.convert(raw_frame)
-        if mapping_plugin is None:
-            last_motion_command = endpoint_converter.convert(
-                last_normalized_intent,
-                current_tip_position_m=current_tip_position_m,
-            )
-        else:
-            strategy = getattr(mapping_plugin, "strategy", None)
-            map_input = getattr(strategy, "map_input", None)
-            if not callable(map_input):
-                raise TypeError("loadcell mapping plugin must expose strategy.map_input")
-            mapped_intent = map_input(
-                last_normalized_intent,
-                selected_mapping_parameters,
-            )
-            if not isinstance(mapped_intent, InputIntent):
-                raise TypeError("loadcell mapping strategy returned an invalid input intent")
-            last_motion_command = MotionCommand(
-                timestamp_s=mapped_intent.timestamp_s,
-                metadata=mapped_intent.metadata,
-            )
+        mapped_intent = mapping_plugin.strategy.map_input(
+            last_normalized_intent,
+            selected_mapping_parameters,
+        )
+        if not isinstance(mapped_intent, InputIntent):
+            raise TypeError("loadcell mapping strategy returned an invalid input intent")
+        last_motion_command = MotionCommand(
+            timestamp_s=mapped_intent.timestamp_s,
+            metadata=mapped_intent.metadata,
+        )
 
     return LoadcellSerialDryRunSmokeResult(
         frames_read=frames_read,

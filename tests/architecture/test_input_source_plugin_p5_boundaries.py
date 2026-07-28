@@ -19,53 +19,6 @@ PRODUCTION_SOURCE_IDS = set(INPUT_SOURCE_CATALOG.ids)
 SOURCE_PACKAGE_ROOT = SRC / "plugins" / "input_sources"
 TEST_SOURCE_PACKAGE_ROOT = ROOT / "tests" / "plugins" / "input_sources"
 MAPPING_TEST_ROOT = ROOT / "tests" / "plugins" / "mappings"
-MAPPING_COMPATIBILITY_FACADES = {
-    "keyboard.py",
-    "continuous_endpoint_velocity.py",
-    "analog_fixture.py",
-    "loadcell_serial.py",
-    "replay.py",
-}
-MOVED_CONCRETE_OLD_MODULES = {
-    "selfrionette.input_sources.analog_fixture",
-    "selfrionette.input_sources.loadcell_serial",
-    "selfrionette.input_sources.programmed_target",
-    "selfrionette.input_sources.replay",
-    "selfrionette.input_sources.viewer",
-}
-MOVED_IMPLEMENTATION_SYMBOLS = {
-    "AnalogFixtureSample",
-    "DEFAULT_SWEEP_X_DT_S",
-    "DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES",
-    "DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES",
-    "DEFAULT_SWEEP_X_INITIAL_POSITION_M",
-    "DEFAULT_SWEEP_X_MOVE_FRAMES",
-    "DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M",
-    "DEFAULT_SWEEP_X_RETURN_FRAMES",
-    "DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES",
-    "DEFAULT_VIEWER_INPUT_COMMAND_TIMEOUT_MS",
-    "DEFAULT_VIEWER_SAFE_ENDPOINT_M",
-    "InputSource",
-    "LoadcellNormalizationConfig",
-    "LoadcellNormalizedInputIntentConverter",
-    "NormalizedLoadcellInputIntent",
-    "ProgrammedTargetFrame",
-    "ProgrammedTargetInputSource",
-    "ProgrammedTargetTrajectory",
-    "RawLoadcellVectorRecord",
-    "ReplayInputSource",
-    "SerialDiagnosticEvent",
-    "SerialFrameParseError",
-    "SerialInputSource",
-    "ViewerInputSource",
-    "build_sweep_x_input_source",
-    "build_sweep_x_trajectory",
-    "normalize_loadcell_frame_for_mapping",
-    "parse_analog_fixture_sample",
-    "parse_serial_frame_line",
-}
-
-
 def _modules(tree: ast.AST) -> tuple[str, ...]:
     values: list[str] = []
     for node in ast.walk(tree):
@@ -154,33 +107,13 @@ def test_mapping_tests_use_canonical_mapping_owners() -> None:
     for relative, module in (
         ("analog_fixture", "selfrionette.plugins.mappings.analog_fixture"),
         ("loadcell", "selfrionette.plugins.mappings.loadcell"),
+        ("replay", "selfrionette.plugins.mappings.replay"),
         ("viewer", "selfrionette.plugins.mappings.keyboard"),
     ):
         owner_tests = tuple((MAPPING_TEST_ROOT / relative).rglob("test_*.py"))
         assert owner_tests, relative
         assert any(module in _modules(_parse(path)) for path in owner_tests), module
     assert not violations
-
-
-def test_input_source_to_mapping_reverse_dependency_is_allowlisted_to_facades() -> None:
-    violations: list[str] = []
-    facade_paths = {
-        SRC / "input_sources" / name for name in MAPPING_COMPATIBILITY_FACADES
-    }
-    for path in (SRC / "input_sources").rglob("*.py"):
-        for module in _modules(_parse(path)):
-            if module.startswith("selfrionette.plugins.mappings") and path not in facade_paths:
-                violations.append(f"{path}:{module}")
-    assert not violations
-    expected_facade_imports = {
-        "analog_fixture.py": "selfrionette.plugins.mappings.analog_fixture",
-        "continuous_endpoint_velocity.py": "selfrionette.plugins.mappings.continuous_endpoint_velocity",
-        "keyboard.py": "selfrionette.plugins.mappings.keyboard",
-        "loadcell_serial.py": "selfrionette.plugins.mappings.loadcell",
-        "replay.py": "selfrionette.plugins.mappings.replay",
-    }
-    for filename, canonical_module in expected_facade_imports.items():
-        assert canonical_module in (SRC / "input_sources" / filename).read_text(encoding="utf-8")
 
 
 def test_each_production_source_has_a_plugin_local_test_owner() -> None:
@@ -275,15 +208,6 @@ def test_canonical_source_code_has_no_robot_evaluation_or_mapping_dependency() -
     assert not violations
 
 
-def test_plugin_packages_do_not_import_moved_concrete_old_source_modules() -> None:
-    violations: list[str] = []
-    for path in SOURCE_PACKAGE_ROOT.rglob("*.py"):
-        for module in _modules(_parse(path)):
-            if module in MOVED_CONCRETE_OLD_MODULES:
-                violations.append(f"{path}:{module}")
-    assert not violations
-
-
 def test_loadcell_plugins_share_deliberate_owner_without_private_cross_imports() -> None:
     for source_id in ("loadcell_fixture", "loadcell_serial"):
         modules = {
@@ -298,22 +222,6 @@ def test_loadcell_plugins_share_deliberate_owner_without_private_cross_imports()
             )
             for module in modules
         )
-
-
-def test_old_source_modules_are_implementation_free_compatibility_facades() -> None:
-    facade_paths = (
-        SRC / "input_sources" / "analog_fixture.py",
-        SRC / "input_sources" / "base.py",
-        SRC / "input_sources" / "programmed_target.py",
-        SRC / "input_sources" / "replay.py",
-        SRC / "input_sources" / "viewer.py",
-        SRC / "input_sources" / "loadcell_serial.py",
-    )
-    for path in facade_paths:
-        duplicate_symbols = (
-            _defined_top_level_symbols(path) & MOVED_IMPLEMENTATION_SYMBOLS
-        )
-        assert not duplicate_symbols, f"{path}:{sorted(duplicate_symbols)}"
 
 
 def test_viewer_defaults_have_one_definition_and_no_keyboard_gamepad_source_plugins() -> None:
@@ -384,41 +292,12 @@ def test_mapping_plugin_import_graph_does_not_acquire_devices_or_browser() -> No
     assert not violations
 
 
-def test_legacy_registry_is_retained_only_as_a_low_level_compatibility_boundary() -> None:
-    registry_path = SRC / "input_sources" / "registry.py"
-    registry_text = registry_path.read_text(encoding="utf-8")
-    assert "plugins.input_sources.catalog" in registry_text or "production runtime selection source of truth" in registry_text
-    assert "INPUT_SOURCE_CATALOG" not in registry_text
-    for root in (SRC / "runtime", SRC / "plugins"):
-        for path in root.rglob("*.py"):
-            assert "selfrionette.input_sources.registry" not in path.read_text(encoding="utf-8"), path
-
-
 def test_retired_execution_fallback_has_no_duplicate_implementation() -> None:
     source_text = "\n".join(
         path.read_text(encoding="utf-8")
         for path in (SRC / "runtime").rglob("*.py")
     )
     assert "compatibility_execution_adapter" not in source_text
-
-
-def test_legacy_direct_runner_default_path_is_bounded_and_golden_compatible() -> None:
-    for relative in (
-        "scripts/compatibility/run_replay_mujoco_dry_run.py",
-        "scripts/compatibility/run_replay_mujoco_websocket_publisher.py",
-    ):
-        path = ROOT / relative
-        text = path.read_text(encoding="utf-8")
-        tree = ast.parse(text, filename=str(path))
-        assert "if args.input_source is None:" in text
-        assert any(
-            isinstance(node, ast.Compare)
-            and isinstance(node.left, ast.Attribute)
-            and node.left.attr == "input_source"
-            and any(isinstance(item, ast.Constant) and item.value is None for item in node.comparators)
-            for node in ast.walk(tree)
-        )
-        assert "run_replay_mujoco_" in text
 
 
 def test_test_only_dummy_is_not_visible_to_production_source_code_or_cli() -> None:

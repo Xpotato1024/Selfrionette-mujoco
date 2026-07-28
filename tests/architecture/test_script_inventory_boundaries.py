@@ -23,8 +23,6 @@ EXPECTED_SCRIPTS = {
     "scripts/viewer/export_wasm_qpos_fixture.py",
     "scripts/viewer/run_live_viewer_smoke.py",
     "scripts/viewer/run-browser-viewer-smoke.ps1",
-    "scripts/compatibility/run_replay_mujoco_dry_run.py",
-    "scripts/compatibility/run_replay_mujoco_websocket_publisher.py",
     "scripts/repository/validate_github_body_structure.py",
     "scripts/repository/validate_markdown_docs.py",
 }

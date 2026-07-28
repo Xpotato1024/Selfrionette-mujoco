@@ -19,7 +19,15 @@ def test_frontend_keyboard_capture_exposes_only_key_allowlist_semantics() -> Non
 
 
 def test_backend_viewer_source_has_no_control_mapping_import_or_algorithm() -> None:
-    path = ROOT / "src" / "selfrionette" / "input_sources" / "viewer.py"
+    path = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "plugins"
+        / "input_sources"
+        / "viewer"
+        / "source.py"
+    )
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
     imported_modules = {

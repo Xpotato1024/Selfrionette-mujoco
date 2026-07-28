@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-27
+last_verified: 2026-07-28
 canonical_for:
   - runtime composition root
 related:
@@ -29,8 +29,8 @@ related:
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
 | `runners/` | 現行operational dry-run / smoke / publisher entry point |
 
-`runtime.__init__`は`RuntimeConfig`、C4までのpublic compatibility objectである`RuntimePipeline`、
-既存catalog resolver 5件だけをlazy exportする。
+`runtime.__init__`は`RuntimeConfig`と既存catalog resolver 5件だけをlazy exportする。
+interpreter-based `RuntimePipeline`はC4で退役し、`ControlMappedRuntimePipeline`だけをexecution ownerに残す。
 contractやrunnerをpackage rootからre-exportしない。catalog access前のlazy-load、resolved Bundleのtyped
 provider identity、plugin identityはこの移動で変更しない。
 
@@ -113,9 +113,8 @@ healthを呼出しごとに検証する。production runtime selectionのSoTは
 `plugins/input_sources/catalog.py`であり、selectionはaliasから`PluginSelection`、resolved plugin、sample schema、
 validated reader、typed execution adapterへ一度だけ解決する。
 
-`input_sources/registry.py`は既存低位descriptor APIのsignatureとframe behaviorだけを維持するcompatibility
-boundaryであり、plugin catalogをimportまたはprojectionしない。source behaviorとdefaultはcanonical
-plugin source ownerを参照する。source固有のpreset、custom frame、factory
+旧`input_sources/registry.py`はC4で退役した。source selection SoTは
+`plugins/input_sources/catalog.py`だけであり、source固有のpreset、custom frame、factory
 parameterはproduction registrationのrequest builderが所有する。plugin-backed primary pathはsource IDを比較せず、
 registrationが保持するexecution adapterを必須とする。adapter欠落はfail-closedであり、source-name tableを持つ
 `compatibility_execution_adapter()`はproduction/public callerがないことを確認して退役した。
@@ -187,8 +186,10 @@ effective mapping-input schemaだけを`replay_raw_input_frame/v1`としてversi
 legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping実装へ分岐しない。C2では
 source-owned implementationを`plugins/input_sources/`へ集約した。C3ではproduction/internal consumerを
 catalog、typed mapping selection、`ControlMappedRuntimePipeline`へ収束させた。
-`src/selfrionette/input_sources/`、`input_interpreters/`、interpreter-based `RuntimePipeline`、public helper、
-observable parityが未成立のcompatibility scriptはpublic compatibilityとしてC4まで残す。
+public compatibility evidenceの監査後、C4はimmediate removalを採用した。
+`src/selfrionette/input_sources/`、`input_interpreters/`、interpreter-based `RuntimePipeline`、old-path helper、
+compatibility scriptを退役した。canonical CLIの`--robot` requirement、validation wording、runtime behaviorへ
+wrapper parityを逆流させない。
 
 raw gamepad sampleでは`raw_axes`をmappingのauthoritative inputとして保持する一方、gamepad/v1の
 `zero_state`、`source_active`、heartbeatはlegacy projected `axes`とbuttonsに基づくobservable semanticsを
@@ -215,8 +216,8 @@ hold safety、malformed ingressの即時`invalid`遷移を維持する。
 
 この文書はcurrent responsibility boundaryを固定し、does not perform a broad runtime rewrite。
 fast_arm固有diagnosticsは`plugins/robots/fast_arm/adapter/diagnostics/`が所有し、generic runtime public surfaceや
-plugin discovery entry pointからeager importしない。production builderは`ControlMappedRuntimePipeline`を構築し、
-interpreter-based `RuntimePipeline`を使わない。test-only mapped wiringは`tests/support/`が所有する。
+plugin discovery entry pointからeager importしない。production builderは`ControlMappedRuntimePipeline`を構築する。
+test-only mapped wiringは`tests/support/`が所有する。
 pre-audit composition chronologyとrefactor proposalは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
 ### #461 final audit correction (2026-07-26)
@@ -227,4 +228,4 @@ source activity / healthとmappingが生成するcommand zeroは別概念であ�
 projectionはobservable source activityの互換条件として維持し、button-only sample、disconnect、hidden、
 blur、stale、invalidの既存hold safetyも維持する。
 
-Control Mapping parametersの優先順位は、`explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults`である。selectionはcallerが明示したparameter keyを保持し、暗黙defaultと区別したうえでplan readiness時にtyped compatibility capabilityを合成する。C3ではrepository内部のlegacy interpreter / mapping facade fallbackを退役し、public compatibility retirementだけをC4へ残す。
+Control Mapping parametersの優先順位は、`explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults`である。selectionはcallerが明示したparameter keyを保持し、暗黙defaultと区別したうえでplan readiness時にtyped compatibility capabilityを合成する。C4ではpublic compatibility surfaceも退役し、canonical ownerへのdirect pathだけを残した。

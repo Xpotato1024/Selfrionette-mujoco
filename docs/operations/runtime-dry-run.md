@@ -43,7 +43,7 @@ file は JSON array ではなく UTF-8、LF の NDJSON である。`frame_index`
 `replay --input-source`は`programmed_target`、`replay`、`noop`だけを受理する。
 viewer ingress lifecycleを実行しないため、`replay --input-source viewer`は受理しない。
 
-## Internal pathとpublic compatibility
+## Internal path
 
 production/internal source selectionはinstallable CLIからcatalogとversioned mappingを解決する。
-旧scriptはpublic compatibilityとしてC4まで残るが、current operator手順では使用しない。
+旧compatibility scriptはC4で退役し、`selfrionette replay`だけをcurrent operator entry pointとする。
