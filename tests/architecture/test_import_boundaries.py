@@ -8,60 +8,49 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = ROOT / "src" / "selfrionette"
 
 FORBIDDEN_IMPORTS = {
-    "input_sources": [
+    Path("plugins/input_sources"): [
+        "selfrionette.plugins.mappings",
         "selfrionette.motion",
         "selfrionette.kinematics",
         "selfrionette.mujoco_backend",
         "selfrionette.transport",
-        "selfrionette.runtime",
     ],
-    "input_interpreters": [
-        "selfrionette.input_sources",
+    Path("plugins/mappings"): [
+        "selfrionette.plugins.input_sources",
         "selfrionette.motion",
         "selfrionette.kinematics",
         "selfrionette.mujoco_backend",
         "selfrionette.transport",
-        "selfrionette.runtime",
     ],
-    "motion": [
-        "selfrionette.input_sources",
-        "selfrionette.input_interpreters",
+    Path("motion"): [
+        "selfrionette.plugins.input_sources",
+        "selfrionette.plugins.mappings",
         "selfrionette.mujoco_backend",
         "selfrionette.transport",
         "selfrionette.runtime",
     ],
-    "kinematics": [
-        "selfrionette.input_sources",
-        "selfrionette.input_interpreters",
+    Path("kinematics"): [
+        "selfrionette.plugins.input_sources",
+        "selfrionette.plugins.mappings",
         "selfrionette.mujoco_backend",
         "selfrionette.transport",
         "selfrionette.runtime",
     ],
-    "mujoco_backend": [
-        "selfrionette.input_sources",
-        "selfrionette.input_interpreters",
+    Path("mujoco_backend"): [
+        "selfrionette.plugins.input_sources",
+        "selfrionette.plugins.mappings",
         "selfrionette.motion",
         "selfrionette.transport",
         "selfrionette.runtime",
     ],
-    "transport": [
-        "selfrionette.input_sources",
-        "selfrionette.input_interpreters",
+    Path("transport"): [
+        "selfrionette.plugins.input_sources",
+        "selfrionette.plugins.mappings",
         "selfrionette.motion",
         "selfrionette.kinematics",
         "selfrionette.mujoco_backend",
         "selfrionette.runtime",
     ],
-}
-ALLOWED_COMPATIBILITY_IMPORTS = {
-    (
-        Path("input_sources/base.py"),
-        "selfrionette.runtime.experiment.input_source",
-    ),
-    (
-        Path("input_sources/loadcell_serial.py"),
-        "selfrionette.runtime.runners.loadcell_serial_dry_run",
-    ),
 }
 
 
@@ -81,14 +70,11 @@ def iter_imports(path: Path) -> list[str]:
 def test_import_boundaries() -> None:
     violations: list[str] = []
 
-    for layer, forbidden_prefixes in FORBIDDEN_IMPORTS.items():
-        for path in (SRC_ROOT / layer).rglob("*.py"):
+    for layer_path, forbidden_prefixes in FORBIDDEN_IMPORTS.items():
+        for path in (SRC_ROOT / layer_path).rglob("*.py"):
             for imported in iter_imports(path):
                 for forbidden in forbidden_prefixes:
                     if imported.startswith(forbidden):
-                        relative_path = path.relative_to(SRC_ROOT)
-                        if (relative_path, imported) in ALLOWED_COMPATIBILITY_IMPORTS:
-                            continue
                         violations.append(
                             f"{path.relative_to(ROOT)} imports {imported}; "
                             f"forbidden prefix: {forbidden}"

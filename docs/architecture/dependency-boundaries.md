@@ -123,44 +123,42 @@ generic schema / domain / Protocol
 禁止するdependency:
 
 ```text
-input_sources       -> motion
-input_sources       -> kinematics
-input_sources       -> mujoco_backend
-input_sources       -> transport
-input_sources       -> runtime
-input_sources       -> plugins
+plugins/input_sources -> plugins/mappings
+plugins/input_sources -> motion
+plugins/input_sources -> kinematics
+plugins/input_sources -> mujoco_backend
+plugins/input_sources -> transport
 
-input_interpreters  -> input_sources
-input_interpreters  -> motion
-input_interpreters  -> kinematics
-input_interpreters  -> mujoco_backend
-input_interpreters  -> transport
-input_interpreters  -> runtime
+plugins/mappings      -> plugins/input_sources
+plugins/mappings      -> motion
+plugins/mappings      -> kinematics
+plugins/mappings      -> mujoco_backend
+plugins/mappings      -> transport
 
-motion              -> input_sources
-motion              -> input_interpreters
-motion              -> mujoco_backend
-motion              -> transport
-motion              -> runtime
+motion                -> plugins/input_sources
+motion                -> plugins/mappings
+motion                -> mujoco_backend
+motion                -> transport
+motion                -> runtime
 
-kinematics          -> input_sources
-kinematics          -> input_interpreters
-kinematics          -> mujoco_backend
-kinematics          -> transport
-kinematics          -> runtime
+kinematics            -> plugins/input_sources
+kinematics            -> plugins/mappings
+kinematics            -> mujoco_backend
+kinematics            -> transport
+kinematics            -> runtime
 
-mujoco_backend      -> input_sources
-mujoco_backend      -> input_interpreters
-mujoco_backend      -> motion
-mujoco_backend      -> transport
-mujoco_backend      -> runtime
+mujoco_backend        -> plugins/input_sources
+mujoco_backend        -> plugins/mappings
+mujoco_backend        -> motion
+mujoco_backend        -> transport
+mujoco_backend        -> runtime
 
-transport           -> input_sources
-transport           -> input_interpreters
-transport           -> motion
-transport           -> kinematics
-transport           -> mujoco_backend
-transport           -> runtime
+transport             -> plugins/input_sources
+transport             -> plugins/mappings
+transport             -> motion
+transport             -> kinematics
+transport             -> mujoco_backend
+transport             -> runtime
 ```
 
 これらの境界を変更する場合は、この文書、import boundary test、PRのArchitecture Impactを
