@@ -4,7 +4,6 @@ import ast
 from pathlib import Path
 
 import selfrionette as selfrionette_package
-import selfrionette.input_sources as input_sources
 import selfrionette.kinematics as kinematics
 import selfrionette.motion as motion
 import selfrionette.mujoco_backend as mujoco_backend
@@ -36,7 +35,6 @@ DOUBLE_EXPORT_NAMES = {
 }
 PRODUCTION_PACKAGES = (
     selfrionette_package,
-    input_sources,
     kinematics,
     motion,
     mujoco_backend,

@@ -10,23 +10,20 @@ from selfrionette.plugins.mappings.catalog import (
     CONTROL_MAPPING_PLUGINS,
     CONTROL_MAPPING_REGISTRY,
 )
+from selfrionette.runtime.experiment.contracts import VersionedIdentity
+from selfrionette.runtime.experiment.input_source import InputSourceMode
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "selfrionette"
-OLD_MODULE_PREFIXES = (
-    "selfrionette.input_sources.registry",
+OLD_PACKAGE_PREFIXES = (
+    "selfrionette.input_sources",
     "selfrionette.input_interpreters",
-    "selfrionette.input_sources.keyboard",
-    "selfrionette.input_sources.continuous_endpoint_velocity",
-    "selfrionette.input_sources.analog_fixture",
-    "selfrionette.input_sources.loadcell_serial",
-    "selfrionette.input_sources.replay",
 )
-FACADE_SELF_WIRING = {
-    SRC / "input_sources" / "__init__.py",
-    SRC / "input_interpreters" / "__init__.py",
-}
+COMPATIBILITY_PACKAGE_ROOTS = (
+    SRC / "input_sources",
+    SRC / "input_interpreters",
+)
 PUBLIC_COMPATIBILITY_TEST_ROOTS = (
     ROOT / "tests" / "compatibility",
     ROOT / "tests" / "input_interpreters",
@@ -60,10 +57,10 @@ def _imported_modules(path: Path) -> tuple[str, ...]:
     return tuple(modules)
 
 
-def _uses_old_module(module: str) -> bool:
+def _uses_old_package(module: str) -> bool:
     return any(
         module == prefix or module.startswith(f"{prefix}.")
-        for prefix in OLD_MODULE_PREFIXES
+        for prefix in OLD_PACKAGE_PREFIXES
     )
 
 
@@ -71,25 +68,27 @@ def _is_public_compatibility_test(path: Path) -> bool:
     return any(path.is_relative_to(root) for root in PUBLIC_COMPATIBILITY_TEST_ROOTS)
 
 
-def test_old_imports_are_bounded_to_facade_wiring_and_public_compatibility_tests() -> None:
+def _is_compatibility_package_internal(path: Path) -> bool:
+    return any(path.is_relative_to(root) for root in COMPATIBILITY_PACKAGE_ROOTS)
+
+
+def test_old_package_imports_are_bounded_to_package_internals_and_public_compatibility_tests() -> None:
     violations: list[str] = []
     for root in (ROOT / "src", ROOT / "scripts", ROOT / "tests"):
         for path in root.rglob("*.py"):
-            if path in FACADE_SELF_WIRING or _is_public_compatibility_test(path):
+            if _is_compatibility_package_internal(path) or _is_public_compatibility_test(path):
                 continue
             for module in _imported_modules(path):
-                if _uses_old_module(module):
+                if _uses_old_package(module):
                     violations.append(f"{path.relative_to(ROOT)}:{module}")
     assert not violations, "\n".join(violations)
 
 
-def test_production_runtime_has_no_interpreter_or_old_registry_dependency() -> None:
+def test_production_runtime_has_no_old_package_dependency() -> None:
     violations: list[str] = []
     for path in (SRC / "runtime").rglob("*.py"):
         for module in _imported_modules(path):
-            if module.startswith("selfrionette.input_interpreters") or module.startswith(
-                "selfrionette.input_sources.registry"
-            ):
+            if _uses_old_package(module):
                 violations.append(f"{path.relative_to(ROOT)}:{module}")
     assert not violations, "\n".join(violations)
 
@@ -127,6 +126,21 @@ def test_current_operator_docs_do_not_reference_compatibility_scripts() -> None:
         if "scripts/compatibility/" in path.read_text(encoding="utf-8")
     ]
     assert not violations
+
+
+def test_current_cli_docs_match_command_specific_input_source_choices() -> None:
+    unified_cli = (ROOT / "docs" / "operations" / "unified-cli.md").read_text(
+        encoding="utf-8"
+    )
+    runtime_dry_run = (
+        ROOT / "docs" / "operations" / "runtime-dry-run.md"
+    ).read_text(encoding="utf-8")
+
+    replay_choices = "`programmed_target` / `replay` / `noop`"
+    viewer_choices = "`programmed_target` / `replay` / `noop` / `viewer`"
+    assert replay_choices in unified_cli
+    assert viewer_choices in unified_cli
+    assert "`replay --input-source viewer`は受理しない" in runtime_dry_run
 
 
 def test_catalog_and_mapping_identities_remain_canonical() -> None:
@@ -169,6 +183,72 @@ def test_catalog_and_mapping_identities_remain_canonical() -> None:
         "replay_mapping/v1",
         "viewer_keyboard_gamepad_mapping/v1",
     )
+
+
+def test_source_contracts_are_preserved_while_c3_adapters_are_explicit() -> None:
+    expected = {
+        "programmed_target": (
+            VersionedIdentity("programmed_target_sample", 1),
+            InputSourceMode.OFFLINE,
+            VersionedIdentity("target_metadata_input_execution", 1),
+            VersionedIdentity("replay_raw_input_frame", 1),
+        ),
+        "replay": (
+            VersionedIdentity("replay_raw_input_frame", 1),
+            InputSourceMode.REPLAY,
+            VersionedIdentity("replay_compatibility_input_execution", 1),
+            VersionedIdentity("replay_raw_input_frame", 1),
+        ),
+        "noop": (
+            VersionedIdentity("noop_sample", 1),
+            InputSourceMode.OFFLINE,
+            VersionedIdentity("replay_compatibility_input_execution", 1),
+            VersionedIdentity("replay_raw_input_frame", 1),
+        ),
+        "viewer": (
+            VersionedIdentity("viewer_control_sample", 1),
+            InputSourceMode.VIEWER_BRIDGE,
+            VersionedIdentity("viewer_local_endpoint_input_execution", 1),
+            VersionedIdentity("viewer_control_sample", 1),
+        ),
+        "loadcell_serial": (
+            VersionedIdentity("loadcell_vector_sample", 1),
+            InputSourceMode.LIVE,
+            VersionedIdentity("loadcell_input_execution", 1),
+            VersionedIdentity("loadcell_normalized_input_intent", 1),
+        ),
+        "loadcell_fixture": (
+            VersionedIdentity("loadcell_vector_sample", 1),
+            InputSourceMode.REPLAY,
+            VersionedIdentity("loadcell_input_execution", 1),
+            VersionedIdentity("loadcell_normalized_input_intent", 1),
+        ),
+        "analog_fixture": (
+            VersionedIdentity("analog_fixture_sample", 1),
+            InputSourceMode.REPLAY,
+            VersionedIdentity("analog_fixture_input_execution", 1),
+            VersionedIdentity("analog_fixture_sample", 1),
+        ),
+    }
+    actual = {
+        registration.plugin.identity.name: (
+            registration.plugin.produced_sample_schema_identity,
+            registration.plugin.source_mode,
+            registration.execution_adapter.identity,
+            registration.plugin.effective_mapping_input_sample_schema,
+        )
+        for registration in INPUT_SOURCE_CATALOG.registrations
+    }
+    assert actual == expected
+
+    registrations = {
+        registration.plugin.identity.name: registration
+        for registration in INPUT_SOURCE_CATALOG.registrations
+    }
+    assert registrations["programmed_target"].plugin.mapping_input_adapter is not None
+    assert registrations["noop"].plugin.mapping_input_adapter is not None
+    assert registrations["replay"].plugin.mapping_input_adapter is None
+    assert registrations["viewer"].plugin.mapping_input_adapter is None
 
 
 def test_each_production_source_has_an_explicit_versioned_mapping_selection() -> None:

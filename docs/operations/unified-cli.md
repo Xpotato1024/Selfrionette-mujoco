@@ -30,6 +30,13 @@ uv run selfrionette viewer --robot fast_arm --steps 18000 --input-source viewer
 | `replay` | `run_replay_mujoco_dry_run` | deterministic replay と payload v0 NDJSON 出力。`--input-source`で`programmed_target` / `replay` / `noop`をcatalog解決する |
 | `viewer` | `run_replay_mujoco_websocket_publisher` / `run_input_source_websocket_publisher` | replay payloadまたはtyped source step loopのWebSocket配信。`--input-source viewer`はviewer ingress lifecycleを有効にする |
 
+commandごとの`--input-source` choicesは次のとおりである。
+
+- `replay`: `programmed_target` / `replay` / `noop`
+- `viewer`: `programmed_target` / `replay` / `noop` / `viewer`
+
+`viewer` sourceはviewer ingressとruntime readerを必要とするため、`replay --input-source viewer`では受理しない。
+
 repository内部とcurrent operator手順はinstallable CLIだけを使用する。旧compatibility scriptは
 error/help surfaceの完全parityが未成立のpublic compatibilityとしてC4まで残すが、新しいcallerを追加しない。
 既存 Python API の既定値もcompatibilityのため変更しない。

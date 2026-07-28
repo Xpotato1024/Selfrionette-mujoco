@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from selfrionette import input_sources
 from selfrionette.plugins.input_sources.programmed_target import (
     ProgrammedTargetFrame,
     ProgrammedTargetInputSource,
@@ -26,18 +25,6 @@ def _build_trajectory() -> ProgrammedTargetTrajectory:
             ),
         ),
     )
-
-
-def test_programmed_target_input_source_is_importable_from_package_root() -> None:
-    from selfrionette.input_sources import (
-        ProgrammedTargetInputSource as CompatibilityProgrammedTargetInputSource,
-    )
-
-    assert CompatibilityProgrammedTargetInputSource is ProgrammedTargetInputSource
-    assert ProgrammedTargetInputSource is input_sources.ProgrammedTargetInputSource
-    assert "ProgrammedTargetInputSource" in input_sources.__all__
-    assert "StaticInputSource" not in input_sources.__all__
-    assert not hasattr(input_sources, "StaticInputSource")
 
 
 def test_programmed_target_input_source_emits_programmed_target_metadata() -> None:

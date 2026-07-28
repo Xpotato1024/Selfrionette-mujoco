@@ -20,6 +20,75 @@ class _BundleWithoutCapabilities:
         )
 
 
+def _input_source_choices(command: str) -> tuple[str, ...]:
+    parser = cli.build_parser()
+    subparsers = parser._subparsers
+    assert subparsers is not None
+    command_parser = subparsers._group_actions[0].choices[command]
+    action = next(
+        action
+        for action in command_parser._actions
+        if "--input-source" in action.option_strings
+    )
+    assert action.choices is not None
+    return tuple(action.choices)
+
+
+@pytest.mark.parametrize("source_name", ("programmed_target", "replay", "noop"))
+def test_replay_parser_accepts_offline_and_replay_input_sources(
+    source_name: str,
+) -> None:
+    args = cli.build_parser().parse_args(
+        ["replay", "--robot", "fast_arm", "--input-source", source_name]
+    )
+    assert args.input_source == source_name
+
+
+def test_replay_parser_rejects_viewer_with_argparse_exit_two(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(
+            ["replay", "--robot", "fast_arm", "--input-source", "viewer"]
+        )
+
+    assert exc_info.value.code == 2
+    error = capsys.readouterr().err
+    assert "invalid choice: 'viewer'" in error
+    assert "{programmed_target,replay,noop}" in error
+
+
+def test_viewer_parser_accepts_all_generic_input_source_aliases() -> None:
+    args = cli.build_parser().parse_args(
+        ["viewer", "--robot", "fast_arm", "--input-source", "viewer"]
+    )
+    assert args.input_source == "viewer"
+    assert _input_source_choices("viewer") == (
+        "programmed_target",
+        "replay",
+        "noop",
+        "viewer",
+    )
+
+
+def test_command_help_agrees_with_command_specific_parser_choices() -> None:
+    parser = cli.build_parser()
+    subparsers = parser._subparsers
+    assert subparsers is not None
+    commands = subparsers._group_actions[0].choices
+
+    assert _input_source_choices("replay") == (
+        "programmed_target",
+        "replay",
+        "noop",
+    )
+    assert "{programmed_target,replay,noop}" in commands["replay"].format_help()
+    assert (
+        "{programmed_target,replay,noop,viewer}"
+        in commands["viewer"].format_help()
+    )
+
+
 def test_help_is_deterministic(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["--help"])
@@ -87,7 +156,11 @@ def test_viewer_resolves_bundle_and_forwards_robot_selection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(cli, "resolve_robot_bundle", lambda robot_id: _BundleWithCapabilities())
+    monkeypatch.setattr(
+        cli,
+        "resolve_robot_bundle",
+        lambda robot_id: _BundleWithCapabilities(),
+    )
     monkeypatch.setattr(
         cli,
         "run_replay_mujoco_websocket_publisher",
@@ -97,6 +170,44 @@ def test_viewer_resolves_bundle_and_forwards_robot_selection(
     assert cli.main(["viewer", "--robot", "selected", "--port", "9000"]) == 0
     assert calls[0]["robot_profile_id"] == "selected"
     assert calls[0]["port"] == 9000
+
+
+def test_viewer_source_selection_uses_canonical_viewer_ingress_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(cli, "resolve_robot_bundle", lambda robot_id: _BundleWithCapabilities())
+    monkeypatch.setattr(
+        cli,
+        "run_input_source_websocket_publisher",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    assert (
+        cli.main(
+            [
+                "viewer",
+                "--robot",
+                "fast_arm",
+                "--input-source",
+                "viewer",
+            ]
+        )
+        == 0
+    )
+    assert calls == [
+        {
+            "host": "127.0.0.1",
+            "port": 8766,
+            "steps": 1,
+            "dt_s": 1.0 / 60.0,
+            "interval_s": 0.0,
+            "grace_period_s": 0.05,
+            "preset": None,
+            "robot_profile_id": "fast_arm",
+            "input_source": "viewer",
+        }
+    ]
 
 
 def test_runtime_failure_returns_one(

@@ -41,11 +41,3 @@ def test_replay_input_source_loops_back_to_start() -> None:
 def test_replay_input_source_rejects_empty_frames() -> None:
     with pytest.raises(ValueError, match="at least one frame"):
         ReplayInputSource(())
-
-
-def test_old_replay_path_re_exports_canonical_reader() -> None:
-    from selfrionette.input_sources import (
-        ReplayInputSource as CompatibilityReplayInputSource,
-    )
-
-    assert CompatibilityReplayInputSource is ReplayInputSource

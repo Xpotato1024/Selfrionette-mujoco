@@ -178,6 +178,12 @@ parameter contractとoptional semantic validator / normalizerをsource lifecycle
 selection / plan readinessでrejectし、normalized / frozen parametersをstep loopへ渡す。unknown、duplicate、
 version mismatch、schema mismatch、missing mapping capabilityはimplicit fallbackなしでfail-closedとする。
 
+C3のinterpreter fallback退役では、`programmed_target`と`noop`の既存`RawInputFrame` semanticsを
+`replay_mapping/v1`へ明示的に接続するdefault mapping selectionとidentity mapping adapterを追加した。
+adapterはframe representationを変更せず同一objectを返し、sourceのproduced sample schemaも変更しない。
+effective mapping-input schemaだけを`replay_raw_input_frame/v1`としてversioned contractに表し、
+旧`ReplayInputInterpreter`と同じ`InputIntent` shallow-copy semanticsを維持する。
+
 legacy messageはsourceでcanonical sampleへ変換され、別のlegacy mapping実装へ分岐しない。C2では
 source-owned implementationを`plugins/input_sources/`へ集約した。C3ではproduction/internal consumerを
 catalog、typed mapping selection、`ControlMappedRuntimePipeline`へ収束させた。

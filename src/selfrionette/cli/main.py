@@ -8,7 +8,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from selfrionette.plugins.catalog import resolve_robot_bundle
-from selfrionette.plugins.input_sources.catalog import SUPPORTED_INPUT_SOURCE_NAMES
+from selfrionette.plugins.input_sources.catalog import (
+    INPUT_SOURCE_CATALOG,
+    SUPPORTED_INPUT_SOURCE_NAMES,
+)
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -22,12 +25,19 @@ from selfrionette.runtime.runners.websocket_publisher import (
     run_replay_mujoco_websocket_publisher,
 )
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.experiment.input_source import InputSourceMode
 
 _RUNTIME_CAPABILITIES = (
     RESET_INITIAL_STATE_V1,
     ENDPOINT_POSE_V1,
     ENDPOINT_COMMAND_V1,
     QPOS_FEASIBILITY_V1,
+)
+REPLAY_INPUT_SOURCE_NAMES = tuple(
+    source_name
+    for source_name in SUPPORTED_INPUT_SOURCE_NAMES
+    if INPUT_SOURCE_CATALOG.resolve(source_name).plugin.source_mode
+    in {InputSourceMode.OFFLINE, InputSourceMode.REPLAY}
 )
 
 
@@ -79,7 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--output", type=Path, default=None)
     replay.add_argument(
         "--input-source",
-        choices=SUPPORTED_INPUT_SOURCE_NAMES,
+        choices=REPLAY_INPUT_SOURCE_NAMES,
         default=None,
     )
 

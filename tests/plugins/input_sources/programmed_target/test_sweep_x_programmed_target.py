@@ -5,31 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette import input_sources
 from selfrionette.plugins.input_sources.programmed_target import (
     ProgrammedTargetInputSource,
     build_sweep_x_input_source,
     build_sweep_x_trajectory,
-)
-from selfrionette.plugins.input_sources.programmed_target.source import (
-    DEFAULT_SWEEP_X_DT_S as CANONICAL_DEFAULT_SWEEP_X_DT_S,
-    DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES as CANONICAL_DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES,
-    DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES as CANONICAL_DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES,
-    DEFAULT_SWEEP_X_INITIAL_POSITION_M as CANONICAL_DEFAULT_SWEEP_X_INITIAL_POSITION_M,
-    DEFAULT_SWEEP_X_MOVE_FRAMES as CANONICAL_DEFAULT_SWEEP_X_MOVE_FRAMES,
-    DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M as CANONICAL_DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M,
-    DEFAULT_SWEEP_X_RETURN_FRAMES as CANONICAL_DEFAULT_SWEEP_X_RETURN_FRAMES,
-    DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES as CANONICAL_DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES,
-)
-from selfrionette.input_sources.programmed_target import (
-    DEFAULT_SWEEP_X_DT_S,
-    DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES,
-    DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES,
-    DEFAULT_SWEEP_X_INITIAL_POSITION_M,
-    DEFAULT_SWEEP_X_MOVE_FRAMES,
-    DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M,
-    DEFAULT_SWEEP_X_RETURN_FRAMES,
-    DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES,
 )
 
 
@@ -43,14 +22,6 @@ PROGRAMMED_TARGET_MODULE = (
     / "programmed_target"
     / "source.py"
 )
-
-
-def test_sweep_x_input_source_is_exported_from_package_root() -> None:
-    assert build_sweep_x_input_source is input_sources.build_sweep_x_input_source
-    assert "build_sweep_x_input_source" in input_sources.__all__
-    assert "build_sweep_x_trajectory" not in input_sources.__all__
-    assert not hasattr(input_sources, "build_sweep_x_trajectory")
-    assert isinstance(build_sweep_x_input_source(), ProgrammedTargetInputSource)
 
 
 def test_sweep_x_trajectory_is_deterministic_and_phase_annotated() -> None:
@@ -149,43 +120,3 @@ def test_sweep_x_programmed_target_module_does_not_import_noop_motion_generator(
             assert "tests.support.motion_doubles" not in imported_names
 
     assert "NoOpMotionGenerator" not in source_text
-
-
-def test_sweep_x_trajectory_is_module_level_public_api() -> None:
-    import selfrionette.input_sources.programmed_target as programmed_target_module
-
-    assert programmed_target_module.build_sweep_x_trajectory is build_sweep_x_trajectory
-    assert programmed_target_module.build_sweep_x_input_source is build_sweep_x_input_source
-    assert "build_sweep_x_trajectory" in programmed_target_module.__all__
-    assert "build_sweep_x_input_source" in programmed_target_module.__all__
-
-
-def test_sweep_x_defaults_remain_module_attributes_without_expanding_all() -> None:
-    import selfrionette.input_sources.programmed_target as programmed_target_module
-
-    compatibility_defaults = {
-        "DEFAULT_SWEEP_X_INITIAL_POSITION_M": DEFAULT_SWEEP_X_INITIAL_POSITION_M,
-        "DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M": DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M,
-        "DEFAULT_SWEEP_X_DT_S": DEFAULT_SWEEP_X_DT_S,
-        "DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES": DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES,
-        "DEFAULT_SWEEP_X_MOVE_FRAMES": DEFAULT_SWEEP_X_MOVE_FRAMES,
-        "DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES": DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES,
-        "DEFAULT_SWEEP_X_RETURN_FRAMES": DEFAULT_SWEEP_X_RETURN_FRAMES,
-        "DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES": DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES,
-    }
-    canonical_defaults = {
-        "DEFAULT_SWEEP_X_INITIAL_POSITION_M": CANONICAL_DEFAULT_SWEEP_X_INITIAL_POSITION_M,
-        "DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M": CANONICAL_DEFAULT_SWEEP_X_POSITIVE_X_OFFSET_M,
-        "DEFAULT_SWEEP_X_DT_S": CANONICAL_DEFAULT_SWEEP_X_DT_S,
-        "DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES": CANONICAL_DEFAULT_SWEEP_X_INITIAL_HOLD_FRAMES,
-        "DEFAULT_SWEEP_X_MOVE_FRAMES": CANONICAL_DEFAULT_SWEEP_X_MOVE_FRAMES,
-        "DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES": CANONICAL_DEFAULT_SWEEP_X_SLOW_OR_HOLD_FRAMES,
-        "DEFAULT_SWEEP_X_RETURN_FRAMES": CANONICAL_DEFAULT_SWEEP_X_RETURN_FRAMES,
-        "DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES": CANONICAL_DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES,
-    }
-
-    for name, compatibility_value in compatibility_defaults.items():
-        assert getattr(programmed_target_module, name) is compatibility_value
-        assert compatibility_value == canonical_defaults[name]
-        assert compatibility_value is canonical_defaults[name]
-        assert name not in programmed_target_module.__all__

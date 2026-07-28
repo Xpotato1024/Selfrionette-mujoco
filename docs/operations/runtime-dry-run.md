@@ -40,6 +40,8 @@ file は JSON array ではなく UTF-8、LF の NDJSON である。`frame_index`
 
 `--preset` と Python API の custom `frames` は同時指定できない。steps は正整数、`dt-s` は
 正数でなければならず、違反時の failure semantics は変更しない。
+`replay --input-source`は`programmed_target`、`replay`、`noop`だけを受理する。
+viewer ingress lifecycleを実行しないため、`replay --input-source viewer`は受理しない。
 
 ## Internal pathとpublic compatibility
 
