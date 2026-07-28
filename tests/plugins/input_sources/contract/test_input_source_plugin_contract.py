@@ -28,7 +28,7 @@ from selfrionette.runtime.experiment.input_source import (
     ValidatedInputSourceReader,
     ValidatedManagedInputSourceReader,
 )
-from selfrionette.plugins.input_sources.registration import InputSourcePluginRegistration
+from selfrionette.plugins.input_source_registration import InputSourcePluginRegistration
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from selfrionette.schemas import RawInputFrame
 from tests.runtime.test_experiment_plugin_composition import (
@@ -102,7 +102,7 @@ def test_factory_output_and_parameters_are_validated_without_fallback() -> None:
         return object()
 
     plugin = replace(build_conformance_input_source(), factory=bad_factory)
-    with pytest.raises(TypeError, match="does not satisfy"):
+    with pytest.raises(TypeError, match="must satisfy"):
         plugin.create_runtime_reader({})
 
     parameter_plugin = replace(
@@ -185,7 +185,7 @@ def test_live_factory_creation_is_side_effect_free_until_explicit_start() -> Non
 
 
 def test_factory_output_requires_side_effect_free_typed_health_provider() -> None:
-    with pytest.raises(TypeError, match="InputSourceHealthProvider"):
+    with pytest.raises(TypeError, match="HealthyInputSource"):
         replace(
             build_conformance_input_source(),
             factory=ReaderWithoutHealth,
@@ -367,11 +367,8 @@ def test_registration_requires_typed_execution_adapter() -> None:
         InputSourcePluginRegistration(
             plugin=registration.plugin,
             cli_aliases=registration.cli_aliases,
-            generic_cli_exposed=registration.generic_cli_exposed,
             request_builder=registration.request_builder,
             execution_adapter=object(),  # type: ignore[arg-type]
-            default_control_mapping_selection=registration.default_control_mapping_selection,
-            control_mapping_parameters=registration.control_mapping_parameters,
         )
 
 

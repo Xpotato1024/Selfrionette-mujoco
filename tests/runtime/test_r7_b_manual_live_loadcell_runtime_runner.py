@@ -12,7 +12,7 @@ from selfrionette.runtime.runners.live_loadcell import (
     run_live_loadcell_runtime_runner,
 )
 from selfrionette.schemas import RawInputFrame
-from selfrionette.plugins.input_sources._loadcell import (
+from selfrionette.plugins.input_sources.selfrionette import (
     NormalizedLoadcellInputIntent,
     normalize_loadcell_frame_for_mapping,
 )
@@ -59,7 +59,7 @@ def test_live_loadcell_runtime_runner_processes_injected_lines_without_opening_s
     payload = payloads[0]
     assert payload["version"] == 0
     assert payload["target_position_m"] is None
-    assert payload["metadata"]["source_kind"] == "loadcell_serial"
+    assert payload["metadata"]["source_kind"] == "selfrionette"
     assert payload["metadata"]["frame_index"] == 1
     assert payload["metadata"]["serial_timestamp_s"] == 1.0
     assert payload["metadata"]["current_tip_position_m"] == (0.1, 0.0, 0.3)
@@ -137,7 +137,7 @@ def test_live_loadcell_runtime_runner_preserves_primary_failure_when_close_fails
 
         def read_frame(self) -> RawInputFrame:
             return RawInputFrame(
-                source="loadcell_serial",
+                source="selfrionette",
                 timestamp_s=1.0,
                 values=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
             )
@@ -188,7 +188,7 @@ def test_live_loadcell_runtime_runner_surfaces_close_failure_after_success(
 
         def read_frame(self) -> RawInputFrame:
             return RawInputFrame(
-                source="loadcell_serial",
+                source="selfrionette",
                 timestamp_s=1.0,
                 values=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
             )
@@ -236,7 +236,7 @@ def test_live_loadcell_runtime_runner_rejects_live_mode_without_pyserial(
 
     monkeypatch.setattr(builtins, "__import__", guarded_import)
 
-    with pytest.raises(RuntimeError, match="serial module is required for live serial mode"):
+    with pytest.raises(RuntimeError, match="serial module is required for live Selfrionette mode"):
         run_live_loadcell_runtime_runner(
             LiveLoadcellRuntimeRunnerConfig(
                 port="COM5",

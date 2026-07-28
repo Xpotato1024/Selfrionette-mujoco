@@ -2,9 +2,19 @@
 
 from collections.abc import Mapping
 
-from selfrionette.plugins.input_sources._common import NoopInputSource
 from selfrionette.runtime.experiment.input_source import InputSourceHealth, InputSourceHealthStatus
 from selfrionette.schemas import RawInputFrame
+
+
+class NoopInputSource:
+    def __init__(self, frame: RawInputFrame) -> None:
+        self._frame = frame
+
+    def read_frame(self) -> RawInputFrame:
+        return self._frame
+
+    def current_health(self) -> InputSourceHealth:
+        return InputSourceHealth(InputSourceHealthStatus.ACTIVE, age_ms=0)
 
 
 def build_frames(parameters: Mapping[str, object]) -> tuple[RawInputFrame, ...]:
@@ -16,4 +26,4 @@ def build_reader(parameters: Mapping[str, object]) -> NoopInputSource:
     return NoopInputSource(frames[0])
 
 
-__all__ = ["build_frames", "build_reader"]
+__all__ = ["NoopInputSource", "build_frames", "build_reader"]

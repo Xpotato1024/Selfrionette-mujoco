@@ -25,7 +25,7 @@ jobs:
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           uv run python scripts/repository/validate_markdown_docs.py --base-ref "$BASE_SHA" --strict-map --strict-links
       - name: Run tests
-        run: uv run pytest tests/architecture tests/schemas tests/support tests/runtime tests/mujoco_backend tests/transport tests/motion tests/kinematics tests/plugins tests/integration tests/loadcell_serial -q
+        run: uv run pytest tests/architecture tests/schemas tests/support tests/runtime tests/mujoco_backend tests/transport tests/motion tests/kinematics tests/plugins tests/integration tests/selfrionette -q
       - name: Compile Python files
         run: uv run python -m compileall src tests
       - name: Check diff whitespace

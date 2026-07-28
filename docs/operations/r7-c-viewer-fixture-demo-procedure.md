@@ -73,14 +73,16 @@ manual demo ではなく contract smoke として扱い、次の tests を確認
 
 ```powershell
 uv run pytest `
-  tests/plugins/mappings/viewer/test_keyboard_mapping.py `
+  tests/plugins/mappings/viewer_keyboard_gamepad_mapping/test_keyboard_mapping.py `
   tests/runtime/test_r7_b_offline_input_runtime_stepping_smoke.py `
   tests/runtime/test_r7_b_input_driven_payload_smoke.py
 ```
 
 確認ポイント:
 
-- `configs/input/keyboard_default.json` が reserved path である
+- 既定keybindが
+  `src/selfrionette/plugins/mappings/viewer_keyboard_gamepad_mapping/resources/keyboard_default.json`
+  にあり、Mapping plugin package resourceとして配布される
 - WASD / Space / Shift が `desired_endpoint_m` を作る
 - `build_keyboard_motion_command()` が `MotionCommand.metadata["desired_endpoint_m"]` を埋める
 - offline runtime smoke が `target_position_m` を viewer feedback / fallback として扱う

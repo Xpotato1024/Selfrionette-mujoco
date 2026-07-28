@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping.keyboard import (
@@ -15,17 +12,12 @@ from selfrionette.runtime.control.desired_endpoint_resolver import resolve_desir
 from selfrionette.schemas import MotionCommand
 
 
-def test_default_keyboard_keybind_contract_matches_reserved_config() -> None:
-    config_path = Path("configs/input/keyboard_default.json")
-    assert config_path.exists()
-
-    payload = json.loads(config_path.read_text(encoding="utf-8"))
+def test_default_keyboard_keybind_contract_matches_package_resource() -> None:
     config = build_default_keyboard_input_config()
 
-    assert payload["source_kind"] == "keyboard"
-    assert payload["speed_m_s"] == 0.1
-    assert payload["deadzone"] == 0.0
-    assert payload["max_delta_m"] == 0.03
+    assert config.speed_m_s == 0.1
+    assert config.deadzone == 0.0
+    assert config.max_delta_m == 0.03
     assert config.bindings["KeyW"] == KeyboardBinding(axis="y", direction=1)
     assert config.bindings["KeyS"] == KeyboardBinding(axis="y", direction=-1)
     assert config.bindings["KeyA"] == KeyboardBinding(axis="x", direction=-1)

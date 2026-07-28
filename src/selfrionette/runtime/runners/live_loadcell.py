@@ -6,10 +6,13 @@ from math import isfinite
 from typing import cast
 
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
-from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
+from selfrionette.plugins.input_sources.selfrionette import NormalizedLoadcellInputIntent
 from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
 from selfrionette.runtime.experiment.contracts import PluginSelection
-from selfrionette.runtime.experiment.input_source import InputSourceRuntimeDependencies
+from selfrionette.runtime.experiment.input_source import (
+    InputSourceRuntimeDependencies,
+    ManagedInputSource,
+)
 from selfrionette.runtime.runners.offline_input_smoke import run_offline_input_runtime_stepping_smoke
 from selfrionette.schemas import InputIntent, MotionCommand
 
@@ -77,7 +80,11 @@ def _build_runtime_intent(
     config: LiveLoadcellRuntimeRunnerConfig,
 ) -> NormalizedLoadcellInputIntent:
     metadata = dict(intent.metadata)
-    metadata.setdefault("source_kind", "loadcell_serial")
+    metadata.setdefault("source_kind", "selfrionette")
+    metadata.setdefault(
+        "acquisition_backend",
+        "live_serial" if config.port is not None else "injected_lines",
+    )
     metadata["frame_index"] = frame_index
     metadata["serial_timestamp_s"] = serial_timestamp_s
     if config.port is not None:
@@ -96,9 +103,7 @@ def run_live_loadcell_runtime_runner(
         raise ValueError("port is required for live serial mode")
 
     materialized_lines = tuple(line_source) if line_source is not None else None
-    registration = INPUT_SOURCE_CATALOG.resolve(
-        "loadcell_fixture" if materialized_lines is not None else "loadcell_serial"
-    )
+    registration = INPUT_SOURCE_CATALOG.resolve("selfrionette")
     source_parameters = (
         {"lines": materialized_lines}
         if materialized_lines is not None
@@ -127,15 +132,14 @@ def run_live_loadcell_runtime_runner(
             else None
         ),
     )
+    if not isinstance(source, ManagedInputSource):
+        raise TypeError("Selfrionette input source must provide managed lifecycle")
     payloads: list[Mapping[str, object]] = []
-    start = getattr(source, "start", None)
-    close = getattr(source, "close", None)
     start_attempted = False
     primary_failure: BaseException | None = None
     try:
-        if callable(start):
-            start_attempted = True
-            start()
+        start_attempted = True
+        source.start()
         for frame_index in range(1, config.max_frames + 1):
             try:
                 raw_frame = source.read_frame()
@@ -179,9 +183,9 @@ def run_live_loadcell_runtime_runner(
         primary_failure = failure
         raise
     finally:
-        if start_attempted and callable(close):
+        if start_attempted:
             try:
-                close()
+                source.close()
             except BaseException as cleanup_failure:
                 if primary_failure is not None:
                     primary_failure.add_note(

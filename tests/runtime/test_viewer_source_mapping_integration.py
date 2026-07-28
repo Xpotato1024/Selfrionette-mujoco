@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from math import inf, nan
-
 import pytest
 
 from selfrionette.plugins.input_sources.viewer import ViewerInputSource
-from selfrionette.plugins.mappings.keyboard import KeyboardBinding, KeyboardInputConfig
-from selfrionette.plugins.mappings.viewer import VIEWER_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping.keyboard import KeyboardBinding, KeyboardInputConfig
+from selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping import VIEWER_CONTROL_MAPPING_PLUGIN
 from selfrionette.schemas import (
     ViewerControlGamepadButtonMessage,
     ViewerControlGamepadMessage,
@@ -69,8 +67,8 @@ def gamepad_message(
     )
 
 
-def map_frame(frame):
-    return VIEWER_CONTROL_MAPPING_PLUGIN.strategy.map_input(frame, {})
+def map_frame(frame, parameters=None):
+    return VIEWER_CONTROL_MAPPING_PLUGIN.strategy.map_input(frame, parameters or {})
 
 
 _LEGACY_FRONTEND_GAMEPAD_DEADZONE = 0.1
@@ -164,7 +162,7 @@ def test_raw_gamepad_custom_deadzone_preserves_parameterized_legacy_composition(
     deadzone: float,
     raw_axis: float,
 ) -> None:
-    source = ViewerInputSource(clock=lambda: 0.0, gamepad_deadzone=deadzone)
+    source = ViewerInputSource(clock=lambda: 0.0)
     frame = source.ingest_control_message(
         gamepad_message(
             4.0,
@@ -174,7 +172,7 @@ def test_raw_gamepad_custom_deadzone_preserves_parameterized_legacy_composition(
         )
     )
 
-    intent = map_frame(frame)
+    intent = map_frame(frame, {"gamepad_deadzone": deadzone})
     assert intent.values[0] == pytest.approx(
         _baseline_gamepad_transfer(raw_axis, deadzone), abs=1e-12
     )
@@ -296,21 +294,24 @@ def test_legacy_gamepad_sample_without_raw_axes_keeps_zero_state_compatibility()
     assert map_frame(frame).values == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
 
-def test_viewer_mapping_applies_compatibility_parameters_and_preserves_defaults() -> None:
+def test_viewer_mapping_applies_mapping_owned_parameters_and_preserves_defaults() -> None:
     keyboard_config = KeyboardInputConfig(
         bindings={"KeyQ": KeyboardBinding(axis="z", direction=-1)},
         speed_m_s=0.2,
         deadzone=0.0,
         max_delta_m=0.05,
     )
-    source = ViewerInputSource(
-        clock=lambda: 0.0,
-        keyboard_config=keyboard_config,
-        gamepad_speed_m_s=0.2,
-        gamepad_deadzone=0.2,
-        gamepad_max_delta_m=0.05,
+    source = ViewerInputSource(clock=lambda: 0.0)
+    mapping_parameters = {
+        "keyboard_config": keyboard_config,
+        "gamepad_speed_m_s": 0.2,
+        "gamepad_deadzone": 0.2,
+        "gamepad_max_delta_m": 0.05,
+    }
+    keyboard_intent = map_frame(
+        source.ingest_control_message(keyboard_message(1.0, "KeyQ")),
+        mapping_parameters,
     )
-    keyboard_intent = map_frame(source.ingest_control_message(keyboard_message(1.0, "KeyQ")))
     assert keyboard_intent.values == pytest.approx((0.0, 0.0, -1.0), abs=1e-12)
     assert keyboard_intent.metadata["local_endpoint_velocity_m_s"] == pytest.approx(
         (0.0, 0.0, -0.2), abs=1e-12
@@ -318,7 +319,8 @@ def test_viewer_mapping_applies_compatibility_parameters_and_preserves_defaults(
     assert keyboard_intent.metadata["local_endpoint_max_delta_m"] == pytest.approx(0.05)
 
     gamepad_intent = map_frame(
-        source.ingest_control_message(gamepad_message(2.0, (0.3, 0.0, 0.0)))
+        source.ingest_control_message(gamepad_message(2.0, (0.3, 0.0, 0.0))),
+        mapping_parameters,
     )
     assert gamepad_intent.values[0] == pytest.approx(0.3, abs=1e-12)
     assert gamepad_intent.metadata["local_endpoint_velocity_m_s"][0] == pytest.approx(0.06)
@@ -328,11 +330,11 @@ def test_viewer_mapping_applies_compatibility_parameters_and_preserves_defaults(
     "field",
     ("gamepad_speed_m_s", "gamepad_deadzone", "gamepad_max_delta_m"),
 )
-def test_viewer_input_source_rejects_negative_or_non_finite_mapping_parameters(field: str) -> None:
+def test_viewer_mapping_rejects_negative_or_non_finite_mapping_parameters(field: str) -> None:
     with pytest.raises(ValueError, match="finite and non-negative"):
-        ViewerInputSource(**{field: -1.0})
+        VIEWER_CONTROL_MAPPING_PLUGIN.normalize_parameters({field: -1.0})
     with pytest.raises(ValueError, match="finite and non-negative"):
-        ViewerInputSource(**{field: inf if field == "gamepad_speed_m_s" else nan})
+        VIEWER_CONTROL_MAPPING_PLUGIN.normalize_parameters({field: float("nan")})
 
 
 @pytest.mark.parametrize(

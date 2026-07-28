@@ -38,7 +38,7 @@ live loadcell の観測は #235 の template に記録された human-run eviden
 keyboard path は no-hardware contract smoke として扱う。
 
 ```powershell
-uv run pytest tests/plugins/mappings/viewer/test_keyboard_mapping.py
+uv run pytest tests/plugins/mappings/viewer_keyboard_gamepad_mapping/test_keyboard_mapping.py
 ```
 
 確認すること:
@@ -72,7 +72,7 @@ Codex / CI は live serial を開かない。
 
 確認すること:
 
-- `metadata["source_kind"] == "loadcell_serial"`
+- `metadata["source_kind"] == "selfrionette"`
 - observed frame count が 0 ではない
 - `metadata["desired_endpoint_m"]` が存在する
 - no OSC / no robot output / no actuator command が確認済み

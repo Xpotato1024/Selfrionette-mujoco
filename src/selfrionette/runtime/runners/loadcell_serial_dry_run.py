@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from selfrionette.plugins.input_sources._loadcell import (
+from selfrionette.plugins.input_sources.selfrionette import (
     LoadcellNormalizationConfig,
     LoadcellNormalizedInputIntentConverter,
     NormalizedLoadcellInputIntent,
     SerialDiagnosticEvent,
     SerialInputSource,
 )
-from selfrionette.plugins.mappings.loadcell import (
+from selfrionette.plugins.mappings.loadcell_endpoint_mapping import (
     LoadcellEndpointMappingConfig,
     build_r7_a_lite_smoke_endpoint_mapping_config,
 )
@@ -209,13 +209,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     fixture_lines = args.fixture.read_text(encoding="utf-8").splitlines()
     normalization_config = LoadcellNormalizationConfig(
-        deadzone=args.deadzone,
         scale=args.scale,
         clamp_abs=1.0,
     )
     endpoint_config = build_r7_a_lite_smoke_endpoint_mapping_config(
         gain_m=args.gain_m,
         max_delta_m=args.max_delta_m,
+        operational_deadzone=args.deadzone,
     )
     result = run_loadcell_serial_dry_run_smoke(
         fixture_lines,

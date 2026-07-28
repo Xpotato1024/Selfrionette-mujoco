@@ -7,7 +7,7 @@ import pytest
 
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.plugins.mappings.catalog import CONTROL_MAPPING_REGISTRY
-from selfrionette.plugins.input_sources.registration import (
+from selfrionette.plugins.input_source_registration import (
     InputSourcePluginRegistration,
 )
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
@@ -17,45 +17,41 @@ from selfrionette.runtime.experiment.input_source import InputSourceHealthStatus
 from selfrionette.runtime.execution.input_source_adapters import (
     REPLAY_COMPATIBILITY_EXECUTION_ADAPTER,
 )
-from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
+from selfrionette.plugins.input_sources.selfrionette import NormalizedLoadcellInputIntent
+from selfrionette.cli.main import CLI_INPUT_SOURCE_NAMES
 from selfrionette.schemas import InputIntent
 
 
 def test_production_input_source_catalog_is_versioned_and_deterministic() -> None:
     assert INPUT_SOURCE_CATALOG.ids == (
         "analog_fixture",
-        "loadcell_fixture",
-        "loadcell_serial",
         "noop",
         "programmed_target",
         "replay",
+        "selfrionette",
         "viewer",
     )
     assert INPUT_SOURCE_CATALOG.aliases == (
+        "analog_fixture",
+        "noop",
         "programmed_target",
         "replay",
-        "noop",
+        "selfrionette",
         "viewer",
     )
-    assert INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin.produced_sample_schema_identity == VersionedIdentity(
+    assert INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin.produced_sample_schema == VersionedIdentity(
         "loadcell_vector_sample", 1
     )
-    assert INPUT_SOURCE_CATALOG.resolve("loadcell_fixture").plugin.produced_sample_schema_identity == VersionedIdentity(
-        "loadcell_vector_sample", 1
-    )
-
-
-def test_generic_aliases_do_not_expose_live_or_fixture_sources() -> None:
-    assert "loadcell_serial" not in INPUT_SOURCE_CATALOG.aliases
-    assert "loadcell_fixture" not in INPUT_SOURCE_CATALOG.aliases
-    assert "analog_fixture" not in INPUT_SOURCE_CATALOG.aliases
+def test_cli_projection_excludes_specialized_sources() -> None:
+    assert "selfrionette" not in CLI_INPUT_SOURCE_NAMES
+    assert "analog_fixture" not in CLI_INPUT_SOURCE_NAMES
 
 
 def test_selection_resolves_plugin_schema_reader_health_and_adapter() -> None:
     selection = select_runtime_input_source("viewer", steps=1)
     assert selection.plugin_selection is not None
     assert selection.resolved_plugin is not None
-    assert selection.produced_sample_schema_identity == VersionedIdentity(
+    assert selection.produced_sample_schema == VersionedIdentity(
         "viewer_control_sample", 1
     )
     assert selection.runtime_reader is not None
@@ -206,14 +202,14 @@ def _loadcell_mapping_parameters() -> dict[str, object]:
 
 def test_production_loadcell_selection_adapts_raw_frame_before_mapping_strategy() -> None:
     selection = select_runtime_input_source(
-        "loadcell_fixture",
+        "selfrionette",
         steps=1,
         line_source=("vector,1000,1,0,0,0,0,0,0",),
         control_mapping_selection=PluginSelection("loadcell_endpoint_mapping", 1),
         control_mapping_parameters=_loadcell_mapping_parameters(),
     )
 
-    assert selection.produced_sample_schema_identity == VersionedIdentity(
+    assert selection.produced_sample_schema == VersionedIdentity(
         "loadcell_vector_sample", 1
     )
     assert selection.control_mapping is CONTROL_MAPPING_REGISTRY.resolve(
@@ -235,6 +231,7 @@ def test_production_loadcell_selection_adapts_raw_frame_before_mapping_strategy(
         else ()
     )
     assert selection.runtime_reader is not None
+    selection.runtime_reader.start()
     raw_frame = selection.runtime_reader.read_frame()
     normalized_intent = selection.mapping_input_adapter(raw_frame)
     assert isinstance(normalized_intent, NormalizedLoadcellInputIntent)
@@ -246,12 +243,13 @@ def test_production_loadcell_selection_adapts_raw_frame_before_mapping_strategy(
     assert mapped_intent.metadata["desired_endpoint_m"] == pytest.approx(
         (0.11, 0.2, 0.3)
     )
+    selection.runtime_reader.close()
 
 
 def test_production_loadcell_selection_rejects_incompatible_mapping_before_reader_use() -> None:
     with pytest.raises(ValueError, match="schema compatibility mismatch"):
         select_runtime_input_source(
-            "loadcell_fixture",
+            "selfrionette",
             steps=1,
             line_source=("vector,1000,1,0,0,0,0,0,0",),
             control_mapping_selection=PluginSelection(
@@ -304,7 +302,7 @@ def test_invalid_loadcell_mapping_parameters_fail_before_source_reader_creation(
     monkeypatch.setattr(InputSourcePlugin, "create_runtime_reader", spy)
     with pytest.raises((TypeError, ValueError)):
         select_runtime_input_source(
-            "loadcell_serial",
+            "selfrionette",
             steps=1,
             line_source=("vector,1000,1,0,0,0,0,0,0",),
             control_mapping_selection=PluginSelection("loadcell_endpoint_mapping", 1),

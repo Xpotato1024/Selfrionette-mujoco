@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-28
+last_verified: 2026-07-29
 canonical_for:
   - R7-A-lite serial frame contract
 related:
@@ -10,10 +10,16 @@ related:
 
 # R7-A-lite Serial Frame契約
 
-Current ownership: serial parsing, diagnostic accumulation, 7-channel acquisition, and intrinsic normalization are canonical in `src/selfrionette/plugins/input_sources/_loadcell/`. Channel-axis weights, gain, endpoint delta, and MotionCommand conversion are canonical in `src/selfrionette/plugins/mappings/loadcell.py`. Offline dry-run orchestration is owned by `src/selfrionette/runtime/runners/loadcell_serial_dry_run.py` and requires an explicit versioned mapping.
+Current ownership: serial parsing、diagnostic accumulation、7-channel acquisition、intrinsic calibration /
+normalization、sensor clamp、health、lifecycleは
+`src/selfrionette/plugins/input_sources/selfrionette/`が所有する。operational deadzone、channel-axis
+weights、gain、sign、endpoint delta、MotionCommand conversionは
+`src/selfrionette/plugins/mappings/loadcell_endpoint_mapping/`が所有する。offline dry-run orchestrationは
+`src/selfrionette/runtime/runners/loadcell_serial_dry_run.py`が所有し、versioned Mappingを明示する。
 
-P3ではserial parserと7-channel `RawInputFrame` acquisitionを`loadcell_serial` plugin registrationへ
-接続し、recorded linesは`loadcell_fixture`として同じparserと`loadcell_vector_sample/v1`を使用する。
+current architectureではserial parserと7-channel `RawInputFrame` acquisitionを
+`selfrionette/v1`へ接続する。recorded / injected linesは別production identityではなく、同じdevice
+readerのhardware-free backendとして`loadcell_vector_sample/v1`を生成する。
 channel-axis mapping、gain、endpoint delta、`MotionCommand`生成はこのsource contractの外に残す。
 
 ## 対象範囲
@@ -241,7 +247,7 @@ parserは次のruleに従う。
 
 ## Source plugin factoryとlifecycle
 
-`loadcell_serial/v1` factoryはI/O前に次をfail-closedで検証する。
+`selfrionette/v1` factoryはI/O前に次をfail-closedで検証する。
 
 - port指定時はnonblank stringである。
 - baud rateはpositive integerである。boolはintegerとして受理しない。
@@ -254,8 +260,9 @@ live portをopenする。`read_frame()`は未start時に
 `loadcell serial input source is not started`でfail-closedし、暗黙startを行わない。
 closeはnormal / failure / start failure後に最大1回試行し、primary failureをcleanup failureで置換しない。
 
-`loadcell_fixture/v1`は同じparserと`loadcell_vector_sample/v1`を使用し、real serialをopenしない。
-runnerが受け取るone-shot `Iterable[str]`は一度だけtuple化し、同じrecorded linesをfactoryへ渡す。
+injected backendは同じparserと`loadcell_vector_sample/v1`を使用し、real serialをopenしない。
+runnerが受け取るone-shot `Iterable[str]`は一度だけtuple化し、同じrecorded linesをSelfrionette
+factoryのruntime dependencyへ渡す。
 parser、baud `115200`、diagnostic accumulation、7-channel vector semanticsは変更しない。
 
 ## Non-goals

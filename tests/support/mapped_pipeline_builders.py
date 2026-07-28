@@ -7,7 +7,7 @@ from pathlib import Path
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.model_loader import ModelResourceBundle
-from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard

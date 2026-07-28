@@ -40,7 +40,7 @@ keyboard demo は `build_keyboard_motion_command()` が作る `MotionCommand` �
 確認方法:
 
 ```powershell
-uv run pytest tests/plugins/mappings/viewer/test_keyboard_mapping.py
+uv run pytest tests/plugins/mappings/viewer_keyboard_gamepad_mapping/test_keyboard_mapping.py
 ```
 
 補足:

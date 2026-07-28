@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
-from selfrionette.plugins.mappings.loadcell import LoadcellEndpointMotionCommandConverter
+from selfrionette.plugins.input_sources.selfrionette import NormalizedLoadcellInputIntent
+from selfrionette.plugins.mappings.loadcell_endpoint_mapping import LoadcellEndpointMotionCommandConverter
 from selfrionette.runtime.control.desired_endpoint_resolver import (
     ResolvedDesiredEndpoint,
     resolve_desired_endpoint_from_motion_command,
@@ -109,10 +109,10 @@ def test_resolve_desired_endpoint_from_motion_command_uses_metadata_target_posit
 def test_resolve_desired_endpoint_from_loadcell_motion_command_output() -> None:
     converter = LoadcellEndpointMotionCommandConverter()
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=2.0,
         values=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
-        metadata={"source_kind": "loadcell_serial"},
+        metadata={"source_kind": "selfrionette"},
     )
     command = converter.convert(intent, current_tip_position_m=(0.1, 0.2, 0.3))
 
@@ -120,4 +120,4 @@ def test_resolve_desired_endpoint_from_loadcell_motion_command_output() -> None:
 
     assert resolved.desired_endpoint_m == (0.1, 0.2, 0.3)
     assert resolved.source == 'MotionCommand.metadata["desired_endpoint_m"]'
-    assert resolved.metadata["source_kind"] == "loadcell_serial"
+    assert resolved.metadata["source_kind"] == "selfrionette"

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
+from selfrionette.plugins.input_sources.selfrionette import NormalizedLoadcellInputIntent
 from selfrionette.plugins.mappings.loadcell_endpoint_mapping import (
     LoadcellEndpointMappingConfig,
     LoadcellEndpointMotionCommandConverter,
@@ -15,7 +15,7 @@ from selfrionette.schemas import MotionCommand
 
 def test_loadcell_endpoint_mapping_converts_to_desired_endpoint_and_preserves_metadata() -> None:
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=1.25,
         values=(0.2, -0.3, 0.4, 0.1, 0.0, 0.0, 0.0),
         active_channels=(0, 1, 2, 3),
@@ -56,7 +56,7 @@ def test_loadcell_endpoint_mapping_converts_to_desired_endpoint_and_preserves_me
 
 def test_default_loadcell_endpoint_mapping_is_safe_and_no_op() -> None:
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=2.0,
         values=(0.9, -0.8, 0.7, -0.6, 0.5, -0.4, 0.3),
         active_channels=(0, 2, 4, 6),
@@ -76,7 +76,7 @@ def test_default_loadcell_endpoint_mapping_is_safe_and_no_op() -> None:
 
 def test_loadcell_endpoint_mapping_clamps_endpoint_delta() -> None:
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=3.0,
         values=(0.05, -0.04, 0.1, 0.0, 0.0, 0.0, 0.0),
         active_channels=(0, 1, 2),
@@ -116,7 +116,7 @@ def test_loadcell_endpoint_mapping_clamps_endpoint_delta() -> None:
 )
 def test_loadcell_endpoint_mapping_rejects_wrong_channel_count(values: tuple[float, ...]) -> None:
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=4.0,
         values=values,  # type: ignore[arg-type]
         metadata={"origin": "bad-count"},
@@ -140,7 +140,7 @@ def test_loadcell_endpoint_mapping_rejects_wrong_current_tip_position_length(
     current_tip_position_m: tuple[float, ...],
 ) -> None:
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=5.0,
         values=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7),
         metadata={"origin": "bad-tip"},
@@ -217,7 +217,7 @@ def test_loadcell_endpoint_mapping_rejects_invalid_mapping_config(
 
 def test_loadcell_endpoint_mapping_rejects_non_finite_input() -> None:
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=6.0,
         values=(0.1, math.nan, 0.3, 0.4, 0.5, 0.6, 0.7),
         metadata={"origin": "non-finite"},
@@ -232,7 +232,7 @@ def test_loadcell_endpoint_mapping_rejects_non_finite_input() -> None:
 
 def test_loadcell_endpoint_mapping_rejects_non_finite_current_tip_position() -> None:
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=7.0,
         values=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7),
         metadata={"origin": "non-finite-tip"},
@@ -243,3 +243,33 @@ def test_loadcell_endpoint_mapping_rejects_non_finite_current_tip_position() -> 
             intent,
             current_tip_position_m=(0.1, math.inf, 0.3),
         )
+
+
+def test_loadcell_endpoint_mapping_owns_operational_deadzone() -> None:
+    config = LoadcellEndpointMappingConfig(
+        channel_axis_weights=(
+            (1.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+        ),
+        gain_m=1.0,
+        max_delta_m=0.03,
+        operational_deadzone=0.05,
+    )
+    intent = NormalizedLoadcellInputIntent(
+        source="selfrionette",
+        timestamp_s=0.0,
+        values=(0.049, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+    )
+
+    command = LoadcellEndpointMotionCommandConverter(config).convert(
+        intent,
+        current_tip_position_m=(0.1, 0.2, 0.3),
+    )
+
+    assert command.metadata["endpoint_delta_m"] == pytest.approx((0.0, 0.0, 0.0))
+    assert command.metadata["desired_endpoint_m"] == pytest.approx((0.1, 0.2, 0.3))

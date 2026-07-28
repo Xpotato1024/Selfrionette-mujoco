@@ -37,10 +37,6 @@ class InputSourceMode(str, Enum):
     VIEWER_BRIDGE = "viewer_bridge"
 
 
-# Descriptive alias used by callers that refer to the contract as SourceMode.
-SourceMode = InputSourceMode
-
-
 class InputSourceHealthStatus(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
@@ -55,6 +51,11 @@ class InputSourceHealthProvider(Protocol):
 
     def current_health(self) -> InputSourceHealth:
         ...
+
+
+@runtime_checkable
+class HealthyInputSource(InputSource, InputSourceHealthProvider, Protocol):
+    """Canonical reader boundary: frames and source-owned health are inseparable."""
 
 
 @runtime_checkable
@@ -79,14 +80,6 @@ class ViewerBridgeRuntimeCapability(Protocol):
         ...
 
     def rebind_clock(self, clock: Callable[[], float]) -> None:
-        ...
-
-
-@runtime_checkable
-class ViewerMappingCompatibilityCapability(Protocol):
-    """Optional typed handoff for explicit legacy source mapping parameters."""
-
-    def mapping_compatibility_parameters(self) -> Mapping[str, object]:
         ...
 
 
@@ -179,13 +172,28 @@ class ManagedInputSource(Protocol):
 
 
 @runtime_checkable
+class ManagedHealthyInputSource(
+    HealthyInputSource,
+    ManagedInputSource,
+    Protocol,
+):
+    """Canonical managed reader boundary for explicit acquisition lifecycle."""
+
+
+@runtime_checkable
+class ViewerBridgeInputSource(ManagedHealthyInputSource, Protocol):
+    @property
+    def viewer_bridge_capability(self) -> ViewerBridgeRuntimeCapability: ...
+
+
+@runtime_checkable
 class InputSourceFactory(Protocol):
     def __call__(
         self,
         parameters: Mapping[str, object],
         *,
         runtime_dependencies: InputSourceRuntimeDependencies | None = None,
-    ) -> object: ...
+    ) -> HealthyInputSource: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,18 +218,14 @@ class InputSourceMappingAdapterContract:
         return self.adapt(frame)
 
 
-# Compatibility name for callers that used the P5 callable type alias.
-InputSourceMappingAdapter = InputSourceMappingAdapterContract
-
-
-class ValidatedInputSourceReader(InputSource, InputSourceHealthProvider):
+class ValidatedInputSourceReader(HealthyInputSource):
     """Read-time validation adapter for offline and replay source instances."""
 
-    def __init__(self, delegate: InputSourceHealthProvider) -> None:
+    def __init__(self, delegate: HealthyInputSource) -> None:
         self._delegate = delegate
 
     def read_frame(self) -> RawInputFrame:
-        frame = self._delegate.read_frame()  # type: ignore[attr-defined]
+        frame = self._delegate.read_frame()
         if not isinstance(frame, RawInputFrame):
             raise TypeError(
                 "input source reader returned an invalid frame: expected RawInputFrame, "
@@ -244,7 +248,7 @@ class ValidatedManagedInputSourceReader(ValidatedInputSourceReader):
 
     def __init__(
         self,
-        delegate: ManagedInputSource,
+        delegate: ManagedHealthyInputSource,
         *,
         viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None,
     ) -> None:
@@ -252,10 +256,10 @@ class ValidatedManagedInputSourceReader(ValidatedInputSourceReader):
         self._viewer_bridge_capability = viewer_bridge_capability
 
     def start(self) -> None:
-        self._delegate.start()  # type: ignore[attr-defined]
+        self._delegate.start()
 
     def close(self) -> None:
-        self._delegate.close()  # type: ignore[attr-defined]
+        self._delegate.close()
 
     @property
     def viewer_bridge_capability(self) -> ViewerBridgeRuntimeCapability | None:
@@ -331,21 +335,16 @@ class InputSourcePlugin:
                 frozen_parameters,
                 runtime_dependencies=runtime_dependencies,
             )
-        if not isinstance(reader, InputSource):
+        if not isinstance(reader, HealthyInputSource):
             raise TypeError(
-                "input source factory returned an object that does not satisfy "
-                "InputSource.read_frame()"
-            )
-        if not isinstance(reader, InputSourceHealthProvider):
-            raise TypeError(
-                "input source factory output must provide "
-                "InputSourceHealthProvider.current_health()"
+                "input source factory output must satisfy "
+                "HealthyInputSource.read_frame()/current_health()"
             )
         managed = self.mode in (
             InputSourceMode.LIVE,
             InputSourceMode.VIEWER_BRIDGE,
         )
-        if managed and not isinstance(reader, ManagedInputSource):
+        if managed and not isinstance(reader, ManagedHealthyInputSource):
             raise TypeError(
                 f"{self.mode.value} input source factory output must provide "
                 "ManagedInputSource.start()/close()"
@@ -361,31 +360,18 @@ class InputSourcePlugin:
                 "input source factory initial health does not match plugin initial health"
             )
         if managed:
-            viewer_bridge_capability = getattr(
-                reader,
-                "viewer_bridge_capability",
-                None,
-            )
-            if viewer_bridge_capability is not None and not isinstance(
-                viewer_bridge_capability,
-                ViewerBridgeRuntimeCapability,
-            ):
-                raise TypeError(
-                    "viewer bridge capability must satisfy ViewerBridgeRuntimeCapability"
-                )
+            viewer_bridge_capability = None
+            if self.mode is InputSourceMode.VIEWER_BRIDGE:
+                if not isinstance(reader, ViewerBridgeInputSource):
+                    raise TypeError(
+                        "viewer bridge source must satisfy ViewerBridgeInputSource"
+                    )
+                viewer_bridge_capability = reader.viewer_bridge_capability
             return ValidatedManagedInputSourceReader(
                 reader,
                 viewer_bridge_capability=viewer_bridge_capability,
             )
         return ValidatedInputSourceReader(reader)
-
-    @property
-    def source_mode(self) -> InputSourceMode:
-        return self.mode
-
-    @property
-    def produced_sample_schema_identity(self) -> VersionedIdentity:
-        return self.produced_sample_schema
 
     @property
     def effective_mapping_input_sample_schema(self) -> VersionedIdentity:
@@ -395,35 +381,22 @@ class InputSourcePlugin:
             return self.produced_sample_schema
         return self.mapping_input_adapter.output_schema
 
-    # Short compatibility spelling for callers that use the generic reader term.
-    def create_reader(
-        self,
-        parameters: Mapping[str, object],
-        *,
-        runtime_dependencies: InputSourceRuntimeDependencies | None = None,
-    ) -> ValidatedInputSourceReader | ValidatedManagedInputSourceReader:
-        return self.create_runtime_reader(
-            parameters,
-            runtime_dependencies=runtime_dependencies,
-        )
-
-
 __all__ = [
     "InputSourceFactory",
-    "InputSourceMappingAdapter",
     "InputSourceMappingAdapterContract",
     "InputSourceHealth",
     "InputSourceHealthStatus",
     "InputSourceHealthProvider",
+    "HealthyInputSource",
     "InputSourceRuntimeDependencies",
     "InputSourceMode",
     "InputSourcePlugin",
     "InputSource",
     "ManagedInputSource",
+    "ManagedHealthyInputSource",
     "RawInputFrame",
-    "SourceMode",
     "ViewerBridgeRuntimeCapability",
-    "ViewerMappingCompatibilityCapability",
+    "ViewerBridgeInputSource",
     "ViewerEndpointRebaseCapability",
     "ValidatedInputSourceReader",
     "ValidatedManagedInputSourceReader",

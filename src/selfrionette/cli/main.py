@@ -10,7 +10,6 @@ from pathlib import Path
 from selfrionette.plugins.catalog import resolve_robot_bundle
 from selfrionette.plugins.input_sources.catalog import (
     INPUT_SOURCE_CATALOG,
-    SUPPORTED_INPUT_SOURCE_NAMES,
 )
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
@@ -33,10 +32,18 @@ _RUNTIME_CAPABILITIES = (
     ENDPOINT_COMMAND_V1,
     QPOS_FEASIBILITY_V1,
 )
+CLI_INPUT_SOURCE_NAMES = (
+    "programmed_target",
+    "replay",
+    "noop",
+    "viewer",
+)
+if any(source_name not in INPUT_SOURCE_CATALOG.aliases for source_name in CLI_INPUT_SOURCE_NAMES):
+    raise RuntimeError("CLI input source policy references an unknown source")
 REPLAY_INPUT_SOURCE_NAMES = tuple(
     source_name
-    for source_name in SUPPORTED_INPUT_SOURCE_NAMES
-    if INPUT_SOURCE_CATALOG.resolve(source_name).plugin.source_mode
+    for source_name in CLI_INPUT_SOURCE_NAMES
+    if INPUT_SOURCE_CATALOG.resolve(source_name).plugin.mode
     in {InputSourceMode.OFFLINE, InputSourceMode.REPLAY}
 )
 
@@ -111,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     viewer.add_argument(
         "--input-source",
-        choices=SUPPORTED_INPUT_SOURCE_NAMES,
+        choices=CLI_INPUT_SOURCE_NAMES,
         default=None,
     )
     return parser

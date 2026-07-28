@@ -52,6 +52,27 @@ class ManagedConformanceInputSourceReader(ConformanceInputSourceReader):
     def close(self) -> None:
         self.closed = True
 
+    @property
+    def viewer_bridge_capability(self):
+        return self
+
+    def ingest_control_message(self, message):
+        _ = message
+        return self.read_frame()
+
+    def ingest_control_message_json(self, message: str):
+        _ = message
+        return self.read_frame()
+
+    def record_ingress_failure(self, reason: str) -> None:
+        _ = reason
+
+    def rebase_current_endpoint_m(self, endpoint_m) -> None:
+        _ = endpoint_m
+
+    def rebind_clock(self, clock) -> None:
+        _ = clock
+
 
 class ReaderWithoutHealth:
     def __init__(self, parameters: Mapping[str, object]) -> None:

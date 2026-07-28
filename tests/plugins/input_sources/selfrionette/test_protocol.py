@@ -1,10 +1,12 @@
+"""Selfrionette seven-channel protocol parser contract."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from selfrionette.plugins.input_sources._loadcell import (
+from selfrionette.plugins.input_sources.selfrionette import (
     RawLoadcellVectorRecord,
     SerialDiagnosticEvent,
     SerialFrameParseError,

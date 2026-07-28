@@ -6,7 +6,6 @@ from dataclasses import replace
 
 import pytest
 
-from selfrionette.plugins.input_sources._common import ManagedFrameHealthReader
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.runtime.control.input_source_selection import (
     select_runtime_input_source,
@@ -36,80 +35,8 @@ from selfrionette.schemas import (
 )
 
 
-class _RetryLifecycleDelegate:
-    def __init__(
-        self,
-        *,
-        fail_first_start: bool = False,
-        fail_first_close: bool = False,
-    ) -> None:
-        self.start_calls = 0
-        self.close_calls = 0
-        self.is_open = False
-        self._fail_first_start = fail_first_start
-        self._fail_first_close = fail_first_close
-
-    def start(self) -> None:
-        self.start_calls += 1
-        if self._fail_first_start and self.start_calls == 1:
-            raise RuntimeError("first start failure")
-        self.is_open = True
-
-    def close(self) -> None:
-        self.close_calls += 1
-        if self._fail_first_close and self.close_calls == 1:
-            raise RuntimeError("first close failure")
-        self.is_open = False
-
-    def read_frame(self) -> RawInputFrame:
-        return RawInputFrame(source="fixture", timestamp_s=0.0)
-
-    def current_health(self) -> InputSourceHealth:
-        return InputSourceHealth(InputSourceHealthStatus.ACTIVE, age_ms=0)
-
-
-def _managed_reader(delegate: _RetryLifecycleDelegate) -> ManagedFrameHealthReader:
-    return ManagedFrameHealthReader(
-        delegate,
-        InputSourceHealth(InputSourceHealthStatus.ACTIVE, age_ms=0),
-    )
-
-
-def test_managed_reader_retries_after_failed_start_cleanup_without_leaking() -> None:
-    delegate = _RetryLifecycleDelegate(fail_first_start=True)
-    reader = _managed_reader(delegate)
-
-    with pytest.raises(RuntimeError, match="first start failure"):
-        reader.start()
-    reader.close()
-
-    reader.start()
-    assert delegate.is_open is True
-    reader.close()
-
-    assert delegate.start_calls == 2
-    assert delegate.close_calls == 2
-    assert delegate.is_open is False
-
-
-def test_managed_reader_allows_cleanup_retry_after_close_failure() -> None:
-    delegate = _RetryLifecycleDelegate(fail_first_close=True)
-    reader = _managed_reader(delegate)
-
-    reader.start()
-    with pytest.raises(RuntimeError, match="first close failure"):
-        reader.close()
-    assert delegate.is_open is True
-
-    reader.close()
-
-    assert delegate.start_calls == 1
-    assert delegate.close_calls == 2
-    assert delegate.is_open is False
-
-
 def test_loadcell_plugin_rejects_read_after_close_and_restarts_cleanly() -> None:
-    plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+    plugin = INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin
     reader = plugin.create_runtime_reader(
         {"lines": ("vector,1000,1,2,3,4,5,6,7",)}
     )
@@ -120,7 +47,7 @@ def test_loadcell_plugin_rejects_read_after_close_and_restarts_cleanly() -> None
 
     with pytest.raises(
         RuntimeError,
-        match="loadcell serial input source is not started",
+        match="Selfrionette input source is not started",
     ):
         reader.read_frame()
 

@@ -7,7 +7,6 @@ from types import SimpleNamespace
 import pytest
 
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
-from selfrionette.plugins.input_sources._common import ManagedFrameHealthReader
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 from selfrionette.runtime.control.input_source_state import (
     annotate_raw_input_frame,
@@ -136,39 +135,12 @@ def test_managed_reader_start_failure_is_preserved_when_cleanup_also_fails() -> 
     assert any("cleanup failed" in note for note in error.value.__notes__)
 
 
-def test_managed_reader_normal_close_failure_is_surface_and_reader_start_failure_is_not_sticky() -> None:
+def test_managed_reader_normal_close_failure_is_surfaced() -> None:
     reader = _ManagedReader(fail_on_close=True)
 
     with pytest.raises(RuntimeError, match="close failure"):
         asyncio.run(run_runtime_input_source_step_loop(_build_managed_test_plan(reader), steps=1))
     assert reader.close_calls == 1
-
-    starts: list[int] = []
-
-    class FailingDelegate:
-        def start(self) -> None:
-            starts.append(1)
-            raise RuntimeError("delegate start failure")
-
-        def close(self) -> None:
-            pass
-
-        def read_frame(self) -> RawInputFrame:
-            return RawInputFrame(source="viewer", timestamp_s=0.0)
-
-        def current_health(self) -> InputSourceHealth:
-            return InputSourceHealth(InputSourceHealthStatus.ACTIVE, age_ms=0)
-
-    managed = ManagedFrameHealthReader(
-        FailingDelegate(), InputSourceHealth(InputSourceHealthStatus.ACTIVE, age_ms=0)
-    )
-    with pytest.raises(RuntimeError, match="delegate start failure"):
-        managed.start()
-    managed.close()
-    with pytest.raises(RuntimeError, match="delegate start failure"):
-        managed.start()
-    assert len(starts) == 2
-
 
 def test_loadcell_factory_has_no_io_and_read_before_start_is_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
@@ -186,10 +158,10 @@ def test_loadcell_factory_has_no_io_and_read_before_start_is_fail_closed(
             return b"vector,0,1,2,3,4,5,6,7\n"
 
     monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=FakeSerial))
-    plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+    plugin = INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin
     reader = plugin.create_runtime_reader({"port": "COM-test", "baud_rate": 115200})
 
-    with pytest.raises(RuntimeError, match="loadcell serial input source is not started"):
+    with pytest.raises(RuntimeError, match="Selfrionette input source is not started"):
         reader.read_frame()
     assert calls["open"] == 0
 
@@ -202,8 +174,8 @@ def test_loadcell_factory_has_no_io_and_read_before_start_is_fail_closed(
 @pytest.mark.parametrize(
     ("parameters", "message"),
     [
-        ({}, "port is required for live serial mode"),
-        ({"port": "   "}, "port must not be empty"),
+        ({}, "port or injected lines are required for Selfrionette"),
+        ({"port": "   "}, "port must be a non-empty string"),
         ({"port": "COM-test", "baud_rate": 0}, "baud_rate must be positive"),
         (
             {"port": "COM-test", "baud_rate": True},
@@ -230,7 +202,7 @@ def test_loadcell_direct_factory_rejects_invalid_configuration_before_io(
             calls["open"] += 1
 
     monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=FakeSerial))
-    plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+    plugin = INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin
 
     with pytest.raises(ValueError, match=message):
         plugin.create_runtime_reader(parameters)
@@ -248,7 +220,7 @@ def test_loadcell_direct_factory_accepts_injected_lines_without_serial_io(
             calls["open"] += 1
 
     monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=FakeSerial))
-    plugin = INPUT_SOURCE_CATALOG.resolve("loadcell_serial").plugin
+    plugin = INPUT_SOURCE_CATALOG.resolve("selfrionette").plugin
     reader = plugin.create_runtime_reader(
         {"lines": ("vector,0,1,2,3,4,5,6,7",)}
     )

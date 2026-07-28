@@ -15,7 +15,6 @@ from selfrionette.runtime.execution.input_source_adapters import (
 from selfrionette.runtime.experiment.contracts import (
     ParameterContract,
     ParameterField,
-    PluginSelection,
     VersionedIdentity,
 )
 from selfrionette.runtime.experiment.input_source import (
@@ -90,14 +89,8 @@ _PLUGIN = InputSourcePlugin(
 INPUT_SOURCE_PLUGIN = InputSourcePluginRegistration(
     plugin=_PLUGIN,
     cli_aliases=("viewer",),
-    generic_cli_exposed=True,
     request_builder=_request,
     execution_adapter=VIEWER_LOCAL_ENDPOINT_EXECUTION_ADAPTER,
-    default_control_mapping_selection=PluginSelection(
-        "viewer_keyboard_gamepad_mapping", 1
-    ),
-    catalog_order=3,
-    generic_cli_order=3,
 )
 
 

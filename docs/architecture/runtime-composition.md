@@ -107,8 +107,9 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 
 ## Input Source reader boundary
 
-Input Sourceのfactory outputは`InputSource`と`InputSourceHealthProvider`を満たし、factory直後のtyped
-current healthがpluginの`initial_health`と一致しなければならない。`ValidatedInputSourceReader`はframeと
+Input Sourceのfactory outputは`HealthyInputSource`として`read_frame()`と`current_health()`をtypedに
+満たし、factory直後のhealthがpluginの`initial_health`と一致しなければならない。live / viewer bridgeは
+`ManagedHealthyInputSource`として`start()` / `close()`も満たす。`ValidatedInputSourceReader`はframeと
 healthを呼出しごとに検証する。production runtime selectionのSoTは
 `plugins/input_sources/catalog.py`であり、selectionはaliasから`PluginSelection`、resolved plugin、sample schema、
 validated reader、typed execution adapterへ一度だけ解決する。
@@ -119,7 +120,9 @@ parameterはproduction registrationのrequest builderが所有する。plugin-ba
 registrationが保持するexecution adapterを必須とする。adapter欠落はfail-closedであり、source-name tableを持つ
 `compatibility_execution_adapter()`はproduction/public callerがないことを確認して退役した。
 
-composition readinessはfactory、frame read、lifecycle startを実行しない。offline / replayにmanaged lifecycleを
+module import、bounded discovery、catalog construction、factory constructionはexternal I/Oを行わない。
+Selfrionetteの`pyserial` loadとserial openは明示的な`start()`以後だけである。composition readinessは
+frame read、lifecycle startを実行しない。offline / replayにmanaged lifecycleを
 要求せず、live / viewer_bridgeのruntime instanceだけがmanaged adapterを持つ。execution開始前に`steps`等の
 pure argumentを検証し、無効な要求では`start()`も`close()`も呼ばない。managed executionを開始した場合は
 start failureを含む各attemptでcloseを最大1回試行し、cleanup failureはprimary failureを置換せずdiagnostic noteへ
@@ -169,8 +172,10 @@ projected axesとbuttonsを反映し、connection / focus / visibility / stale /
 frontend APIをimportせず、canonical sampleから既存keyboard / gamepad semanticsを一度だけ実行する。
 runtimeはmapping resultを適用し、publish-before-rebase orderingと同一source/capability instanceのidentityを維持する。
 
-source selectionとmapping selectionは別の`PluginSelection`として解決する。source registrationが持つのは
-optionalなdefault mapping identityであり、callerが指定したmapping identityを上書きしない。runtimeは
+source selectionとmapping selectionは別の`PluginSelection`として解決する。source registrationは
+concrete Mapping identity、default、Mapping parameter projectionを持たない。operator convenienceの
+default pairingは`runtime/control/input_source_mapping_policy.py`が所有し、callerが指定したmapping
+identityを上書きしない。runtimeは
 resolved sourceのproduced sample schemaとmappingのaccepted schemaをexact matchで検証し、mappingのgeneric
 parameter contractとoptional semantic validator / normalizerをsource lifecycle開始前に実行してからmappingを
 実行する。unknown parameter、negative / non-finite speed・deadzone・max delta、invalid keyboard axis / directionは
@@ -228,4 +233,6 @@ source activity / healthとmappingが生成するcommand zeroは別概念であ�
 projectionはobservable source activityの互換条件として維持し、button-only sample、disconnect、hidden、
 blur、stale、invalidの既存hold safetyも維持する。
 
-Control Mapping parametersの優先順位は、`explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults`である。selectionはcallerが明示したparameter keyを保持し、暗黙defaultと区別したうえでplan readiness時にtyped compatibility capabilityを合成する。C4ではpublic compatibility surfaceも退役し、canonical ownerへのdirect pathだけを残した。
+Control Mapping parametersは`explicit runtime mapping parameters > Mapping plugin defaults`の順で
+解決する。Input Source instance、frame metadata、source registrationからMapping parameterを投影しない。
+selection / plan readinessでMapping contractを正規化・freezeし、source lifecycle開始前に確定する。

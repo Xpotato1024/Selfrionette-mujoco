@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from collections.abc import Mapping
 
 from selfrionette.plugins.input_sources.catalog import InputSourceCatalog
-from selfrionette.plugins.input_sources.registration import (
+from selfrionette.plugins.input_source_registration import (
     InputSourcePluginRegistration,
     InputSourcePluginRequest,
 )
@@ -99,10 +99,8 @@ DUMMY_EXECUTION_ADAPTER = RuntimeInputSourceExecutionAdapter(
 DUMMY_REGISTRATION = InputSourcePluginRegistration(
     plugin=DUMMY_PLUGIN,
     cli_aliases=("test_dummy_input",),
-    generic_cli_exposed=False,
     request_builder=_build_request,
     execution_adapter=DUMMY_EXECUTION_ADAPTER,
-    default_control_mapping_selection=DUMMY_MAPPING_ID,
 )
 
 DUMMY_CATALOG = InputSourceCatalog((DUMMY_REGISTRATION,))

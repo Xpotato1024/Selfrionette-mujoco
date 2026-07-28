@@ -47,7 +47,13 @@ def test_catalogs_and_generic_registration_do_not_list_concrete_plugins() -> Non
     )
     for path in guarded:
         text = path.read_text(encoding="utf-8")
-        assert not any(plugin_id in text for plugin_id in concrete_ids), path
+        tree = ast.parse(text, filename=str(path))
+        string_literals = {
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        assert not set(concrete_ids) & string_literals, path
         assert not any(
             module.startswith("selfrionette.plugins.input_sources.")
             or module.startswith("selfrionette.plugins.mappings.")
@@ -55,7 +61,7 @@ def test_catalogs_and_generic_registration_do_not_list_concrete_plugins() -> Non
         ), path
 
 
-def test_mapping_root_compatibility_exports_are_not_discovery_inputs() -> None:
+def test_mapping_root_compatibility_exports_are_retired() -> None:
     compatibility = (PLUGINS / "mappings" / "__init__.py").read_text(
         encoding="utf-8"
     )
@@ -64,8 +70,9 @@ def test_mapping_root_compatibility_exports_are_not_discovery_inputs() -> None:
     )
     catalog = (PLUGINS / "mappings" / "catalog.py").read_text(encoding="utf-8")
 
-    assert "_PUBLIC_EXPORTS" in compatibility
-    assert "__getattr__" in compatibility
+    assert "_PUBLIC_EXPORTS" not in compatibility
+    assert "__getattr__" not in compatibility
+    assert "__all__: list[str] = []" in compatibility
     for production_source in (discovery, catalog):
         assert "_PUBLIC_EXPORTS" not in production_source
         assert "mappings.__all__" not in production_source

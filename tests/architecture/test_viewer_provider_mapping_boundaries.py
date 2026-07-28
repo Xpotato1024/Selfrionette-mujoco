@@ -56,11 +56,15 @@ def test_mapping_does_not_read_legacy_viewer_control_summary() -> None:
             assert node.slice.value != "viewer_control_message", ast.unparse(node)
 
 
-def test_input_source_registration_selects_mapping_by_identity_not_object() -> None:
+def test_input_source_registration_has_no_cross_axis_mapping_policy() -> None:
     source = _text(
         "src/selfrionette/plugins/input_sources/viewer/plugin.py"
     )
     assert "ControlMappingPlugin" not in source
     assert "VIEWER_CONTROL_MAPPING_PLUGIN" not in source
-    assert "PluginSelection(" in source
-    assert '"viewer_keyboard_gamepad_mapping", 1' in source
+    assert "PluginSelection(" not in source
+    assert "viewer_keyboard_gamepad_mapping" not in source
+    policy = _text(
+        "src/selfrionette/runtime/control/input_source_mapping_policy.py"
+    )
+    assert '"viewer": PluginSelection("viewer_keyboard_gamepad_mapping", 1)' in policy

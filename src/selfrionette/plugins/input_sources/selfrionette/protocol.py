@@ -1,4 +1,4 @@
-"""Shared load-cell acquisition, parsing, normalization, and diagnostics."""
+"""Selfrionette 7-channel protocol, parsing, and intrinsic normalization."""
 
 from __future__ import annotations
 
@@ -26,8 +26,9 @@ class SerialDiagnosticEvent:
 
 @dataclass(frozen=True, slots=True)
 class LoadcellNormalizationConfig:
+    """Device-intrinsic calibration and sensor-domain saturation limits."""
+
     channel_count: int = 7
-    deadzone: float = 0.0
     scale: float = 1.0
     clamp_abs: float = 1.0
 
@@ -36,8 +37,6 @@ class LoadcellNormalizationConfig:
             raise ValueError("channel_count must be exactly 7")
         if self.scale <= 0.0:
             raise ValueError("scale must be positive")
-        if self.deadzone < 0.0:
-            raise ValueError("deadzone must be non-negative")
         if self.clamp_abs <= 0.0:
             raise ValueError("clamp_abs must be positive")
 
@@ -178,11 +177,11 @@ class SerialInputSource:
     def read_frame(self) -> RawInputFrame:
         vector_record = self._read_next_vector_record()
         return RawInputFrame(
-            source="loadcell_serial",
+            source="selfrionette",
             timestamp_s=float(vector_record.timestamp_ms) / 1000.0,
             values=vector_record.channels,
             metadata={
-                "source_kind": "loadcell_serial",
+                "source_kind": "selfrionette",
                 "timestamp_ms": vector_record.timestamp_ms,
                 "raw_line": vector_record.raw_line,
             },
@@ -211,9 +210,6 @@ def _coerce_loadcell_values(
 
 def _normalize_channel_value(raw_value: float, config: LoadcellNormalizationConfig) -> float:
     normalized_value = raw_value / config.scale
-    if abs(normalized_value) < config.deadzone:
-        return 0.0
-
     if normalized_value > config.clamp_abs:
         return config.clamp_abs
     if normalized_value < -config.clamp_abs:
@@ -229,7 +225,7 @@ class LoadcellNormalizedInputIntentConverter:
         self,
         config: LoadcellNormalizationConfig | None = None,
         *,
-        source: str = "loadcell_serial",
+        source: str = "selfrionette",
     ) -> None:
         self._config = LoadcellNormalizationConfig() if config is None else config
         self._source = source

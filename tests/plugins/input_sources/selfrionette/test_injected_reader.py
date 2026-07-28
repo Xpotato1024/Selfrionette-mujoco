@@ -1,10 +1,12 @@
+"""Selfrionette injected-line reader contract."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from selfrionette.plugins.input_sources._loadcell import (
+from selfrionette.plugins.input_sources.selfrionette import (
     SerialFrameParseError,
     SerialInputSource,
 )
@@ -24,10 +26,10 @@ def test_serial_input_source_from_lines_reads_first_valid_vector_record() -> Non
     frame = source.read_frame()
 
     assert isinstance(frame, RawInputFrame)
-    assert frame.source == "loadcell_serial"
+    assert frame.source == "selfrionette"
     assert frame.timestamp_s == pytest.approx(2152.956)
     assert frame.values == pytest.approx((-37.67, 99.06, 137.60, 242.13, 277.34, 25.87, -18.67))
-    assert frame.metadata["source_kind"] == "loadcell_serial"
+    assert frame.metadata["source_kind"] == "selfrionette"
     assert frame.metadata["timestamp_ms"] == 2_152_956
     assert frame.metadata["raw_line"] == "vector,2152956,-37.67,99.06,137.60,242.13,277.34,25.87,-18.67"
 

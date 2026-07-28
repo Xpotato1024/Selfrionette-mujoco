@@ -7,12 +7,12 @@ import pytest
 from selfrionette.runtime.runners.loadcell_serial_dry_run import (
     run_loadcell_serial_dry_run_smoke as _run_canonical_loadcell_smoke,
 )
-from selfrionette.plugins.input_sources._loadcell import (
+from selfrionette.plugins.input_sources.selfrionette import (
     LoadcellNormalizationConfig,
     SerialFrameParseError,
     SerialInputSource,
 )
-from selfrionette.plugins.mappings.loadcell import (
+from selfrionette.plugins.mappings.loadcell_endpoint_mapping import (
     LoadcellEndpointMotionCommandConverter,
     build_r7_a_lite_smoke_endpoint_mapping_config,
 )
@@ -43,7 +43,6 @@ def test_r7_a_lite_serial_dry_run_smoke_runs_recorded_fixture_through_command_ch
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
-            deadzone=0.0,
             scale=100000.0,
             clamp_abs=1.0,
         ),
@@ -76,7 +75,6 @@ def test_r7_a_lite_serial_dry_run_smoke_preserves_diagnostics_and_stops_before_m
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
-            deadzone=0.0,
             scale=100000.0,
             clamp_abs=1.0,
         ),
@@ -98,7 +96,6 @@ def test_r7_a_lite_serial_dry_run_smoke_rejects_malformed_fixture_deterministica
             read_fixture_lines("malformed.txt"),
             max_vectors=1,
             normalization_config=LoadcellNormalizationConfig(
-                deadzone=0.0,
                 scale=100000.0,
                 clamp_abs=1.0,
             ),
@@ -124,7 +121,6 @@ def test_r7_a_lite_serial_dry_run_smoke_uses_injected_lines_instead_of_opening_a
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
-            deadzone=0.0,
             scale=100000.0,
             clamp_abs=1.0,
         ),
@@ -198,11 +194,11 @@ def test_r7_a_lite_serial_dry_run_cli_fixture_mode_outputs_endpoint_metadata(cap
 
 
 def test_default_endpoint_mapping_is_no_op_and_explicit_mapping_changes_desired_endpoint_m() -> None:
-    from selfrionette.plugins.input_sources._loadcell import NormalizedLoadcellInputIntent
-    from selfrionette.plugins.mappings.loadcell import LoadcellEndpointMotionCommandConverter
+    from selfrionette.plugins.input_sources.selfrionette import NormalizedLoadcellInputIntent
+    from selfrionette.plugins.mappings.loadcell_endpoint_mapping import LoadcellEndpointMotionCommandConverter
 
     intent = NormalizedLoadcellInputIntent(
-        source="loadcell_serial",
+        source="selfrionette",
         timestamp_s=1.0,
         values=(0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         metadata={"origin": "smoke"},
@@ -220,7 +216,6 @@ def test_default_endpoint_mapping_is_no_op_and_explicit_mapping_changes_desired_
         ["vector,1000,40000,0,0,0,0,0,0"],
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
-            deadzone=0.0,
             scale=100000.0,
             clamp_abs=1.0,
         ),

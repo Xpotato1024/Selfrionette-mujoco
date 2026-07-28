@@ -150,14 +150,6 @@ class ResolvedExperimentComposition:
     evidence_producers: tuple[EvidenceProducerBinding, ...]
 
     @property
-    def resolved_produced_sample_schema(self) -> VersionedIdentity:
-        return self.resolved_input_sample_schema
-
-    @property
-    def produced_sample_schema_identity(self) -> VersionedIdentity:
-        return self.resolved_input_sample_schema
-
-    @property
     def effective_mapping_input_sample_schema(self) -> VersionedIdentity:
         """Return the versioned representation consumed by the mapping strategy."""
 

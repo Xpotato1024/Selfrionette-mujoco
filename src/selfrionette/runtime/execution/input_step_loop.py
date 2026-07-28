@@ -9,6 +9,7 @@ from time import monotonic
 from selfrionette.plugins.input_sources.viewer import (
     DEFAULT_VIEWER_SAFE_ENDPOINT_M,
     ViewerInputSource,
+    ViewerManagedInputSourceReader,
 )
 from selfrionette.plugins.catalog import resolve_robot_bundle, resolve_robot_profile
 from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
@@ -21,7 +22,6 @@ from selfrionette.runtime.control.input_step_diagnostics import (
 )
 from selfrionette.runtime.control.input_source_selection import (
     RuntimeInputSourceSelection,
-    merge_control_mapping_compatibility_parameters,
 )
 from selfrionette.runtime.control.input_source_state import (
     annotate_raw_input_frame,
@@ -29,9 +29,9 @@ from selfrionette.runtime.control.input_source_state import (
     build_runtime_input_source_state_from_health,
 )
 from selfrionette.runtime.experiment.input_source import (
-    InputSourceMappingAdapter,
+    ManagedInputSource,
+    InputSourceMappingAdapterContract,
     ViewerBridgeRuntimeCapability,
-    ViewerMappingCompatibilityCapability,
     ViewerEndpointRebaseCapability,
 )
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
@@ -86,7 +86,7 @@ class RuntimeInputSourceStepLoopPlan:
     execution_adapter: RuntimeInputSourceExecutionAdapter
     control_mapping: ControlMappingPlugin
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
-    mapping_input_adapter: InputSourceMappingAdapter | None = None
+    mapping_input_adapter: InputSourceMappingAdapterContract | None = None
     viewer_bridge_capability: ViewerBridgeRuntimeCapability | None = None
 
 
@@ -261,7 +261,11 @@ def build_runtime_input_source_step_loop_plan(
         ):
             assert viewer_capability is not None
             viewer_capability.rebind_clock(viewer_clock)
-        pipeline_input_source = viewer_input_source or selection.runtime_reader
+        pipeline_input_source = (
+            ViewerManagedInputSourceReader(viewer_input_source)
+            if viewer_input_source is not None
+            else selection.runtime_reader
+        )
         if pipeline_input_source is None:
             initial_endpoint_m = _coerce_viewer_endpoint_m(
                 selection.initial_metadata.get(
@@ -269,21 +273,17 @@ def build_runtime_input_source_step_loop_plan(
                     selection.initial_metadata.get("target_position_m"),
                 )
             )
-            pipeline_input_source = ViewerInputSource(
+            fallback_viewer_source = ViewerInputSource(
                 clock=viewer_clock if viewer_clock is not None else monotonic,
                 initial_endpoint_m=initial_endpoint_m,
             )
-            viewer_capability = pipeline_input_source
+            pipeline_input_source = ViewerManagedInputSourceReader(
+                fallback_viewer_source
+            )
+            viewer_capability = fallback_viewer_source
 
         if viewer_capability is None:
             raise ValueError("viewer input source is missing its runtime bridge capability")
-
-        control_mapping_parameters = selection.control_mapping_parameters
-        if isinstance(viewer_capability, ViewerMappingCompatibilityCapability):
-            control_mapping_parameters = merge_control_mapping_compatibility_parameters(
-                selection,
-                viewer_capability.mapping_compatibility_parameters(),
-            )
 
         pipeline = build_concrete_mujoco_pipeline(
             frames=selection.frames,
@@ -294,7 +294,7 @@ def build_runtime_input_source_step_loop_plan(
             discontinuity_threshold_rad=VIEWER_ENDPOINT_CONTINUITY_THRESHOLD_RAD,
             discontinuity_threshold_label="viewer endpoint continuity threshold",
             control_mapping=selection.control_mapping,
-            control_mapping_parameters=control_mapping_parameters,
+            control_mapping_parameters=selection.control_mapping_parameters,
             mapping_input_adapter=selection.mapping_input_adapter,
         )
         pipeline.input_source = pipeline_input_source
@@ -317,7 +317,7 @@ def build_runtime_input_source_step_loop_plan(
             **plan_providers,
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
-            control_mapping_parameters=control_mapping_parameters,
+            control_mapping_parameters=selection.control_mapping_parameters,
             mapping_input_adapter=selection.mapping_input_adapter,
             viewer_bridge_capability=viewer_capability,
         )
@@ -350,17 +350,16 @@ async def run_runtime_input_source_step_loop(
         raise ValueError("steps must be a positive integer")
 
     reader = plan.pipeline.input_source
-    start = getattr(reader, "start", None)
-    close = getattr(reader, "close", None)
+    managed_reader = reader if isinstance(reader, ManagedInputSource) else None
     start_attempted = False
     start_completed = False
     close_attempted = False
     close_completed = False
     primary_failure: BaseException | None = None
     try:
-        if callable(start):
+        if managed_reader is not None:
             start_attempted = True
-            start()
+            managed_reader.start()
             start_completed = True
         return await _run_runtime_input_source_step_loop(
             plan,
@@ -375,10 +374,10 @@ async def run_runtime_input_source_step_loop(
         primary_failure = failure
         raise
     finally:
-        if start_attempted and callable(close) and not close_attempted:
+        if start_attempted and managed_reader is not None and not close_attempted:
             close_attempted = True
             try:
-                close()
+                managed_reader.close()
                 close_completed = True
             except BaseException as cleanup_failure:
                 if primary_failure is not None:
@@ -430,32 +429,25 @@ async def _run_runtime_input_source_step_loop(
                 default_source_kind=plan.selection.source_name,
             )
         else:
-            health_provider = getattr(plan.pipeline.input_source, "current_health", None)
-            if callable(health_provider):
-                health = health_provider()
-                source_state = build_runtime_input_source_state_from_health(
-                    health, source_kind=plan.selection.source_name
-                )
-                native_state = build_runtime_input_source_state_from_metadata(
-                    raw_frame.metadata,
-                    default_source_kind=source_state.source_kind,
-                )
-                field_keys = (
-                    ("source_active", "source_active"),
-                    ("command_age_ms", "command_age_ms"),
-                    ("stale_reason", "stale_reason"),
-                )
-                if any(
-                    key in raw_frame.metadata
-                    and getattr(native_state, field) != getattr(source_state, field)
-                    for field, key in field_keys
-                ):
-                    raise ValueError("input source frame metadata and typed health disagree")
-            else:
-                source_state = build_runtime_input_source_state_from_metadata(
-                    raw_frame.metadata,
-                    default_source_kind=plan.selection.source_name,
-                )
+            health = plan.pipeline.input_source.current_health()
+            source_state = build_runtime_input_source_state_from_health(
+                health, source_kind=plan.selection.source_name
+            )
+            native_state = build_runtime_input_source_state_from_metadata(
+                raw_frame.metadata,
+                default_source_kind=source_state.source_kind,
+            )
+            field_keys = (
+                ("source_active", "source_active"),
+                ("command_age_ms", "command_age_ms"),
+                ("stale_reason", "stale_reason"),
+            )
+            if any(
+                key in raw_frame.metadata
+                and getattr(native_state, field) != getattr(source_state, field)
+                for field, key in field_keys
+            ):
+                raise ValueError("input source frame metadata and typed health disagree")
         frame = annotate_raw_input_frame(raw_frame, source_state)
         mapping_input = (
             plan.mapping_input_adapter(frame)

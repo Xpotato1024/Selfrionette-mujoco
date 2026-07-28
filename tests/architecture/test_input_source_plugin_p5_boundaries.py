@@ -54,8 +54,8 @@ def test_input_source_is_the_sixth_composition_axis_and_catalog_is_singleton() -
         "replay",
         "noop",
         "viewer",
-        "loadcell_serial",
-        "loadcell_fixture",
+        "selfrionette",
+        "selfrionette",
         "analog_fixture",
     }
     assert tuple(sorted(registration.plugin.identity.name for registration in INPUT_SOURCE_REGISTRATIONS)) == INPUT_SOURCE_CATALOG.ids
@@ -87,7 +87,7 @@ def test_production_loadcell_source_declares_explicit_mapping_input_adapter() ->
     assert "loadcell_normalized_input_intent" in {
         schema.name for schema in loadcell_mapping.accepted_input_sample_schemas
     }
-    for source_id in ("loadcell_serial", "loadcell_fixture"):
+    for source_id in ("selfrionette", "selfrionette"):
         source = INPUT_SOURCE_CATALOG.resolve(source_id).plugin
         assert source.mapping_input_adapter is not None, source_id
         assert source.mapping_input_adapter.input_schema == source.produced_sample_schema
@@ -106,16 +106,16 @@ def test_mapping_tests_use_canonical_mapping_owners() -> None:
                 violations.append(f"{path}:{node.lineno}:{node.module}:{sorted(imported)}")
     for relative, module in (
         (
-            "analog_fixture",
+            "analog_fixture_mapping",
             "selfrionette.plugins.mappings.analog_fixture_mapping",
         ),
         (
-            "loadcell",
+            "loadcell_endpoint_mapping",
             "selfrionette.plugins.mappings.loadcell_endpoint_mapping",
         ),
-        ("replay", "selfrionette.plugins.mappings.replay_mapping"),
+        ("replay_mapping", "selfrionette.plugins.mappings.replay_mapping"),
         (
-            "viewer",
+            "viewer_keyboard_gamepad_mapping",
             "selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping.keyboard",
         ),
     ):
@@ -189,7 +189,7 @@ def test_source_plugin_import_graph_has_no_forbidden_or_private_cross_source_edg
                     violations.append(f"source:{path}:{module}")
                 if module.startswith("selfrionette.plugins.input_sources."):
                     other = module.split(".")[3]
-                    if other not in {"_common", "_loadcell", source_id}:
+                    if other != source_id:
                         violations.append(f"cross-source:{path}:{module}")
     assert not violations
 
@@ -197,7 +197,7 @@ def test_source_plugin_import_graph_has_no_forbidden_or_private_cross_source_edg
 def test_canonical_source_code_has_no_robot_evaluation_or_mapping_dependency() -> None:
     violations: list[str] = []
     canonical_roots = (
-        SOURCE_PACKAGE_ROOT / "_loadcell",
+        SOURCE_PACKAGE_ROOT / "selfrionette",
         SOURCE_PACKAGE_ROOT / "analog_fixture",
         SOURCE_PACKAGE_ROOT / "programmed_target",
         SOURCE_PACKAGE_ROOT / "replay",
@@ -217,20 +217,12 @@ def test_canonical_source_code_has_no_robot_evaluation_or_mapping_dependency() -
     assert not violations
 
 
-def test_loadcell_plugins_share_deliberate_owner_without_private_cross_imports() -> None:
-    for source_id in ("loadcell_fixture", "loadcell_serial"):
-        modules = {
-            module
-            for path in (SOURCE_PACKAGE_ROOT / source_id).rglob("*.py")
-            for module in _modules(_parse(path))
-        }
-        assert "selfrionette.plugins.input_sources._loadcell" in modules
-        assert not any(
-            module.startswith(
-                f"selfrionette.plugins.input_sources.{'loadcell_serial' if source_id == 'loadcell_fixture' else 'loadcell_fixture'}"
-            )
-            for module in modules
-        )
+def test_selfrionette_is_the_only_production_owner_for_loadcell_protocol() -> None:
+    owner = SOURCE_PACKAGE_ROOT / "selfrionette"
+    assert (owner / "protocol.py").is_file()
+    assert not tuple((SOURCE_PACKAGE_ROOT / "_loadcell").glob("*.py"))
+    assert not tuple((SOURCE_PACKAGE_ROOT / "loadcell_serial").glob("*.py"))
+    assert not tuple((SOURCE_PACKAGE_ROOT / "loadcell_fixture").glob("*.py"))
 
 
 def test_viewer_defaults_have_one_definition_and_no_keyboard_gamepad_source_plugins() -> None:

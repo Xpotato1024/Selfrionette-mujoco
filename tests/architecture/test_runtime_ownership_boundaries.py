@@ -27,6 +27,7 @@ EXPECTED_MODULES = {
         "desired_endpoint_resolver",
         "endpoint_target_generator",
         "input_source_selection",
+        "input_source_mapping_policy",
         "input_source_state",
         "input_step_diagnostics",
         "viewer_control_ingress",

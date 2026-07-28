@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-07-16
+last_verified: 2026-07-29
 canonical_for:
   - R7-A-lite serial dry-run smoke
 related:
@@ -28,7 +28,8 @@ serial frame lines
 
 ## 正本
 
-- `src/selfrionette/loadcell_serial.py`
+- `src/selfrionette/plugins/input_sources/selfrionette/`
+- `src/selfrionette/plugins/mappings/loadcell_endpoint_mapping/`
 - `tests/fixtures/r7_a_lite_serial_frames/minimal_valid.txt`
 - `tests/fixtures/r7_a_lite_serial_frames/malformed.txt`
 - `docs/experiment-notes/2026-06-21-r7-a-lite-data/com5-calibrated-transcript.txt`

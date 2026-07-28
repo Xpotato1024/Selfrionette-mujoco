@@ -1,1 +1,0 @@
-"""Analog mapping test owner."""

@@ -58,6 +58,7 @@ class LoadcellEndpointMappingConfig:
     )
     max_delta_m: float = 0.03
     gain_m: float = 0.01
+    operational_deadzone: float = 0.0
 
     def __post_init__(self) -> None:
         if len(self.channel_axis_weights) != 7:
@@ -71,6 +72,13 @@ class LoadcellEndpointMappingConfig:
         if gain_m < 0.0:
             raise ValueError("gain_m must be non-negative")
         object.__setattr__(self, "gain_m", gain_m)
+        operational_deadzone = _coerce_finite_number(
+            "operational_deadzone",
+            self.operational_deadzone,
+        )
+        if operational_deadzone < 0.0:
+            raise ValueError("operational_deadzone must be non-negative")
+        object.__setattr__(self, "operational_deadzone", operational_deadzone)
         max_delta_m = _coerce_finite_number("max_delta_m", self.max_delta_m)
         if max_delta_m <= 0.0:
             raise ValueError("max_delta_m must be positive")
@@ -131,6 +139,8 @@ def _compute_endpoint_delta_m(
 ) -> Vector3:
     endpoint_delta_m = [0.0, 0.0, 0.0]
     for channel_value, channel_weights in zip(values, config.channel_axis_weights, strict=True):
+        if abs(channel_value) <= config.operational_deadzone:
+            channel_value = 0.0
         endpoint_delta_m[0] += channel_value * channel_weights[0]
         endpoint_delta_m[1] += channel_value * channel_weights[1]
         endpoint_delta_m[2] += channel_value * channel_weights[2]
@@ -160,6 +170,7 @@ def build_r7_a_lite_smoke_endpoint_mapping_config(
     *,
     gain_m: float,
     max_delta_m: float,
+    operational_deadzone: float = 0.0,
 ) -> LoadcellEndpointMappingConfig:
     return LoadcellEndpointMappingConfig(
         channel_axis_weights=(
@@ -173,6 +184,7 @@ def build_r7_a_lite_smoke_endpoint_mapping_config(
         ),
         gain_m=gain_m,
         max_delta_m=max_delta_m,
+        operational_deadzone=operational_deadzone,
     )
 
 

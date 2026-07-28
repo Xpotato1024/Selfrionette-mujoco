@@ -84,7 +84,7 @@ banner が port / baud rate / max frames を示さない場合は validation を
 確認対象は simulation-facing payload metadata である。
 
 - `metadata["desired_endpoint_m"]` が存在する
-- `metadata["source_kind"]` が `loadcell_serial` である
+- `metadata["source_kind"]` が `selfrionette` である
 - `metadata["frame_index"]` が observed frame count と矛盾しない
 - `metadata["serial_timestamp_s"]` が記録できる
 - `metadata["serial_port"]` / `metadata["baud_rate"]` が live mode で記録される

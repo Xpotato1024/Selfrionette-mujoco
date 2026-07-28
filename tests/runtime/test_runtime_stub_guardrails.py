@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import selfrionette.runtime.runners.websocket_publisher as websocket_runner_module
-from selfrionette.plugins.mappings.replay import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from tests.support.input_source_doubles import StaticInputSource
 from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmEndpointInverseKinematicsSolver

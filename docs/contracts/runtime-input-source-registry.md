@@ -36,23 +36,25 @@ facadeを別moduleへ移植しない。frontend keyboard / gamepad providerとma
 missing / wrong export、import failure、duplicate identity、package / logical identity mismatchを
 fail-closedで拒否する。catalogはdiscovery結果からknown-IDの
 `VersionedPluginRegistry[InputSourcePlugin]`とCLI alias mapを構築する。
-`INPUT_SOURCE_PLUGIN_REGISTRY`はcatalog内部の同一registry instanceをexportする互換名であり、別registryを
-再生成しない。duplicate plugin ID、duplicate alias、unknown alias、contract version mismatchをfail-closedで
+registryは`INPUT_SOURCE_CATALOG.registry`から明示的に取得する。旧
+`INPUT_SOURCE_PLUGIN_REGISTRY`互換名はrepo consumerがないことを確認して退役した。duplicate plugin ID、
+duplicate alias、unknown alias、contract version mismatchをfail-closedで
 拒否する。中央のconcrete import / tuple list、external package discovery、arbitrary dynamic import、
 hot reload、implicit noop fallbackは持たない。
 
 | plugin ID | contract | produced sample schema | mode | CLI alias | generic CLI | execution adapter |
 |---|---:|---|---|---|---|---|
+| `analog_fixture` | 1 | `analog_fixture_sample/v1` | replay | `analog_fixture` | no | `analog_fixture_input_execution/v1` |
+| `noop` | 1 | `noop_sample/v1` | offline | `noop` | yes | `replay_compatibility_input_execution/v1` |
 | `programmed_target` | 1 | `programmed_target_sample/v1` | offline | `programmed_target` | yes | `target_metadata_input_execution/v1` |
 | `replay` | 1 | `replay_raw_input_frame/v1` | replay | `replay` | yes | `replay_compatibility_input_execution/v1` |
-| `noop` | 1 | `noop_sample/v1` | offline | `noop` | yes | `replay_compatibility_input_execution/v1` |
+| `selfrionette` | 1 | `loadcell_vector_sample/v1` | live | `selfrionette` | no | `loadcell_input_execution/v1` |
 | `viewer` | 1 | `viewer_control_sample/v1` | viewer_bridge | `viewer` | yes | `viewer_local_endpoint_input_execution/v1` |
-| `loadcell_serial` | 1 | `loadcell_vector_sample/v1` | live | `loadcell_serial` | no | `loadcell_input_execution/v1` |
-| `loadcell_fixture` | 1 | `loadcell_vector_sample/v1` | replay | `loadcell_fixture` | no | `loadcell_input_execution/v1` |
-| `analog_fixture` | 1 | `analog_fixture_sample/v1` | replay | `analog_fixture` | no | `analog_fixture_input_execution/v1` |
 
-Plugin identityとsample schema identityは別のversioned identityである。loadcell liveとfixtureは同じ
-7-channel sample semanticsを生成するため、`loadcell_vector_sample/v1`を共有する。
+Plugin identityとsample schema identityは別のversioned identityである。`selfrionette/v1`が7 channel
+loadcell deviceのidentityであり、live serial、injected lines、recorded/offline dataはacquisition
+backendまたはruntime dependencyであって別device identityではない。旧`loadcell_serial/v1`と
+`loadcell_fixture/v1`はrepo-internal migrationを完了してproduction catalogから退役した。
 
 Generic CLIへ公開する名前は従来どおり次の4件だけである。
 
@@ -63,8 +65,9 @@ noop
 viewer
 ```
 
-`loadcell_serial`、`loadcell_fixture`、`analog_fixture`はgeneric replay CLI choicesへ追加せず、
-専用runnerまたは明示的なfixture boundaryから到達する。
+`selfrionette`と`analog_fixture`はgeneric replay CLI choicesへ追加せず、専用runnerまたは明示的な
+runtime dependency / fixture boundaryから到達する。generic CLIの表示順は
+`cli/main.py::CLI_INPUT_SOURCE_NAMES`だけが所有し、plugin registrationへglobal ordinalを置かない。
 
 ## Plugin contract
 
@@ -81,12 +84,13 @@ viewer
 現在の追加validation:
 
 - programmed target: positive `steps`、`preset=sweep_x`、boolean `loop`
-- loadcell serial: nonblank port、positive integer baud、tuple lines、string elements、port / linesの排他
-- fixture source: required tuple fixture
+- selfrionette: nonblank port、positive integer baud、tuple lines、string elements、port / linesの排他
+- analog fixture: required tuple fixture
 
 ### Readerとhealth
 
-factory outputは`InputSource`と`InputSourceHealthProvider`を満たす。
+factory outputは`HealthyInputSource`を満たし、`read_frame()`と`current_health()`をtyped contractとして
+常に提供する。live / viewer bridgeは`ManagedHealthyInputSource`として`start()`と`close()`も提供する。
 generic `InputSource` Protocolのcanonical definitionは
 `src/selfrionette/runtime/experiment/input_source.py`に置く。
 旧`src/selfrionette/input_sources/base.py`はC4で退役し、consumerはcanonical contractを直接参照する。
@@ -150,12 +154,12 @@ current test ownerはproduction packageの責務を鏡写しにし、cross-layer
 | 責務 | current owner |
 |---|---|
 | generic contract / conformance | `tests/plugins/input_sources/contract/` |
-| source-local reader / parser / health / lifecycle | `tests/plugins/input_sources/<plugin_id>/`、shared loadcellは`tests/plugins/input_sources/_loadcell/` |
+| source-local reader / parser / health / lifecycle | `tests/plugins/input_sources/<plugin_id>/`。Selfrionetteも同じowner ruleを使う |
 | mapping algorithm / parameter / frame | `tests/plugins/mappings/` |
 | catalog / registry / composition | `tests/runtime/test_input_source_plugin_catalog.py`、`tests/runtime/test_experiment_plugin_composition.py` |
 | source -> mapping -> runtime / stale hold | `tests/runtime/` |
 | viewer browser provider | `apps/mujoco-viewer/tests/` |
-| hardware/manual gate | `tests/loadcell_serial/`、manual runner tests |
+| hardware/manual gate | `tests/selfrionette/`、manual runner tests |
 
 `tests/plugins/input_sources/contract/conformance.py`の`InputSourceConformanceCase`は、plugin固有のvalid
 parametersとinjected dependencyだけを受け取り、identity / contract version、produced sample、parameter
@@ -237,12 +241,16 @@ runtime step-loopのsource-state解決:
   Control Mappingはdeadzone、axis/sign、button supplement、command intentを所有する。frontendのnormalized
   gamepad `axes`はcompatibility projectionであり、`raw_axes`がmappingのauthoritative inputである。
 
-### Loadcell serial / fixture
+### Selfrionette device / acquisition backend
 
-- parser、diagnostic accumulation、7-channel acquisitionをsource側に置く。
-- mapping、gain、endpoint delta、MotionCommand生成はmapping側に残す。
-- live factoryはport / baud / linesをI/O前に検証する。
-- fixtureは同じparserとsample schemaを使用し、real serialをopenしない。
+- `plugins/input_sources/selfrionette/`が7-channel protocol、serial framing、diagnostics、intrinsic
+  calibration、sensor saturation clamp、typed health、explicit lifecycle、serial backendを所有する。
+- `loadcell_fixture`というproduction identityは持たない。injected linesは同じSelfrionette readerへ渡す
+  hardware-free backendであり、generic replayはrecorded canonical frame / traceの再生を所有する。
+- module import、bounded discovery、catalog construction、factory constructionではserialをopenしない。
+  `pyserial`のloadとport openは明示的な`start()`以後に限定する。
+- operational deadzone、gain、sign、channel-to-axis assignment、coordinate frame、endpoint delta、
+  command clampは`loadcell_endpoint_mapping/v1`が所有する。
 
 ### Analog fixture
 
@@ -263,7 +271,7 @@ source-owned implementationのphysical ownerは次である。
 | replay reader | `plugins/input_sources/replay/source.py` |
 | viewer ingestion / lifecycle / health / diagnostics / defaults | `plugins/input_sources/viewer/source.py` |
 | analog fixture sample / strict parser | `plugins/input_sources/analog_fixture/source.py` |
-| shared loadcell records / parser / intrinsic normalization / injected-line reader / diagnostics | `plugins/input_sources/_loadcell/` |
+| Selfrionette protocol / intrinsic normalization / injected-line backend / diagnostics / health / lifecycle | `plugins/input_sources/selfrionette/` |
 
 C4ではimmediate removalを採用した。root version `0.0.0`、release/tag 0件、PyPI publish workflowなし、
 READMEに旧APIのinstall/usageなし、C1–C3でtemporary compatibilityと明示、というrepository evidenceに対し、
@@ -273,7 +281,9 @@ repository外consumer不在の証明とは扱わないが、available evidence�
 
 このpolicyに基づき、旧`input_sources/`、`input_interpreters/`、descriptor registry、source / mapping facade、
 interpreter-based `RuntimePipeline`、old-path loadcell re-export、`mapping_plugin=None` fallback、
-compatibility CLI wrapperをretained surfaceなしで退役した。canonical helper
+compatibility CLI wrapperに加え、Mapping package-root lazy facade、旧flat Mapping modules、
+`plugins/input_sources/registration.py`、旧identity alias、runtime input-source移行aliasを退役した。
+canonical public APIとして維持するのは各concrete packageの`__all__`、catalog resolverとcanonical helper
 `runtime.runners.loadcell_serial_dry_run.run_loadcell_serial_dry_run_smoke()`はoffline fixture capabilityとして残すが、
 versioned `loadcell_endpoint_mapping/v1`の明示指定を必須とする。
 
@@ -351,10 +361,19 @@ production Control Mapping catalog は次の deterministic registrations を持�
 | `analog_fixture_mapping/v1` | `analog_fixture_sample/v1` | analog axis/sign/scale/deadzone/frame/endpoint intent |
 | `loadcell_endpoint_mapping/v1` | `loadcell_normalized_input_intent/v1` | loadcell endpoint delta and `MotionCommand` metadata |
 
-analog の parser、timestamp、raw values、health は source-owned で、mapping implementation は `src/selfrionette/plugins/mappings/analog_fixture.py` にある。loadcell の serial parser、diagnostic、intrinsic normalization は `src/selfrionette/plugins/input_sources/_loadcell/` が所有し、channel-axis weights、gain、max delta、endpoint delta、command conversion は `src/selfrionette/plugins/mappings/loadcell.py` が所有する。loadcellのacquisition schemaはraw `loadcell_vector_sample/v1`、source-owned `mapping_input_adapter`のoutputはeffective mapping-input schema `loadcell_normalized_input_intent/v1`である。generic runtimeはadapter contractを検証してその結果だけをmapping strategyへ渡し、Control Mapping Pluginはnormalized schemaをaccepted schemaとして宣言する。adapter不在・input/output schema mismatch・別mappingとのschema mismatchはfail-closedにする。
+analogのparser、timestamp、raw values、healthはsource-ownedで、mapping implementationは
+`src/selfrionette/plugins/mappings/analog_fixture_mapping/`にある。Selfrionetteのserial parser、
+diagnostic、intrinsic normalizationは`src/selfrionette/plugins/input_sources/selfrionette/`が所有し、
+operational deadzone、channel-axis weights、gain、max delta、endpoint delta、command conversionは
+`src/selfrionette/plugins/mappings/loadcell_endpoint_mapping/`が所有する。acquisition schemaはraw
+`loadcell_vector_sample/v1`、source-owned `mapping_input_adapter`のoutputはeffective mapping-input schema
+`loadcell_normalized_input_intent/v1`である。generic runtimeはadapter contractを検証してその結果だけを
+mapping strategyへ渡し、Control Mapping Pluginはnormalized schemaをaccepted schemaとして宣言する。
+adapter不在・input/output schema mismatch・別mappingとのschema mismatchはfail-closedにする。
 
-C3ではimplicit `ReplayInputInterpreter` fallbackを除去するため、`programmed_target`と`noop`へ
-`replay_mapping/v1`のdefault `PluginSelection`を追加した。両sourceのproduced sample schemaはそれぞれ
+C3ではimplicit `ReplayInputInterpreter` fallbackを除去するため、`programmed_target`と`noop`を
+`replay_mapping/v1`へ接続するdefault policyを追加した。#478ではこのpolicyをsource registrationから
+`runtime/control/input_source_mapping_policy.py`へ移した。両sourceのproduced sample schemaはそれぞれ
 `programmed_target_sample/v1`、`noop_sample/v1`のまま維持し、source-owned identity adapterが
 `replay_raw_input_frame/v1`をeffective mapping-input schemaとして宣言する。adapterは同じ
 `RawInputFrame` objectを返し、source、timestamp、values、buttons、metadata、reader behaviorを変更しない。
@@ -371,4 +390,7 @@ generic conformance は source-specific valid parameters に加え、frame/metad
 
 `raw_axes`はnew provider pathのcanonical mapping inputであり、frontend normalized `axes`はwire / overlay compatibility projectionである。gamepad/v1の`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsに基づくobservable semanticsを維持し、mapping deadzoneのcommand zeroとは分離する。button-only sampleもmappingへ渡し、`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。fixed frontend `0.1` projection + configurable backend thresholdはmapping plugin内で一元化し、default parity、custom `0.0`のraw `0.05` hold、raw `0.15`の`1/18`をgolden testで固定する。
 
-runtime parameter precedenceは `explicit runtime mapping parameters > direct ViewerInputSource compatibility parameters > registration / plugin defaults` とする。selectionはexplicit keyをprovenanceとして保持し、plan readinessでtyped compatibilityを正規化・freezeしてからruntimeへ渡す。source-owned mapping input adapterはsource plugin capabilityとして明示し、runtime coreはsource identityを解釈しない。
+runtime parameter precedenceは`explicit runtime mapping parameters > Mapping plugin defaults`とする。
+plan readinessでMapping contractを正規化・freezeしてからruntimeへ渡し、source instance / frame metadata /
+source registrationからMapping parameterを投影しない。source-owned mapping input adapterはsample
+representation変換だけを行い、Mapping operational parameterを所有しない。

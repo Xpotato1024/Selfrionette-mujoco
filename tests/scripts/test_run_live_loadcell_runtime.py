@@ -27,7 +27,7 @@ def test_cli_without_required_mode_exits_safely() -> None:
 
 def test_cli_live_mode_passes_required_live_config_and_prints_banner() -> None:
     stdout = io.StringIO()
-    fixture_payload = {"version": 0, "metadata": {"source_kind": "loadcell_serial"}}
+    fixture_payload = {"version": 0, "metadata": {"source_kind": "selfrionette"}}
 
     with patch.object(MODULE, "run_live_loadcell_runtime_runner", return_value=[fixture_payload]) as run_runner:
         with contextlib.redirect_stdout(stdout):

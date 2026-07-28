@@ -6,8 +6,8 @@ from pathlib import Path
 from selfrionette.runtime.runners.loadcell_serial_dry_run import (
     run_loadcell_serial_dry_run_smoke as _run_canonical_loadcell_smoke,
 )
-from selfrionette.plugins.input_sources._loadcell import LoadcellNormalizationConfig
-from selfrionette.plugins.mappings.loadcell import build_r7_a_lite_smoke_endpoint_mapping_config
+from selfrionette.plugins.input_sources.selfrionette import LoadcellNormalizationConfig
+from selfrionette.plugins.mappings.loadcell_endpoint_mapping import build_r7_a_lite_smoke_endpoint_mapping_config
 from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
 from selfrionette.runtime.experiment.contracts import PluginSelection
 from selfrionette.schemas import MuJoCoState
@@ -33,7 +33,6 @@ def test_r7_a_lite_websocket_viewer_smoke_preserves_command_metadata_without_end
         read_fixture_lines("minimal_valid.txt"),
         max_vectors=1,
         normalization_config=LoadcellNormalizationConfig(
-            deadzone=0.0,
             scale=100000.0,
             clamp_abs=1.0,
         ),

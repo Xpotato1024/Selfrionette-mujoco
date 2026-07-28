@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from selfrionette.runtime.experiment.input_source import (
+    InputSourceHealth,
+    InputSourceHealthStatus,
+)
 from selfrionette.schemas import RawInputFrame
 
 
@@ -29,6 +33,9 @@ class ReplayInputSource:
         frame = self._frames[self._index]
         self._index += 1
         return frame
+
+    def current_health(self) -> InputSourceHealth:
+        return InputSourceHealth(InputSourceHealthStatus.ACTIVE, age_ms=0)
 
 
 __all__ = [
