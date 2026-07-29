@@ -198,6 +198,11 @@ def test_stale_programmed_target_does_not_update_target_marker_or_endpoint_evalu
     assert records[0].motion_command.joint is not None
     assert records[0].motion_command.metadata["stale_reason"] == "source_inactive"
     assert records[0].motion_command.metadata["runtime_input_safety_applied"] is True
+    assert plan.pipeline.simulator.last_joint_position_command is not None
+    assert (
+        plan.pipeline.simulator.last_joint_position_command.joint_angles_rad
+        == pytest.approx(records[0].motion_command.joint.joint_angles_rad)
+    )
     assert "desired_endpoint_m" not in records[0].motion_command.metadata
     assert "target_position_m" not in records[0].motion_command.metadata
     assert records[0].state.target_position_m != stale_desired_endpoint_m

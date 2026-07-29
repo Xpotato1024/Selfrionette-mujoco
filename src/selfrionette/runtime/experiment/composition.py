@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from selfrionette.runtime.experiment.contracts import (
+    CommandSemanticsRoute,
     ControlMappingPlugin,
     EnvironmentPlugin,
     EnvironmentRole,
@@ -23,6 +24,10 @@ from selfrionette.runtime.experiment.contracts import (
 )
 from selfrionette.runtime.experiment.input_source import InputSourcePlugin
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
+from selfrionette.runtime.execution.command_routes import (
+    CommandExecutionBinding,
+    ResolvedCommandExecution,
+)
 from selfrionette.runtime.composition.robot_bundle import RobotBundle
 
 
@@ -106,10 +111,13 @@ class ExperimentPluginManifest:
     control_mapping: PluginSelection
     task: PluginSelection
     input_source: PluginSelection
+    command_semantics_route: VersionedIdentity
     evaluators: tuple[PluginSelection, ...]
     parameters: tuple[PluginParameters, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.command_semantics_route, VersionedIdentity):
+            raise TypeError("command_semantics_route must use VersionedIdentity")
         if not isinstance(self.evaluators, tuple):
             object.__setattr__(self, "evaluators", tuple(self.evaluators))
         if not isinstance(self.parameters, tuple):
@@ -142,6 +150,7 @@ class ResolvedExperimentComposition:
     input_source: InputSourcePlugin
     resolved_input_sample_schema: VersionedIdentity
     resolved_mapping_input_sample_schema: VersionedIdentity
+    resolved_command_semantics_route: CommandSemanticsRoute
     evaluators: tuple[EvaluationPlugin, ...]
     resolved_capabilities: frozenset[VersionedIdentity]
     resolved_roles: frozenset[SemanticRole]
@@ -209,6 +218,36 @@ def _validate_compatibility(
         raise ValueError("environment/task compatibility mismatch")
     if task.compatible_backend_kinds and backend_kind not in task.compatible_backend_kinds:
         raise ValueError("robot backend/task compatibility mismatch")
+
+
+def resolve_command_semantics_route(
+    mapping: ControlMappingPlugin,
+    robot: RobotBundle,
+    identity: VersionedIdentity | None,
+) -> CommandSemanticsRoute:
+    """Resolve one executable route and return its versioned declaration."""
+
+    return resolve_command_execution(mapping, robot, identity).route
+
+
+def resolve_command_execution(
+    mapping: ControlMappingPlugin,
+    robot: RobotBundle,
+    identity: VersionedIdentity | None,
+) -> ResolvedCommandExecution:
+    """Bind one Mapping route to its matching Robot command provider."""
+
+    route = mapping.resolve_command_semantics_route(identity)
+    provider = robot.command_semantic_provider(
+        route.robot_command_semantics_identity
+    )
+    binding = route.execution_strategy.bind(provider)
+    if not isinstance(binding, CommandExecutionBinding):
+        raise TypeError(
+            "command route execution strategy must return a "
+            "CommandExecutionBinding"
+        )
+    return ResolvedCommandExecution(route=route, binding=binding)
 
 
 def _validate_role_requirements(
@@ -351,6 +390,12 @@ def compose_experiment(
             f"{tuple(sorted(item.canonical_id for item in mapping.accepted_input_sample_schemas))!r}"
         )
 
+    command_semantics_route = resolve_command_semantics_route(
+        mapping,
+        robot,
+        manifest.command_semantics_route,
+    )
+
     required_capabilities = (
         environment.required_robot_capabilities
         | mapping.required_robot_capabilities
@@ -431,6 +476,7 @@ def compose_experiment(
         input_source=input_source,
         resolved_input_sample_schema=input_source.produced_sample_schema,
         resolved_mapping_input_sample_schema=effective_mapping_schema,
+        resolved_command_semantics_route=command_semantics_route,
         evaluators=evaluators,
         resolved_capabilities=robot.provided_capabilities,
         resolved_roles=resolved_roles,
@@ -447,6 +493,8 @@ __all__ = [
     "PluginParameters",
     "freeze_parameter_value",
     "parameter_value_to_document",
+    "resolve_command_execution",
+    "resolve_command_semantics_route",
     "ResolvedExperimentComposition",
     "compose_experiment",
 ]

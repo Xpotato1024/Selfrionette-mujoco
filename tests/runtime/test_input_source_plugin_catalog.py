@@ -7,7 +7,7 @@ import pytest
 
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.plugins.mappings.catalog import CONTROL_MAPPING_REGISTRY
-from selfrionette.plugins.input_source_registration import (
+from selfrionette.plugins.input_sources.registration import (
     InputSourcePluginRegistration,
 )
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source

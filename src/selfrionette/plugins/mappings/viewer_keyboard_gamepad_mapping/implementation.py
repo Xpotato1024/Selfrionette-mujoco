@@ -10,6 +10,9 @@ from types import MappingProxyType
 from selfrionette.plugins.mappings._continuous_endpoint_velocity import (
     build_continuous_endpoint_velocity_intent,
 )
+from selfrionette.plugins.mappings._command_routes import (
+    joint_position_command_route,
+)
 from selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping.keyboard import (
     KeyboardBinding,
     KeyboardInputConfig,
@@ -18,7 +21,7 @@ from selfrionette.plugins.mappings.viewer_keyboard_gamepad_mapping.keyboard impo
 )
 from selfrionette.runtime.experiment.contracts import (
     ControlMappingPlugin,
-    ControlMappingStrategy,
+    LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
     ParameterContract,
     ParameterField,
     VersionedIdentity,
@@ -389,6 +392,14 @@ VIEWER_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(
     control_frame=None,
     comparison_family_identity=VersionedIdentity("viewer_keyboard_gamepad_comparison", 1),
     mapping_semantics_identity=VIEWER_MAPPING_SEMANTICS_IDENTITY,
+    command_semantics_routes=frozenset(
+        {
+            joint_position_command_route(
+                route_identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+                control_semantics_identity=VIEWER_MAPPING_SEMANTICS_IDENTITY,
+            )
+        }
+    ),
     parameter_normalizer=normalize_viewer_control_mapping_parameters,
 )
 

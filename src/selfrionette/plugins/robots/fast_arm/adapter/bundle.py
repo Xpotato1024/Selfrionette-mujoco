@@ -15,9 +15,13 @@ from selfrionette.runtime.composition.robot_provider_adapters import (
     ProfileEndpointSceneRoleProvider,
     RuntimeEndpointCommandProvider,
     RuntimeEndpointPoseProvider,
+    RuntimeJointPositionCommandProvider,
     RuntimeQposFeasibilityProvider,
 )
-from selfrionette.runtime.experiment.contracts import VersionedIdentity
+from selfrionette.runtime.experiment.contracts import (
+    JOINT_POSITION_COMMAND_V1,
+    VersionedIdentity,
+)
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -25,6 +29,7 @@ from selfrionette.runtime.composition.robot_bundle import (
     RESET_INITIAL_STATE_V1,
     SCENE_ROLE_BINDING_V1,
     CapabilityProviderBinding,
+    RobotCommandSemanticProviderBinding,
     RobotBundle,
 )
 
@@ -33,6 +38,12 @@ FAST_ARM_ROBOT_BUNDLE = RobotBundle(
     identity=VersionedIdentity("fast_arm", 1),
     profile=FAST_ARM_ROBOT_PROFILE,
     runtime_plugin=FAST_ARM_RUNTIME_PLUGIN,
+    command_semantic_providers=(
+        RobotCommandSemanticProviderBinding(
+            JOINT_POSITION_COMMAND_V1,
+            RuntimeJointPositionCommandProvider(FAST_ARM_RUNTIME_PLUGIN),
+        ),
+    ),
     capability_providers=(
         CapabilityProviderBinding(
             RESET_INITIAL_STATE_V1,

@@ -8,17 +8,17 @@ from importlib import import_module
 _PUBLIC_EXPORTS = {
     "RuntimeConfig": ("selfrionette.runtime.composition.config", "RuntimeConfig"),
     "registered_robot_bundle_ids": (
-        "selfrionette.plugins.catalog",
+        "selfrionette.plugins.robots.catalog",
         "registered_robot_bundle_ids",
     ),
     "registered_robot_runtime_plugin_ids": (
-        "selfrionette.plugins.catalog",
+        "selfrionette.plugins.robots.catalog",
         "registered_robot_runtime_plugin_ids",
     ),
-    "resolve_robot_bundle": ("selfrionette.plugins.catalog", "resolve_robot_bundle"),
-    "resolve_robot_runtime": ("selfrionette.plugins.catalog", "resolve_robot_runtime"),
+    "resolve_robot_bundle": ("selfrionette.plugins.robots.catalog", "resolve_robot_bundle"),
+    "resolve_robot_runtime": ("selfrionette.plugins.robots.catalog", "resolve_robot_runtime"),
     "resolve_robot_runtime_plugin": (
-        "selfrionette.plugins.catalog",
+        "selfrionette.plugins.robots.catalog",
         "resolve_robot_runtime_plugin",
     ),
 }

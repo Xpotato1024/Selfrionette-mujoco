@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from selfrionette.plugins.input_source_registration import InputSourcePluginRegistration
+from selfrionette.plugins.input_sources.registration import InputSourcePluginRegistration
 from selfrionette.runtime.experiment.contracts import PluginSelection
 from selfrionette.runtime.experiment.input_source import InputSourcePlugin
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
@@ -60,7 +60,7 @@ class InputSourceCatalog:
         )
 
 
-from selfrionette.plugins.input_source_discovery import (
+from selfrionette.plugins.input_sources.discovery import (
     InputSourcePluginDiscoveryError,
     discover_production_input_source_plugins,
 )

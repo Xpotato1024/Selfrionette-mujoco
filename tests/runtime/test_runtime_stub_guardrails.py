@@ -5,6 +5,8 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
+
 import selfrionette.runtime.runners.websocket_publisher as websocket_runner_module
 from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
@@ -130,7 +132,11 @@ def test_build_concrete_mujoco_pipeline_emits_non_empty_joint_command_and_four_d
     assert len(command.joint.joint_angles_rad) == 4
     assert command.joint.joint_angles_rad[:2] != (0.0, 0.0)
     assert command.joint.joint_angles_rad[2:] != (0.0, 0.0)
-    assert state.qpos[:4] == command.joint.joint_angles_rad
+    assert state_pipeline.simulator.last_joint_position_command is not None
+    assert state.qpos[:4] == pytest.approx(
+        state_pipeline.simulator.last_joint_position_command.joint_angles_rad,
+        abs=1e-9,
+    )
 
 
 def test_run_replay_mujoco_dry_run_default_path_uses_concrete_pipeline() -> None:

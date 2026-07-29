@@ -5,17 +5,21 @@ from pathlib import Path
 
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     RobotCatalog,
     resolve_robot_bundle,
     resolve_robot_profile,
 )
 from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
+from selfrionette.runtime.composition.robot_resolution import (
+    validate_production_robot_selection_consistency,
+)
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.evaluation.endpoint_metrics import build_endpoint_evaluation_state_publisher
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
+from selfrionette.runtime.experiment.contracts import VersionedIdentity
 from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
@@ -70,6 +74,7 @@ def build_concrete_mujoco_pipeline(
     control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
     control_mapping_parameters: Mapping[str, object] | None = None,
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
+    command_semantics_route_selection: VersionedIdentity | None = None,
 ) -> ControlMappedRuntimePipeline:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
@@ -91,12 +96,28 @@ def build_concrete_mujoco_pipeline(
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
     plugin = robot_bundle.runtime_plugin
+    validate_production_robot_selection_consistency(
+        selection,
+        bundle_identity=robot_bundle.identity,
+        profile=profile,
+        plugin=plugin,
+    )
+    command_execution = resolve_command_execution(
+        control_mapping,
+        robot_bundle,
+        command_semantics_route_selection,
+    )
     initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
-    endpoint_command_provider = robot_bundle.provider(ENDPOINT_COMMAND_V1)
+    endpoint_command_provider = (
+        robot_bundle.provider(ENDPOINT_COMMAND_V1)
+        if command_execution.binding.requires_motion_generator
+        else None
+    )
     endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
     qpos_feasibility_provider = robot_bundle.provider(QPOS_FEASIBILITY_V1)
     assert isinstance(initial_state_provider, ResetInitialStateProvider)
-    assert isinstance(endpoint_command_provider, EndpointCommandProvider)
+    if endpoint_command_provider is not None:
+        assert isinstance(endpoint_command_provider, EndpointCommandProvider)
     assert isinstance(endpoint_pose_provider, EndpointPoseProvider)
     assert isinstance(qpos_feasibility_provider, QposFeasibilityProvider)
     initial_state = initial_state_provider.resolve_initial_state()
@@ -123,10 +144,14 @@ def build_concrete_mujoco_pipeline(
             else control_mapping_parameters
         ),
         mapping_input_adapter=mapping_input_adapter,
-        motion_generator=endpoint_command_provider.build_target_motion_generator(
-            seed_joint_angles_rad=seed_joint_angles_rad,
-            discontinuity_threshold_rad=discontinuity_threshold_rad,
-            discontinuity_threshold_label=discontinuity_threshold_label,
+        motion_generator=(
+            endpoint_command_provider.build_target_motion_generator(
+                seed_joint_angles_rad=seed_joint_angles_rad,
+                discontinuity_threshold_rad=discontinuity_threshold_rad,
+                discontinuity_threshold_label=discontinuity_threshold_label,
+            )
+            if endpoint_command_provider is not None
+            else None
         ),
         simulator=simulator,
         publisher=build_endpoint_evaluation_state_publisher(
@@ -141,6 +166,8 @@ def build_concrete_mujoco_pipeline(
             model=simulator.model,
             config_path=runtime_config.joint_limit_config_path,
         ),
+        command_semantics_route=command_execution.route,
+        command_execution=command_execution.binding,
         robot_profile_metadata=robot_profile_runtime_metadata(robot_bundle.profile),
     )
 

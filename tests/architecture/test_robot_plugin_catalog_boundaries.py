@@ -42,7 +42,7 @@ def test_generic_contracts_do_not_import_catalog_or_concrete_plugins() -> None:
 
 def test_domain_layers_do_not_reverse_depend_on_assembly_or_manifest() -> None:
     forbidden = (
-        "selfrionette.plugins.catalog",
+        "selfrionette.plugins.robots.catalog",
         "selfrionette.runtime.composition.robot_bundle",
         "selfrionette.runtime.evaluation.manifest",
     )
@@ -102,7 +102,7 @@ def test_runtime_execution_edges_use_typed_providers_not_broad_plugins() -> None
 
 def test_catalog_and_bundle_do_not_introduce_defaults_or_dynamic_discovery() -> None:
     paths = (
-        SRC / "plugins" / "catalog.py",
+        SRC / "plugins" / "robots" / "catalog.py",
         SRC / "plugins" / "__init__.py",
         SRC / "plugins" / "robots" / "fast_arm" / "bundle.py",
         SRC / "runtime" / "composition" / "robot_provider_adapters.py",
@@ -123,8 +123,8 @@ def test_catalog_and_bundle_do_not_introduce_defaults_or_dynamic_discovery() -> 
 
 
 def test_bounded_discovery_has_one_production_owner_and_fixed_entry_point() -> None:
-    discovery = (SRC / "plugins" / "robot_discovery.py").read_text(encoding="utf-8")
-    catalog = (SRC / "plugins" / "catalog.py").read_text(encoding="utf-8")
+    discovery = (SRC / "plugins" / "robots" / "discovery.py").read_text(encoding="utf-8")
+    catalog = (SRC / "plugins" / "robots" / "catalog.py").read_text(encoding="utf-8")
 
     assert 'ROBOT_PLUGIN_ENTRY_MODULE = "plugin"' in discovery
     assert 'ROBOT_PLUGIN_ENTRY_SYMBOL = "ROBOT_PLUGIN"' in discovery
@@ -139,11 +139,11 @@ def test_bounded_discovery_has_one_production_owner_and_fixed_entry_point() -> N
         path.relative_to(SRC)
         for path in SRC.rglob("*.py")
         if any(
-            imported == "selfrionette.plugins.robot_discovery"
+            imported == "selfrionette.plugins.robots.discovery"
             for imported in _imports(path)
         )
     }
-    assert discovery_importers == {Path("plugins/catalog.py")}
+    assert discovery_importers == {Path("plugins/robots/catalog.py")}
 
 
 def test_test_discovery_root_and_fixture_names_do_not_enter_production_sources() -> None:
@@ -166,7 +166,7 @@ def test_runtime_generic_exports_are_catalog_free_until_resolver_access() -> Non
     for resolver_name in ("resolve_robot_runtime", "resolve_robot_bundle"):
         command = (
             "import sys; import selfrionette.runtime as runtime; "
-            "assert 'selfrionette.plugins.catalog' not in sys.modules; "
+            "assert 'selfrionette.plugins.robots.catalog' not in sys.modules; "
             "assert 'selfrionette.plugins.robots.fast_arm.plugin' not in sys.modules; "
             "from selfrionette.runtime.composition.robot_resolution import "
             "ResolvedRobotRuntime as direct_runtime; "
@@ -179,10 +179,10 @@ def test_runtime_generic_exports_are_catalog_free_until_resolver_access() -> Non
             "assert not hasattr(runtime, 'ResolvedRobotRuntime'); "
             "assert not hasattr(runtime, 'RobotBundle'); "
             "assert not hasattr(runtime, 'VersionedIdentity'); "
-            "assert 'selfrionette.plugins.catalog' not in sys.modules; "
+            "assert 'selfrionette.plugins.robots.catalog' not in sys.modules; "
             "assert 'selfrionette.plugins.robots.fast_arm.plugin' not in sys.modules; "
             f"getattr(runtime, {resolver_name!r}); "
-            "assert 'selfrionette.plugins.catalog' in sys.modules; "
+            "assert 'selfrionette.plugins.robots.catalog' in sys.modules; "
             "assert 'selfrionette.plugins.robots.fast_arm.plugin' in sys.modules"
         )
         result = subprocess.run(

@@ -1,4 +1,4 @@
-"""Immutable first-party Robot Plugin onboarding declaration."""
+"""Immutable axis-local first-party Robot Plugin onboarding declaration."""
 
 from __future__ import annotations
 
@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 
-from selfrionette.runtime.experiment.contracts import VersionedIdentity
+from selfrionette.runtime.experiment.contracts import (
+    PluginSelection,
+    VersionedIdentity,
+)
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -25,6 +28,9 @@ from selfrionette.runtime.composition.robot_resource import (
     PackageResource,
     PackageResourceBundle,
     read_package_resource_bytes,
+)
+from selfrionette.runtime.composition.robot_resolution import (
+    validate_production_robot_selection_consistency,
 )
 
 
@@ -266,16 +272,14 @@ class RobotPluginRegistration:
             raise ValueError("registration/Robot Bundle identity mismatch")
         profile = self.bundle.profile
         plugin = self.bundle.runtime_plugin
-        if profile.profile_id != robot_id:
-            raise ValueError("registration/Robot Profile identity mismatch")
-        if plugin.profile_id != robot_id:
-            raise ValueError("registration/Runtime Plugin identity mismatch")
+        validate_production_robot_selection_consistency(
+            PluginSelection(robot_id, self.identity.version),
+            bundle_identity=self.bundle.identity,
+            profile=profile,
+            plugin=plugin,
+        )
         if self.viewer.profile_id != robot_id:
             raise ValueError("registration/viewer declaration identity mismatch")
-        if profile.profile_contract_version != self.identity.version:
-            raise ValueError(
-                "Robot Plugin logical version/Robot Profile contract version mismatch"
-            )
         if self.viewer.profile_contract_version != self.identity.version:
             raise ValueError(
                 "Robot Plugin logical version/viewer profile contract version mismatch"
@@ -396,7 +400,7 @@ class RobotPluginRegistration:
         ):
             raise ValueError("viewer fixture/resource declaration mismatch")
 
-        resolved_configurations = tuple(
+        _ = tuple(
             _resource_bytes(
                 repository_root,
                 resource,

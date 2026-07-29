@@ -7,8 +7,12 @@ from types import MappingProxyType
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.plugins.input_sources.viewer import DEFAULT_VIEWER_SAFE_ENDPOINT_M
 from selfrionette.plugins.mappings.catalog import resolve_control_mapping_plugin
-from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
-from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
+from selfrionette.runtime.experiment.contracts import (
+    CommandSemanticsRoute,
+    ControlMappingPlugin,
+    PluginSelection,
+    VersionedIdentity,
+)
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceMappingAdapterContract,
@@ -82,6 +86,8 @@ class RuntimeInputSourceSelection:
     control_mapping_selection: PluginSelection | None = None
     control_mapping: ControlMappingPlugin | None = None
     control_mapping_parameters: Mapping[str, object] = field(default_factory=dict)
+    command_semantics_route_selection: VersionedIdentity | None = None
+    resolved_command_semantics_route: CommandSemanticsRoute | None = None
     mapping_input_sample_schema: VersionedIdentity | None = None
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None
 
@@ -136,6 +142,7 @@ def select_runtime_input_source(
     replay_initial_metadata: Mapping[str, object] | None = None,
     control_mapping_selection: PluginSelection | None = None,
     control_mapping_parameters: Mapping[str, object] | None = None,
+    command_semantics_route_selection: VersionedIdentity | None = None,
 ) -> RuntimeInputSourceSelection:
     registration = INPUT_SOURCE_CATALOG.resolve(source_name)
     plugin_selection = PluginSelection(
@@ -193,6 +200,13 @@ def select_runtime_input_source(
         control_mapping,
         control_mapping_parameters,
     )
+    resolved_command_semantics_route = (
+        control_mapping.resolve_command_semantics_route(
+            command_semantics_route_selection
+        )
+        if control_mapping is not None
+        else None
+    )
 
     # No managed reader is created until source/mapping schema and all mapping
     # parameters have passed readiness. In particular, invalid mapping input
@@ -239,6 +253,12 @@ def select_runtime_input_source(
         control_mapping_selection=resolved_mapping_selection,
         control_mapping=control_mapping,
         control_mapping_parameters=resolved_mapping_parameters,
+        command_semantics_route_selection=(
+            resolved_command_semantics_route.identity
+            if resolved_command_semantics_route is not None
+            else None
+        ),
+        resolved_command_semantics_route=resolved_command_semantics_route,
         mapping_input_sample_schema=(
             effective_mapping_schema if control_mapping is not None else None
         ),

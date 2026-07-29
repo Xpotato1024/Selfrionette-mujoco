@@ -68,13 +68,31 @@ identityへ含めない。一方、first-party bounded discoveryではdirect-chi
 `logical identity.name`と一致させるstructural invariantを採用する。したがってfirst-party package
 pathは完全に任意ではなく、mismatchはdiscovery時にfail-closedとなる。
 
+#480以後、axis固有infrastructureもconcrete packageと同じaxis packageへ置く。root
+`plugins/`に残すのは複数axisで共有する`bounded_discovery.py`だけである。
+
+```text
+plugins/
+├── bounded_discovery.py
+├── robots/{catalog.py,discovery.py,registration.py}
+├── input_sources/{catalog.py,discovery.py,registration.py}
+└── mappings/{catalog.py,discovery.py}
+```
+
+Discoveryは固定entryからcandidate pluginを発見する。Registrationはplugin本体以外の
+axis-specific onboarding declarationを束ねる。Catalogはvalidated discovery / registrationを
+application-facing resolverへ投影する。Robot registrationはBundle、viewer declaration、resource、
+onboarding contractを、Input Source registrationはCLI alias、request builder、execution adapterを
+束ねる。Control Mappingは`ControlMappingPlugin`自身が必要情報を保持するためregistrationを持たず、
+file symmetryだけを目的とする`mappings/registration.py`を作らない。
+
 6軸の#476実装前後inventoryは次のとおりである。
 
 | 軸 | #476前のconcrete owner / 列挙 | #476後のentry point / discovery | 判断 |
 |---|---|---|---|
-| Robot | `plugins/robots/fast_arm/`、既存`robot_discovery.py` | `fast_arm/plugin.py::ROBOT_PLUGIN`、direct-child bounded discovery | #426/#427のreference implementationを維持し、rewriteしない |
-| Input Source | 7 packageがimplementationを所有するが、中央`input_sources/registration.py`が具体pluginとrequestをimport / 列挙 | 各`plugins/input_sources/<source_id>/plugin.py::INPUT_SOURCE_PLUGIN`、`input_source_discovery.py` | #478で`selfrionette/v1`へdevice identityを収束し、6 identityとした。CLI順序はCLI projectionへ移した |
-| Control Mapping | `plugins/mappings/*.py`と中央`mappings/catalog.py`の4件手書き列挙 | logical IDと一致する4 packageの`plugin.py::CONTROL_MAPPING_PLUGIN`、`control_mapping_discovery.py` | algorithmをpackageへ移し、#478で旧flat importとpackage-root facadeを退役した |
+| Robot | `plugins/robots/fast_arm/`、既存`robots/discovery.py` | `fast_arm/plugin.py::ROBOT_PLUGIN`、direct-child bounded discovery | #426/#427のreference implementationを維持し、rewriteしない |
+| Input Source | 7 packageがimplementationを所有するが、中央`input_sources/registration.py`が具体pluginとrequestをimport / 列挙 | 各`plugins/input_sources/<source_id>/plugin.py::INPUT_SOURCE_PLUGIN`、`input_sources/discovery.py` | #478で`selfrionette/v1`へdevice identityを収束し、6 identityとした。CLI順序はCLI projectionへ移した |
+| Control Mapping | `plugins/mappings/*.py`と中央`mappings/catalog.py`の4件手書き列挙 | logical IDと一致する4 packageの`plugin.py::CONTROL_MAPPING_PLUGIN`、`mappings/discovery.py` | algorithmをpackageへ移し、#478で旧flat importとpackage-root facadeを退役した |
 | Environment / Scene | production concrete package / catalogなし。generic `EnvironmentPlugin`とcomposition test fixtureだけ | production discovery候補なし | second SoTがないため変更しない。最初のproduction plugin追加時に本sectionの規則を適用 |
 | Task | production concrete package / catalogなし。generic `TaskPlugin`とcomposition test fixtureだけ | production discovery候補なし | 同上 |
 | Evaluation | production concrete package / catalogなし。generic `EvaluationPlugin`とcomposition test fixtureだけ | production discovery候補なし | 同上 |
@@ -113,7 +131,7 @@ unknown logical identityとしてfailする。
 
 | 分類 | canonical owner / decision |
 |---|---|
-| generic contract | `bounded_discovery.py`、axis discovery、`input_source_registration.py`、`runtime/experiment/`、schemas |
+| generic contract | `bounded_discovery.py`、axis discovery、`input_sources/registration.py`、`runtime/experiment/`、schemas |
 | concrete Input Source owner | `analog_fixture/`、`noop/`、`programmed_target/`、`replay/`、`selfrionette/`、`viewer/` |
 | concrete Mapping owner | `analog_fixture_mapping/`、`loadcell_endpoint_mapping/`、`replay_mapping/`、`viewer_keyboard_gamepad_mapping/` |
 | axis-local shared implementation | Mappingの`_continuous_endpoint_velocity.py`だけ。Input Sourceはshared owner不要 |
@@ -146,7 +164,10 @@ schema adapterを通じて接続するため名称を維持する。
 
 `RobotBundle`は既存`RobotProfile`と`RobotRuntimePlugin`を置換せず、その上位で両者と
 小さなproviderを束ねる。bundle construction時にprofile/plugin identity、contract、object
-bindingを既存resolverと同じfail-closed ruleで検証する。
+bindingを既存resolverと同じfail-closed ruleで検証する。generic experiment compositionではBundle
+identityがProfile IDと異なる用途を許すため、Bundle construction自体は両者のlogical identity一致を
+強制しない。first-party production runtimeだけがselection、Bundle、Profile、Runtime Pluginの
+logical identity / versionを共有validatorで追加検証する。
 
 current capability identityとtyped providerは次のとおりである。
 
@@ -207,6 +228,69 @@ world/tool mapping、gain、deadzone、assistance等はこの軸のpluginまた�
 world/tool pairでcontrol-frame差を許可するparameterは`ParameterField.condition_specific=True`を
 明示し、mapping plugin自身の`control_frame` declarationとrequested frameを一致させる。
 mappingはrequired Robot capabilityを宣言し、利用不能時に別mappingへfallbackしない。
+
+### control semanticsとRobot command semantics
+
+Mapping output/control semantics、runtime/controller conversion semantics、Robot/backend command
+semanticsは別契約である。`CommandSemanticsRoute`は次の3 identityとtyped executable strategyを
+一つのversioned experiment conditionとして保持する。
+
+- route identity: runtime/controller conversionまたはnative passthroughの方式
+- `control_semantics_identity`: operator inputをMappingが何として解釈したか
+- `robot_command_semantics_identity`: route後にRobot/backendが直接受理するcommand
+- executable strategy: selected routeとRobot command providerをbindし、runtimeが実際に実行する変換
+
+Robot command semanticは少なくとも`endpoint_position_command/v1`、
+`endpoint_velocity_command/v1`、`joint_position_command/v1`、
+`joint_velocity_command/v1`を区別する。class名、module名、metadata keyから推論しない。
+Mappingはconcrete Robot IDを、Robotはconcrete Mapping IDを参照しない。generic compositionはselected
+routeの最終semanticに対応する`RobotCommandSemanticProviderBinding`をRobot Bundleから解決し、route
+strategyが返すtyped execution bindingのroute / control / Robot semantic identityが一致することを
+検証する。Robot Bundleのsupported semantic集合はprovider bindingから導出し、identityだけを宣言できない。
+実装済みsemanticではsemantic identity、providerの`command_type`、実際に渡すtyped commandを一致させる。
+`joint_position_command/v1`は`JointPositionCommand`だけを、
+`endpoint_velocity_command/v1`は`EndpointVelocityCommand`だけを受理する。
+`MotionCommand`はruntime内部のmotion / safety envelopeであり、Robot command typeとしてbindしない。
+
+productionの4 Mapping分類は次のとおりである。
+
+| Mapping | accepted input schema | Mapping/control semantics | runtime conversion route | final Robot command semantic |
+|---|---|---|---|---|
+| `analog_fixture_mapping/v1` | `analog_fixture_sample/v1` | `analog_fixture_endpoint_velocity/v1` | `local_endpoint_velocity_to_joint_position/v1` | `joint_position_command/v1` |
+| `loadcell_endpoint_mapping/v1` | `loadcell_normalized_input_intent/v1` | `loadcell_endpoint_delta/v1` | `endpoint_delta_to_joint_position/v1` | `joint_position_command/v1` |
+| `replay_mapping/v1` | `replay_raw_input_frame/v1` | `replay_metadata_command/v1` | `replay_command_to_joint_position/v1` | `joint_position_command/v1` |
+| `viewer_keyboard_gamepad_mapping/v1` | `viewer_control_sample/v1` | `viewer_keyboard_gamepad_semantics/v1` | `local_endpoint_velocity_to_joint_position/v1` | `joint_position_command/v1` |
+
+continuous endpoint velocityを出力するMappingでも、現行routeはvelocityを`dt`で積分し、
+endpoint delta / desired endpoint position、Jacobian allocation、qpos feasibilityを経て
+`MotionCommand.joint`を生成し、safety後に`JointPositionCommand`へprojectionする。この経路をnative
+`endpoint_velocity_command/v1` supportとは呼ばない。`endpoint_command/v1`もtarget / local endpoint
+motion generatorを構築する上位capabilityであり、`endpoint_position_command/v1`または
+`endpoint_velocity_command/v1`と同一ではない。
+
+test-only namespaceではnative velocity passthrough strategyをvelocity-capable dummy Robot providerへbindし、
+generic runtime planを実行する。typed `EndpointVelocityCommand`がprovider/backendへ到達し、joint-position
+MotionGenerator、`dt`積分、endpoint delta、Jacobian allocationを通らないことを検証する。このdummy
+provider / Robotはproduction catalogへ登録しない。composition compatibilityだけではexecution
+swappabilityの証拠としない。
+
+実装済みsemanticのcommand typeは`RobotCommandSemanticContract`のgeneric mappingをSoTとする。
+route strategy、resolved execution binding、Robot providerの3者は同じsemantic contractのexact typeへ
+一致しなければならず、identityだけ一致するwrong typeはsource lifecycle / backend構築前にrejectする。
+production builderは`ResolvedCommandExecution`を外部入力として採用せず、selected Mappingのcanonical
+route strategyとcurrent Robot Bundleのcanonical providerからbindingを内部生成する。providerの
+`ProviderAssemblyBinding`はBundle logical identityおよびcanonical Profile / Runtime Plugin ownerと
+同一でなければBundle construction時にrejectする。manifest / freezeにはversioned semantic identityを
+保存し、Python strategy / binding / provider object identityは保存しない。
+production replay compositionはconfig Robot selection、Bundle identity、Profile ID / contract version、
+Runtime Plugin ID / canonical Profile objectをexactに照合する。同じBundleのRuntime Pluginがbackendを
+構築してmodelを検証し、Bundle providerがqpos feasibility guardを構築する。raw Bundle identityを
+ownership proofにせず、aliased Bundle、external simulator、別Robot / 別logical version backend、
+foreign modelはprovider execute、source start、backend build、simulator stepより前にrejectする。
+arbitrary simulator / guard injectionはtest-only helperの境界とする。
+`ControlMappedRuntimePipeline`はroute / bindingを必須保持し、CLIから到達する全production runnerは
+pipelineのtyped execution APIへ収束する。`MotionCommand -> simulator.apply_command()`はproduction
+runtime入口として使用しない。
 
 `TaskPlugin`は次を宣言する。
 
@@ -307,7 +391,7 @@ production fast_armは独立package `fast_arm_core`でpure kinematics、model/na
 parse、canonical initial state、model/config resourceを所有する。`selfrionette.plugins.robots.fast_arm.adapter`は
 Profile、Runtime Plugin、Selfrionette kinematics/schema変換、MuJoCo validator / endpoint wrapper、feasibility guard、
 initial-state projection、diagnostics、scene/viewer resource、Robot Bundle assemblyを所有し、`fast_arm/v1` Bundleとして
-`selfrionette.plugins.catalog`だけへ登録する。bundleは同packageの
+`selfrionette.plugins.robots.catalog`だけへ登録する。bundleは同packageの
 `FAST_ARM_ROBOT_PROFILE`と`FAST_ARM_RUNTIME_PLUGIN`の同一objectを参照し、generic
 `runtime.composition.robot_provider_adapters`を使って既存のmodel validation、endpoint IK/FK、target/local motion、
 qpos feasibility、endpoint state accessorへ委譲する。initial stateは既存`home` keyframe referenceと
@@ -317,13 +401,13 @@ qpos feasibility、endpoint state accessorへ委譲する。initial stateは既�
 fast_arm_core
         -> plugins/robots/fast_arm/adapter/
 plugins/robots/fast_arm/plugin.py::ROBOT_PLUGIN
-        -> plugins/catalog.py
+        -> plugins/robots/catalog.py
         -> application composition
 ```
 
 `robots/fast_arm.py`、`robot_registry.py`、`runtime/fast_arm_*.py`、`runtime/default_robot_providers.py`、
 旧registry moduleは#429で退役した。internal consumerはplugin owner、`runtime/composition/robot_provider_adapters.py`、
-`plugins/catalog.py`を直接使用する。deliberate package-root resolverはcanonical catalog ownerへ直接mappingし、
+`plugins/robots/catalog.py`を直接使用する。deliberate package-root resolverはcanonical catalog ownerへ直接mappingし、
 intermediate facadeを再導入しない。
 `plugins/robots/fast_arm/*.py`の既存module pathはadapterからのthin re-exportに限定する。
 
@@ -345,7 +429,7 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
   `EvaluationPlugin`、`contact_evidence/v1` extension pointを使い、typed object/frame/unit requirementと
   cube/contact固有fieldをgeneric contractへ追加できる。
 - どちらもTask/Evaluationへfast_arm固有nameまたはsolver classを持ち込まず、viewerへ判定を追加しない。
-- #406のproduction compositionは`selfrionette.plugins.catalog`の
+- #406のproduction compositionは`selfrionette.plugins.robots.catalog`の
   `resolve_robot_bundle()` / `resolve_robot_profile()` / `resolve_robot_runtime_plugin()` /
   `resolve_robot_runtime()`、または既存のresolved experiment compositionを使用する。runtime consumerには
   `RobotBundle.provider()`でassembly時に取得した`EndpointCommandProvider`、

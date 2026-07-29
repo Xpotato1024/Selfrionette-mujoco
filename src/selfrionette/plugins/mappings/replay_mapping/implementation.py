@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from selfrionette.runtime.experiment.contracts import ControlMappingPlugin, VersionedIdentity
+from selfrionette.plugins.mappings._command_routes import (
+    joint_position_command_route,
+)
+from selfrionette.runtime.experiment.contracts import (
+    ControlMappingPlugin,
+    REPLAY_COMMAND_TO_JOINT_POSITION_V1,
+    VersionedIdentity,
+)
 from selfrionette.schemas import InputIntent, MotionCommand, RawInputFrame
 
 
@@ -45,6 +52,14 @@ REPLAY_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(
     strategy=ReplayMappingStrategy(),
     accepted_input_sample_schemas=frozenset({REPLAY_SAMPLE_SCHEMA}),
     mapping_semantics_identity=REPLAY_MAPPING_SEMANTICS_IDENTITY,
+    command_semantics_routes=frozenset(
+        {
+            joint_position_command_route(
+                route_identity=REPLAY_COMMAND_TO_JOINT_POSITION_V1,
+                control_semantics_identity=REPLAY_MAPPING_SEMANTICS_IDENTITY,
+            )
+        }
+    ),
 )
 
 

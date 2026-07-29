@@ -1,4 +1,4 @@
-"""Typed Input Source Plugin registration contract."""
+"""Typed axis-local Input Source Plugin registration contract."""
 
 from __future__ import annotations
 

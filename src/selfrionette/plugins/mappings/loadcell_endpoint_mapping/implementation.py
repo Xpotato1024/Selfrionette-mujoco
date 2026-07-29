@@ -8,8 +8,12 @@ from math import isfinite
 from types import MappingProxyType
 from typing import Protocol, cast, runtime_checkable
 
+from selfrionette.plugins.mappings._command_routes import (
+    joint_position_command_route,
+)
 from selfrionette.runtime.experiment.contracts import (
     ControlMappingPlugin,
+    ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
     ParameterContract,
     ParameterField,
     VersionedIdentity,
@@ -302,6 +306,14 @@ LOADCELL_ENDPOINT_MAPPING_PLUGIN = ControlMappingPlugin(
     ),
     comparison_family_identity=VersionedIdentity("loadcell_comparison", 1),
     mapping_semantics_identity=LOADCELL_MAPPING_SEMANTICS_IDENTITY,
+    command_semantics_routes=frozenset(
+        {
+            joint_position_command_route(
+                route_identity=ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
+                control_semantics_identity=LOADCELL_MAPPING_SEMANTICS_IDENTITY,
+            )
+        }
+    ),
     parameter_normalizer=normalize_loadcell_endpoint_mapping_parameters,
 )
 

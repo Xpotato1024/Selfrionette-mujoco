@@ -16,13 +16,14 @@ from selfrionette.runtime.experiment.contracts import (
     ParameterContract,
     SemanticRole,
     VersionedIdentity,
+    robot_command_semantic_contract,
 )
 from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.runtime.composition.robot_plugin import RobotRuntimePlugin
 from selfrionette.runtime.composition.robot_resolution import (
     validate_robot_profile_plugin_consistency,
 )
-from selfrionette.schemas import MuJoCoState
+from selfrionette.schemas import MuJoCoState, RobotCommand
 
 
 RESET_INITIAL_STATE_V1 = VersionedIdentity("reset_initial_state", 1)
@@ -214,6 +215,15 @@ class ContactEvidenceProvider(Protocol):
     ) -> tuple[CanonicalEvidence, ...]: ...
 
 
+@runtime_checkable
+class RobotCommandSemanticProvider(Protocol):
+    command_semantics_identity: VersionedIdentity
+    command_type: type
+    assembly_binding: ProviderAssemblyBinding
+
+    def execute(self, command: RobotCommand, *, backend: object) -> None: ...
+
+
 CAPABILITY_PROVIDER_TYPES: Mapping[VersionedIdentity, type] = MappingProxyType(
     {
         RESET_INITIAL_STATE_V1: ResetInitialStateProvider,
@@ -269,11 +279,45 @@ class CapabilityProviderBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class RobotCommandSemanticProviderBinding:
+    identity: VersionedIdentity
+    provider: RobotCommandSemanticProvider
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.identity, VersionedIdentity):
+            raise TypeError("Robot command semantic identity must use VersionedIdentity")
+        if not isinstance(self.provider, RobotCommandSemanticProvider):
+            raise TypeError(
+                "Robot command semantic provider must satisfy "
+                "RobotCommandSemanticProvider"
+            )
+        if self.provider.command_semantics_identity != self.identity:
+            raise ValueError(
+                "Robot command semantic provider identity mismatch for "
+                f"{self.identity.canonical_id!r}"
+            )
+        if not isinstance(self.provider.command_type, type):
+            raise TypeError("Robot command semantic provider command_type must be a type")
+        semantic_contract = robot_command_semantic_contract(self.identity)
+        if self.provider.command_type is not semantic_contract.command_type:
+            raise TypeError(
+                "Robot command semantic provider command type mismatch for "
+                f"{self.identity.canonical_id!r}"
+            )
+        if not isinstance(self.provider.assembly_binding, ProviderAssemblyBinding):
+            raise TypeError(
+                "Robot command semantic provider must declare a "
+                "ProviderAssemblyBinding"
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class RobotBundle:
     identity: VersionedIdentity
     profile: RobotProfile
     runtime_plugin: RobotRuntimePlugin
     capability_providers: tuple[CapabilityProviderBinding, ...]
+    command_semantic_providers: tuple[RobotCommandSemanticProviderBinding, ...]
     parameter_contract: ParameterContract = ParameterContract()
 
     def __post_init__(self) -> None:
@@ -283,18 +327,38 @@ class RobotBundle:
         identities = tuple(binding.identity for binding in self.capability_providers)
         if len(identities) != len(set(identities)):
             raise ValueError("ambiguous Robot Bundle capability provider registration")
-        for capability in self.capability_providers:
-            assembly = capability.provider.assembly_binding
+        command_semantic_identities = tuple(
+            binding.identity for binding in self.command_semantic_providers
+        )
+        if not command_semantic_identities:
+            raise ValueError(
+                "Robot Bundle must bind at least one executable command semantic provider"
+            )
+        if len(command_semantic_identities) != len(set(command_semantic_identities)):
+            raise ValueError(
+                "ambiguous Robot Bundle command semantic provider registration"
+            )
+        for binding in (
+            *self.capability_providers,
+            *self.command_semantic_providers,
+        ):
+            assembly = binding.provider.assembly_binding
             if assembly.robot_identity != self.identity:
                 raise ValueError(
                     "Robot Bundle/provider logical identity mismatch for "
-                    f"{capability.identity.canonical_id!r}"
+                    f"{binding.identity.canonical_id!r}"
                 )
             if assembly.owner is not self.profile and assembly.owner is not self.runtime_plugin:
                 raise ValueError(
                     "Robot Bundle provider is not bound to the canonical Profile or "
-                    f"Runtime Plugin for {capability.identity.canonical_id!r}"
+                    f"Runtime Plugin for {binding.identity.canonical_id!r}"
                 )
+
+    @property
+    def supported_command_semantics(self) -> frozenset[VersionedIdentity]:
+        return frozenset(
+            binding.identity for binding in self.command_semantic_providers
+        )
 
     @property
     def provided_capabilities(self) -> frozenset[VersionedIdentity]:
@@ -317,6 +381,28 @@ class RobotBundle:
         if len(providers) != 1:
             raise ValueError(
                 f"ambiguous Robot Bundle capability provider {identity.canonical_id!r}"
+            )
+        return providers[0]
+
+    def command_semantic_provider(
+        self, identity: VersionedIdentity
+    ) -> RobotCommandSemanticProvider:
+        providers = tuple(
+            binding.provider
+            for binding in self.command_semantic_providers
+            if binding.identity == identity
+        )
+        if not providers:
+            supported_ids = tuple(
+                item.canonical_id for item in sorted(self.supported_command_semantics)
+            )
+            raise ValueError(
+                "mapping/Robot command semantics compatibility mismatch: "
+                f"required={identity.canonical_id!r}, supported={supported_ids}"
+            )
+        if len(providers) != 1:
+            raise ValueError(
+                f"ambiguous Robot command semantic provider {identity.canonical_id!r}"
             )
         return providers[0]
 
@@ -350,6 +436,8 @@ __all__ = [
     "QPOS_FEASIBILITY_V1",
     "QposFeasibilityProvider",
     "ProviderAssemblyBinding",
+    "RobotCommandSemanticProvider",
+    "RobotCommandSemanticProviderBinding",
     "RESET_INITIAL_STATE_V1",
     "ROBOT_TOOL_ENDPOINT_ROLE",
     "ResetInitialStateProvider",

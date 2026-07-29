@@ -192,7 +192,7 @@ def test_evaluation_manifest_readiness_contract_is_canonical_and_registered() ->
     assert "`docs/contracts/evaluation-manifest-readiness.md`" in index
     for marker in (
         "EvaluationManifest",
-        "evaluation-manifest/v2",
+        "evaluation-manifest/v3",
         "canonical JSON",
         "sha256",
         "FreezeRecord",

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-28
+last_verified: 2026-07-29
 canonical_for:
   - runtime composition root
 related:
@@ -22,7 +22,7 @@ related:
 | owner | canonical responsibility |
 |---|---|
 | `composition/` | config、Robot Profile / Plugin / Bundle、typed provider adapter、pipeline assembly |
-| `execution/` | `ControlMappedRuntimePipeline`、input step loop、typed input-source execution adapters、timing / pacing |
+| `execution/` | route-bound `ControlMappedRuntimePipeline`、input step loop、typed command / input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness-only composition |
@@ -47,17 +47,22 @@ startup keyframe、IK / FK、motion policy、qpos feasibility guardの整合を�
 zero solver、退役したPlanar solverへ暗黙fallbackしない。
 
 production concrete registrationは、固定namespace直下の`plugin.py` / `ROBOT_PLUGIN`を読むbounded
-discoveryから`selfrionette.plugins.catalog`へ投影する。catalogは具体robot importや具体IDを持たず、
+discoveryから`selfrionette.plugins.robots.catalog`へ投影する。catalogは具体robot importや具体IDを持たず、
 discovered `RobotBundle`をknown IDでresolveし、ProfileとRuntime Plugin resolverは同じBundle objectの
 `profile` / `runtime_plugin`へprojectionする。application compositionはBundleから必要なtyped providerを
 assembly時に取得してconsumerへ渡し、処理中にBundleへ問い合わせるservice locatorにはしない。
 `RuntimeConfig.robot_selection`は`robot_profile_id`と`robot_logical_version`から#405 / #406共通の
 `PluginSelection`を作り、registration、Bundle、Profile、Runtime Plugin、runtime pipelineの全resolverへ同じ値を渡す。
-version省略時のfast_arm logical v1 behaviorは維持し、requested / registered version不一致はmodel load前に拒否する。
+shared production consistency validatorはselection、Bundle logical identity、Profile ID / contract version、
+Runtime Plugin ID / canonical Profile objectを一致させる。raw Bundle identityだけをproduction ownership
+proofにせず、aliased robot ID / logical versionをbackend build前に拒否する。このvalidatorはgeneric experiment
+`RobotBundle` constructionへ適用しない。version省略時のfast_arm logical v1 behaviorは維持し、
+requested / registered version不一致はmodel load前に拒否する。
 onboarding schema versionをruntime selectionへ流用しない。
 `RuntimeInputSourceStepLoopPlan`は`EndpointPoseProvider`、`EndpointCommandProvider`、
-`QposFeasibilityProvider`だけを保持し、`ResolvedRobotRuntime`またはRuntime Plugin全体をexecution edgeへ
-持ち越さない。endpoint poseの観測、motion generator、qpos guardはそれぞれのtyped providerを使用する。
+`QposFeasibilityProvider`、resolved `CommandSemanticsRoute` / `CommandExecutionBinding`を保持し、
+`ResolvedRobotRuntime`またはRuntime Plugin全体をexecution edgeへ持ち越さない。endpoint poseの観測、
+motion generator、qpos guard、Robot command applicationはそれぞれのtyped provider / bindingを使用する。
 concrete MuJoCo pipelineのendpoint evaluation publisherも`ENDPOINT_POSE_V1` providerを受け取り、
 site/body endpointの選択をgeneric runtime内で再構築しない。assembly時の初期stateでendpoint positionを
 解決できない場合はfail closedとする。
@@ -66,7 +71,7 @@ Runtime Pluginを直接使用できるのはcomposition中のmodel validationと
 object identityを固定する。custom providerを含め、stale Profile、stale Runtime Plugin、別robot、別logical versionに
 bindされたproviderをregistration / assembly時に拒否する。
 旧profile / runtime / bundle registry moduleは退役済みである。application compositionとruntimeのdeliberate
-package-root resolverは`plugins/catalog.py`のcanonical resolverへ直接到達し、intermediate facadeを通らない。
+package-root resolverは`plugins/robots/catalog.py`のcanonical resolverへ直接到達し、intermediate facadeを通らない。
 
 discoveryはapplicationがcatalog resolverへ初めて到達した時点で同期的に完了し、duplicate identity、
 broken entry point、contract / capability不整合、missing / escaped resourceをpartial registryなしで拒否する。
@@ -97,7 +102,7 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 | source lifecycle | runtime loop | source lifecycle coordinator | selected sourceとclock | latest `InputIntent`、source activity、age |
 | control-frame resolution | runtime control-frame resolver | pure frame resolver | requested frame、pre-step orientation、`dt_s` | resolved world intentまたはunavailable status |
 | motion policy | selected plugin / runtime coordinator | motion policy adapter | intent、current qpos、target lifecycle | `MotionCommand`またはhold / reject |
-| backend update | MuJoCo backend boundary | backend command applier | validated whole qpos candidate | updated model stateまたは適用前failure |
+| backend update | typed Robot command provider / MuJoCo backend boundary | semantic-specific backend command applier | `JointPositionCommand`等のvalidated typed command | updated model stateまたは適用前failure |
 | MuJoCo measurement | post-step measurement helper | pure measurement helper | post-step `MuJoCoState` | physical `tip` site measurement |
 | diagnostic annotation | runtime diagnostics | pure annotator | intent、prediction、measurement、source state | precedenceを固定したmetadata |
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |
@@ -205,6 +210,48 @@ button-only sampleはactive provider sampleとしてmappingへ渡す。`raw_axes
 hold safety、malformed ingressの即時`invalid`遷移を維持する。
 
 ## failureとordering
+
+command semanticsを含むstartup順序は次で固定する。
+
+```text
+resolve Input Source / Mapping / Robot selections
+-> validate source-produced / Mapping-accepted schemas
+-> normalize and validate Mapping parameters
+-> resolve Mapping control semantics / runtime conversion route
+-> resolve final Robot command semantic provider
+-> bind and validate typed command execution
+-> readiness / freeze
+-> source start
+-> serial / viewer / network I/O and MuJoCo stepping
+```
+
+semantic provider不在、provider command type不一致、selected route / execution binding identity不一致は
+source lifecycle開始前にfail-closedとする。provider不在は
+`mapping/Robot command semantics compatibility mismatch`としてrejectする。
+`ControlMappedRuntimePipeline`はresolved routeと同じidentity / command typeへbindされた
+`CommandExecutionBinding`を必須保持し、bindingなしでは構築できない。input step loop、`run_once()`、
+default / explicit replay、default / explicit viewer、`sweep_x`、offline smokeはpipelineの
+`execute_intent()`または`execute_motion_command()`だけをRobot command application入口として使用する。
+productionのconcrete / replay builderは外部で解決済みの`ResolvedCommandExecution`を受け取らず、
+current Control Mapping、route selection、current Robot Bundleからcanonical route / strategy /
+binding / providerを内部解決する。step-loop planは完成したpipelineのrouteと同一binding objectを
+authoritative objectとして保持し、別途解決したbindingを併存させない。
+production replay builderは`RuntimeConfig.robot_selection`、Bundle identity、Profile identity / contract
+version、Runtime Plugin identity / canonical Profile objectを共有validatorで照合し、Bundleのcanonical
+Runtime Pluginだけでsimulatorを構築してmodel contractをpipeline return前に検証する。qpos feasibility
+guardとprofile metadataも同じBundleから導出し、外部simulator、aliased Bundle、別Robot / 別logical
+version backend、foreign modelをtyped providerと独立に組み合わせる注入面を持たない。
+現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
+desired endpoint positionからJacobianで`MotionCommand`を構築し、safety / qpos feasibility後に
+`JointPositionCommand`へprojectionする。missing joint、joint-velocity-only、empty positionは
+provider/backend到達前にrejectする。`MotionCommand`はdiagnostics用runtime envelopeとして保持し、
+Robot command semantic typeには使用しない。このconversionはruntime / controller ownerであり、
+fast_arm backendのnative endpoint-velocity能力ではない。
+
+`HeadlessMuJoCoSimulator.apply_command(MotionCommand)`はRobot command contractではない。既存の
+fast_arm低位diagnosticとbackend単体testに限るlegacy入口として残し、production runtime / runnerからの
+call、`motion_command_to_qpos_command()`使用、`command_type = MotionCommand`再導入をarchitecture guardで
+拒否する。
 
 - unknown profile、incompatible model、invalid joint orderはcomposition前に失敗する。
 - qpos feasibilityはcandidate全体を検証し、invalid candidateを部分適用しない。

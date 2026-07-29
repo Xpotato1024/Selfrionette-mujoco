@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from math import dist
 
 import pytest
 
 import selfrionette.runtime.composition.concrete_mujoco_pipeline as concrete_pipeline_module
 from selfrionette.motion import TargetToJointMotionGenerator
+from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
 from selfrionette.plugins.robots.fast_arm.adapter.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmEndpointInverseKinematicsSolver
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime.evaluation.endpoint_metrics import EndpointEvaluationStatePublisher
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
+from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.composition.robot_bundle import RobotBundle
+from selfrionette.runtime.experiment.contracts import VersionedIdentity
 from selfrionette.schemas import JointCommand, MuJoCoState, RawInputFrame
 from generic_qpos_test_doubles import RejectingGenericQposGuard
 
@@ -25,6 +31,30 @@ class RecordingPublisher:
         self.states.append(state)
 
 
+def _bundle_with_identity(identity: VersionedIdentity) -> RobotBundle:
+    bundle = resolve_robot_bundle("fast_arm")
+    return RobotBundle(
+        identity=identity,
+        profile=bundle.profile,
+        runtime_plugin=bundle.runtime_plugin,
+        capability_providers=tuple(
+            type(binding)(
+                binding.identity,
+                replace(binding.provider, robot_identity=identity),
+            )
+            for binding in bundle.capability_providers
+        ),
+        command_semantic_providers=tuple(
+            type(binding)(
+                binding.identity,
+                replace(binding.provider, robot_identity=identity),
+            )
+            for binding in bundle.command_semantic_providers
+        ),
+        parameter_contract=bundle.parameter_contract,
+    )
+
+
 def test_build_concrete_mujoco_pipeline_uses_concrete_solver_path() -> None:
     publisher = RecordingPublisher()
     pipeline = build_concrete_mujoco_pipeline(publisher=publisher)
@@ -35,6 +65,20 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_solver_path() -> None:
     assert isinstance(pipeline.publisher, EndpointEvaluationStatePublisher)
     assert pipeline.publisher.publisher is publisher
     assert pipeline.simulator.last_command is None
+
+
+def test_build_concrete_mujoco_pipeline_binds_current_bundle_canonical_execution() -> None:
+    robot_bundle = resolve_robot_bundle("fast_arm")
+    route = REPLAY_CONTROL_MAPPING_PLUGIN.resolve_command_semantics_route()
+
+    pipeline = build_concrete_mujoco_pipeline(publisher=RecordingPublisher())
+
+    assert pipeline.command_semantics_route is route
+    assert pipeline.command_execution.provider is (
+        robot_bundle.command_semantic_provider(
+            route.robot_command_semantics_identity
+        )
+    )
 
 
 def test_build_concrete_mujoco_pipeline_uses_catalog_bundle_resolver(
@@ -50,6 +94,46 @@ def test_build_concrete_mujoco_pipeline_uses_catalog_bundle_resolver(
     monkeypatch.setattr(concrete_pipeline_module, "resolve_robot_bundle", recording_resolver)
     build_concrete_mujoco_pipeline(publisher=RecordingPublisher())
     assert calls == ["fast_arm/v1"]
+
+
+def test_concrete_builder_rejects_aliased_bundle_identity_before_backend_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    aliased_bundle = _bundle_with_identity(VersionedIdentity("robot_b", 1))
+
+    class _AliasedCatalog:
+        def resolve_profile(self, selection):  # noqa: ANN001, ANN201
+            _ = selection
+            return aliased_bundle.profile
+
+        def resolve_bundle(self, selection):  # noqa: ANN001, ANN201
+            _ = selection
+            return aliased_bundle
+
+    build_calls = 0
+
+    def fail_if_built(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        nonlocal build_calls
+        build_calls += 1
+        raise AssertionError("backend must not be built for an aliased Bundle")
+
+    monkeypatch.setattr(
+        type(aliased_bundle.runtime_plugin),
+        "build_simulator",
+        fail_if_built,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="production Robot Bundle/Profile logical identity mismatch",
+    ):
+        build_concrete_mujoco_pipeline(
+            config=RuntimeConfig(robot_profile_id="robot_b"),
+            publisher=RecordingPublisher(),
+            robot_catalog=_AliasedCatalog(),  # type: ignore[arg-type]
+        )
+
+    assert build_calls == 0
 
 
 @pytest.mark.parametrize("reject", [False, True])

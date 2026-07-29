@@ -61,6 +61,9 @@ immutable objectへ束ねる。`onboarding_contract_version`はregistration sche
 logical identity versionではない。onboarding schema v1はlogical v1とlogical v2のrobotを同じregistryへ
 登録できる。registration identityとBundle identityは一致し、Profile、Runtime Pluginが参照するProfile、
 Viewer declarationの`profile_contract_version`はrobot logical versionと一致しなければならない。
+registration、production concrete / replay compositionはruntime層の同じproduction consistency validatorを
+使用し、selection、Bundle logical identity、Profile ID / contract version、Runtime Plugin ID / canonical
+Profile objectのdriftを同じruleで拒否する。resource / viewer path ownershipはregistration固有検証に残す。
 unsupported onboarding schemaはlogical versionに関係なくfailする。Bundleは引き続きtyped provider
 assemblyだけを担い、execution中のservice locatorにはしない。各providerは
 `ProviderAssemblyBinding`でBundle logical identityとassembly ownerを宣言し、ownerは同じBundleのcanonical
@@ -124,7 +127,7 @@ repository-owned resource、またはdeclared Python package resource
 
 robot packageは少なくともside-effect-freeな`__init__.py`、固定entry pointの`plugin.py`、Profile、
 Runtime Plugin、Bundle assembly、viewer declarationを持つ。robot固有algorithmまたはmodel contractは同packageへ
-置き、generic `runtime/`、`kinematics/`、`mujoco_backend/`、`plugins/catalog.py`、viewer production source、
+置き、generic `runtime/`、`kinematics/`、`mujoco_backend/`、`plugins/robots/catalog.py`、viewer production source、
 root compatibility facadeへ新robot固有import、ID、fallbackを追加しない。
 
 registry IDとcanonical identity materialはlogical identityでsortし、candidate列挙順に依存しない。
@@ -136,7 +139,7 @@ catalogへ混入させない。
 runtime composition dependency、public APIではない。
 
 production concrete registrationのSoTは各robot packageの`plugin.py` / `ROBOT_PLUGIN`である。
-`selfrionette.plugins.catalog`はdiscovery結果だけからregistryとprojection resolverを構成し、具体robot
+`selfrionette.plugins.robots.catalog`はdiscovery結果だけからregistryとprojection resolverを構成し、具体robot
 package、具体robot ID、Bundle singletonをimportしない。`resolve_robot_profile()`、`resolve_robot_runtime_plugin()`、
 `resolve_robot_runtime()`、`resolve_robot_bundle()`は同じBundleのProfile / Runtime Plugin objectへ収束する。
 Profile、Runtime Plugin、Bundleを独立したconcrete registryへ重複登録しない。旧registry moduleは
@@ -152,6 +155,23 @@ pluginをrejectする。production defaultではcatalogのBundleを一度assembl
 
 ## Productionとgenericの選択
 
+Robot Bundleのtyped provider capabilityとbackend accepted command semanticsは別集合である。
+`endpoint_command/v1`はtarget / local endpoint motion generatorを構築するprovider能力を表し、
+backendがendpoint positionまたはendpoint velocityをnative受理するという宣言ではない。
+最終backend boundaryは`RobotCommandSemanticProviderBinding`でsemantic identityとtyped execution
+providerを一対一にbindする。`supported_command_semantics`はこのbindingから導出されるprojectionであり、
+providerなしのidentity宣言はできない。
+
+fast_arm / MuJoCoの現行motion generatorはendpoint targetまたはvelocity由来deltaをJacobianで
+candidate qposへ変換し、MuJoCo adapterへ`JointCommand(joint_angles_rad=...)`を渡す。したがって
+fast_armが実行providerを持つcommand semanticは`joint_position_command/v1`だけである。このproviderは
+既存MotionGenerator / safety後の`MotionCommand.joint`をfiniteかつnon-emptyな
+`JointPositionCommand`へprojectionし、typed backend boundaryへ渡す。providerは`MotionCommand`、
+TargetCommand-only、joint-velocity-only envelopeを受理しない。MuJoCo backendはtyped commandを
+model joint orderのqposへ適用し、既存どおりqvelをzeroにしてstep前後のcommanded qposを維持する。
+`endpoint_velocity_command/v1`、`endpoint_position_command/v1`、`joint_velocity_command/v1`は
+versioned identityとして区別できるが、未実装のfast_arm capabilityとして宣言しない。
+
 production fast_arm entry pointは`RuntimeConfig(robot_profile_id="fast_arm")`を
 明示的に構築するか、callerにそのIDの指定を要求する。解決済みprofile/plugin pairを通して、
 model、`home` keyframe、endpoint reference、現在のIK/FK behavior、motion policy、
@@ -162,12 +182,19 @@ logical v2等を選択するcallerは`RuntimeConfig(robot_profile_id=<id>, robot
 `RuntimeConfig.robot_selection`は#405 / #406と同じ`PluginSelection`を返し、catalog projectionとruntime compositionは
 そのselectionを共有する。requested / registered logical version不一致はmodel load前にfailする。
 
-`ControlMappedRuntimePipeline`と`build_replay_mujoco_pipeline()`はgenericのままとする。model pathまたはjoint nameから
-profileを推論せず、profileがない場合にfast_armを選択せず、明示的なmodel pathを要求する。callerはgeneric
-keyframe、guard、state metadataをinjectしてよい。stub-defaultの`build_mujoco_pipeline()`と
+`ControlMappedRuntimePipeline`はgenericのままとし、`build_replay_mujoco_pipeline()`は明示的な
+`RuntimeConfig.robot_selection`とRobot Bundleを要求する。model pathまたはjoint nameからprofileを推論せず、
+profileがない場合にfast_armを選択しない。replay builderはcurrent MappingとBundleからcanonical command
+executionを内部解決し、pre-bound execution、simulator、keyframe、guard、profile metadataを受け取らない。
+production consistency validatorはraw Bundle identityだけを信用せず、selection、Bundle、Profile、Runtime
+Pluginのlogical identity / versionをbackend build前に照合する。BundleのRuntime Pluginがsimulatorを
+構築してmodelを検証し、Bundle providerがguardを構築する。callerがmodel pathをoverrideしても、
+selected Bundleのmodel contractをpipeline return前に通過しなければならない。
+test-onlyのarbitrary simulator / guard injectionはproduction builderではなく明示的なtest helperへ閉じる。
+stub-defaultの`build_mujoco_pipeline()`と
 `build_noop_pipeline()`はproduction surfaceから退役した。したがって最小のnon-fast_arm MJCFは、
-real replay componentまたは明示的に構築した`ControlMappedRuntimePipeline`により、fast_arm validationやconfigurationなしで
-loadとstepができる。
+明示的に構築したtest-only `ControlMappedRuntimePipeline`により、fast_arm validationやconfigurationなしで
+loadとstepを検証できる。
 
 package resourceは宣言したimport packageとpackage-relative pathだけを許可し、stable logical pathとは別に検証する。
 MuJoCo include/meshは`PackageResourceBundle`のrelative VFS layoutで解決し、filesystemへ永続materializeしない。

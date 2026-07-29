@@ -177,6 +177,7 @@ def run_live_selfrionette_runtime_runner(
             runtime_result = run_offline_input_runtime_stepping_smoke(
                 motion_command,
                 steps=config.steps_per_frame,
+                control_mapping=mapping_plugin,
             )
             if runtime_result.payload is None:  # pragma: no cover - defensive
                 raise RuntimeError("offline runtime smoke did not produce a payload")

@@ -27,6 +27,7 @@ from selfrionette.runtime.experiment.composition import (
     parameter_value_to_document,
 )
 from selfrionette.runtime.experiment.contracts import (
+    CommandSemanticsRoute,
     EnvironmentRole,
     PluginAxis,
     PluginParameterOwner,
@@ -42,8 +43,8 @@ from selfrionette.runtime.composition.robot_bundle import (
 )
 
 
-EVALUATION_MANIFEST_SCHEMA_VERSION = "evaluation-manifest/v2"
-EVALUATION_MANIFEST_CONTRACT_VERSION = 2
+EVALUATION_MANIFEST_SCHEMA_VERSION = "evaluation-manifest/v3"
+EVALUATION_MANIFEST_CONTRACT_VERSION = 3
 EVALUATION_MANIFEST_DIGEST_ALGORITHM = "sha256"
 EVALUATION_FREEZE_SCHEMA_VERSION = "evaluation-freeze/v1"
 _CONTROL_FRAMES = frozenset({"world", "tool"})
@@ -409,6 +410,7 @@ class EvaluationManifest:
     control_mapping: PluginSelection
     task: PluginSelection
     input_source: PluginSelection
+    command_semantics_route_identity: VersionedIdentity
     evaluators: tuple[PluginSelection, ...]
     parameters: tuple[PluginParameters, ...]
     initial_keyframe_name: str
@@ -469,6 +471,10 @@ class EvaluationManifest:
         _identity("runtime_plugin_identity", self.runtime_plugin_identity)
         _identity("model_contract_identity", self.model_contract_identity)
         _identity("initial_state_contract_identity", self.initial_state_contract_identity)
+        _identity(
+            "command_semantics_route_identity",
+            self.command_semantics_route_identity,
+        )
 
         evaluators = tuple(self.evaluators)
         if any(not isinstance(item, PluginSelection) for item in evaluators):
@@ -651,6 +657,7 @@ class EvaluationManifest:
             control_mapping=self.control_mapping,
             task=self.task,
             input_source=self.input_source,
+            command_semantics_route=self.command_semantics_route_identity,
             evaluators=self.evaluators,
             parameters=self.parameters,
         )
@@ -674,6 +681,9 @@ class EvaluationManifest:
             "control_mapping": _selection_document(self.control_mapping),
             "task": _selection_document(self.task),
             "input_source": _selection_document(self.input_source),
+            "command_semantics_route_identity": _identity_document(
+                self.command_semantics_route_identity
+            ),
             "evaluators": [_selection_document(item) for item in self.evaluators],
             "parameters": [
                 {
@@ -809,6 +819,13 @@ def decode_evaluation_manifest(
         ),
         input_source=_document_selection(
             _require_object(root["input_source"], "input_source"), "input_source"
+        ),
+        command_semantics_route_identity=_document_identity(
+            _require_object(
+                root["command_semantics_route_identity"],
+                "command_semantics_route_identity",
+            ),
+            "command_semantics_route_identity",
         ),
         evaluators=evaluators,
         parameters=tuple(parameters),
@@ -1105,6 +1122,9 @@ def _resolved_identity_document(
             "input_source": _selection_document(manifest.input_source),
             "evaluators": [_selection_document(item) for item in manifest.evaluators],
         },
+        "requested_command_semantics_route_identity": _identity_document(
+            manifest.command_semantics_route_identity
+        ),
         "resolved_plugin_identities": {
             "robot_bundle": _identity_document(composition.robot_bundle.identity),
             "environment": _identity_document(composition.environment.identity),
@@ -1123,6 +1143,17 @@ def _resolved_identity_document(
             "family_identity": _identity_document(mapping_family_identity),
             "mapping_semantics_identity": _identity_document(mapping_semantics_identity),
             "control_frame": composition.control_mapping.control_frame,
+        },
+        "resolved_command_semantics_route": {
+            "route_identity": _identity_document(
+                composition.resolved_command_semantics_route.identity
+            ),
+            "control_semantics_identity": _identity_document(
+                composition.resolved_command_semantics_route.control_semantics_identity
+            ),
+            "robot_command_semantics_identity": _identity_document(
+                composition.resolved_command_semantics_route.robot_command_semantics_identity
+            ),
         },
         "software_execution_identity": {
             "repository_identity": execution_identity.repository_identity,
@@ -1238,6 +1269,7 @@ class EvaluationReadiness:
     software_execution_identity: SoftwareExecutionIdentity
     mapping_comparison_family_identity: VersionedIdentity
     mapping_semantics_identity: VersionedIdentity
+    command_semantics_route: CommandSemanticsRoute
     readiness_status: ReadinessStatus
     resolved_identity_digest: str
     freeze_record: FreezeRecord
@@ -1306,6 +1338,17 @@ class EvaluationReadiness:
             "readiness mapping semantics identity",
             self.mapping_semantics_identity,
         )
+        if not isinstance(self.command_semantics_route, CommandSemanticsRoute):
+            raise EvaluationManifestError(
+                "readiness command semantics must use CommandSemanticsRoute"
+            )
+        if (
+            self.command_semantics_route
+            != self.composition.resolved_command_semantics_route
+        ):
+            raise EvaluationManifestError(
+                "readiness command semantics/composition mismatch"
+            )
 
     @property
     def canonical_requested_manifest_identity(self) -> str:
@@ -1440,6 +1483,7 @@ def _readiness_from_composition(
             software_execution_identity=execution_identity,
             mapping_comparison_family_identity=mapping_family_identity,
             mapping_semantics_identity=mapping_semantics_identity,
+            command_semantics_route=composition.resolved_command_semantics_route,
             readiness_status=ReadinessStatus.READY,
             resolved_identity_digest=resolved_identity,
             freeze_record=freeze_record,

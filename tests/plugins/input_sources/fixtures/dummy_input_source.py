@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from collections.abc import Mapping
 
 from selfrionette.plugins.input_sources.catalog import InputSourceCatalog
-from selfrionette.plugins.input_source_registration import (
+from selfrionette.plugins.input_sources.registration import (
     InputSourcePluginRegistration,
     InputSourcePluginRequest,
 )

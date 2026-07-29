@@ -7,7 +7,13 @@ from selfrionette.plugins.robots.fast_arm.adapter.runtime import build_fast_arm_
 import mujoco
 import pytest
 
-from selfrionette.schemas import JointCommand, MotionCommand, MuJoCoState, TargetCommand
+from selfrionette.schemas import (
+    JointCommand,
+    JointPositionCommand,
+    MotionCommand,
+    MuJoCoState,
+    TargetCommand,
+)
 
 
 def test_headless_simulator_from_default_fast_arm_loads_scene() -> None:
@@ -84,6 +90,23 @@ def test_headless_simulator_position_commands_clear_stale_velocity_before_mj_ste
     assert int(simulator.data.warning.number[bad_qacc_warning]) == 0
     assert simulator.data.time == pytest.approx(7.0 / 60.0)
     assert tuple(simulator.data.qvel) == pytest.approx((0.0,) * len(simulator.data.qvel))
+
+
+def test_headless_simulator_typed_joint_position_command_preserves_qpos_and_qvel() -> None:
+    simulator = build_fast_arm_simulator()
+    command = JointPositionCommand(
+        timestamp_s=1.0,
+        joint_angles_rad=(0.1, -0.2, 0.3, -0.4),
+    )
+
+    simulator.apply_joint_position_command(command)
+    simulator.step(1.0 / 60.0)
+    state = simulator.snapshot()
+
+    assert simulator.last_joint_position_command is command
+    assert simulator.last_command is None
+    assert state.qpos[:4] == pytest.approx(command.joint_angles_rad)
+    assert state.qvel == pytest.approx((0.0,) * len(state.qvel))
 
 
 def test_headless_simulator_rejects_non_positive_dt_s() -> None:

@@ -22,6 +22,8 @@ from selfrionette.runtime.composition.robot_bundle import (
     ProviderAssemblyBinding,
     SemanticRoleBinding,
 )
+from selfrionette.runtime.experiment.contracts import JOINT_POSITION_COMMAND_V1
+from selfrionette.schemas import JointPositionCommand, RobotCommand
 from selfrionette.runtime.composition.robot_plugin import RobotRuntimePlugin
 from selfrionette.schemas import MuJoCoState
 
@@ -108,6 +110,38 @@ class RuntimeEndpointCommandProvider:
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimeJointPositionCommandProvider:
+    plugin: RobotRuntimePlugin
+    robot_identity: VersionedIdentity | None = None
+    command_semantics_identity = JOINT_POSITION_COMMAND_V1
+    command_type = JointPositionCommand
+
+    @property
+    def assembly_binding(self) -> ProviderAssemblyBinding:
+        identity = self.robot_identity or VersionedIdentity(
+            self.plugin.profile.profile_id,
+            self.plugin.profile.profile_contract_version,
+        )
+        return ProviderAssemblyBinding(identity, self.plugin)
+
+    def execute(self, command: RobotCommand, *, backend: object) -> None:
+        if not isinstance(command, JointPositionCommand):
+            raise TypeError(
+                "joint_position_command/v1 provider requires "
+                "JointPositionCommand"
+            )
+        apply_joint_position_command = getattr(
+            backend, "apply_joint_position_command", None
+        )
+        if not callable(apply_joint_position_command):
+            raise TypeError(
+                "joint_position_command/v1 backend must provide "
+                "apply_joint_position_command()"
+            )
+        apply_joint_position_command(command)
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeQposFeasibilityProvider:
     plugin: RobotRuntimePlugin
     robot_identity: VersionedIdentity | None = None
@@ -170,6 +204,7 @@ __all__ = [
     "NamedKeyframeInitialStateProvider",
     "ProfileEndpointSceneRoleProvider",
     "RuntimeEndpointCommandProvider",
+    "RuntimeJointPositionCommandProvider",
     "RuntimeEndpointPoseProvider",
     "RuntimeQposFeasibilityProvider",
 ]

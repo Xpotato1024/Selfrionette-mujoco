@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
 
 import asyncio
 import json
 
+from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.transport import WebSocketStatePublisher
 
@@ -20,8 +21,9 @@ class RecordingSender:
 def test_replay_pipeline_publishes_payload_v0_json_in_memory() -> None:
     sender = RecordingSender()
     pipeline = build_replay_mujoco_pipeline(
+        config=RuntimeConfig(robot_profile_id="fast_arm"),
         publisher=WebSocketStatePublisher(sender),
-        model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
+        robot_bundle=resolve_robot_bundle("fast_arm"),
     )
 
     state = asyncio.run(pipeline.run_once())

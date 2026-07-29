@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from selfrionette.plugins.control_mapping_discovery import (
+from selfrionette.plugins.mappings.discovery import (
     ControlMappingDiscoveryRoot,
     ControlMappingPluginDiscoveryError,
     discover_control_mapping_plugins,
 )
-from selfrionette.plugins.input_source_discovery import (
+from selfrionette.plugins.input_sources.discovery import (
     InputSourceDiscoveryRoot,
     InputSourcePluginDiscoveryError,
     discover_input_source_plugins,

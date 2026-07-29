@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from selfrionette.schemas.command import JointCommand, MotionCommand, TargetCommand
+from selfrionette.schemas.command import (
+    EndpointVelocityCommand,
+    JointCommand,
+    JointPositionCommand,
+    MotionCommand,
+    RobotCommand,
+    TargetCommand,
+)
 from selfrionette.schemas.endpoint import (
     ControlFrameResolutionStatus,
     EndpointControlFrame,
@@ -59,12 +66,14 @@ __all__ = [
     "EndpointControlFrame",
     "EndpointMetadata",
     "EndpointProgressStatus",
+    "EndpointVelocityCommand",
     "EndpointVelocityFrame",
     "EXPERIMENT_MOTION_LOG_SCHEMA_VERSION",
     "ConfigurationRecord",
     "ExperimentMotionLogRecord",
     "InputIntent",
     "JointCommand",
+    "JointPositionCommand",
     "JointVector",
     "MotionCommand",
     "MotionStatus",
@@ -73,6 +82,7 @@ __all__ = [
     "QuaternionWXYZ",
     "RawInputFrame",
     "RenderState",
+    "RobotCommand",
     "ResolvedEndpointFrame",
     "ScalarVector",
     "SiteTransform",

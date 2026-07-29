@@ -38,7 +38,7 @@ def test_generic_viewer_renderer_and_qpos_sync_do_not_embed_fast_arm() -> None:
 
 def test_profile_registries_do_not_use_arbitrary_dynamic_imports() -> None:
     paths = (
-        ROOT / "src" / "selfrionette" / "plugins" / "catalog.py",
+        ROOT / "src" / "selfrionette" / "plugins" / "robots" / "catalog.py",
         ROOT / "apps" / "mujoco-viewer" / "src" / "robot-profiles" / "registry.ts",
     )
     for path in paths:

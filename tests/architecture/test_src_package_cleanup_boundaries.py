@@ -8,7 +8,7 @@ from importlib.util import resolve_name
 from pathlib import Path
 
 import selfrionette.runtime as runtime
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     resolve_robot_bundle,
     resolve_robot_profile,
     resolve_robot_runtime_plugin,
@@ -142,7 +142,7 @@ def test_only_fast_arm_plugin_package_imports_concrete_fast_arm_modules() -> Non
 def test_plugin_discovery_does_not_eagerly_load_diagnostics() -> None:
     code = (
         "import sys;sys.path.insert(0, 'src');"
-        "from selfrionette.plugins.robot_discovery import discover_production_robot_plugins;"
+        "from selfrionette.plugins.robots.discovery import discover_production_robot_plugins;"
         "discover_production_robot_plugins();"
         "assert not any('.diagnostics' in name for name in sys.modules), "
         "sorted(name for name in sys.modules if '.diagnostics' in name)"
@@ -220,7 +220,7 @@ def test_runtime_root_retains_only_deliberate_catalog_apis() -> None:
     retained_catalog_apis = {
         name
         for name, (owner, _) in runtime._PUBLIC_EXPORTS.items()
-        if owner == "selfrionette.plugins.catalog"
+        if owner == "selfrionette.plugins.robots.catalog"
     }
     assert retained_catalog_apis == {
         "registered_robot_bundle_ids",

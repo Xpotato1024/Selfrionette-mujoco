@@ -10,7 +10,7 @@ from selfrionette.plugins.bounded_discovery import (
     direct_child_package_names,
     import_fixed_entry_module,
 )
-from selfrionette.plugins.input_source_registration import (
+from selfrionette.plugins.input_sources.registration import (
     InputSourcePluginRegistration,
 )
 

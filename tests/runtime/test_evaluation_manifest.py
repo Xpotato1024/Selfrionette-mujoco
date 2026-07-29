@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from selfrionette.plugins.catalog import (
+from selfrionette.plugins.robots.catalog import (
     resolve_robot_bundle as resolve_robot_bundle_from_catalog,
 )
 from selfrionette.runtime.evaluation.manifest import (
@@ -29,8 +29,10 @@ from selfrionette.runtime.experiment.composition import (
     PluginParameters,
 )
 from selfrionette.runtime.experiment.contracts import (
+    ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
     EnvironmentRole,
     ControlMappingPlugin,
+    LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
     ParameterContract,
     ParameterField,
     PluginAxis,
@@ -38,12 +40,12 @@ from selfrionette.runtime.experiment.contracts import (
     PluginSelection,
     VersionedIdentity,
 )
+from selfrionette.plugins.mappings._command_routes import (
+    joint_position_command_route,
+)
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from tests.support.input_source_plugin_doubles import CONFORMANCE_SAMPLE_SCHEMA
 from selfrionette.runtime.composition.robot_bundle import CONTACT_EVIDENCE_V1, InitialStateContract
-from selfrionette.plugins.catalog import (
-    resolve_robot_bundle as resolve_robot_bundle_from_compatibility_facade,
-)
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.plugins.robots.fast_arm.adapter.initial_state import (
     FAST_ARM_INITIAL_STATE_CONTRACT,
@@ -64,13 +66,13 @@ from tests.runtime.test_experiment_plugin_composition import (
 
 
 BASELINE_FAST_ARM_MANIFEST_DIGEST = (
-    "sha256:55d2103e69f414bc0aa513ffa96287f0e56900ad2e5d286d6cdc5a8128eadb95"
+    "sha256:2125da9cf092fcd33bb57df5cbd1fdf129b054fd2eba3b4f5d01872493a6caeb"
 )
 BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST = (
-    "sha256:208478963f6ae539c164feebc3a58876bbdce972106f21596aa6aff7fb2cc08c"
+    "sha256:5c184f295fc6c8fe5371dfbfd0c85b65467360b784c4a9490a983ec9197fc8f3"
 )
 BASELINE_FAST_ARM_FREEZE_DIGEST = (
-    "sha256:5f4ccbdebffd7d5c3919c66d1e51452809f373a459521283ae47e9531c08faaf"
+    "sha256:7b7d77a441539026aec1eee0642236fdb1b85f876262815c8f20d0ac3521ab06"
 )
 
 
@@ -91,7 +93,7 @@ def _manifest(**overrides: object) -> EvaluationManifest:
     environment = PluginSelection("dummy_environment", 1)
     values: dict[str, object] = {
         "schema_version": EVALUATION_MANIFEST_SCHEMA_VERSION,
-        "contract_version": 2,
+        "contract_version": 3,
         "repository_identity": "Xpotato1024/Selfrionette-mujoco",
         "software_revision_identity": EXECUTION_IDENTITY.software_revision_identity,
         "robot_bundle": PluginSelection("dummy_robot_bundle", 1),
@@ -105,6 +107,9 @@ def _manifest(**overrides: object) -> EvaluationManifest:
         "control_mapping": PluginSelection("dummy_mapping", 1),
         "task": PluginSelection("dummy_reach_task", 1),
         "input_source": PluginSelection("conformance_input_source", 1),
+        "command_semantics_route_identity": (
+            LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
+        ),
         "evaluators": (PluginSelection("dummy_success_evaluator", 1),),
         "parameters": (_environment_parameters(environment),),
         "initial_keyframe_name": "neutral",
@@ -208,6 +213,58 @@ def test_canonical_round_trip_and_field_insertion_order_are_stable() -> None:
 
     assert decode_evaluation_manifest(canonical) == manifest
     assert encode_evaluation_manifest(decode_evaluation_manifest(reordered)) == canonical
+
+
+def test_command_semantics_are_preserved_in_manifest_readiness_and_freeze() -> None:
+    manifest = _manifest()
+    readiness = _build_readiness(
+        manifest,
+        _readiness_registries(mapping=replace(_mapping(), control_frame="world")),
+    )
+
+    assert manifest.to_document()["command_semantics_route_identity"] == {
+        "name": "local_endpoint_velocity_to_joint_position",
+        "version": 1,
+    }
+    assert readiness.command_semantics_route.identity == (
+        LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
+    )
+    resolved = readiness.freeze_record.canonical_resolved_identity_bytes
+    assert b"local_endpoint_velocity_to_joint_position" in resolved
+    assert b"dummy_mapping_semantics" in resolved
+    assert b"joint_position_command" in resolved
+
+
+def test_command_route_difference_changes_resolved_and_freeze_identity() -> None:
+    baseline_mapping = replace(_mapping(), control_frame="world")
+    control_semantics = baseline_mapping.mapping_semantics_identity
+    assert control_semantics is not None
+    alternate_route = joint_position_command_route(
+        route_identity=ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
+        control_semantics_identity=control_semantics,
+    )
+    alternate_mapping = replace(
+        baseline_mapping,
+        command_semantics_routes=frozenset({alternate_route}),
+    )
+    baseline = _build_readiness(
+        _manifest(),
+        _readiness_registries(mapping=baseline_mapping),
+    )
+    alternate = _build_readiness(
+        _manifest(
+            command_semantics_route_identity=ENDPOINT_DELTA_TO_JOINT_POSITION_V1
+        ),
+        _readiness_registries(mapping=alternate_mapping),
+    )
+
+    assert baseline.manifest_digest != alternate.manifest_digest
+    assert baseline.resolved_identity_digest != alternate.resolved_identity_digest
+    assert baseline.freeze_identity != alternate.freeze_identity
+    assert (
+        b"endpoint_delta_to_joint_position"
+        in alternate.freeze_record.canonical_resolved_identity_bytes
+    )
 
 
 def test_one_semantic_field_changes_the_manifest_digest() -> None:
@@ -833,10 +890,6 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
         _evaluator(identity=fast_evaluator_identity)
     )
     bundle = resolve_robot_bundle_from_catalog("fast_arm")
-    compatibility_bundle = resolve_robot_bundle_from_compatibility_facade(
-        "fast_arm"
-    )
-    assert compatibility_bundle is bundle
     registries = _readiness_registries(
         bundle=bundle,
         environment=fast_environment,
@@ -879,27 +932,14 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
     )
 
     readiness = _build_readiness(manifest, registries)
-    compatibility_readiness = _build_readiness(
-        manifest,
-        _readiness_registries(
-            bundle=compatibility_bundle,
-            environment=fast_environment,
-            mapping=fast_mapping,
-            task=fast_task,
-            evaluator=fast_evaluator,
-        ),
+    # Golden values include the evaluation-manifest/v3 command semantics condition.
+    assert readiness.freeze_record.manifest_digest == (
+        BASELINE_FAST_ARM_MANIFEST_DIGEST
     )
-
-    # Golden values were executed at baseline main
-    # e0311688f8d9738689434a82895616c42e965c0f with test-revision:abc123.
-    for candidate in (readiness, compatibility_readiness):
-        assert candidate.freeze_record.manifest_digest == (
-            BASELINE_FAST_ARM_MANIFEST_DIGEST
-        )
-        assert candidate.resolved_identity == (
-            BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST
-        )
-        assert candidate.freeze_identity == BASELINE_FAST_ARM_FREEZE_DIGEST
+    assert readiness.resolved_identity == (
+        BASELINE_FAST_ARM_RESOLVED_IDENTITY_DIGEST
+    )
+    assert readiness.freeze_identity == BASELINE_FAST_ARM_FREEZE_DIGEST
 
     assert readiness.composition.robot_bundle is bundle
     assert readiness.robot_profile_identity == VersionedIdentity("fast_arm", 1)
@@ -910,14 +950,6 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
         encode_evaluation_manifest(manifest)
     )
     assert (
-        compatibility_readiness.freeze_record.canonical_manifest_bytes
-        == readiness.freeze_record.canonical_manifest_bytes
-    )
-    assert (
-        compatibility_readiness.freeze_record.canonical_resolved_identity_bytes
-        == readiness.freeze_record.canonical_resolved_identity_bytes
-    )
-    assert (
         b"selfrionette.plugins"
         not in readiness.freeze_record.canonical_resolved_identity_bytes
     )
@@ -925,5 +957,3 @@ def test_fast_arm_profile_plugin_and_model_identity_regression() -> None:
         b"fast_arm_bundle.py"
         not in readiness.freeze_record.canonical_resolved_identity_bytes
     )
-    assert compatibility_readiness.resolved_identity == readiness.resolved_identity
-    assert compatibility_readiness.freeze_identity == readiness.freeze_identity

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-28
+last_verified: 2026-07-29
 canonical_for:
   - import boundaries
 related:
@@ -63,28 +63,55 @@ generic schema / domain / Protocol
   <- robot-specific profile / runtime / feasibility / initial state
   <- Robot Bundle assembly
   <- robot-specific plugin.py / ROBOT_PLUGIN registration
-  <- bounded first-party discovery / plugins/catalog.py
+  <- bounded first-party discovery / plugins/robots/catalog.py
   <- application composition root
 ```
 
-- `selfrionette.plugins.robot_discovery`は`selfrionette.plugins.robots`直下packageだけを列挙し、
+axis-specific catalog / discovery / registrationは`plugins/robots/`、
+`plugins/input_sources/`、`plugins/mappings/`の各ownerへ閉じる。root `plugins/`は
+cross-axis primitiveだけを所有し、旧root moduleをcompatibility aliasとして残さない。
+Mappingに追加registration情報がない限り`mappings/registration.py`は作らない。
+
+- `selfrionette.plugins.robots.discovery`は`selfrionette.plugins.robots`直下packageだけを列挙し、
   固定`plugin.py`の固定`ROBOT_PLUGIN`だけを読む。configuration値、robot ID、external entry pointを
   import pathとして使用しない。
 - 各robot packageの`ROBOT_PLUGIN`はBundle、viewer declaration、resource declaration、
   onboarding contract versionを一つのimmutable registrationへ束ねる。`__init__.py`の
   import副作用で自己登録しない。onboarding contract versionはregistration schema軸であり、
   Bundle / Profile / Viewerのrobot logical version軸とは独立させる。
-- `selfrionette.plugins.catalog`はproduction discovery結果の唯一のprojection入口であり、
+- `selfrionette.plugins.robots.catalog`はproduction discovery結果の唯一のprojection入口であり、
   concrete robot package、具体robot ID、Bundle singletonを直接importまたは列挙しない。
 - ProfileとRuntime Pluginのresolverは、別registryへ具体objectを重複登録せず、resolved Bundleの
   `profile`と`runtime_plugin`を返す。
 - `RuntimeConfig.robot_selection`、catalog resolver、experiment compositionは同じ`PluginSelection`を使用し、
   robot logical versionをapplication compositionまで保持する。onboarding schema versionはselection軸にしない。
+- generic experimentの`RobotBundle.identity`はProfile IDと異なるcomposition identityを持てる。一方、
+  first-party production runtime selectionではshared consistency validatorによりselection、Bundle logical
+  identity、Profile ID / contract version、Runtime Plugin ID / canonical Profile objectを一致させる。
+  このproduction制約をgeneric `RobotBundle` constructionへ逆流させない。
 - Bundleのtyped providerはgeneric `ProviderAssemblyBinding`でBundle logical identityとcanonical Profile / Runtime
   Plugin ownerへbindする。provider adapter class名ではなくbinding contractとobject identityを検査する。
 - generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
   `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
+- production pipeline builderはpre-bound executionを注入面として公開せず、current Mappingとcurrent
+  Robot Bundleからcanonical route strategy / binding / providerを内部解決する。別Robot、別logical
+  version、stale provider、同じroute identityを名乗るcustom strategyをcurrent simulatorへ組み合わせない。
+  replay backendもBundleのcanonical Runtime Pluginが構築し、model contractをpipeline return前に検証する。
+  config selection、Bundle identity、Profile identity / contract version、Runtime Plugin identity、
+  provider assembly、model、qpos guardを一つのcompositionとして解決し、raw Bundle identityの自己申告だけを
+  ownership proofにしない。external simulatorやarbitrary guard / profile metadataをproduction APIへ注入しない。
+  runtime planはpipelineが保持する同一binding objectを参照する。
+- Mapping packageとRobot packageは互いのconcrete IDをimportしない。Mappingのcontrol semantics、
+  selected runtime conversion route、Robotのcommand semantic providerを`VersionedIdentity`で照合する。
+  routeはtyped executable strategy、Robotはtyped providerを所有し、generic runtimeが両者をbindする。
+  class名やmetadata keyによるcompatibility判定、generic runtime内のconcrete route ID dispatchを行わない。
+- executable semanticはgeneric contractで`joint_position_command/v1 ↔ JointPositionCommand`、
+  `endpoint_velocity_command/v1 ↔ EndpointVelocityCommand`を固定する。selected route strategy、
+  execution binding、Robot providerのcommand typeはこのcontractとexact一致しなければならない。
+  application-facing production runnerは`MotionCommand`をbackendへ直接渡さず、route-bound pipelineと
+  typed providerを経由する。legacy `apply_command(MotionCommand)`はfast_arm低位diagnosticとbackend
+  単体testだけに限定し、generic runtimeへ逆流させない。
 - generic Robot Profile contractは`selfrionette.runtime.composition.robot_profile`、viewer向けrobot declaration
   contractは`selfrionette.runtime.composition.viewer_robot_declaration`が所有する。旧flat moduleは退役済みである。
 - Selfrionetteの7-channel protocol、intrinsic normalization、typed health、serial / injected backendは

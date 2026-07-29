@@ -28,7 +28,7 @@ from selfrionette.runtime.experiment.input_source import (
     ValidatedInputSourceReader,
     ValidatedManagedInputSourceReader,
 )
-from selfrionette.plugins.input_source_registration import InputSourcePluginRegistration
+from selfrionette.plugins.input_sources.registration import InputSourcePluginRegistration
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from selfrionette.schemas import RawInputFrame
 from tests.runtime.test_experiment_plugin_composition import (

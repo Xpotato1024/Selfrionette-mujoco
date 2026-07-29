@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from math import sqrt
 
 from selfrionette.kinematics import InverseKinematicsSolver
 from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, TargetCommand
@@ -221,9 +220,32 @@ def build_motion_command_from_input_intent(intent: InputIntent) -> MotionCommand
 class InputIntentMotionGenerator:
     """Minimal motion skeleton that turns replay intent into MotionCommand."""
 
+    def __init__(self) -> None:
+        self._current_qpos_rad: tuple[float, ...] | None = None
+
+    def set_current_qpos_rad(
+        self, current_qpos_rad: Sequence[float] | None
+    ) -> None:
+        self._current_qpos_rad = _coerce_joint_angles(
+            "current_qpos_rad", current_qpos_rad
+        )
+
     def update(self, intent: InputIntent, dt_s: float) -> MotionCommand:
         _ = dt_s  # Protocol compatibility; this skeleton does not use delta time yet.
-        return build_motion_command_from_input_intent(intent)
+        command = build_motion_command_from_input_intent(intent)
+        if (
+            command.target is None
+            and command.joint is None
+            and self._current_qpos_rad is not None
+        ):
+            return MotionCommand(
+                timestamp_s=command.timestamp_s,
+                joint=JointCommand(
+                    joint_angles_rad=self._current_qpos_rad
+                ),
+                metadata=command.metadata,
+            )
+        return command
 
 
 class TargetToJointMotionGenerator:

@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
+
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
@@ -12,7 +15,11 @@ from selfrionette.runtime.control.input_source_selection import select_runtime_i
 from tests.support.mapped_pipeline_builders import build_test_mujoco_pipeline
 from selfrionette.plugins.robots.fast_arm.adapter.feasibility import FastArmJointLimitGuard
 from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
-from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
+from selfrionette.schemas import (
+    MotionCommand,
+    MuJoCoState,
+    RawInputFrame,
+)
 from generic_qpos_test_doubles import RejectingGenericQposGuard
 
 
@@ -25,6 +32,9 @@ MINIMAL_MODEL = """\
       <geom type="sphere" size="0.01" density="1000"/>
     </body>
   </worldbody>
+  <keyframe>
+    <key name="home" qpos="0"/>
+  </keyframe>
 </mujoco>
 """
 
@@ -50,21 +60,20 @@ def test_generic_pipeline_accepts_non_fast_arm_model_without_fast_arm_config(tmp
     assert state.qpos == (0.0,)
 
 
-def test_generic_replay_pipeline_accepts_non_fast_arm_model_without_fast_arm_validation(tmp_path: Path) -> None:
+def test_production_replay_pipeline_rejects_foreign_model_before_return(
+    tmp_path: Path,
+) -> None:
     model_path = _write_minimal_model(tmp_path)
-    pipeline = build_replay_mujoco_pipeline(
-        model_path=model_path,
-        config=RuntimeConfig(joint_limit_config_path=tmp_path / "missing-fast-arm-limits.toml"),
-        frames=(RawInputFrame(source="replay", timestamp_s=0.0),),
-    )
-
-    assert pipeline.qpos_feasibility_guard is None
-    state = asyncio.run(pipeline.run_once())
-
-    assert state.qpos == (0.0,)
+    with pytest.raises(ValueError, match="qpos dimension mismatch"):
+        build_replay_mujoco_pipeline(
+            model_path=model_path,
+            config=RuntimeConfig(robot_profile_id="fast_arm"),
+            frames=(RawInputFrame(source="replay", timestamp_s=0.0),),
+            robot_bundle=resolve_robot_bundle("fast_arm"),
+        )
 
 
-def test_fast_arm_replay_production_step_loop_explicitly_injects_guard() -> None:
+def test_fast_arm_replay_production_step_loop_uses_bundle_owned_guard() -> None:
     plan = build_runtime_input_source_step_loop_plan(
         select_runtime_input_source("replay", steps=1),
     )
@@ -80,7 +89,11 @@ def test_fast_arm_production_composition_rejects_non_fast_arm_model(tmp_path: Pa
     try:
         build_concrete_mujoco_pipeline(model_path=model_path, publisher=_RecordingPublisher())
     except ValueError as exc:
-        assert "joint order" in str(exc) or "missing" in str(exc)
+        assert (
+            "qpos dimension mismatch" in str(exc)
+            or "joint order" in str(exc)
+            or "missing" in str(exc)
+        )
     else:
         raise AssertionError("fast_arm production composition accepted a non-fast-arm model")
 
