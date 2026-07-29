@@ -85,6 +85,10 @@ Mappingに追加registration情報がない限り`mappings/registration.py`は�
   `profile`と`runtime_plugin`を返す。
 - `RuntimeConfig.robot_selection`、catalog resolver、experiment compositionは同じ`PluginSelection`を使用し、
   robot logical versionをapplication compositionまで保持する。onboarding schema versionはselection軸にしない。
+- generic experimentの`RobotBundle.identity`はProfile IDと異なるcomposition identityを持てる。一方、
+  first-party production runtime selectionではshared consistency validatorによりselection、Bundle logical
+  identity、Profile ID / contract version、Runtime Plugin ID / canonical Profile objectを一致させる。
+  このproduction制約をgeneric `RobotBundle` constructionへ逆流させない。
 - Bundleのtyped providerはgeneric `ProviderAssemblyBinding`でBundle logical identityとcanonical Profile / Runtime
   Plugin ownerへbindする。provider adapter class名ではなくbinding contractとobject identityを検査する。
 - generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
@@ -94,8 +98,9 @@ Mappingに追加registration情報がない限り`mappings/registration.py`は�
   Robot Bundleからcanonical route strategy / binding / providerを内部解決する。別Robot、別logical
   version、stale provider、同じroute identityを名乗るcustom strategyをcurrent simulatorへ組み合わせない。
   replay backendもBundleのcanonical Runtime Pluginが構築し、model contractをpipeline return前に検証する。
-  config selection、Bundle identity、Runtime Plugin、model、qpos guard、typed providerを一つのcomposition
-  として解決し、external simulatorやarbitrary guard / profile metadataをproduction APIへ注入しない。
+  config selection、Bundle identity、Profile identity / contract version、Runtime Plugin identity、
+  provider assembly、model、qpos guardを一つのcompositionとして解決し、raw Bundle identityの自己申告だけを
+  ownership proofにしない。external simulatorやarbitrary guard / profile metadataをproduction APIへ注入しない。
   runtime planはpipelineが保持する同一binding objectを参照する。
 - Mapping packageとRobot packageは互いのconcrete IDをimportしない。Mappingのcontrol semantics、
   selected runtime conversion route、Robotのcommand semantic providerを`VersionedIdentity`で照合する。

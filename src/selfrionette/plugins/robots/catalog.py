@@ -18,7 +18,7 @@ from selfrionette.runtime.composition.robot_resolution import (
     ProfileIdRegistry,
     ResolvedRobotRuntime,
     resolve_robot_runtime_from_registries,
-    validate_robot_profile_plugin_consistency,
+    validate_production_robot_selection_consistency,
 )
 
 
@@ -74,10 +74,11 @@ class RobotCatalog:
     def resolve_runtime(self, selection: PluginSelection) -> ResolvedRobotRuntime:
         self._require_id(selection.plugin_id, kind="robot profile")
         bundle = self.resolve_bundle(selection)
-        validate_robot_profile_plugin_consistency(
-            selection.plugin_id,
-            bundle.profile,
-            bundle.runtime_plugin,
+        validate_production_robot_selection_consistency(
+            selection,
+            bundle_identity=bundle.identity,
+            profile=bundle.profile,
+            plugin=bundle.runtime_plugin,
         )
         return ResolvedRobotRuntime(
             profile=bundle.profile,

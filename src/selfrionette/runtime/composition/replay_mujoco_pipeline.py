@@ -17,11 +17,13 @@ from selfrionette.runtime.composition.robot_bundle import (
 from selfrionette.runtime.composition.robot_profile import (
     robot_profile_runtime_metadata,
 )
+from selfrionette.runtime.composition.robot_resolution import (
+    validate_production_robot_selection_consistency,
+)
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import (
     ControlMappingPlugin,
-    PluginSelection,
     VersionedIdentity,
 )
 from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
@@ -72,16 +74,12 @@ def build_replay_mujoco_pipeline(
     robot_selection = config.robot_selection
     if robot_selection is None:
         raise ValueError("production replay composition requires robot_selection")
-    expected_selection = PluginSelection(
-        robot_bundle.identity.name,
-        robot_bundle.identity.version,
+    validate_production_robot_selection_consistency(
+        robot_selection,
+        bundle_identity=robot_bundle.identity,
+        profile=robot_bundle.profile,
+        plugin=robot_bundle.runtime_plugin,
     )
-    if robot_selection != expected_selection:
-        raise ValueError(
-            "RuntimeConfig/Robot Bundle identity mismatch: "
-            f"config={robot_selection.plugin_id}/v{robot_selection.contract_version}, "
-            f"bundle={expected_selection.plugin_id}/v{expected_selection.contract_version}"
-        )
 
     command_execution = resolve_command_execution(
         control_mapping,

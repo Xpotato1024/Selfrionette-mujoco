@@ -9,6 +9,10 @@ from typing import Generic, Protocol, TypeVar
 
 from selfrionette.runtime.composition.robot_profile import RobotProfile
 from selfrionette.runtime.composition.robot_plugin import RobotRuntimePlugin
+from selfrionette.runtime.experiment.contracts import (
+    PluginSelection,
+    VersionedIdentity,
+)
 
 
 class IdentifiedByProfileId(Protocol):
@@ -91,6 +95,49 @@ def validate_robot_profile_plugin_consistency(
         )
 
 
+def validate_production_robot_selection_consistency(
+    selection: PluginSelection,
+    *,
+    bundle_identity: VersionedIdentity,
+    profile: RobotProfile,
+    plugin: RobotRuntimePlugin,
+) -> None:
+    """Validate one production Robot selection without restricting generic Bundles."""
+
+    expected_identity = VersionedIdentity(
+        selection.plugin_id,
+        selection.contract_version,
+    )
+    if bundle_identity != expected_identity:
+        raise ValueError(
+            "production Robot selection/Bundle logical identity mismatch: "
+            f"selection={expected_identity.canonical_id}, "
+            f"bundle={bundle_identity.canonical_id}"
+        )
+    if profile.profile_id != selection.plugin_id:
+        raise ValueError(
+            "production Robot Bundle/Profile logical identity mismatch: "
+            f"bundle={bundle_identity.canonical_id}, "
+            f"profile={profile.profile_id}/v{profile.profile_contract_version}"
+        )
+    if plugin.profile_id != selection.plugin_id:
+        raise ValueError(
+            "production Robot Bundle/Runtime Plugin logical identity mismatch: "
+            f"bundle={bundle_identity.canonical_id}, plugin={plugin.profile_id!r}"
+        )
+    if profile.profile_contract_version != selection.contract_version:
+        raise ValueError(
+            "production Robot Bundle/Profile logical version mismatch: "
+            f"bundle={bundle_identity.canonical_id}, "
+            f"profile={profile.profile_id}/v{profile.profile_contract_version}"
+        )
+    validate_robot_profile_plugin_consistency(
+        selection.plugin_id,
+        profile,
+        plugin,
+    )
+
+
 def resolve_robot_runtime_from_registries(
     profile_id: str,
     *,
@@ -120,5 +167,6 @@ __all__ = [
     "ProfileIdRegistry",
     "ResolvedRobotRuntime",
     "resolve_robot_runtime_from_registries",
+    "validate_production_robot_selection_consistency",
     "validate_robot_profile_plugin_consistency",
 ]

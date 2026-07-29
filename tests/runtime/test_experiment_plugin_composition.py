@@ -354,6 +354,13 @@ class _NoOpPublisher:
         _ = state
 
 
+def test_generic_experiment_bundle_identity_can_differ_from_profile_identity() -> None:
+    bundle = _dummy_bundle()
+
+    assert bundle.identity == VersionedIdentity("dummy_robot_bundle", 1)
+    assert bundle.profile.profile_id == "dummy_robot"
+
+
 def _assert_production_builder_rejects_prebound_execution(
     execution: ResolvedCommandExecution,
 ) -> None:

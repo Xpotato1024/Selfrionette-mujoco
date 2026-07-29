@@ -30,7 +30,12 @@ from selfrionette.plugins.robots.catalog import (
 )
 from selfrionette.runtime.composition.robot_resolution import (
     ImmutableRegistry,
+    validate_production_robot_selection_consistency,
     validate_robot_profile_plugin_consistency,
+)
+from selfrionette.runtime.experiment.contracts import (
+    PluginSelection,
+    VersionedIdentity,
 )
 from selfrionette.transport import mujoco_state_to_payload
 
@@ -138,6 +143,26 @@ def test_cross_registry_rejects_model_contract_and_profile_object_mismatches() -
     with pytest.raises(ValueError, match="registered profile object"):
         validate_robot_profile_plugin_consistency(
             "dummy", profile, _PluginEntry(equal_but_distinct_profile)
+        )
+
+
+def test_production_selection_rejects_runtime_plugin_identity_mismatch() -> None:
+    profile = _dummy_profile(profile_id="robot_a", joints=("joint",), nq=1, nv=1)
+
+    @dataclass(frozen=True)
+    class _MismatchedPlugin:
+        profile: RobotProfile
+        profile_id: str = "robot_b"
+
+    with pytest.raises(
+        ValueError,
+        match="production Robot Bundle/Runtime Plugin logical identity mismatch",
+    ):
+        validate_production_robot_selection_consistency(
+            PluginSelection("robot_a", 1),
+            bundle_identity=VersionedIdentity("robot_a", 1),
+            profile=profile,
+            plugin=_MismatchedPlugin(profile),  # type: ignore[arg-type]
         )
 
 

@@ -160,7 +160,7 @@ def test_incompatible_command_semantics_rejects_before_source_start() -> None:
     assert source.start_count == 0
 
 
-def test_replay_bundle_identity_mismatch_rejects_before_source_or_backend_start(
+def test_replay_aliased_bundle_identity_rejects_before_source_or_backend_start(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     foreign_bundle = _fast_arm_bundle_with_identity(
@@ -183,16 +183,30 @@ def test_replay_bundle_identity_mismatch_rejects_before_source_or_backend_start(
             self.start_count += 1
 
     backend_build_count = 0
+    provider_execute_count = 0
 
     def fail_if_built(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
         nonlocal backend_build_count
         backend_build_count += 1
         raise AssertionError("backend must not be built for an identity mismatch")
 
+    def fail_if_executed(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        nonlocal provider_execute_count
+        provider_execute_count += 1
+        raise AssertionError("provider must not execute for an identity mismatch")
+
     monkeypatch.setattr(
         type(foreign_bundle.runtime_plugin),
         "build_simulator",
         fail_if_built,
+    )
+    command_provider = foreign_bundle.command_semantic_provider(
+        JOINT_POSITION_COMMAND_V1
+    )
+    monkeypatch.setattr(
+        type(command_provider),
+        "execute",
+        fail_if_executed,
     )
     source = _StartSpy()
     selection = replace(
@@ -202,16 +216,17 @@ def test_replay_bundle_identity_mismatch_rejects_before_source_or_backend_start(
 
     with pytest.raises(
         ValueError,
-        match="RuntimeConfig/Robot Bundle identity mismatch",
+        match="production Robot Bundle/Profile logical identity mismatch",
     ):
         build_runtime_input_source_step_loop_plan(
             selection,
-            config=RuntimeConfig(robot_profile_id="fast_arm"),
+            config=RuntimeConfig(robot_profile_id="foreign_robot"),
             robot_catalog=_MismatchedCatalog(),  # type: ignore[arg-type]
         )
 
     assert source.start_count == 0
     assert backend_build_count == 0
+    assert provider_execute_count == 0
 
 
 def test_native_endpoint_velocity_route_executes_provider_without_joint_path() -> None:

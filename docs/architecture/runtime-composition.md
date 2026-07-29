@@ -53,7 +53,11 @@ discovered `RobotBundle`をknown IDでresolveし、ProfileとRuntime Plugin reso
 assembly時に取得してconsumerへ渡し、処理中にBundleへ問い合わせるservice locatorにはしない。
 `RuntimeConfig.robot_selection`は`robot_profile_id`と`robot_logical_version`から#405 / #406共通の
 `PluginSelection`を作り、registration、Bundle、Profile、Runtime Plugin、runtime pipelineの全resolverへ同じ値を渡す。
-version省略時のfast_arm logical v1 behaviorは維持し、requested / registered version不一致はmodel load前に拒否する。
+shared production consistency validatorはselection、Bundle logical identity、Profile ID / contract version、
+Runtime Plugin ID / canonical Profile objectを一致させる。raw Bundle identityだけをproduction ownership
+proofにせず、aliased robot ID / logical versionをbackend build前に拒否する。このvalidatorはgeneric experiment
+`RobotBundle` constructionへ適用しない。version省略時のfast_arm logical v1 behaviorは維持し、
+requested / registered version不一致はmodel load前に拒否する。
 onboarding schema versionをruntime selectionへ流用しない。
 `RuntimeInputSourceStepLoopPlan`は`EndpointPoseProvider`、`EndpointCommandProvider`、
 `QposFeasibilityProvider`、resolved `CommandSemanticsRoute` / `CommandExecutionBinding`を保持し、
@@ -232,9 +236,10 @@ productionのconcrete / replay builderは外部で解決済みの`ResolvedComman
 current Control Mapping、route selection、current Robot Bundleからcanonical route / strategy /
 binding / providerを内部解決する。step-loop planは完成したpipelineのrouteと同一binding objectを
 authoritative objectとして保持し、別途解決したbindingを併存させない。
-production replay builderは`RuntimeConfig.robot_selection`とBundle identityをexact比較し、Bundleの
-canonical Runtime Pluginだけでsimulatorを構築してmodel contractをpipeline return前に検証する。
-qpos feasibility guardとprofile metadataも同じBundleから導出し、外部simulator、別Robot / 別logical
+production replay builderは`RuntimeConfig.robot_selection`、Bundle identity、Profile identity / contract
+version、Runtime Plugin identity / canonical Profile objectを共有validatorで照合し、Bundleのcanonical
+Runtime Pluginだけでsimulatorを構築してmodel contractをpipeline return前に検証する。qpos feasibility
+guardとprofile metadataも同じBundleから導出し、外部simulator、aliased Bundle、別Robot / 別logical
 version backend、foreign modelをtyped providerと独立に組み合わせる注入面を持たない。
 現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
 desired endpoint positionからJacobianで`MotionCommand`を構築し、safety / qpos feasibility後に

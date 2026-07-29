@@ -164,7 +164,10 @@ schema adapterを通じて接続するため名称を維持する。
 
 `RobotBundle`は既存`RobotProfile`と`RobotRuntimePlugin`を置換せず、その上位で両者と
 小さなproviderを束ねる。bundle construction時にprofile/plugin identity、contract、object
-bindingを既存resolverと同じfail-closed ruleで検証する。
+bindingを既存resolverと同じfail-closed ruleで検証する。generic experiment compositionではBundle
+identityがProfile IDと異なる用途を許すため、Bundle construction自体は両者のlogical identity一致を
+強制しない。first-party production runtimeだけがselection、Bundle、Profile、Runtime Pluginの
+logical identity / versionを共有validatorで追加検証する。
 
 current capability identityとtyped providerは次のとおりである。
 
@@ -279,10 +282,12 @@ route strategyとcurrent Robot Bundleのcanonical providerからbindingを内部
 `ProviderAssemblyBinding`はBundle logical identityおよびcanonical Profile / Runtime Plugin ownerと
 同一でなければBundle construction時にrejectする。manifest / freezeにはversioned semantic identityを
 保存し、Python strategy / binding / provider object identityは保存しない。
-production replay compositionはconfig Robot selectionとBundle identityをexact比較し、同じBundleの
-Runtime Pluginがbackendを構築してmodelを検証し、Bundle providerがqpos feasibility guardを構築する。
-external simulator、別Robot / 別logical version backend、foreign modelはprovider execute、source start、
-simulator stepより前にrejectする。arbitrary simulator / guard injectionはtest-only helperの境界とする。
+production replay compositionはconfig Robot selection、Bundle identity、Profile ID / contract version、
+Runtime Plugin ID / canonical Profile objectをexactに照合する。同じBundleのRuntime Pluginがbackendを
+構築してmodelを検証し、Bundle providerがqpos feasibility guardを構築する。raw Bundle identityを
+ownership proofにせず、aliased Bundle、external simulator、別Robot / 別logical version backend、
+foreign modelはprovider execute、source start、backend build、simulator stepより前にrejectする。
+arbitrary simulator / guard injectionはtest-only helperの境界とする。
 `ControlMappedRuntimePipeline`はroute / bindingを必須保持し、CLIから到達する全production runnerは
 pipelineのtyped execution APIへ収束する。`MotionCommand -> simulator.apply_command()`はproduction
 runtime入口として使用しない。

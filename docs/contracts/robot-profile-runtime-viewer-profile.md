@@ -61,6 +61,9 @@ immutable objectへ束ねる。`onboarding_contract_version`はregistration sche
 logical identity versionではない。onboarding schema v1はlogical v1とlogical v2のrobotを同じregistryへ
 登録できる。registration identityとBundle identityは一致し、Profile、Runtime Pluginが参照するProfile、
 Viewer declarationの`profile_contract_version`はrobot logical versionと一致しなければならない。
+registration、production concrete / replay compositionはruntime層の同じproduction consistency validatorを
+使用し、selection、Bundle logical identity、Profile ID / contract version、Runtime Plugin ID / canonical
+Profile objectのdriftを同じruleで拒否する。resource / viewer path ownershipはregistration固有検証に残す。
 unsupported onboarding schemaはlogical versionに関係なくfailする。Bundleは引き続きtyped provider
 assemblyだけを担い、execution中のservice locatorにはしない。各providerは
 `ProviderAssemblyBinding`でBundle logical identityとassembly ownerを宣言し、ownerは同じBundleのcanonical
@@ -183,8 +186,10 @@ logical v2等を選択するcallerは`RuntimeConfig(robot_profile_id=<id>, robot
 `RuntimeConfig.robot_selection`とRobot Bundleを要求する。model pathまたはjoint nameからprofileを推論せず、
 profileがない場合にfast_armを選択しない。replay builderはcurrent MappingとBundleからcanonical command
 executionを内部解決し、pre-bound execution、simulator、keyframe、guard、profile metadataを受け取らない。
-BundleのRuntime Pluginがsimulatorを構築してmodelを検証し、Bundle providerがguardを構築する。callerが
-model pathをoverrideしても、selected Bundleのmodel contractをpipeline return前に通過しなければならない。
+production consistency validatorはraw Bundle identityだけを信用せず、selection、Bundle、Profile、Runtime
+Pluginのlogical identity / versionをbackend build前に照合する。BundleのRuntime Pluginがsimulatorを
+構築してmodelを検証し、Bundle providerがguardを構築する。callerがmodel pathをoverrideしても、
+selected Bundleのmodel contractをpipeline return前に通過しなければならない。
 test-onlyのarbitrary simulator / guard injectionはproduction builderではなく明示的なtest helperへ閉じる。
 stub-defaultの`build_mujoco_pipeline()`と
 `build_noop_pipeline()`はproduction surfaceから退役した。したがって最小のnon-fast_arm MJCFは、

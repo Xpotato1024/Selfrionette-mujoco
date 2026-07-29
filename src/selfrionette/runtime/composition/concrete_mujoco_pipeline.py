@@ -11,6 +11,9 @@ from selfrionette.plugins.robots.catalog import (
     resolve_robot_profile,
 )
 from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
+from selfrionette.runtime.composition.robot_resolution import (
+    validate_production_robot_selection_consistency,
+)
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.evaluation.endpoint_metrics import build_endpoint_evaluation_state_publisher
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
@@ -93,6 +96,12 @@ def build_concrete_mujoco_pipeline(
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
     plugin = robot_bundle.runtime_plugin
+    validate_production_robot_selection_consistency(
+        selection,
+        bundle_identity=robot_bundle.identity,
+        profile=profile,
+        plugin=plugin,
+    )
     command_execution = resolve_command_execution(
         control_mapping,
         robot_bundle,

@@ -105,7 +105,7 @@ def test_replay_builder_rejects_cross_robot_bundle_before_backend_build(
 
     with pytest.raises(
         ValueError,
-        match="RuntimeConfig/Robot Bundle identity mismatch",
+        match="production Robot selection/Bundle logical identity mismatch",
     ):
         build_replay_mujoco_pipeline(
             config=RuntimeConfig(robot_profile_id="fast_arm"),
@@ -120,7 +120,7 @@ def test_replay_builder_rejects_stale_bundle_logical_version() -> None:
 
     with pytest.raises(
         ValueError,
-        match="config=fast_arm/v1, bundle=fast_arm/v2",
+        match="selection=fast_arm/v1, bundle=fast_arm/v2",
     ):
         build_replay_mujoco_pipeline(
             config=RuntimeConfig(
@@ -129,6 +129,67 @@ def test_replay_builder_rejects_stale_bundle_logical_version() -> None:
             ),
             robot_bundle=robot_v2,
         )
+
+
+def test_replay_builder_rejects_aliased_bundle_identity_before_backend_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    aliased_bundle = _bundle_with_identity(VersionedIdentity("robot_b", 1))
+    build_calls = 0
+
+    def fail_if_built(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        nonlocal build_calls
+        build_calls += 1
+        raise AssertionError("backend must not be built for an aliased Bundle")
+
+    monkeypatch.setattr(
+        type(aliased_bundle.runtime_plugin),
+        "build_simulator",
+        fail_if_built,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="production Robot Bundle/Profile logical identity mismatch",
+    ):
+        build_replay_mujoco_pipeline(
+            config=RuntimeConfig(robot_profile_id="robot_b"),
+            robot_bundle=aliased_bundle,
+        )
+
+    assert build_calls == 0
+
+
+def test_replay_builder_rejects_aliased_logical_version_before_backend_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    aliased_bundle = _bundle_with_identity(VersionedIdentity("fast_arm", 2))
+    build_calls = 0
+
+    def fail_if_built(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        nonlocal build_calls
+        build_calls += 1
+        raise AssertionError("backend must not be built for an aliased version")
+
+    monkeypatch.setattr(
+        type(aliased_bundle.runtime_plugin),
+        "build_simulator",
+        fail_if_built,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="production Robot Bundle/Profile logical version mismatch",
+    ):
+        build_replay_mujoco_pipeline(
+            config=RuntimeConfig(
+                robot_profile_id="fast_arm",
+                robot_logical_version=2,
+            ),
+            robot_bundle=aliased_bundle,
+        )
+
+    assert build_calls == 0
 
 
 def test_replay_builder_has_no_foreign_backend_injection_surface() -> None:

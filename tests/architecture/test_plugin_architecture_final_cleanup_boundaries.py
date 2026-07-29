@@ -257,6 +257,13 @@ def test_production_pipeline_builders_do_not_accept_prebound_command_execution()
             and node.func.id == "resolve_command_execution"
             for node in ast.walk(builder)
         )
+        assert any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id
+            == "validate_production_robot_selection_consistency"
+            for node in ast.walk(builder)
+        )
 
     replay_path = composition_root / "replay_mujoco_pipeline.py"
     replay_tree = ast.parse(
@@ -291,9 +298,47 @@ def test_production_pipeline_builders_do_not_accept_prebound_command_execution()
         "build_guard",
     } <= attribute_calls
     replay_source = replay_path.read_text(encoding="utf-8")
-    assert "robot_selection != expected_selection" in replay_source
+    validation_line = next(
+        node.lineno
+        for node in ast.walk(replay_builder)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "validate_production_robot_selection_consistency"
+    )
+    build_simulator_line = next(
+        node.lineno
+        for node in ast.walk(replay_builder)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "build_simulator"
+    )
+    assert validation_line < build_simulator_line
     assert "robot_bundle.runtime_plugin" in replay_source
     assert "robot_profile_runtime_metadata(robot_bundle.profile)" in replay_source
+
+    robot_resolution_source = (
+        composition_root / "robot_resolution.py"
+    ).read_text(encoding="utf-8")
+    for required_check in (
+        "bundle_identity != expected_identity",
+        "profile.profile_id != selection.plugin_id",
+        "plugin.profile_id != selection.plugin_id",
+        "profile.profile_contract_version != selection.contract_version",
+        "validate_robot_profile_plugin_consistency(",
+    ):
+        assert required_check in robot_resolution_source
+
+    registration_source = (
+        ROOT / "src" / "selfrionette" / "plugins" / "robots" / "registration.py"
+    ).read_text(encoding="utf-8")
+    assert "validate_production_robot_selection_consistency(" in registration_source
+    robot_bundle_source = (
+        composition_root / "robot_bundle.py"
+    ).read_text(encoding="utf-8")
+    assert (
+        "validate_production_robot_selection_consistency"
+        not in robot_bundle_source
+    )
 
     step_loop = (
         ROOT
