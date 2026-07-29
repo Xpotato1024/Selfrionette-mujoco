@@ -38,7 +38,6 @@ from selfrionette.runtime.experiment.input_source import (
     ViewerBridgeRuntimeCapability,
     ViewerEndpointRebaseCapability,
 )
-from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import (
     CommandSemanticsRoute,
     ControlMappingPlugin,
@@ -200,30 +199,22 @@ def build_runtime_input_source_step_loop_plan(
         robot_bundle = robot_catalog.resolve_bundle(robot_selection)
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
-    resolved_command_execution = resolve_command_execution(
-        selection.control_mapping,
-        robot_bundle,
-        selection.command_semantics_route_selection,
+    selected_command_semantics_route = (
+        selection.control_mapping.resolve_command_semantics_route(
+            selection.command_semantics_route_selection
+        )
     )
-    command_semantics_route = resolved_command_execution.route
-    command_execution = resolved_command_execution.binding
     if (
         selection.resolved_command_semantics_route is not None
-        and selection.resolved_command_semantics_route != command_semantics_route
+        and selection.resolved_command_semantics_route
+        != selected_command_semantics_route
     ):
         raise ValueError("runtime command semantics selection changed after source readiness")
     plugin = robot_bundle.runtime_plugin
     endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
-    endpoint_command_provider = (
-        robot_bundle.provider(ENDPOINT_COMMAND_V1)
-        if command_execution.requires_motion_generator
-        else None
-    )
     qpos_feasibility_provider = robot_bundle.provider(QPOS_FEASIBILITY_V1)
     initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
     assert isinstance(endpoint_pose_provider, EndpointPoseProvider)
-    if endpoint_command_provider is not None:
-        assert isinstance(endpoint_command_provider, EndpointCommandProvider)
     assert isinstance(qpos_feasibility_provider, QposFeasibilityProvider)
     assert isinstance(initial_state_provider, ResetInitialStateProvider)
     initial_state = initial_state_provider.resolve_initial_state()
@@ -232,15 +223,6 @@ def build_runtime_input_source_step_loop_plan(
     resolved_model_path = _resolve_model_path(
         model_path=model_path, config=runtime_config, robot_bundle=robot_bundle
     )
-    plan_providers = {
-        "endpoint_pose_provider": endpoint_pose_provider,
-        "endpoint_command_provider": endpoint_command_provider,
-        "qpos_feasibility_provider": qpos_feasibility_provider,
-        "endpoint_site_name": robot_bundle.profile.endpoint.site_name,
-        "command_semantics_route": command_semantics_route,
-        "command_execution": command_execution,
-    }
-
     if viewer_input_source is not None and not execution_adapter.uses_viewer_endpoint_compatibility:
         raise ValueError(
             "viewer_input_source can only be supplied for the viewer endpoint compatibility adapter"
@@ -257,17 +239,27 @@ def build_runtime_input_source_step_loop_plan(
             control_mapping_parameters=selection.control_mapping_parameters,
             mapping_input_adapter=selection.mapping_input_adapter,
             robot_catalog=robot_catalog,
-            build_motion_generator=command_execution.requires_motion_generator,
-            command_semantics_route_selection=command_semantics_route.identity,
-            resolved_command_execution=resolved_command_execution,
+            command_semantics_route_selection=selected_command_semantics_route.identity,
         )
         if selection.runtime_reader is not None:
             pipeline.input_source = selection.runtime_reader
+        endpoint_command_provider = (
+            robot_bundle.provider(ENDPOINT_COMMAND_V1)
+            if pipeline.command_execution.requires_motion_generator
+            else None
+        )
+        if endpoint_command_provider is not None:
+            assert isinstance(endpoint_command_provider, EndpointCommandProvider)
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=True,
-            **plan_providers,
+            endpoint_pose_provider=endpoint_pose_provider,
+            endpoint_command_provider=endpoint_command_provider,
+            qpos_feasibility_provider=qpos_feasibility_provider,
+            endpoint_site_name=robot_bundle.profile.endpoint.site_name,
+            command_semantics_route=pipeline.command_semantics_route,
+            command_execution=pipeline.command_execution,
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
@@ -290,7 +282,8 @@ def build_runtime_input_source_step_loop_plan(
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
             mapping_input_adapter=selection.mapping_input_adapter,
-            resolved_command_execution=resolved_command_execution,
+            robot_bundle=robot_bundle,
+            command_semantics_route_selection=selected_command_semantics_route.identity,
         )
         plugin.validate_model(pipeline.simulator.model)
         pipeline.qpos_feasibility_guard = qpos_feasibility_provider.build_guard(
@@ -299,11 +292,23 @@ def build_runtime_input_source_step_loop_plan(
         )
         if selection.runtime_reader is not None:
             pipeline.input_source = selection.runtime_reader
+        endpoint_command_provider = (
+            robot_bundle.provider(ENDPOINT_COMMAND_V1)
+            if pipeline.command_execution.requires_motion_generator
+            else None
+        )
+        if endpoint_command_provider is not None:
+            assert isinstance(endpoint_command_provider, EndpointCommandProvider)
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=False,
-            **plan_providers,
+            endpoint_pose_provider=endpoint_pose_provider,
+            endpoint_command_provider=endpoint_command_provider,
+            qpos_feasibility_provider=qpos_feasibility_provider,
+            endpoint_site_name=robot_bundle.profile.endpoint.site_name,
+            command_semantics_route=pipeline.command_semantics_route,
+            command_execution=pipeline.command_execution,
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
@@ -359,12 +364,17 @@ def build_runtime_input_source_step_loop_plan(
             control_mapping_parameters=selection.control_mapping_parameters,
             mapping_input_adapter=selection.mapping_input_adapter,
             robot_catalog=robot_catalog,
-            build_motion_generator=command_execution.requires_motion_generator,
-            command_semantics_route_selection=command_semantics_route.identity,
-            resolved_command_execution=resolved_command_execution,
+            command_semantics_route_selection=selected_command_semantics_route.identity,
         )
         pipeline.input_source = pipeline_input_source
-        if command_execution.requires_motion_generator:
+        endpoint_command_provider = (
+            robot_bundle.provider(ENDPOINT_COMMAND_V1)
+            if pipeline.command_execution.requires_motion_generator
+            else None
+        )
+        if endpoint_command_provider is not None:
+            assert isinstance(endpoint_command_provider, EndpointCommandProvider)
+        if pipeline.command_execution.requires_motion_generator:
             assert endpoint_command_provider is not None
             pipeline.motion_generator = (
                 endpoint_command_provider.build_local_endpoint_motion_generator()
@@ -382,7 +392,12 @@ def build_runtime_input_source_step_loop_plan(
             selection=selection,
             pipeline=pipeline,
             annotate_target_position_m=True,
-            **plan_providers,
+            endpoint_pose_provider=endpoint_pose_provider,
+            endpoint_command_provider=endpoint_command_provider,
+            qpos_feasibility_provider=qpos_feasibility_provider,
+            endpoint_site_name=robot_bundle.profile.endpoint.site_name,
+            command_semantics_route=pipeline.command_semantics_route,
+            command_execution=pipeline.command_execution,
             execution_adapter=execution_adapter,
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,

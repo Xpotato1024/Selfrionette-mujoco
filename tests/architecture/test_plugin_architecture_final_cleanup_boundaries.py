@@ -230,6 +230,79 @@ def test_command_route_execution_is_provider_bound_without_central_id_dispatch()
         assert concrete_route_constant not in command_routes
 
 
+def test_production_pipeline_builders_do_not_accept_prebound_command_execution() -> None:
+    composition_root = (
+        ROOT / "src" / "selfrionette" / "runtime" / "composition"
+    )
+    builder_paths = (
+        composition_root / "concrete_mujoco_pipeline.py",
+        composition_root / "replay_mujoco_pipeline.py",
+    )
+    for path in builder_paths:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        builder = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name.startswith("build_")
+            and node.name.endswith("_mujoco_pipeline")
+        )
+        keyword_names = {
+            argument.arg for argument in builder.args.kwonlyargs
+        }
+        assert "resolved_command_execution" not in keyword_names
+        assert any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "resolve_command_execution"
+            for node in ast.walk(builder)
+        )
+
+    step_loop = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "runtime"
+        / "execution"
+        / "input_step_loop.py"
+    ).read_text(encoding="utf-8")
+    assert "resolved_command_execution" not in step_loop
+    assert "command_semantics_route=pipeline.command_semantics_route" in step_loop
+    assert "command_execution=pipeline.command_execution" in step_loop
+
+    offline_smoke_path = (
+        ROOT
+        / "src"
+        / "selfrionette"
+        / "runtime"
+        / "runners"
+        / "offline_input_smoke.py"
+    )
+    offline_tree = ast.parse(
+        offline_smoke_path.read_text(encoding="utf-8"),
+        filename=str(offline_smoke_path),
+    )
+    offline_builder = next(
+        node
+        for node in offline_tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "run_offline_input_runtime_stepping_smoke"
+    )
+    assert "resolved_command_execution" not in {
+        argument.arg
+        for argument in (
+            *offline_builder.args.args,
+            *offline_builder.args.kwonlyargs,
+        )
+    }
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "resolve_command_execution"
+        for node in ast.walk(offline_builder)
+    )
+
+
 def test_production_runtime_cannot_reintroduce_motion_command_backend_bypass() -> None:
     runtime_root = ROOT / "src" / "selfrionette" / "runtime"
     violations: list[str] = []

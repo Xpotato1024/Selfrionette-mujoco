@@ -1,18 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from pathlib import Path
 
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.plugins.mappings.replay_mapping import (
-    REPLAY_CONTROL_MAPPING_PLUGIN,
-)
-from selfrionette.runtime.composition.robot_bundle import ProviderAssemblyBinding
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
 from selfrionette.runtime.composition.config import RuntimeConfig
-from selfrionette.runtime.execution.command_routes import (
-    ResolvedCommandExecution,
-)
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
 from selfrionette.runtime.execution.input_step_loop import build_runtime_input_source_step_loop_plan
@@ -20,12 +13,7 @@ from selfrionette.runtime.control.input_source_selection import select_runtime_i
 from tests.support.mapped_pipeline_builders import build_test_mujoco_pipeline
 from selfrionette.plugins.robots.fast_arm.adapter.feasibility import FastArmJointLimitGuard
 from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityGuard
-from selfrionette.runtime.experiment.contracts import (
-    JOINT_POSITION_COMMAND_V1,
-    VersionedIdentity,
-)
 from selfrionette.schemas import (
-    JointPositionCommand,
     MotionCommand,
     MuJoCoState,
     RawInputFrame,
@@ -52,27 +40,6 @@ def _write_minimal_model(tmp_path: Path) -> Path:
     return path
 
 
-@dataclass(frozen=True, slots=True)
-class _GenericJointPositionProvider:
-    assembly_binding = ProviderAssemblyBinding(
-        VersionedIdentity("generic_test_robot", 1),
-        object(),
-    )
-    command_semantics_identity = JOINT_POSITION_COMMAND_V1
-    command_type = JointPositionCommand
-
-    def execute(self, command, *, backend) -> None:
-        backend.apply_joint_position_command(command)
-
-
-def _generic_command_execution() -> ResolvedCommandExecution:
-    route = REPLAY_CONTROL_MAPPING_PLUGIN.resolve_command_semantics_route()
-    return ResolvedCommandExecution(
-        route,
-        route.execution_strategy.bind(_GenericJointPositionProvider()),
-    )
-
-
 def test_generic_pipeline_accepts_non_fast_arm_model_without_fast_arm_config(tmp_path: Path) -> None:
     model_path = _write_minimal_model(tmp_path)
     config = RuntimeConfig(joint_limit_config_path=tmp_path / "missing-fast-arm-limits.toml")
@@ -94,7 +61,7 @@ def test_generic_replay_pipeline_accepts_non_fast_arm_model_without_fast_arm_val
         model_path=model_path,
         config=RuntimeConfig(joint_limit_config_path=tmp_path / "missing-fast-arm-limits.toml"),
         frames=(RawInputFrame(source="replay", timestamp_s=0.0),),
-        resolved_command_execution=_generic_command_execution(),
+        robot_bundle=resolve_robot_bundle("fast_arm"),
     )
 
     assert pipeline.qpos_feasibility_guard is None

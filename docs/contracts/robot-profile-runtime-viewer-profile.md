@@ -180,8 +180,9 @@ logical v2等を選択するcallerは`RuntimeConfig(robot_profile_id=<id>, robot
 そのselectionを共有する。requested / registered logical version不一致はmodel load前にfailする。
 
 `ControlMappedRuntimePipeline`と`build_replay_mujoco_pipeline()`はgenericのままとする。model pathまたはjoint nameから
-profileを推論せず、profileがない場合にfast_armを選択せず、明示的なmodel pathを要求する。callerはgeneric
-keyframe、guard、state metadataをinjectしてよい。stub-defaultの`build_mujoco_pipeline()`と
+profileを推論せず、profileがない場合にfast_armを選択せず、明示的なmodel pathとRobot Bundleを要求する。
+replay builderはcurrent MappingとBundleからcanonical command executionを内部解決し、pre-bound executionを
+受け取らない。callerはgeneric keyframe、guard、state metadataをinjectしてよい。stub-defaultの`build_mujoco_pipeline()`と
 `build_noop_pipeline()`はproduction surfaceから退役した。したがって最小のnon-fast_arm MJCFは、
 real replay componentまたは明示的に構築した`ControlMappedRuntimePipeline`により、fast_arm validationやconfigurationなしで
 loadとstepができる。

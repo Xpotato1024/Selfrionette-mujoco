@@ -7,6 +7,8 @@ import pytest
 
 import selfrionette.runtime.composition.concrete_mujoco_pipeline as concrete_pipeline_module
 from selfrionette.motion import TargetToJointMotionGenerator
+from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
 from selfrionette.plugins.robots.fast_arm.adapter.endpoint import extract_fast_arm_tip_site_endpoint_from_state
 from selfrionette.plugins.robots.fast_arm.adapter.kinematics import FastArmEndpointInverseKinematicsSolver
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
@@ -35,6 +37,20 @@ def test_build_concrete_mujoco_pipeline_uses_concrete_solver_path() -> None:
     assert isinstance(pipeline.publisher, EndpointEvaluationStatePublisher)
     assert pipeline.publisher.publisher is publisher
     assert pipeline.simulator.last_command is None
+
+
+def test_build_concrete_mujoco_pipeline_binds_current_bundle_canonical_execution() -> None:
+    robot_bundle = resolve_robot_bundle("fast_arm")
+    route = REPLAY_CONTROL_MAPPING_PLUGIN.resolve_command_semantics_route()
+
+    pipeline = build_concrete_mujoco_pipeline(publisher=RecordingPublisher())
+
+    assert pipeline.command_semantics_route is route
+    assert pipeline.command_execution.provider is (
+        robot_bundle.command_semantic_provider(
+            route.robot_command_semantics_identity
+        )
+    )
 
 
 def test_build_concrete_mujoco_pipeline_uses_catalog_bundle_resolver(

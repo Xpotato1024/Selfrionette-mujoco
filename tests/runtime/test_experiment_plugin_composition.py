@@ -26,6 +26,7 @@ from selfrionette.runtime.experiment.composition import (
     ExperimentPluginRegistries,
     PluginParameters,
     compose_experiment,
+    resolve_command_execution,
 )
 from selfrionette.runtime.experiment.contracts import (
     CanonicalEvidence,
@@ -82,6 +83,9 @@ from selfrionette.schemas import (
     EndpointVelocityCommand,
     JointPositionCommand,
     MotionCommand,
+)
+from selfrionette.runtime.composition.concrete_mujoco_pipeline import (
+    build_concrete_mujoco_pipeline,
 )
 
 
@@ -343,6 +347,95 @@ def _dummy_bundle(
         ),
         parameter_contract=parameter_contract,
     )
+
+
+class _NoOpPublisher:
+    async def publish(self, state) -> None:  # noqa: ANN001
+        _ = state
+
+
+def _assert_production_builder_rejects_prebound_execution(
+    execution: ResolvedCommandExecution,
+) -> None:
+    with pytest.raises(TypeError, match="resolved_command_execution"):
+        build_concrete_mujoco_pipeline(
+            publisher=_NoOpPublisher(),
+            **{"resolved_command_execution": execution},
+        )
+
+
+def test_production_builder_rejects_other_robot_prebound_provider() -> None:
+    robot_a = _dummy_bundle(
+        identity=VersionedIdentity("dummy_robot_a", 1)
+    )
+    robot_b = _dummy_bundle(
+        identity=VersionedIdentity("dummy_robot_b", 1)
+    )
+    mapping = _mapping()
+    foreign_execution = resolve_command_execution(mapping, robot_b, None)
+
+    assert (
+        foreign_execution.binding.provider
+        is not robot_a.command_semantic_provider(JOINT_POSITION_COMMAND_V1)
+    )
+    _assert_production_builder_rejects_prebound_execution(foreign_execution)
+
+
+def test_production_builder_rejects_stale_logical_version_execution() -> None:
+    current_robot = _dummy_bundle(
+        identity=VersionedIdentity("dummy_versioned_robot", 1)
+    )
+    stale_robot = _dummy_bundle(
+        identity=VersionedIdentity("dummy_versioned_robot", 2)
+    )
+    mapping = _mapping()
+    stale_execution = resolve_command_execution(mapping, stale_robot, None)
+
+    assert (
+        stale_execution.binding.provider.assembly_binding.robot_identity
+        != current_robot.identity
+    )
+    _assert_production_builder_rejects_prebound_execution(stale_execution)
+
+
+def test_production_builder_rejects_same_identity_custom_strategy_execution() -> None:
+    robot = _dummy_bundle()
+    canonical_route = _mapping().resolve_command_semantics_route()
+
+    class _CustomJointPositionStrategy:
+        route_identity = canonical_route.identity
+        control_semantics_identity = canonical_route.control_semantics_identity
+        robot_command_semantics_identity = (
+            canonical_route.robot_command_semantics_identity
+        )
+        command_type = JointPositionCommand
+
+        def bind(self, provider):  # noqa: ANN001, ANN201
+            return JointPositionCommandExecutionBinding(
+                route_identity=self.route_identity,
+                control_semantics_identity=self.control_semantics_identity,
+                robot_command_semantics_identity=(
+                    self.robot_command_semantics_identity
+                ),
+                provider=provider,
+            )
+
+    custom_route = replace(
+        canonical_route,
+        execution_strategy=_CustomJointPositionStrategy(),
+    )
+    custom_execution = ResolvedCommandExecution(
+        route=custom_route,
+        binding=custom_route.execution_strategy.bind(
+            robot.command_semantic_provider(JOINT_POSITION_COMMAND_V1)
+        ),
+    )
+
+    assert (
+        custom_execution.route.execution_strategy
+        is not canonical_route.execution_strategy
+    )
+    _assert_production_builder_rejects_prebound_execution(custom_execution)
 
 
 def _environment(

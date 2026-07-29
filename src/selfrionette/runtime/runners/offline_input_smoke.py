@@ -178,12 +178,12 @@ def run_offline_input_runtime_stepping_smoke(
     )
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
-    resolved_command_execution = resolve_command_execution(
+    canonical_command_execution = resolve_command_execution(
         control_mapping,
         robot_bundle,
         None,
     )
-    if not resolved_command_execution.binding.requires_motion_generator:
+    if not canonical_command_execution.binding.requires_motion_generator:
         raise ValueError(
             "offline MotionCommand smoke requires a motion-generator command route"
         )
@@ -242,8 +242,8 @@ def run_offline_input_runtime_stepping_smoke(
         simulator=simulator,
         publisher=_OfflineStatePublisher(),
         control_mapping_parameters={},
-        command_semantics_route=resolved_command_execution.route,
-        command_execution=resolved_command_execution.binding,
+        command_semantics_route=canonical_command_execution.route,
+        command_execution=canonical_command_execution.binding,
         qpos_feasibility_guard=qpos_guard,
         robot_profile_metadata=robot_profile_runtime_metadata(profile),
     )

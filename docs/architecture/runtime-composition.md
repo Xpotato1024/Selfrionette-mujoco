@@ -228,6 +228,10 @@ source lifecycle開始前にfail-closedとする。provider不在は
 `CommandExecutionBinding`を必須保持し、bindingなしでは構築できない。input step loop、`run_once()`、
 default / explicit replay、default / explicit viewer、`sweep_x`、offline smokeはpipelineの
 `execute_intent()`または`execute_motion_command()`だけをRobot command application入口として使用する。
+productionのconcrete / replay builderは外部で解決済みの`ResolvedCommandExecution`を受け取らず、
+current Control Mapping、route selection、current Robot Bundleからcanonical route / strategy /
+binding / providerを内部解決する。step-loop planは完成したpipelineのrouteと同一binding objectを
+authoritative objectとして保持し、別途解決したbindingを併存させない。
 現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
 desired endpoint positionからJacobianで`MotionCommand`を構築し、safety / qpos feasibility後に
 `JointPositionCommand`へprojectionする。missing joint、joint-velocity-only、empty positionは

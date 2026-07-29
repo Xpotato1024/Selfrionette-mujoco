@@ -9,11 +9,8 @@ from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
-from selfrionette.runtime.experiment.composition import resolve_command_execution
-from selfrionette.plugins.mappings.replay_mapping import (
-    REPLAY_CONTROL_MAPPING_PLUGIN,
-)
 from selfrionette.plugins.robots.catalog import resolve_robot_bundle
+from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.schemas import (
     JointPositionCommand,
     MotionCommand,
@@ -24,11 +21,7 @@ from selfrionette.schemas import (
 
 def _build_replay_pipeline(**kwargs):
     return build_replay_mujoco_pipeline(
-        resolved_command_execution=resolve_command_execution(
-            REPLAY_CONTROL_MAPPING_PLUGIN,
-            resolve_robot_bundle("fast_arm"),
-            None,
-        ),
+        robot_bundle=resolve_robot_bundle("fast_arm"),
         **kwargs,
     )
 
@@ -40,6 +33,23 @@ def test_build_replay_mujoco_pipeline_returns_runtime_pipeline() -> None:
     assert isinstance(pipeline.motion_generator, InputIntentMotionGenerator)
     assert isinstance(pipeline.simulator, HeadlessMuJoCoSimulator)
     assert hasattr(pipeline.publisher, "last_state")
+
+
+def test_replay_builder_binds_current_bundle_canonical_execution() -> None:
+    robot_bundle = resolve_robot_bundle("fast_arm")
+    route = REPLAY_CONTROL_MAPPING_PLUGIN.resolve_command_semantics_route()
+
+    pipeline = build_replay_mujoco_pipeline(
+        model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
+        robot_bundle=robot_bundle,
+    )
+
+    assert pipeline.command_semantics_route is route
+    assert pipeline.command_execution.provider is (
+        robot_bundle.command_semantic_provider(
+            route.robot_command_semantics_identity
+        )
+    )
 
 
 def test_run_once_replays_frame_into_mujoco_state() -> None:

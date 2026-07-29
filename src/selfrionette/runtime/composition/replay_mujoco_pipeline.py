@@ -9,9 +9,13 @@ from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.model_loader import ModelResourceBundle
 from selfrionette.runtime.composition.config import RuntimeConfig
+from selfrionette.runtime.composition.robot_bundle import RobotBundle
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
-from selfrionette.runtime.execution.command_routes import ResolvedCommandExecution
-from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
+from selfrionette.runtime.experiment.composition import resolve_command_execution
+from selfrionette.runtime.experiment.contracts import (
+    ControlMappingPlugin,
+    VersionedIdentity,
+)
 from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
 from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.schemas import RawInputFrame
@@ -61,9 +65,15 @@ def build_replay_mujoco_pipeline(
     control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
     control_mapping_parameters: Mapping[str, object] | None = None,
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
-    resolved_command_execution: ResolvedCommandExecution,
+    robot_bundle: RobotBundle,
+    command_semantics_route_selection: VersionedIdentity | None = None,
 ) -> ControlMappedRuntimePipeline:
     runtime_config = RuntimeConfig() if config is None else config
+    command_execution = resolve_command_execution(
+        control_mapping,
+        robot_bundle,
+        command_semantics_route_selection,
+    )
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)
     if simulator is not None and (model_path is not None or runtime_config.mujoco_model_path is not None):
         raise ValueError("simulator and model_path are mutually exclusive")
@@ -90,11 +100,15 @@ def build_replay_mujoco_pipeline(
             else control_mapping_parameters
         ),
         mapping_input_adapter=mapping_input_adapter,
-        motion_generator=InputIntentMotionGenerator(),
+        motion_generator=(
+            InputIntentMotionGenerator()
+            if command_execution.binding.requires_motion_generator
+            else None
+        ),
         simulator=resolved_simulator,
         publisher=state_publisher,
-        command_semantics_route=resolved_command_execution.route,
-        command_execution=resolved_command_execution.binding,
+        command_semantics_route=command_execution.route,
+        command_execution=command_execution.binding,
         qpos_feasibility_guard=qpos_feasibility_guard,
         state_metadata=state_metadata,
         robot_profile_metadata=robot_profile_metadata,

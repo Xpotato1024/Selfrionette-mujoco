@@ -90,6 +90,10 @@ Mappingに追加registration情報がない限り`mappings/registration.py`は�
 - generic `runtime` contract、`kinematics`、`motion`、generic MuJoCo backendは
   `selfrionette.plugins`、catalog、Bundle assembly、evaluation manifestへ逆依存しない。
 - application compositionはcatalogからBundleをresolveし、consumerへ必要なtyped providerだけを渡す。
+- production pipeline builderはpre-bound executionを注入面として公開せず、current Mappingとcurrent
+  Robot Bundleからcanonical route strategy / binding / providerを内部解決する。別Robot、別logical
+  version、stale provider、同じroute identityを名乗るcustom strategyをcurrent simulatorへ組み合わせない。
+  runtime planはpipelineが保持する同一binding objectを参照する。
 - Mapping packageとRobot packageは互いのconcrete IDをimportしない。Mappingのcontrol semantics、
   selected runtime conversion route、Robotのcommand semantic providerを`VersionedIdentity`で照合する。
   routeはtyped executable strategy、Robotはtyped providerを所有し、generic runtimeが両者をbindする。

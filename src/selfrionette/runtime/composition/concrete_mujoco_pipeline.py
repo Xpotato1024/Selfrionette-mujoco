@@ -14,7 +14,6 @@ from selfrionette.runtime.composition.robot_profile import robot_profile_runtime
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.evaluation.endpoint_metrics import build_endpoint_evaluation_state_publisher
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
-from selfrionette.runtime.execution.command_routes import ResolvedCommandExecution
 from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
 from selfrionette.runtime.experiment.contracts import VersionedIdentity
@@ -72,9 +71,7 @@ def build_concrete_mujoco_pipeline(
     control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
     control_mapping_parameters: Mapping[str, object] | None = None,
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
-    build_motion_generator: bool = True,
     command_semantics_route_selection: VersionedIdentity | None = None,
-    resolved_command_execution: ResolvedCommandExecution | None = None,
 ) -> ControlMappedRuntimePipeline:
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
@@ -96,32 +93,15 @@ def build_concrete_mujoco_pipeline(
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
     plugin = robot_bundle.runtime_plugin
-    canonical_command_execution = resolve_command_execution(
+    command_execution = resolve_command_execution(
         control_mapping,
         robot_bundle,
         command_semantics_route_selection,
     )
-    if resolved_command_execution is not None:
-        if (
-            resolved_command_execution.route
-            != canonical_command_execution.route
-            or resolved_command_execution.binding.command_type
-            is not canonical_command_execution.binding.command_type
-        ):
-            raise ValueError(
-                "provided command execution does not match canonical composition"
-            )
-        command_execution = resolved_command_execution
-    else:
-        command_execution = canonical_command_execution
-    if build_motion_generator != command_execution.binding.requires_motion_generator:
-        raise ValueError(
-            "motion-generator construction must match selected command execution route"
-        )
     initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
     endpoint_command_provider = (
         robot_bundle.provider(ENDPOINT_COMMAND_V1)
-        if build_motion_generator
+        if command_execution.binding.requires_motion_generator
         else None
     )
     endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
