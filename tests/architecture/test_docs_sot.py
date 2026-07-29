@@ -40,6 +40,7 @@ def test_docs_sot_required_paths_exist() -> None:
     required = [
         "docs/README.md",
         "docs/conventions.md",
+        "docs/architecture/code-documentation-policy.md",
         "docs/architecture/documentation-sot-policy.md",
         "docs/architecture/dependency-boundaries.md",
     ]
@@ -61,6 +62,27 @@ def test_canonical_docs_have_valid_front_matter() -> None:
 def test_docs_readme_has_source_of_truth_map() -> None:
     text = read("docs/README.md")
     assert "Source of Truth Map" in text
+
+
+def test_code_documentation_policy_is_canonical_and_registered() -> None:
+    index = read("docs/README.md")
+    policy = read("docs/architecture/code-documentation-policy.md")
+
+    assert "`docs/architecture/code-documentation-policy.md`" in index
+    for marker in (
+        "code and plugin documentation policy",
+        "contract significance",
+        "TODO(#123)",
+        "commented-out code",
+        "suppression",
+        "plugin root README",
+        "axis README",
+        "concrete production plugin README",
+        "Issue #447との境界",
+        "#484",
+        "#485",
+    ):
+        assert marker in policy
 
 
 def test_current_contracts_are_registered_and_evidence_is_not_in_sot_map() -> None:

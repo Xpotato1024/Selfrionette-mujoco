@@ -1,7 +1,7 @@
 ---
 status: supporting
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-30
 canonical_for: []
 related:
   - docs/README.md
@@ -18,6 +18,8 @@ related:
 - `validation.md`: 変更層とfailure modeに応じたvalidation
 - `codex-workflow.md`: Codex promptの共通ruleとtask-specific delta
 - `japanese-doc-writing-guardrails.md`: UTF-8、BOM、mojibake、日本語方針
+- `plugin-readme-templates.md`: plugin root / axis / concrete plugin READMEのsupporting template
+- `code-documentation-review-checklist.md`: code documentation policyのreview checklist
 - `hardware-safety.md`: serial、OSC、hardware accessのoperator gate
 
 ## runtime / viewer起動と診断

@@ -23,6 +23,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | 開発方針 | `docs/architecture/development-policy.md` | 現在のtaskに適用するlayer責務と責務driftの防止 |
 | skeleton構造とlayer責務 | `docs/architecture/mujoco-skeleton-first-spec.md` | MuJoCo SoT、Three.js rendering-only、layer ownership |
 | 文書governance | `docs/architecture/documentation-sot-policy.md` | 文書role、配置、1 topic = 1 canonical document |
+| code / plugin documentation | `docs/architecture/code-documentation-policy.md` | comment、docstring / JSDoc、TODO、suppression、README責務 |
 | 命名・単位・座標系 | `docs/conventions.md` | naming、SI unit、coordinate convention |
 | import境界 | `docs/architecture/dependency-boundaries.md` | layer間の許可・禁止dependency |
 | runtime data flow | `docs/architecture/data-flow.md` | inputからMuJoCo、transport、viewerまでの流れ |
