@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-20
+last_verified: 2026-07-29
 canonical_for:
   - versioned evaluation manifest
   - canonical manifest serialization
@@ -110,7 +110,9 @@ unit、quaternion order）、mapping comparison family / semantics identityを�
 さらにselected command routeがMapping declarationに存在し、そのcontrol semanticsがMappingの
 `mapping_semantics_identity`と一致し、final command semanticのtyped providerをRobot Bundleが持ち、
 route strategyから解決したexecution bindingの3 identityがrouteと一致することを
-source start、model step、external I/Oより前に検証する。
+source start、model step、external I/Oより前に検証する。さらに実装済みsemanticではroute strategy、
+execution binding、Robot providerのcommand typeがgeneric semantic contractとexact一致することを
+検証する。command class名やmodule pathはmanifestへ保存せず、versioned semantic identityを再現条件とする。
 
 成功時だけ`EvaluationReadiness`を返す。resultはcanonical requested manifest identity、resolved
 identity tuple、`EvidenceProducerBinding`、initial-state identity、`ReadinessStatus.READY`、

@@ -213,12 +213,12 @@ def test_command_route_execution_is_provider_bound_without_central_id_dispatch()
         / "robot_provider_adapters.py"
     ).read_text(encoding="utf-8")
 
-    assert "plan.command_execution.execute(" in step_loop
+    assert "plan.pipeline.execute_intent(" in step_loop
     assert "command_semantic_providers" in robot_bundle
     assert "supported_command_semantics:" not in robot_bundle
-    assert "command_type=JointPositionCommand" in command_routes
-    assert "command_type=MotionCommand" not in command_routes
-    assert "command_type=EndpointVelocityCommand" in command_routes
+    assert "command_type: ClassVar[type] = JointPositionCommand" in command_routes
+    assert "command_type: ClassVar[type] = MotionCommand" not in command_routes
+    assert "command_type: ClassVar[type] = EndpointVelocityCommand" in command_routes
     assert "command_type = JointPositionCommand" in robot_provider_adapters
     assert "command_type = MotionCommand" not in robot_provider_adapters
     for concrete_route_constant in (
@@ -228,6 +228,108 @@ def test_command_route_execution_is_provider_bound_without_central_id_dispatch()
         "NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1",
     ):
         assert concrete_route_constant not in command_routes
+
+
+def test_production_runtime_cannot_reintroduce_motion_command_backend_bypass() -> None:
+    runtime_root = ROOT / "src" / "selfrionette" / "runtime"
+    violations: list[str] = []
+    for path in runtime_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "apply_command"
+            ):
+                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "getattr"
+                and len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and node.args[1].value in {
+                    "apply_command",
+                    "apply_joint_position_command",
+                }
+                and path.name != "robot_provider_adapters.py"
+            ):
+                violations.append(
+                    f"{path.relative_to(ROOT)}:{node.lineno}:"
+                    f"backend getattr {node.args[1].value}"
+                )
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                value = node.value
+                if isinstance(value, ast.Name) and value.id == "MotionCommand":
+                    targets = (
+                        node.targets
+                        if isinstance(node, ast.Assign)
+                        else (node.target,)
+                    )
+                    if any(
+                        isinstance(target, ast.Name)
+                        and target.id == "command_type"
+                        for target in targets
+                    ):
+                        violations.append(
+                            f"{path.relative_to(ROOT)}:{node.lineno}:"
+                            "command_type=MotionCommand"
+                        )
+        if (
+            path.name != "command_adapter.py"
+            and "motion_command_to_qpos_command(" in path.read_text(
+                encoding="utf-8"
+            )
+        ):
+            violations.append(
+                f"{path.relative_to(ROOT)}:"
+                "motion_command_to_qpos_command"
+            )
+
+    assert violations == []
+
+
+def test_legacy_motion_command_backend_calls_are_limited_to_diagnostics() -> None:
+    source_root = ROOT / "src" / "selfrionette"
+    call_owners: set[tuple[str, str]] = set()
+    for path in source_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        parents: dict[ast.AST, ast.AST] = {}
+        for parent in ast.walk(tree):
+            for child in ast.iter_child_nodes(parent):
+                parents[child] = parent
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "apply_command"
+            ):
+                continue
+            owner = parents.get(node)
+            while owner is not None and not isinstance(
+                owner,
+                (ast.FunctionDef, ast.AsyncFunctionDef),
+            ):
+                owner = parents.get(owner)
+            call_owners.add(
+                (
+                    path.relative_to(ROOT).as_posix(),
+                    "<module>" if owner is None else owner.name,
+                )
+            )
+
+    assert call_owners == {
+        (
+            "src/selfrionette/plugins/robots/fast_arm/adapter/diagnostics/"
+            "endpoint_motion_sanity.py",
+            "_run_fast_arm_endpoint_trajectory_case",
+        ),
+        (
+            "src/selfrionette/plugins/robots/fast_arm/adapter/diagnostics/"
+            "endpoint_motion_sanity.py",
+            "_run_fast_arm_endpoint_motion_sanity_case_async",
+        ),
+    }
 
 
 def test_endpoint_motion_capability_is_not_a_robot_command_semantic() -> None:

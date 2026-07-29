@@ -271,6 +271,13 @@ MotionGenerator、`dt`積分、endpoint delta、Jacobian allocationを通らな�
 provider / Robotはproduction catalogへ登録しない。composition compatibilityだけではexecution
 swappabilityの証拠としない。
 
+実装済みsemanticのcommand typeは`RobotCommandSemanticContract`のgeneric mappingをSoTとする。
+route strategy、resolved execution binding、Robot providerの3者は同じsemantic contractのexact typeへ
+一致しなければならず、identityだけ一致するwrong typeはsource lifecycle / backend構築前にrejectする。
+`ControlMappedRuntimePipeline`はroute / bindingを必須保持し、CLIから到達する全production runnerは
+pipelineのtyped execution APIへ収束する。`MotionCommand -> simulator.apply_command()`はproduction
+runtime入口として使用しない。
+
 `TaskPlugin`は次を宣言する。
 
 - required Robot capability

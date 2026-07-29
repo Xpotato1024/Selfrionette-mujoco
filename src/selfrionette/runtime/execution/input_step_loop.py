@@ -111,6 +111,14 @@ class RuntimeInputSourceStepLoopPlan:
             raise ValueError(
                 "runtime plan command route/execution binding mismatch"
             )
+        if (
+            self.pipeline.command_semantics_route
+            != self.command_semantics_route
+            or self.pipeline.command_execution is not self.command_execution
+        ):
+            raise ValueError(
+                "runtime plan and pipeline command execution binding mismatch"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +258,8 @@ def build_runtime_input_source_step_loop_plan(
             mapping_input_adapter=selection.mapping_input_adapter,
             robot_catalog=robot_catalog,
             build_motion_generator=command_execution.requires_motion_generator,
+            command_semantics_route_selection=command_semantics_route.identity,
+            resolved_command_execution=resolved_command_execution,
         )
         if selection.runtime_reader is not None:
             pipeline.input_source = selection.runtime_reader
@@ -280,6 +290,7 @@ def build_runtime_input_source_step_loop_plan(
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
             mapping_input_adapter=selection.mapping_input_adapter,
+            resolved_command_execution=resolved_command_execution,
         )
         plugin.validate_model(pipeline.simulator.model)
         pipeline.qpos_feasibility_guard = qpos_feasibility_provider.build_guard(
@@ -349,6 +360,8 @@ def build_runtime_input_source_step_loop_plan(
             mapping_input_adapter=selection.mapping_input_adapter,
             robot_catalog=robot_catalog,
             build_motion_generator=command_execution.requires_motion_generator,
+            command_semantics_route_selection=command_semantics_route.identity,
+            resolved_command_execution=resolved_command_execution,
         )
         pipeline.input_source = pipeline_input_source
         if command_execution.requires_motion_generator:
@@ -554,12 +567,11 @@ async def _run_runtime_input_source_step_loop(
                 intent,
                 metadata=build_viewer_local_motion_metadata(motion_intent_metadata, dt_s=dt),
             )
-        safety_result = plan.command_execution.execute(
+        safety_result = plan.pipeline.execute_intent(
             motion_intent,
             dt_s=dt,
             pre_step_state=pre_step_state,
             source_state=source_state,
-            pipeline=plan.pipeline,
         )
         step_endpoint_m = last_valid_endpoint_m
         if (

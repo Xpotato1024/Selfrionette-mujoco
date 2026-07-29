@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, ClassVar, Protocol, runtime_checkable
 
 from selfrionette.runtime.composition.robot_bundle import (
     RobotCommandSemanticProvider,
 )
 from selfrionette.runtime.control.input_source_state import RuntimeInputSourceState
-from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.experiment.contracts import (
     CommandSemanticsRoute,
     VersionedIdentity,
+    robot_command_semantic_contract,
 )
 from selfrionette.runtime.safety.input_safety import (
     RuntimeInputSafetyResult,
@@ -26,12 +26,16 @@ from selfrionette.schemas import (
     MuJoCoState,
 )
 
+if TYPE_CHECKING:
+    from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+
 
 @runtime_checkable
 class CommandExecutionBinding(Protocol):
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
+    command_type: type
     requires_motion_generator: bool
 
     def execute(
@@ -39,6 +43,18 @@ class CommandExecutionBinding(Protocol):
         intent: InputIntent,
         *,
         dt_s: float,
+        pre_step_state: MuJoCoState,
+        source_state: RuntimeInputSourceState,
+        pipeline: ControlMappedRuntimePipeline,
+    ) -> RuntimeInputSafetyResult: ...
+
+
+@runtime_checkable
+class MotionCommandExecutionBinding(CommandExecutionBinding, Protocol):
+    def execute_motion_command(
+        self,
+        command: MotionCommand,
+        *,
         pre_step_state: MuJoCoState,
         source_state: RuntimeInputSourceState,
         pipeline: ControlMappedRuntimePipeline,
@@ -65,6 +81,17 @@ class ResolvedCommandExecution:
             raise ValueError(
                 "selected command route and execution binding identity mismatch"
             )
+        semantic_contract = robot_command_semantic_contract(
+            self.route.robot_command_semantics_identity
+        )
+        if (
+            self.route.execution_strategy.command_type
+            is not semantic_contract.command_type
+            or self.binding.command_type is not semantic_contract.command_type
+        ):
+            raise TypeError(
+                "selected command route/execution binding command type mismatch"
+            )
 
 
 def _validate_provider(
@@ -73,6 +100,11 @@ def _validate_provider(
     semantic_identity: VersionedIdentity,
     command_type: type,
 ) -> RobotCommandSemanticProvider:
+    semantic_contract = robot_command_semantic_contract(semantic_identity)
+    if command_type is not semantic_contract.command_type:
+        raise TypeError(
+            "command route execution strategy/semantic contract command type mismatch"
+        )
     if not isinstance(provider, RobotCommandSemanticProvider):
         raise TypeError(
             "command route execution strategy requires a typed "
@@ -118,6 +150,7 @@ class JointPositionCommandExecutionBinding:
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
     provider: RobotCommandSemanticProvider
+    command_type: ClassVar[type] = JointPositionCommand
     requires_motion_generator: bool = True
 
     def execute(
@@ -138,8 +171,23 @@ class JointPositionCommandExecutionBinding:
         if callable(set_current_qpos):
             set_current_qpos(tuple(pre_step_state.qpos))
         motion_command = motion_generator.update(intent, dt_s)
-        safety_result = build_runtime_input_safety_result(
+        return self.execute_motion_command(
             motion_command,
+            pre_step_state=pre_step_state,
+            source_state=source_state,
+            pipeline=pipeline,
+        )
+
+    def execute_motion_command(
+        self,
+        command: MotionCommand,
+        *,
+        pre_step_state: MuJoCoState,
+        source_state: RuntimeInputSourceState,
+        pipeline: ControlMappedRuntimePipeline,
+    ) -> RuntimeInputSafetyResult:
+        safety_result = build_runtime_input_safety_result(
+            command,
             source_state=source_state,
             current_state=pre_step_state,
             qpos_feasibility_guard=pipeline.qpos_feasibility_guard,
@@ -164,6 +212,7 @@ class NativeEndpointVelocityCommandExecutionBinding:
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
     provider: RobotCommandSemanticProvider
+    command_type: ClassVar[type] = EndpointVelocityCommand
     requires_motion_generator: bool = False
 
     def execute(
@@ -183,7 +232,7 @@ class NativeEndpointVelocityCommandExecutionBinding:
                 "native endpoint-velocity execution requires "
                 "local_endpoint_velocity_m_s"
             )
-        velocity = tuple(float(component) for component in velocity_value)
+        velocity = tuple(velocity_value)
         frame_value = intent.metadata.get(
             "local_endpoint_velocity_frame",
             intent.metadata.get("control_frame"),
@@ -235,6 +284,7 @@ class JointPositionCommandRouteExecutionStrategy:
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
+    command_type: ClassVar[type] = JointPositionCommand
 
     def bind(self, provider: object) -> JointPositionCommandExecutionBinding:
         typed_provider = _validate_provider(
@@ -255,6 +305,7 @@ class NativeEndpointVelocityCommandRouteExecutionStrategy:
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
+    command_type: ClassVar[type] = EndpointVelocityCommand
 
     def bind(
         self, provider: object
@@ -276,6 +327,7 @@ __all__ = [
     "CommandExecutionBinding",
     "JointPositionCommandExecutionBinding",
     "JointPositionCommandRouteExecutionStrategy",
+    "MotionCommandExecutionBinding",
     "NativeEndpointVelocityCommandExecutionBinding",
     "NativeEndpointVelocityCommandRouteExecutionStrategy",
     "project_joint_position_command",

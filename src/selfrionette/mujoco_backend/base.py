@@ -6,9 +6,6 @@ from selfrionette.schemas import JointPositionCommand, MotionCommand, MuJoCoStat
 
 
 class MuJoCoSimulator(Protocol):
-    def apply_command(self, command: MotionCommand) -> None:
-        ...
-
     def apply_joint_position_command(
         self, command: JointPositionCommand
     ) -> None:

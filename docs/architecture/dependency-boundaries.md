@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-28
+last_verified: 2026-07-29
 canonical_for:
   - import boundaries
 related:
@@ -94,6 +94,12 @@ Mappingに追加registration情報がない限り`mappings/registration.py`は�
   selected runtime conversion route、Robotのcommand semantic providerを`VersionedIdentity`で照合する。
   routeはtyped executable strategy、Robotはtyped providerを所有し、generic runtimeが両者をbindする。
   class名やmetadata keyによるcompatibility判定、generic runtime内のconcrete route ID dispatchを行わない。
+- executable semanticはgeneric contractで`joint_position_command/v1 ↔ JointPositionCommand`、
+  `endpoint_velocity_command/v1 ↔ EndpointVelocityCommand`を固定する。selected route strategy、
+  execution binding、Robot providerのcommand typeはこのcontractとexact一致しなければならない。
+  application-facing production runnerは`MotionCommand`をbackendへ直接渡さず、route-bound pipelineと
+  typed providerを経由する。legacy `apply_command(MotionCommand)`はfast_arm低位diagnosticとbackend
+  単体testだけに限定し、generic runtimeへ逆流させない。
 - generic Robot Profile contractは`selfrionette.runtime.composition.robot_profile`、viewer向けrobot declaration
   contractは`selfrionette.runtime.composition.viewer_robot_declaration`が所有する。旧flat moduleは退役済みである。
 - Selfrionetteの7-channel protocol、intrinsic normalization、typed health、serial / injected backendは

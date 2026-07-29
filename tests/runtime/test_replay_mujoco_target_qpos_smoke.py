@@ -7,7 +7,12 @@ import asyncio
 import pytest
 
 from selfrionette.mujoco_backend import snapshot_mujoco_state
+from selfrionette.plugins.mappings.replay_mapping import (
+    REPLAY_CONTROL_MAPPING_PLUGIN,
+)
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
+from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.schemas import JointCommand, MotionCommand, RawInputFrame
 from selfrionette.transport import mujoco_state_to_payload
 
@@ -40,6 +45,11 @@ def test_replay_dry_run_smoke_keeps_target_feedback_separate_from_qpos_update() 
         frames=(frame,),
         loop=False,
         model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset,
+        resolved_command_execution=resolve_command_execution(
+            REPLAY_CONTROL_MAPPING_PLUGIN,
+            resolve_robot_bundle("fast_arm"),
+            None,
+        ),
     )
     pipeline.motion_generator = _ReplayJointMotionGenerator(joint_angles_rad)
 

@@ -9,6 +9,9 @@ from selfrionette.mujoco_backend import snapshot_mujoco_state
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import DEFAULT_CONCRETE_TARGET_POSITION_M, build_concrete_mujoco_pipeline
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
+from selfrionette.runtime.control.input_source_state import (
+    build_runtime_input_source_state_from_metadata,
+)
 from selfrionette.runtime.control.viewer_control_ingress import (
     build_viewer_input_source,
     ingest_viewer_control_message_json,
@@ -24,7 +27,7 @@ from selfrionette.runtime.execution.live_timing import (
 from selfrionette.runtime.runners.live_websocket_delivery import (
     LiveLatestStateWebSocketPublisher,
 )
-from selfrionette.runtime.safety.qpos_feasibility import NoOpQposFeasibilityGuard, QposFeasibilityResult
+from selfrionette.runtime.safety.input_safety import RuntimeInputSafetyResult
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import WebSocketPublisherServer, WebSocketStatePublisher
@@ -89,9 +92,14 @@ def _log(message: str) -> None:
     print(message, flush=True)
 
 
-def _annotate_sweep_x_state(pipeline, state, intent, qpos_result: QposFeasibilityResult):
-    command = qpos_result.motion_command
-    qpos_rejected = not qpos_result.accepted
+def _annotate_sweep_x_state(
+    pipeline,
+    state,
+    intent,
+    safety_result: RuntimeInputSafetyResult,
+):
+    command = safety_result.motion_command
+    qpos_rejected = safety_result.qpos_feasibility_rejected
     metadata = merge_runtime_metadata(
         state.metadata,
         pipeline.state_metadata,
@@ -284,19 +292,25 @@ async def _run_replay_mujoco_websocket_publisher_async(
             for index in range(steps):
                 frame = pipeline.input_source.read_frame()
                 intent = pipeline.map_input(frame)
-                command = pipeline.motion_generator.update(intent, dt_s)
                 pre_step_state = pipeline.simulator.snapshot()
-                qpos_guard = pipeline.qpos_feasibility_guard or NoOpQposFeasibilityGuard()
-                qpos_result = qpos_guard.evaluate(
-                    command,
-                    current_qpos_rad=pre_step_state.qpos,
+                safety_result = pipeline.execute_intent(
+                    intent,
+                    dt_s=dt_s,
+                    pre_step_state=pre_step_state,
+                    source_state=build_runtime_input_source_state_from_metadata(
+                        frame.metadata,
+                        default_source_kind=frame.source,
+                    ),
                 )
-                command = qpos_result.motion_command
-                pipeline.simulator.apply_command(command)
                 pipeline.simulator.step(dt_s)
 
                 state = pipeline.simulator.snapshot()
-                annotated_state = _annotate_sweep_x_state(pipeline, state, intent, qpos_result)
+                annotated_state = _annotate_sweep_x_state(
+                    pipeline,
+                    state,
+                    intent,
+                    safety_result,
+                )
                 await pipeline.publisher.publish(annotated_state)
 
                 if interval_s > 0.0 and index + 1 < steps:

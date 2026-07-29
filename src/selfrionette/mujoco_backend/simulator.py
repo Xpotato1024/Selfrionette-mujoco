@@ -70,6 +70,8 @@ class HeadlessMuJoCoSimulator:
         )
 
     def apply_command(self, command: MotionCommand) -> None:
+        """Legacy low-level entry retained for diagnostic and backend tests only."""
+
         self._last_command = command
         self._pending_command = command
         self._last_joint_position_command = None

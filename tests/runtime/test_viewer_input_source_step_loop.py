@@ -15,6 +15,7 @@ from selfrionette.runtime.execution.input_step_loop import (
 from selfrionette.runtime.control.viewer_control_ingress import ingest_viewer_control_message
 from selfrionette.runtime.control.input_source_selection import select_runtime_input_source
 from selfrionette.schemas import (
+    JointPositionCommand,
     ViewerControlGamepadButtonMessage,
     ViewerControlGamepadMessage,
     ViewerControlKeyboardMessage,
@@ -68,6 +69,17 @@ def _build_viewer_plan(clock: _ClockSequence, *, steps: int = 1):
         viewer_input_source=source,
     )
     return source, plan
+
+
+def test_viewer_plan_keeps_the_resolved_typed_command_binding() -> None:
+    _, plan = _build_viewer_plan(_ClockSequence((0.0,)))
+
+    assert plan.command_execution is plan.pipeline.command_execution
+    assert plan.command_execution.command_type is JointPositionCommand
+    assert (
+        plan.command_execution.route_identity
+        == plan.command_semantics_route.identity
+    )
 
 
 def test_viewer_step_loop_accepts_continuous_keyboard_motion_with_small_bounded_qpos_delta() -> None:

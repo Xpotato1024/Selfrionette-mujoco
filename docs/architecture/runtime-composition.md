@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-28
+last_verified: 2026-07-29
 canonical_for:
   - runtime composition root
 related:
@@ -22,7 +22,7 @@ related:
 | owner | canonical responsibility |
 |---|---|
 | `composition/` | config、Robot Profile / Plugin / Bundle、typed provider adapter、pipeline assembly |
-| `execution/` | `ControlMappedRuntimePipeline`、input step loop、typed input-source execution adapters、timing / pacing |
+| `execution/` | route-bound `ControlMappedRuntimePipeline`、input step loop、typed command / input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness-only composition |
@@ -56,8 +56,9 @@ assembly時に取得してconsumerへ渡し、処理中にBundleへ問い合わ�
 version省略時のfast_arm logical v1 behaviorは維持し、requested / registered version不一致はmodel load前に拒否する。
 onboarding schema versionをruntime selectionへ流用しない。
 `RuntimeInputSourceStepLoopPlan`は`EndpointPoseProvider`、`EndpointCommandProvider`、
-`QposFeasibilityProvider`だけを保持し、`ResolvedRobotRuntime`またはRuntime Plugin全体をexecution edgeへ
-持ち越さない。endpoint poseの観測、motion generator、qpos guardはそれぞれのtyped providerを使用する。
+`QposFeasibilityProvider`、resolved `CommandSemanticsRoute` / `CommandExecutionBinding`を保持し、
+`ResolvedRobotRuntime`またはRuntime Plugin全体をexecution edgeへ持ち越さない。endpoint poseの観測、
+motion generator、qpos guard、Robot command applicationはそれぞれのtyped provider / bindingを使用する。
 concrete MuJoCo pipelineのendpoint evaluation publisherも`ENDPOINT_POSE_V1` providerを受け取り、
 site/body endpointの選択をgeneric runtime内で再構築しない。assembly時の初期stateでendpoint positionを
 解決できない場合はfail closedとする。
@@ -97,7 +98,7 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 | source lifecycle | runtime loop | source lifecycle coordinator | selected sourceとclock | latest `InputIntent`、source activity、age |
 | control-frame resolution | runtime control-frame resolver | pure frame resolver | requested frame、pre-step orientation、`dt_s` | resolved world intentまたはunavailable status |
 | motion policy | selected plugin / runtime coordinator | motion policy adapter | intent、current qpos、target lifecycle | `MotionCommand`またはhold / reject |
-| backend update | MuJoCo backend boundary | backend command applier | validated whole qpos candidate | updated model stateまたは適用前failure |
+| backend update | typed Robot command provider / MuJoCo backend boundary | semantic-specific backend command applier | `JointPositionCommand`等のvalidated typed command | updated model stateまたは適用前failure |
 | MuJoCo measurement | post-step measurement helper | pure measurement helper | post-step `MuJoCoState` | physical `tip` site measurement |
 | diagnostic annotation | runtime diagnostics | pure annotator | intent、prediction、measurement、source state | precedenceを固定したmetadata |
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |
@@ -223,14 +224,21 @@ resolve Input Source / Mapping / Robot selections
 semantic provider不在、provider command type不一致、selected route / execution binding identity不一致は
 source lifecycle開始前にfail-closedとする。provider不在は
 `mapping/Robot command semantics compatibility mismatch`としてrejectする。
-`RuntimeInputSourceStepLoopPlan`はresolved routeをmetadataとして保持するだけでなく、同じidentityへ
-bindされた`CommandExecutionBinding`を必須保持し、run loopはそのbindingの`execute()`だけをcommand
-application入口として使用する。現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
+`ControlMappedRuntimePipeline`はresolved routeと同じidentity / command typeへbindされた
+`CommandExecutionBinding`を必須保持し、bindingなしでは構築できない。input step loop、`run_once()`、
+default / explicit replay、default / explicit viewer、`sweep_x`、offline smokeはpipelineの
+`execute_intent()`または`execute_motion_command()`だけをRobot command application入口として使用する。
+現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
 desired endpoint positionからJacobianで`MotionCommand`を構築し、safety / qpos feasibility後に
 `JointPositionCommand`へprojectionする。missing joint、joint-velocity-only、empty positionは
 provider/backend到達前にrejectする。`MotionCommand`はdiagnostics用runtime envelopeとして保持し、
 Robot command semantic typeには使用しない。このconversionはruntime / controller ownerであり、
 fast_arm backendのnative endpoint-velocity能力ではない。
+
+`HeadlessMuJoCoSimulator.apply_command(MotionCommand)`はRobot command contractではない。既存の
+fast_arm低位diagnosticとbackend単体testに限るlegacy入口として残し、production runtime / runnerからの
+call、`motion_command_to_qpos_command()`使用、`command_type = MotionCommand`再導入をarchitecture guardで
+拒否する。
 
 - unknown profile、incompatible model、invalid joint orderはcomposition前に失敗する。
 - qpos feasibilityはcandidate全体を検証し、invalid candidateを部分適用しない。

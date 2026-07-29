@@ -8,6 +8,8 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 
+from selfrionette.schemas import EndpointVelocityCommand, JointPositionCommand
+
 
 @dataclass(frozen=True, slots=True, order=True)
 class VersionedIdentity:
@@ -43,11 +45,60 @@ NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1 = VersionedIdentity(
 )
 
 
+@dataclass(frozen=True, slots=True)
+class RobotCommandSemanticContract:
+    identity: VersionedIdentity
+    command_type: type
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.identity, VersionedIdentity):
+            raise TypeError(
+                "Robot command semantic contract identity must use VersionedIdentity"
+            )
+        if not isinstance(self.command_type, type):
+            raise TypeError(
+                "Robot command semantic contract command_type must be a type"
+            )
+
+
+ROBOT_COMMAND_SEMANTIC_CONTRACTS: Mapping[
+    VersionedIdentity, RobotCommandSemanticContract
+] = MappingProxyType(
+    {
+        JOINT_POSITION_COMMAND_V1: RobotCommandSemanticContract(
+            JOINT_POSITION_COMMAND_V1,
+            JointPositionCommand,
+        ),
+        ENDPOINT_VELOCITY_COMMAND_V1: RobotCommandSemanticContract(
+            ENDPOINT_VELOCITY_COMMAND_V1,
+            EndpointVelocityCommand,
+        ),
+    }
+)
+
+
+def robot_command_semantic_contract(
+    identity: VersionedIdentity,
+) -> RobotCommandSemanticContract:
+    if not isinstance(identity, VersionedIdentity):
+        raise TypeError(
+            "Robot command semantic contract lookup requires VersionedIdentity"
+        )
+    contract = ROBOT_COMMAND_SEMANTIC_CONTRACTS.get(identity)
+    if contract is None:
+        raise ValueError(
+            "Robot command semantic has no executable typed command contract: "
+            f"{identity.canonical_id!r}"
+        )
+    return contract
+
+
 @runtime_checkable
 class CommandRouteExecutionStrategy(Protocol):
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
+    command_type: type
 
     def bind(self, provider: object) -> object: ...
 
@@ -85,6 +136,13 @@ class CommandSemanticsRoute:
         ):
             raise ValueError(
                 "command semantics route/execution strategy identity mismatch"
+            )
+        semantic_contract = robot_command_semantic_contract(
+            self.robot_command_semantics_identity
+        )
+        if self.execution_strategy.command_type is not semantic_contract.command_type:
+            raise TypeError(
+                "command semantics route/execution strategy command type mismatch"
             )
 
 
@@ -685,6 +743,9 @@ __all__ = [
     "MetricResult",
     "NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1",
     "REPLAY_COMMAND_TO_JOINT_POSITION_V1",
+    "ROBOT_COMMAND_SEMANTIC_CONTRACTS",
+    "RobotCommandSemanticContract",
+    "robot_command_semantic_contract",
     "ParameterContract",
     "ParameterField",
     "PluginAxis",

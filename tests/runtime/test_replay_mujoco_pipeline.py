@@ -9,11 +9,32 @@ from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.composition.replay_mujoco_pipeline import build_replay_mujoco_pipeline
-from selfrionette.schemas import MotionCommand, MuJoCoState, RawInputFrame
+from selfrionette.runtime.experiment.composition import resolve_command_execution
+from selfrionette.plugins.mappings.replay_mapping import (
+    REPLAY_CONTROL_MAPPING_PLUGIN,
+)
+from selfrionette.plugins.robots.catalog import resolve_robot_bundle
+from selfrionette.schemas import (
+    JointPositionCommand,
+    MotionCommand,
+    MuJoCoState,
+    RawInputFrame,
+)
+
+
+def _build_replay_pipeline(**kwargs):
+    return build_replay_mujoco_pipeline(
+        resolved_command_execution=resolve_command_execution(
+            REPLAY_CONTROL_MAPPING_PLUGIN,
+            resolve_robot_bundle("fast_arm"),
+            None,
+        ),
+        **kwargs,
+    )
 
 
 def test_build_replay_mujoco_pipeline_returns_runtime_pipeline() -> None:
-    pipeline = build_replay_mujoco_pipeline(model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
+    pipeline = _build_replay_pipeline(model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     assert isinstance(pipeline, ControlMappedRuntimePipeline)
     assert isinstance(pipeline.motion_generator, InputIntentMotionGenerator)
@@ -27,7 +48,7 @@ def test_run_once_replays_frame_into_mujoco_state() -> None:
         timestamp_s=3.5,
         metadata={"case": "R6-A-P1"},
     )
-    pipeline = build_replay_mujoco_pipeline(frames=(frame,), model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
+    pipeline = _build_replay_pipeline(frames=(frame,), model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     state = asyncio.run(pipeline.run_once())
 
@@ -41,17 +62,21 @@ def test_run_once_replays_frame_into_mujoco_state() -> None:
 
 def test_motion_command_reaches_simulator() -> None:
     frame = RawInputFrame(source="replay", timestamp_s=7.25)
-    pipeline = build_replay_mujoco_pipeline(frames=(frame,), model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
+    pipeline = _build_replay_pipeline(frames=(frame,), model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     asyncio.run(pipeline.run_once())
 
     assert isinstance(pipeline.simulator.last_command, MotionCommand)
     assert pipeline.simulator.last_command.timestamp_s == frame.timestamp_s
+    assert isinstance(
+        pipeline.simulator.last_joint_position_command,
+        JointPositionCommand,
+    )
 
 
 def test_replay_eof_raises_stop_iteration_without_looping() -> None:
     frame = RawInputFrame(source="replay", timestamp_s=1.0)
-    pipeline = build_replay_mujoco_pipeline(frames=(frame,), loop=False, model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
+    pipeline = _build_replay_pipeline(frames=(frame,), loop=False, model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     asyncio.run(pipeline.run_once())
 
@@ -68,7 +93,7 @@ def test_replay_eof_raises_stop_iteration_without_looping() -> None:
 
 def test_custom_dt_s_is_forwarded_to_simulator() -> None:
     frame = RawInputFrame(source="replay", timestamp_s=2.0)
-    pipeline = build_replay_mujoco_pipeline(frames=(frame,), model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
+    pipeline = _build_replay_pipeline(frames=(frame,), model_path=FAST_ARM_ROBOT_PROFILE.mujoco_model_asset)
 
     asyncio.run(pipeline.run_once(dt_s=0.125))
 
@@ -77,4 +102,4 @@ def test_custom_dt_s_is_forwarded_to_simulator() -> None:
 
 def test_generic_replay_builder_does_not_infer_fast_arm_when_model_is_absent() -> None:
     with pytest.raises(ValueError, match="requires an explicit model_path"):
-        build_replay_mujoco_pipeline()
+        _build_replay_pipeline()

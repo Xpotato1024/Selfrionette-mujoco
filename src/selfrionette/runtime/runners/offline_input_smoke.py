@@ -4,7 +4,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from math import isfinite
 
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator, RuntimeMuJoCoEndpointEvaluation
+from selfrionette.mujoco_backend import RuntimeMuJoCoEndpointEvaluation
+from selfrionette.plugins.input_sources.replay import ReplayInputSource
+from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.plugins.robots.catalog import resolve_robot_bundle, resolve_robot_profile
 from selfrionette.runtime.composition.robot_profile import RobotProfile, robot_profile_runtime_metadata
 from selfrionette.runtime.control.desired_endpoint_resolver import resolve_desired_endpoint_from_motion_command
@@ -22,7 +24,19 @@ from selfrionette.runtime.composition.robot_bundle import (
     ResetInitialStateProvider,
 )
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
-from selfrionette.schemas import InputIntent, JointCommand, MotionCommand, MuJoCoState
+from selfrionette.runtime.control.input_source_state import (
+    build_runtime_input_source_state_from_metadata,
+)
+from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from selfrionette.runtime.experiment.composition import resolve_command_execution
+from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
+from selfrionette.schemas import (
+    InputIntent,
+    JointCommand,
+    MotionCommand,
+    MuJoCoState,
+    RawInputFrame,
+)
 from selfrionette.transport import mujoco_state_to_payload
 
 _DEFAULT_DT_S = 1.0 / 60.0
@@ -35,6 +49,11 @@ class OfflineInputRuntimeSmokeResult:
     state: MuJoCoState
     endpoint_evaluation: Mapping[str, object] | None
     payload: Mapping[str, object] | None
+
+
+class _OfflineStatePublisher:
+    async def publish(self, state: MuJoCoState) -> None:
+        _ = state
 
 
 def _coerce_vector3(name: str, value: object) -> tuple[float, float, float]:
@@ -135,6 +154,7 @@ def run_offline_input_runtime_stepping_smoke(
     initial_qpos: Sequence[float] | None = None,
     steps: int = 1,
     config: RuntimeConfig | None = None,
+    control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
 ) -> OfflineInputRuntimeSmokeResult:
     if steps < 1:
         raise ValueError("steps must be a positive integer")
@@ -158,6 +178,15 @@ def run_offline_input_runtime_stepping_smoke(
     )
     if robot_bundle.profile is not profile:
         raise ValueError("Robot Bundle/profile catalog consistency mismatch")
+    resolved_command_execution = resolve_command_execution(
+        control_mapping,
+        robot_bundle,
+        None,
+    )
+    if not resolved_command_execution.binding.requires_motion_generator:
+        raise ValueError(
+            "offline MotionCommand smoke requires a motion-generator command route"
+        )
     plugin = robot_bundle.runtime_plugin
     initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
     endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
@@ -192,17 +221,50 @@ def run_offline_input_runtime_stepping_smoke(
     )
     fk_solver = plugin.build_forward_kinematics()
     runtime_motion_command = motion_generator.update(runtime_intent, _DEFAULT_DT_S)
+    pipeline = ControlMappedRuntimePipeline(
+        config=runtime_config,
+        input_source=ReplayInputSource(
+            (
+                RawInputFrame(
+                    source=str(
+                        runtime_intent.metadata.get(
+                            "source_kind",
+                            "offline_input",
+                        )
+                    ),
+                    timestamp_s=runtime_intent.timestamp_s,
+                    metadata=runtime_intent.metadata,
+                ),
+            )
+        ),
+        control_mapping=control_mapping,
+        motion_generator=motion_generator,
+        simulator=simulator,
+        publisher=_OfflineStatePublisher(),
+        control_mapping_parameters={},
+        command_semantics_route=resolved_command_execution.route,
+        command_execution=resolved_command_execution.binding,
+        qpos_feasibility_guard=qpos_guard,
+        robot_profile_metadata=robot_profile_runtime_metadata(profile),
+    )
+    source_state = build_runtime_input_source_state_from_metadata(
+        runtime_intent.metadata,
+        default_source_kind="offline_input",
+    )
 
     applied_command = runtime_motion_command
     qpos_rejected = False
     for _ in range(steps):
-        decision = qpos_guard.evaluate(
+        safety_result = pipeline.execute_motion_command(
             runtime_motion_command,
-            current_qpos_rad=simulator.snapshot().qpos,
+            pre_step_state=simulator.snapshot(),
+            source_state=source_state,
         )
-        applied_command = decision.motion_command
-        qpos_rejected = qpos_rejected or not decision.accepted
-        simulator.apply_command(applied_command)
+        applied_command = safety_result.motion_command
+        qpos_rejected = (
+            qpos_rejected
+            or safety_result.qpos_feasibility_rejected
+        )
         simulator.step(_DEFAULT_DT_S)
 
     state = simulator.snapshot()

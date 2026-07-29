@@ -16,6 +16,7 @@ from selfrionette.runtime.experiment.contracts import (
     ParameterContract,
     SemanticRole,
     VersionedIdentity,
+    robot_command_semantic_contract,
 )
 from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.runtime.composition.robot_plugin import RobotRuntimePlugin
@@ -297,6 +298,12 @@ class RobotCommandSemanticProviderBinding:
             )
         if not isinstance(self.provider.command_type, type):
             raise TypeError("Robot command semantic provider command_type must be a type")
+        semantic_contract = robot_command_semantic_contract(self.identity)
+        if self.provider.command_type is not semantic_contract.command_type:
+            raise TypeError(
+                "Robot command semantic provider command type mismatch for "
+                f"{self.identity.canonical_id!r}"
+            )
         if not isinstance(self.provider.assembly_binding, ProviderAssemblyBinding):
             raise TypeError(
                 "Robot command semantic provider must declare a "

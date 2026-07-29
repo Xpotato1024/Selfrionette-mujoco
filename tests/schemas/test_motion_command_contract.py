@@ -5,6 +5,7 @@ from dataclasses import fields
 import pytest
 
 from selfrionette.schemas import (
+    EndpointVelocityCommand,
     JointPositionCommand,
     MotionCommand,
     MuJoCoState,
@@ -56,3 +57,44 @@ def test_joint_position_command_rejects_bool_as_numeric(
 ) -> None:
     with pytest.raises(TypeError, match="must be numeric"):
         JointPositionCommand(timestamp_s, joint_angles_rad)
+
+
+def test_endpoint_velocity_command_requires_finite_typed_values() -> None:
+    command = EndpointVelocityCommand(
+        timestamp_s=2,
+        velocity_m_s=(0, -0.2, 0.3),
+        frame="world",
+    )
+
+    assert command.timestamp_s == 2.0
+    assert command.velocity_m_s == (0.0, -0.2, 0.3)
+
+    with pytest.raises(ValueError, match="timestamp must be finite"):
+        EndpointVelocityCommand(float("nan"), (0.0, 0.0, 0.0), "world")
+    with pytest.raises(ValueError, match="exactly three finite"):
+        EndpointVelocityCommand(1.0, (0.0, 0.0), "world")
+    with pytest.raises(ValueError, match="exactly three finite"):
+        EndpointVelocityCommand(
+            1.0,
+            (0.0, float("inf"), 0.0),
+            "world",
+        )
+    with pytest.raises(ValueError, match="frame must be"):
+        EndpointVelocityCommand(1.0, (0.0, 0.0, 0.0), "base")
+
+
+@pytest.mark.parametrize(
+    ("timestamp_s", "velocity_m_s"),
+    (
+        (True, (0.0, 0.0, 0.0)),
+        ("1.0", (0.0, 0.0, 0.0)),
+        (1.0, (False, 0.0, 0.0)),
+        (1.0, ("0.1", 0.0, 0.0)),
+    ),
+)
+def test_endpoint_velocity_command_rejects_bool_and_numeric_strings(
+    timestamp_s: object,
+    velocity_m_s: tuple[object, ...],
+) -> None:
+    with pytest.raises(TypeError, match="must be numeric"):
+        EndpointVelocityCommand(timestamp_s, velocity_m_s, "tool")

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-29
 canonical_for:
   - MotionCommand contract
 related:
@@ -36,6 +36,8 @@ Robot/backend commandそのものでもない。motion generationは`motion` / I
 - `JointPositionCommand`は`joint_position_command/v1`専用のRobot/backend commandであり、
   finite timestampと1個以上のfinite joint anglesだけを持つ。
 - `EndpointVelocityCommand`は`endpoint_velocity_command/v1`専用のRobot/backend commandである。
+  timestampと3 velocity componentはbool / numeric stringを拒否するtyped finite numericで、
+  normalized valueはfloat、frameは`world | tool`である。
 - joint-position routeはsafety後の`MotionCommand.joint.joint_angles_rad`を
   `JointPositionCommand`へ明示projectionする。missing joint、empty angles、
   joint velocityだけのcommandはprovider到達前にrejectする。
@@ -80,6 +82,9 @@ Robot/backend commandそのものでもない。motion generationは`motion` / I
 - actuator commandは現在のschemaに含めない。追加にはschema reviewを必要とする。
 - backend application boundaryでは、`MotionCommand.joint`を
   `JointPositionCommand`へprojectionし、typed provider経由でMuJoCo `qpos`へ反映する。
+- `ControlMappedRuntimePipeline`はselected route / bindingを必須保持する。CLIから到達するdefault /
+  explicit replay、default / explicit viewer、`sweep_x`、offline smokeを含むproduction pathは、
+  safety / qpos feasibility後にこのtyped provider boundaryを通る。
 - 現在の fast-arm backend は既存の joint tuple shape のみを受け付け、
   MuJoCo model joint order に従って qpos に反映する。
 - `MotionCommand.target`だけのenvelopeはjoint-position projectionで明示的に拒否する。

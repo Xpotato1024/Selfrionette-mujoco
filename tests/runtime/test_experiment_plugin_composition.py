@@ -18,6 +18,7 @@ from selfrionette.runtime.execution.command_routes import (
     JointPositionCommandExecutionBinding,
     JointPositionCommandRouteExecutionStrategy,
     NativeEndpointVelocityCommandRouteExecutionStrategy,
+    ResolvedCommandExecution,
 )
 from selfrionette.runtime.experiment.composition import (
     EvidenceProducerBinding,
@@ -974,24 +975,34 @@ def test_robot_bundle_rejects_command_semantic_without_provider() -> None:
 def test_joint_position_route_rejects_broad_motion_command_provider() -> None:
     bundle = _dummy_bundle()
     provider_binding = bundle.command_semantic_providers[0]
-    mismatched_bundle = replace(
-        bundle,
-        command_semantic_providers=(
-            RobotCommandSemanticProviderBinding(
-                provider_binding.identity,
-                replace(
-                    provider_binding.provider,
-                    command_type=MotionCommand,
-                ),
-            ),
-        ),
-    )
-
     with pytest.raises(
         TypeError,
         match="command type mismatch",
     ):
-        compose_experiment(_manifest(), _registries(bundle=mismatched_bundle))
+        RobotCommandSemanticProviderBinding(
+            provider_binding.identity,
+            replace(
+                provider_binding.provider,
+                command_type=MotionCommand,
+            ),
+        )
+
+
+def test_robot_bundle_rejects_endpoint_velocity_semantic_with_joint_position_type() -> None:
+    bundle = _dummy_bundle()
+    provider_binding = bundle.command_semantic_providers[0]
+    with pytest.raises(
+        TypeError,
+        match="command type mismatch",
+    ):
+        RobotCommandSemanticProviderBinding(
+            ENDPOINT_VELOCITY_COMMAND_V1,
+            replace(
+                provider_binding.provider,
+                command_semantics_identity=ENDPOINT_VELOCITY_COMMAND_V1,
+                command_type=JointPositionCommand,
+            ),
+        )
 
 
 def test_selected_route_and_execution_binding_mismatch_fails_closed() -> None:
@@ -1002,6 +1013,7 @@ def test_selected_route_and_execution_binding_mismatch_fails_closed() -> None:
         route_identity = LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
         control_semantics_identity = control_semantics
         robot_command_semantics_identity = JOINT_POSITION_COMMAND_V1
+        command_type = JointPositionCommand
 
         def bind(self, provider):
             valid = JointPositionCommandRouteExecutionStrategy(
@@ -1033,6 +1045,66 @@ def test_selected_route_and_execution_binding_mismatch_fails_closed() -> None:
         match="selected command route and execution binding identity mismatch",
     ):
         compose_experiment(_manifest(), _registries(mapping=mapping))
+
+
+def test_command_route_rejects_strategy_command_type_mismatch() -> None:
+    control_semantics = VersionedIdentity("dummy_mapping_semantics", 1)
+
+    @dataclass(frozen=True)
+    class _WrongTypeStrategy:
+        route_identity = LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
+        control_semantics_identity = control_semantics
+        robot_command_semantics_identity = JOINT_POSITION_COMMAND_V1
+        command_type = EndpointVelocityCommand
+
+        def bind(self, provider):
+            _ = provider
+            raise AssertionError("invalid strategy must fail before binding")
+
+    with pytest.raises(
+        TypeError,
+        match="execution strategy command type mismatch",
+    ):
+        CommandSemanticsRoute(
+            identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+            control_semantics_identity=control_semantics,
+            robot_command_semantics_identity=JOINT_POSITION_COMMAND_V1,
+            execution_strategy=_WrongTypeStrategy(),
+        )
+
+
+def test_resolved_execution_rejects_binding_command_type_mismatch() -> None:
+    control_semantics = VersionedIdentity("dummy_mapping_semantics", 1)
+
+    @dataclass(frozen=True)
+    class _WrongBinding:
+        route_identity = LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1
+        control_semantics_identity = control_semantics
+        robot_command_semantics_identity = JOINT_POSITION_COMMAND_V1
+        command_type = EndpointVelocityCommand
+        requires_motion_generator = True
+
+        def execute(self, intent, **kwargs):
+            _ = intent
+            _ = kwargs
+            raise AssertionError("invalid binding must fail before execution")
+
+    route = CommandSemanticsRoute(
+        identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+        control_semantics_identity=control_semantics,
+        robot_command_semantics_identity=JOINT_POSITION_COMMAND_V1,
+        execution_strategy=JointPositionCommandRouteExecutionStrategy(
+            route_identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
+            control_semantics_identity=control_semantics,
+            robot_command_semantics_identity=JOINT_POSITION_COMMAND_V1,
+        ),
+    )
+
+    with pytest.raises(
+        TypeError,
+        match="execution binding command type mismatch",
+    ):
+        ResolvedCommandExecution(route, _WrongBinding())
 
 
 def test_cross_plugin_compatibility_rejects_robot_bundle_version_mismatch() -> None:

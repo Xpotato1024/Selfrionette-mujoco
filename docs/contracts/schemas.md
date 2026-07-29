@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-28
+last_verified: 2026-07-29
 canonical_for:
   - schema contracts
 related:
@@ -60,7 +60,9 @@ domain間依存は`input / command / state / endpoint -> types`、`experiment_lo
 - `JointPositionCommand`: `joint_position_command/v1` providerが受理する
   joint-position専用Robot/backend command。
 - `EndpointVelocityCommand`: `endpoint_velocity_command/v1` providerが受理する
-  endpoint-velocity専用Robot/backend command。
+  endpoint-velocity専用Robot/backend command。timestampとexactly 3のvelocity componentは
+  bool / numeric stringを拒否するfinite numericで、保存時にfloatへnormalizeする。frameは
+  `world | tool`だけを受理する。
 - `BodyTransform`、`SiteTransform`: backendが抽出するrigid transform。
 - `MuJoCoState`: transport layerとviewer layerへ渡すbackend snapshot。
   `docs/contracts/mujoco-state.md`を参照する。

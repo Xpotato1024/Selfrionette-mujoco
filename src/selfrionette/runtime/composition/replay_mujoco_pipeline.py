@@ -10,6 +10,7 @@ from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
 from selfrionette.mujoco_backend.model_loader import ModelResourceBundle
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from selfrionette.runtime.execution.command_routes import ResolvedCommandExecution
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
 from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
 from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
@@ -60,6 +61,7 @@ def build_replay_mujoco_pipeline(
     control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
     control_mapping_parameters: Mapping[str, object] | None = None,
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
+    resolved_command_execution: ResolvedCommandExecution,
 ) -> ControlMappedRuntimePipeline:
     runtime_config = RuntimeConfig() if config is None else config
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)
@@ -91,6 +93,8 @@ def build_replay_mujoco_pipeline(
         motion_generator=InputIntentMotionGenerator(),
         simulator=resolved_simulator,
         publisher=state_publisher,
+        command_semantics_route=resolved_command_execution.route,
+        command_execution=resolved_command_execution.binding,
         qpos_feasibility_guard=qpos_feasibility_guard,
         state_metadata=state_metadata,
         robot_profile_metadata=robot_profile_metadata,

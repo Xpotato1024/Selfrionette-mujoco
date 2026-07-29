@@ -15,8 +15,28 @@ class EndpointVelocityCommand:
     frame: str
 
     def __post_init__(self) -> None:
-        velocity = tuple(float(component) for component in self.velocity_m_s)
-        if len(velocity) != 3 or not all(isfinite(component) for component in velocity):
+        if isinstance(self.timestamp_s, bool) or not isinstance(
+            self.timestamp_s, Real
+        ):
+            raise TypeError("endpoint velocity command timestamp must be numeric")
+        timestamp_s = float(self.timestamp_s)
+        if not isfinite(timestamp_s):
+            raise ValueError("endpoint velocity command timestamp must be finite")
+
+        values = tuple(self.velocity_m_s)
+        if len(values) != 3:
+            raise ValueError(
+                "endpoint velocity command must contain exactly three finite values"
+            )
+        if any(
+            isinstance(component, bool) or not isinstance(component, Real)
+            for component in values
+        ):
+            raise TypeError(
+                "endpoint velocity command components must be numeric"
+            )
+        velocity = tuple(float(component) for component in values)
+        if not all(isfinite(component) for component in velocity):
             raise ValueError(
                 "endpoint velocity command must contain exactly three finite values"
             )
@@ -24,8 +44,7 @@ class EndpointVelocityCommand:
             raise ValueError(
                 "endpoint velocity command frame must be 'world' or 'tool'"
             )
-        if not isfinite(self.timestamp_s):
-            raise ValueError("endpoint velocity command timestamp must be finite")
+        object.__setattr__(self, "timestamp_s", timestamp_s)
         object.__setattr__(self, "velocity_m_s", velocity)
 
 
