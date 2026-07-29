@@ -18,7 +18,12 @@ READMEはlocal entry pointとcanonical routingを担う。plugin declaration、c
 contractを複製したsecond SoTを作らない。identity、contract、parameterのcurrent値はcanonical ownerへ
 linkする。
 
+plugin READMEのactual rootは`src/selfrionette/plugins/`である。このtemplateからroot直下へ
+別の`plugins/`を作らない。
+
 ## plugin root README
+
+target: `src/selfrionette/plugins/README.md`
 
 required section:
 
@@ -59,6 +64,8 @@ generic-only axisをproduction-readyと書かない。current concrete plugin li
 列挙せず、catalog / discovery ownerへlinkする。
 
 ## axis README
+
+target: `src/selfrionette/plugins/<axis>/README.md`
 
 required section:
 
@@ -114,6 +121,8 @@ generic-only axisは、generic contractが存在することとproduction concre
 
 ## concrete plugin README
 
+target: `src/selfrionette/plugins/<axis>/<plugin>/README.md`
+
 required section:
 
 ````markdown
@@ -126,22 +135,21 @@ required section:
 canonical declaration:
 [<replace-with-plugin-declaration-label>](<replace-with-relative-link-to-declaration>)
 
-## input / output
+## input / outputまたはcomposition role
 
-- input: <replace-with-input>
-- output: <replace-with-output>
+<replace-with-input-output-or-composition-role>
 
 ## parameters
 
-<replace-with-parameter-owner-link-and-material-interpretation>
+<replace-with-parameter-owner-and-material-interpretation-or-explicit-none>
 
 ## lifecycleとside effect
 
 <replace-with-start-stop-state-and-side-effect>
 
-## compatibilityとcommand semantics
+## compatibilityとcomposition
 
-<replace-with-compatible-owner-route-and-fallback-policy>
+<replace-with-compatibility-and-composition-boundary>
 
 ## constraintsとnon-goals
 
@@ -151,14 +159,25 @@ canonical declaration:
 ## tests / validation
 
 - [<replace-with-test-or-operation-label>](<replace-with-relative-link>)
+
+## canonical architecture / contract
+
+- [<replace-with-architecture-owner>](<replace-with-relative-link>)
+- [<replace-with-contract-owner>](<replace-with-relative-link>)
 ````
 
 optional section:
 
+- command semantics route
 - hardware / transport boundary
 - resource contract
 - failure / rejection / hold behavior
 - deprecation / retirement condition
+- task / environment / evaluator固有のcomposition条件
+
+command semantics routeは、Control Mappingがrouteを宣言する、Robot providerがtyped Robot command
+semanticを受理する、native command passthroughを持つ、またはselected routeがplugin behaviorを
+実質的に変える場合だけ追加する。Environment、Task、Evaluation等へ一律に要求しない。
 
 hardware accessまたは外部side effectがある場合は、device / portをREADMEへ固定せず、operator gate、
 open / close lifecycle、defaultでside effectを起こすか、failure時の安全な状態、canonical hardware

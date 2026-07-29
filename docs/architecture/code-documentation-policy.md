@@ -183,9 +183,12 @@ READMEはlocal entry pointとroutingを担い、catalog、declaration、schema�
 第二SoTを作らない。作成時は
 [`plugin-readme-templates.md`](../operations/plugin-readme-templates.md)を使用できる。
 
+plugin READMEのrepository rootからの基準pathは`src/selfrionette/plugins/`である。root直下に
+別の`plugins/`を作らない。
+
 ### plugin root README
 
-`plugins/README.md`は次を説明する。
+`src/selfrionette/plugins/README.md`は次を説明する。
 
 - plugin system全体への入口とsix-axis composition
 - logical identityとbounded discovery
@@ -197,7 +200,7 @@ READMEはlocal entry pointとroutingを担い、catalog、declaration、schema�
 
 ### axis README
 
-`plugins/<axis>/README.md`は次を説明する。
+`src/selfrionette/plugins/<axis>/README.md`は次を説明する。
 
 - axisの責務と、置けるもの / 置けないもの
 - required contract、input / output
@@ -209,18 +212,35 @@ READMEはlocal entry pointとroutingを担い、catalog、declaration、schema�
 
 ### concrete production plugin README
 
-`plugins/<axis>/<plugin>/README.md`は次を説明する。
+`src/selfrionette/plugins/<axis>/<plugin>/README.md`は、6軸のどのconcrete production pluginにも
+適用できる共通責務として次を説明する。対象はRobot、Input Source、Control Mapping、
+Environment、Task、Evaluationである。
 
-- pluginの意味、logical identity、responsibility
-- input / output、parameters
-- lifecycle、side effect、compatibility
-- command semantics route、constraints、non-goals
+- pluginの意味とlogical identityへのcanonical link
+- local responsibility
+- input / output、またはcomposition上のrole
+- parameters、またはparameterを持たないこと
+- lifecycleとside effect
+- compatibility / composition boundary
+- constraintsとnon-goals
 - tests / validation入口
-- canonical declarationへのlink
+- canonical architecture / contractへのrouting
+
+command semantics routeは共通必須項目にしない。次のようにselected routeがplugin contractまたは
+behaviorへ関与する場合だけ、該当するREADMEで説明する。
+
+- Control Mappingがcommand semantics routeを宣言する場合
+- Robot providerがtyped Robot command semanticを受理する場合
+- native command passthroughを持つ場合
+- selected routeがplugin behaviorを実質的に変える場合
+
+Environment、Task、Evaluation等、Robot command routeを所有または消費しないpluginへ
+command semanticsの記述を要求しない。
 
 discoverable concrete production pluginにはREADMEを必須とする。ただし、READMEをplugin declarationや
 catalogのsecond registryにせず、identityの値はcanonical declarationへlinkする。新規または変更する
-discoverable pluginは、同じPRでREADMEを追加または更新する。既存pluginのcoverage debtは#484で扱う。
+discoverable pluginは、同じPRでREADMEを追加または更新する。既存pluginのcoverage debtを解消する
+remediationは、policy変更とは独立したreview unitに分離できる。
 
 ### READMEを機械的に要求しない対象
 
@@ -240,26 +260,17 @@ comment、docstring / JSDoc、README、canonical documentを同じdiffで確認�
 判定しない。
 
 このpolicy段階でrepository-wideのREADME coverage、public symbol docstring / JSDoc coverage、
-comment数、全suppression禁止をhard failureにしない。既存README debtは#484、既存code documentation
-debtは#485でpolicyに基づきremediationし、coverage guardの導入可否を各Issueで判断する。#483では
-policyの存在、AGENTS routing、Source of Truth Map ownership、supporting文書のmetadata / link、
-canonical topicの一意性だけをfocused validation対象とする。
+comment数、全suppression禁止をhard failureにしない。policy導入時に既存debtを即時hard failureへ
+変換しない場合がある。coverage guardは、remediation completeness、false-positive risk、
+maintenance costを確認してから導入する。README remediationとsource code documentation remediationは、
+互いのscopeを先取りしない独立したreview unitに分離できる。
 
-## Issue #447との境界
+## repository-wide policyとsubproject固有policyの境界
 
-Issue #447の`fast_arm_core`固有規則は、独立core repositoryに対する厳格なAPI documentation要件である。
-repository-wide policyには、全module、全private helper、全property、全`__post_init__`の必須化や、
-symbol countによる機械的な完了判定を適用しない。
+独立core等のsubprojectは、対象contractと利用者に必要であればrepository-wide policyより厳格な
+documentation policyを持てる。そのsubproject固有policyをrepository全体へ自動適用しない。
+repository-wide defaultには、全module、全private helper、全property、全`__post_init__`の必須化や、
+symbol countによる機械的な完了判定を採用しない。
 
 一方、unit、frame、solver assumption、resource contract、failure behaviorを誤読させない原則は、
 該当するAPIへcontract significanceに基づいて適用する。
-
-## downstream handoff
-
-- #484はこのpolicyとplugin README templateを入力に、plugin root / axis / concrete plugin hierarchy、
-  existing README remediation、coverage guardの導入判断を扱う。production sourceのdocstringは変更しない。
-- #485はこのpolicyとreview checklistを入力に、comment、docstring、JSDoc、suppressionを修正する。
-  README hierarchy、public API、behaviorは変更せず、automated candidateをpolicyでfilterし、
-  architecture-sensitiveなP1 contractから扱う。
-
-#483のpolicyがreviewableに固定されたheadから、#484と#485は互いに独立したbranchとして開始できる。
