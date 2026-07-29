@@ -4,45 +4,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-ALLOWED_STATUS = {"canonical", "supporting", "historical", "draft", "obsolete"}
-CANONICAL_DOCS = [
-    "docs/README.md",
-    "docs/conventions.md",
-    "docs/architecture/development-policy.md",
-    "docs/architecture/mujoco-skeleton-first-spec.md",
-    "docs/architecture/documentation-sot-policy.md",
-    "docs/architecture/dependency-boundaries.md",
-    "docs/architecture/data-flow.md",
-    "docs/architecture/runtime-composition.md",
-    "docs/contracts/parallel-work-contracts.md",
-    "docs/contracts/kinematics-command-contract.md",
-    "docs/contracts/motion-command.md",
-    "docs/contracts/schemas.md",
-    "docs/contracts/mujoco-state.md",
-    "docs/contracts/transport-payload.md",
-    "docs/contracts/robot-profile-runtime-viewer-profile.md",
-    "docs/contracts/experiment-plugin-composition.md",
-    "docs/contracts/evaluation-manifest-readiness.md",
-    "docs/contracts/assets.md",
-    "docs/contracts/r7-b-runtime-input-pipeline-contract.md",
-    "docs/operations/git-pr-workflow.md",
-    "docs/operations/validation.md",
-    "docs/operations/hardware-safety.md",
-    "docs/operations/codex-workflow.md",
-    "docs/operations/r7-c-viewer-fixture-demo-procedure.md",
-    "docs/operations/r7-c-keyboard-replay-demo-package.md",
-    "docs/operations/r7-c-live-selfrionette-validation-log.md",
-    "docs/experiment-notes/templates/r7-c-live-loadcell-validation-template.md",
-    "docs/operations/r7-c-axis-sanity-check.md",
-    "docs/experiment-notes/templates/r7-c-axis-sanity-check-template.md",
-    "docs/reports/implementation/r7-c-presentation-demo-notes.md",
-    "docs/reports/audits/r7-c-completion-audit.md",
-    "docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md",
-    "docs/reports/implementation/r7-e-p22-neutral-initial-pose.md",
-    "docs/migration/legacy-inventory.md",
-    "docs/migration/legacy-to-new-layer-map.md",
-    "docs/migration/rapier-to-mujoco-migration.md",
-]
 
 
 def read(path: str) -> str:
@@ -63,6 +24,18 @@ def status_value(front: str) -> str:
     raise AssertionError("front matter missing status")
 
 
+def source_map_targets() -> tuple[str, ...]:
+    targets = []
+    for line in read("docs/README.md").splitlines():
+        if not line.startswith("|") or line.startswith("|---") or "| Topic |" in line:
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) < 2 or not cells[1].startswith("`"):
+            continue
+        targets.append(cells[1].strip("`"))
+    return tuple(targets)
+
+
 def test_docs_sot_required_paths_exist() -> None:
     required = [
         "docs/README.md",
@@ -80,9 +53,9 @@ def test_doc_directory_is_not_used() -> None:
 
 
 def test_canonical_docs_have_valid_front_matter() -> None:
-    for path in CANONICAL_DOCS:
+    for path in ("docs/README.md", *source_map_targets()):
         front = front_matter(read(path))
-        assert status_value(front) in ALLOWED_STATUS, path
+        assert status_value(front) == "canonical", path
 
 
 def test_docs_readme_has_source_of_truth_map() -> None:
@@ -136,7 +109,9 @@ def test_runtime_composition_documents_current_responsibility_split() -> None:
     assert "only composition root" in text
     assert "render-only" in text
     assert "publish-before-ViewerInputSource-rebase" in text
-    assert "does not perform a broad runtime rewrite" in text
+    assert "runtimeの別実装を追加しない" in text
+    assert "diagnostic / operational runtime" in text
+    assert "planned #486" in text
 
 
 def test_robot_profile_contract_is_canonical_and_registered() -> None:
@@ -183,6 +158,29 @@ def test_experiment_plugin_composition_contract_is_canonical_and_registered() ->
         "#411",
     ):
         assert marker in text
+
+
+def test_plugin_infrastructure_and_shared_owners_match_current_tree() -> None:
+    dependency = read("docs/architecture/dependency-boundaries.md")
+    composition = read("docs/contracts/experiment-plugin-composition.md")
+    registry = read("docs/contracts/runtime-input-source-registry.md")
+
+    for marker in (
+        "`plugins/mappings/_continuous_endpoint_velocity.py`",
+        "`plugins/mappings/_command_routes.py`",
+        "algorithm primitive",
+        "declaration / route factory",
+    ):
+        assert marker in dependency
+        assert marker in composition
+
+    assert "production 6 source" in registry
+    assert "root\n`plugins/input_source_registration.py`" in registry
+    assert "plugins/input_sources/registration.py`はtyped registration contract" in registry
+    assert "source registrationはMapping object、default selection、" in composition
+    assert "production experiment runnerの存在を意味しない" in composition
+    assert "production experiment runner" in composition
+    assert "#486" in composition
 
 
 def test_evaluation_manifest_readiness_contract_is_canonical_and_registered() -> None:

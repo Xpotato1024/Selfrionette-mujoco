@@ -1,7 +1,7 @@
 ---
 status: supporting
 owner: architecture
-last_verified: 2026-07-27
+last_verified: 2026-07-30
 canonical_for: []
 related:
   - docs/README.md
@@ -22,6 +22,15 @@ contract、反復operationのsource of truthにはしない。現在仕様は`do
 
 ## 主要な入口
 
+- [2026-07-30 current documentation SoT audit](audits/current-documentation-sot-audit-2026-07-30.md):
+  baseline `baabf057e02a8f5e29e51987b3ea25b92ecf6bc4`に対するIssue #482のcurrent SoT監査。
+  #483 policy、#484 README、#485 code documentationのhandoff inventoryを含むhistorical evidence。
+- [#483 documentation policy remediation inventory](inventories/documentation-policy-remediation-inventory.md):
+  comment、docstring、JSDoc、README policy owner候補と未決定事項。
+- [#484 README remediation inventory](inventories/readme-remediation-inventory.md):
+  existing README 24件とmissing plugin / directory entry pointのremediation入力。
+- [#485 code documentation remediation inventory](inventories/code-documentation-remediation-inventory.md):
+  production sourceとarchitecture-sensitive support codeのdocstring、JSDoc、comment、suppression候補。
 - [Viewer PoC / Planar kinematics retirement audit](audits/viewer-poc-planar-kinematics-retirement.md):
   #391で固定した#385〜#389のcompletion evidence。current architecture / operation SoTではない。
 - [2026-07-16 Markdown migration snapshot](inventories/markdown-inventory.md):

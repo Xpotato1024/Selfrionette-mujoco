@@ -19,8 +19,8 @@
 
 ## 入力
 
-config、選択された input source / interpreter / motion generator /
-MuJoCo backend / transport。
+config、選択されたInput Source / Control Mapping / command semantics route /
+Robot Bundle、MuJoCo backend、transport。
 
 ## 出力
 
@@ -38,5 +38,5 @@ MuJoCo backend / transport。
 
 層の中身の責務を runtime に吸収しない。runtime は結線と lifecycle 管理に限定する。
 
-runtime package rootは`RuntimeConfig`、`RuntimePipeline`、catalog resolverだけをlazy exportする。
+runtime package rootは`RuntimeConfig`とRobot catalog resolver 5件だけをlazy exportする。
 各contract、control、safety、evaluation、runner APIは上表のcanonical ownerからimportする。

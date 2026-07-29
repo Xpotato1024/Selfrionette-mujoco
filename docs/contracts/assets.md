@@ -4,6 +4,8 @@ owner: architecture
 last_verified: 2026-07-19
 canonical_for:
   - model asset contract
+related:
+  - docs/contracts/robot-profile-runtime-viewer-profile.md
 ---
 
 # asset契約

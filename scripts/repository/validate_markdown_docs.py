@@ -89,13 +89,43 @@ def tracked_markdown() -> list[str]:
 
 
 def front_matter_status(text: str) -> str:
+    fields = front_matter_fields(text)
+    status = fields.get("status")
+    return status if isinstance(status, str) and status else "missing"
+
+
+def front_matter_fields(text: str) -> dict[str, str | tuple[str, ...]]:
+    """Parse the small metadata subset used by repository Markdown."""
     if not text.startswith("---\n"):
-        return "missing"
+        return {}
     end = text.find("\n---\n", 4)
     if end == -1:
-        return "malformed"
-    match = re.search(r"^status:\s*(\S+)\s*$", text[4:end], re.MULTILINE)
-    return match.group(1) if match else "missing"
+        return {}
+    fields: dict[str, str | tuple[str, ...]] = {}
+    active_list: str | None = None
+    for line in text[4:end].splitlines():
+        item = re.fullmatch(r"\s+-\s+(.+?)\s*", line)
+        if item and active_list is not None:
+            values = fields.get(active_list, ())
+            if not isinstance(values, tuple):
+                values = ()
+            fields[active_list] = (*values, item.group(1))
+            continue
+        pair = re.fullmatch(r"([a-z_]+):\s*(.*?)\s*", line)
+        if pair is None:
+            active_list = None
+            continue
+        key, value = pair.groups()
+        if value == "[]":
+            fields[key] = ()
+            active_list = None
+        elif value:
+            fields[key] = value
+            active_list = None
+        else:
+            fields[key] = ()
+            active_list = key
+    return fields
 
 
 def directory_role(path: str) -> str:
@@ -256,6 +286,7 @@ def validate(
     changed = changed_paths(base_ref)
     texts: dict[str, str] = {}
     statuses: dict[str, str] = {}
+    metadata: dict[str, dict[str, str | tuple[str, ...]]] = {}
 
     for path in paths:
         data = (ROOT / path).read_bytes()
@@ -273,6 +304,8 @@ def validate(
         if found:
             result.errors.append(f"mojibake-like marker in {path}: {found!r}")
 
+        fields = front_matter_fields(text)
+        metadata[path] = fields
         status = front_matter_status(text)
         statuses[path] = status
         if path.startswith(("docs/", "research/")) and status not in ALLOWED_STATUS:
@@ -286,6 +319,40 @@ def validate(
                 f"{path}: {status} not in {sorted(allowed)}"
             )
             (result.errors if path in changed else result.warnings).append(message)
+        if status in {"canonical", "supporting"}:
+            missing_fields = [
+                field
+                for field in (
+                    "status",
+                    "owner",
+                    "last_verified",
+                    "canonical_for",
+                    "related",
+                )
+                if field not in fields
+            ]
+            if missing_fields:
+                message = (
+                    f"current Markdown metadata is incomplete: {path}: "
+                    f"missing {missing_fields}"
+                )
+                is_strict_current = strict_map and base_ref is None
+                (result.errors if path in changed or is_strict_current else result.warnings).append(
+                    message
+                )
+            canonical_for = fields.get("canonical_for", ())
+            if status == "canonical" and not canonical_for:
+                message = f"canonical_for must identify at least one topic: {path}"
+                is_strict_current = strict_map and base_ref is None
+                (result.errors if path in changed or is_strict_current else result.warnings).append(
+                    message
+                )
+            if status == "supporting" and canonical_for:
+                message = f"supporting Markdown must not own canonical topics: {path}"
+                is_strict_current = strict_map and base_ref is None
+                (result.errors if path in changed or is_strict_current else result.warnings).append(
+                    message
+                )
 
     for path, text in texts.items():
         for target in relative_links(path, text):
@@ -315,6 +382,44 @@ def validate(
         message = f"Source of Truth Map duplicate: {duplicate}"
         map_changed = "docs/README.md" in changed
         (result.errors if strict_map and (base_ref is None or map_changed) else result.warnings).append(message)
+
+    canonical_topic_owners: dict[str, list[str]] = {}
+    for path, fields in metadata.items():
+        if statuses.get(path) != "canonical":
+            continue
+        canonical_for = fields.get("canonical_for", ())
+        if not isinstance(canonical_for, tuple):
+            continue
+        for topic in canonical_for:
+            canonical_topic_owners.setdefault(topic, []).append(path)
+    for topic, owners in canonical_topic_owners.items():
+        if len(owners) <= 1:
+            continue
+        message = (
+            f"canonical topic has multiple declarations: {topic!r}: {owners}"
+        )
+        changed_owner = any(owner in changed for owner in owners)
+        (result.errors if strict_map and (base_ref is None or changed_owner) else result.warnings).append(
+            message
+        )
+
+    if strict_map:
+        map_targets = {target for _, target in map_rows}
+        canonical_paths = {
+            path
+            for path, status in statuses.items()
+            if status == "canonical"
+            and path != "docs/README.md"
+            and path.startswith(("docs/", "research/"))
+        }
+        for path in sorted(canonical_paths - map_targets):
+            result.errors.append(
+                f"canonical document is missing from Source of Truth Map: {path}"
+            )
+        for path in sorted(map_targets - canonical_paths):
+            result.errors.append(
+                f"Source of Truth Map target is not canonical: {path}"
+            )
 
     absolute_path = re.compile(
         r"(?<![A-Za-z0-9_])[A-Za-z]:[\\/](?:Users|Xpotato|Xpotato-apps|Xpotato-Apps)[\\/]"

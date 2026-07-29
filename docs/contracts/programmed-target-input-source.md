@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-28
+last_verified: 2026-07-30
 canonical_for:
   - programmed target input source contract
   - RawInputFrame.metadata bridge for deterministic programmed target trajectories
@@ -13,9 +13,9 @@ related:
 
 # ProgrammedTargetInputSource Contract
 
-P3ではこのbehaviorを`plugins/input_sources/programmed_target/`のversioned registrationがfactoryへ
-接続した。C4後はこのcanonical ownerを直接使用し、旧public compatibility importは退役済みである。
-trajectory、preset validation、terminal hold、loop semanticsは変更しない。
+`plugins/input_sources/programmed_target/`がversioned plugin、factory、trajectoryを所有する。
+runtimeはcatalogからregistrationを解決し、Control Mappingを独立selectionとして接続する。
+旧public compatibility importと`InputInterpreter`経路はcurrent contractではない。
 
 ## Versioned plugin parameter contract
 
@@ -131,11 +131,12 @@ base `ProgrammedTargetInputSource` contract の必須 key には含めず、必�
 
 この挙動は dry-run や visual smoke の既存の期待と整合する。
 
-## 8. InputInterpreter / InputIntent との関係
+## 8. Control Mapping / InputIntentとの関係
 
-`ReplayInputInterpreter` のような interpreter は、`RawInputFrame.metadata` を
-`InputIntent.metadata` にそのまま保持する。
-programmed target の契約は interpreter 側で再定義しない。
+`programmed_target`はsource-owned schema adapterを通してeffective mapping-input schema
+`replay_raw_input_frame/v1`を宣言し、`replay_mapping/v1`が`RawInputFrame.metadata`を
+`InputIntent.metadata`へshallow-copyする。source pluginは特定Mapping identityを所有せず、
+diagnostic convenience pairingは`runtime/control/input_source_mapping_policy.py`が所有する。
 
 ## 9. sweep_x との関係
 

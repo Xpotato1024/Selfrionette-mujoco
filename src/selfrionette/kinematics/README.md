@@ -20,7 +20,7 @@ generic solver Protocolで定義した計算結果。
 
 ## 依存してはいけない層
 
-`input_sources`, `input_interpreters`, `mujoco_backend`, `transport`, `runtime`,
+`plugins/input_sources`, `plugins/mappings`, `mujoco_backend`, `transport`, `runtime`,
 concrete robot plugin
 
 ## 禁止事項
