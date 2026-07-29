@@ -93,6 +93,9 @@ Mappingに追加registration情報がない限り`mappings/registration.py`は�
 - production pipeline builderはpre-bound executionを注入面として公開せず、current Mappingとcurrent
   Robot Bundleからcanonical route strategy / binding / providerを内部解決する。別Robot、別logical
   version、stale provider、同じroute identityを名乗るcustom strategyをcurrent simulatorへ組み合わせない。
+  replay backendもBundleのcanonical Runtime Pluginが構築し、model contractをpipeline return前に検証する。
+  config selection、Bundle identity、Runtime Plugin、model、qpos guard、typed providerを一つのcomposition
+  として解決し、external simulatorやarbitrary guard / profile metadataをproduction APIへ注入しない。
   runtime planはpipelineが保持する同一binding objectを参照する。
 - Mapping packageとRobot packageは互いのconcrete IDをimportしない。Mappingのcontrol semantics、
   selected runtime conversion route、Robotのcommand semantic providerを`VersionedIdentity`で照合する。

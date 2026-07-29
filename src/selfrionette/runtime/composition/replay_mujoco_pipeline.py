@@ -6,18 +6,25 @@ from pathlib import Path
 from selfrionette.plugins.input_sources.replay import ReplayInputSource
 from selfrionette.plugins.mappings.replay_mapping import REPLAY_CONTROL_MAPPING_PLUGIN
 from selfrionette.motion import InputIntentMotionGenerator
-from selfrionette.mujoco_backend import HeadlessMuJoCoSimulator
-from selfrionette.mujoco_backend.model_loader import ModelResourceBundle
 from selfrionette.runtime.composition.config import RuntimeConfig
-from selfrionette.runtime.composition.robot_bundle import RobotBundle
+from selfrionette.runtime.composition.robot_bundle import (
+    QPOS_FEASIBILITY_V1,
+    RESET_INITIAL_STATE_V1,
+    QposFeasibilityProvider,
+    ResetInitialStateProvider,
+    RobotBundle,
+)
+from selfrionette.runtime.composition.robot_profile import (
+    robot_profile_runtime_metadata,
+)
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import (
     ControlMappingPlugin,
+    PluginSelection,
     VersionedIdentity,
 )
 from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
-from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.schemas import RawInputFrame
 from selfrionette.transport import StatePublisher
 
@@ -33,13 +40,11 @@ class _ReplayCompatibilityStatePublisher:
 
 
 def _resolve_model_path(
-    *, model_path: str | Path | ModelResourceBundle | None, config: RuntimeConfig
-) -> Path | ModelResourceBundle:
+    *, model_path: str | Path | None, config: RuntimeConfig
+) -> Path | None:
     if model_path is not None:
-        return model_path if isinstance(model_path, ModelResourceBundle) else Path(model_path)
-    if config.mujoco_model_path is not None:
-        return config.mujoco_model_path
-    raise ValueError("generic replay MuJoCo pipeline requires an explicit model_path")
+        return Path(model_path)
+    return config.mujoco_model_path
 
 
 def _default_replay_frame() -> RawInputFrame:
@@ -53,45 +58,63 @@ def _default_replay_frame() -> RawInputFrame:
 def build_replay_mujoco_pipeline(
     *,
     frames: Sequence[RawInputFrame] | None = None,
-    config: RuntimeConfig | None = None,
-    model_path: str | Path | ModelResourceBundle | None = None,
+    config: RuntimeConfig,
+    model_path: str | Path | None = None,
     loop: bool = False,
     publisher: StatePublisher | None = None,
-    qpos_feasibility_guard: QposFeasibilityGuard | None = None,
-    initial_keyframe_name: str | None = None,
     state_metadata: Mapping[str, object] | None = None,
-    robot_profile_metadata: Mapping[str, object] | None = None,
-    simulator: HeadlessMuJoCoSimulator | None = None,
     control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
     control_mapping_parameters: Mapping[str, object] | None = None,
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
     robot_bundle: RobotBundle,
     command_semantics_route_selection: VersionedIdentity | None = None,
 ) -> ControlMappedRuntimePipeline:
-    runtime_config = RuntimeConfig() if config is None else config
+    robot_selection = config.robot_selection
+    if robot_selection is None:
+        raise ValueError("production replay composition requires robot_selection")
+    expected_selection = PluginSelection(
+        robot_bundle.identity.name,
+        robot_bundle.identity.version,
+    )
+    if robot_selection != expected_selection:
+        raise ValueError(
+            "RuntimeConfig/Robot Bundle identity mismatch: "
+            f"config={robot_selection.plugin_id}/v{robot_selection.contract_version}, "
+            f"bundle={expected_selection.plugin_id}/v{expected_selection.contract_version}"
+        )
+
     command_execution = resolve_command_execution(
         control_mapping,
         robot_bundle,
         command_semantics_route_selection,
     )
+    initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
+    qpos_feasibility_provider = robot_bundle.provider(QPOS_FEASIBILITY_V1)
+    assert isinstance(initial_state_provider, ResetInitialStateProvider)
+    assert isinstance(qpos_feasibility_provider, QposFeasibilityProvider)
+    initial_state = initial_state_provider.resolve_initial_state()
+    if initial_state.source_kind != "named_keyframe":
+        raise ValueError("production replay composition requires a named-keyframe initial state")
+
     replay_frames = tuple(frames) if frames is not None else (_default_replay_frame(),)
-    if simulator is not None and (model_path is not None or runtime_config.mujoco_model_path is not None):
-        raise ValueError("simulator and model_path are mutually exclusive")
-    resolved_model_path = (
-        None
-        if simulator is not None
-        else _resolve_model_path(model_path=model_path, config=runtime_config)
+    resolved_model_path = _resolve_model_path(
+        model_path=model_path,
+        config=config,
     )
     state_publisher = _ReplayCompatibilityStatePublisher() if publisher is None else publisher
-    resolved_simulator = simulator
-    if resolved_simulator is None:
-        assert resolved_model_path is not None
-        resolved_simulator = HeadlessMuJoCoSimulator.from_model_path(
-            resolved_model_path,
-            initial_keyframe_name=initial_keyframe_name,
-        )
+    plugin = robot_bundle.runtime_plugin
+    simulator = plugin.build_simulator(
+        model_path=resolved_model_path,
+        initial_keyframe_name=initial_state.source_id,
+    )
+    plugin.validate_model(simulator.model)
+    qpos_feasibility_guard = qpos_feasibility_provider.build_guard(
+        model=simulator.model,
+        config_path=config.joint_limit_config_path,
+    )
+
     return ControlMappedRuntimePipeline(
-        config=runtime_config,
+        config=config,
         input_source=ReplayInputSource(replay_frames, loop=loop),
         control_mapping=control_mapping,
         control_mapping_parameters=(
@@ -105,11 +128,11 @@ def build_replay_mujoco_pipeline(
             if command_execution.binding.requires_motion_generator
             else None
         ),
-        simulator=resolved_simulator,
+        simulator=simulator,
         publisher=state_publisher,
         command_semantics_route=command_execution.route,
         command_execution=command_execution.binding,
         qpos_feasibility_guard=qpos_feasibility_guard,
         state_metadata=state_metadata,
-        robot_profile_metadata=robot_profile_metadata,
+        robot_profile_metadata=robot_profile_runtime_metadata(robot_bundle.profile),
     )

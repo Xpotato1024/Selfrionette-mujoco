@@ -279,6 +279,10 @@ route strategyとcurrent Robot Bundleのcanonical providerからbindingを内部
 `ProviderAssemblyBinding`はBundle logical identityおよびcanonical Profile / Runtime Plugin ownerと
 同一でなければBundle construction時にrejectする。manifest / freezeにはversioned semantic identityを
 保存し、Python strategy / binding / provider object identityは保存しない。
+production replay compositionはconfig Robot selectionとBundle identityをexact比較し、同じBundleの
+Runtime Pluginがbackendを構築してmodelを検証し、Bundle providerがqpos feasibility guardを構築する。
+external simulator、別Robot / 別logical version backend、foreign modelはprovider execute、source start、
+simulator stepより前にrejectする。arbitrary simulator / guard injectionはtest-only helperの境界とする。
 `ControlMappedRuntimePipeline`はroute / bindingを必須保持し、CLIから到達する全production runnerは
 pipelineのtyped execution APIへ収束する。`MotionCommand -> simulator.apply_command()`はproduction
 runtime入口として使用しない。

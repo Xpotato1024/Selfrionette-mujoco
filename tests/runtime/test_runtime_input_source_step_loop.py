@@ -92,6 +92,30 @@ class RecordingPublisher:
         self.states.append(state)
 
 
+def _fast_arm_bundle_with_identity(identity: VersionedIdentity) -> RobotBundle:
+    bundle = resolve_robot_bundle("fast_arm")
+    return RobotBundle(
+        identity=identity,
+        profile=bundle.profile,
+        runtime_plugin=bundle.runtime_plugin,
+        capability_providers=tuple(
+            type(binding)(
+                binding.identity,
+                replace(binding.provider, robot_identity=identity),
+            )
+            for binding in bundle.capability_providers
+        ),
+        command_semantic_providers=tuple(
+            type(binding)(
+                binding.identity,
+                replace(binding.provider, robot_identity=identity),
+            )
+            for binding in bundle.command_semantic_providers
+        ),
+        parameter_contract=bundle.parameter_contract,
+    )
+
+
 def test_incompatible_command_semantics_rejects_before_source_start() -> None:
     selection = select_runtime_input_source("viewer", steps=1)
     assert selection.control_mapping is not None
@@ -134,6 +158,60 @@ def test_incompatible_command_semantics_rejects_before_source_start() -> None:
         build_runtime_input_source_step_loop_plan(incompatible)
 
     assert source.start_count == 0
+
+
+def test_replay_bundle_identity_mismatch_rejects_before_source_or_backend_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    foreign_bundle = _fast_arm_bundle_with_identity(
+        VersionedIdentity("foreign_robot", 1)
+    )
+
+    class _MismatchedCatalog:
+        def resolve_profile(self, selection):  # noqa: ANN001, ANN201
+            _ = selection
+            return foreign_bundle.profile
+
+        def resolve_bundle(self, selection):  # noqa: ANN001, ANN201
+            _ = selection
+            return foreign_bundle
+
+    class _StartSpy:
+        start_count = 0
+
+        def start(self) -> None:
+            self.start_count += 1
+
+    backend_build_count = 0
+
+    def fail_if_built(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        nonlocal backend_build_count
+        backend_build_count += 1
+        raise AssertionError("backend must not be built for an identity mismatch")
+
+    monkeypatch.setattr(
+        type(foreign_bundle.runtime_plugin),
+        "build_simulator",
+        fail_if_built,
+    )
+    source = _StartSpy()
+    selection = replace(
+        select_runtime_input_source("replay", steps=1),
+        runtime_reader=source,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="RuntimeConfig/Robot Bundle identity mismatch",
+    ):
+        build_runtime_input_source_step_loop_plan(
+            selection,
+            config=RuntimeConfig(robot_profile_id="fast_arm"),
+            robot_catalog=_MismatchedCatalog(),  # type: ignore[arg-type]
+        )
+
+    assert source.start_count == 0
+    assert backend_build_count == 0
 
 
 def test_native_endpoint_velocity_route_executes_provider_without_joint_path() -> None:
@@ -683,6 +761,8 @@ def test_replay_step_loop_injects_typed_providers_and_protects_profile_metadata(
     assert plan.endpoint_pose_provider is bundle.provider(ENDPOINT_POSE_V1)
     assert plan.endpoint_command_provider is bundle.provider(ENDPOINT_COMMAND_V1)
     assert plan.qpos_feasibility_provider is bundle.provider(QPOS_FEASIBILITY_V1)
+    assert plan.command_execution is plan.pipeline.command_execution
+    assert plan.command_semantics_route is plan.pipeline.command_semantics_route
     assert record.state.metadata["robot_profile_id"] == "fast_arm"
     assert record.state.metadata["model_contract_version"] == FAST_ARM_ROBOT_PROFILE.model_contract_version
     assert record.state.metadata["robot_joint_names"] == FAST_ARM_ROBOT_PROFILE.canonical_joint_names

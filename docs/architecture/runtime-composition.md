@@ -232,6 +232,10 @@ productionのconcrete / replay builderは外部で解決済みの`ResolvedComman
 current Control Mapping、route selection、current Robot Bundleからcanonical route / strategy /
 binding / providerを内部解決する。step-loop planは完成したpipelineのrouteと同一binding objectを
 authoritative objectとして保持し、別途解決したbindingを併存させない。
+production replay builderは`RuntimeConfig.robot_selection`とBundle identityをexact比較し、Bundleの
+canonical Runtime Pluginだけでsimulatorを構築してmodel contractをpipeline return前に検証する。
+qpos feasibility guardとprofile metadataも同じBundleから導出し、外部simulator、別Robot / 別logical
+version backend、foreign modelをtyped providerと独立に組み合わせる注入面を持たない。
 現行fast_arm local motion routeはendpoint velocityを`dt`積分し、
 desired endpoint positionからJacobianで`MotionCommand`を構築し、safety / qpos feasibility後に
 `JointPositionCommand`へprojectionする。missing joint、joint-velocity-only、empty positionは

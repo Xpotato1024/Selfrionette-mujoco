@@ -179,13 +179,17 @@ logical v2等を選択するcallerは`RuntimeConfig(robot_profile_id=<id>, robot
 `RuntimeConfig.robot_selection`は#405 / #406と同じ`PluginSelection`を返し、catalog projectionとruntime compositionは
 そのselectionを共有する。requested / registered logical version不一致はmodel load前にfailする。
 
-`ControlMappedRuntimePipeline`と`build_replay_mujoco_pipeline()`はgenericのままとする。model pathまたはjoint nameから
-profileを推論せず、profileがない場合にfast_armを選択せず、明示的なmodel pathとRobot Bundleを要求する。
-replay builderはcurrent MappingとBundleからcanonical command executionを内部解決し、pre-bound executionを
-受け取らない。callerはgeneric keyframe、guard、state metadataをinjectしてよい。stub-defaultの`build_mujoco_pipeline()`と
+`ControlMappedRuntimePipeline`はgenericのままとし、`build_replay_mujoco_pipeline()`は明示的な
+`RuntimeConfig.robot_selection`とRobot Bundleを要求する。model pathまたはjoint nameからprofileを推論せず、
+profileがない場合にfast_armを選択しない。replay builderはcurrent MappingとBundleからcanonical command
+executionを内部解決し、pre-bound execution、simulator、keyframe、guard、profile metadataを受け取らない。
+BundleのRuntime Pluginがsimulatorを構築してmodelを検証し、Bundle providerがguardを構築する。callerが
+model pathをoverrideしても、selected Bundleのmodel contractをpipeline return前に通過しなければならない。
+test-onlyのarbitrary simulator / guard injectionはproduction builderではなく明示的なtest helperへ閉じる。
+stub-defaultの`build_mujoco_pipeline()`と
 `build_noop_pipeline()`はproduction surfaceから退役した。したがって最小のnon-fast_arm MJCFは、
-real replay componentまたは明示的に構築した`ControlMappedRuntimePipeline`により、fast_arm validationやconfigurationなしで
-loadとstepができる。
+明示的に構築したtest-only `ControlMappedRuntimePipeline`により、fast_arm validationやconfigurationなしで
+loadとstepを検証できる。
 
 package resourceは宣言したimport packageとpackage-relative pathだけを許可し、stable logical pathとは別に検証する。
 MuJoCo include/meshは`PackageResourceBundle`のrelative VFS layoutで解決し、filesystemへ永続materializeしない。

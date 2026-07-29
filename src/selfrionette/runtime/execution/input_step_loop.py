@@ -16,7 +16,6 @@ from selfrionette.plugins.robots.catalog import (
     resolve_robot_bundle,
     resolve_robot_profile,
 )
-from selfrionette.runtime.composition.robot_profile import robot_profile_runtime_metadata
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.control.input_step_diagnostics import (
@@ -51,11 +50,9 @@ from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
     QPOS_FEASIBILITY_V1,
-    RESET_INITIAL_STATE_V1,
     EndpointCommandProvider,
     EndpointPoseProvider,
     QposFeasibilityProvider,
-    ResetInitialStateProvider,
     RobotBundle,
 )
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
@@ -210,16 +207,10 @@ def build_runtime_input_source_step_loop_plan(
         != selected_command_semantics_route
     ):
         raise ValueError("runtime command semantics selection changed after source readiness")
-    plugin = robot_bundle.runtime_plugin
     endpoint_pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1)
     qpos_feasibility_provider = robot_bundle.provider(QPOS_FEASIBILITY_V1)
-    initial_state_provider = robot_bundle.provider(RESET_INITIAL_STATE_V1)
     assert isinstance(endpoint_pose_provider, EndpointPoseProvider)
     assert isinstance(qpos_feasibility_provider, QposFeasibilityProvider)
-    assert isinstance(initial_state_provider, ResetInitialStateProvider)
-    initial_state = initial_state_provider.resolve_initial_state()
-    if initial_state.source_kind != "named_keyframe":
-        raise ValueError("production input step-loop requires a named-keyframe initial state")
     resolved_model_path = _resolve_model_path(
         model_path=model_path, config=runtime_config, robot_bundle=robot_bundle
     )
@@ -267,28 +258,17 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if execution_adapter.uses_replay_pipeline:
-        simulator = plugin.build_simulator(
-            model_path=resolved_model_path,
-            initial_keyframe_name=initial_state.source_id,
-        )
         pipeline = build_replay_mujoco_pipeline(
             frames=selection.frames,
             config=runtime_config,
-            simulator=simulator,
+            model_path=resolved_model_path,
             loop=selection.loop,
             publisher=publisher,
-            initial_keyframe_name=initial_state.source_id,
-            robot_profile_metadata=robot_profile_runtime_metadata(robot_bundle.profile),
             control_mapping=selection.control_mapping,
             control_mapping_parameters=selection.control_mapping_parameters,
             mapping_input_adapter=selection.mapping_input_adapter,
             robot_bundle=robot_bundle,
             command_semantics_route_selection=selected_command_semantics_route.identity,
-        )
-        plugin.validate_model(pipeline.simulator.model)
-        pipeline.qpos_feasibility_guard = qpos_feasibility_provider.build_guard(
-            model=pipeline.simulator.model,
-            config_path=runtime_config.joint_limit_config_path,
         )
         if selection.runtime_reader is not None:
             pipeline.input_source = selection.runtime_reader

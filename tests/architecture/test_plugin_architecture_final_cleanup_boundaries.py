@@ -258,6 +258,43 @@ def test_production_pipeline_builders_do_not_accept_prebound_command_execution()
             for node in ast.walk(builder)
         )
 
+    replay_path = composition_root / "replay_mujoco_pipeline.py"
+    replay_tree = ast.parse(
+        replay_path.read_text(encoding="utf-8"),
+        filename=str(replay_path),
+    )
+    replay_builder = next(
+        node
+        for node in replay_tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "build_replay_mujoco_pipeline"
+    )
+    replay_arguments = {
+        argument.arg for argument in replay_builder.args.kwonlyargs
+    }
+    assert {
+        "resolved_command_execution",
+        "simulator",
+        "robot_profile_metadata",
+        "qpos_feasibility_guard",
+        "initial_keyframe_name",
+    }.isdisjoint(replay_arguments)
+    attribute_calls = {
+        node.func.attr
+        for node in ast.walk(replay_builder)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+    }
+    assert {
+        "build_simulator",
+        "validate_model",
+        "build_guard",
+    } <= attribute_calls
+    replay_source = replay_path.read_text(encoding="utf-8")
+    assert "robot_selection != expected_selection" in replay_source
+    assert "robot_bundle.runtime_plugin" in replay_source
+    assert "robot_profile_runtime_metadata(robot_bundle.profile)" in replay_source
+
     step_loop = (
         ROOT
         / "src"
@@ -267,8 +304,14 @@ def test_production_pipeline_builders_do_not_accept_prebound_command_execution()
         / "input_step_loop.py"
     ).read_text(encoding="utf-8")
     assert "resolved_command_execution" not in step_loop
+    assert "simulator=simulator" not in step_loop
+    assert "robot_profile_metadata=" not in step_loop
+    assert "qpos_feasibility_guard=" not in step_loop
     assert "command_semantics_route=pipeline.command_semantics_route" in step_loop
     assert "command_execution=pipeline.command_execution" in step_loop
+    assert "tests.support" not in step_loop
+    for path in (ROOT / "src" / "selfrionette" / "runtime").rglob("*.py"):
+        assert "tests.support" not in path.read_text(encoding="utf-8")
 
     offline_smoke_path = (
         ROOT
