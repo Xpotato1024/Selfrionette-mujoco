@@ -1,6 +1,10 @@
-# Arduino Firmware Reference
+# Arduino firmware
 
-- This subtree holds Arduino firmware reference imports for Selfrionette-mujoco.
-- `legacy_selfrionette/` is the copied legacy reference asset from the old repository.
-- Keep this area reference-only unless a later issue explicitly widens scope.
-- Do not add new build or upload flows here.
+current candidateとlegacy referenceを分離する。このindexはboard、port、parameterの正本ではない。
+
+- `loadcell_7ch_pro_micro/`: current 7-channel sender candidate
+- [legacy_selfrionette](legacy_selfrionette/README.md): provenanceを保持したreference
+- [serial frame contract](../../docs/contracts/r7-a-lite-serial-frame-contract.md)
+- [hardware safety](../../docs/operations/hardware-safety.md)
+
+upload、serial open、実機validationはsoftware-only testと別のside effectである。

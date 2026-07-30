@@ -27,3 +27,9 @@ IK禁止、target更新禁止、MuJoCo step禁止、入力デバイス読み取�
 
 現在のpublic surfaceは`transport/__init__.py`、wire contractは
 `docs/contracts/transport-payload.md`を正とする。将来file名をREADMEで予約しない。
+
+## canonical routing
+
+- [transport payload](../../../docs/contracts/transport-payload.md)
+- [runtime data flow](../../../docs/architecture/data-flow.md)
+- [WebSocket publisher operation](../../../docs/operations/websocket-publisher-runner.md)

@@ -28,3 +28,9 @@ MuJoCo data 直接操作禁止、WebSocket送信禁止、Three.js transform生�
 
 現在のpublic surfaceとownerは`motion/__init__.py`、runtimeとの境界は
 `docs/contracts/motion-command.md`を正とする。将来file名をREADMEで予約しない。
+
+## canonical routing
+
+- [dependency boundary](../../../docs/architecture/dependency-boundaries.md)
+- [MotionCommand](../../../docs/contracts/motion-command.md)
+- [runtime composition](../../../docs/architecture/runtime-composition.md)
