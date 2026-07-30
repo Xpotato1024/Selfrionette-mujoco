@@ -1,0 +1,25 @@
+schema_version = 1
+skill_name = "skill-lifecycle-review"
+invocation_policy = "explicit-only"
+side_effect_boundary = "candidate record only; no Git/GitHub or external mutation"
+positive_triggers = [
+  "複数のIssueとPRで同じhandoff手順が反復しているので、evidence付きcandidate reviewを行ってください。",
+  "既存Skillとのoverlap、5軸score、statusとactionを確認して、repository-local draftの可否を判断してください。",
+  "candidate storeの記録を読み、record・create-draft・promote・deprecateのどれが妥当か監査してください。"
+]
+negative_triggers = [
+  "単発のREADME typoだけを修正し、Skill candidateは作成しないでください。",
+  "GitHub PRをmergeしてIssueをcloseしてください。これはSkill lifecycle reviewの対象外です。"
+]
+route_boundaries = [
+  "変更に必要なtest commandの選択はselfrionette-change-validationへrouteする。",
+  "PRのhead、CI、Draft stateの突合はselfrionette-pr-handoffへrouteする。"
+]
+required_inputs = ["skill-system.toml", "AGENTS.md", "agent-skill-governance.md", "candidate・Skill・eval registry", "persisted GitHub / Git evidence"]
+expected_major_steps = ["opt-in確認", "知識分類", "evidence確認", "5軸scoring", "overlap確認", "status / action判断", "candidate記録とvalidation"]
+expected_outputs = ["分類結果", "evidence付きscore", "status / action", "approval boundary", "残存risk"]
+forbidden_actions = ["Issue / PR mutation", "Git merge", "Issue close", "branch削除", "user-global Skill変更", "根拠のない候補捏造"]
+representative_dry_run = "明示的にSkillを読み、bounded-plugin-change-audit候補のevidence、score、overlap、approval boundaryをread-onlyで照合する。"
+false_positive_risk = "長い単発taskを反復workflowと誤認してcandidate化するリスク。"
+false_negative_risk = "Issue・PR・Git履歴を横断せず、構造的に反復するworkflowを見落とすリスク。"
+stale_reference_risk = "candidate evidenceのcurrent stateを再取得せず、古いbranchやPR状態を採用するリスク。"

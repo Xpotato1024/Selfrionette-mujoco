@@ -1,0 +1,7 @@
+interface:
+  display_name: "Skill Lifecycle Review"
+  short_description: "継続的Skill改善の候補レビューを行う"
+  default_prompt: "Use $skill-lifecycle-review to review a repository-local Skill candidate."
+
+policy:
+  allow_implicit_invocation: false

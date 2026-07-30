@@ -1,0 +1,24 @@
+schema_version = 1
+candidate_key = "protected-long-form-body-safety"
+status = "candidate"
+scope = "repository-local GitHub metadata safety workflow"
+summary = "長文Issue・PR bodyのfull-body取得、UTF-8 backup、localized candidate、write前再取得、exact read-back、structural preservationを順序どおりに確認する反復workflow。"
+observable_evidence = [
+  "Git commits 6bd7389とdaf1192で、malformed baselineとstructural collapseを拒否するGitHub body safetyを追加した。",
+  "AGENTS.mdとdocs/operations/git-pr-workflow.mdで、transport integrityとstructural preservationを独立gateとして繰り返し要求している。",
+  "Issue #491の既存scopeはこの領域をstarter Skillへ昇格させず、Skillからのexternal mutationを禁止している。"
+]
+related_overlapping_skills = []
+approval_boundary = "候補記録とread-only判定に限定し、GitHub bodyの作成・更新・rollbackは既存canonical workflowと明示承認へrouteする。"
+unresolved_risks = [
+  "connectorごとのrevision controlとfull-body取得能力が異なるため、実際のwrite taskでは別途concurrency gateが必要である。"
+]
+proposed_action = "record"
+
+[score]
+recurrence = 2
+reconstruction_cost = 2
+error_prevention = 2
+stability = 1
+verifiability = 1
+total = 8

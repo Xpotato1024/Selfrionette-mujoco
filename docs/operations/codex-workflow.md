@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-31
 canonical_for:
   - Codex workflow
 related:
@@ -32,3 +32,6 @@ Codex promptの共通ruleは`AGENTS.md`を正とする。個別promptにはtask�
 research log要否は変更ファイルの種類で決めない。`AGENTS.md`、workflow、metadata、documentation governance、CI / validator等だけの変更は、実質的な研究影響がなければ原則としてlog対象外とする。対象外の場合はPR本文または最終報告へ簡潔な理由を残す。詳細は`research/README.md`を正とする。
 
 repository policy全体を個別promptへ繰り返さない。
+
+repository-local Skillのopt-in、lifecycle、candidate / eval schema、autonomy boundary、
+promotionおよび廃止は[`agent-skill-governance.md`](agent-skill-governance.md)を正本とする。

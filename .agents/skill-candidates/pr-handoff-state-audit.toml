@@ -1,0 +1,24 @@
+schema_version = 1
+candidate_key = "pr-handoff-state-audit"
+status = "draft"
+scope = "repository-local Git and PR handoff workflow"
+summary = "branch、base、actual diff、validation、local・remote・PR head、CI、Draft state、Issue relation、impactをread-onlyで突合する反復workflow。"
+observable_evidence = [
+  "PR #394、#401、#403、#463、#489、#490の本文で、base SHA、branch、local・remote・PR head、actual diff、CI、impact、Draft stateを繰り返し報告している。",
+  "Git commit 4b8dfeeでchanged Markdown governanceをCI検証へ接続し、直近のorigin/main履歴でもPRごとのbase・head・scope監査が継続している。",
+  "Issue #491はmergeableだけでready判定しないこと、commit・push・PR更新・merge・Issue close・branch削除をSkillから禁止することを要求している。"
+]
+related_overlapping_skills = ["selfrionette-pr-handoff"]
+approval_boundary = "read-only inspectionに限定し、Git/GitHub mutation、long-form body write、merge、Ready化、Issue close、branch削除を行わない。"
+unresolved_risks = [
+  "remote CIやPR bodyを取得できない場合、handoffの一部gateを成功扱いできない。"
+]
+proposed_action = "promote"
+
+[score]
+recurrence = 2
+reconstruction_cost = 2
+error_prevention = 2
+stability = 2
+verifiability = 1
+total = 9

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-30
+last_verified: 2026-07-31
 canonical_for:
   - documentation source of truth map
 related:
@@ -59,6 +59,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | world/tool control-frame評価 | `docs/evaluation/world-tool-frame-comparison-design.md` | limited exploratory pilot design |
 | Git / PR workflow | `docs/operations/git-pr-workflow.md` | branch、diff、PR、head一致のgate |
 | Codex workflow | `docs/operations/codex-workflow.md` | repository-local ruleとtask-specific deltaの適用 |
+| repository-local Skill governance | `docs/operations/agent-skill-governance.md` | Skill lifecycle、candidate / eval schema、autonomy boundary |
 | validation | `docs/operations/validation.md` | 変更層とfailure modeに応じた検証 |
 | hardware safety | `docs/operations/hardware-safety.md` | serial、OSC、実機作動のoperator gate |
 | 日本語文書guardrail | `docs/operations/japanese-doc-writing-guardrails.md` | UTF-8、BOM、mojibake、language policy |
