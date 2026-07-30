@@ -27,3 +27,8 @@ package public surfaceは`schemas.__init__`の明示的な`__all__`を正とす�
 処理ロジック、MuJoCo 操作、通信、表示、入力読み取りを持たない。
 
 1型1fileの旧moduleは退役済みであり、compatibility facadeとして再導入しない。
+
+## canonical routing
+
+- [schema contract](../../../docs/contracts/schemas.md)
+- [dependency boundary](../../../docs/architecture/dependency-boundaries.md)

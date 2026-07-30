@@ -1,6 +1,10 @@
 # mujoco-viewer
 
-## endpoint表示の境界
+browser上でMuJoCo WASM sceneを描画し、payload-v0のstateとdiagnostic overlayを表示する
+rendering-only applicationである。最初の起動手順は
+[backend / viewer startup](../../docs/operations/backend-viewer-startup.md)を参照する。
+
+## responsibilityと境界
 
 input overlayは、既存のpayload-v0 endpoint metadataを型付きのrequested、resolved、
 predicted、measured groupとしてparseする。欠落または不正な値はzeroへ変換せず、
@@ -9,6 +13,8 @@ measurement-unavailableは互いに独立した状態である。このoverlay�
 schemaを定義せず、FKまたはIKを実行しない。
 
 `apps/mujoco-viewer` は MuJoCo WASM scene renderer を rendering-only でホストする。
+Input Sourceとしてのbrowser control acquisitionとbackend-side source / Mappingの境界は
+[viewer Input Source](../../src/selfrionette/plugins/input_sources/viewer/README.md)から辿る。
 
 ## 正本
 
@@ -35,25 +41,17 @@ uv run python scripts/viewer/export_wasm_qpos_fixture.py --preset sweep_x --step
 
 既定の出力先はSelfrionette adapter packageの
 `src/selfrionette/plugins/robots/fast_arm/adapter/resources/fixtures/fast_arm_sweep_x_qpos.json`である。
-contractは`schema_version: 1`、model `assets/mujoco/fast_arm/scene.xml`、
-preset `sweep_x`、`qpos_length: 4`、30 framesである。修復済みcurrent pathの内容は
-SHA-256 `4925D77535A67ED0E4EB68BDCC0B66C262D2D11AE5E1F7DCA99C3AE5E38D312A`
-である。viewer testはtracked fileをparseし、schema、source、model path、preset、
-frame count、連続するframe index、単調増加するsimulation time、qpos dimension、
-finiteなqpos value、有意なsweep progressionを検証する。
-
-採用しなかったPR #392の再生成候補は、SHA-256
-`A30FD0A303506C7807BA2E687411FACDF28BA2BC2AE9AC8F909B9C59997FEE36`
-だった。joint positionの直接適用によって古いMuJoCo velocity stateが残り、
-BADQACC recoveryとtime rollbackが発生したため採用しなかった。現在のnative simulatorは
-position command時にvelocityをclearし、`sweep_x`はframeごとのdesired endpointを供給する。
-exporterはproduct-owned fixtureをatomicに置換する前にsequence全体を検証する。
+fixture contractとresource identityは
+[fast_arm Robot Plugin README](../../src/selfrionette/plugins/robots/fast_arm/README.md)からcanonical
+ownerへ辿る。viewer testはtracked fixtureのschema、model path、frame ordering、qpos dimension、
+finite値、progressionを検証する。過去の候補hashや採否理由は`docs/reports/`のevidenceに残し、
+このcurrent operation入口には複製しない。
 
 Viteは`publicDir`や旧`assets/` physical directoryを使わず、core/adapterのpackage source bindingから
 development serverとproduction buildへ同じstable URLでresource bytesを公開する。manual copyは不要であり、
 build outputの`mujoco/fast_arm/`はdeterministicなgenerated artifactである。
 
-## 参照用の検証コマンド
+## validation
 
 ```powershell
 cd apps\mujoco-viewer

@@ -1,7 +1,11 @@
-# Firmware Reference Assets
+# firmware
 
-- `firmware/` is the reference asset area for real-device input investigation in R7-A and later.
-- Do not import anything here from the Python runtime, viewer, or transport layers yet.
-- Firmware upload is forbidden until a manual gate opens.
-- Serial port open is handled only in P6-or-later manual smoke.
-- OSC, real robot output, and actuator command are out of scope.
+hardware firmwareとlegacy referenceの入口である。Python runtime、schema、viewerの
+source of truthではない。
+
+- [Arduino firmware](arduino/README.md)
+- [serial frame contract](../docs/contracts/r7-a-lite-serial-frame-contract.md)
+- [hardware safety](../docs/operations/hardware-safety.md)
+
+README閲覧やcompileはhardware accessではない。serial open、upload、実機作動は
+canonical operationのoperator gateなしに実行しない。

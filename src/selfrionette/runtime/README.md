@@ -40,3 +40,10 @@ Robot Bundle、MuJoCo backend、transport。
 
 runtime package rootは`RuntimeConfig`とRobot catalog resolver 5件だけをlazy exportする。
 各contract、control、safety、evaluation、runner APIは上表のcanonical ownerからimportする。
+
+## canonical routing
+
+- [runtime composition](../../../docs/architecture/runtime-composition.md)
+- [dependency boundary](../../../docs/architecture/dependency-boundaries.md)
+- [plugin system](../plugins/README.md)
+- [unified CLI](../../../docs/operations/unified-cli.md)

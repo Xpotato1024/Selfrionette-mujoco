@@ -1,7 +1,7 @@
 # Selfrionette-mujoco
 
 `Selfrionette-mujoco` の docs 正本は `docs/README.md` です。
-このルート README は、backend / dry-run / WebSocket publisher / Web viewer / browser 接続へ最短で辿る入口だけをまとめます。
+このルート README は、current architecture、plugin、backend / viewerの最初の入口だけをまとめます。
 
 ## まず読むもの
 
@@ -9,10 +9,30 @@
 - [docs/architecture/dependency-boundaries.md](docs/architecture/dependency-boundaries.md)
 - [docs/architecture/runtime-composition.md](docs/architecture/runtime-composition.md)
 - [docs/contracts/experiment-plugin-composition.md](docs/contracts/experiment-plugin-composition.md)
+- [src/selfrionette/plugins/README.md](src/selfrionette/plugins/README.md)
 - [docs/operations/backend-viewer-startup.md](docs/operations/backend-viewer-startup.md)
 - [docs/operations/websocket-host-port-contract.md](docs/operations/websocket-host-port-contract.md)
 - [docs/operations/runtime-to-viewer-e2e-smoke.md](docs/operations/runtime-to-viewer-e2e-smoke.md)
 - [apps/mujoco-viewer/README.md](apps/mujoco-viewer/README.md)
+
+## current architecture
+
+MuJoCoがphysical stateのsource of truthであり、Three.js / browser viewerはrenderingと
+read-only diagnosticsを担当します。複数層のcompositionは`src/selfrionette/runtime/`だけが所有します。
+pluginはRobot、Environment、Mapping、Task、Evaluation、Input Sourceの6軸で独立選択しますが、
+現在のproduction診断・運用pathはRobot、Input Source、Mappingが中心です。
+Environment、Task、Evaluationはgeneric contractのみで、production concrete pluginやrunner / UIはありません。
+
+## directory map
+
+- [`src/selfrionette/`](src/selfrionette/README.md): Python packageと各layerの入口
+- [`src/selfrionette/plugins/`](src/selfrionette/plugins/README.md): plugin hierarchyと追加方法
+- [`apps/mujoco-viewer/`](apps/mujoco-viewer/README.md): rendering-only browser viewer
+- [`scripts/`](scripts/README.md): repository / diagnostics / viewer / hardware script
+- [`tests/`](tests/README.md): test ownershipとvalidation入口
+- [`firmware/`](firmware/README.md): hardware firmwareとlegacy境界
+- [`docs/`](docs/README.md): canonical Source of Truth Map
+- [`research/`](research/README.md): research logの記録条件
 
 ## セットアップ
 

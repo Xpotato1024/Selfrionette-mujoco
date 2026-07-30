@@ -39,7 +39,11 @@ def _tracked_scripts() -> set[str]:
     result = subprocess.run(
         ["git", "ls-files", "scripts"], cwd=ROOT, check=True, capture_output=True, text=True
     )
-    return set(result.stdout.splitlines())
+    return {
+        path
+        for path in result.stdout.splitlines()
+        if Path(path).suffix in {".py", ".ps1"}
+    }
 
 
 def _current_consumer_files() -> list[Path]:
@@ -60,7 +64,9 @@ def _current_consumer_files() -> list[Path]:
 
 def test_script_inventory_covers_the_exact_current_paths() -> None:
     assert _tracked_scripts() == EXPECTED_SCRIPTS
-    assert not tuple(path for path in (ROOT / "scripts").iterdir() if path.is_file())
+    assert {
+        path.name for path in (ROOT / "scripts").iterdir() if path.is_file()
+    } == {"README.md"}
     assert not any(path.name == ".gitkeep" for path in (ROOT / "scripts").rglob("*"))
     assert not any(
         path.name.lower() == "readme.md" and not path.read_text(encoding="utf-8").strip()

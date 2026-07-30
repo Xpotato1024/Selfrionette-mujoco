@@ -27,3 +27,9 @@ concrete robot plugin
 
 入力デバイス依存禁止、MuJoCo data直接操作禁止、WebSocket禁止、Three.js表示禁止、
 runtime / input / transport依存禁止。concrete solver、robot固有定数、stubを置かない。
+
+## canonical routing
+
+- [dependency boundary](../../../docs/architecture/dependency-boundaries.md)
+- [kinematics / command contract](../../../docs/contracts/kinematics-command-contract.md)
+- [Robot Plugin axis](../plugins/robots/README.md)

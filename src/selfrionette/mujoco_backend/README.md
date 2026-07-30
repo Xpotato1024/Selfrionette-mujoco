@@ -29,3 +29,9 @@ Three.js描画禁止、runtime依存禁止。
 
 現在のpublic surfaceは`mujoco_backend/__init__.py`、typed command境界は
 `docs/contracts/motion-command.md`を正とする。将来file名をREADMEで予約しない。
+
+## canonical routing
+
+- [dependency boundary](../../../docs/architecture/dependency-boundaries.md)
+- [MuJoCoState](../../../docs/contracts/mujoco-state.md)
+- [Robot Plugin axis](../plugins/robots/README.md)

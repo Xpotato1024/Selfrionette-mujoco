@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from selfrionette.plugins import input_sources, mappings, robots
+from selfrionette.plugins.bounded_discovery import direct_child_package_names
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.plugins.mappings.catalog import CONTROL_MAPPING_REGISTRY
 
@@ -33,6 +35,28 @@ def test_discoverable_axes_use_fixed_package_entry_points() -> None:
         entry = PLUGINS / "mappings" / plugin_id / "plugin.py"
         assert entry.is_file(), plugin_id
         assert "CONTROL_MAPPING_PLUGIN" in entry.read_text(encoding="utf-8")
+
+
+def test_plugin_readme_coverage_follows_bounded_discovery_candidates() -> None:
+    assert (PLUGINS / "README.md").is_file()
+    for axis in (
+        "robots",
+        "input_sources",
+        "mappings",
+        "environments",
+        "tasks",
+        "evaluations",
+    ):
+        assert (PLUGINS / axis / "README.md").is_file(), axis
+
+    for namespace in (robots, input_sources, mappings):
+        axis_root = PLUGINS / namespace.__name__.rsplit(".", 1)[-1]
+        for package_name in direct_child_package_names(namespace):
+            readme = axis_root / package_name / "README.md"
+            assert readme.is_file(), (
+                "discoverable plugin package requires README.md: "
+                f"{readme.relative_to(ROOT)}"
+            )
 
 
 def test_catalogs_and_generic_registration_do_not_list_concrete_plugins() -> None:
@@ -145,7 +169,7 @@ def test_environment_task_evaluation_have_no_production_concrete_second_sot() ->
         assert tuple(
             path.name
             for path in namespace.iterdir()
-            if not path.name.startswith("_")
+            if not path.name.startswith("_") and path.name != "README.md"
         ) == ()
 
 
