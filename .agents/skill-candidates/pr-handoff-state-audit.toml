@@ -1,6 +1,6 @@
 schema_version = 1
 candidate_key = "pr-handoff-state-audit"
-status = "candidate"
+status = "draft"
 scope = "repository-local Git and PR handoff workflow"
 summary = "branch、base、actual diff、validation、local・remote・PR head、CI、Draft state、Issue relation、impactをread-onlyで突合する反復workflow。"
 observable_evidence = [
@@ -13,7 +13,7 @@ approval_boundary = "read-only inspectionに限定し、Git/GitHub mutation、lo
 unresolved_risks = [
   "remote CIやPR bodyを取得できない場合、handoffの一部gateを成功扱いできない。"
 ]
-proposed_action = "create-draft"
+proposed_action = "promote"
 
 [score]
 recurrence = 2

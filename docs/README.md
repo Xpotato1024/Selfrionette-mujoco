@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-30
+last_verified: 2026-07-31
 canonical_for:
   - documentation source of truth map
 related:

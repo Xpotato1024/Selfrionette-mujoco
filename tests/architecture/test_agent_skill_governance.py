@@ -85,6 +85,130 @@ def test_transient_branch_reference_is_rejected_from_skill_body(tmp_path: Path) 
     assert any("transient Issue / branch" in error for error in result.errors)
 
 
+def test_transient_full_sha_is_rejected_from_skill_body(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    skill = target / ".agents" / "skills" / "skill-lifecycle-review" / "SKILL.md"
+    skill.write_text(
+        skill.read_text(encoding="utf-8") + "\nA transient value is 05d8321e0918baec69caede2c22db398055057a6.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("transient Issue / branch / SHA" in error for error in result.errors)
+
+
+def test_transient_contextual_abbreviated_sha_is_rejected_from_skill_body(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    skill = target / ".agents" / "skills" / "skill-lifecycle-review" / "SKILL.md"
+    skill.write_text(
+        skill.read_text(encoding="utf-8") + "\nDo not pin head: 05d8321 or base SHA = 329ec5df1886.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("transient Issue / branch / SHA" in error for error in result.errors)
+
+
+def test_non_sha_hex_like_text_is_not_rejected_from_skill_body(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    skill = target / ".agents" / "skills" / "skill-lifecycle-review" / "SKILL.md"
+    skill.write_text(
+        skill.read_text(encoding="utf-8") + "\nA generic identifier is abcdef1234567.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert result.accepted, result.errors
+
+
+def test_candidate_evidence_can_contain_full_sha(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = target / ".agents" / "skill-candidates" / "protected-long-form-body-safety.toml"
+    text = candidate.read_text(encoding="utf-8")
+    candidate.write_text(
+        text.replace(
+            'observable_evidence = [',
+            'observable_evidence = [\n  "commit 05d8321e0918baec69caede2c22db398055057a6 was inspected.",',
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert result.accepted, result.errors
+
+
+def test_candidate_create_draft_with_related_skill_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = target / ".agents" / "skill-candidates" / "protected-long-form-body-safety.toml"
+    text = candidate.read_text(encoding="utf-8")
+    candidate.write_text(
+        text.replace('related_overlapping_skills = []', 'related_overlapping_skills = ["selfrionette-change-validation"]')
+        .replace('proposed_action = "record"', 'proposed_action = "create-draft"'),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("cannot use create-draft" in error for error in result.errors)
+
+
+def test_candidate_skill_reference_and_lifecycle_are_consistent(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = target / ".agents" / "skill-candidates" / "protected-long-form-body-safety.toml"
+    text = candidate.read_text(encoding="utf-8")
+    candidate.write_text(
+        text.replace('status = "candidate"', 'status = "draft"')
+        .replace('related_overlapping_skills = []', 'related_overlapping_skills = ["missing-skill"]')
+        .replace('proposed_action = "record"', 'proposed_action = "update"'),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("unknown Skill" in error for error in result.errors)
+
+
+def test_draft_candidate_without_related_skill_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = target / ".agents" / "skill-candidates" / "protected-long-form-body-safety.toml"
+    text = candidate.read_text(encoding="utf-8")
+    candidate.write_text(
+        text.replace('status = "candidate"', 'status = "draft"')
+        .replace('proposed_action = "record"', 'proposed_action = "update"'),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("must reference an existing Skill" in error for error in result.errors)
+
+
+def test_record_only_candidate_without_related_skill_is_allowed() -> None:
+    candidate = ROOT / ".agents" / "skill-candidates" / "protected-long-form-body-safety.toml"
+    text = candidate.read_text(encoding="utf-8")
+
+    assert 'status = "candidate"' in text
+    assert 'proposed_action = "record"' in text
+    assert 'related_overlapping_skills = []' in text
+    assert MODULE.validate(ROOT).accepted
+
+
 def test_candidate_provenance_can_contain_issue_and_sha_evidence() -> None:
     candidate = (
         ROOT / ".agents" / "skill-candidates" / "layer-aware-change-validation.toml"

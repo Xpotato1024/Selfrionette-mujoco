@@ -1,6 +1,6 @@
 schema_version = 1
 candidate_key = "layer-aware-change-validation"
-status = "candidate"
+status = "draft"
 scope = "repository-local developer workflow"
 summary = "変更層、contract、failure mode、side effectから必要なvalidationを選択する反復workflow。"
 observable_evidence = [
@@ -13,7 +13,7 @@ approval_boundary = "repository-local instruction-only Skillのdraft作成はopt
 unresolved_risks = [
   "validation categoryの選択は変更層とfailure modeの読み違いに依存するため、代表taskを継続評価する。"
 ]
-proposed_action = "create-draft"
+proposed_action = "promote"
 
 [score]
 recurrence = 2

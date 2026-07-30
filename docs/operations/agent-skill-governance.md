@@ -38,6 +38,18 @@ production、hardware権限を拡張しない。
 Skill本文へcurrent Issue、branch、commit SHA、日付、local absolute pathを固定しない。
 canonical documentationの詳細をSkillへ大量複製せず、正本へrouteする。
 
+## Skillのinstruction-onlyとtaskのwrite boundary
+
+`instruction-only`はSkill自身が手順を記述・検証するだけで、外部side effectを実行しないという意味である。
+対象taskのread-only / write modeとは別であり、instruction-onlyを理由にすべてのplugin taskをread-onlyへ固定しない。
+
+read-only taskでは、pluginのcontract、ownership、discovery、identity、registration、composition、docs、tests、impactを
+監査するだけで、Skill関連ファイルやplugin実装を変更しない。対象Issueと`AGENTS.md`が明示的に許可するwrite taskでは、
+plugin implementation、registration / catalog、discovery、plugin-owned resources、directly required tests、plugin-local README、
+axis README、related canonical docsを変更してよい。ただしSkillは新しい権限を与えず、Issue scope外のpublic contract、重大なschema、
+dependency追加、runtime compositionのmaterial expansion、unrelated viewer / simulation、compatibility layer、parallel implementation、
+hardware、serial、OSC、production、credentials、external mutationは停止・承認対象とする。
+
 validatorが検査するSKILL.md frontmatter subsetは、先頭と末尾の`---` delimiter、および
 重複しない単純scalarの`name: value`と`description: value`の2 keyだけである。list、nested
 mapping、任意のYAML tagは扱わない。`agents/openai.yaml`もYAML全仕様としてparseせず、
@@ -114,6 +126,9 @@ repository policyを上書きしない。
 作成する。draftはexplicit-onlyで構造、trigger、代表task、side-effect boundaryを検証し、
 検証済みで安定している場合だけactive化を検討する。stale、重複、obsoleteなSkillは
 `update`、`merge`、`disable`、`deprecate`または`rejected`を選び、理由と残存riskを残す。
+関連する既存Skillが`related_overlapping_skills`にあるcandidateは`create-draft`を選ばず、
+既存Skillの`update`またはvalidation evidenceに基づく`promote`を選ぶ。`draft`または`active`のcandidateは
+対応する既存Skillを参照し、関連Skillのないrecord-only candidateは`candidate` / `record`として維持できる。
 
 ## Invocation policy
 
@@ -154,6 +169,9 @@ boundaryを明示する。frontmatterはvalidatorが検査する小さなsubset�
 validatorはconfig、candidate / eval TOML、duplicate key、score total、status / action、
 Skill frontmatter、directory/name、lowercase-hyphenated name、duplicate Skill、参照path、
 implicit policy、placeholder、transient state、secretらしき値、UTF-8、BOM、mojibakeを検査する。
+Skill本文のtransient SHAは、standaloneの40桁full SHAと、`commit`、`sha`、`head`、`base`の文脈に続く
+7〜39桁のhex SHAを検出する。candidateのobservable evidenceとevalのrepresentative fixtureにあるSHAは許可し、
+SHA形式そのものを説明するcanonical docsの一般例もSkill本文の検査対象外とする。
 trigger evaluationではpositive 3件以上・negative 2件以上とroute boundaryを確認し、代表dry-run
 ではSkillをexplicitに読み、成果物、DoD、失敗時の停止条件を照合する。
 

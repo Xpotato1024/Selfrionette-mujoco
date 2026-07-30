@@ -42,6 +42,10 @@ TRANSIENT_PATTERNS = (
     re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:[\\/][^\s`]+"),
     re.compile(r"(?<![A-Za-z0-9_])/(?:Users|home|mnt)/[^\s`]+"),
     re.compile(r"(?<![A-Za-z0-9_])~[\\/][^\s`]+"),
+    re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{40}(?![0-9A-Fa-f])"),
+    re.compile(
+        r"(?i)\b(?:commit|sha|head|base)(?:\s+sha)?\s*(?:[:=]\s*|\s+)[0-9a-f]{7,39}\b"
+    ),
 )
 SKILL_NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 REQUIRED_FRONTMATTER_KEYS = {"name", "description"}
@@ -286,7 +290,12 @@ def _validate_skills(root: Path, result: ValidationResult, evals: dict[str, dict
     return names
 
 
-def _validate_candidates(root: Path, config: dict[str, Any], result: ValidationResult) -> None:
+def _validate_candidates(
+    root: Path,
+    config: dict[str, Any],
+    result: ValidationResult,
+    skill_names: set[str],
+) -> None:
     store = root / config["_paths"]["candidate_store"]
     if not store.is_dir():
         _add(result, f"candidate store directory is missing: {store}")
@@ -327,6 +336,15 @@ def _validate_candidates(root: Path, config: dict[str, Any], result: ValidationR
             value = data.get(field_name)
             if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
                 _add(result, f"{field_name} must be a string list: {path}")
+        related = data.get("related_overlapping_skills")
+        if isinstance(related, list) and all(isinstance(item, str) and item.strip() for item in related):
+            for skill_name in related:
+                if skill_name not in skill_names:
+                    _add(result, f"candidate references unknown Skill {skill_name!r}: {path}")
+            if related and data.get("proposed_action") == "create-draft":
+                _add(result, f"candidate with an existing related Skill cannot use create-draft: {path}")
+            if data.get("status") in {"draft", "active"} and not related:
+                _add(result, f"draft or active candidate must reference an existing Skill: {path}")
         score = data.get("score")
         score_keys = {"recurrence", "reconstruction_cost", "error_prevention", "stability", "verifiability", "total"}
         if not isinstance(score, dict) or set(score) != score_keys:
@@ -409,7 +427,7 @@ def validate(root: Path = ROOT) -> ValidationResult:
     evals = _validate_evals(root, config, skill_dirs, result)
     for name, skill_dir in skill_dirs.items():
         _validate_skill_policy(skill_dir, evals.get(name), result)
-    _validate_candidates(root, config, result)
+    _validate_candidates(root, config, result, set(skill_dirs))
     return result
 
 
