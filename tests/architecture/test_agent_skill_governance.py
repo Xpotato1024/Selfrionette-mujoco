@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 import shutil
 import sys
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -54,12 +55,12 @@ def test_duplicate_candidate_key_is_rejected(tmp_path: Path) -> None:
     assert any("duplicate candidate key" in error for error in result.errors)
 
 
-def test_explicit_only_policy_is_required_for_starter_skills(tmp_path: Path) -> None:
+def test_explicit_only_eval_rejects_implicit_policy(tmp_path: Path) -> None:
     target = _copy_agents(tmp_path)
-    policy = target / ".agents" / "skills" / "selfrionette-pr-handoff" / "agents" / "openai.yaml"
-    text = policy.read_text(encoding="utf-8")
-    policy.write_text(
-        text.replace("allow_implicit_invocation: false", "allow_implicit_invocation: true"),
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-pr-handoff.toml"
+    text = eval_path.read_text(encoding="utf-8")
+    eval_path.write_text(
+        text.replace('invocation_policy = "implicit-after-validation"', 'invocation_policy = "explicit-only"'),
         encoding="utf-8",
         newline="\n",
     )
@@ -68,6 +69,200 @@ def test_explicit_only_policy_is_required_for_starter_skills(tmp_path: Path) -> 
 
     assert not result.accepted
     assert any("cannot allow implicit invocation" in error for error in result.errors)
+
+
+def test_validated_active_implicit_skills_are_accepted() -> None:
+    result = MODULE.validate(ROOT)
+
+    assert result.accepted, result.errors
+    for skill_name in MODULE.EXPECTED_IMPLICIT_SKILLS:
+        eval_path = ROOT / ".agents" / "skill-evals" / f"{skill_name}.toml"
+        eval_data = tomllib.loads(eval_path.read_text(encoding="utf-8"))
+        policy = ROOT / ".agents" / "skills" / skill_name / "agents" / "openai.yaml"
+        assert eval_data["invocation_policy"] == "implicit-after-validation"
+        assert eval_data["validation_status"] == "validated"
+        assert "allow_implicit_invocation: true" in policy.read_text(encoding="utf-8")
+
+
+def test_draft_skill_cannot_allow_implicit_invocation(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-pr-handoff.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            'validation_status = "validated"', 'validation_status = "draft"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("draft Skill cannot allow implicit invocation" in error for error in result.errors)
+
+
+def test_incomplete_validation_cannot_allow_implicit_invocation(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-pr-handoff.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            'validation_status = "validated"', 'validation_status = "pending"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("invalid eval validation_status" in error for error in result.errors)
+    assert any("cannot allow implicit invocation" in error for error in result.errors)
+
+
+def test_unresolved_approval_cannot_allow_implicit_invocation(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-plugin-change.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            "unresolved_approval = false", "unresolved_approval = true"
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("unresolved approval" in error for error in result.errors)
+
+
+def test_side_effectful_policy_cannot_allow_implicit_invocation(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-plugin-change.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            'side_effect_policy = "instruction-only"', 'side_effect_policy = "side-effectful"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("side-effectful Skill" in error for error in result.errors)
+
+
+def test_implicit_invocation_cannot_grant_permissions(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    config = target / ".agents" / "skill-system.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            "implicit_invocation_grants_permissions = false",
+            "implicit_invocation_grants_permissions = true",
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("must not grant permissions" in error for error in result.errors)
+
+
+def test_policy_value_outside_policy_section_or_in_comment_is_not_adopted(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    policy = target / ".agents" / "skills" / "selfrionette-pr-handoff" / "agents" / "openai.yaml"
+    policy.write_text(
+        policy.read_text(encoding="utf-8").replace(
+            "\npolicy:\n",
+            "\n  allow_implicit_invocation: false\n"
+            "# allow_implicit_invocation: false\n"
+            "policy:\n",
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert result.accepted, result.errors
+
+
+def test_unconditional_skill_chaining_fixture_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-plugin-change.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            "automatic_chain = false", "automatic_chain = true"
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("must not require unconditional Skill chaining" in error for error in result.errors)
+
+
+def test_routing_fixtures_select_the_narrow_skill_and_preserve_boundaries() -> None:
+    evals = {
+        path.stem: tomllib.loads(path.read_text(encoding="utf-8"))
+        for path in (ROOT / ".agents" / "skill-evals").glob("*.toml")
+    }
+    plugin_case = evals["selfrionette-plugin-change"]["routing_cases"][0]
+    validation_case = evals["selfrionette-change-validation"]["routing_cases"][0]
+    handoff_case = evals["selfrionette-pr-handoff"]["routing_cases"][0]
+
+    assert plugin_case["primary_skill"] == "selfrionette-plugin-change"
+    assert validation_case["primary_skill"] == "selfrionette-change-validation"
+    assert handoff_case["primary_skill"] == "selfrionette-pr-handoff"
+    assert all(
+        not case["automatic_chain"] and not case["permission_grant"]
+        for data in evals.values()
+        for case in data["routing_cases"]
+    )
+
+
+def test_representative_metadata_routing_scenarios_are_bounded() -> None:
+    evals = {
+        path.stem: tomllib.loads(path.read_text(encoding="utf-8"))
+        for path in (ROOT / ".agents" / "skill-evals").glob("*.toml")
+    }
+    unrelated = "このrepositoryと無関係な一般質問に答えてください。"
+
+    assert any("docs" in prompt for prompt in evals["selfrionette-change-validation"]["positive_triggers"])
+    assert any(
+        "pluginと無関係" in prompt
+        for prompt in evals["selfrionette-plugin-change"]["negative_triggers"]
+    )
+    assert any(
+        "read-only" in prompt for prompt in evals["selfrionette-pr-handoff"]["positive_triggers"]
+    )
+    assert all(unrelated in data["negative_triggers"] for data in evals.values())
+    assert "Issue / PR mutation" in evals["skill-lifecycle-review"]["forbidden_actions"]
+    assert "serial / OSC / robot output" in evals["selfrionette-change-validation"]["forbidden_actions"]
+    assert "external mutation" in evals["selfrionette-plugin-change"]["forbidden_actions"]
+    assert "commit" in evals["selfrionette-pr-handoff"]["forbidden_actions"]
+
+
+def test_active_candidate_without_implemented_skill_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = target / ".agents" / "skill-candidates" / "protected-long-form-body-safety.toml"
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace(
+            'status = "candidate"', 'status = "active"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("unimplemented candidate cannot be active" in error for error in result.errors)
 
 
 def test_transient_branch_reference_is_rejected_from_skill_body(tmp_path: Path) -> None:
