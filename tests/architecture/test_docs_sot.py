@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -40,6 +41,7 @@ def test_docs_sot_required_paths_exist() -> None:
     required = [
         "docs/README.md",
         "docs/conventions.md",
+        "docs/architecture/code-documentation-policy.md",
         "docs/architecture/documentation-sot-policy.md",
         "docs/architecture/dependency-boundaries.md",
     ]
@@ -61,6 +63,50 @@ def test_canonical_docs_have_valid_front_matter() -> None:
 def test_docs_readme_has_source_of_truth_map() -> None:
     text = read("docs/README.md")
     assert "Source of Truth Map" in text
+
+
+def test_code_documentation_policy_is_canonical_and_registered() -> None:
+    index = read("docs/README.md")
+    policy = read("docs/architecture/code-documentation-policy.md")
+
+    assert "`docs/architecture/code-documentation-policy.md`" in index
+    for marker in (
+        "code and plugin documentation policy",
+        "contract significance",
+        "TODO(#123)",
+        "commented-out code",
+        "suppression",
+        "plugin root README",
+        "axis README",
+        "concrete production plugin README",
+        "src/selfrionette/plugins/README.md",
+        "command semantics route",
+        "該当するREADME",
+        "repository-wide policyとsubproject固有policyの境界",
+        "全private helper",
+        "symbol count",
+        "coverage guard",
+        "false-positive risk",
+    ):
+        assert marker in policy
+
+    policy_without_tracking_example = policy.replace("TODO(#123)", "")
+    assert re.search(r"#\d+", policy_without_tracking_example) is None
+
+
+def test_concrete_plugin_readme_template_is_axis_neutral() -> None:
+    policy = read("docs/architecture/code-documentation-policy.md")
+    template = read("docs/operations/plugin-readme-templates.md")
+    concrete = template.split("## concrete plugin README", 1)[1]
+    required, optional = concrete.split("optional section:", 1)
+
+    assert "src/selfrionette/plugins/<axis>/<plugin>/README.md" in policy
+    assert "src/selfrionette/plugins/<axis>/<plugin>/README.md" in template
+    assert "root直下" in policy
+    assert "## compatibilityとcomposition" in required
+    assert "command semantics" not in required
+    assert "command semantics route" in optional
+    assert "Environment、Task、Evaluation等へ一律に要求しない" in optional
 
 
 def test_current_contracts_are_registered_and_evidence_is_not_in_sot_map() -> None:

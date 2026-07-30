@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Last updated: 2026-07-16
+Last updated: 2026-07-30
 
 ## 0. Purpose
 
@@ -22,6 +22,7 @@ Last updated: 2026-07-16
 主要な入口:
 
 - 開発方針: `docs/architecture/development-policy.md`
+- code / plugin documentation: `docs/architecture/code-documentation-policy.md`
 - architecture ownership: `docs/architecture/dependency-boundaries.md`
 - runtime composition: `docs/architecture/runtime-composition.md`
 - conventions: `docs/conventions.md`
@@ -103,6 +104,18 @@ Last updated: 2026-07-16
 - 既存英語文書は、対象Issueのscopeに含まれる場合だけ移行する。repository-wideの既存英語負債だけを初回からhard failureにしない。
 - 変更した人間向け本文はlanguage policyのvalidation対象とし、code block、path、identifier、formal nameを単純な文字比率で誤判定しない。
 - encoding、BOM、mojibake、GitHub本文のtransport integrityは`docs/operations/japanese-doc-writing-guardrails.md`を正とする。
+
+### Code and plugin documentation
+
+comment、docstring、JSDoc、TODO / FIXME、commented-out code、suppression、README、plugin documentationの
+詳細は`docs/architecture/code-documentation-policy.md`を正とする。
+
+- 新しいdiscoverable pluginにはplugin-local READMEを同じPRで追加する。
+- 新しいplugin axisを追加する場合、またはaxis責務を変更する場合はaxis READMEを同じPRで更新する。
+- comment、docstring、JSDocは日本語方針とcanonical policyに従い、commented-out dead codeを残さない。
+- materialなTODO / FIXMEは、owner、未完了内容、成立または削除条件を追跡可能にする。
+- behavior、ownership、contract変更時は、関連comment、README、canonical docsを同じPRで同期する。
+- completionをcomment数、docstring数、README数、文字数、日本語文字率だけで判定しない。
 
 ## 5. Scope discipline
 

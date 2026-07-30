@@ -1,11 +1,12 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-30
 canonical_for:
   - documentation source of truth policy
 related:
   - docs/README.md
+  - docs/architecture/code-documentation-policy.md
 ---
 
 # 文書Source of Truth方針
@@ -19,6 +20,9 @@ related:
 - 文書rootは`docs/`だけとし、`doc/`を作らない。
 - `docs/README.md`をcurrent canonical topicのSource of Truth Mapとする。
 - 1 topic = 1 canonical documentとし、同じtopicの正本を複数作らない。
+- READMEとcode documentationも1 topic = 1 canonical documentに従う。comment、docstring / JSDoc、
+  TODO / FIXME、suppression、plugin READMEの詳細規則は
+  [`code-documentation-policy.md`](code-documentation-policy.md)へ委譲する。
 - supporting文書は、補足対象のcanonical documentへlinkする。
 - 新規文書を追加する前に、既存canonical documentを更新できないか確認する。
 - implementation report、completion audit、inventory、review結果をcurrent specの正本にしない。

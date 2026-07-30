@@ -215,6 +215,40 @@ def test_agents_requires_docs_research_and_experiment_impact_gate() -> None:
         assert marker in text
 
 
+def test_code_documentation_policy_routing_and_supporting_metadata() -> None:
+    policy_path = "docs/architecture/code-documentation-policy.md"
+    supporting_paths = (
+        "docs/operations/plugin-readme-templates.md",
+        "docs/operations/code-documentation-review-checklist.md",
+    )
+    agents = (MODULE.ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    index = (MODULE.ROOT / "docs/README.md").read_text(encoding="utf-8")
+    policy_text = (MODULE.ROOT / policy_path).read_text(encoding="utf-8")
+    policy_fields = MODULE.front_matter_fields(policy_text)
+
+    assert policy_path in agents
+    assert f"`{policy_path}`" in index
+    assert policy_fields["status"] == "canonical"
+    assert policy_fields["canonical_for"] == ("code and plugin documentation policy",)
+
+    for path in supporting_paths:
+        text = (MODULE.ROOT / path).read_text(encoding="utf-8")
+        fields = MODULE.front_matter_fields(text)
+        assert fields["status"] == "supporting"
+        assert fields["canonical_for"] == ()
+        assert policy_path in fields["related"]
+        assert "../architecture/code-documentation-policy.md" in text
+
+    for marker in (
+        "新しいdiscoverable plugin",
+        "axis README",
+        "commented-out dead code",
+        "TODO / FIXME",
+        "comment数",
+    ):
+        assert marker in agents
+
+
 def test_research_log_policy_uses_substantive_research_impact() -> None:
     text = (MODULE.ROOT / "research/README.md").read_text(encoding="utf-8")
     for marker in (

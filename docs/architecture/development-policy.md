@@ -1,12 +1,13 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-30
 canonical_for:
   - development policy
 related:
   - docs/architecture/dependency-boundaries.md
   - docs/architecture/documentation-sot-policy.md
+  - docs/architecture/code-documentation-policy.md
 ---
 
 # 開発方針
@@ -17,6 +18,8 @@ related:
 ## 現在の原則
 
 - 1 topic = 1 canonical documentとし、文書、実装、testsの主張を一致させる。
+- comment、docstring / JSDoc、TODO / FIXME、suppression、READMEの詳細規則は
+  [`code-documentation-policy.md`](code-documentation-policy.md)へ委譲し、この文書へ複製しない。
 - runtime behaviorを変更する場合は、対応するcontractとfocused regressionを同じ変更で整合させる。
 - 新しいstub、adapter、compatibility layer、並行実装は、acceptance criteriaに直接必要な場合だけ追加する。
 - MuJoCoをphysical stateのsource of truthとし、viewerへ独立FK / IKまたは第二の姿勢SoTを持たせない。
