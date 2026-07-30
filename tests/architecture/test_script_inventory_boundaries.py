@@ -39,11 +39,7 @@ def _tracked_scripts() -> set[str]:
     result = subprocess.run(
         ["git", "ls-files", "scripts"], cwd=ROOT, check=True, capture_output=True, text=True
     )
-    return {
-        path
-        for path in result.stdout.splitlines()
-        if Path(path).suffix in {".py", ".ps1"}
-    }
+    return set(result.stdout.splitlines()) - {"scripts/README.md"}
 
 
 def _current_consumer_files() -> list[Path]:
