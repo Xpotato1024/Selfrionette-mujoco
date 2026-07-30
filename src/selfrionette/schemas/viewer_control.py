@@ -60,7 +60,12 @@ class ViewerControlGamepadMessage:
 
 @dataclass(frozen=True, slots=True)
 class ViewerControlMessage:
-    """provider identity、monotonic sequence、排他的payloadを持つv1 envelope。"""
+    """provider identityとsource固有payloadを持つstrict v1 wire envelope。
+
+    ``sequence`` はprovider-ownedなoptional integerであり、このschemaはmessage間の
+    monotonicityを検証しない。``source_kind`` に応じてkeyboard / gamepad payloadの
+    一方だけを受理する。
+    """
 
     type: ViewerControlEnvelopeType
     timestamp_s: float

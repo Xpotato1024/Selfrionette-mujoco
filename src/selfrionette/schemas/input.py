@@ -14,10 +14,12 @@ _VALID_CONTROL_FRAMES = {"world", "tool"}
 
 @dataclass(frozen=True, slots=True)
 class RawInputFrame:
-    """source-owned timestamp/values/buttons/metadataの取得frame。
+    """source-owned timestamp / values / buttons / metadataの取得frame。
 
-    ``timestamp_s`` のclock originとvaluesのunitはsource contractが所有し、Mappingは
-    source identityを確認して解釈する。metadataはJSON-compatibleなsnapshotへfreezeする。
+    ``timestamp_s`` のclock origin、valuesのunit、metadataの意味はsource contractが
+    所有し、Mappingはsource / schema identityに従って解釈する。frozen dataclassは
+    top-level fieldの再代入だけを防ぎ、受け取ったmetadata Mappingをdeep-freezeまたは
+    JSON validationしない。
     """
 
     source: str

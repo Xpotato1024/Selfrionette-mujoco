@@ -46,6 +46,25 @@ non-trivialなprivate helperやP2 compatibility surface、unnecessaryはobvious 
 - fast_arm diagnosticはcommand intent、solver prediction、MuJoCo tip-site measurementを分離し、
   world position/deltaのm、joint perturbationのrad、Jacobianのm/radを明示した。
 
+### schema documentation follow-up
+
+PR #490の局所再監査で検出した5件のmisleading documentationをactual field、validation、
+canonical ownerへ同期した。
+
+- `MotionCommand`はoptionalなtarget / joint bucketを持つruntime内部envelopeであり、未実装の
+  排他制約を持たない。
+- `EndpointVelocityCommand`は`timestamp_s`、`velocity_m_s`、`frame`だけを持ち、per-step
+  delta limitはupstream intentまたはruntime policyが所有する。
+- `RawInputFrame`はsource-owned frameであり、top-level frozen dataclassであってもmetadataを
+  deep-freezeまたはJSON validationしない。
+- `ViewerControlMessage.sequence`はprovider-owned optional integerであり、schemaはmessage間の
+  monotonicityを検証しない。
+- `ConfigurationRecord`はexperiment motion logのconfiguration snapshotであり、
+  `EvaluationManifest`、`EvaluationReadiness`、`FreezeRecord`とは別contractである。
+
+修正はdocstringとfocused AST guardに限定し、runtime behavior、public API、schema field、
+validation、error literal、dataclass optionを変更していない。
+
 ## suppression disposition
 
 current production sourceの72候補を再監査した。
@@ -85,8 +104,8 @@ fast_arm compatibility wrapperのF403はmodule-levelに一度だけ理由と削�
 2. fast_arm compatibility wrapperの削除はconsumer migrationとpublic API変更を要するため、本Issue
    ではrationale/removal conditionの明示に留めた。
 
-P0 / P1 blockerは0件。public API、schema field、error literal、plugin identity、runtime behaviorは
-変更していない。
+上記5件のfollow-up修正後、P0 / P1 blockerは0件。public API、schema field、validation、
+error literal、plugin identity、runtime behaviorは変更していない。
 
 ## impact
 

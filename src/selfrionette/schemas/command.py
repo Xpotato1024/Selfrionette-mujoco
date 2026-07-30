@@ -18,8 +18,10 @@ from selfrionette.schemas.types import Vector3
 class EndpointVelocityCommand:
     """``frame`` 座標系のendpoint linear velocity command。
 
-    ``velocity_m_s`` は(x, y, z)順のm/s、``max_delta_m`` は1 stepの上限である。
-    accept/reject/holdとqpos生成は対応Robot providerが所有する。
+    ``velocity_m_s`` は(x, y, z)順のm/sで、``frame`` はcurrent contractの
+    ``world`` または``tool``である。accept/reject/holdとqpos生成は対応する
+    provider / runtime boundaryが所有する。per-step delta limitはこのcommandの
+    fieldではなく、upstream intentまたはruntime policyが所有する。
     """
 
     timestamp_s: float
@@ -112,7 +114,12 @@ class TargetCommand:
 
 @dataclass(frozen=True, slots=True)
 class MotionCommand:
-    """1 runtime stepで高々1種類のcommandを運ぶexclusive envelope。"""
+    """runtime内部でmotionとsafety情報を運ぶenvelope。
+
+    optionalなtarget / joint command bucketとdiagnostic metadataを保持するが、
+    Robot / backend commandそのものではない。downstream route / projectionが、
+    選択されたcommand semanticで利用可能なshapeを検証する。
+    """
 
     timestamp_s: float
     target: TargetCommand | None = None

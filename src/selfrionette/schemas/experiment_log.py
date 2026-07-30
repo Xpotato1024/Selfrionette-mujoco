@@ -1,7 +1,9 @@
 """experiment motion logのversioned JSONL record schema。
 
-manifest/readiness identity、trial ordering、m/rad/s単位、measured evidence整合をencode前と
-decode後に検証する。runtimeを実行せず、optional fieldの欠落を測定済みとは扱わない。
+configuration / trial / sample / outcomeのordering、m/rad/s単位、measured evidence
+整合をencode前とdecode後に検証する。runtimeを実行せず、optional fieldの欠落を
+測定済みとは扱わない。EvaluationManifest、EvaluationReadiness、FreezeRecordは
+``runtime/evaluation/manifest.py`` が所有する別contractである。
 """
 
 from __future__ import annotations
@@ -123,7 +125,12 @@ def _vectors_close(left: Sequence[float], right: Sequence[float]) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class ConfigurationRecord:
-    """trial群に先行するmanifest v3/readiness freeze identity record。"""
+    """trial群に先行するexperiment motion logのconfiguration snapshot。
+
+    configuration identity、software revision、initial state、target、source、
+    comparison parametersを記録する。EvaluationManifest v3、EvaluationReadiness、
+    FreezeRecordそのものではなく、それらのmanifest / freeze identityを保持しない。
+    """
 
     experiment_id: str
     session_id: str
