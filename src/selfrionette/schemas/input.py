@@ -1,3 +1,5 @@
+"""Input SourceとControl Mapping間のfrozen schema境界。"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -12,6 +14,12 @@ _VALID_CONTROL_FRAMES = {"world", "tool"}
 
 @dataclass(frozen=True, slots=True)
 class RawInputFrame:
+    """source-owned timestamp/values/buttons/metadataの取得frame。
+
+    ``timestamp_s`` のclock originとvaluesのunitはsource contractが所有し、Mappingは
+    source identityを確認して解釈する。metadataはJSON-compatibleなsnapshotへfreezeする。
+    """
+
     source: str
     timestamp_s: float
     values: tuple[float, ...] = ()
@@ -21,6 +29,8 @@ class RawInputFrame:
 
 @dataclass(frozen=True, slots=True)
 class InputIntent:
+    """Mapping後の汎用intent envelope。command semanticsはconcrete schemaが所有する。"""
+
     source: str
     timestamp_s: float
     values: tuple[float, ...] = ()

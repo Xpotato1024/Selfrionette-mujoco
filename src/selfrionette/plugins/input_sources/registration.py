@@ -1,4 +1,4 @@
-"""Typed axis-local Input Source Plugin registration contract."""
+"""Input Source declarationをconstruction requestとexecution adapterへ結ぶ契約。"""
 
 from __future__ import annotations
 
@@ -17,6 +17,10 @@ from selfrionette.schemas import RawInputFrame
 
 @dataclass(frozen=True, slots=True)
 class InputSourcePluginRequest:
+    """validation済みparameterとoffline frame/runtime dependencyのconstruction入力。
+
+    この値の生成だけではserial、browser、filesystem等のacquisitionを開始しない。
+    """
     parameters: Mapping[str, object]
     frames: tuple[RawInputFrame, ...]
     loop: bool
@@ -29,6 +33,7 @@ RequestBuilder = Callable[..., InputSourcePluginRequest]
 
 @dataclass(frozen=True, slots=True)
 class InputSourcePluginRegistration:
+    """logical plugin、CLI alias、request builder、typed adapterの固定宣言。"""
     plugin: InputSourcePlugin
     cli_aliases: tuple[str, ...]
     request_builder: RequestBuilder

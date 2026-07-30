@@ -1,3 +1,9 @@
+"""experiment motion logのversioned JSONL record schema。
+
+manifest/readiness identity、trial ordering、m/rad/s単位、measured evidence整合をencode前と
+decode後に検証する。runtimeを実行せず、optional fieldの欠落を測定済みとは扱わない。
+"""
+
 from __future__ import annotations
 
 import json
@@ -117,6 +123,8 @@ def _vectors_close(left: Sequence[float], right: Sequence[float]) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class ConfigurationRecord:
+    """trial群に先行するmanifest v3/readiness freeze identity record。"""
+
     experiment_id: str
     session_id: str
     participant_id: str
@@ -170,6 +178,8 @@ class ConfigurationRecord:
 
 @dataclass(frozen=True, slots=True)
 class TrialStartRecord:
+    """1 trial開始時のrequested/resolved conditionとinitial state記録。"""
+
     experiment_id: str
     session_id: str
     participant_id: str
@@ -212,6 +222,12 @@ class TrialStartRecord:
 
 @dataclass(frozen=True, slots=True)
 class MotionSampleRecord:
+    """trial内の時系列command/state/evidence sample。
+
+    sample indexとtimeは単調増加、position/delta/errorはm、joint angleはradである。
+    measured fieldはMuJoCo観測がある場合だけ設定し、command intentで代用しない。
+    """
+
     experiment_id: str
     session_id: str
     participant_id: str
@@ -357,6 +373,8 @@ class MotionSampleRecord:
 
 @dataclass(frozen=True, slots=True)
 class TrialOutcomeRecord:
+    """終端classificationとprimary measured outcomeを固定するrecord。"""
+
     experiment_id: str
     session_id: str
     participant_id: str
@@ -409,6 +427,8 @@ _RECORD_TYPES = {"configuration": ConfigurationRecord, "trial_start": TrialStart
 
 
 def record_to_json_value(record: ExperimentMotionLogRecord) -> dict[str, object]:
+    """typed recordをversion/discriminantを保ったJSON-compatible objectへ変換する。"""
+
     def json_value(item: object) -> object:
         if isinstance(item, Mapping):
             return {str(key): json_value(value) for key, value in item.items()}
@@ -426,6 +446,8 @@ def record_to_json_value(record: ExperimentMotionLogRecord) -> dict[str, object]
 
 
 def parse_record(value: Mapping[str, object]) -> ExperimentMotionLogRecord:
+    """record discriminantでstrict型を選び、unknown/inconsistent fieldを拒否する。"""
+
     if value.get("schema_version") != EXPERIMENT_MOTION_LOG_SCHEMA_VERSION:
         raise ValueError(f"unsupported schema_version: {value.get('schema_version')!r}")
     kind = value.get("record_kind")
@@ -446,10 +468,14 @@ def parse_record(value: Mapping[str, object]) -> ExperimentMotionLogRecord:
 
 
 def encode_jsonl(records: Iterable[ExperimentMotionLogRecord]) -> str:
+    """validation済みrecord orderingをUTF-8向けJSONL textへencodeする。"""
+
     return "".join(json.dumps(record_to_json_value(record), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False) + "\n" for record in records)
 
 
 def decode_jsonl(text: str) -> tuple[ExperimentMotionLogRecord, ...]:
+    """JSONLをtyped record列へdecodeし、stream全体のorderingも検証する。"""
+
     result = []
     for line_number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
@@ -521,6 +547,8 @@ def _validate_outcome_evidence(configuration: ConfigurationRecord, samples: Mapp
 
 
 def validate_record_stream(records: Iterable[ExperimentMotionLogRecord]) -> None:
+    """configuration/trial/sample/outcomeのorderingとcross-record identityを検証する。"""
+
     configurations: dict[tuple[str, str, str, str], ConfigurationRecord] = {}
     starts: dict[str, TrialStartRecord] = {}
     samples: dict[str, dict[int, MotionSampleRecord]] = {}

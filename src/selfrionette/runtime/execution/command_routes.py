@@ -1,4 +1,8 @@
-"""Typed executable control-to-Robot command route bindings."""
+"""解決済みMapping semanticをtyped Robot command providerへbindする境界。
+
+routeはcommand型とprovider capabilityをside effect前に検証し、unsupported routeを
+暗黙fallbackしない。実際のsimulation stepやtransportはこのmoduleのownerではない。
+"""
 
 from __future__ import annotations
 
@@ -32,6 +36,8 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class CommandExecutionBinding(Protocol):
+    """Control Mapping出力を1つのtyped Robot commandへ投影する実行契約。"""
+
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
@@ -51,6 +57,8 @@ class CommandExecutionBinding(Protocol):
 
 @runtime_checkable
 class MotionCommandExecutionBinding(CommandExecutionBinding, Protocol):
+    """Mapping出力からMotionCommandを得るroute bindingの共通Protocol。"""
+
     def execute_motion_command(
         self,
         command: MotionCommand,
@@ -63,6 +71,8 @@ class MotionCommandExecutionBinding(CommandExecutionBinding, Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ResolvedCommandExecution:
+    """route identityと検証済みexecution bindingの解決結果。"""
+
     route: CommandSemanticsRoute
     binding: CommandExecutionBinding
 
@@ -146,6 +156,8 @@ def project_joint_position_command(
 
 @dataclass(frozen=True, slots=True)
 class JointPositionCommandExecutionBinding:
+    """Mapping結果をRobot-owned qpos orderingのJointPositionCommandへ投影する。"""
+
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
@@ -208,6 +220,11 @@ class JointPositionCommandExecutionBinding:
 
 @dataclass(frozen=True, slots=True)
 class NativeEndpointVelocityCommandExecutionBinding:
+    """local frameのendpoint velocity commandを対応providerへ渡すbinding。
+
+    velocity unitはm/s、providerはRobot command semanticに従いreject/holdを決める。
+    """
+
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
@@ -281,6 +298,8 @@ class NativeEndpointVelocityCommandExecutionBinding:
 
 @dataclass(frozen=True, slots=True)
 class JointPositionCommandRouteExecutionStrategy:
+    """joint-position routeをcompatible providerへbindするdeclaration strategy。"""
+
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
@@ -302,6 +321,8 @@ class JointPositionCommandRouteExecutionStrategy:
 
 @dataclass(frozen=True, slots=True)
 class NativeEndpointVelocityCommandRouteExecutionStrategy:
+    """endpoint-velocity passthrough routeをcompatible providerへbindするstrategy。"""
+
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity

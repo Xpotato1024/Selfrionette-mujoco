@@ -1,3 +1,7 @@
+/**
+ * MuJoCo/WASM sceneをThree.jsへ描画投影するrenderer。
+ * Python/MuJoCo physical stateをSoTとし、viewer-side FK/IKや独立physics stepを行わない。
+ */
 import {
   AmbientLight,
   AxesHelper,
@@ -71,6 +75,7 @@ export interface MujocoSceneRendererOptions {
   onError?: (error: Error) => void;
 }
 
+/** render resource lifecycle。dispose後はcanvas/scene resourceを再利用しない。 */
 export interface MujocoSceneRenderer {
   start(): Promise<void>;
   dispose(): void;
@@ -147,6 +152,7 @@ function buildPrimitiveGeometry(type: number, size: ArrayLike<number>): BufferGe
   return new BufferGeometry();
 }
 
+/** 検証済みmodel/profileからprojection rendererを構築し、Robot fallbackを行わない。 */
 export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): MujocoSceneRenderer {
   const frameTiming = createViewerFrameTiming();
   let profile = options.profile;

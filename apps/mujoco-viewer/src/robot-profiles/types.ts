@@ -10,6 +10,10 @@ export interface ViewerAxisVisualStyle {
   detail: string;
 }
 
+/**
+ * Robot Plugin所有declarationの検証済みprojection。
+ * logical identity、resource path、qpos ordering/frameを保持し、viewer fallbackを許さない。
+ */
 export interface ViewerRobotProfile {
   readonly schemaVersion: "viewer-robot-declaration/v1";
   readonly profileId: string;

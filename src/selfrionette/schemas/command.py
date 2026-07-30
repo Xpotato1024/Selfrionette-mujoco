@@ -1,3 +1,9 @@
+"""MappingからRobot/runtimeへ渡すtyped command schema。
+
+field ordering、unit、frameは各commandのcontractで固定し、viewerやtransportが独自に
+physical stateを再構成するためのschemaではない。
+"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -10,6 +16,12 @@ from selfrionette.schemas.types import Vector3
 
 @dataclass(frozen=True, slots=True)
 class EndpointVelocityCommand:
+    """``frame`` 座標系のendpoint linear velocity command。
+
+    ``velocity_m_s`` は(x, y, z)順のm/s、``max_delta_m`` は1 stepの上限である。
+    accept/reject/holdとqpos生成は対応Robot providerが所有する。
+    """
+
     timestamp_s: float
     velocity_m_s: Vector3
     frame: str
@@ -50,6 +62,8 @@ class EndpointVelocityCommand:
 
 @dataclass(frozen=True, slots=True)
 class JointPositionCommand:
+    """Robot-owned joint orderingのtarget qpos。角度jointのunitはrad。"""
+
     timestamp_s: float
     joint_angles_rad: tuple[float, ...]
 
@@ -82,18 +96,24 @@ class JointPositionCommand:
 
 @dataclass(frozen=True, slots=True)
 class JointCommand:
+    """legacy joint delta/absolute commandを保持するcompatibility schema。"""
+
     joint_angles_rad: tuple[float, ...] = ()
     joint_velocities_rad_s: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class TargetCommand:
+    """world frameのtarget positionをmで表すhigh-level intent。"""
+
     position_m: Vector3 | None = None
     delta_m: Vector3 = (0.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True, slots=True)
 class MotionCommand:
+    """1 runtime stepで高々1種類のcommandを運ぶexclusive envelope。"""
+
     timestamp_s: float
     target: TargetCommand | None = None
     joint: JointCommand | None = None

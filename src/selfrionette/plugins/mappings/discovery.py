@@ -1,4 +1,8 @@
-"""Axis-local bounded deterministic discovery for first-party Control Mapping Plugins."""
+"""first-party Control Mappingのfixed ``plugin.py`` を読むbounded discovery。
+
+declaration importだけを行い、Mapping algorithm実行やRobot provider bindingは行わない。
+duplicate identityと不正なdeclarationはregistry完成前に拒否する。
+"""
 
 from __future__ import annotations
 
@@ -24,6 +28,7 @@ class ControlMappingPluginDiscoveryError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class ControlMappingDiscoveryRoot:
+    """Control Mapping探索を許可するpackage namespace。"""
     namespace: ModuleType
 
     def __post_init__(self) -> None:

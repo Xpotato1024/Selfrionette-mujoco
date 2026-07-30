@@ -1,4 +1,8 @@
-"""Single production catalog projected from bounded Robot Plugin discovery."""
+"""bounded discovery結果を唯一のproduction Robot catalogへ投影する。
+
+logical identityをBundle/Profile/Runtime Pluginへroutingし、未知identityやversion不一致を
+fallbackせず拒否する。provider lifecycleやsimulator開始は行わない。
+"""
 
 from __future__ import annotations
 
@@ -24,7 +28,7 @@ from selfrionette.runtime.composition.robot_resolution import (
 
 @dataclass(frozen=True, slots=True)
 class RobotCatalog:
-    """Immutable resolver projection over one validated registration registry."""
+    """Robot registrationをidentity一意で保持するread-only resolver。"""
 
     registrations: RobotPluginRegistry
     bundles: VersionedPluginRegistry[RobotBundle] = field(init=False)
@@ -113,12 +117,14 @@ def _selection(
 def resolve_robot_plugin_registration(
     robot_id: str, *, robot_logical_version: int = 1
 ) -> RobotPluginRegistration:
+    """production catalogからexact identity/versionのregistrationを解決する。"""
     return ROBOT_CATALOG.resolve_registration(
         PluginSelection(robot_id, robot_logical_version)
     )
 
 
 def registered_robot_plugin_ids() -> tuple[str, ...]:
+    """登録済みRobot Plugin canonical IDをdeterministic順で返す。"""
     return ROBOT_CATALOG.ids
 
 
@@ -128,6 +134,7 @@ def resolve_robot_bundle(
     robot_logical_version: int = 1,
     contract_version: int | None = None,
 ) -> RobotBundle:
+    """Robot selectionに属するgeneric Bundleを解決し、runtimeを開始しない。"""
     return ROBOT_CATALOG.resolve_bundle(
         _selection(
             bundle_id,
@@ -138,6 +145,7 @@ def resolve_robot_bundle(
 
 
 def registered_robot_bundle_ids() -> tuple[str, ...]:
+    """catalogが提供するRobot Bundle IDをdeterministic順で返す。"""
     return ROBOT_CATALOG.ids
 
 
@@ -174,24 +182,28 @@ ROBOT_RUNTIME_PLUGIN_REGISTRY: ProfileIdRegistry[RobotRuntimePlugin] = (
 def resolve_robot_profile(
     profile_id: str, *, robot_logical_version: int = 1
 ) -> RobotProfile:
+    """compatibility用Profile projectionを同じRobot registrationから解決する。"""
     return ROBOT_CATALOG.resolve_profile(
         PluginSelection(profile_id, robot_logical_version)
     )
 
 
 def registered_robot_profile_ids() -> tuple[str, ...]:
+    """Profile compatibility surfaceのregistered IDを返す。"""
     return ROBOT_CATALOG.ids
 
 
 def resolve_robot_runtime_plugin(
     profile_id: str, *, robot_logical_version: int = 1
 ) -> RobotRuntimePlugin:
+    """Robot-owned Runtime Plugin projectionをexact IDで解決する。"""
     return ROBOT_CATALOG.resolve_runtime_plugin(
         PluginSelection(profile_id, robot_logical_version)
     )
 
 
 def registered_robot_runtime_plugin_ids() -> tuple[str, ...]:
+    """Runtime Plugin projectionのregistered IDを返す。"""
     return ROBOT_CATALOG.ids
 
 
@@ -202,6 +214,7 @@ def resolve_robot_runtime(
     profile_registry: ProfileIdRegistry[RobotProfile] | None = None,
     plugin_registry: ProfileIdRegistry[RobotRuntimePlugin] | None = None,
 ) -> ResolvedRobotRuntime:
+    """legacy registry injectionを含むruntime lookupをcanonical selectionへroutingする。"""
     if profile_registry is None and plugin_registry is None:
         return ROBOT_CATALOG.resolve_runtime(
             PluginSelection(profile_id, robot_logical_version)

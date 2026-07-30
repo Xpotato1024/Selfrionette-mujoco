@@ -1,3 +1,7 @@
+/**
+ * Python/MuJoCo由来qposをloaded model orderingのままviewerへ同期する。
+ * qposを推定・並べ替えせず、長さ不一致と欠落をfail closedに扱う。
+ */
 import type { TransportPayloadV0 } from "../types/transportPayload.js";
 import {
   getFrameByIndex,
@@ -39,6 +43,7 @@ export function ensureQposLength(values: readonly number[], modelNq: number, lab
   return values;
 }
 
+/** plugin declarationが指定したkeyframeだけを初期qposとして解決する。 */
 export function resolveInitialKeyframeQpos(
   values: ArrayLike<number>,
   modelNq: number,
@@ -94,6 +99,7 @@ export function stepPreviousFrameIndex(currentFrameIndex: number): number {
   return getPreviousFrameIndex(currentFrameIndex);
 }
 
+/** live payload qposをnq検証して返し、欠落時にfixture/keyframeへfallbackしない。 */
 export function resolveTransportQpos(
   payload: TransportPayloadV0 | null,
   modelNq: number,

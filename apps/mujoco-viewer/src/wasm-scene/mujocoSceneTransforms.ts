@@ -1,3 +1,4 @@
+/** MuJoCo world transformを座標変換せずThree.js matrixへ投影するhelper。 */
 import { Matrix4, Quaternion, Vector3 } from "three";
 
 export interface MujocoGeomLike {
@@ -5,6 +6,7 @@ export interface MujocoGeomLike {
   pos: ArrayLike<number>;
 }
 
+/** MuJoCo world-frame mat(3x3 row-major)とpos(m)をMatrix4へ写す。 */
 export function matrixFromMujocoGeom(geom: MujocoGeomLike): Matrix4 {
   const matrix = new Matrix4();
   matrix.set(
@@ -34,6 +36,7 @@ export interface MujocoMeshTransformLike {
   scale: ArrayLike<number>;
 }
 
+/** model-owned mesh quaternion/position/scaleを描画matrixへ合成する。 */
 export function matrixFromMujocoMeshTransform(mesh: MujocoMeshTransformLike): Matrix4 {
   const matrix = new Matrix4();
   const position = new Vector3(Number(mesh.pos[0] ?? 0), Number(mesh.pos[1] ?? 0), Number(mesh.pos[2] ?? 0));

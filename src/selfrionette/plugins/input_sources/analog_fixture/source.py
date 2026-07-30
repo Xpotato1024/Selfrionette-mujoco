@@ -68,6 +68,12 @@ def parse_analog_fixture_sample(value: Mapping[str, object]) -> AnalogFixtureSam
 
 
 class AnalogFixtureInputSource:
+    """memory上のrecorded sampleを一方向にpollするoffline reader。
+
+    construction時に全sampleを検証し、device/filesystem accessは行わない。末尾到達後は
+    最終sampleをholdする。healthは最後に読んだsampleのactive/stale semanticsを反映する。
+    """
+
     def __init__(self, samples: tuple[Mapping[str, object], ...]) -> None:
         self._samples = tuple(parse_analog_fixture_sample(sample) for sample in samples)
         if not self._samples:

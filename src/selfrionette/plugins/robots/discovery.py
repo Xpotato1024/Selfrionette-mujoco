@@ -1,4 +1,8 @@
-"""Bounded deterministic discovery for first-party repository Robot Plugins."""
+"""repository配下だけを走査するfirst-party Robot Plugin bounded discovery。
+
+import対象を明示root直下のfixed ``plugin.py`` に限定し、duplicate identity、
+malformed registration、resource ownership違反をcatalog作成前に拒否する。
+"""
 
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ class RobotPluginDiscoveryError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class RobotDiscoveryRoot:
+    """探索を許可するfilesystem root、package、resource rootの対応。"""
     namespace: ModuleType
     repository_root: Path
     asset_roots: tuple[Path, ...]
@@ -36,6 +41,7 @@ class RobotDiscoveryRoot:
 
 
 class RobotPluginRegistry:
+    """discovery済みregistrationをcanonical IDで保持するread-only registry。"""
     def __init__(self, entries: Iterable[RobotPluginRegistration]) -> None:
         values: dict[str, RobotPluginRegistration] = {}
         for entry in entries:

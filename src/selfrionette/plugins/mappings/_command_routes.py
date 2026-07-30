@@ -1,4 +1,8 @@
-"""Axis-local helpers for executable Control Mapping command routes."""
+"""Control Mapping axisが共有するcommand route declaration factory。
+
+Mapping selectionとRobot command semanticのcompatible routeを宣言するだけで、
+mapping algorithm、provider assembly、execution strategyの実行lifecycleは所有しない。
+"""
 
 from __future__ import annotations
 
@@ -17,6 +21,8 @@ def joint_position_command_route(
     route_identity: VersionedIdentity,
     control_semantics_identity: VersionedIdentity,
 ) -> CommandSemanticsRoute:
+    """joint-position semanticへのrouteとtyped strategyをidentity整合付きで宣言する。"""
+
     strategy = JointPositionCommandRouteExecutionStrategy(
         route_identity=route_identity,
         control_semantics_identity=control_semantics_identity,

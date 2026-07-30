@@ -7,6 +7,12 @@ from selfrionette.schemas import RawInputFrame
 
 
 class NoopInputSource:
+    """同一zero/no-op frameを返すside-effect-free reader。
+
+    explicit compatibility path用であり、fallback selectionではない。start/closeやexternal
+    I/Oを持たず、healthはactiveのまま、readごとに同じfrozen frameを返す。
+    """
+
     def __init__(self, frame: RawInputFrame) -> None:
         self._frame = frame
 

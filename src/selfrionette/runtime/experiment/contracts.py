@@ -1,4 +1,8 @@
-"""Versioned contracts shared by experiment composition plugins."""
+"""実験compositionの6軸を接続前に検証・freezeするversioned contract。
+
+このmoduleはproduction runnerを起動せず、plugin identity、parameter owner、
+role、evidence、command routeの整合だけをside effect前に確定する。
+"""
 
 from __future__ import annotations
 
@@ -13,6 +17,8 @@ from selfrionette.schemas import EndpointVelocityCommand, JointPositionCommand
 
 @dataclass(frozen=True, slots=True, order=True)
 class VersionedIdentity:
+    """catalog間で比較する論理名と正のcontract versionの組。"""
+
     name: str
     version: int
 
@@ -47,6 +53,8 @@ NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1 = VersionedIdentity(
 
 @dataclass(frozen=True, slots=True)
 class RobotCommandSemanticContract:
+    """Robot command semanticを実行時のtyped command classへ対応付ける契約。"""
+
     identity: VersionedIdentity
     command_type: type
 
@@ -80,6 +88,8 @@ ROBOT_COMMAND_SEMANTIC_CONTRACTS: Mapping[
 def robot_command_semantic_contract(
     identity: VersionedIdentity,
 ) -> RobotCommandSemanticContract:
+    """既知semanticのtyped contractを返し、未対応identityはfail closedにする。"""
+
     if not isinstance(identity, VersionedIdentity):
         raise TypeError(
             "Robot command semantic contract lookup requires VersionedIdentity"
@@ -95,6 +105,8 @@ def robot_command_semantic_contract(
 
 @runtime_checkable
 class CommandRouteExecutionStrategy(Protocol):
+    """選択済みrouteをproviderへbindするstrategyのidentity整合契約。"""
+
     route_identity: VersionedIdentity
     control_semantics_identity: VersionedIdentity
     robot_command_semantics_identity: VersionedIdentity
@@ -148,6 +160,8 @@ class CommandSemanticsRoute:
 
 @dataclass(frozen=True, slots=True)
 class PluginSelection:
+    """1軸で要求されたplugin logical identityとcontract version。"""
+
     plugin_id: str
     contract_version: int
 
@@ -159,6 +173,8 @@ class PluginSelection:
 
 
 class PluginAxis(str, Enum):
+    """generic experiment compositionがfreezeする6つのownership軸。"""
+
     ROBOT_BUNDLE = "robot_bundle"
     ENVIRONMENT = "environment"
     CONTROL_MAPPING = "control_mapping"
@@ -169,6 +185,8 @@ class PluginAxis(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class PluginParameterOwner:
+    """parameter namespaceの所有axisとplugin selectionを表す。"""
+
     axis: PluginAxis
     selection: PluginSelection
 
@@ -187,6 +205,8 @@ class PluginParameterOwner:
 
 
 class EvidenceStatus(str, Enum):
+    """canonical evidenceの生成段階または利用不能状態。"""
+
     REQUESTED = "requested"
     RESOLVED = "resolved"
     PREDICTED = "predicted"
@@ -197,6 +217,8 @@ class EvidenceStatus(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class CanonicalEvidence:
+    """provenance付きevidence値とfailure semanticsを保持する契約。"""
+
     identity: VersionedIdentity
     status: EvidenceStatus
     value: object | None
@@ -220,6 +242,8 @@ class CanonicalEvidence:
 
 
 class CanonicalEvidenceSet:
+    """versioned identityごとに重複を拒否するread-only evidence lookup。"""
+
     def __init__(self, entries: tuple[CanonicalEvidence, ...]) -> None:
         values: dict[VersionedIdentity, CanonicalEvidence] = {}
         for entry in entries:
@@ -245,6 +269,8 @@ class CanonicalEvidenceSet:
 
 @dataclass(frozen=True, slots=True)
 class ParameterField:
+    """plugin parameterの型・必須性・実験条件帰属を宣言する。"""
+
     name: str
     value_type: type
     required: bool = True
@@ -261,6 +287,8 @@ class ParameterField:
 
 @dataclass(frozen=True, slots=True)
 class ParameterContract:
+    """未知・不足・型不一致をcomposition時に拒否するparameter schema。"""
+
     fields: tuple[ParameterField, ...] = ()
 
     def __post_init__(self) -> None:
@@ -318,6 +346,8 @@ def _parameter_value_matches(expected: type, value: object) -> bool:
 
 @dataclass(frozen=True, slots=True, order=True)
 class SemanticRole:
+    """environmentとRobot間で共有するversion非依存のsemantic role名。"""
+
     name: str
 
     def __post_init__(self) -> None:
@@ -327,6 +357,8 @@ class SemanticRole:
 
 @dataclass(frozen=True, slots=True)
 class EnvironmentRole:
+    """environment objectのkind、coordinate frame、unitを束ねるrole記述。"""
+
     role: SemanticRole
     object_kind: str
     frame: str
@@ -344,6 +376,8 @@ ROLE_ATTRIBUTE_WILDCARD = "*"
 
 @dataclass(frozen=True, slots=True, order=True)
 class SemanticRoleRequirement:
+    """Robot側へ要求するrole属性。明示的な ``*`` だけをwildcardとする。"""
+
     role: SemanticRole
     object_kind: str
     frame: str
@@ -371,6 +405,8 @@ class SemanticRoleRequirement:
 
 @runtime_checkable
 class EnvironmentSceneProvider(Protocol):
+    """sceneの生成とresetをenvironment ownerへ委譲するlifecycle境界。"""
+
     def compose_scene(self, parameters: Mapping[str, object]) -> object: ...
 
     def reset_scene(self, scene: object) -> None: ...
@@ -378,10 +414,14 @@ class EnvironmentSceneProvider(Protocol):
 
 @runtime_checkable
 class ControlMappingStrategy(Protocol):
+    """Input Intentをcontrol semanticへ写像するMapping戦略境界。"""
+
     def map_input(self, input_intent: object, parameters: Mapping[str, object]) -> object: ...
 
 
 class TaskTerminalClassification(str, Enum):
+    """Taskが返す継続・成功・失敗・技術的無効の終端分類。"""
+
     RUNNING = "running"
     SUCCESS = "success"
     FAILURE = "failure"
@@ -390,6 +430,8 @@ class TaskTerminalClassification(str, Enum):
 
 @runtime_checkable
 class TaskLifecycleStrategy(Protocol):
+    """Task state生成とevidenceに基づく終端判定のowner契約。"""
+
     def initial_state(self, parameters: Mapping[str, object]) -> object: ...
 
     def classify_terminal(
@@ -398,6 +440,8 @@ class TaskLifecycleStrategy(Protocol):
 
 
 class EvidenceDisposition(str, Enum):
+    """欠落・unavailable・invalid evidenceに対するmetric側の扱い。"""
+
     REJECT = "reject"
     PRODUCE_UNAVAILABLE = "produce_unavailable"
     PRODUCE_INVALID = "produce_invalid"
@@ -405,6 +449,8 @@ class EvidenceDisposition(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class EvidencePolicy:
+    """evidence failure categoryごとのfail-closed方針。"""
+
     missing: EvidenceDisposition = EvidenceDisposition.REJECT
     unavailable: EvidenceDisposition = EvidenceDisposition.REJECT
     invalid: EvidenceDisposition = EvidenceDisposition.REJECT
@@ -412,6 +458,8 @@ class EvidencePolicy:
 
 @dataclass(frozen=True, slots=True)
 class MetricResult:
+    """metric valueまたは理由付き非値をprovenanceとともに返す契約。"""
+
     metric_id: VersionedIdentity
     value: object | None
     status: EvidenceStatus
@@ -432,6 +480,8 @@ class MetricResult:
 
 @runtime_checkable
 class MetricDerivationStrategy(Protocol):
+    """frozen evidenceからmetricを導出し、runtimeを駆動しない評価境界。"""
+
     def derive(
         self,
         evidence: CanonicalEvidenceSet,
@@ -443,6 +493,8 @@ class MetricDerivationStrategy(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class EnvironmentPlugin:
+    """scene、role、capability requirementを所有するEnvironment宣言。"""
+
     identity: VersionedIdentity
     scene_provider: EnvironmentSceneProvider
     roles: tuple[EnvironmentRole, ...]
@@ -481,6 +533,12 @@ class EnvironmentPlugin:
 
 @dataclass(frozen=True, slots=True)
 class ControlMappingPlugin:
+    """Input Intent、command semantic、parameter contractを結ぶMapping宣言。
+
+    route declarationを所有するが、provider binding後のexecution lifecycleは
+    ``CommandRouteExecutionStrategy`` が所有する。
+    """
+
     identity: VersionedIdentity
     strategy: ControlMappingStrategy
     accepted_input_sample_schemas: frozenset[VersionedIdentity]
@@ -592,6 +650,8 @@ class ControlMappingPlugin:
 
 @dataclass(frozen=True, slots=True)
 class TaskPlugin:
+    """task lifecycleとrequired evidence/roleを宣言するTask contract。"""
+
     identity: VersionedIdentity
     lifecycle: TaskLifecycleStrategy
     required_robot_capabilities: frozenset[VersionedIdentity]
@@ -627,6 +687,8 @@ class TaskPlugin:
 
 @dataclass(frozen=True, slots=True)
 class EvaluationPlugin:
+    """evidence policyとmetric derivationを所有するEvaluation contract。"""
+
     identity: VersionedIdentity
     metric_deriver: MetricDerivationStrategy
     required_evidence: frozenset[VersionedIdentity]

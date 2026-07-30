@@ -1,4 +1,8 @@
-"""Immutable axis-local first-party Robot Plugin onboarding declaration."""
+"""first-party Robot Pluginのidentityとresource ownershipを宣言する契約。
+
+resource path、viewer VFS coverage、Bundle/Profile/Runtime identityをimport時に検証するが、
+model load、simulator起動、hardware I/Oは行わない。
+"""
 
 from __future__ import annotations
 
@@ -56,6 +60,7 @@ def _validate_relative_resource_path(value: str, *, name: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class RepositoryResource:
+    """repository-relative pathとcontent digestで固定したresource identity。"""
     repository_path: str
 
     def __post_init__(self) -> None:
@@ -76,6 +81,7 @@ RobotResource = RepositoryResource | PackageResource | PackageResourceBundle
 
 @dataclass(frozen=True, slots=True)
 class RobotResourceDeclaration:
+    """1 Robot Pluginが所有するmodel/viewer/config resource集合。"""
     model: RobotResource
     configurations: tuple[RobotResource, ...]
     viewer_declaration: RobotResource
@@ -255,6 +261,7 @@ def _validate_viewer_vfs_coverage(
 
 @dataclass(frozen=True, slots=True)
 class RobotPluginRegistration:
+    """fixed ``plugin.py`` が公開するimmutable Robot onboarding declaration。"""
     identity: VersionedIdentity
     onboarding_contract_version: int
     bundle: RobotBundle

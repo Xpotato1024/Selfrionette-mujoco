@@ -1,6 +1,7 @@
 export const QPOS_FIXTURE_SCHEMA_VERSION = 1;
 export const QPOS_FIXTURE_SOURCE_LABEL = "python-native-mujoco fixture";
 
+/** Python-native MuJoCoが出力した1 frame。t_sはs、qpos orderingはmodel nq順。 */
 export interface QposFixtureFrame {
   frame_index: number;
   t_s: number;
@@ -8,6 +9,7 @@ export interface QposFixtureFrame {
   metadata: Record<string, unknown>;
 }
 
+/** 明示的offline fixture。live payload欠落時の暗黙fallbackには使用しない。 */
 export interface QposFixture {
   schema_version: number;
   source: string;
@@ -66,6 +68,7 @@ function toFrame(value: unknown, frameIndex: number): QposFixtureFrame {
   };
 }
 
+/** schema/version/finite値/orderを検証し、unknown shapeを拒否する。 */
 export function parseQposFixture(raw: unknown, expectedSchemaVersion = QPOS_FIXTURE_SCHEMA_VERSION): QposFixture {
   if (!isRecord(raw)) {
     throw new Error("fixture must be a JSON object");
@@ -97,6 +100,7 @@ export function parseQposFixture(raw: unknown, expectedSchemaVersion = QPOS_FIXT
   };
 }
 
+/** 全frameのqpos長をloaded MuJoCo modelのnqと照合する。 */
 export function validateQposFixtureForModel(fixture: QposFixture, modelNq: number): QposFixture {
   if (!Number.isInteger(modelNq) || modelNq < 1) {
     throw new Error("model.nq must be a positive integer");

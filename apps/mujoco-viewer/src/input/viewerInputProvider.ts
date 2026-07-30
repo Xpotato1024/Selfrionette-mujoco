@@ -1,3 +1,7 @@
+/**
+ * browser input acquisitionをprovider identityごとに管理する。
+ * key/gamepadの解釈とcommand生成はbackend Mappingが所有し、ここでは行わない。
+ */
 import {
   createViewerKeyboardControlSender,
   type ViewerKeyboardCapture,
@@ -205,6 +209,7 @@ const DEFAULT_PROVIDER_REGISTRATIONS: readonly ViewerInputProviderRegistration[]
   },
 ];
 
+/** duplicate provider ID/schemaを拒否するbrowser-side declaration registry。 */
 export class ViewerInputProviderRegistry {
   private readonly registrations: ReadonlyMap<ViewerInputProviderId, ViewerInputProviderRegistration>;
 
@@ -240,6 +245,7 @@ export class ViewerInputProviderRegistry {
   }
 }
 
+/** keyboard/gamepad v1だけを登録し、利用不能providerへのfallbackは追加しない。 */
 export function createDefaultViewerInputProviderRegistry(): ViewerInputProviderRegistry {
   return new ViewerInputProviderRegistry(DEFAULT_PROVIDER_REGISTRATIONS);
 }

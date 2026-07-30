@@ -1,4 +1,8 @@
-"""Fail-closed startup readiness for explicit experiment plugin composition."""
+"""6軸のgeneric experiment contractをside effect前に解決するcomposition root。
+
+結果はreadiness/freeze用であり、production diagnostic runtimeやrunnerへの接続、
+scene生成、Input Source開始、Robot command実行は行わない。
+"""
 
 from __future__ import annotations
 
@@ -72,6 +76,8 @@ def parameter_value_to_document(value: object) -> object:
 
 @dataclass(frozen=True, slots=True)
 class PluginParameters:
+    """owner identityとJSON-compatibleなfrozen parameter値の組。"""
+
     owner: PluginParameterOwner
     values: Mapping[str, object]
 
@@ -91,6 +97,8 @@ class PluginParameters:
 
 @dataclass(frozen=True, slots=True)
 class EvidenceProducerBinding:
+    """解決済みproducerと、そのevidence identity/provenanceの固定binding。"""
+
     producer_axis: PluginAxis
     producer_identity: VersionedIdentity
     evidence_identity: VersionedIdentity
@@ -106,6 +114,8 @@ class EvidenceProducerBinding:
 
 @dataclass(frozen=True, slots=True)
 class ExperimentPluginManifest:
+    """6軸のselectionとaxis-owned parameterを入力する未解決manifest。"""
+
     robot_bundle: PluginSelection
     environment: PluginSelection
     control_mapping: PluginSelection
@@ -132,6 +142,8 @@ class ExperimentPluginManifest:
 
 @dataclass(frozen=True, slots=True)
 class ExperimentPluginRegistries:
+    """各axisのbounded registryをまとめるlookup-only dependency。"""
+
     robot_bundles: VersionedPluginRegistry[RobotBundle]
     environments: VersionedPluginRegistry[EnvironmentPlugin]
     control_mappings: VersionedPluginRegistry[ControlMappingPlugin]
@@ -142,6 +154,12 @@ class ExperimentPluginRegistries:
 
 @dataclass(frozen=True, slots=True)
 class ResolvedExperimentComposition:
+    """全validation後にfreezeされたsoftware-only readiness結果。
+
+    production pluginを選べてもproduction runnerへの接続済みを意味せず、
+    test fixtureのregistryも同じcontractを満たせば解決できる。
+    """
+
     manifest: ExperimentPluginManifest
     robot_bundle: RobotBundle
     environment: EnvironmentPlugin
@@ -311,6 +329,11 @@ def compose_experiment(
     manifest: ExperimentPluginManifest,
     registries: ExperimentPluginRegistries,
 ) -> ResolvedExperimentComposition:
+    """6軸を解決し、identity・parameter・role・routeを実行前に検証する。
+
+    失敗はproviderのbind、scene生成、source start等のside effectより前に送出する。
+    """
+
     robot = registries.robot_bundles.resolve(manifest.robot_bundle)
     environment = registries.environments.resolve(manifest.environment)
     mapping = registries.control_mappings.resolve(manifest.control_mapping)

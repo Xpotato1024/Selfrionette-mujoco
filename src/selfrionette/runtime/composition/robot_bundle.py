@@ -1,4 +1,8 @@
-"""Additive Robot Bundle and typed capability-provider boundary."""
+"""Robot logical identityからtyped capability providerを組み立てる契約。
+
+generic Bundleのvalidation/assemblyを所有し、production Robotのcatalog selection
+やruntime lifecycle開始は所有しない。validation failureはprovider side effect前に返す。
+"""
 
 from __future__ import annotations
 
@@ -38,6 +42,8 @@ ROBOT_TOOL_ENDPOINT_ROLE = SemanticRole("robot.tool_endpoint")
 
 @dataclass(frozen=True, slots=True)
 class InitialStateReference:
+    """初期姿勢のlogical identityとRobot-owned qpos orderingを固定する参照。"""
+
     source_kind: str
     source_id: str
 
@@ -113,12 +119,16 @@ class InitialStateContract:
 
 @dataclass(frozen=True, slots=True)
 class EndpointPoseObservation:
+    """Robot providerが観測したworld frameのendpoint pose。位置unitはm。"""
+
     position_m: tuple[float, float, float] | None
     quaternion_wxyz: tuple[float, float, float, float] | None
 
 
 @dataclass(frozen=True, slots=True)
 class SemanticRoleBinding:
+    """environment semantic roleをRobot-owned model objectへ束縛する宣言。"""
+
     role: SemanticRole
     backend_kind: str
     target_kind: str
@@ -146,6 +156,8 @@ class SemanticRoleBinding:
 
 @runtime_checkable
 class ResetInitialStateProvider(Protocol):
+    """reset時の初期state参照を提供するlifecycle capability。"""
+
     capability_identity: VersionedIdentity
     assembly_binding: ProviderAssemblyBinding
 
@@ -154,6 +166,8 @@ class ResetInitialStateProvider(Protocol):
 
 @runtime_checkable
 class InitialStateContractProvider(Protocol):
+    """初期qpos contractを名前解決するprovider境界。"""
+
     capability_identity: VersionedIdentity
     assembly_binding: ProviderAssemblyBinding
 
@@ -162,6 +176,8 @@ class InitialStateContractProvider(Protocol):
 
 @runtime_checkable
 class EndpointPoseProvider(Protocol):
+    """simulation stateからendpoint poseを観測するRobot-owned境界。"""
+
     capability_identity: VersionedIdentity
     assembly_binding: ProviderAssemblyBinding
 
@@ -170,6 +186,8 @@ class EndpointPoseProvider(Protocol):
 
 @runtime_checkable
 class EndpointCommandProvider(Protocol):
+    """endpoint control intentをtyped Robot commandへ変換するprovider境界。"""
+
     capability_identity: VersionedIdentity
     assembly_binding: ProviderAssemblyBinding
 
@@ -186,6 +204,8 @@ class EndpointCommandProvider(Protocol):
 
 @runtime_checkable
 class QposFeasibilityProvider(Protocol):
+    """候補qposをside effectなしにaccept/rejectする安全境界。"""
+
     capability_identity: VersionedIdentity
     assembly_binding: ProviderAssemblyBinding
 
@@ -196,6 +216,8 @@ class QposFeasibilityProvider(Protocol):
 
 @runtime_checkable
 class SceneRoleBindingProvider(Protocol):
+    """semantic roleをRobot model内のcanonical objectへ解決する境界。"""
+
     capability_identity: VersionedIdentity
     assembly_binding: ProviderAssemblyBinding
 
@@ -204,6 +226,8 @@ class SceneRoleBindingProvider(Protocol):
 
 @runtime_checkable
 class ContactEvidenceProvider(Protocol):
+    """runtime stateからcontact evidenceを抽出するRobot-owned境界。"""
+
     capability_identity: VersionedIdentity
     assembly_binding: ProviderAssemblyBinding
 
@@ -217,6 +241,8 @@ class ContactEvidenceProvider(Protocol):
 
 @runtime_checkable
 class RobotCommandSemanticProvider(Protocol):
+    """1つのtyped Robot command semanticを実行可能にするprovider契約。"""
+
     command_semantics_identity: VersionedIdentity
     command_type: type
     assembly_binding: ProviderAssemblyBinding
@@ -252,6 +278,8 @@ class ProviderAssemblyBinding:
 
 @dataclass(frozen=True, slots=True)
 class CapabilityProviderBinding:
+    """capability identityとassembly対象providerを対応付ける宣言。"""
+
     identity: VersionedIdentity
     provider: object
 
@@ -280,6 +308,8 @@ class CapabilityProviderBinding:
 
 @dataclass(frozen=True, slots=True)
 class RobotCommandSemanticProviderBinding:
+    """command semantic identityとtyped providerを対応付ける宣言。"""
+
     identity: VersionedIdentity
     provider: RobotCommandSemanticProvider
 
@@ -313,6 +343,12 @@ class RobotCommandSemanticProviderBinding:
 
 @dataclass(frozen=True, slots=True)
 class RobotBundle:
+    """1つのRobot logical identityに属するprovider集合。
+
+    profile/runtime pluginはこのBundleを参照できるが、Bundle自身はproduction
+    selection、simulator起動、command送信を行わない。
+    """
+
     identity: VersionedIdentity
     profile: RobotProfile
     runtime_plugin: RobotRuntimePlugin

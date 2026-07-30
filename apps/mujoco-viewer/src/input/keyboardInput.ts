@@ -14,6 +14,7 @@ export interface ViewerKeyboardCaptureSnapshot {
   zero_state: boolean;
 }
 
+/** blur/hidden/resetでpressed stateをzeroへ戻すbrowser-local capture。 */
 export interface ViewerKeyboardCapture {
   handleKeyDown(code: string, repeat?: boolean): boolean;
   handleKeyUp(code: string): boolean;
@@ -119,6 +120,7 @@ function buildSnapshot(activeKeyCodes: ReadonlySet<string>, focusState: ViewerCo
   };
 }
 
+/** allowlist keyだけを取得し、axis/sign semanticsはbackend Mappingへ残す。 */
 export function createViewerKeyboardCapture(
   bindings: ViewerKeyboardCaptureKeys = DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS,
   initialFocusState: ViewerControlKeyboardFocusState = "focused",
@@ -226,6 +228,7 @@ export function buildViewerKeyboardControlMessage(
   return message;
 }
 
+/** WebSocket接続中だけsampleを送り、disconnect中のsend failureでviewerを停止しない。 */
 export function createViewerKeyboardControlSender(
   options: ViewerKeyboardControlSenderOptions,
 ): ViewerKeyboardControlSender {

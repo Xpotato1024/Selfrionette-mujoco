@@ -37,7 +37,12 @@ class _LifecycleState(str, Enum):
 
 
 class SelfrionetteInputSource:
-    """Typed lifecycle and health owner for one Selfrionette device."""
+    """1つのSelfrionette readerのexclusive lifecycle/health owner。
+
+    constructionはI/Oを行わない。``start()`` だけがlive modeでserial portを開き、
+    injected modeではcaller提供lineを読む。start failure後は``close()``までretryを拒否し、
+    ``close()`` はportを閉じる。thread-safeではなく、同一runtime loopから直列利用する。
+    """
 
     def __init__(
         self,
@@ -67,6 +72,7 @@ class SelfrionetteInputSource:
                 if self._port is None:  # pragma: no cover - validated at construction
                     raise ValueError("port is required for live Selfrionette mode")
                 try:
+                    # pyserialはlive start時だけ必要なoptional hardware dependencyである。
                     import serial  # type: ignore[import-not-found]
                 except ModuleNotFoundError as exc:
                     raise RuntimeError(_SERIAL_IMPORT_ERROR) from exc
@@ -161,6 +167,8 @@ def build_reader(
     *,
     runtime_dependencies: InputSourceRuntimeDependencies | None = None,
 ) -> SelfrionetteInputSource:
+    """parameterを検証して未開始readerを返し、serial portは開かない。"""
+
     port, baud_rate, injected_lines = _validate_parameters(
         parameters,
         runtime_dependencies=runtime_dependencies,
