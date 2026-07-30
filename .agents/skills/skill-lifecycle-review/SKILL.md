@@ -1,6 +1,6 @@
 ---
 name: skill-lifecycle-review
-description: repository-local Skill候補の知識分類、evidence確認、5軸scoring、lifecycle判断を行う。反復workflowの候補レビュー、draft作成、promotion検討、既存Skillのupdate・merge・disable・deprecateを判断するときに使用する。
+description: repository-local Skill候補の知識分類、evidence確認、5軸scoring、lifecycle判断を行う。反復workflowのCandidate Reviewや既存Skillの更新判断に使用し、単発taskやGit・GitHub・hardware mutationには使用しない。
 ---
 
 # Skill lifecycle review

@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $skill-lifecycle-review to review a repository-local Skill candidate."
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true

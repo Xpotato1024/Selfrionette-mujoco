@@ -81,7 +81,7 @@ Strong signal:
 
 - 同一または構造的に同等なworkflowを2回以上確認した。
 - 同種のreview指摘またはuser修正を複数回確認した。
-- 既存Skillの未発火、誤発火、手順不足、stale reference、過剰作業を確認した。
+- 既存Skillの未発火、誤発火、過剰適用、手順不足、stale reference、過剰作業を確認した。
 - 同じscript、validator、template、checklist、reportを繰り返し再生成した。
 
 Complexity signal:
@@ -132,10 +132,22 @@ repository policyを上書きしない。
 
 ## Invocation policy
 
+implicit invocationはmetadata matchによるworkflow selectionであり、permission grantではない。
+prompt、対象Issue、`AGENTS.md`、canonical documentation、Git / GitHub、hardware safety、
+external side-effect boundaryを変更または拡張しない。
+
 新規Skillは原則としてexplicit-only draftで開始する。各Skillの
 `agents/openai.yaml`に`policy.allow_implicit_invocation: false`を設定し、trigger eval、
 代表task、required input、failure path、side-effect boundaryが検証されるまでimplicit
-invocationを許可しない。検証後もimplicit化は別判断であり、repository-wideに強制しない。
+invocationを許可しない。validated activeなinstruction-only Skillは、repository設定が許可し、
+未解決approvalがない場合に`allow_implicit_invocation: true`へ移行できる。validation完了後は
+repository設定に従ってactive化とimplicit化を自動適用してよいが、active化は権限拡張を意味しない。
+
+複数Skillが一致する場合は、taskの現在段階と主要目的に最も狭く一致するSkillをprimaryとして
+優先する。関連Skillを無条件に連鎖発火させず、各Skillのrequired inputとtriggerを個別に確認する。
+required inputまたはpermissionが不足する場合は、該当stepをNot Applicable、Not Run、または
+`approval-required`として停止・報告する。誤発火、未発火、過剰適用はCandidate Reviewのstrong
+signalとして扱う。
 
 ## Candidate schema
 
@@ -149,12 +161,16 @@ repository内で重複させない。Issue番号、PR番号、SHA、日付は`ob
 ## Eval schema
 
 各Skillに`.agents/skill-evals/<skill-name>.toml`を対応させる。必須fieldは
-`schema_version`、`skill_name`、`invocation_policy`、`side_effect_boundary`、
+`schema_version`、`skill_name`、`invocation_policy`、`validation_status`、
+`side_effect_policy`、`unresolved_approval`、`side_effect_boundary`、
 `positive_triggers`（3件以上）、`negative_triggers`（2件以上）、`route_boundaries`、
 `required_inputs`、`expected_major_steps`、`expected_outputs`、`forbidden_actions`、
 `representative_dry_run`、`false_positive_risk`、`false_negative_risk`、
-`stale_reference_risk`である。triggerは日本語promptを中心とし、negativeには非対象または
-別Skillへのroute例を含める。
+`stale_reference_risk`、`routing_cases`である。implicit対応Skillは
+`invocation_policy = "implicit-after-validation"`、`validation_status = "validated"`、
+`side_effect_policy = "instruction-only"`、`unresolved_approval = false`を満たす。
+各routing caseは複数候補prompt、候補Skill、primary Skill、無条件連鎖禁止、permission非付与を
+表現する。triggerは日本語promptを中心とし、negativeには非対象または別Skillへのroute例を含める。
 
 ## Skill authoring contract
 
@@ -168,12 +184,14 @@ boundaryを明示する。frontmatterはvalidatorが検査する小さなsubset�
 
 validatorはconfig、candidate / eval TOML、duplicate key、score total、status / action、
 Skill frontmatter、directory/name、lowercase-hyphenated name、duplicate Skill、参照path、
-implicit policy、placeholder、transient state、secretらしき値、UTF-8、BOM、mojibakeを検査する。
+implicit policy、validation status、approval、routing case、placeholder、transient state、
+secretらしき値、UTF-8、BOM、mojibakeを検査する。
 Skill本文のtransient SHAは、standaloneの40桁full SHAと、`commit`、`sha`、`head`、`base`の文脈に続く
 7〜39桁のhex SHAを検出する。candidateのobservable evidenceとevalのrepresentative fixtureにあるSHAは許可し、
 SHA形式そのものを説明するcanonical docsの一般例もSkill本文の検査対象外とする。
-trigger evaluationではpositive 3件以上・negative 2件以上とroute boundaryを確認し、代表dry-run
-ではSkillをexplicitに読み、成果物、DoD、失敗時の停止条件を照合する。
+trigger evaluationではpositive 3件以上・negative 2件以上、route boundary、複数候補時の
+最狭primary、無条件連鎖禁止、permission非付与を確認する。代表dry-runではmetadata / trigger
+routing fixtureとして成果物、DoD、失敗時の停止条件を照合する。
 
 変更層、contract、failure mode、side effectに対するvalidation選択は
 [`validation.md`](validation.md)を正本とし、全taskへfull suiteを機械適用しない。testsの削除、
@@ -182,7 +200,8 @@ docsのlink、encoding、Japanese guardrail、Git diff、base / branch / head / 
 必要範囲で検証する。
 
 promotion前にrequired inputの取得可能性、expected output、failure path、false positive / negative、
-stale riskを再確認する。実行できないvalidationはNot Run Reason、代替証拠、残存riskとして報告する。
+stale riskを再確認する。draft、未検証、未解決approval、side-effectful policyをimplicit化しない。
+実行できないvalidationはNot Run Reason、代替証拠、残存riskとして報告する。
 
 ## 既存workflowへのroute
 

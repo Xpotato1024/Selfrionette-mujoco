@@ -1,6 +1,6 @@
 schema_version = 1
 candidate_key = "bounded-plugin-change-audit"
-status = "draft"
+status = "active"
 scope = "repository-local plugin architecture workflow"
 summary = "plugin axisのcontract、ownership、discovery、identity、registration、composition、docs、testsを順序どおりに監査する反復workflow。"
 observable_evidence = [
