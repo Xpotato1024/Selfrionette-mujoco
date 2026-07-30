@@ -1,0 +1,24 @@
+schema_version = 1
+candidate_key = "bounded-plugin-change-audit"
+status = "candidate"
+scope = "repository-local plugin architecture workflow"
+summary = "plugin axisのcontract、ownership、discovery、identity、registration、composition、docs、testsを順序どおりに監査する反復workflow。"
+observable_evidence = [
+  "Git commits 6939510、15bdb71、de82da9、4412586、0d5daf9、82415f5、1f3e3c5、baabf05でplugin contractとbounded ownershipを段階的に監査・実装した。",
+  "PR #422、#427、#463、#489の本文で、axis、registry、identity、runtime composition、README、test ownershipを繰り返し確認している。",
+  "Issue #491はRobot、Environment、Mapping、Task、Evaluation、Input Sourceの6 axisと不要なstub・compat layer・parallel implementationの禁止を明記している。"
+]
+related_overlapping_skills = ["selfrionette-plugin-change"]
+approval_boundary = "plugin behavior・contract・schema・hardware pathを変更せず、repository-local instruction-only Skillのdraft検証に限る。"
+unresolved_risks = [
+  "axisごとのcurrent ownerとplanned capabilityが異なるため、canonical contractとactual implementationの再確認が必要である。"
+]
+proposed_action = "create-draft"
+
+[score]
+recurrence = 2
+reconstruction_cost = 2
+error_prevention = 2
+stability = 2
+verifiability = 1
+total = 9

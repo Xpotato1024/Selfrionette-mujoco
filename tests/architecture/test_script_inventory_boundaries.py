@@ -24,6 +24,7 @@ EXPECTED_SCRIPTS = {
     "scripts/viewer/run_live_viewer_smoke.py",
     "scripts/viewer/run-browser-viewer-smoke.ps1",
     "scripts/repository/validate_github_body_structure.py",
+    "scripts/repository/validate_agent_skills.py",
     "scripts/repository/validate_markdown_docs.py",
 }
 HISTORICAL_SCRIPT_NAMES = {

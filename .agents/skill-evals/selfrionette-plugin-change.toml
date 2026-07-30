@@ -1,0 +1,25 @@
+schema_version = 1
+skill_name = "selfrionette-plugin-change"
+invocation_policy = "explicit-only"
+side_effect_boundary = "instruction-only audit and scoped docs/tests; no runtime, hardware, or external mutation"
+positive_triggers = [
+  "Input Source pluginを追加するので、contract、identity、registration、runtime composition、README、testsを監査してください。",
+  "Mappingの既存実装を移動せずにownershipとdiscoveryの境界を確認し、不要なcompat layerを防いでください。",
+  "Robot pluginのresourceとcatalog変更について、Documentation、Research log、Experiment evidence impactを判定してください。"
+]
+negative_triggers = [
+  "pluginと無関係なREADMEのtypoだけを修正してください。",
+  "serial portを開き、hardware pluginを実機へdeployしてください。"
+]
+route_boundaries = [
+  "validation commandの選択はselfrionette-change-validationへrouteする。",
+  "branch、PR head、CI、Draft stateの突合はselfrionette-pr-handoffへrouteする。"
+]
+required_inputs = ["axis contract", "dependency boundaries", "runtime composition", "axis / plugin README", "catalog / discovery / registration", "actual diff", "tests"]
+expected_major_steps = ["axis限定", "contract / ownership確認", "discovery / identity確認", "registration / composition確認", "README / docs / tests確認", "3 impact判定", "validationへのroute"]
+expected_outputs = ["axis audit", "ownership map", "identity / registration result", "docs・test要否", "impact判定", "残存risk"]
+forbidden_actions = ["無関係なstub", "不要なcompat layer", "不要なparallel implementation", "暗黙fallback", "runtime / viewer / schemaのscope外変更", "hardware / serial / OSC"]
+representative_dry_run = "明示的にSkillを読み、Input Source axisの既存registryとREADMEをread-onlyで照合し、plugin behaviorを変更せずに必要なvalidationをrouteする。"
+false_positive_risk = "単なるplugin documentation閲覧をmaterial plugin changeと誤認するリスク。"
+false_negative_risk = "identityやresource ownershipの小さな変更をREADMEだけの変更と誤認するリスク。"
+stale_reference_risk = "planned axis capabilityをcurrent implementationとして扱うリスク。"

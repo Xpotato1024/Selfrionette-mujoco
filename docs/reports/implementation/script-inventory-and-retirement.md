@@ -36,6 +36,7 @@ CI、experiment evidence、historical reference の検索結果に基づいて�
 | `run_replay_mujoco_websocket_publisher.py` | viewer-input/gamepad procedures、browser smoke、CLI compatibility tests | thin wrapper として一時維持 | canonical replay publisher は `selfrionette viewer --robot fast_arm`。`--input-source viewer` consumer を保持 |
 | `run-browser-viewer-smoke.ps1` | browser visual smoke procedure | developer validation tool として維持 | frontend process orchestration を production CLI へ組み込まない |
 | `validate_github_body_structure.py` | AGENTS.md、Git/PR workflow、script tests | repository developer tool として維持 | protected long-form body gate であり runtime command ではない |
+| `validate_agent_skills.py` | repository-local Skill governance、architecture tests | repository developer tool として維持 | opt-in、candidate / eval、Skill構造、invocation policyを検証し、runtime commandではない |
 | `validate_markdown_docs.py` | CI、architecture tests | repository developer tool として維持 | CI command pathを維持し、production CLIへ組み込まない |
 | `view_fast_arm_native_mujoco.py` | archived operator procedure | historical/evidence 上の理由で維持 | native viewer check の過去 evidence を壊さない |
 

@@ -1,0 +1,24 @@
+schema_version = 1
+candidate_key = "layer-aware-change-validation"
+status = "candidate"
+scope = "repository-local developer workflow"
+summary = "変更層、contract、failure mode、side effectから必要なvalidationを選択する反復workflow。"
+observable_evidence = [
+  "Git commit 3ce7f30で文書governanceと検証基盤を導入し、a3a458fでdocs・research impact gateを追加した。",
+  "PR #403、#463、#490の本文で、focused validation、architecture suite、compile、docs・Git audit、impact判定を別々に選択している。",
+  "Issue #491はこのworkflowをrepository-local Skillとして候補化し、全taskへのfull suite機械適用を禁止している。"
+]
+related_overlapping_skills = ["selfrionette-change-validation"]
+approval_boundary = "repository-local instruction-only Skillのdraft作成はopt-inとvalidator通過後に限り、script変更・external mutation・hardwareは明示承認とする。"
+unresolved_risks = [
+  "validation categoryの選択は変更層とfailure modeの読み違いに依存するため、代表taskを継続評価する。"
+]
+proposed_action = "create-draft"
+
+[score]
+recurrence = 2
+reconstruction_cost = 2
+error_prevention = 2
+stability = 2
+verifiability = 2
+total = 10

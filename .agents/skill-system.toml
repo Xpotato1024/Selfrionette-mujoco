@@ -1,0 +1,21 @@
+schema_version = 1
+enabled = true
+human_facing_language = "ja"
+candidate_store = ".agents/skill-candidates"
+eval_store = ".agents/skill-evals"
+
+[thresholds]
+candidate_record = 5
+draft_creation = 7
+promotion_review = 9
+
+[autonomy]
+instruction_only_repository_skill_auto_create_or_update = true
+executable_script_change_approval = "explicit-approval"
+user_global_skill_change = "prohibited"
+external_side_effect_skill_approval = "explicit-approval"
+incidental_skill_change = "separate-commit-or-follow-up"
+
+[invocation]
+new_skill_default = "explicit-only"
+implicit_invocation_requires_validation = true
