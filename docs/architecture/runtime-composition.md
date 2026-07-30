@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-29
+last_verified: 2026-07-30
 canonical_for:
   - runtime composition root
 related:
@@ -93,6 +93,13 @@ versioned known-ID registryから明示解決する。`runtime/`はphysicsやrun
 axis-scoped parameter owner、typed semantic role、version-aware robot/environment/task compatibility、
 evidence producer、evaluator requirementをfail-closedで検証する。詳細なtyped contractとreadiness順序は
 `docs/contracts/experiment-plugin-composition.md`を正とする。
+
+このgeneric experiment compositionはreadiness-onlyであり、current productionのEnvironment / Task /
+Evaluation catalog、scene spawn、task lifecycle、metric artifact、experiment runnerを所有しない。
+application-facing replay / viewer / smokeはRobot、Input Source、Control Mapping、command semantics routeを
+接続するdiagnostic / operational runtimeである。全6軸を選択するproduction experiment runnerとviewer
+control planeはplanned #486のscopeであり、current diagnostic経路へ暗黙にEnvironment / Task /
+Evaluationを補わない。
 
 ## composition-rootの責務分割
 
@@ -266,13 +273,14 @@ call、`motion_command_to_qpos_command()`使用、`command_type = MotionCommand`
   identityをfreezeするsoftware-only gateである。world/tool pairの条件差分は
   `docs/contracts/evaluation-manifest-readiness.md`の許可リストに限定する。
 
-この文書はcurrent responsibility boundaryを固定し、does not perform a broad runtime rewrite。
+この文書はcurrent responsibility boundaryを固定し、runtimeの別実装を追加しない。
 fast_arm固有diagnosticsは`plugins/robots/fast_arm/adapter/diagnostics/`が所有し、generic runtime public surfaceや
 plugin discovery entry pointからeager importしない。production builderは`ControlMappedRuntimePipeline`を構築する。
 test-only mapped wiringは`tests/support/`が所有する。
 pre-audit composition chronologyとrefactor proposalは
 `docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
-### #461 final audit correction (2026-07-26)
+
+### Current gamepad / Mapping parameter boundary
 
 gamepadのraw pathは、`raw_axes`をmappingのauthoritative inputとして保持する。default `gamepad_deadzone=0.1`では、fixed frontend deadzone `0.1`のprojectionとbackendの第二thresholdをControl Mapping Plugin内で同じ順序に適用し、raw `0.15` / `0.19`はzero、raw `0.20`はlegacyと同じ非zero結果になる。`gamepad_deadzone=0.0`でもraw `0.05`はfrontend projectionとlegacy `zero_state=true`によりholdとなり、raw `0.15`は`1/18`の非zero結果になる。normalized `axes`はwire / overlay compatibility projectionに限る。
 

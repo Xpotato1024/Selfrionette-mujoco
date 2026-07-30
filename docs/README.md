@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-07-30
 canonical_for:
   - documentation source of truth map
 related:
@@ -27,6 +27,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | import境界 | `docs/architecture/dependency-boundaries.md` | layer間の許可・禁止dependency |
 | runtime data flow | `docs/architecture/data-flow.md` | inputからMuJoCo、transport、viewerまでの流れ |
 | runtime composition | `docs/architecture/runtime-composition.md` | 唯一のmulti-layer composition root |
+| 並行作業境界 | `docs/contracts/parallel-work-contracts.md` | layer間の入力・出力と並行実装時の固定契約 |
 | schema | `docs/contracts/schemas.md` | shared contract type |
 | asset | `docs/contracts/assets.md` | MJCF、STL、scale、axis、unit |
 | Robot Plugin / Profile / Runtime Plugin / Viewer declaration | `docs/contracts/robot-profile-runtime-viewer-profile.md` | bounded discovery、robot selection、resource ownership、backend/viewer compatibility |
@@ -36,6 +37,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | fast_arm MuJoCo model name | `docs/contracts/mujoco-model-name-contract.md` | plugin-owned body/site name、fallback、failure contract |
 | forward kinematics | `docs/contracts/forward-kinematics.md` | robot-specific FK ownership |
 | inverse kinematics | `docs/contracts/inverse-kinematics.md` | robot-specific IK ownership |
+| runtime forward kinematics evaluation | `docs/contracts/runtime-forward-kinematics-evaluation.md` | runtime FK評価とMuJoCo measurementの境界 |
 | MotionCommand | `docs/contracts/motion-command.md` | commandとstateの分離 |
 | MuJoCoState | `docs/contracts/mujoco-state.md` | backend snapshot contract |
 | transport payload | `docs/contracts/transport-payload.md` | versioned JSON-compatible payload |
@@ -45,6 +47,8 @@ completion audit、implementation report、inventory、handoff、historical reco
 | EndpointTargetGenerator | `docs/contracts/endpoint-target-generator.md` | input vectorからcommand-side targetを生成する契約 |
 | programmed target input | `docs/contracts/programmed-target-input-source.md` | deterministic target trajectoryとmetadata bridge |
 | runtime input source registry | `docs/contracts/runtime-input-source-registry.md` | versioned production catalog、selection、CLI alias、health、lifecycle contract |
+| Selfrionette serial frame | `docs/contracts/r7-a-lite-serial-frame-contract.md` | 7-channel protocol、diagnostic、parser contract |
+| runtime input pipeline | `docs/contracts/r7-b-runtime-input-pipeline-contract.md` | Input SourceからMuJoCo stepまでのruntime contract |
 | runtime input source state | `docs/contracts/runtime-input-source-state.md` | source stateのpayload metadata |
 | runtime input safety | `docs/contracts/runtime-input-safety.md` | stale commandのhold contract |
 | continuous endpoint velocity input | `docs/contracts/continuous-endpoint-velocity-input.md` | evaluation-ready velocity intent |
@@ -53,6 +57,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | fast_arm joint-limit configuration | `docs/contracts/fast-arm-joint-limit-config.md` | TOML SoTとqpos feasibility guard |
 | world/tool control-frame評価 | `docs/evaluation/world-tool-frame-comparison-design.md` | limited exploratory pilot design |
 | Git / PR workflow | `docs/operations/git-pr-workflow.md` | branch、diff、PR、head一致のgate |
+| Codex workflow | `docs/operations/codex-workflow.md` | repository-local ruleとtask-specific deltaの適用 |
 | validation | `docs/operations/validation.md` | 変更層とfailure modeに応じた検証 |
 | hardware safety | `docs/operations/hardware-safety.md` | serial、OSC、実機作動のoperator gate |
 | 日本語文書guardrail | `docs/operations/japanese-doc-writing-guardrails.md` | UTF-8、BOM、mojibake、language policy |
@@ -61,8 +66,19 @@ completion audit、implementation report、inventory、handoff、historical reco
 | backend / viewer起動 | `docs/operations/backend-viewer-startup.md` | backend、publisher、viewerの起動入口 |
 | WebSocket host / port | `docs/operations/websocket-host-port-contract.md` | bind hostとbrowser-visible hostの分離 |
 | WebSocket publisher | `docs/operations/websocket-publisher-runner.md` | local/dev payload delivery |
+| live viewer smoke | `docs/operations/live-viewer-smoke.md` | live viewer接続の反復診断 |
 | runtime-to-viewer smoke | `docs/operations/runtime-to-viewer-e2e-smoke.md` | backendからbrowser viewerまでの診断入口 |
+| browser visual smoke | `docs/operations/browser-visual-smoke.md` | browser-visible sceneの反復確認 |
 | product viewer WASM scene renderer | `docs/operations/product-viewer-wasm-scene-renderer.md` | current product viewerのoperator path |
+| keyboard / gamepad live viewer smoke | `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | viewer inputのmanual smoke |
+| Selfrionette serial dry-run smoke | `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | recorded fixtureによるoffline serial検証 |
+| live Selfrionette runtime | `docs/operations/r7-b-manual-live-selfrionette-runtime-runner.md` | operator-gated live source手順 |
+| axis sanity check | `docs/operations/r7-c-axis-sanity-check.md` | software / hardware evidenceを分離するaxis確認 |
+| keyboard / replay demo | `docs/operations/r7-c-keyboard-replay-demo-package.md` | deterministic demo手順 |
+| live Selfrionette validation log | `docs/operations/r7-c-live-selfrionette-validation-log.md` | live validationの記録手順 |
+| viewer fixture demo | `docs/operations/r7-c-viewer-fixture-demo-procedure.md` | fixture viewer demo手順 |
+| fast_arm endpoint command check | `docs/operations/r7-d-p3-fast-arm-endpoint-command-check-procedure.md` | no-hardware command smoke |
+| fast_arm endpoint motion sanity | `docs/operations/r7-e-p1-fast-arm-endpoint-motion-sanity.md` | endpoint motionの診断gate |
 | research / implementation log | `research/README.md` | monthly logの責務、entry条件、記録方法 |
 
 ## Directory index

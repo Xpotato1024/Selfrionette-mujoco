@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-29
+last_verified: 2026-07-30
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -59,7 +59,7 @@ parameter ownerは6軸のselection identity全体を所有者とし、raw plugin
 R7-G-P1 / #405とR7-H-P1 / #411は、software revision、condition、canonical serializationを
 含む上位manifestを追加できるが、この6軸selectionを別の暗黙規則へ置き換えない。
 
-## self-contained packageとbounded discovery（#476）
+## self-contained packageとbounded discovery
 
 plugin固有implementationは`plugins/<axis>/<plugin_id>/`の自己完結packageが所有し、generic
 contract、registry、composition primitiveだけをpackage外へ置く。manifest、readiness、freeze、
@@ -86,16 +86,16 @@ onboarding contractを、Input Source registrationはCLI alias、request builder
 束ねる。Control Mappingは`ControlMappingPlugin`自身が必要情報を保持するためregistrationを持たず、
 file symmetryだけを目的とする`mappings/registration.py`を作らない。
 
-6軸の#476実装前後inventoryは次のとおりである。
+6軸のcurrent production stateは次のとおりである。
 
-| 軸 | #476前のconcrete owner / 列挙 | #476後のentry point / discovery | 判断 |
-|---|---|---|---|
-| Robot | `plugins/robots/fast_arm/`、既存`robots/discovery.py` | `fast_arm/plugin.py::ROBOT_PLUGIN`、direct-child bounded discovery | #426/#427のreference implementationを維持し、rewriteしない |
-| Input Source | 7 packageがimplementationを所有するが、中央`input_sources/registration.py`が具体pluginとrequestをimport / 列挙 | 各`plugins/input_sources/<source_id>/plugin.py::INPUT_SOURCE_PLUGIN`、`input_sources/discovery.py` | #478で`selfrionette/v1`へdevice identityを収束し、6 identityとした。CLI順序はCLI projectionへ移した |
-| Control Mapping | `plugins/mappings/*.py`と中央`mappings/catalog.py`の4件手書き列挙 | logical IDと一致する4 packageの`plugin.py::CONTROL_MAPPING_PLUGIN`、`mappings/discovery.py` | algorithmをpackageへ移し、#478で旧flat importとpackage-root facadeを退役した |
-| Environment / Scene | production concrete package / catalogなし。generic `EnvironmentPlugin`とcomposition test fixtureだけ | production discovery候補なし | second SoTがないため変更しない。最初のproduction plugin追加時に本sectionの規則を適用 |
-| Task | production concrete package / catalogなし。generic `TaskPlugin`とcomposition test fixtureだけ | production discovery候補なし | 同上 |
-| Evaluation | production concrete package / catalogなし。generic `EvaluationPlugin`とcomposition test fixtureだけ | production discovery候補なし | 同上 |
+| 軸 | current concrete owner / entry point | production catalog / discovery |
+|---|---|---|
+| Robot | `plugins/robots/fast_arm/plugin.py::ROBOT_PLUGIN` | `robots/{catalog.py,discovery.py,registration.py}` |
+| Input Source | 6 packageの`plugin.py::INPUT_SOURCE_PLUGIN` | `input_sources/{catalog.py,discovery.py,registration.py}` |
+| Control Mapping | 4 packageの`plugin.py::CONTROL_MAPPING_PLUGIN` | `mappings/{catalog.py,discovery.py}`。追加registration layerなし |
+| Environment / Scene | concrete production packageなし。generic `EnvironmentPlugin`とtest fixtureのみ | production catalog / discoveryなし |
+| Task | concrete production packageなし。generic `TaskPlugin`とtest fixtureのみ | production catalog / discoveryなし |
+| Evaluation | concrete production packageなし。generic `EvaluationPlugin`とtest fixtureのみ | production catalog / discoveryなし |
 
 discoverable first-party axisは、固定namespace直下のdirect child packageだけを対象にする。`_support`
 等のprivate/shared packageを除外し、candidateをsortして`<package>.plugin`だけをimportする。
@@ -108,9 +108,11 @@ startup前にfail-closedとする。共通helperはdirect-child enumeration、pr
 module import、import failure normalizationだけを所有し、Input Source registrationとControl Mapping
 contractの検証はtyped axis discoveryへ残す。
 
-Control Mappingの`_continuous_endpoint_velocity.py`はaxis-local private shared ownerであり、
-plugin IDやfixed entry pointを持たずdiscoverしない。Input Sourceの旧`_common.py`と`_loadcell/`は
-#478で退役し、Selfrionette固有処理、analog fixture、noop、viewer healthを各owning packageへ移した。
+Control Mappingの`plugins/mappings/_continuous_endpoint_velocity.py`はaxis-local shared algorithm primitive、
+`plugins/mappings/_command_routes.py`はaxis-local shared declaration / route factoryである。どちらもprivate shared
+ownerであり、plugin IDやfixed entry pointを持たずdiscoverしない。Input Sourceの旧`_common.py`と
+`_loadcell/`はcurrent ownerではなく、Selfrionette固有処理、analog fixture、noop、viewer healthは
+各owning packageが所有する。
 真に複数sourceへ共通なimplementationが生じるまで`_support/`は作らない。
 Robot resourceは従来どおりplugin declarationが所有する。Input Sourceのreader / parser /
 trajectory、Control Mappingのalgorithm / parameterはowning packageが所有し、generic resolverが
@@ -127,33 +129,33 @@ unrelated pluginへ具体ID/importを追加しない。test-only packageは明�
 discoverし、production namespace / catalog / CLIへ混入させない。packageを除去した後のselectionは
 unknown logical identityとしてfailする。
 
-### #478 final namespace inventory
+### Current namespace inventory
 
 | 分類 | canonical owner / decision |
 |---|---|
 | generic contract | `bounded_discovery.py`、axis discovery、`input_sources/registration.py`、`runtime/experiment/`、schemas |
 | concrete Input Source owner | `analog_fixture/`、`noop/`、`programmed_target/`、`replay/`、`selfrionette/`、`viewer/` |
 | concrete Mapping owner | `analog_fixture_mapping/`、`loadcell_endpoint_mapping/`、`replay_mapping/`、`viewer_keyboard_gamepad_mapping/` |
-| axis-local shared implementation | Mappingの`_continuous_endpoint_velocity.py`だけ。Input Sourceはshared owner不要 |
+| axis-local shared implementation | Mappingのalgorithm primitive `_continuous_endpoint_velocity.py`とdeclaration / route factory `_command_routes.py`。Input Sourceはshared owner不要 |
 | canonical public surface | concrete packageの`__all__`、catalog resolver、fixed `plugin.py` export |
-| retired compatibility / migration | Input Source registration facade、Mapping root / flat facade、runtime移行alias、旧loadcell identity / package |
+| retired compatibility / migration | root Input Source registration facade、Mapping root / flat facade、runtime移行alias、旧loadcell identity / package |
 | test fixture / test-only namespace | `tests/plugins/input_sources/fixtures/`。production discovery対象外 |
 | CLI / composition policy | CLI表示順は`cli/main.py`、convenience default pairingは`runtime/control/input_source_mapping_policy.py` |
 | runtime composition | `runtime/control/input_source_selection.py`と`runtime/experiment/composition.py` |
 | schema boundary | sourceのproduced schemaとMappingのaccepted schemaをversioned identityで照合 |
 
-Finding A–Hの最終決定は次のとおりである。
+current ownership invariantは次のとおりである。
 
-| Finding | decision |
+| boundary | current decision |
 |---|---|
-| A identity | `selfrionette/v1`をdevice identityとし、serial / injected lines / recorded dataをbackendまたはfixtureとして分離 |
-| B ownership | `_common.py`と`_loadcell/`を廃止し、concrete behaviorをowning packageへ移動 |
-| C lifecycle | `HealthyInputSource`、`ManagedHealthyInputSource`、`ViewerBridgeInputSource`でtyped化し、`Any` / `getattr` forwardingを退役 |
-| D cross-axis | source registrationからMapping ID、default、parameter projectionを除去。runtime policyがconvenience pairingを所有 |
-| E ordering | catalogはlogical identity順、CLI表示順はCLI projectionだけが所有 |
-| F compatibility | stable external evidenceのない移行facade / aliasを退役。concrete package APIとoperator helperだけをcanonical維持 |
-| G identity rule | logical identityをprovenance SoTとしつつ、first-party basename一致をstructural invariant化 |
-| H normalization | device intrinsic calibration / sensor clampはSelfrionette、operational deadzone / gain / sign / axis / command policyはMapping |
+| identity | `selfrionette/v1`をdevice identityとし、serial / injected lines / recorded dataをbackendまたはfixtureとして分離 |
+| ownership | concrete behaviorは各owning packageへ置き、無制限なshared dumping groundを作らない |
+| lifecycle | `HealthyInputSource`、`ManagedHealthyInputSource`、`ViewerBridgeInputSource`でtyped化する |
+| cross-axis | source registrationはMapping ID、default、parameter projectionを持たず、runtime policyがdiagnostic convenience pairingを所有 |
+| ordering | catalogはlogical identity順、CLI表示順はCLI projectionだけが所有 |
+| public surface | concrete package APIとoperator helperだけをcanonical維持し、移行facade / aliasを再導入しない |
+| identity rule | logical identityをprovenance SoTとしつつ、first-party basename一致をstructural invariant化 |
+| normalization | device intrinsic calibration / sensor clampはSelfrionette、operational deadzone / gain / sign / axis / command policyはMapping |
 
 `loadcell_endpoint_mapping/v1`はsource packageをimportせず、versionedな7-channel normalized sampleと
 configurable weightsを受けるため名称を維持する。`replay_mapping/v1`はacquisition deviceではなく
@@ -385,6 +387,20 @@ typecheck / buildはmerge gateとして維持し、CI change-detection matrixは
 このboundaryはrunner execution、scene spawn、physics step、task advance、metric artifact出力を行わない。
 readiness後に不足へ気付く設計や、特定robot/task/evaluatorの暗黙選択を許可しない。
 
+## Generic experiment contractとproduction runtimeの区別
+
+`compose_experiment()`、`ExperimentPluginManifest`、`EvaluationManifest` / readiness / freezeは、
+6軸selectionと互換性を実行前に固定するgeneric contractである。test fixtureはEnvironment、
+Task、Evaluationを含むvalid / invalid compositionを検証するが、production concrete pluginや
+production experiment runnerの存在を意味しない。
+
+current application-facing CLI、replay、viewer、offline smoke、WebSocket publisherは、
+Robot、Input Source、Control Mapping、command semantics routeを接続するdiagnostic / operational
+runtimeである。Environment、Task、Evaluationを選択しないことはcurrent contract違反ではない。
+Environment / Task / Evaluationのproduction catalog、全軸を明示選択するproduction experiment runner、
+viewer構成UIはplanned experiment control plane #486のscopeであり、このcontractは暗黙default pluginや
+未実装runnerを提供しない。
+
 ## fast_arm migration
 
 production fast_armは独立package `fast_arm_core`でpure kinematics、model/name specification、joint-limit
@@ -444,37 +460,22 @@ virtual reaction force、viewer feature、hardware/serial/Arduino/OSC/robot outp
 conformance testはcontractとreadinessの成立を示すが、実験結果、metric妥当性、接触物理、physical
 safetyを証明しない。
 
-## #462 mapping ownership and compatibility facades
+## Input Source / Mapping readiness
 
-Control Mapping Plugin の production catalog は viewerだけに限定されず、replay、analog fixture、loadcell endpoint mappingをdeterministic IDで登録する。source parser、provider acquisition、intrinsic normalizationはsource ownerに残し、axis assignment、sign、gain、scale、deadzone、control frame、endpoint/command conversionはmapping ownerに置く。
+Input Sourceが提供するsample identityとControl Mappingが受け付けるsample identityはcomposition
+boundaryでexact compatibilityを検証する。source registrationはMapping object、default selection、
+Mapping parameterを所有しない。diagnostic convenience pairingは
+`runtime/control/input_source_mapping_policy.py`、explicit experiment selectionはmanifestが所有する。
 
-loadcell は serial source pluginが生成する acquisition schema `loadcell_vector_sample/v1`を、source pluginのtyped/versioned `mapping_input_adapter` contract（input `loadcell_vector_sample/v1`、output `loadcell_normalized_input_intent/v1`）でsource-owned normalizationへ通す。adapter後のeffective mapping-input schema `loadcell_normalized_input_intent/v1`をControl Mapping Pluginのaccepted schemaと比較し、strategyへは`NormalizedLoadcellInputIntent`だけを渡す。adapter不在、adapter input/output schema mismatch、別mapping選択はstartup readinessでfail-closedとなり、raw frameのmapping package内implicit re-normalizationやfallbackは行わない。
+source parser、provider acquisition、intrinsic normalizationはsource ownerに残し、axis assignment、
+sign、gain、scale、deadzone、control frame、endpoint / command conversionはMapping ownerに置く。
+`selfrionette/v1`のacquisition schema `loadcell_vector_sample/v1`はsource-owned typed adapterを通して
+`loadcell_normalized_input_intent/v1`となり、そのeffective schemaだけを
+`loadcell_endpoint_mapping/v1`へ渡す。adapter不在、adapter input / output mismatch、Mapping schema
+mismatchはsource lifecycle開始前にfail-closedとする。
 
-既存public importを保つためのsource facadeは5 moduleに限定する。facadeはcanonical `plugins/mappings/` implementationをreexportするだけで、mapping algorithmのsecond SoTではない。architecture guardはallowlist外のreverse dependency、mapping testからのmapping-owned source import、source-name dispatchを拒否する。
-
-## viewer input composition handoff (#461)
-
-Input Sourceが提供する`viewer_control_sample/v1`とControl Mappingが受け付けるsample identityは
-composition boundaryでexact compatibilityを検証する。viewer providerの`keyboard/v1` / `gamepad/v1`
-はfrontendのacquisition IDであり、backend source plugin identityやmapping identityを暗黙に選択する
-source-name dispatchではない。source registrationはconcrete mapping objectではなくdefaultの
-`PluginSelection`を宣言し、runtimeがsource selectionとは独立したmapping selectionをresolveする。callerが
-指定したmapping selectionをdefaultで上書きせず、runtimeはschema compatibilityをmapping実行前に検証する。
-resolved mapping resultはruntimeがendpoint progressionへ適用する。
-
-viewer mappingの`keyboard_config`、`gamepad_speed_m_s`、`gamepad_deadzone`、`gamepad_max_delta_m`は
-typed Control Mapping parametersであり、finite / non-negativeおよびkeyboard bindingのaxis / direction
-validationをmapping boundaryで行う。selection / plan readinessで検証済みparameterを保持し、invalid
-parameterではmanaged sourceをstartせず、frameをreadしない。frontend providerとbackend sourceはこれらを
-適用しない。
-
-P4はprovider lifecycleとbackend source / mapping ownershipを成立させた。plugin-local test relocation、
-dummy onboarding、legacy fallbackのretirementと残存symbolの最終監査は#462 completion auditで確定済みである。
-
-## #461 final audit correction (2026-07-26)
-
-viewer providerはraw acquisitionとlifecycle、backend sourceはcanonical sample・health・timeout、Control Mapping Pluginはaxis/sign・gain・deadzone・button supplement・control frame・command intentを所有する。raw `raw_axes`はauthoritative mapping inputであり、normalized `axes`はlegacy wire / overlay compatibility projectionである。default `gamepad_deadzone=0.1`のfixed frontend `0.1` projection + backend thresholdはmapping plugin内で同じ順序に再現し、custom `0.0`でもraw `0.05`はlegacy `zero_state=true`のholdとなり、raw `0.15`はfrontend projection後の`1/18`になる。
-
-mapping parameterの解決順位は`explicit runtime mapping parameters > Mapping plugin defaults`とする。
-source instance / frame metadata / source registrationからMapping parameterを投影しない。parameter validationは
-source lifecycle開始とframe readより前に完了し、malformed ingressは即時`INVALID`へ遷移する。
+viewer providerはraw acquisitionとlifecycle、backend sourceはcanonical sample / health / timeout、
+Control Mappingはaxis / sign / gain / deadzone / button supplement / control frame / command intentを
+所有する。Mapping parameterの解決順位は
+`explicit runtime mapping parameters > Mapping plugin defaults`とし、source instance、frame metadata、
+source registrationから投影しない。

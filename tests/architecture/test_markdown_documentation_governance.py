@@ -82,6 +82,47 @@ def test_source_of_truth_map_targets_exist() -> None:
         assert (MODULE.ROOT / target).exists(), target
 
 
+def test_current_metadata_and_canonical_ownership_are_complete() -> None:
+    topics: dict[str, str] = {}
+    for path in MODULE.tracked_markdown():
+        text = (MODULE.ROOT / path).read_text(encoding="utf-8")
+        fields = MODULE.front_matter_fields(text)
+        status = MODULE.front_matter_status(text)
+        if status not in {"canonical", "supporting"}:
+            continue
+        assert {
+            "status",
+            "owner",
+            "last_verified",
+            "canonical_for",
+            "related",
+        } <= fields.keys(), path
+        canonical_for = fields["canonical_for"]
+        assert isinstance(canonical_for, tuple), path
+        if status == "supporting":
+            assert not canonical_for, path
+            continue
+        assert canonical_for, path
+        for topic in canonical_for:
+            assert topic not in topics, (topic, topics.get(topic), path)
+            topics[topic] = path
+
+
+def test_source_of_truth_map_covers_every_current_canonical_document() -> None:
+    targets = {target for _, target in MODULE.source_map_rows()}
+    expected = {
+        path
+        for path in MODULE.tracked_markdown()
+        if path != "docs/README.md"
+        and path.startswith(("docs/", "research/"))
+        and MODULE.front_matter_status(
+            (MODULE.ROOT / path).read_text(encoding="utf-8")
+        )
+        == "canonical"
+    }
+    assert targets == expected
+
+
 def test_repository_current_markdown_governance_is_accepted() -> None:
     result = MODULE.validate(strict_map=True, strict_links=True)
     assert result.accepted, result.errors

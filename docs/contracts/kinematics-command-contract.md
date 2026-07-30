@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: contracts
-last_verified: 2026-07-19
+last_verified: 2026-07-30
 canonical_for:
   - kinematics solver contract
   - JointCommand / MotionCommand boundary
@@ -138,10 +138,10 @@ test-only implementationは`tests/support/`だけが所有する。
 - `ZeroInverseKinematicsSolver` は concrete IK ではない。
 - `NoOpMotionGenerator` は command generation の本線ではない。
 - `NoOpMuJoCoSimulator` は MuJoCo backend integration の本線ではない。
-- `NoOpInputInterpreter` は input-to-intent 本線ではない。
 - `NoOpStatePublisher` は production transport ではない。
 
 これらをproduction runtime fallbackとして使用せず、`src/selfrionette/**/stubs.py`を再導入しない。
+旧`InputInterpreter`経路も退役済みであり、Input SourceとControl Mappingをruntimeで直接composeする。
 
 ## Forward kinematics ownership
 

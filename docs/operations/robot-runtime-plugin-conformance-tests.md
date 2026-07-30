@@ -1,9 +1,8 @@
 ---
 status: supporting
 owner: architecture
-last_verified: 2026-07-15
-canonical_for:
-  - adding test-only Robot Profile / Runtime Plugin / MuJoCo conformance cases
+last_verified: 2026-07-30
+canonical_for: []
 related:
   - docs/contracts/robot-profile-runtime-viewer-profile.md
   - docs/contracts/fast-arm-joint-limit-config.md

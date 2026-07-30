@@ -1,9 +1,8 @@
 ---
 status: supporting
 owner: architecture
-last_verified: 2026-07-15
-canonical_for:
-  - generic kinematics test-double ownership and usage
+last_verified: 2026-07-30
+canonical_for: []
 related:
   - docs/contracts/forward-kinematics.md
   - docs/contracts/inverse-kinematics.md

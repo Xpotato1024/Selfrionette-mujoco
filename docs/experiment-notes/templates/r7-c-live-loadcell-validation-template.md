@@ -1,9 +1,8 @@
 ---
 status: supporting
 owner: operations
-last_verified: 2026-06-22
-canonical_for:
-  - R7-C live loadcell validation log template
+last_verified: 2026-07-30
+canonical_for: []
 related:
   - docs/operations/r7-c-live-loadcell-validation-log.md
   - docs/operations/r7-c-keyboard-replay-demo-package.md

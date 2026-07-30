@@ -5,7 +5,6 @@ last_verified: 2026-07-16
 canonical_for:
   - runtime-to-viewer E2E smoke
   - browser viewer troubleshooting
-  - runtime-to-viewer E2E smoke
 related:
   - README.md
   - apps/mujoco-viewer/README.md

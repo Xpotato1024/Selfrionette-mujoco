@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-29
+last_verified: 2026-07-30
 canonical_for:
   - import boundaries
 related:
@@ -71,6 +71,9 @@ axis-specific catalog / discovery / registrationは`plugins/robots/`、
 `plugins/input_sources/`、`plugins/mappings/`の各ownerへ閉じる。root `plugins/`は
 cross-axis primitiveだけを所有し、旧root moduleをcompatibility aliasとして残さない。
 Mappingに追加registration情報がない限り`mappings/registration.py`は作らない。
+Mappingのaxis-local private shared ownerは、algorithm primitiveの
+`plugins/mappings/_continuous_endpoint_velocity.py`と、declaration / route factoryの
+`plugins/mappings/_command_routes.py`である。どちらもdiscoverable plugin entryではない。
 
 - `selfrionette.plugins.robots.discovery`は`selfrionette.plugins.robots`直下packageだけを列挙し、
   固定`plugin.py`の固定`ROBOT_PLUGIN`だけを読む。configuration値、robot ID、external entry pointを
@@ -261,7 +264,7 @@ package-root exportとmodule-level exportは別のpublic surfaceである。
   canonical文書で維持理由を説明できるcompatibility helperに限定する。
 - `selfrionette.runtime`は各public nameをowner moduleとattribute nameの明示mappingで解決する。
   module scan、transitive import、module orderingへ解決先を依存させない。generic contractの参照では
-  concrete catalogをloadせず、catalog-backed resolverを参照した時点だけcompatibility facade経由でloadする。
+  concrete catalogをloadせず、catalog-backed resolverを参照した時点だけcanonical catalog ownerをloadする。
 - 明示mappingのkey setは`__all__`と一致させ、全entryのowner object identityをarchitecture testで固定する。
 - `NoOp*`、`Zero*`、`Static*`などのtest doubleをproduction packageへ置かず、package-rootのstable APIにしない。
 - test doubleは`tests/support/`だけが所有する。production sourceは`tests`をimportしない。
@@ -272,7 +275,7 @@ package-root exportとmodule-level exportは別のpublic surfaceである。
 このpublic surfaceを変更する場合は、`tests/architecture/test_public_export_policy.py`と
 該当packageの`__all__` contract testを同じ変更で更新する。
 
-## viewer provider / source / mapping direction (#461)
+## viewer provider / source / mapping direction
 
 viewer frontend providerはbrowser-only boundaryであり、physics、robot、task、FK、IKをimportしない。
 backend viewer sourceはtransport messageとviewer sample schemaを扱うが、keyboard axis assignment、
@@ -298,8 +301,9 @@ Control Mappingのtyped parametersとcanonical sampleが所有する。
 viewer sourceはtyped ingress failureを受けてlatest canonical sampleを`source_active=false`、healthを
 `invalid`へ遷移させる。runtimeはinvalid / stale / inactive / disconnectedでhold-currentを適用し、valid
 sampleが来るまで古いactive intentを再開しない。source registrationはconcrete mapping objectを保持せず、
-`PluginSelection`をdefaultとして宣言するだけであり、explicit mapping selectionはruntime compositionで
-優先される。produced sample schemaとaccepted sample schema、mapping `ParameterContract`、optionalな
+default Mapping selectionやMapping parameterも保持しない。diagnostic convenience pairingは
+`runtime/control/input_source_mapping_policy.py`が所有し、explicit mapping selectionを上書きしない。
+produced sample schemaとaccepted sample schema、mapping `ParameterContract`、optionalな
 mapping-specific parameter normalizationはreaderのlifecycle開始・frame read・mapping execution前に検証する。
 検証済みparametersはdeterministicなfrozen mappingとしてplanへ渡し、invalid parameterではmanaged sourceを
 startせず、frameもreadしない。
@@ -309,11 +313,16 @@ production runtimeはcatalogとversioned Control Mapping Pluginを直接compose�
 `run_selfrionette_serial_dry_run_smoke()`はoffline fixture validation用に残すが、
 `loadcell_endpoint_mapping/v1`の明示指定を必須とし、optional fallbackやold-path re-exportを持たない。
 
-## #461 final audit correction (2026-07-26)
+## Current source / Mapping readiness
 
 frontend providerはbrowser raw acquisitionとlifecycleを所有し、normalized gamepad `axes`はwire / overlay compatibility projectionとして残す。canonical `raw_axes`、source lifecycle / activity、backend health、Control Mappingのcommand zeroを同じ責務に戻さない。gamepadのlegacy two-stage transfer functionはControl Mapping Plugin内で一元化し、frontendまたはsourceへmapping semanticsを戻さない。
 
 sourceとmappingは別identityでruntimeがcomposeする。mapping parametersはexecution / source start前に
 generic contractとmapping-specific semantic validatorで検証し、explicit Mapping selection parameters、
 Mapping plugin defaultsの順に解決する。Input Sourceからのparameter projectionは持たない。
-C4 / #478でpublic facade、helper fallback、old packageも退役済みである。
+public facade、helper fallback、old packageをcurrent pathへ再導入しない。
+
+generic experiment compositionはEnvironment / Task / Evaluationを含む6軸readiness contractを所有するが、
+current productionのEnvironment / Task / Evaluation catalogまたはexperiment runnerを意味しない。
+replay / viewer / smokeはRobot、Input Source、Mapping、command routeのdiagnostic / operational runtimeであり、
+planned experiment control plane #486まで暗黙のfull compositionへ変更しない。

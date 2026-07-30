@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-29
+last_verified: 2026-07-30
 canonical_for:
   - runtime input source registry
   - Input Source Plugin v1 ownership boundary
@@ -25,13 +25,13 @@ composition軸である。production runtime selectionの正本は
 mode、factory、health、lifecycle、CLI alias、execution adapterを解決する。具体registrationの正本は
 各`plugins/input_sources/<source_id>/plugin.py::INPUT_SOURCE_PLUGIN`である。
 
-C4で旧`src/selfrionette/input_sources/registry.py`を退役した。production source selectionの正本は
-`plugins/input_sources/catalog.py`だけであり、historical descriptor、frame/default registry、mapping lookup
-facadeを別moduleへ移植しない。frontend keyboard / gamepad providerとmappingの分離は#461で成立している。
+production source selectionの正本は`plugins/input_sources/catalog.py`だけである。
+旧`src/selfrionette/input_sources/registry.py`、historical descriptor、frame/default registry、
+mapping lookup facadeを別moduleへ移植しない。
 
 ## Production plugin catalog
 
-`input_source_discovery.py`は`plugins.input_sources`直下のpublic direct-child packageをsortし、固定
+`plugins/input_sources/discovery.py`は`plugins.input_sources`直下のpublic direct-child packageをsortし、固定
 `plugin.py::INPUT_SOURCE_PLUGIN`からtyped registrationを取得する。private packageは対象外であり、
 missing / wrong export、import failure、duplicate identity、package / logical identity mismatchを
 fail-closedで拒否する。catalogはdiscovery結果からknown-IDの
@@ -164,7 +164,7 @@ current test ownerはproduction packageの責務を鏡写しにし、cross-layer
 `tests/plugins/input_sources/contract/conformance.py`の`InputSourceConformanceCase`は、plugin固有のvalid
 parametersとinjected dependencyだけを受け取り、identity / contract version、produced sample、parameter
 contract、factory、initial health、read-frame type、mode、lifecycle、health vocabulary、deterministic readを
-共通検証する。production 7 sourceは各plugin-local ownerからこのhelperを再利用する。generic testはproduction
+共通検証する。production 6 sourceは各plugin-local ownerからこのhelperを再利用する。generic testはproduction
 sourceのprivate implementationや別test moduleのprivate helperを参照しない。
 
 test-only `test_dummy_input_source/v1`は`tests/plugins/input_sources/fixtures/`のcatalogへだけ登録する。
@@ -180,8 +180,8 @@ conditionalを追加しない。
 2. versioned plugin ID、contract version、produced sample schema IDを定義する。
 3. typed parameter contractとsource-specific validationを定義する。
 4. reader、lifecycle、initial/current health、cleanupを実装する。
-5. package-local `plugin.py::INPUT_SOURCE_PLUGIN`でtyped registration、CLI alias、既存CLI順序に必要な
-   projection metadataを宣言する。
+5. package-local `plugin.py::INPUT_SOURCE_PLUGIN`でtyped registration、CLI alias、request builder、
+   execution adapterを宣言する。CLI表示順は`cli/main.py`が所有する。
 6. compatible Mapping Pluginのaccepted sample schemaを宣言する。
 7. generic conformanceとplugin-local source testsを追加する。
 8. registry / schema compatibilityとminimal runtime/composition smokeを追加する。
@@ -201,7 +201,7 @@ runtime step-loopのsource-state解決:
 
 - replay compatibility: recorded frame metadataから復元する。
 - replay以外: typed healthを取得し、frameに存在するstate keyだけ整合性を確認する。
-- canonical projection後の同じframeをinterpreter、record、diagnosticsへ渡す。
+- canonical projection後の同じframeをControl Mapping、record、diagnosticsへ渡す。
 - runtime safetyはsource observationとは別にhold reasonを導出できる。
 
 ## Source-specific behavior
@@ -260,7 +260,7 @@ runtime step-loopのsource-state解決:
 - frame / health parity、sequence ordering、terminal holdを維持する。
 - normalizationとmapping semanticsはmapping側に残す。
 
-## Public compatibility policy
+## Current public surface
 
 source-owned implementationのphysical ownerは次である。
 
@@ -273,17 +273,14 @@ source-owned implementationのphysical ownerは次である。
 | analog fixture sample / strict parser | `plugins/input_sources/analog_fixture/source.py` |
 | Selfrionette protocol / intrinsic normalization / injected-line backend / diagnostics / health / lifecycle | `plugins/input_sources/selfrionette/` |
 
-C4ではimmediate removalを採用した。root version `0.0.0`、release/tag 0件、PyPI publish workflowなし、
-READMEに旧APIのinstall/usageなし、C1–C3でtemporary compatibilityと明示、というrepository evidenceに対し、
-stable external API、published compatibility commitment、released package contractのevidenceはなかった。
-repository外consumer不在の証明とは扱わないが、available evidenceではdeprecation windowよりimmediate removalが
-妥当である。
-
-このpolicyに基づき、旧`input_sources/`、`input_interpreters/`、descriptor registry、source / mapping facade、
+旧`input_sources/`、`input_interpreters/`、descriptor registry、source / mapping facade、
 interpreter-based `RuntimePipeline`、old-path loadcell re-export、`mapping_plugin=None` fallback、
-compatibility CLI wrapperに加え、Mapping package-root lazy facade、旧flat Mapping modules、
-`plugins/input_sources/registration.py`、旧identity alias、runtime input-source移行aliasを退役した。
-canonical public APIとして維持するのは各concrete packageの`__all__`、catalog resolverとcanonical helper
+compatibility CLI wrapper、Mapping package-root lazy facade、旧flat Mapping modules、root
+`plugins/input_source_registration.py`、旧identity alias、runtime input-source移行aliasはcurrent
+public surfaceではない。axis-local `plugins/input_sources/registration.py`はtyped registration contractの
+current ownerであり、退役root moduleと混同しない。
+
+canonical public APIとして維持するのは各concrete packageの`__all__`、catalog resolverとcanonical helperである。
 `runtime.runners.selfrionette_serial_dry_run.run_selfrionette_serial_dry_run_smoke()`はoffline fixture capabilityとして残すが、
 versioned `loadcell_endpoint_mapping/v1`の明示指定を必須とする。
 
@@ -294,12 +291,6 @@ ingress lifecycleを必要とし、replay commandへinitial frameとして投影
 旧wrapperのimplicit robot selection、validation wording差はcanonical CLIへ吸収しない。
 `selfrionette replay ...`と`selfrionette viewer ...`が唯一のcurrent operator entry pointであり、
 `--robot` required、exit status、stdout / stderr、NDJSON、viewer ingress behaviorを維持する。
-
-## Cleanup end state
-
-C2のsource implementation ownership移行、C3のrepository内部consumer移行、C4のpublic compatibility
-retirementは完了している。旧package importは`src/`、`scripts/`、`tests/`で禁止し、wheel / sdistにも
-収録しない。追加のdevice実装、hardware gate、experiment evidenceは別scopeで扱う。
 
 ## 関連canonical文書
 
@@ -314,12 +305,13 @@ retirementは完了している。旧package importは`src/`、`scripts/`、`tes
 [Issue #458 input source ownership inventory](../reports/inventories/input-source-plugin-ownership-inventory.md)を参照する。
 inventoryはhistorical evidenceでありcurrent contractの正本ではない。
 
-## P4 viewer provider / source / mapping boundary (#461)
+## Viewer provider / source / mapping boundary
 
 viewer pluginの`viewer_control_sample/v1`は、browser providerが送ったraw payloadをbackend
 viewer sourceが検証済みcanonical sampleへ投影したschemaである。source registrationはconcrete
-Control Mapping objectを所有せず、optionalなdefault mapping `PluginSelection`だけを宣言する。
-runtimeはsourceとは独立してmapping selectionをresolveし、callerのexplicit selectionをdefaultで上書きしない。
+Control Mapping object、default mapping selection、Mapping parameterを所有しない。
+runtimeはsourceとは独立してmapping selectionをresolveする。diagnostic convenience pairingは
+`runtime/control/input_source_mapping_policy.py`が所有し、callerのexplicit selectionを上書きしない。
 selection時にproduced sample schemaとmappingのaccepted schemaをexact matchで検証し、未知schemaやidentity
 mismatchはmapping実行前にfail-closedとする。
 
@@ -346,11 +338,11 @@ frontend registryはarbitrary dynamic importを行わない。lifecycleが選択
 unknownまたはduplicate provider IDは安全なdefaultへ置換せずrejectする。provider disposal後は
 publication、polling、heartbeatを停止し、再activationはzero / safe stateから開始する。
 
-C4後はkeyboard / continuous mappingのcanonical implementationを`src/selfrionette/plugins/mappings/`、
+keyboard / continuous mappingのcanonical implementationは`src/selfrionette/plugins/mappings/`、
 viewer sourceのcanonical implementationを`src/selfrionette/plugins/input_sources/viewer/`から直接使用する。
 旧facade、low-level registry、retained compatibility symbolは存在しない。
 
-## #462 mapping ownership and conformance correction (2026-07-27)
+## Current Mapping ownership and conformance
 
 production Control Mapping catalog は次の deterministic registrations を持つ。
 
@@ -371,24 +363,26 @@ operational deadzone、channel-axis weights、gain、max delta、endpoint delta�
 mapping strategyへ渡し、Control Mapping Pluginはnormalized schemaをaccepted schemaとして宣言する。
 adapter不在・input/output schema mismatch・別mappingとのschema mismatchはfail-closedにする。
 
-C3ではimplicit `ReplayInputInterpreter` fallbackを除去するため、`programmed_target`と`noop`を
-`replay_mapping/v1`へ接続するdefault policyを追加した。#478ではこのpolicyをsource registrationから
-`runtime/control/input_source_mapping_policy.py`へ移した。両sourceのproduced sample schemaはそれぞれ
+`programmed_target`と`noop`を`replay_mapping/v1`へ接続するdiagnostic convenience policyは
+`runtime/control/input_source_mapping_policy.py`が所有する。両sourceのproduced sample schemaはそれぞれ
 `programmed_target_sample/v1`、`noop_sample/v1`のまま維持し、source-owned identity adapterが
 `replay_raw_input_frame/v1`をeffective mapping-input schemaとして宣言する。adapterは同じ
 `RawInputFrame` objectを返し、source、timestamp、values、buttons、metadata、reader behaviorを変更しない。
-旧interpreterと新mappingは同じ`InputIntent`を生成し、metadataを同じshallow-copy規則で扱う。
-これはmapping adapter / default mapping configurationの意図的追加であり、Input Source identity/version、
-produced sample schema、source mode、health、execution adapter identity、Control Mapping Plugin identity、
-public observable behaviorの変更ではない。loadcell / viewerの既存adapter semanticsは変更しない。
+`replay_mapping/v1`はmetadataをshallow-copyして`InputIntent`を生成する。
 
 canonical mapping testsは`plugins/mappings/` ownerを直接importし、source-owned parser/normalization typeは`plugins/input_sources/`のcanonical ownerから参照する。
 
-generic conformance は source-specific valid parameters に加え、frame/metadata validator、timestamp/sequence policy、sequence validator、optional typed health transition cases を受け付ける。production 7 source cases は constant timestamp、monotonic/indexed、preserved replay order、terminal hold のいずれかを明示する。
+generic conformanceはsource-specific valid parametersに加え、frame/metadata validator、
+timestamp/sequence policy、sequence validator、optional typed health transition casesを受け付ける。
+production 6 source casesはconstant timestamp、monotonic/indexed、preserved replay order、
+terminal holdのいずれかを明示する。
 
-## #461 final audit correction (2026-07-26)
-
-`raw_axes`はnew provider pathのcanonical mapping inputであり、frontend normalized `axes`はwire / overlay compatibility projectionである。gamepad/v1の`zero_state`、`source_active`、heartbeatはlegacy projected axesとbuttonsに基づくobservable semanticsを維持し、mapping deadzoneのcommand zeroとは分離する。button-only sampleもmappingへ渡し、`raw_axes`を持たないlegacy messageは旧`axes` / `zero_state`解釈を維持する。fixed frontend `0.1` projection + configurable backend thresholdはmapping plugin内で一元化し、default parity、custom `0.0`のraw `0.05` hold、raw `0.15`の`1/18`をgolden testで固定する。
+`raw_axes`はprovider pathのcanonical mapping inputであり、frontend normalized `axes`はwire / overlay
+compatibility projectionである。gamepad/v1の`zero_state`、`source_active`、heartbeatはprojected axesと
+buttonsに基づくobservable semanticsを維持し、mapping deadzoneのcommand zeroとは分離する。
+button-only sampleもmappingへ渡し、`raw_axes`を持たないlegacy messageは既存`axes` / `zero_state`
+解釈を維持する。fixed frontend `0.1` projectionとconfigurable backend thresholdはmapping plugin内で
+一元化し、default parity、custom `0.0`のraw `0.05` hold、raw `0.15`の`1/18`をgolden testで固定する。
 
 runtime parameter precedenceは`explicit runtime mapping parameters > Mapping plugin defaults`とする。
 plan readinessでMapping contractを正規化・freezeしてからruntimeへ渡し、source instance / frame metadata /

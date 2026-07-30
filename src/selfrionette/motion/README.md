@@ -19,13 +19,12 @@
 
 ## 依存してはいけない層
 
-`input_sources`, `input_interpreters`, `mujoco_backend`, `transport`, `runtime`
+`plugins/input_sources`, `plugins/mappings`, `mujoco_backend`, `transport`, `runtime`
 
 ## 禁止事項
 
 MuJoCo data 直接操作禁止、WebSocket送信禁止、Three.js transform生成禁止、
 入力デバイス直接読み取り禁止。
 
-## 今後 stub を置く予定のファイル名
-
-`motion_generator.py`, `target_updater.py`, `constraints.py`, `safety_limits.py`
+現在のpublic surfaceとownerは`motion/__init__.py`、runtimeとの境界は
+`docs/contracts/motion-command.md`を正とする。将来file名をREADMEで予約しない。

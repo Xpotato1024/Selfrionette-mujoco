@@ -6,13 +6,12 @@
 ## まず読むもの
 
 - [docs/README.md](docs/README.md)
+- [docs/architecture/dependency-boundaries.md](docs/architecture/dependency-boundaries.md)
+- [docs/architecture/runtime-composition.md](docs/architecture/runtime-composition.md)
+- [docs/contracts/experiment-plugin-composition.md](docs/contracts/experiment-plugin-composition.md)
 - [docs/operations/backend-viewer-startup.md](docs/operations/backend-viewer-startup.md)
 - [docs/operations/websocket-host-port-contract.md](docs/operations/websocket-host-port-contract.md)
 - [docs/operations/runtime-to-viewer-e2e-smoke.md](docs/operations/runtime-to-viewer-e2e-smoke.md)
-- [docs/reports/audits/r6-g-p1-startup-path-audit.md](docs/reports/audits/r6-g-p1-startup-path-audit.md)
-- [docs/reports/audits/r6-g-p3-startup-script-gap-audit.md](docs/reports/audits/r6-g-p3-startup-script-gap-audit.md)
-- [docs/reports/audits/r6-g-completion-audit.md](docs/reports/audits/r6-g-completion-audit.md)
-- [docs/reports/audits/r7-e-p8-architecture-endpoint-audit.md](docs/reports/audits/r7-e-p8-architecture-endpoint-audit.md)
 - [apps/mujoco-viewer/README.md](apps/mujoco-viewer/README.md)
 
 ## セットアップ
@@ -82,7 +81,7 @@ browser page URL と WebSocket URL は別です。viewer は `websocketUrl` を�
 uv run python scripts/viewer/run_live_viewer_smoke.py --host 127.0.0.1 --port 8766 --steps 3 --grace-period-s 5
 ```
 
-browser / viewer smoke の補助導線です。CLI は browser URL と WebSocket endpoint を区別して出力します。R6-F visual elements の観測入口として使います。
+browser / viewer smoke の補助導線です。CLI は browser URL と WebSocket endpoint を区別して出力します。
 
 ## URL と host の注意
 

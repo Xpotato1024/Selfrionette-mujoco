@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-07-30
 canonical_for:
   - runtime data flow
 related:
@@ -16,11 +16,13 @@ related:
 ## Current production flow
 
 ```text
-InputSource
-  -> InputInterpreter
-  -> InputIntent
-  -> motion policy / target generator
-  -> selected RobotRuntimePlugin (IK / FK / joint guard)
+Input Source Plugin / validated reader
+  -> canonical sample + typed source health
+  -> Control Mapping Plugin
+  -> InputIntent / control semantics
+  -> selected command semantics route
+  -> motion / safety conversionまたはnative passthrough
+  -> typed Robot command provider
   -> MuJoCo backend update
   -> post-step MuJoCoState measurement
   -> diagnostic annotation
@@ -32,11 +34,18 @@ InputSource
 post-step `MuJoCoState`がphysical evidenceである。transportはserialize / deliveryだけを行い、
 viewerは受信payloadを再計算せず描画する。
 
+現行のapplication-facing replay / viewer / smokeは、Robot、Input Source、Control Mapping、
+command semantics routeを接続するdiagnostic / operational runtimeである。Environment、Task、
+Evaluationを含むgeneric experiment compositionはreadiness contractとして存在するが、production
+experiment runnerには未接続である。この区別はcurrent behaviorであり、viewerまたはreplayの欠陥ではない。
+
 ## Endpointとjointのflow
 
 - `desired_endpoint_m`: command-sideのworld intent。
 - solver-local target: IK内部だけで使う変換後のtarget。
-- `MotionCommand.joint`: backendへ渡すqpos-like command boundary。
+- `MotionCommand.joint`: runtime内部のmotion / safety envelope。Robot command contractではない。
+- `JointPositionCommand` / `EndpointVelocityCommand`: selected route後にtyped Robot command providerが
+  直接受理するcommand boundary。
 - `target_position_m`: viewer-visible feedback / active targetであり、desired intentと同一とは限らない。
 - `current_tip_position_m`: MuJoCo `tip` siteから測定したphysical endpoint。
 
