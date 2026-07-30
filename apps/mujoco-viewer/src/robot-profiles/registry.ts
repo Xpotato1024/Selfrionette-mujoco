@@ -1,6 +1,7 @@
 import { loadFastArmViewerProfile } from "./fastArm.js";
 import type { ViewerRobotProfile } from "./types.js";
 
+/** profileId重複とunknown selectionを拒否するread-only viewer registry。 */
 export class ViewerRobotProfileRegistry {
   readonly #profiles: ReadonlyMap<string, ViewerRobotProfile>;
 
@@ -30,6 +31,7 @@ export class ViewerRobotProfileRegistry {
   }
 }
 
+/** plugin-owned declarationを読み、失敗時に別Robot profileへfallbackしない。 */
 export async function loadDefaultViewerRobotProfile(
   fetcher: typeof fetch = fetch,
 ): Promise<ViewerRobotProfile> {

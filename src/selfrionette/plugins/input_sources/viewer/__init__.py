@@ -27,7 +27,11 @@ def viewer_health(delegate: ViewerInputSource) -> InputSourceHealth:
 
 
 class ViewerManagedInputSourceReader:
-    """Typed lifecycle/health owner for the viewer bridge source."""
+    """externally-pushed viewer bridgeのnoop start/close lifecycle owner。
+
+    browser/WebSocket acquisitionはviewer側が所有するため、このreaderはI/Oを開始・停止
+    しない。read/healthはdelegateのstale/invalid状態を直列に投影し、thread-safeではない。
+    """
 
     def __init__(self, delegate: ViewerInputSource) -> None:
         self._delegate = delegate
@@ -54,6 +58,8 @@ def build_frames(parameters: Mapping[str, object]) -> tuple[RawInputFrame, ...]:
 
 
 def build_reader(parameters: Mapping[str, object], *, runtime_dependencies: InputSourceRuntimeDependencies | None = None) -> ViewerManagedInputSourceReader:
+    """初期safe endpointとclockを固定した未接続backend readerを返す。"""
+
     endpoint = parameters.get("initial_endpoint_m", DEFAULT_VIEWER_SAFE_ENDPOINT_M)
     clock = monotonic if runtime_dependencies is None or runtime_dependencies.clock is None else runtime_dependencies.clock
     delegate = ViewerInputSource(initial_endpoint_m=endpoint, clock=clock)

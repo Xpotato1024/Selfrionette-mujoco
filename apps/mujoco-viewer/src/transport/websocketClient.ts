@@ -1,3 +1,7 @@
+/**
+ * backend payload WebSocketのconnect/message/close/error lifecycleを所有する。
+ * invalid payloadは観測errorとして返し、別stateやfixtureへ暗黙fallbackしない。
+ */
 import type { TransportPayloadV0 } from "../types/transportPayload.js";
 import { parseTransportPayloadV0Message } from "./parseTransportPayloadV0Message.js";
 
@@ -55,6 +59,7 @@ function buildError(message: string, cause?: unknown): Error {
   return error;
 }
 
+/** socketを生成してstrict payload parserへ接続する。reconnectはcaller責務である。 */
 export function createViewerWebSocketClient(
   options: ViewerWebSocketClientOptions,
 ): ViewerWebSocketClient {

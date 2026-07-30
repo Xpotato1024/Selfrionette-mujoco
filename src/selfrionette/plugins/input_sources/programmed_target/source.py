@@ -37,6 +37,11 @@ def _interpolate_vector3(start: Vector3, end: Vector3, fraction: float) -> Vecto
 
 @dataclass(frozen=True, slots=True)
 class ProgrammedTargetFrame:
+    """world frameのprogrammed target sample。
+
+    ``t_s`` はtrajectory開始からのs、position/desired endpointはm、velocityはm/sである。
+    """
+
     t_s: float
     target_position_m: Vector3
     desired_endpoint_m: Vector3
@@ -76,6 +81,8 @@ class ProgrammedTargetFrame:
 
 @dataclass(frozen=True, slots=True)
 class ProgrammedTargetTrajectory:
+    """空でないframe列とそのorderingを所有するdeterministic trajectory。"""
+
     name: str
     frames: tuple[ProgrammedTargetFrame, ...]
 
@@ -87,7 +94,11 @@ class ProgrammedTargetTrajectory:
 
 
 class ProgrammedTargetInputSource:
-    """Deterministic programmed target input source."""
+    """memory上のtrajectoryをpollするdeterministic programmed target source。
+
+    external I/Oとstart/close side effectはない。non-loopでは最終frameをholdし、
+    loopでは先頭へ戻る。healthは常にactiveで、単一runtime loopからの直列readを前提とする。
+    """
 
     def __init__(self, trajectory: ProgrammedTargetTrajectory, *, loop: bool = False) -> None:
         self._trajectory = trajectory
@@ -163,6 +174,8 @@ def build_sweep_x_trajectory(
     return_frames: int = DEFAULT_SWEEP_X_RETURN_FRAMES,
     final_hold_frames: int = DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES,
 ) -> ProgrammedTargetTrajectory:
+    """world +X方向のm単位往復trajectoryを指定 ``dt_s`` orderingで生成する。"""
+
     initial_position_m = _coerce_vector3("initial_position_m", initial_position_m)
     if dt_s <= 0.0:
         raise ValueError("dt_s must be positive")
@@ -258,6 +271,8 @@ def build_sweep_x_input_source(
     return_frames: int = DEFAULT_SWEEP_X_RETURN_FRAMES,
     final_hold_frames: int = DEFAULT_SWEEP_X_FINAL_HOLD_FRAMES,
 ) -> ProgrammedTargetInputSource:
+    """I/Oを開始せず、生成済みsweep trajectoryを所有するreaderを返す。"""
+
     return ProgrammedTargetInputSource(
         build_sweep_x_trajectory(
             initial_position_m=initial_position_m,

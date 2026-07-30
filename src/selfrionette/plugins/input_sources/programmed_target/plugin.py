@@ -1,4 +1,8 @@
-"""Fixed discovery entry point for programmed_target/v1."""
+"""``programmed_target/v1`` のfixed declaration entry point。
+
+deterministic trajectory metadataをtarget adapterへroutingする。importはdeclaration検証
+だけで、trajectory再生やproduction runnerへの接続を開始しない。
+"""
 
 from __future__ import annotations
 

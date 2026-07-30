@@ -1,3 +1,10 @@
+"""fast_armのMuJoCo tip-site behaviorを層別に観測するsoftware diagnostic。
+
+command intent、solver prediction、MuJoCo qpos/site measurementを別fieldで保持し、
+world frameのposition/deltaはm、joint perturbationはradで記録する。diagnosticは
+hardware I/Oを行わず、unavailable/rejected evidenceを推測値で補完しない。
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -306,6 +313,8 @@ def _diagnose_case(
 
 @dataclass(frozen=True, slots=True)
 class FastArmEndpointMotionSanityResult:
+    """1 axis command caseのintent・execution・MuJoCo measurementを分離した結果。"""
+
     axis: str
     sign: int
     command_label: str
@@ -361,6 +370,8 @@ class FastArmEndpointMotionSanityResult:
 
 @dataclass(frozen=True, slots=True)
 class FastArmEndpointDiagnosticRecord:
+    """1 diagnostic layerのstatus、world-vector(m)、provenance record。"""
+
     step_index: int
     command_label: str
     base_endpoint_source: str
@@ -377,6 +388,8 @@ class FastArmEndpointDiagnosticRecord:
 
 @dataclass(frozen=True, slots=True)
 class FastArmFkSiteConsistencyDiagnostic:
+    """solver FKとMuJoCo tip siteのworld position(m)差分診断。"""
+
     fixture_label: str
     qpos: tuple[float, ...]
     solver_qpos: tuple[float, ...]
@@ -394,6 +407,8 @@ class FastArmFkSiteConsistencyDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class FastArmIkFkSanityDiagnostic:
+    """world target(m)に対するIK/FK round-tripとfailure reasonの診断。"""
+
     fixture_label: str
     target_endpoint_m: Vector3
     ik_input_target_m: Vector3
@@ -413,6 +428,8 @@ class FastArmIkFkSanityDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class FastArmViewerEndpointWorkspaceDiagnostic:
+    """MuJoCo stateからviewerへ投影するtip site world position(m) sample。"""
+
     sample_label: str
     sample_kind: str
     qpos_sample: tuple[float, ...]
@@ -429,6 +446,8 @@ class FastArmViewerEndpointWorkspaceDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class FastArmJointAxisPerturbationResult:
+    """1 qpos indexへrad摂動した際のtip world delta(m)とaxis mapping evidence。"""
+
     joint_name: str
     qpos_index: int
     mujoco_joint_axis: Vector3
@@ -449,6 +468,8 @@ class FastArmJointAxisPerturbationResult:
 
 @dataclass(frozen=True, slots=True)
 class FastArmLocalJacobianColumn:
+    """central differenceで得た1 jointのlocal Jacobian column。unitはm/rad。"""
+
     pose_label: str
     qpos: tuple[float, ...]
     qpos_index: int
@@ -465,6 +486,8 @@ class FastArmLocalJacobianColumn:
 
 @dataclass(frozen=True, slots=True)
 class FastArmLocalJacobianPoseDiagnostics:
+    """1 poseにおけるjoint ordering付きlocal Jacobian診断。"""
+
     pose_label: str
     qpos: tuple[float, ...]
     tip_position_m: Vector3
@@ -476,6 +499,8 @@ class FastArmLocalJacobianPoseDiagnostics:
 
 @dataclass(frozen=True, slots=True)
 class FastArmEndpointTrajectoryStepRecord:
+    """trajectory 1 stepのdesired/measured endpoint(m)とreject/hold状態。"""
+
     command_label: str
     step_index: int
     desired_endpoint_m: Vector3
@@ -498,6 +523,8 @@ class FastArmEndpointTrajectoryStepRecord:
 
 @dataclass(frozen=True, slots=True)
 class FastArmEndpointTrajectorySummary:
+    """trajectory全体のerror/rejection/continuity集計。distance unitはm。"""
+
     command_label: str
     step_count: int
     command_delta_m_per_step: float
@@ -522,6 +549,8 @@ class FastArmEndpointTrajectorySummary:
 
 @dataclass(frozen=True, slots=True)
 class FastArmEndpointTrajectoryDiagnostics:
+    """axis別trajectory record列とsummaryを束ねるdiagnostic結果。"""
+
     command_label: str
     axis: str
     sign: int
@@ -708,6 +737,8 @@ def run_fast_arm_fk_site_consistency_diagnostics(
     model_path: str | Path | None = None,
     qpos_fixtures: Sequence[tuple[str, Sequence[float]]] | None = None,
 ) -> tuple[FastArmFkSiteConsistencyDiagnostic, ...]:
+    """fixture qposごとにsolver FKとMuJoCo tip siteをworld frame(m)で比較する。"""
+
     fixtures = (
         _fast_arm_fk_site_consistency_qpos_fixtures(model_path=model_path)
         if qpos_fixtures is None
@@ -839,6 +870,8 @@ def run_fast_arm_ik_fk_sanity_diagnostics(
     model_path: str | Path | None = None,
     target_fixtures: Sequence[tuple[str, Sequence[float], Sequence[float] | None, str]] | None = None,
 ) -> tuple[FastArmIkFkSanityDiagnostic, ...]:
+    """world target fixtureへIK/FKを適用し、unreachableを理由付きで記録する。"""
+
     fixtures = (
         _fast_arm_ik_fk_sanity_target_fixtures(model_path=model_path)
         if target_fixtures is None
@@ -893,6 +926,8 @@ def _ik_fk_sanity_diagnostic_row(
 def build_fast_arm_ik_fk_sanity_log_rows(
     records: Sequence[FastArmIkFkSanityDiagnostic],
 ) -> tuple[dict[str, object], ...]:
+    """IK/FK結果をJSON-compatible rowへ投影し、field semanticsを変更しない。"""
+
     return tuple(_ik_fk_sanity_diagnostic_row(record) for record in records)
 
 
@@ -900,6 +935,8 @@ def write_fast_arm_ik_fk_sanity_log_jsonl(
     records: Sequence[FastArmIkFkSanityDiagnostic],
     output_path: str | Path,
 ) -> Path:
+    """IK/FK rowを指定pathへUTF-8 JSONLとして書き込む唯一のfile side effect。"""
+
     rows = build_fast_arm_ik_fk_sanity_log_rows(records)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -933,6 +970,8 @@ def _fk_site_consistency_diagnostic_row(
 def build_fast_arm_fk_site_consistency_log_rows(
     records: Sequence[FastArmFkSiteConsistencyDiagnostic],
 ) -> tuple[dict[str, object], ...]:
+    """FK/site結果をJSON-compatible rowへ投影する。"""
+
     return tuple(_fk_site_consistency_diagnostic_row(record) for record in records)
 
 
@@ -940,6 +979,8 @@ def write_fast_arm_fk_site_consistency_log_jsonl(
     records: Sequence[FastArmFkSiteConsistencyDiagnostic],
     output_path: str | Path,
 ) -> Path:
+    """FK/site rowを指定pathへUTF-8 JSONLとして書き込む。"""
+
     rows = build_fast_arm_fk_site_consistency_log_rows(records)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -974,6 +1015,8 @@ def _endpoint_diagnostic_row_from_record(
 def build_fast_arm_endpoint_diagnostic_log_rows(
     results: Sequence[FastArmEndpointMotionSanityResult],
 ) -> tuple[dict[str, object], ...]:
+    """endpoint sanity結果の層別recordをflat rowへ投影する。"""
+
     return tuple(
         _endpoint_diagnostic_row_from_record(record)
         for record in _build_fast_arm_endpoint_diagnostic_records(results)
@@ -984,6 +1027,8 @@ def write_fast_arm_endpoint_diagnostic_log_csv(
     results: Sequence[FastArmEndpointMotionSanityResult],
     output_path: str | Path,
 ) -> Path:
+    """endpoint diagnostic rowを指定pathへCSVとして書き込む。"""
+
     rows = build_fast_arm_endpoint_diagnostic_log_rows(results)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1013,6 +1058,8 @@ def write_fast_arm_endpoint_diagnostic_log_jsonl(
     results: Sequence[FastArmEndpointMotionSanityResult],
     output_path: str | Path,
 ) -> Path:
+    """endpoint diagnostic rowを指定pathへUTF-8 JSONLとして書き込む。"""
+
     rows = build_fast_arm_endpoint_diagnostic_log_rows(results)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1056,6 +1103,8 @@ def build_fast_arm_endpoint_trajectory_log_rows(
     *,
     dt_s: float | None = None,
 ) -> tuple[dict[str, object], ...]:
+    """trajectory step/summaryをunit付きJSON-compatible rowへ投影する。"""
+
     if dt_s is None:
         dt_s = RuntimeConfig().dt_s
     if dt_s <= 0.0:
@@ -1080,6 +1129,8 @@ def write_fast_arm_endpoint_trajectory_log_csv(
     *,
     dt_s: float | None = None,
 ) -> Path:
+    """trajectory rowを指定pathへCSVとして書き込む。"""
+
     rows = build_fast_arm_endpoint_trajectory_log_rows(trajectory_diagnostics, dt_s=dt_s)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1097,6 +1148,8 @@ def write_fast_arm_endpoint_trajectory_log_jsonl(
     *,
     dt_s: float | None = None,
 ) -> Path:
+    """trajectory rowを指定pathへUTF-8 JSONLとして書き込む。"""
+
     rows = build_fast_arm_endpoint_trajectory_log_rows(trajectory_diagnostics, dt_s=dt_s)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1175,6 +1228,8 @@ def run_fast_arm_joint_axis_mapping_diagnostics(
     model_path: str | Path | None = None,
     perturbation_rad: float = _JOINT_AXIS_PERTURBATION_RAD,
 ) -> tuple[FastArmJointAxisPerturbationResult, ...]:
+    """各jointへrad摂動を与え、MuJoCo tip siteのworld delta(m)を測る。"""
+
     if perturbation_rad <= 0.0:
         raise ValueError("perturbation_rad must be positive")
 
@@ -1322,6 +1377,8 @@ def sample_fast_arm_viewer_endpoint_workspace(
     *,
     model_path: str | Path | None = None,
 ) -> tuple[FastArmViewerEndpointWorkspaceDiagnostic, ...]:
+    """viewer projection元となるMuJoCo tip-site world position(m)だけをsampleする。"""
+
     simulator = _build_fast_arm_simulator(model_path)
     initial_state = simulator.snapshot()
     initial_qpos = tuple(initial_state.qpos[:4])
@@ -1430,6 +1487,8 @@ def run_fast_arm_local_jacobian_diagnostics(
     model_path: str | Path | None = None,
     perturbation_rad: float = _LOCAL_JACOBIAN_PERTURBATION_RAD,
 ) -> tuple[FastArmLocalJacobianPoseDiagnostics, ...]:
+    """preset poseごとにcentral-difference Jacobian(m/rad)を測定する。"""
+
     if perturbation_rad <= 0.0:
         raise ValueError("perturbation_rad must be positive")
 
@@ -1941,6 +2000,8 @@ def run_fast_arm_endpoint_trajectory_diagnostics(
     model_path: str | Path | None = None,
     seed_joint_angles_rad: tuple[float, ...] | None = None,
 ) -> tuple[FastArmEndpointTrajectoryDiagnostics, ...]:
+    """software runtimeでaxis別trajectoryを実行し、reject/hold/errorを層別記録する。"""
+
     if trajectory_steps <= 0:
         raise ValueError("trajectory_steps must be positive")
     if trajectory_delta_m <= 0.0:
@@ -2309,6 +2370,12 @@ def run_fast_arm_endpoint_motion_sanity(
     model_path: str | Path | None = None,
     seed_joint_angles_rad: tuple[float, ...] | None = None,
 ) -> tuple[FastArmEndpointMotionSanityResult, ...]:
+    """±XYZのworld target commandをsoftware-onlyで評価する同期entry point。
+
+    ``asyncio.run`` を所有するため既存event loop内からは呼ばない。serial/OSC/robot output
+    は行わず、command、solver、MuJoCo measurementのfailure timingを別々に保持する。
+    """
+
     if command_delta_m <= 0.0:
         raise ValueError("command_delta_m must be positive")
 

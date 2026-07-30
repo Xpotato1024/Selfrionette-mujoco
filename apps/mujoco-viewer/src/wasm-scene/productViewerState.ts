@@ -1,3 +1,7 @@
+/**
+ * backend/MuJoCo payloadをUI表示へ投影するviewer state。
+ * physical stateのSoT、FK/IK、qpos補完を所有せず、欠落値へ別姿勢をfallbackしない。
+ */
 import type { TransportEndpointEvaluationPayload, TransportPayloadV0 } from "../types/transportPayload.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import { formatQpos } from "./mujocoQposSync.js";
@@ -59,6 +63,7 @@ export interface ProductViewerInputOverlayState {
   gamepadZeroState: boolean | null;
 }
 
+/** renderer/transport/inputの表示状態。qpos値はbackendまたは明示fixture由来に限る。 */
 export interface ProductViewerState {
   rendererMode: ProductViewerRendererMode;
   connectionStatus: ProductViewerConnectionStatus;
@@ -87,6 +92,7 @@ export interface ProductViewerState {
 
 export type ProductViewerRendererStatePatch = Omit<Partial<ProductViewerState>, "connectionStatus">;
 
+/** renderer-owned fieldだけを更新し、transport connection stateを上書きしない。 */
 export function applyProductViewerRendererStatePatch(
   previous: ProductViewerState,
   patch: ProductViewerRendererStatePatch,
@@ -107,6 +113,7 @@ export function isProductViewerLiveInputEnabled(
   return state.connectionStatus === "open" && state.status !== "error";
 }
 
+/** profile declarationから未接続のprojection stateを作り、physical stateは生成しない。 */
 export function createInitialProductViewerState(profile?: ViewerRobotProfile): ProductViewerState {
   return {
     rendererMode: "wasm-scene",

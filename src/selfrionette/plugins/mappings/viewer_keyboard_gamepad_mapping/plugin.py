@@ -1,4 +1,8 @@
-"""Fixed discovery entry point for viewer_keyboard_gamepad_mapping/v1."""
+"""``viewer_keyboard_gamepad_mapping/v1`` のfixed Mapping declaration entry point。
+
+importはkeyboard/gamepad interpretation ownerへroutingするだけで、browser acquisitionや
+Robot command executionを開始しない。
+"""
 
 from .implementation import VIEWER_CONTROL_MAPPING_PLUGIN
 

@@ -1,0 +1,151 @@
+"""Issue #485で確定した重要code documentation boundaryのfocused guard。"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _module(path: str) -> ast.Module:
+    return ast.parse((REPOSITORY_ROOT / path).read_text(encoding="utf-8"))
+
+
+def _documented_top_level_symbols(path: str) -> dict[str, str]:
+    tree = _module(path)
+    return {
+        node.name: ast.get_docstring(node) or ""
+        for node in tree.body
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
+def _class_contract(path: str, name: str) -> tuple[set[str], str]:
+    for node in _module(path).body:
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            fields = {
+                statement.target.id
+                for statement in node.body
+                if isinstance(statement, ast.AnnAssign)
+                and isinstance(statement.target, ast.Name)
+            }
+            return fields, ast.get_docstring(node) or ""
+    raise AssertionError(f"{name} was not found in {path}")
+
+
+def test_architecture_sensitive_python_contracts_have_semantic_documentation() -> None:
+    required_symbols = {
+        "src/selfrionette/runtime/experiment/contracts.py": {
+            "VersionedIdentity",
+            "CommandSemanticsRoute",
+            "EnvironmentPlugin",
+            "ControlMappingPlugin",
+            "TaskPlugin",
+            "EvaluationPlugin",
+        },
+        "src/selfrionette/runtime/experiment/composition.py": {
+            "ResolvedExperimentComposition",
+            "compose_experiment",
+        },
+        "src/selfrionette/runtime/composition/robot_bundle.py": {
+            "RobotCommandSemanticProvider",
+            "RobotBundle",
+        },
+        "src/selfrionette/runtime/execution/command_routes.py": {
+            "ResolvedCommandExecution",
+            "NativeEndpointVelocityCommandExecutionBinding",
+        },
+        "src/selfrionette/runtime/control/endpoint_target_generator.py": {
+            "EndpointTargetGeneratorConfig",
+            "EndpointTargetGeneratorState",
+            "generate_endpoint_target",
+        },
+    }
+
+    for path, names in required_symbols.items():
+        documented = _documented_top_level_symbols(path)
+        assert names <= documented.keys()
+        assert all(documented[name].strip() for name in names)
+
+
+def test_schema_documentation_matches_current_field_and_owner_boundaries() -> None:
+    command_path = "src/selfrionette/schemas/command.py"
+    endpoint_fields, endpoint_doc = _class_contract(
+        command_path, "EndpointVelocityCommand"
+    )
+    motion_fields, motion_doc = _class_contract(command_path, "MotionCommand")
+    assert endpoint_fields == {"timestamp_s", "velocity_m_s", "frame"}
+    assert "max_delta_m" not in endpoint_doc
+    assert motion_fields == {"timestamp_s", "target", "joint", "metadata"}
+    assert "exclusive" not in motion_doc
+
+    raw_fields, raw_doc = _class_contract(
+        "src/selfrionette/schemas/input.py", "RawInputFrame"
+    )
+    assert raw_fields == {"source", "timestamp_s", "values", "buttons", "metadata"}
+    assert "JSON-compatibleなsnapshotへfreeze" not in raw_doc
+
+    viewer_fields, viewer_doc = _class_contract(
+        "src/selfrionette/schemas/viewer_control.py", "ViewerControlMessage"
+    )
+    assert {"sequence", "keyboard", "gamepad"} <= viewer_fields
+    assert "monotonic sequence" not in viewer_doc
+
+    experiment_path = "src/selfrionette/schemas/experiment_log.py"
+    configuration_fields, configuration_doc = _class_contract(
+        experiment_path, "ConfigurationRecord"
+    )
+    assert {
+        "configuration_id",
+        "software_revision",
+        "initial_qpos_rad",
+        "target_world_position_m",
+        "source_kind",
+        "comparison_parameters",
+    } <= configuration_fields
+    assert {
+        "manifest_digest",
+        "resolved_digest",
+        "freeze_digest",
+    }.isdisjoint(configuration_fields)
+    assert "manifest v3/readiness freeze identity" not in configuration_doc
+    assert "EvaluationManifest" in configuration_doc
+    assert "FreezeRecord" in configuration_doc
+    module_doc = ast.get_docstring(_module(experiment_path)) or ""
+    assert "manifest/readiness identity" not in module_doc
+
+
+def test_fixed_plugin_entry_points_document_declaration_without_starting_lifecycle() -> None:
+    entry_points = sorted(
+        (REPOSITORY_ROOT / "src/selfrionette/plugins").glob("**/plugin.py")
+    )
+    assert entry_points
+
+    for path in entry_points:
+        module_doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8"))) or ""
+        assert "declaration" in module_doc
+        assert "import" in module_doc
+        assert any(marker in module_doc for marker in ("開始しない", "行わない", "実行しない"))
+
+
+def test_viewer_boundary_jsdoc_preserves_mujoco_sot_and_qpos_ordering() -> None:
+    qpos_sync = (
+        REPOSITORY_ROOT
+        / "apps/mujoco-viewer/src/wasm-scene/mujocoQposSync.ts"
+    ).read_text(encoding="utf-8")
+    renderer = (
+        REPOSITORY_ROOT
+        / "apps/mujoco-viewer/src/wasm-scene/mujocoSceneRenderer.ts"
+    ).read_text(encoding="utf-8")
+    input_provider = (
+        REPOSITORY_ROOT
+        / "apps/mujoco-viewer/src/input/viewerInputProvider.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "model ordering" in qpos_sync
+    assert "fallbackしない" in qpos_sync
+    assert "physical stateをSoT" in renderer
+    assert "viewer-side FK/IK" in renderer
+    assert "backend Mapping" in input_provider

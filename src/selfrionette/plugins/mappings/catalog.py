@@ -1,4 +1,4 @@
-"""Deterministic production Control Mapping Plugin catalog."""
+"""production Control Mappingをexact logical identityで解決するread-only catalog。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ CONTROL_MAPPING_PLUGINS: tuple[ControlMappingPlugin, ...] = (
 
 
 def resolve_control_mapping_plugin(selection: PluginSelection) -> ControlMappingPlugin:
+    """bounded registryからexact versionを解決し、unknown selectionは拒否する。"""
     return CONTROL_MAPPING_REGISTRY.resolve(selection)
 
 

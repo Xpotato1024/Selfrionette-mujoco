@@ -1,4 +1,8 @@
-"""Deterministic production Input Source Plugin catalog."""
+"""bounded discoveryから構築するproduction Input Source catalog。
+
+aliasとlogical identityを同一registrationへroutingし、unknown/duplicate/version mismatchを
+fail closedにする。source construction/start/read/closeはcatalogの責務ではない。
+"""
 
 from __future__ import annotations
 
@@ -11,6 +15,7 @@ from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 
 
 class InputSourceCatalog:
+    """Input Source registrationをaliasとcanonical IDで一意に解決する。"""
     def __init__(self, registrations: Iterable[InputSourcePluginRegistration]) -> None:
         self._registrations = tuple(
             sorted(registrations, key=lambda item: item.plugin.identity.canonical_id)
@@ -73,10 +78,12 @@ try:
 except ValueError as exc:
     raise InputSourcePluginDiscoveryError(str(exc)) from exc
 def get_input_source_registration(alias: str) -> InputSourcePluginRegistration:
+    """CLI aliasからregistrationを解決し、未知aliasを拒否する。"""
     return INPUT_SOURCE_CATALOG.resolve(alias)
 
 
 def resolve_input_source_plugin(selection: PluginSelection) -> InputSourcePlugin:
+    """exact plugin identity/versionを解決し、source lifecycleは開始しない。"""
     return INPUT_SOURCE_CATALOG.resolve_plugin(selection)
 
 

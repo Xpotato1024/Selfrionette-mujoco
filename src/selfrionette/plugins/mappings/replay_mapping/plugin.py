@@ -1,4 +1,8 @@
-"""Fixed discovery entry point for replay_mapping/v1."""
+"""``replay_mapping/v1`` のfixed Mapping declaration entry point。
+
+importはreplay command semanticを既存implementationへroutingするだけで、execution
+strategyを開始しない。
+"""
 
 from .implementation import REPLAY_CONTROL_MAPPING_PLUGIN
 

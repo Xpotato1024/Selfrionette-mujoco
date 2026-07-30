@@ -1,4 +1,8 @@
-"""Fixed discovery entry point for noop/v1."""
+"""``noop/v1`` のfixed declaration entry point。
+
+明示的なno-op sourceをcompatibility adapterへroutingする。import時にsourceを生成せず、
+reader lifecycleを開始しない。runtimeがrequestを選択した場合だけreaderを構築する。
+"""
 
 from __future__ import annotations
 

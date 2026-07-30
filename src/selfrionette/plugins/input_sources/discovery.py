@@ -1,4 +1,8 @@
-"""Bounded deterministic discovery for first-party Input Source Plugins."""
+"""first-party Input Sourceのfixed ``plugin.py`` だけを読むbounded discovery。
+
+module importはdeclaration取得に限定され、serial/browser/file readerを開始しない。
+duplicate identityや不正registrationはproduction catalog作成前に拒否する。
+"""
 
 from __future__ import annotations
 
@@ -25,6 +29,7 @@ class InputSourcePluginDiscoveryError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class InputSourceDiscoveryRoot:
+    """Input Source探索を許可するpackage namespace。"""
     namespace: ModuleType
 
     def __post_init__(self) -> None:

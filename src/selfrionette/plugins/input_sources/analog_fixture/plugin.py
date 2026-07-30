@@ -1,4 +1,8 @@
-"""Fixed discovery entry point for analog_fixture/v1."""
+"""``analog_fixture/v1`` のfixed declaration entry point。
+
+recorded sample readerとtyped adapterをcatalogへroutingする。importはregistrationの
+構築・検証だけを行い、file/device accessやreader lifecycleを開始しない。
+"""
 
 from __future__ import annotations
 

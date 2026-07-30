@@ -1,4 +1,8 @@
-"""Fixed discovery entry point for viewer/v1."""
+"""``viewer/v1`` のfixed declaration entry point。
+
+browser control sampleをviewer-local endpoint adapterへroutingする。import時にbrowser、
+WebSocket、reader lifecycleを開始しない。backend ingressがsample ownershipを持つ。
+"""
 
 from __future__ import annotations
 

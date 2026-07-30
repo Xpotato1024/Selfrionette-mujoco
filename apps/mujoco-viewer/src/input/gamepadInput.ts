@@ -5,6 +5,7 @@ export interface ViewerGamepadButtonSnapshot {
   value: number | null;
 }
 
+/** browser poll 1回分。raw_axesはMapping前のfinite値である。 */
 export interface ViewerGamepadSnapshot {
   connected: boolean;
   index?: number;
@@ -102,6 +103,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** 非finite値を0とし、deadzone後のaxisを[-1, 1]へclampする。 */
 export function normalizeViewerGamepadAxis(
   value: number,
   options: ViewerGamepadSamplingOptions = {},
@@ -141,6 +143,7 @@ function buildZeroStateSnapshot(): ViewerGamepadSnapshot {
   };
 }
 
+/** browser Gamepadをpollし、disconnect/欠落時はstale zero snapshotを返す。 */
 export function sampleViewerGamepadSnapshot(
   gamepads: ArrayLike<ViewerGamepadLike | null | undefined> | null | undefined,
   options: ViewerGamepadSamplingOptions = {},
@@ -180,6 +183,7 @@ function isActiveGamepadSnapshot(snapshot: ViewerGamepadSnapshot): boolean {
   return snapshot.connected && !snapshot.stale && !snapshot.zero_state;
 }
 
+/** connect/disconnectとheartbeatを所有し、stop後のsample送信を停止する。 */
 export function createViewerGamepadPublicationController(
   options: ViewerGamepadPublicationControllerOptions,
 ): ViewerGamepadPublicationController {
@@ -322,6 +326,7 @@ export function buildViewerGamepadControlMessage(
   return message;
 }
 
+/** browser sampleをwire envelopeへ送り、command semanticsはbackend Mappingへ残す。 */
 export function createViewerGamepadControlSender(
   options: ViewerGamepadControlSenderOptions,
 ): ViewerGamepadControlSender {

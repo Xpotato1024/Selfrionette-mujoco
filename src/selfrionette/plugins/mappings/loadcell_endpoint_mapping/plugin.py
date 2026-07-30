@@ -1,4 +1,8 @@
-"""Fixed discovery entry point for loadcell_endpoint_mapping/v1."""
+"""``loadcell_endpoint_mapping/v1`` のfixed Mapping declaration entry point。
+
+loadcell-to-endpoint contractを既存implementationへroutingし、import時にsourceやRobotの
+lifecycleを開始しない。
+"""
 
 from .implementation import LOADCELL_ENDPOINT_MAPPING_PLUGIN
 

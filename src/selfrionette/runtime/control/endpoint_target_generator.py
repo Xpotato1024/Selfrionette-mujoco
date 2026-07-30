@@ -1,4 +1,4 @@
-"""Endpoint target control policy."""
+"""normalized inputからworld-frame endpoint targetを生成するstateful control policy。"""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from selfrionette.schemas import Vector3
 
 @dataclass(frozen=True, slots=True)
 class EndpointTargetGeneratorConfig:
+    """target integrationのm/s gain、deadzone、m/step上限、world workspace境界。"""
+
     gain_m_per_s: float
     deadzone: float
     max_step_m: float
@@ -21,6 +23,8 @@ class EndpointTargetGeneratorConfig:
 
 @dataclass(frozen=True, slots=True)
 class EndpointTargetGeneratorState:
+    """step間で継続するdesired endpointとrejection後hold state。"""
+
     previous_desired_endpoint_m: Vector3 | None
     last_valid_target_position_m: Vector3 | None
     previous_rejected: bool = False
@@ -28,6 +32,8 @@ class EndpointTargetGeneratorState:
 
 @dataclass(frozen=True, slots=True)
 class EndpointTargetGeneratorInput:
+    """1 stepのworld tip(m)、normalized vector、正の ``dt_s`` 入力。"""
+
     current_tip_position_m: Vector3
     input_vector: Vector3
     dt_s: float
@@ -36,6 +42,8 @@ class EndpointTargetGeneratorInput:
 
 @dataclass(frozen=True, slots=True)
 class EndpointTargetGeneratorResult:
+    """生成target/delta(m)とmoved/clamped/projected/held semantics。"""
+
     desired_endpoint_m: Vector3
     target_delta_m: Vector3
     target_generation_status: str
@@ -166,6 +174,12 @@ def generate_endpoint_target(
     state: EndpointTargetGeneratorState,
     generator_input: EndpointTargetGeneratorInput,
 ) -> EndpointTargetGeneratorResult:
+    """入力を積分しworkspaceへprojectするか、deadzone/rejection時にholdする。
+
+    validationはstate更新やRobot command生成より前に行う。``previous_rejected`` の次stepは
+    last valid targetをholdし、solver/Robotへ新しい移動を要求しない。
+    """
+
     config = _validate_config(config)
     state = _validate_state(state)
     generator_input = _validate_input(generator_input)
@@ -252,6 +266,8 @@ def generate_endpoint_target(
 
 
 def endpoint_target_generation_result_to_metadata(result: EndpointTargetGeneratorResult) -> dict[str, object]:
+    """結果をdiagnostic metadataへ投影し、control decision自体は変更しない。"""
+
     return {
         "desired_endpoint_m": result.desired_endpoint_m,
         "target_delta_m": result.target_delta_m,

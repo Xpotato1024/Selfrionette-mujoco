@@ -10,10 +10,11 @@ from selfrionette.schemas import RawInputFrame
 
 
 class ReplayInputSource:
-    """Deterministic replay source that yields stored RawInputFrame objects.
+    """stored RawInputFrameを決定的orderingで返すoffline replay source。
 
-    The source returns the frozen frame reference it owns; it does not clone
-    the frame or its metadata on read.
+    filesystem/device access、start/close side effectはない。``loop=False`` では末尾後に
+    ``StopIteration``、``loop=True`` では先頭へ戻る。所有するfrozen frame referenceを
+    cloneせず返し、単一runtime loopからの直列readを前提とする。
     """
 
     def __init__(self, frames: Sequence[RawInputFrame], *, loop: bool = False) -> None:

@@ -1,4 +1,9 @@
-"""Private shared continuous endpoint-velocity mapping primitive."""
+"""複数Mappingが共有するcontinuous endpoint-velocity algorithm primitive。
+
+入力axisは正規化対象の ``(x, y, z)``、出力velocityは ``control_frame`` のm/s。
+deadzone、supplement、norm clampの順序を所有するがstateは保持しない。
+``max_delta_m`` はdownstream command ownerへ渡すper-step limitで、ここでは適用しない。
+"""
 
 from __future__ import annotations
 
@@ -23,7 +28,11 @@ def build_continuous_endpoint_velocity_intent(
     supplemental_axis_values: Sequence[float] = (0.0, 0.0, 0.0),
     clamp_before_deadzone: bool = False,
 ) -> ContinuousEndpointVelocityIntent:
-    """Map source axes to the versioned endpoint-velocity intent contract."""
+    """source axisをclamp/deadzoneしてversioned velocity intentへ写像する。
+
+    ``axis_values`` とsupplementは3要素finite値で、結果はnorm 1以下へclampされる。
+    sourceのinactive/stale判定は呼出側が所有し、この関数はその状態を変更しない。
+    """
     components = tuple(float(component) for component in axis_values)
     if len(components) != 3:
         raise ValueError("axis_values must contain exactly three values")
@@ -93,6 +102,12 @@ def build_normalized_analog_fixture_intent(
     stale_reason: str | None = None,
     source_diagnostics: Mapping[str, object] | None = None,
 ) -> ContinuousEndpointVelocityIntent:
+    """recorded analog fixtureを同じunit/frame/clamp semanticsへroutingする。
+
+    fixture acquisitionやparameter selectionは行わず、algorithm ownershipを
+    ``build_continuous_endpoint_velocity_intent`` に一元化する。
+    """
+
     return build_continuous_endpoint_velocity_intent(
         axis_values,
         source_kind=source_kind,

@@ -1,4 +1,8 @@
-"""Fixed discovery entry point for replay/v1."""
+"""``replay/v1`` のfixed declaration entry point。
+
+caller-owned frozen frame列をreplay compatibility adapterへroutingする。import時に
+fileを読まず、reader construction/read lifecycleも開始しない。
+"""
 
 from __future__ import annotations
 

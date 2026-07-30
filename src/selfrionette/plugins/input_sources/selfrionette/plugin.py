@@ -1,4 +1,8 @@
-"""Fixed discovery entry point for selfrionette/v1."""
+"""``selfrionette/v1`` のfixed declaration entry point。
+
+serial/injected-line sourceをloadcell adapterへroutingする。importとcatalog discoveryでは
+serial module import、port open、read/close lifecycleを一切開始しない。
+"""
 
 from __future__ import annotations
 

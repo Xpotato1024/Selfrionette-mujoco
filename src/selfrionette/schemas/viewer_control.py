@@ -1,4 +1,8 @@
-"""Viewer-to-backend control wire domain."""
+"""browser acquisitionをbackend Input Sourceへ渡すstrict control message schema。
+
+keyboard/gamepadのraw状態を検証する境界で、axis-to-command semanticsやphysical stateを
+所有しない。unknown field、provider identity不一致、非finite値はingressで拒否する。
+"""
 
 from __future__ import annotations
 
@@ -17,11 +21,15 @@ ViewerControlProviderSchema = Literal[
 
 
 class ViewerControlMessageError(ValueError):
+    """viewer control envelopeのschema/identity validation failure。"""
+
     pass
 
 
 @dataclass(frozen=True, slots=True)
 class ViewerControlKeyboardMessage:
+    """key stateとfocus/zero projectionを保持するkeyboard sample。"""
+
     active_key_codes: tuple[str, ...] = ()
     key_state: Mapping[str, bool] = field(default_factory=dict)
     focus_state: ViewerControlKeyboardFocusState | None = None
@@ -30,12 +38,16 @@ class ViewerControlKeyboardMessage:
 
 @dataclass(frozen=True, slots=True)
 class ViewerControlGamepadButtonMessage:
+    """browser Gamepad buttonのpressed/touched/value snapshot。"""
+
     pressed: bool
     value: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ViewerControlGamepadMessage:
+    """raw browser axes/buttonsとconnected/stale projectionのsample。"""
+
     connected: bool
     index: int | None = None
     id: str | None = None
@@ -48,6 +60,13 @@ class ViewerControlGamepadMessage:
 
 @dataclass(frozen=True, slots=True)
 class ViewerControlMessage:
+    """provider identityとsource固有payloadを持つstrict v1 wire envelope。
+
+    ``sequence`` はprovider-ownedなoptional integerであり、このschemaはmessage間の
+    monotonicityを検証しない。``source_kind`` に応じてkeyboard / gamepad payloadの
+    一方だけを受理する。
+    """
+
     type: ViewerControlEnvelopeType
     timestamp_s: float
     source_kind: ViewerControlSourceKind
@@ -245,6 +264,8 @@ def _coerce_gamepad_message(value: object) -> ViewerControlGamepadMessage:
 
 
 def coerce_viewer_control_message(payload: object) -> ViewerControlMessage:
+    """JSON-compatible値をstrict envelopeへ変換し、fallback補完しない。"""
+
     if not _is_plain_mapping(payload):
         raise ViewerControlMessageError("Invalid viewer control message: expected a JSON object")
 
@@ -353,6 +374,8 @@ def coerce_viewer_control_message(payload: object) -> ViewerControlMessage:
 
 
 def parse_viewer_control_message_json(message: str) -> ViewerControlMessage:
+    """JSON textをdecodeして同じstrict validationを適用する。"""
+
     try:
         payload = json.loads(message)
     except json.JSONDecodeError as exc:
