@@ -1,6 +1,6 @@
 schema_version = 1
 candidate_key = "bounded-plugin-change-audit"
-status = "draft"
+status = "active"
 scope = "repository-local plugin architecture workflow"
 summary = "plugin axisのcontract、ownership、discovery、identity、registration、composition、docs、testsを順序どおりに監査する反復workflow。"
 observable_evidence = [
@@ -8,8 +8,9 @@ observable_evidence = [
   "PR #422、#427、#463、#489の本文で、axis、registry、identity、runtime composition、README、test ownershipを繰り返し確認している。",
   "Issue #491はRobot、Environment、Mapping、Task、Evaluation、Input Sourceの6 axisと不要なstub・compat layer・parallel implementationの禁止を明記している。"
 ]
-related_overlapping_skills = ["selfrionette-plugin-change"]
-approval_boundary = "plugin behavior・contract・schema・hardware pathを変更せず、repository-local instruction-only Skillのdraft検証に限る。"
+realized_by_skills = ["selfrionette-plugin-change"]
+related_overlapping_skills = []
+approval_boundary = "read-only taskではauditだけを行う。明示されたwrite taskでは、prompt、Issue、AGENTS.mdが許可するscoped plugin実装、catalog、resource、tests、README、canonical docsを扱えるが、implicit invocation自体はwrite permissionを付与しない。scope外public contract、重大なschema、dependency、runtime expansion、unrelated viewer・simulation、hardware、external mutationは停止・承認対象とする。"
 unresolved_risks = [
   "axisごとのcurrent ownerとplanned capabilityが異なるため、canonical contractとactual implementationの再確認が必要である。"
 ]

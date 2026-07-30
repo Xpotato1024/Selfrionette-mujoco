@@ -81,7 +81,7 @@ Strong signal:
 
 - 同一または構造的に同等なworkflowを2回以上確認した。
 - 同種のreview指摘またはuser修正を複数回確認した。
-- 既存Skillの未発火、誤発火、手順不足、stale reference、過剰作業を確認した。
+- 既存Skillの未発火、誤発火、過剰適用、手順不足、stale reference、過剰作業を確認した。
 - 同じscript、validator、template、checklist、reportを繰り返し再生成した。
 
 Complexity signal:
@@ -124,37 +124,64 @@ repository policyを上書きしない。
 `merge`はSkill同士の責務統合を意味し、Git / PR mergeを意味しない。lifecycleは
 `observed`な事実をevidenceとして確認し、`candidate`を採点し、thresholdに応じてdraftを
 作成する。draftはexplicit-onlyで構造、trigger、代表task、side-effect boundaryを検証し、
-検証済みで安定している場合だけactive化を検討する。stale、重複、obsoleteなSkillは
+検証済みで安定している場合だけactive化を検討する。active化にはcandidate scoreが
+`promotion_review` threshold以上であり、candidate、eval、policyが後述の条件を満たす必要がある。
+stale、重複、obsoleteなSkillは
 `update`、`merge`、`disable`、`deprecate`または`rejected`を選び、理由と残存riskを残す。
-関連する既存Skillが`related_overlapping_skills`にあるcandidateは`create-draft`を選ばず、
-既存Skillの`update`またはvalidation evidenceに基づく`promote`を選ぶ。`draft`または`active`のcandidateは
-対応する既存Skillを参照し、関連Skillのないrecord-only candidateは`candidate` / `record`として維持できる。
+candidateを実装したSkillは`realized_by_skills`へ、責務が隣接・重複する別Skillは
+`related_overlapping_skills`へ記録し、両者を混同しない。`draft`または`active`のcandidateは
+1件以上のrealized Skillを持ち、未実装のrecord-only candidateは`realized_by_skills = []`の
+`candidate` / `record`として維持する。
 
 ## Invocation policy
+
+implicit invocationはmetadata matchによるworkflow selectionであり、permission grantではない。
+prompt、対象Issue、`AGENTS.md`、canonical documentation、Git / GitHub、hardware safety、
+external side-effect boundaryを変更または拡張しない。
 
 新規Skillは原則としてexplicit-only draftで開始する。各Skillの
 `agents/openai.yaml`に`policy.allow_implicit_invocation: false`を設定し、trigger eval、
 代表task、required input、failure path、side-effect boundaryが検証されるまでimplicit
-invocationを許可しない。検証後もimplicit化は別判断であり、repository-wideに強制しない。
+invocationを許可しない。validated activeなinstruction-only Skillは、repository設定が許可し、
+未解決approvalがない場合に`allow_implicit_invocation: true`へ移行できる。validation完了後は
+repository設定に従ってactive化とimplicit化を自動適用してよいが、active化は権限拡張を意味しない。
+active implicit Skillはcandidate evidence、promotion threshold、eval、policyからdata-drivenに
+導出する。validatorへSkill名やcandidate対応を固定せず、新しいSkillのactive化でvalidator
+scriptの変更を要求しない。bootstrap Skillも例外扱いせず、少なくとも1件のactive candidateへ
+追跡可能にする。
+
+複数Skillが一致する場合は、taskの現在段階と主要目的に最も狭く一致するSkillをprimaryとして
+優先する。関連Skillを無条件に連鎖発火させず、各Skillのrequired inputとtriggerを個別に確認する。
+required inputまたはpermissionが不足する場合は、該当stepをNot Applicable、Not Run、または
+`approval-required`として停止・報告する。誤発火、未発火、過剰適用はCandidate Reviewのstrong
+signalとして扱う。
 
 ## Candidate schema
 
 候補は`.agents/skill-candidates/<candidate-key>.toml`に1候補1ファイルで保存する。必須
 fieldは`schema_version`、`candidate_key`、`status`、`scope`、`summary`、
-`observable_evidence`、`related_overlapping_skills`、`approval_boundary`、
+`observable_evidence`、`realized_by_skills`、`related_overlapping_skills`、`approval_boundary`、
 `unresolved_risks`、および`[score]`内の5軸と`total`である。`candidate_key`はfilenameと一致し、
 repository内で重複させない。Issue番号、PR番号、SHA、日付は`observable_evidence`に限って
 記録し、Skill本文の恒常手順には移さない。時間、token、コストの削減量は根拠なく記録しない。
+`realized_by_skills`はcandidateを実装したSkill、`related_overlapping_skills`はcandidateの実装では
+ない隣接・重複Skillを表す。同じSkillを両方へ記録せず、Skillとcandidateの実装対応を重複させない。
+active化時はSkillの現在境界に合わせてcandidateの`approval_boundary`と`unresolved_risks`を同期する。
 
 ## Eval schema
 
 各Skillに`.agents/skill-evals/<skill-name>.toml`を対応させる。必須fieldは
-`schema_version`、`skill_name`、`invocation_policy`、`side_effect_boundary`、
+`schema_version`、`skill_name`、`invocation_policy`、`validation_status`、
+`side_effect_policy`、`unresolved_approval`、`side_effect_boundary`、
 `positive_triggers`（3件以上）、`negative_triggers`（2件以上）、`route_boundaries`、
 `required_inputs`、`expected_major_steps`、`expected_outputs`、`forbidden_actions`、
 `representative_dry_run`、`false_positive_risk`、`false_negative_risk`、
-`stale_reference_risk`である。triggerは日本語promptを中心とし、negativeには非対象または
-別Skillへのroute例を含める。
+`stale_reference_risk`、`routing_cases`である。implicit対応Skillは
+`invocation_policy = "implicit-after-validation"`、`validation_status = "validated"`、
+`side_effect_policy = "instruction-only"`、`unresolved_approval = false`を満たす。
+各routing caseは複数候補prompt、候補Skill、primary Skill、無条件連鎖禁止、permission非付与を
+表現する。triggerは日本語promptを中心とし、negativeには非対象または別Skillへのroute例を含める。
+stored `primary_skill`はdeterministic fixtureの期待値であり、実model selectionの実測結果ではない。
 
 ## Skill authoring contract
 
@@ -168,12 +195,22 @@ boundaryを明示する。frontmatterはvalidatorが検査する小さなsubset�
 
 validatorはconfig、candidate / eval TOML、duplicate key、score total、status / action、
 Skill frontmatter、directory/name、lowercase-hyphenated name、duplicate Skill、参照path、
-implicit policy、placeholder、transient state、secretらしき値、UTF-8、BOM、mojibakeを検査する。
+implicit policy、validation status、approval、routing case、placeholder、transient state、
+secretらしき値、UTF-8、BOM、mojibakeを検査する。
+active candidateはscore totalが`promotion_review` threshold以上であり、repository設定が許可する
+active後action、実在するrealized Skill、validated eval、implicit-after-validation、
+instruction-only、未解決approvalなし、implicit policy true、permission grant falseを満たすことを
+機械検査する。active Skill名とcandidate対応はcandidate storeから導出し、validator codeへ固定しない。
+孤立したcandidate、Skill、eval、policy、typo、重複対応、未実装candidateのactive化を拒否する。
 Skill本文のtransient SHAは、standaloneの40桁full SHAと、`commit`、`sha`、`head`、`base`の文脈に続く
 7〜39桁のhex SHAを検出する。candidateのobservable evidenceとevalのrepresentative fixtureにあるSHAは許可し、
 SHA形式そのものを説明するcanonical docsの一般例もSkill本文の検査対象外とする。
-trigger evaluationではpositive 3件以上・negative 2件以上とroute boundaryを確認し、代表dry-run
-ではSkillをexplicitに読み、成果物、DoD、失敗時の停止条件を照合する。
+trigger evaluationではpositive 3件以上・negative 2件以上、route boundary、複数候補時の
+最狭primary、無条件連鎖禁止、permission非付与を確認する。代表dry-runではmetadata / trigger
+routing fixtureとして成果物、DoD、失敗時の停止条件を照合する。
+deterministic routing fixtureのpassを実model dispatchの成功として報告しない。実model dispatchは
+観測可能なinterfaceがない場合はNot Runとし、active化後の誤発火・未発火・過剰適用は今後の実taskで
+継続評価する。
 
 変更層、contract、failure mode、side effectに対するvalidation選択は
 [`validation.md`](validation.md)を正本とし、全taskへfull suiteを機械適用しない。testsの削除、
@@ -182,7 +219,8 @@ docsのlink、encoding、Japanese guardrail、Git diff、base / branch / head / 
 必要範囲で検証する。
 
 promotion前にrequired inputの取得可能性、expected output、failure path、false positive / negative、
-stale riskを再確認する。実行できないvalidationはNot Run Reason、代替証拠、残存riskとして報告する。
+stale riskを再確認する。draft、未検証、未解決approval、side-effectful policyをimplicit化しない。
+実行できないvalidationはNot Run Reason、代替証拠、残存riskとして報告する。
 
 ## 既存workflowへのroute
 

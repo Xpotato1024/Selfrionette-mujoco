@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $selfrionette-plugin-change to audit a scoped plugin change."
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true

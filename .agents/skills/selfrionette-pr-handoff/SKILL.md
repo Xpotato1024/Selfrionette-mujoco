@@ -1,6 +1,6 @@
 ---
 name: selfrionette-pr-handoff
-description: Selfrionette-mujocoのPR handoffをread-onlyで監査し、branch、base、actual diff、Issue scope、validation、local・remote・PR head、CI、body、impact、残存riskを突合する。Draft PR作成前後のhandoff確認に使用する。
+description: Selfrionette-mujocoのPR handoffをread-onlyで監査し、branch、base、actual diff、Issue scope、validation、local・remote・PR head、CI、body、impact、残存riskを突合する。Draft PR作成前後に使用し、commit、push、PR更新、merge等のmutationには使用しない。
 ---
 
 # Selfrionette PR handoff

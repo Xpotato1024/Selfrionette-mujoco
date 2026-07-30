@@ -38,12 +38,15 @@ Last updated: 2026-07-31
 ## Repository-local Skill routing
 
 - repository opt-inの正本は`.agents/skill-system.toml`とする。
-- task開始時に利用可能なSkill metadataを確認し、該当Skillがあればworkflowの再構成前に使用する。
+- task開始時に利用可能なSkill metadataを確認し、validated active Skillはmetadata matchによりimplicitに使用してよい。Skill名の明示指定は必須ではない。
+- active implicit Skillは、canonical governanceに従ってactive candidate evidence、eval、policyへ追跡可能であることを確認する。
+- prompt、対象Issue、この`AGENTS.md`、canonical documentation、既存permission boundaryを常にSkillより優先する。
+- draftまたはapproval未解決のSkillはexplicit-onlyとする。
 - strong signal 1件、またはcomplexity signal 2件以上を観測した場合だけCandidate Reviewを行う。
 - read-only taskではSkill関連ファイルを変更しない。
 - current taskの完了をSkill改善より優先する。
 - Skill改善によって既存の編集、Git、GitHub、external service、production、hardware権限を拡張しない。
-- 詳細なlifecycle、schema、autonomy boundary、validationは`docs/operations/agent-skill-governance.md`を参照する。
+- 詳細なrouting、lifecycle、schema、autonomy boundary、validationは`docs/operations/agent-skill-governance.md`を参照する。
 
 ## 2. Autonomy and permission boundary
 

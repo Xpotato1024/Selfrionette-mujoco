@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $selfrionette-pr-handoff to audit a PR handoff read-only."
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true

@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 import shutil
 import sys
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,12 +22,99 @@ def _copy_agents(tmp_path: Path) -> Path:
     return target
 
 
+def _add_fixture_skill(
+    target: Path,
+    *,
+    skill_name: str,
+    candidate_key: str,
+    status: str,
+    score_axes: tuple[int, int, int, int, int],
+    implicit: bool,
+) -> None:
+    skill_dir = target / ".agents" / "skills" / skill_name
+    (skill_dir / "agents").mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        f"name: {skill_name}\n"
+        f"description: {skill_name}のdata-driven lifecycle fixtureを検証する。fixture検証以外には使用しない。\n"
+        "---\n\n"
+        f"# {skill_name}\n\n"
+        "repository-local validatorの一時fixtureである。\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    (skill_dir / "agents" / "openai.yaml").write_text(
+        "interface:\n"
+        f'  display_name: "{skill_name}"\n'
+        '  short_description: "data-driven fixture"\n'
+        f'  default_prompt: "Use ${skill_name} for a fixture."\n\n'
+        "policy:\n"
+        f"  allow_implicit_invocation: {str(implicit).lower()}\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    invocation_policy = "implicit-after-validation" if implicit else "explicit-only"
+    validation_status = "validated" if implicit else "draft"
+    (target / ".agents" / "skill-evals" / f"{skill_name}.toml").write_text(
+        "schema_version = 1\n"
+        f'skill_name = "{skill_name}"\n'
+        f'invocation_policy = "{invocation_policy}"\n'
+        f'validation_status = "{validation_status}"\n'
+        'side_effect_policy = "instruction-only"\n'
+        "unresolved_approval = false\n"
+        'side_effect_boundary = "fixture内のread-only検証だけ"\n'
+        'positive_triggers = ["fixture Skillを検証してください。", "新しいSkillのactive化を検証してください。", "candidateとの対応を検証してください。"]\n'
+        'negative_triggers = ["外部mutationを実行してください。", "hardwareを操作してください。"]\n'
+        'route_boundaries = ["通常の変更検証はselfrionette-change-validationへrouteする。"]\n'
+        'required_inputs = ["candidate", "eval", "policy"]\n'
+        'expected_major_steps = ["対応確認", "threshold確認"]\n'
+        'expected_outputs = ["fixture validation result"]\n'
+        'forbidden_actions = ["external mutation", "hardware"]\n'
+        'representative_dry_run = "metadata routing fixtureとしてcandidate、eval、policyを照合する。"\n'
+        'false_positive_risk = "fixture外へ発火するリスク。"\n'
+        'false_negative_risk = "追加Skillを見落とすリスク。"\n'
+        'stale_reference_risk = "fixture metadataが古くなるリスク。"\n\n'
+        "[[routing_cases]]\n"
+        'prompt = "新しいSkillと変更検証が候補になるfixtureを確認してください。"\n'
+        f'expected_skills = ["{skill_name}", "selfrionette-change-validation"]\n'
+        f'primary_skill = "{skill_name}"\n'
+        "automatic_chain = false\n"
+        "permission_grant = false\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    recurrence, reconstruction, prevention, stability, verifiability = score_axes
+    total = sum(score_axes)
+    (target / ".agents" / "skill-candidates" / f"{candidate_key}.toml").write_text(
+        "schema_version = 1\n"
+        f'candidate_key = "{candidate_key}"\n'
+        f'status = "{status}"\n'
+        'scope = "data-driven validator fixture"\n'
+        'summary = "validator scriptへSkill名を固定せず追加できることを確認する。"\n'
+        'observable_evidence = ["一時fixtureでcandidate、eval、policyの対応を検証する。"]\n'
+        f'realized_by_skills = ["{skill_name}"]\n'
+        "related_overlapping_skills = []\n"
+        'approval_boundary = "fixture内のinstruction-only検証に限定する。"\n'
+        'unresolved_risks = ["実model dispatchは検証しない。"]\n'
+        'proposed_action = "update"\n\n'
+        "[score]\n"
+        f"recurrence = {recurrence}\n"
+        f"reconstruction_cost = {reconstruction}\n"
+        f"error_prevention = {prevention}\n"
+        f"stability = {stability}\n"
+        f"verifiability = {verifiability}\n"
+        f"total = {total}\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
 def test_repository_local_skill_governance_is_valid() -> None:
     result = MODULE.validate(ROOT)
 
     assert result.accepted, result.errors
     assert result.skill_count == 4
-    assert result.candidate_count == 4
+    assert result.candidate_count == 5
     assert result.eval_count == 4
 
 
@@ -54,12 +142,12 @@ def test_duplicate_candidate_key_is_rejected(tmp_path: Path) -> None:
     assert any("duplicate candidate key" in error for error in result.errors)
 
 
-def test_explicit_only_policy_is_required_for_starter_skills(tmp_path: Path) -> None:
+def test_explicit_only_eval_rejects_implicit_policy(tmp_path: Path) -> None:
     target = _copy_agents(tmp_path)
-    policy = target / ".agents" / "skills" / "selfrionette-pr-handoff" / "agents" / "openai.yaml"
-    text = policy.read_text(encoding="utf-8")
-    policy.write_text(
-        text.replace("allow_implicit_invocation: false", "allow_implicit_invocation: true"),
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-pr-handoff.toml"
+    text = eval_path.read_text(encoding="utf-8")
+    eval_path.write_text(
+        text.replace('invocation_policy = "implicit-after-validation"', 'invocation_policy = "explicit-only"'),
         encoding="utf-8",
         newline="\n",
     )
@@ -68,6 +156,472 @@ def test_explicit_only_policy_is_required_for_starter_skills(tmp_path: Path) -> 
 
     assert not result.accepted
     assert any("cannot allow implicit invocation" in error for error in result.errors)
+
+
+def test_validated_active_implicit_skills_are_accepted() -> None:
+    result = MODULE.validate(ROOT)
+    active_skills = {
+        skill_name
+        for path in (ROOT / ".agents" / "skill-candidates").glob("*.toml")
+        for candidate in [tomllib.loads(path.read_text(encoding="utf-8"))]
+        if candidate["status"] == "active"
+        for skill_name in candidate["realized_by_skills"]
+    }
+
+    assert result.accepted, result.errors
+    assert active_skills
+    for skill_name in active_skills:
+        eval_path = ROOT / ".agents" / "skill-evals" / f"{skill_name}.toml"
+        eval_data = tomllib.loads(eval_path.read_text(encoding="utf-8"))
+        policy = ROOT / ".agents" / "skills" / skill_name / "agents" / "openai.yaml"
+        assert eval_data["invocation_policy"] == "implicit-after-validation"
+        assert eval_data["validation_status"] == "validated"
+        assert "allow_implicit_invocation: true" in policy.read_text(encoding="utf-8")
+
+
+def test_active_candidate_at_or_above_promotion_threshold_is_accepted() -> None:
+    config = tomllib.loads((ROOT / ".agents" / "skill-system.toml").read_text(encoding="utf-8"))
+    threshold = config["thresholds"]["promotion_review"]
+    active_candidates = [
+        tomllib.loads(path.read_text(encoding="utf-8"))
+        for path in (ROOT / ".agents" / "skill-candidates").glob("*.toml")
+        if tomllib.loads(path.read_text(encoding="utf-8"))["status"] == "active"
+    ]
+
+    assert active_candidates
+    assert all(candidate["score"]["total"] >= threshold for candidate in active_candidates)
+    assert MODULE.validate(ROOT).accepted
+
+
+def test_active_candidate_below_promotion_threshold_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = target / ".agents" / "skill-candidates" / "bounded-plugin-change-audit.toml"
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8")
+        .replace("verifiability = 1", "verifiability = 0")
+        .replace("total = 9", "total = 8"),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("below promotion_review threshold" in error for error in result.errors)
+
+
+def test_draft_candidate_below_promotion_threshold_is_accepted(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    _add_fixture_skill(
+        target,
+        skill_name="draft-threshold-fixture",
+        candidate_key="draft-threshold-candidate",
+        status="draft",
+        score_axes=(2, 2, 2, 1, 1),
+        implicit=False,
+    )
+
+    result = MODULE.validate(target)
+
+    assert result.accepted, result.errors
+
+
+def test_new_validated_active_skill_is_data_driven_without_validator_constants(
+    tmp_path: Path,
+) -> None:
+    target = _copy_agents(tmp_path)
+    _add_fixture_skill(
+        target,
+        skill_name="dynamic-active-fixture",
+        candidate_key="dynamic-active-candidate",
+        status="active",
+        score_axes=(2, 2, 2, 2, 1),
+        implicit=True,
+    )
+
+    result = MODULE.validate(target)
+
+    assert result.accepted, result.errors
+    validator_source = SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "EXPECTED_IMPLICIT_SKILLS" not in validator_source
+    assert "IMPLEMENTED_CANDIDATE_SKILLS" not in validator_source
+    assert "UNIMPLEMENTED_CANDIDATES" not in validator_source
+    assert "dynamic-active-fixture" not in validator_source
+    assert "dynamic-active-candidate" not in validator_source
+
+
+def test_active_candidate_action_must_be_allowed_by_repository_config(
+    tmp_path: Path,
+) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = (
+        target
+        / ".agents"
+        / "skill-candidates"
+        / "continuous-skill-lifecycle-review.toml"
+    )
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace(
+            'proposed_action = "update"', 'proposed_action = "promote"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("action is not allowed by repository config" in error for error in result.errors)
+
+
+def test_implicit_skill_without_active_candidate_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = (
+        target / ".agents" / "skill-candidates" / "pr-handoff-state-audit.toml"
+    )
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace(
+            'status = "active"', 'status = "draft"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("implicit Skill has no active candidate" in error for error in result.errors)
+
+
+def test_active_candidate_without_realized_skill_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = (
+        target / ".agents" / "skill-candidates" / "pr-handoff-state-audit.toml"
+    )
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace(
+            'realized_by_skills = ["selfrionette-pr-handoff"]',
+            "realized_by_skills = []",
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("active candidate has no realized Skill" in error for error in result.errors)
+
+
+def test_active_candidate_cannot_realize_explicit_only_skill(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    policy = (
+        target
+        / ".agents"
+        / "skills"
+        / "selfrionette-pr-handoff"
+        / "agents"
+        / "openai.yaml"
+    )
+    policy.write_text(
+        policy.read_text(encoding="utf-8").replace(
+            "allow_implicit_invocation: true",
+            "allow_implicit_invocation: false",
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any(
+        "active candidate Skill must allow implicit invocation" in error
+        for error in result.errors
+    )
+
+
+def test_skill_lifecycle_review_has_active_candidate_mapping() -> None:
+    candidate_path = (
+        ROOT
+        / ".agents"
+        / "skill-candidates"
+        / "continuous-skill-lifecycle-review.toml"
+    )
+    candidate = tomllib.loads(candidate_path.read_text(encoding="utf-8"))
+    eval_data = tomllib.loads(
+        (
+            ROOT / ".agents" / "skill-evals" / "skill-lifecycle-review.toml"
+        ).read_text(encoding="utf-8")
+    )
+    policy = (
+        ROOT
+        / ".agents"
+        / "skills"
+        / "skill-lifecycle-review"
+        / "agents"
+        / "openai.yaml"
+    ).read_text(encoding="utf-8")
+
+    assert candidate["status"] == "active"
+    assert candidate["realized_by_skills"] == ["skill-lifecycle-review"]
+    assert candidate["score"]["total"] == 10
+    evidence = "\n".join(candidate["observable_evidence"])
+    assert "Issue #491" in evidence and "PR #492" in evidence
+    assert "Issue #493" in evidence and "PR #494" in evidence
+    assert eval_data["validation_status"] == "validated"
+    assert eval_data["invocation_policy"] == "implicit-after-validation"
+    assert "allow_implicit_invocation: true" in policy
+    assert MODULE.validate(ROOT).accepted
+
+
+def test_candidate_realized_and_overlapping_skills_cannot_be_confused(
+    tmp_path: Path,
+) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = (
+        target / ".agents" / "skill-candidates" / "layer-aware-change-validation.toml"
+    )
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace(
+            "related_overlapping_skills = []",
+            'related_overlapping_skills = ["selfrionette-change-validation"]',
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("must be disjoint" in error for error in result.errors)
+
+
+def test_duplicate_candidate_to_skill_mapping_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = (
+        target
+        / ".agents"
+        / "skill-candidates"
+        / "protected-long-form-body-safety.toml"
+    )
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace(
+            "realized_by_skills = []",
+            'realized_by_skills = ["skill-lifecycle-review"]',
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("realized by multiple candidates" in error for error in result.errors)
+
+
+def test_isolated_skill_without_candidate_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    _add_fixture_skill(
+        target,
+        skill_name="isolated-draft-fixture",
+        candidate_key="isolated-draft-candidate",
+        status="draft",
+        score_axes=(1, 1, 1, 1, 1),
+        implicit=False,
+    )
+    (
+        target
+        / ".agents"
+        / "skill-candidates"
+        / "isolated-draft-candidate.toml"
+    ).unlink()
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("Skill is not traceable to a candidate" in error for error in result.errors)
+
+
+def test_draft_skill_cannot_allow_implicit_invocation(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-pr-handoff.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            'validation_status = "validated"', 'validation_status = "draft"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("draft Skill cannot allow implicit invocation" in error for error in result.errors)
+
+
+def test_incomplete_validation_cannot_allow_implicit_invocation(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-pr-handoff.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            'validation_status = "validated"', 'validation_status = "pending"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("invalid eval validation_status" in error for error in result.errors)
+    assert any("cannot allow implicit invocation" in error for error in result.errors)
+
+
+def test_unresolved_approval_cannot_allow_implicit_invocation(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-plugin-change.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            "unresolved_approval = false", "unresolved_approval = true"
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("unresolved approval" in error for error in result.errors)
+
+
+def test_side_effectful_policy_cannot_allow_implicit_invocation(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-plugin-change.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            'side_effect_policy = "instruction-only"', 'side_effect_policy = "side-effectful"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("side-effectful Skill" in error for error in result.errors)
+
+
+def test_implicit_invocation_cannot_grant_permissions(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    config = target / ".agents" / "skill-system.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            "implicit_invocation_grants_permissions = false",
+            "implicit_invocation_grants_permissions = true",
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("must not grant permissions" in error for error in result.errors)
+
+
+def test_policy_value_outside_policy_section_or_in_comment_is_not_adopted(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    policy = target / ".agents" / "skills" / "selfrionette-pr-handoff" / "agents" / "openai.yaml"
+    policy.write_text(
+        policy.read_text(encoding="utf-8").replace(
+            "\npolicy:\n",
+            "\n  allow_implicit_invocation: false\n"
+            "# allow_implicit_invocation: false\n"
+            "policy:\n",
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert result.accepted, result.errors
+
+
+def test_unconditional_skill_chaining_fixture_is_rejected(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    eval_path = target / ".agents" / "skill-evals" / "selfrionette-plugin-change.toml"
+    eval_path.write_text(
+        eval_path.read_text(encoding="utf-8").replace(
+            "automatic_chain = false", "automatic_chain = true"
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("must not require unconditional Skill chaining" in error for error in result.errors)
+
+
+def test_routing_fixtures_select_the_narrow_skill_and_preserve_boundaries() -> None:
+    evals = {
+        path.stem: tomllib.loads(path.read_text(encoding="utf-8"))
+        for path in (ROOT / ".agents" / "skill-evals").glob("*.toml")
+    }
+    plugin_case = evals["selfrionette-plugin-change"]["routing_cases"][0]
+    validation_case = evals["selfrionette-change-validation"]["routing_cases"][0]
+    handoff_case = evals["selfrionette-pr-handoff"]["routing_cases"][0]
+
+    assert plugin_case["primary_skill"] == "selfrionette-plugin-change"
+    assert validation_case["primary_skill"] == "selfrionette-change-validation"
+    assert handoff_case["primary_skill"] == "selfrionette-pr-handoff"
+    assert all(
+        not case["automatic_chain"] and not case["permission_grant"]
+        for data in evals.values()
+        for case in data["routing_cases"]
+    )
+
+
+def test_representative_metadata_routing_scenarios_are_bounded() -> None:
+    evals = {
+        path.stem: tomllib.loads(path.read_text(encoding="utf-8"))
+        for path in (ROOT / ".agents" / "skill-evals").glob("*.toml")
+    }
+    unrelated = "このrepositoryと無関係な一般質問に答えてください。"
+
+    assert any("docs" in prompt for prompt in evals["selfrionette-change-validation"]["positive_triggers"])
+    assert any(
+        "pluginと無関係" in prompt
+        for prompt in evals["selfrionette-plugin-change"]["negative_triggers"]
+    )
+    assert any(
+        "read-only" in prompt for prompt in evals["selfrionette-pr-handoff"]["positive_triggers"]
+    )
+    assert all(unrelated in data["negative_triggers"] for data in evals.values())
+    assert "Issue / PR mutation" in evals["skill-lifecycle-review"]["forbidden_actions"]
+    assert "serial / OSC / robot output" in evals["selfrionette-change-validation"]["forbidden_actions"]
+    assert "external mutation" in evals["selfrionette-plugin-change"]["forbidden_actions"]
+    assert "commit" in evals["selfrionette-pr-handoff"]["forbidden_actions"]
+
+
+def test_unimplemented_candidate_cannot_be_active(tmp_path: Path) -> None:
+    target = _copy_agents(tmp_path)
+    candidate = target / ".agents" / "skill-candidates" / "protected-long-form-body-safety.toml"
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8").replace(
+            'status = "candidate"', 'status = "active"'
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = MODULE.validate(target)
+
+    assert not result.accepted
+    assert any("active candidate has no realized Skill" in error for error in result.errors)
 
 
 def test_transient_branch_reference_is_rejected_from_skill_body(tmp_path: Path) -> None:
@@ -147,12 +701,13 @@ def test_candidate_evidence_can_contain_full_sha(tmp_path: Path) -> None:
     assert result.accepted, result.errors
 
 
-def test_candidate_create_draft_with_related_skill_is_rejected(tmp_path: Path) -> None:
+def test_related_overlapping_skill_does_not_realize_draft_candidate(tmp_path: Path) -> None:
     target = _copy_agents(tmp_path)
     candidate = target / ".agents" / "skill-candidates" / "protected-long-form-body-safety.toml"
     text = candidate.read_text(encoding="utf-8")
     candidate.write_text(
-        text.replace('related_overlapping_skills = []', 'related_overlapping_skills = ["selfrionette-change-validation"]')
+        text.replace('status = "candidate"', 'status = "draft"')
+        .replace('related_overlapping_skills = []', 'related_overlapping_skills = ["selfrionette-change-validation"]')
         .replace('proposed_action = "record"', 'proposed_action = "create-draft"'),
         encoding="utf-8",
         newline="\n",
@@ -161,7 +716,7 @@ def test_candidate_create_draft_with_related_skill_is_rejected(tmp_path: Path) -
     result = MODULE.validate(target)
 
     assert not result.accepted
-    assert any("cannot use create-draft" in error for error in result.errors)
+    assert any("must realize at least one Skill" in error for error in result.errors)
 
 
 def test_candidate_skill_reference_and_lifecycle_are_consistent(tmp_path: Path) -> None:
@@ -170,7 +725,7 @@ def test_candidate_skill_reference_and_lifecycle_are_consistent(tmp_path: Path) 
     text = candidate.read_text(encoding="utf-8")
     candidate.write_text(
         text.replace('status = "candidate"', 'status = "draft"')
-        .replace('related_overlapping_skills = []', 'related_overlapping_skills = ["missing-skill"]')
+        .replace('realized_by_skills = []', 'realized_by_skills = ["missing-skill"]')
         .replace('proposed_action = "record"', 'proposed_action = "update"'),
         encoding="utf-8",
         newline="\n",
@@ -182,7 +737,7 @@ def test_candidate_skill_reference_and_lifecycle_are_consistent(tmp_path: Path) 
     assert any("unknown Skill" in error for error in result.errors)
 
 
-def test_draft_candidate_without_related_skill_is_rejected(tmp_path: Path) -> None:
+def test_draft_candidate_without_realized_skill_is_rejected(tmp_path: Path) -> None:
     target = _copy_agents(tmp_path)
     candidate = target / ".agents" / "skill-candidates" / "protected-long-form-body-safety.toml"
     text = candidate.read_text(encoding="utf-8")
@@ -196,7 +751,7 @@ def test_draft_candidate_without_related_skill_is_rejected(tmp_path: Path) -> No
     result = MODULE.validate(target)
 
     assert not result.accepted
-    assert any("must reference an existing Skill" in error for error in result.errors)
+    assert any("must realize at least one Skill" in error for error in result.errors)
 
 
 def test_record_only_candidate_without_related_skill_is_allowed() -> None:
@@ -205,6 +760,7 @@ def test_record_only_candidate_without_related_skill_is_allowed() -> None:
 
     assert 'status = "candidate"' in text
     assert 'proposed_action = "record"' in text
+    assert 'realized_by_skills = []' in text
     assert 'related_overlapping_skills = []' in text
     assert MODULE.validate(ROOT).accepted
 

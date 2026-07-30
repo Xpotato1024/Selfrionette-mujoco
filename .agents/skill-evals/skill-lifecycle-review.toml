@@ -1,6 +1,9 @@
 schema_version = 1
 skill_name = "skill-lifecycle-review"
-invocation_policy = "explicit-only"
+invocation_policy = "implicit-after-validation"
+validation_status = "validated"
+side_effect_policy = "instruction-only"
+unresolved_approval = false
 side_effect_boundary = "candidate record only; no Git/GitHub or external mutation"
 positive_triggers = [
   "複数のIssueとPRで同じhandoff手順が反復しているので、evidence付きcandidate reviewを行ってください。",
@@ -9,7 +12,8 @@ positive_triggers = [
 ]
 negative_triggers = [
   "単発のREADME typoだけを修正し、Skill candidateは作成しないでください。",
-  "GitHub PRをmergeしてIssueをcloseしてください。これはSkill lifecycle reviewの対象外です。"
+  "GitHub PRをmergeしてIssueをcloseしてください。これはSkill lifecycle reviewの対象外です。",
+  "このrepositoryと無関係な一般質問に答えてください。"
 ]
 route_boundaries = [
   "変更に必要なtest commandの選択はselfrionette-change-validationへrouteする。",
@@ -19,7 +23,14 @@ required_inputs = ["skill-system.toml", "AGENTS.md", "agent-skill-governance.md"
 expected_major_steps = ["opt-in確認", "知識分類", "evidence確認", "5軸scoring", "overlap確認", "status / action判断", "candidate記録とvalidation"]
 expected_outputs = ["分類結果", "evidence付きscore", "status / action", "approval boundary", "残存risk"]
 forbidden_actions = ["Issue / PR mutation", "Git merge", "Issue close", "branch削除", "user-global Skill変更", "根拠のない候補捏造"]
-representative_dry_run = "明示的にSkillを読み、bounded-plugin-change-audit候補のevidence、score、overlap、approval boundaryをread-onlyで照合する。"
+representative_dry_run = "metadata matchによるimplicit候補として、bounded-plugin-change-audit候補のevidence、score、overlap、approval boundaryをread-onlyで照合し、候補記録以外の権限を得ないことを確認する。"
 false_positive_risk = "長い単発taskを反復workflowと誤認してcandidate化するリスク。"
 false_negative_risk = "Issue・PR・Git履歴を横断せず、構造的に反復するworkflowを見落とすリスク。"
 stale_reference_risk = "candidate evidenceのcurrent stateを再取得せず、古いbranchやPR状態を採用するリスク。"
+
+[[routing_cases]]
+prompt = "plugin追加taskの完了時に反復workflowのsignalを評価し、必要ならCandidate Reviewを行ってください。"
+expected_skills = ["skill-lifecycle-review", "selfrionette-plugin-change"]
+primary_skill = "skill-lifecycle-review"
+automatic_chain = false
+permission_grant = false

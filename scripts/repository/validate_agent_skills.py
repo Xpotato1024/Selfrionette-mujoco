@@ -191,13 +191,37 @@ def _validate_config(root: Path, result: ValidationResult) -> dict[str, Any] | N
             _add(result, "incidental Skill changes must be separated from product changes")
 
     invocation = data.get("invocation")
-    if not isinstance(invocation, dict) or set(invocation) != {"new_skill_default", "implicit_invocation_requires_validation"}:
+    required_invocation = {
+        "new_skill_default",
+        "validated_active_skill_default",
+        "automatic_activation_after_validation",
+        "implicit_invocation_requires_validation",
+        "implicit_invocation_grants_permissions",
+        "active_candidate_actions",
+    }
+    if not isinstance(invocation, dict) or set(invocation) != required_invocation:
         _add(result, "invocation keys do not match the repository-local minimum schema")
     else:
         if invocation["new_skill_default"] != "explicit-only":
             _add(result, "new Skill default invocation must be explicit-only")
+        if invocation["validated_active_skill_default"] != "implicit":
+            _add(result, "validated active Skill default invocation must be implicit")
+        if invocation["automatic_activation_after_validation"] is not True:
+            _add(result, "validated Skills must activate automatically after validation")
         if invocation["implicit_invocation_requires_validation"] is not True:
             _add(result, "implicit invocation must require validation")
+        if invocation["implicit_invocation_grants_permissions"] is not False:
+            _add(result, "implicit invocation must not grant permissions")
+        active_actions = invocation["active_candidate_actions"]
+        if (
+            not isinstance(active_actions, list)
+            or not active_actions
+            or not all(
+                isinstance(action, str) and action in ALLOWED_ACTIONS
+                for action in active_actions
+            )
+        ):
+            _add(result, "active_candidate_actions must contain allowed candidate actions")
     return {**data, "_paths": paths}
 
 
@@ -230,26 +254,57 @@ def _validate_frontmatter(text: str, path: Path, result: ValidationResult) -> tu
     return name, description
 
 
-def _validate_skill_policy(skill_dir: Path, eval_data: dict[str, Any] | None, result: ValidationResult) -> None:
+def _policy_implicit_value(text: str, policy_path: Path, result: ValidationResult) -> bool | None:
+    section = ""
+    values: list[bool] = []
+    for raw_line in text.splitlines():
+        content = raw_line.split("#", 1)[0].rstrip()
+        if not content.strip():
+            continue
+        if not raw_line.startswith((" ", "\t")):
+            section_match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_-]*):\s*", content)
+            section = section_match.group(1) if section_match else ""
+            continue
+        if section != "policy":
+            continue
+        value_match = re.fullmatch(
+            r"\s+allow_implicit_invocation:\s*(true|false)\s*", content
+        )
+        if value_match:
+            values.append(value_match.group(1) == "true")
+    if len(values) != 1:
+        _add(
+            result,
+            f"Skill policy must declare exactly one policy.allow_implicit_invocation boolean: {policy_path}",
+        )
+        return None
+    return values[0]
+
+
+def _validate_skill_policy(
+    skill_dir: Path, eval_data: dict[str, Any] | None, result: ValidationResult
+) -> bool | None:
     policy_path = skill_dir / "agents" / "openai.yaml"
     if not policy_path.is_file():
         _add(result, f"Skill policy file is missing: {policy_path}")
         return
     text = _read_text(policy_path, result)
     if text is None:
-        return
-    match = re.search(r"^\s*allow_implicit_invocation:\s*(true|false)\s*$", text, re.MULTILINE)
-    if match is None:
-        _add(result, f"Skill policy must declare allow_implicit_invocation: false: {policy_path}")
-        return
-    allow_implicit = match.group(1) == "true"
+        return None
+    allow_implicit = _policy_implicit_value(text, policy_path, result)
+    if allow_implicit is None:
+        return None
     if eval_data is not None:
         invocation = eval_data.get("invocation_policy")
-        side_effect = str(eval_data.get("side_effect_boundary", ""))
         if invocation == "explicit-only" and allow_implicit:
             _add(result, f"explicit-only Skill cannot allow implicit invocation: {skill_dir}")
-        if re.search(r"external|GitHub mutation|hardware|serial|OSC|production", side_effect, re.IGNORECASE) and allow_implicit:
+        if eval_data.get("validation_status") != "validated" and allow_implicit:
+            _add(result, f"unvalidated or draft Skill cannot allow implicit invocation: {skill_dir}")
+        if eval_data.get("unresolved_approval") is not False and allow_implicit:
+            _add(result, f"Skill with unresolved approval cannot allow implicit invocation: {skill_dir}")
+        if eval_data.get("side_effect_policy") != "instruction-only" and allow_implicit:
             _add(result, f"side-effectful Skill cannot allow implicit invocation: {skill_dir}")
+    return allow_implicit
 
 
 def _validate_skills(root: Path, result: ValidationResult, evals: dict[str, dict[str, Any]]) -> dict[str, Path]:
@@ -285,7 +340,6 @@ def _validate_skills(root: Path, result: ValidationResult, evals: dict[str, dict
             reference = match.group(0).lstrip("./")
             if not (skill_dir / reference).exists():
                 _add(result, f"referenced Skill resource does not exist: {path} -> {reference}")
-        _validate_skill_policy(skill_dir, evals.get(name), result)
     result.skill_count = len(skill_dirs)
     return names
 
@@ -295,18 +349,20 @@ def _validate_candidates(
     config: dict[str, Any],
     result: ValidationResult,
     skill_names: set[str],
-) -> None:
+) -> dict[str, dict[str, Any]]:
     store = root / config["_paths"]["candidate_store"]
     if not store.is_dir():
         _add(result, f"candidate store directory is missing: {store}")
-        return
+        return {}
     paths = sorted(store.glob("*.toml"))
     if not paths:
         _add(result, "candidate store must contain at least one candidate")
     seen: dict[str, Path] = {}
+    candidates: dict[str, dict[str, Any]] = {}
     required = {
         "schema_version", "candidate_key", "status", "scope", "summary", "observable_evidence",
-        "related_overlapping_skills", "approval_boundary", "unresolved_risks", "proposed_action", "score",
+        "realized_by_skills", "related_overlapping_skills", "approval_boundary", "unresolved_risks",
+        "proposed_action", "score",
     }
     for path in paths:
         data = _parse_toml(path, result)
@@ -324,6 +380,7 @@ def _validate_candidates(
         if key in seen:
             _add(result, f"duplicate candidate key {key!r}: {seen[key]} and {path}")
         seen[key] = path
+        candidates[key] = data
         if data.get("schema_version") != 1:
             _add(result, f"candidate schema_version must be 1: {path}")
         if data.get("status") not in ALLOWED_STATUSES:
@@ -332,19 +389,45 @@ def _validate_candidates(
             _add(result, f"invalid candidate action: {path}")
         for field_name in ("scope", "summary", "approval_boundary"):
             _nonempty_string(data.get(field_name), field_name, path, result)
-        for field_name in ("observable_evidence", "related_overlapping_skills", "unresolved_risks"):
+        for field_name in (
+            "observable_evidence",
+            "realized_by_skills",
+            "related_overlapping_skills",
+            "unresolved_risks",
+        ):
             value = data.get(field_name)
             if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
                 _add(result, f"{field_name} must be a string list: {path}")
+        realized = data.get("realized_by_skills")
         related = data.get("related_overlapping_skills")
+        if isinstance(realized, list) and all(
+            isinstance(item, str) and item.strip() for item in realized
+        ):
+            if len(realized) != len(set(realized)):
+                _add(result, f"realized_by_skills must not contain duplicates: {path}")
+            for skill_name in realized:
+                if skill_name not in skill_names:
+                    _add(result, f"candidate realizes unknown Skill {skill_name!r}: {path}")
+            if data.get("status") in {"draft", "active"} and not realized:
+                _add(result, f"draft or active candidate must realize at least one Skill: {path}")
         if isinstance(related, list) and all(isinstance(item, str) and item.strip() for item in related):
+            if len(related) != len(set(related)):
+                _add(result, f"related_overlapping_skills must not contain duplicates: {path}")
             for skill_name in related:
                 if skill_name not in skill_names:
-                    _add(result, f"candidate references unknown Skill {skill_name!r}: {path}")
-            if related and data.get("proposed_action") == "create-draft":
-                _add(result, f"candidate with an existing related Skill cannot use create-draft: {path}")
-            if data.get("status") in {"draft", "active"} and not related:
-                _add(result, f"draft or active candidate must reference an existing Skill: {path}")
+                    _add(result, f"candidate overlaps unknown Skill {skill_name!r}: {path}")
+        if (
+            isinstance(realized, list)
+            and isinstance(related, list)
+            and all(isinstance(item, str) for item in realized + related)
+        ):
+            confused = set(realized) & set(related)
+            if confused:
+                _add(
+                    result,
+                    f"realized_by_skills and related_overlapping_skills must be disjoint: {path}: "
+                    f"{sorted(confused)}",
+                )
         score = data.get("score")
         score_keys = {"recurrence", "reconstruction_cost", "error_prevention", "stability", "verifiability", "total"}
         if not isinstance(score, dict) or set(score) != score_keys:
@@ -358,6 +441,7 @@ def _validate_candidates(
             if isinstance(score["total"], int) and not 0 <= score["total"] <= 10:
                 _add(result, f"candidate score total must be from 0 through 10: {path}")
     result.candidate_count = len(paths)
+    return candidates
 
 
 def _validate_evals(root: Path, config: dict[str, Any], skill_dirs: dict[str, Path], result: ValidationResult) -> dict[str, dict[str, Any]]:
@@ -369,9 +453,11 @@ def _validate_evals(root: Path, config: dict[str, Any], skill_dirs: dict[str, Pa
     if {path.stem for path in paths} != set(skill_dirs):
         _add(result, "each Skill must have exactly one matching eval TOML")
     required = {
-        "schema_version", "skill_name", "invocation_policy", "side_effect_boundary", "positive_triggers",
+        "schema_version", "skill_name", "invocation_policy", "validation_status", "side_effect_policy",
+        "unresolved_approval", "side_effect_boundary", "positive_triggers",
         "negative_triggers", "route_boundaries", "required_inputs", "expected_major_steps", "expected_outputs",
-        "forbidden_actions", "representative_dry_run", "false_positive_risk", "false_negative_risk", "stale_reference_risk",
+        "forbidden_actions", "representative_dry_run", "false_positive_risk", "false_negative_risk",
+        "stale_reference_risk", "routing_cases",
     }
     evals: dict[str, dict[str, Any]] = {}
     for path in paths:
@@ -388,6 +474,12 @@ def _validate_evals(root: Path, config: dict[str, Any], skill_dirs: dict[str, Pa
             _add(result, f"eval schema_version must be 1: {path}")
         if data.get("invocation_policy") not in {"explicit-only", "implicit-after-validation"}:
             _add(result, f"invalid eval invocation_policy: {path}")
+        if data.get("validation_status") not in {"draft", "validated"}:
+            _add(result, f"invalid eval validation_status: {path}")
+        if data.get("side_effect_policy") not in {"instruction-only", "side-effectful"}:
+            _add(result, f"invalid eval side_effect_policy: {path}")
+        if not isinstance(data.get("unresolved_approval"), bool):
+            _add(result, f"eval unresolved_approval must be boolean: {path}")
         for field_name in ("side_effect_boundary", "representative_dry_run", "false_positive_risk", "false_negative_risk", "stale_reference_risk"):
             _nonempty_string(data.get(field_name), field_name, path, result)
         for field_name in ("positive_triggers", "negative_triggers", "route_boundaries", "required_inputs", "expected_major_steps", "expected_outputs", "forbidden_actions"):
@@ -404,11 +496,119 @@ def _validate_evals(root: Path, config: dict[str, Any], skill_dirs: dict[str, Pa
             _add(result, f"positive_triggers must be Japanese-prompt centered: {path}")
         if isinstance(negatives, list) and sum(bool(re.search(r"[\u3040-\u30ff\u3400-\u9fff]", item)) for item in negatives if isinstance(item, str)) < 1:
             _add(result, f"negative_triggers must include Japanese prompts: {path}")
-        if isinstance(data.get("representative_dry_run"), str) and "明示" not in data["representative_dry_run"]:
-            _add(result, f"representative_dry_run must describe explicit invocation: {path}")
+        if (
+            data.get("invocation_policy") == "implicit-after-validation"
+            and isinstance(data.get("representative_dry_run"), str)
+            and "metadata" not in data["representative_dry_run"]
+        ):
+            _add(result, f"implicit representative_dry_run must describe metadata routing: {path}")
+        routing_cases = data.get("routing_cases")
+        if not isinstance(routing_cases, list) or not routing_cases:
+            _add(result, f"routing_cases must be a non-empty table list: {path}")
+        else:
+            required_case_keys = {
+                "prompt", "expected_skills", "primary_skill", "automatic_chain", "permission_grant"
+            }
+            for case in routing_cases:
+                if not isinstance(case, dict) or set(case) != required_case_keys:
+                    _add(result, f"routing case keys are invalid: {path}")
+                    continue
+                if not isinstance(case["prompt"], str) or not case["prompt"].strip():
+                    _add(result, f"routing case prompt must be non-empty: {path}")
+                expected = case["expected_skills"]
+                if (
+                    not isinstance(expected, list)
+                    or len(expected) < 2
+                    or not all(isinstance(item, str) and item in skill_dirs for item in expected)
+                ):
+                    _add(result, f"routing case must name at least two existing Skills: {path}")
+                if case["primary_skill"] not in expected:
+                    _add(result, f"routing case primary_skill must be in expected_skills: {path}")
+                if case["automatic_chain"] is not False:
+                    _add(result, f"routing case must not require unconditional Skill chaining: {path}")
+                if case["permission_grant"] is not False:
+                    _add(result, f"routing case must not grant permissions: {path}")
         evals[str(name)] = data
     result.eval_count = len(paths)
     return evals
+
+
+def _validate_implicit_activation(
+    config: dict[str, Any],
+    skill_dirs: dict[str, Path],
+    evals: dict[str, dict[str, Any]],
+    policies: dict[str, bool],
+    candidates: dict[str, dict[str, Any]],
+    result: ValidationResult,
+) -> None:
+    invocation = config.get("invocation", {})
+    if invocation.get("validated_active_skill_default") != "implicit":
+        _add(result, "validated active Skill default must remain implicit")
+    if invocation.get("implicit_invocation_grants_permissions") is not False:
+        _add(result, "implicit invocation permission grant must remain disabled")
+    if set(evals) != set(skill_dirs):
+        _add(result, "Skill and eval registries must not contain isolated entries")
+    if set(policies) != set(skill_dirs):
+        _add(result, "each Skill must have one valid policy entry")
+
+    promotion_threshold = config.get("thresholds", {}).get("promotion_review")
+    allowed_active_actions = invocation.get("active_candidate_actions", [])
+    realized_by: dict[str, list[str]] = {}
+    active_skills: set[str] = set()
+    for candidate_key, candidate in candidates.items():
+        realized = candidate.get("realized_by_skills", [])
+        if not isinstance(realized, list):
+            continue
+        for skill_name in realized:
+            if isinstance(skill_name, str):
+                realized_by.setdefault(skill_name, []).append(candidate_key)
+        if candidate.get("status") != "active":
+            continue
+        score = candidate.get("score")
+        total = score.get("total") if isinstance(score, dict) else None
+        if (
+            isinstance(promotion_threshold, int)
+            and isinstance(total, int)
+            and total < promotion_threshold
+        ):
+            _add(
+                result,
+                f"active candidate score is below promotion_review threshold: {candidate_key}",
+            )
+        if candidate.get("proposed_action") not in allowed_active_actions:
+            _add(result, f"active candidate action is not allowed by repository config: {candidate_key}")
+        if not realized:
+            _add(result, f"active candidate has no realized Skill: {candidate_key}")
+        for skill_name in realized:
+            if not isinstance(skill_name, str) or skill_name not in skill_dirs:
+                continue
+            active_skills.add(skill_name)
+            eval_data = evals.get(skill_name, {})
+            if eval_data.get("validation_status") != "validated":
+                _add(result, f"active candidate Skill is not validated: {skill_name}")
+            if eval_data.get("invocation_policy") != "implicit-after-validation":
+                _add(result, f"active candidate Skill is not implicit-after-validation: {skill_name}")
+            if eval_data.get("side_effect_policy") != "instruction-only":
+                _add(result, f"active candidate Skill is not instruction-only: {skill_name}")
+            if eval_data.get("unresolved_approval") is not False:
+                _add(result, f"active candidate Skill has unresolved approval: {skill_name}")
+            if policies.get(skill_name) is not True:
+                _add(result, f"active candidate Skill must allow implicit invocation: {skill_name}")
+
+    for skill_name, candidate_keys in realized_by.items():
+        if len(candidate_keys) > 1:
+            _add(
+                result,
+                f"Skill is realized by multiple candidates: {skill_name}: {sorted(candidate_keys)}",
+            )
+    for skill_name in sorted(set(skill_dirs) - set(realized_by)):
+        _add(result, f"Skill is not traceable to a candidate: {skill_name}")
+
+    implicit_skills = {name for name, value in policies.items() if value}
+    for skill_name in sorted(implicit_skills - active_skills):
+        _add(result, f"implicit Skill has no active candidate: {skill_name}")
+    for skill_name in sorted(active_skills - implicit_skills):
+        _add(result, f"active candidate must not realize an explicit-only Skill: {skill_name}")
 
 
 def validate(root: Path = ROOT) -> ValidationResult:
@@ -425,9 +625,13 @@ def validate(root: Path = ROOT) -> ValidationResult:
         return result
     skill_dirs = _validate_skills(root, result, {})
     evals = _validate_evals(root, config, skill_dirs, result)
+    policies: dict[str, bool] = {}
     for name, skill_dir in skill_dirs.items():
-        _validate_skill_policy(skill_dir, evals.get(name), result)
-    _validate_candidates(root, config, result, set(skill_dirs))
+        value = _validate_skill_policy(skill_dir, evals.get(name), result)
+        if value is not None:
+            policies[name] = value
+    candidates = _validate_candidates(root, config, result, set(skill_dirs))
+    _validate_implicit_activation(config, skill_dirs, evals, policies, candidates, result)
     return result
 
 
