@@ -1,0 +1,26 @@
+schema_version = 1
+candidate_key = "continuous-skill-lifecycle-review"
+status = "active"
+scope = "repository-local Skill candidate review and lifecycle governance"
+summary = "repository-local Skill候補のevidence、5軸score、overlap、status、action、approval boundaryを監査し、lifecycle判断を行う反復workflow。"
+observable_evidence = [
+  "Issue #491とPR #492でcandidate review、5軸scoring、candidate・eval store、starter Skill、validatorを含むrepository-local Skill基盤を構築した。",
+  "Issue #493とPR #494で既存Skillのpromotion、implicit invocation policy、candidate・eval・policyの整合を監査した。",
+  "PR #492とPR #494で複数の既存candidateについてscore、overlap、status、proposed action、approval boundaryを繰り返し監査した。",
+  "focused Skill governance testsとdeterministic routing fixtureにより、lifecycle、trigger、permission非付与、failure pathを機械検証できる。"
+]
+realized_by_skills = ["skill-lifecycle-review"]
+related_overlapping_skills = []
+approval_boundary = "candidate reviewとrepository-local instruction-only Skill lifecycle判断に限定する。implicit invocation自体はfile edit、Git、GitHub、external service、production、hardwareの権限を付与せず、prompt、Issue、AGENTS.md、canonical governanceを優先する。"
+unresolved_risks = [
+  "deterministic routing fixtureは実model dispatchの実測ではないため、誤発火・未発火・過剰適用を今後の実taskで継続評価する。"
+]
+proposed_action = "update"
+
+[score]
+recurrence = 2
+reconstruction_cost = 2
+error_prevention = 2
+stability = 2
+verifiability = 2
+total = 10

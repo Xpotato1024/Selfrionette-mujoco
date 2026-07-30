@@ -61,18 +61,6 @@ ALLOWED_ACTIONS = {
     "deprecate",
     "approval-required",
 }
-EXPECTED_IMPLICIT_SKILLS = {
-    "skill-lifecycle-review",
-    "selfrionette-change-validation",
-    "selfrionette-plugin-change",
-    "selfrionette-pr-handoff",
-}
-IMPLEMENTED_CANDIDATE_SKILLS = {
-    "layer-aware-change-validation": "selfrionette-change-validation",
-    "bounded-plugin-change-audit": "selfrionette-plugin-change",
-    "pr-handoff-state-audit": "selfrionette-pr-handoff",
-}
-UNIMPLEMENTED_CANDIDATES = {"protected-long-form-body-safety"}
 
 
 @dataclass
@@ -209,6 +197,7 @@ def _validate_config(root: Path, result: ValidationResult) -> dict[str, Any] | N
         "automatic_activation_after_validation",
         "implicit_invocation_requires_validation",
         "implicit_invocation_grants_permissions",
+        "active_candidate_actions",
     }
     if not isinstance(invocation, dict) or set(invocation) != required_invocation:
         _add(result, "invocation keys do not match the repository-local minimum schema")
@@ -223,6 +212,16 @@ def _validate_config(root: Path, result: ValidationResult) -> dict[str, Any] | N
             _add(result, "implicit invocation must require validation")
         if invocation["implicit_invocation_grants_permissions"] is not False:
             _add(result, "implicit invocation must not grant permissions")
+        active_actions = invocation["active_candidate_actions"]
+        if (
+            not isinstance(active_actions, list)
+            or not active_actions
+            or not all(
+                isinstance(action, str) and action in ALLOWED_ACTIONS
+                for action in active_actions
+            )
+        ):
+            _add(result, "active_candidate_actions must contain allowed candidate actions")
     return {**data, "_paths": paths}
 
 
@@ -362,7 +361,8 @@ def _validate_candidates(
     candidates: dict[str, dict[str, Any]] = {}
     required = {
         "schema_version", "candidate_key", "status", "scope", "summary", "observable_evidence",
-        "related_overlapping_skills", "approval_boundary", "unresolved_risks", "proposed_action", "score",
+        "realized_by_skills", "related_overlapping_skills", "approval_boundary", "unresolved_risks",
+        "proposed_action", "score",
     }
     for path in paths:
         data = _parse_toml(path, result)
@@ -389,19 +389,45 @@ def _validate_candidates(
             _add(result, f"invalid candidate action: {path}")
         for field_name in ("scope", "summary", "approval_boundary"):
             _nonempty_string(data.get(field_name), field_name, path, result)
-        for field_name in ("observable_evidence", "related_overlapping_skills", "unresolved_risks"):
+        for field_name in (
+            "observable_evidence",
+            "realized_by_skills",
+            "related_overlapping_skills",
+            "unresolved_risks",
+        ):
             value = data.get(field_name)
             if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
                 _add(result, f"{field_name} must be a string list: {path}")
+        realized = data.get("realized_by_skills")
         related = data.get("related_overlapping_skills")
+        if isinstance(realized, list) and all(
+            isinstance(item, str) and item.strip() for item in realized
+        ):
+            if len(realized) != len(set(realized)):
+                _add(result, f"realized_by_skills must not contain duplicates: {path}")
+            for skill_name in realized:
+                if skill_name not in skill_names:
+                    _add(result, f"candidate realizes unknown Skill {skill_name!r}: {path}")
+            if data.get("status") in {"draft", "active"} and not realized:
+                _add(result, f"draft or active candidate must realize at least one Skill: {path}")
         if isinstance(related, list) and all(isinstance(item, str) and item.strip() for item in related):
+            if len(related) != len(set(related)):
+                _add(result, f"related_overlapping_skills must not contain duplicates: {path}")
             for skill_name in related:
                 if skill_name not in skill_names:
-                    _add(result, f"candidate references unknown Skill {skill_name!r}: {path}")
-            if related and data.get("proposed_action") == "create-draft":
-                _add(result, f"candidate with an existing related Skill cannot use create-draft: {path}")
-            if data.get("status") in {"draft", "active"} and not related:
-                _add(result, f"draft or active candidate must reference an existing Skill: {path}")
+                    _add(result, f"candidate overlaps unknown Skill {skill_name!r}: {path}")
+        if (
+            isinstance(realized, list)
+            and isinstance(related, list)
+            and all(isinstance(item, str) for item in realized + related)
+        ):
+            confused = set(realized) & set(related)
+            if confused:
+                _add(
+                    result,
+                    f"realized_by_skills and related_overlapping_skills must be disjoint: {path}: "
+                    f"{sorted(confused)}",
+                )
         score = data.get("score")
         score_keys = {"recurrence", "reconstruction_cost", "error_prevention", "stability", "verifiability", "total"}
         if not isinstance(score, dict) or set(score) != score_keys:
@@ -520,51 +546,69 @@ def _validate_implicit_activation(
         _add(result, "validated active Skill default must remain implicit")
     if invocation.get("implicit_invocation_grants_permissions") is not False:
         _add(result, "implicit invocation permission grant must remain disabled")
+    if set(evals) != set(skill_dirs):
+        _add(result, "Skill and eval registries must not contain isolated entries")
+    if set(policies) != set(skill_dirs):
+        _add(result, "each Skill must have one valid policy entry")
+
+    promotion_threshold = config.get("thresholds", {}).get("promotion_review")
+    allowed_active_actions = invocation.get("active_candidate_actions", [])
+    realized_by: dict[str, list[str]] = {}
+    active_skills: set[str] = set()
+    for candidate_key, candidate in candidates.items():
+        realized = candidate.get("realized_by_skills", [])
+        if not isinstance(realized, list):
+            continue
+        for skill_name in realized:
+            if isinstance(skill_name, str):
+                realized_by.setdefault(skill_name, []).append(candidate_key)
+        if candidate.get("status") != "active":
+            continue
+        score = candidate.get("score")
+        total = score.get("total") if isinstance(score, dict) else None
+        if (
+            isinstance(promotion_threshold, int)
+            and isinstance(total, int)
+            and total < promotion_threshold
+        ):
+            _add(
+                result,
+                f"active candidate score is below promotion_review threshold: {candidate_key}",
+            )
+        if candidate.get("proposed_action") not in allowed_active_actions:
+            _add(result, f"active candidate action is not allowed by repository config: {candidate_key}")
+        if not realized:
+            _add(result, f"active candidate has no realized Skill: {candidate_key}")
+        for skill_name in realized:
+            if not isinstance(skill_name, str) or skill_name not in skill_dirs:
+                continue
+            active_skills.add(skill_name)
+            eval_data = evals.get(skill_name, {})
+            if eval_data.get("validation_status") != "validated":
+                _add(result, f"active candidate Skill is not validated: {skill_name}")
+            if eval_data.get("invocation_policy") != "implicit-after-validation":
+                _add(result, f"active candidate Skill is not implicit-after-validation: {skill_name}")
+            if eval_data.get("side_effect_policy") != "instruction-only":
+                _add(result, f"active candidate Skill is not instruction-only: {skill_name}")
+            if eval_data.get("unresolved_approval") is not False:
+                _add(result, f"active candidate Skill has unresolved approval: {skill_name}")
+            if policies.get(skill_name) is not True:
+                _add(result, f"active candidate Skill must allow implicit invocation: {skill_name}")
+
+    for skill_name, candidate_keys in realized_by.items():
+        if len(candidate_keys) > 1:
+            _add(
+                result,
+                f"Skill is realized by multiple candidates: {skill_name}: {sorted(candidate_keys)}",
+            )
+    for skill_name in sorted(set(skill_dirs) - set(realized_by)):
+        _add(result, f"Skill is not traceable to a candidate: {skill_name}")
 
     implicit_skills = {name for name, value in policies.items() if value}
-    if implicit_skills != EXPECTED_IMPLICIT_SKILLS:
-        _add(
-            result,
-            "implicit-ready Skill set must exactly match the four validated active Skills: "
-            f"{sorted(implicit_skills)}",
-        )
-    for name in EXPECTED_IMPLICIT_SKILLS:
-        if name not in skill_dirs:
-            _add(result, f"required implicit-ready Skill is missing: {name}")
-            continue
-        eval_data = evals.get(name, {})
-        if eval_data.get("invocation_policy") != "implicit-after-validation":
-            _add(result, f"implicit-ready Skill eval policy is inconsistent: {name}")
-        if eval_data.get("validation_status") != "validated":
-            _add(result, f"implicit-ready Skill is not validated: {name}")
-        if eval_data.get("side_effect_policy") != "instruction-only":
-            _add(result, f"implicit-ready Skill is not instruction-only: {name}")
-        if eval_data.get("unresolved_approval") is not False:
-            _add(result, f"implicit-ready Skill has unresolved approval: {name}")
-
-    for candidate_key, skill_name in IMPLEMENTED_CANDIDATE_SKILLS.items():
-        candidate = candidates.get(candidate_key)
-        if candidate is None:
-            _add(result, f"implemented candidate is missing: {candidate_key}")
-            continue
-        if candidate.get("related_overlapping_skills") != [skill_name]:
-            _add(result, f"candidate / Skill mapping is inconsistent: {candidate_key}")
-        if candidate.get("status") != "active":
-            _add(result, f"implemented candidate must be active: {candidate_key}")
-        if candidate.get("proposed_action") != "update":
-            _add(result, f"active candidate proposed_action must be update: {candidate_key}")
-        if skill_name not in implicit_skills:
-            _add(result, f"active candidate Skill is not implicit-ready: {candidate_key}")
-
-    for candidate_key in UNIMPLEMENTED_CANDIDATES:
-        candidate = candidates.get(candidate_key)
-        if candidate is None:
-            _add(result, f"unimplemented candidate is missing: {candidate_key}")
-            continue
-        if candidate.get("status") == "active":
-            _add(result, f"unimplemented candidate cannot be active: {candidate_key}")
-        if candidate.get("related_overlapping_skills"):
-            _add(result, f"unimplemented candidate must not claim a Skill: {candidate_key}")
+    for skill_name in sorted(implicit_skills - active_skills):
+        _add(result, f"implicit Skill has no active candidate: {skill_name}")
+    for skill_name in sorted(active_skills - implicit_skills):
+        _add(result, f"active candidate must not realize an explicit-only Skill: {skill_name}")
 
 
 def validate(root: Path = ROOT) -> ValidationResult:

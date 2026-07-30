@@ -22,3 +22,4 @@ validated_active_skill_default = "implicit"
 automatic_activation_after_validation = true
 implicit_invocation_requires_validation = true
 implicit_invocation_grants_permissions = false
+active_candidate_actions = ["update"]

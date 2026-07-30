@@ -8,6 +8,7 @@ observable_evidence = [
   "AGENTS.mdとdocs/operations/git-pr-workflow.mdで、transport integrityとstructural preservationを独立gateとして繰り返し要求している。",
   "Issue #491の既存scopeはこの領域をstarter Skillへ昇格させず、Skillからのexternal mutationを禁止している。"
 ]
+realized_by_skills = []
 related_overlapping_skills = []
 approval_boundary = "候補記録とread-only判定に限定し、GitHub bodyの作成・更新・rollbackは既存canonical workflowと明示承認へrouteする。"
 unresolved_risks = [
