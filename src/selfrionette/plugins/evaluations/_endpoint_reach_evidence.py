@@ -1,4 +1,4 @@
-"""Evaluation-local identities and helpers for endpoint-reach metrics."""
+"""endpoint-reach metric専用のidentityとstrict evidence helper。"""
 
 from selfrionette.runtime.experiment.contracts import (
     EvidenceStatus,

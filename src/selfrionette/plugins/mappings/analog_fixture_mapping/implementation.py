@@ -1,4 +1,4 @@
-"""Canonical analog_fixture_mapping/v1 implementation."""
+"""analog_fixture_mapping/v1のcanonical実装。"""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ class AnalogFixtureSampleLike(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class AnalogFixtureMappingConfig:
-    """Immutable raw-channel to endpoint mapping configuration."""
+    """raw channelからendpointへのimmutable mapping設定。"""
 
     centers: tuple[float, ...]
     half_ranges: tuple[float, ...]
@@ -117,7 +117,7 @@ def map_analog_fixture_sample(
     sample: AnalogFixtureSampleLike,
     config: AnalogFixtureMappingConfig,
 ):
-    """Normalize, clamp, project, sign and scale one recorded sample."""
+    """recorded sample 1件をnormalize、clamp、project、sign、scaleする。"""
 
     if len(sample.raw_values) != len(config.centers):
         raise ValueError("fixture raw_values channel count must match mapping configuration")

@@ -1,4 +1,4 @@
-"""R7-G free-space scene condition with no task object or contact surface."""
+"""task objectやcontact surfaceを追加しないR7-G free-space scene条件。"""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ class FreeSpaceSceneCondition:
 
 
 class FreeSpaceSceneProvider:
-    """Side-effect-free provider for the explicit free-space condition."""
+    """明示されたfree-space条件を返すside-effect-free provider。"""
 
     def compose_scene(self, parameters: Mapping[str, object]) -> FreeSpaceSceneCondition:
         if parameters:

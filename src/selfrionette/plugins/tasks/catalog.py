@@ -9,7 +9,7 @@ TASK_PLUGINS: tuple[TaskPlugin, ...] = TASK_REGISTRY.entries
 
 
 def resolve_task_plugin(selection: PluginSelection) -> TaskPlugin:
-    """Resolve one production Task without starting its lifecycle."""
+    """lifecycleを開始せずproduction Taskを1件解決する。"""
 
     return TASK_REGISTRY.resolve(selection)
 

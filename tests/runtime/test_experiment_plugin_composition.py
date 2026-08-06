@@ -53,6 +53,7 @@ from selfrionette.runtime.experiment.contracts import (
     SemanticRoleRequirement,
     TaskPlugin,
     TaskTerminalClassification,
+    TaskTransition,
     VersionedIdentity,
     NATIVE_ENDPOINT_VELOCITY_PASSTHROUGH_V1,
 )
@@ -221,8 +222,30 @@ class _TaskLifecycle:
     def initial_state(self, parameters):
         return {"phase": "running", **parameters}
 
-    def classify_terminal(self, state, evidence):
-        return TaskTerminalClassification.SUCCESS
+    def bind_context(self, context, parameters):
+        return _TaskExecutionBinding(context, dict(parameters))
+
+
+@dataclass(frozen=True)
+class _TaskExecutionBinding:
+    context: object
+    parameters: dict[str, object]
+
+    def initial_state(self):
+        return {"phase": "running", **self.parameters}
+
+    def advance(self, state, observation):
+        evidence = CanonicalEvidenceSet(
+            (
+                CanonicalEvidence(
+                    identity=TASK_TERMINAL_EVIDENCE,
+                    status=EvidenceStatus.MEASURED,
+                    value=TaskTerminalClassification.SUCCESS.value,
+                    provenance="dummy-task",
+                ),
+            )
+        )
+        return TaskTransition(state, TaskTerminalClassification.SUCCESS, evidence)
 
 
 @dataclass(frozen=True)

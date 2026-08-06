@@ -19,7 +19,7 @@ EVALUATION_PLUGIN_ENTRY_SYMBOL = "EVALUATION_PLUGIN"
 
 
 class EvaluationPluginDiscoveryError(RuntimeError):
-    """Fail-closed Evaluation Plugin discovery error."""
+    """Evaluation Plugin discoveryのfail-closed error。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +63,7 @@ def _load_plugin(
 def discover_evaluation_plugins(
     root: EvaluationDiscoveryRoot,
 ) -> VersionedPluginRegistry[EvaluationPlugin]:
-    """Discover public direct children only and reject every broken candidate."""
+    """public direct childだけを探索し、壊れたcandidateをすべて拒否する。"""
 
     package_names = direct_child_package_names(root.namespace)
     plugins = tuple(_load_plugin(root, name) for name in package_names)
@@ -82,7 +82,7 @@ def discover_evaluation_plugins(
 
 def discover_production_evaluation_plugins(
 ) -> VersionedPluginRegistry[EvaluationPlugin]:
-    """Discover only the fixed first-party production namespace."""
+    """固定されたfirst-party production namespaceだけを探索する。"""
 
     from selfrionette.plugins import evaluations
 

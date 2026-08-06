@@ -1,9 +1,8 @@
-"""Immutable evaluation manifests and software-only startup readiness.
+"""immutable evaluation manifestとsoftware-only startup readiness。
 
-This module owns the R7-G-P1 boundary.  It freezes requested experiment
-configuration and the identities resolved by the existing five-axis
-composition root.  It deliberately does not load a model, advance physics,
-run a task, write a log, or derive an outcome.
+6軸composition、command route、upper manifestからTask contextへのbindingを
+side effect前に確定する。model load、physics step、Task実行、log出力、metric導出は
+このmoduleの責務ではない。
 """
 
 from __future__ import annotations
@@ -32,7 +31,11 @@ from selfrionette.runtime.experiment.contracts import (
     PluginAxis,
     PluginParameterOwner,
     PluginSelection,
+    TaskExecutionBinding,
     VersionedIdentity,
+)
+from selfrionette.runtime.experiment.endpoint_reach_evidence import (
+    EndpointReachTaskContext,
 )
 from selfrionette.runtime.composition.robot_bundle import (
     InitialStateContract,
@@ -1257,7 +1260,7 @@ class FreezeRecord:
 
 @dataclass(frozen=True, slots=True)
 class EvaluationReadiness:
-    """All resolved identities a future runner may consume after readiness."""
+    """runnerがside effect開始前に受け取る解決済みidentityとTask binding。"""
 
     manifest: EvaluationManifest
     composition: ResolvedExperimentComposition
@@ -1274,6 +1277,7 @@ class EvaluationReadiness:
     mapping_comparison_family_identity: VersionedIdentity
     mapping_semantics_identity: VersionedIdentity
     command_semantics_route: CommandSemanticsRoute
+    task_execution_binding: TaskExecutionBinding
     readiness_status: ReadinessStatus
     resolved_identity_digest: str
     freeze_record: FreezeRecord
@@ -1352,6 +1356,10 @@ class EvaluationReadiness:
         ):
             raise EvaluationManifestError(
                 "readiness command semantics/composition mismatch"
+            )
+        if not isinstance(self.task_execution_binding, TaskExecutionBinding):
+            raise EvaluationManifestError(
+                "readiness task binding must use TaskExecutionBinding"
             )
 
     @property
@@ -1472,6 +1480,18 @@ def _readiness_from_composition(
             canonical_manifest_bytes=manifest_bytes,
             canonical_resolved_identity_bytes=resolved_bytes,
         )
+        task_parameter_item = _parameter_item_for_owner(manifest, PluginAxis.TASK)
+        task_parameters = (
+            {} if task_parameter_item is None else task_parameter_item.values
+        )
+        task_context = EndpointReachTaskContext(
+            initial_position_world_m=manifest.initial_tip_position_m,
+            target_position_world_m=manifest.target_world_position_m,
+            target_tolerance_m=manifest.target_tolerance_m,
+            dwell_interval_s=manifest.dwell_interval_s,
+            timeout_s=manifest.timeout_s,
+        )
+        task_binding = composition.task.bind_context(task_context, task_parameters)
         return EvaluationReadiness(
             manifest=manifest,
             composition=composition,
@@ -1488,6 +1508,7 @@ def _readiness_from_composition(
             mapping_comparison_family_identity=mapping_family_identity,
             mapping_semantics_identity=mapping_semantics_identity,
             command_semantics_route=composition.resolved_command_semantics_route,
+            task_execution_binding=task_binding,
             readiness_status=ReadinessStatus.READY,
             resolved_identity_digest=resolved_identity,
             freeze_record=freeze_record,
@@ -1504,7 +1525,7 @@ def build_evaluation_readiness(
     *,
     execution_identity: SoftwareExecutionIdentity,
 ) -> EvaluationReadiness:
-    """Compose and validate one condition before any runner starts."""
+    """runner開始前に1 conditionの6軸とTask contextを検証する。"""
 
     if not isinstance(manifest, EvaluationManifest):
         raise TypeError("build_evaluation_readiness requires EvaluationManifest")

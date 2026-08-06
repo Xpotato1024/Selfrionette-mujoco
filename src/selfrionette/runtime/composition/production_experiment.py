@@ -1,7 +1,7 @@
-"""Production six-axis catalogs exposed to application composition roots.
+"""application composition rootへproduction 6軸catalogを公開する。
 
-This module lists axis infrastructure, not concrete plugin identities.  Each
-catalog remains populated by bounded discovery in its owning axis package.
+concrete plugin identityの中央listは持たず、各axisのbounded discoveryがcatalogを
+構成する。このmoduleではlifecycleやexternal I/Oを開始しない。
 """
 
 from selfrionette.plugins.environments.catalog import ENVIRONMENT_REGISTRY
@@ -31,7 +31,7 @@ PRODUCTION_EXPERIMENT_PLUGIN_REGISTRIES = ExperimentPluginRegistries(
 def resolve_production_experiment(
     manifest: ExperimentPluginManifest,
 ) -> ResolvedExperimentComposition:
-    """Resolve all six production axes without starting any lifecycle."""
+    """lifecycleを開始せずproduction 6軸をすべて解決する。"""
 
     return compose_experiment(manifest, PRODUCTION_EXPERIMENT_PLUGIN_REGISTRIES)
 

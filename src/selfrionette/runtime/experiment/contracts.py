@@ -428,15 +428,41 @@ class TaskTerminalClassification(str, Enum):
     TECHNICAL_INVALID = "technical_invalid"
 
 
+@dataclass(frozen=True, slots=True)
+class TaskTransition:
+    """Task-owned transition後のstate、分類、canonical evidence。"""
+
+    state: object
+    classification: TaskTerminalClassification
+    evidence: CanonicalEvidenceSet
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.classification, TaskTerminalClassification):
+            raise TypeError("task transition classification must be typed")
+        if not isinstance(self.evidence, CanonicalEvidenceSet):
+            raise TypeError("task transition evidence must use CanonicalEvidenceSet")
+
+
+@runtime_checkable
+class TaskExecutionBinding(Protocol):
+    """frozen task contextへbind済みのpure transition境界。"""
+
+    def initial_state(self) -> object: ...
+
+    def advance(self, state: object, observation: object) -> TaskTransition: ...
+
+
 @runtime_checkable
 class TaskLifecycleStrategy(Protocol):
-    """Task state生成とevidenceに基づく終端判定のowner契約。"""
+    """Task contextのbindと初期state生成を所有するlifecycle契約。"""
 
     def initial_state(self, parameters: Mapping[str, object]) -> object: ...
 
-    def classify_terminal(
-        self, state: object, evidence: CanonicalEvidenceSet
-    ) -> TaskTerminalClassification: ...
+    def bind_context(
+        self,
+        context: object,
+        parameters: Mapping[str, object],
+    ) -> TaskExecutionBinding: ...
 
 
 class EvidenceDisposition(str, Enum):
@@ -707,6 +733,19 @@ class TaskPlugin:
         ):
             raise TypeError("task compatible environments must use VersionedIdentity")
 
+    def bind_context(
+        self,
+        context: object,
+        parameters: Mapping[str, object],
+    ) -> TaskExecutionBinding:
+        """parameterを検証し、runner用のimmutable execution bindingを返す。"""
+
+        self.parameter_contract.validate(parameters)
+        binding = self.lifecycle.bind_context(context, parameters)
+        if not isinstance(binding, TaskExecutionBinding):
+            raise TypeError("task lifecycle returned an invalid execution binding")
+        return binding
+
 
 @dataclass(frozen=True, slots=True)
 class EvaluationPlugin:
@@ -845,8 +884,10 @@ __all__ = [
     "ROLE_ATTRIBUTE_WILDCARD",
     "SemanticRole",
     "SemanticRoleRequirement",
+    "TaskExecutionBinding",
     "TaskLifecycleStrategy",
     "TaskPlugin",
+    "TaskTransition",
     "TaskTerminalClassification",
     "VersionedIdentity",
 ]

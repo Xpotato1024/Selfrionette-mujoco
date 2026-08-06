@@ -14,59 +14,58 @@ from selfrionette.plugins.evaluations._endpoint_reach_evidence import (
     ENDPOINT_REACH_TERMINAL_EVIDENCE,
     ENDPOINT_REACH_TRAJECTORY_EVIDENCE,
 )
+from selfrionette.plugins.tasks.endpoint_reach_task import ENDPOINT_REACH_TASK_PLUGIN
 from selfrionette.runtime.experiment.contracts import (
     CanonicalEvidence,
     CanonicalEvidenceSet,
     EvidenceStatus,
 )
+from selfrionette.runtime.experiment.endpoint_reach_evidence import (
+    ENDPOINT_REACH_TERMINAL_PROVENANCE,
+    ENDPOINT_REACH_TRAJECTORY_PROVENANCE,
+    EndpointReachObservation,
+    EndpointReachTaskContext,
+)
 
 
-def _evidence(
-    *,
-    classification: str = "success",
-    elapsed_time_s: float | None = 1.5,
-) -> CanonicalEvidenceSet:
-    return CanonicalEvidenceSet(
-        (
-            CanonicalEvidence(
-                identity=ENDPOINT_REACH_TERMINAL_EVIDENCE,
-                status=EvidenceStatus.MEASURED,
-                value={
-                    "classification": classification,
-                    "elapsed_time_s": elapsed_time_s,
-                    "reason": None,
-                },
-                provenance="test-task",
-            ),
-            CanonicalEvidence(
-                identity=ENDPOINT_REACH_TRAJECTORY_EVIDENCE,
-                status=EvidenceStatus.MEASURED,
-                value={
-                    "initial_position_world_m": (0.0, 0.0, 0.0),
-                    "target_position_world_m": (1.0, 0.0, 0.0),
-                    "samples": (
-                        {
-                            "elapsed_time_s": 0.0,
-                            "position_world_m": (0.0, 0.0, 0.0),
-                        },
-                        {
-                            "elapsed_time_s": 0.5,
-                            "position_world_m": (0.5, 0.2, 0.0),
-                        },
-                        {
-                            "elapsed_time_s": 1.5,
-                            "position_world_m": (0.9, 0.0, 0.0),
-                        },
-                    ),
-                },
-                provenance="test-task",
-            ),
-        )
+def _task_evidence(*, success: bool = True) -> CanonicalEvidenceSet:
+    binding = ENDPOINT_REACH_TASK_PLUGIN.bind_context(
+        EndpointReachTaskContext(
+            initial_position_world_m=(0.0, 0.0, 0.0),
+            target_position_world_m=(1.0, 0.0, 0.0),
+            target_tolerance_m=0.11,
+            dwell_interval_s=0.2,
+            timeout_s=2.0,
+        ),
+        {},
     )
+    transition = binding.advance(
+        binding.initial_state(),
+        EndpointReachObservation(0.0, (0.0, 0.0, 0.0)),
+    )
+    transition = binding.advance(
+        transition.state,
+        EndpointReachObservation(0.5, (0.5, 0.2, 0.0)),
+    )
+    if success:
+        transition = binding.advance(
+            transition.state,
+            EndpointReachObservation(1.2, (0.9, 0.0, 0.0)),
+        )
+        transition = binding.advance(
+            transition.state,
+            EndpointReachObservation(1.5, (0.9, 0.0, 0.0)),
+        )
+    else:
+        transition = binding.advance(
+            transition.state,
+            EndpointReachObservation(2.0, (0.5, 0.2, 0.0)),
+        )
+    return transition.evidence
 
 
 def test_primary_and_secondary_metrics_are_pure_and_typed() -> None:
-    evidence = _evidence()
+    evidence = _task_evidence()
     success = SUCCESS_WITHIN_TIMEOUT_PLUGIN.derive_metric(evidence, {})
     drift = OFF_AXIS_DRIFT_PLUGIN.derive_metric(evidence, {})
 
@@ -81,13 +80,13 @@ def test_primary_and_secondary_metrics_are_pure_and_typed() -> None:
 
 
 def test_descriptive_metrics_preserve_failure_semantics() -> None:
-    success_evidence = _evidence()
+    success_evidence = _task_evidence()
     assert COMPLETION_TIME_PLUGIN.derive_metric(success_evidence, {}).value == 1.5
     assert FINAL_ENDPOINT_ERROR_PLUGIN.derive_metric(
         success_evidence, {}
     ).value == pytest.approx(0.1)
 
-    failure_evidence = _evidence(classification="failure", elapsed_time_s=5.0)
+    failure_evidence = _task_evidence(success=False)
     primary = SUCCESS_WITHIN_TIMEOUT_PLUGIN.derive_metric(failure_evidence, {})
     completion = COMPLETION_TIME_PLUGIN.derive_metric(failure_evidence, {})
     assert primary.value is False
@@ -145,9 +144,30 @@ def test_trajectory_validation_rejects_invalid_geometry() -> None:
                         },
                     ),
                 },
-                provenance="test-task",
+                provenance=ENDPOINT_REACH_TRAJECTORY_PROVENANCE,
             ),
         )
     )
     with pytest.raises(ValueError, match="target must differ"):
         OFF_AXIS_DRIFT_PLUGIN.derive_metric(invalid, {})
+
+
+def test_primary_metric_rejects_forged_measured_terminal_producer() -> None:
+    forged = CanonicalEvidenceSet(
+        (
+            CanonicalEvidence(
+                identity=ENDPOINT_REACH_TERMINAL_EVIDENCE,
+                status=EvidenceStatus.MEASURED,
+                value={
+                    "classification": "success",
+                    "elapsed_time_s": 0.1,
+                    "reason": None,
+                },
+                provenance="runner:preclassified",
+            ),
+        )
+    )
+    with pytest.raises(ValueError, match="invalid producer"):
+        SUCCESS_WITHIN_TIMEOUT_PLUGIN.derive_metric(forged, {})
+
+    assert ENDPOINT_REACH_TERMINAL_PROVENANCE == "endpoint_reach_task/v1:terminal"

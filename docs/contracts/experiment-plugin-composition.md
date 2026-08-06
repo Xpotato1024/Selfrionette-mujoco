@@ -313,6 +313,8 @@ runtime入口として使用しない。
 - typed `SemanticRoleRequirement`（role、object kind、frame、unit）
 - strict parameter contract
 - typed lifecycle strategy
+- upper contextへbindしたimmutable `TaskExecutionBinding`
+- observationごとの`TaskTransition`（次state、terminal classification、Task-owned evidence）
 - versioned canonical task event identity
 - produced evidence identity
 - `running` / `success` / `failure` / `technical_invalid`のterminal classification boundary
@@ -322,11 +324,21 @@ canonical task event identityは`produced_evidence`にも含める。Task produc
 joint名、geom名、site名、solver classを参照せず、capability、semantic role、canonical evidenceを
 入力とする。
 
+`TaskLifecycleStrategy`はpreclassified terminal evidenceを入力として読み戻さない。upper ownerから受けた
+contextを`bind_context()`で固定し、runnerはtyped observationだけを`TaskExecutionBinding.advance()`へ渡す。
+classificationとcanonical task eventはTask transitionの出力であり、runnerが直接作成しない。
+
 `endpoint_reach_task/v1`は`endpoint_pose/v1`、`reset_initial_state/v1`、typed
 `robot.tool_endpoint` roleを要求し、`endpoint_reach_terminal_classification/v1`と
 `endpoint_reach_measured_trajectory/v1`を生成するTaskとして宣言する。Task Pluginはtask stateと
 `running` / `success` / `failure` / `technical_invalid`のclosed classificationを所有するが、target、
 tolerance、dwell、timeout、initial stateはupper evaluation manifestを正本とし、plugin parameterへ複製しない。
+readinessはこれら5条件をimmutable `EndpointReachTaskContext`へprojectionする。Task bindingはworld-frame
+measured endpoint sampleとelapsed timeを消費し、tolerance内の連続dwell完了だけをtimeout以下のsuccessとする。
+最初のsampleはMuJoCo-owned elapsed 0 measurementとし、frozen initial positionとのexact一致を要求する。
+upper manifestのinitial positionをmeasured sampleへ自動変換しない。
+tolerance外へ戻ればdwellをresetし、success前のtimeout、held / rejected / staleはfailure、measurement
+unavailable / invalid、reset、non-monotonic stream、technical statusは`technical_invalid`とする。
 両evidence identityとstrict value shapeはcross-axis layer contract
 `runtime/experiment/endpoint_reach_evidence.py`を唯一の定義元とし、Task / Evaluation packageへ複製しない。
 

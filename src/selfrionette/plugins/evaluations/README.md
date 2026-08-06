@@ -18,6 +18,8 @@ Evaluation axisはgeneric experiment composition上の評価方法とresult cont
 ## lifecycleとside effect
 
 R7-G evaluatorはTask-owned canonical evidenceからpureかつdeterministicにmetricを導出する。
+measured terminal / trajectoryはcross-axis contractで固定したTask producer provenanceを要求し、runner等が
+同じshapeのpreclassified evidenceを作成して代用することを拒否する。
 trial aggregation、JSON / CSV artifact、condition summary、viewer計算、external side effectは所有しない。
 
 ## catalog / discovery / registration

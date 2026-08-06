@@ -98,6 +98,11 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 Task / Evaluation catalogは各axis packageが所有し、`composition/production_experiment.py`がconcrete IDを
 知らずに6軸registryを束ねる。`evaluation/r7_g_free_space.py`はproduction catalogだけで解決できるworld /
 tool manifest fixtureを所有するが、scene spawn、task lifecycle、metric artifact、experiment runnerは所有しない。
+R7-G readinessはupper `EvaluationManifest`のtarget、tolerance、dwell、timeout、initial tipをimmutable
+Task contextへbindし、`EvaluationReadiness.task_execution_binding`としてrunnerへ渡す。runnerは
+MuJoCo-owned measured endpointとstatusをtyped observationとして渡すだけで、terminal classificationや
+canonical task evidenceを作成しない。Task pluginがpure transitionとproducer provenanceを所有し、trial
+aggregation、artifact export、condition summaryは後続ownerへ残す。
 application-facing replay / viewer / smokeはRobot、Input Source、Control Mapping、command semantics routeを
 接続するdiagnostic / operational runtimeである。全6軸を選択するproduction experiment runnerとviewer
 control planeはplanned #486のscopeであり、current diagnostic経路へ暗黙にEnvironment / Task /

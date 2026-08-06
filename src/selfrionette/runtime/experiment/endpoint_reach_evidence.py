@@ -1,9 +1,10 @@
-"""Canonical endpoint-reach evidence identities and strict value decoders."""
+"""endpoint reachのTask context、観測、canonical evidence契約。"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from math import isfinite, sqrt
 
 from selfrionette.runtime.experiment.contracts import (
@@ -21,6 +22,10 @@ ENDPOINT_REACH_TERMINAL_EVIDENCE = VersionedIdentity(
 )
 ENDPOINT_REACH_TRAJECTORY_EVIDENCE = VersionedIdentity(
     "endpoint_reach_measured_trajectory", 1
+)
+ENDPOINT_REACH_TERMINAL_PROVENANCE = "endpoint_reach_task/v1:terminal"
+ENDPOINT_REACH_TRAJECTORY_PROVENANCE = (
+    "endpoint_reach_task/v1:measured_trajectory"
 )
 
 
@@ -49,8 +54,96 @@ def _distance(left: Vector3, right: Vector3) -> float:
     return sqrt(sum((left[index] - right[index]) ** 2 for index in range(3)))
 
 
+class EndpointReachMotionStatus(str, Enum):
+    """measured sampleに対応するcommand streamの状態。"""
+
+    NOMINAL = "nominal"
+    HELD = "held"
+    REJECTED = "rejected"
+    STALE = "stale"
+    RESET = "reset"
+    TECHNICAL_INVALID = "technical_invalid"
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointReachTaskContext:
+    """upper manifestから一度だけbindするworld-frame task条件。"""
+
+    initial_position_world_m: Vector3
+    target_position_world_m: Vector3
+    target_tolerance_m: float
+    dwell_interval_s: float
+    timeout_s: float
+
+    def __post_init__(self) -> None:
+        initial = _vector3("initial_position_world_m", self.initial_position_world_m)
+        target = _vector3("target_position_world_m", self.target_position_world_m)
+        if _distance(initial, target) == 0.0:
+            raise ValueError("endpoint reach target must differ from the initial position")
+        tolerance = _number("target_tolerance_m", self.target_tolerance_m)
+        dwell = _number("dwell_interval_s", self.dwell_interval_s)
+        timeout = _number("timeout_s", self.timeout_s)
+        if tolerance <= 0.0 or dwell <= 0.0 or timeout <= 0.0:
+            raise ValueError("endpoint reach tolerance, dwell, and timeout must be positive")
+        if tolerance >= _distance(initial, target):
+            raise ValueError("endpoint reach tolerance must be smaller than target distance")
+        if dwell > timeout:
+            raise ValueError("endpoint reach dwell must not exceed timeout")
+        object.__setattr__(self, "initial_position_world_m", initial)
+        object.__setattr__(self, "target_position_world_m", target)
+        object.__setattr__(self, "target_tolerance_m", tolerance)
+        object.__setattr__(self, "dwell_interval_s", dwell)
+        object.__setattr__(self, "timeout_s", timeout)
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointReachObservation:
+    """runnerがTaskへ渡す単一時点のworld-frame measured observation。"""
+
+    elapsed_time_s: float
+    position_world_m: Vector3 | None
+    measurement_status: EvidenceStatus = EvidenceStatus.MEASURED
+    motion_status: EndpointReachMotionStatus = EndpointReachMotionStatus.NOMINAL
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        elapsed = _number("elapsed_time_s", self.elapsed_time_s, non_negative=True)
+        object.__setattr__(self, "elapsed_time_s", elapsed)
+        if self.measurement_status not in {
+            EvidenceStatus.MEASURED,
+            EvidenceStatus.UNAVAILABLE,
+            EvidenceStatus.INVALID,
+        }:
+            raise ValueError(
+                "endpoint observation status must be measured, unavailable, or invalid"
+            )
+        if not isinstance(self.motion_status, EndpointReachMotionStatus):
+            raise TypeError("endpoint observation motion_status must be typed")
+        if self.measurement_status is EvidenceStatus.MEASURED:
+            if self.position_world_m is None:
+                raise ValueError("measured endpoint observation requires position_world_m")
+            object.__setattr__(
+                self,
+                "position_world_m",
+                _vector3("position_world_m", self.position_world_m),
+            )
+        elif self.position_world_m is not None:
+            raise ValueError("non-measured endpoint observation must not carry a position")
+        if (
+            self.measurement_status is not EvidenceStatus.MEASURED
+            or self.motion_status is not EndpointReachMotionStatus.NOMINAL
+        ) and (not isinstance(self.reason, str) or not self.reason.strip()):
+            raise ValueError("non-nominal endpoint observation requires a reason")
+        if self.reason is not None and (
+            not isinstance(self.reason, str) or not self.reason.strip()
+        ):
+            raise ValueError("endpoint observation reason must be non-empty or null")
+
+
 @dataclass(frozen=True, slots=True)
 class EndpointReachTerminalEvidence:
+    """Taskが生成した終端分類と経過時間。"""
+
     classification: TaskTerminalClassification
     elapsed_time_s: float | None
     reason: str | None
@@ -58,12 +151,16 @@ class EndpointReachTerminalEvidence:
 
 @dataclass(frozen=True, slots=True)
 class EndpointReachTrajectorySample:
+    """MuJoCo world frameの時刻付きendpoint位置。"""
+
     elapsed_time_s: float
     position_world_m: Vector3
 
 
 @dataclass(frozen=True, slots=True)
 class EndpointReachTrajectoryEvidence:
+    """初期位置、target、measured sample列からなるtrajectory。"""
+
     initial_position_world_m: Vector3
     target_position_world_m: Vector3
     samples: tuple[EndpointReachTrajectorySample, ...]
@@ -72,11 +169,13 @@ class EndpointReachTrajectoryEvidence:
 def decode_endpoint_reach_terminal_evidence(
     evidence: CanonicalEvidenceSet,
 ) -> EndpointReachTerminalEvidence:
-    """Decode the Task-owned terminal evidence without adding defaults."""
+    """Task-owned terminal evidenceをdefaultなしで厳密にdecodeする。"""
 
     entry = evidence.require(ENDPOINT_REACH_TERMINAL_EVIDENCE)
     if entry.status is not EvidenceStatus.MEASURED:
         raise ValueError("endpoint reach terminal evidence must be measured")
+    if entry.provenance != ENDPOINT_REACH_TERMINAL_PROVENANCE:
+        raise ValueError("endpoint reach terminal evidence has an invalid producer")
     value = entry.value
     if not isinstance(value, Mapping):
         raise ValueError("endpoint reach terminal evidence must be an object")
@@ -109,11 +208,13 @@ def decode_endpoint_reach_terminal_evidence(
 def decode_endpoint_reach_trajectory_evidence(
     evidence: CanonicalEvidenceSet,
 ) -> EndpointReachTrajectoryEvidence:
-    """Decode measured world-frame trajectory evidence without interpolation."""
+    """measured world-frame trajectoryを補間せず厳密にdecodeする。"""
 
     entry = evidence.require(ENDPOINT_REACH_TRAJECTORY_EVIDENCE)
     if entry.status is not EvidenceStatus.MEASURED:
         raise ValueError("endpoint reach trajectory evidence must be measured")
+    if entry.provenance != ENDPOINT_REACH_TRAJECTORY_PROVENANCE:
+        raise ValueError("endpoint reach trajectory evidence has an invalid producer")
     value = entry.value
     if not isinstance(value, Mapping):
         raise ValueError("endpoint reach trajectory evidence must be an object")
@@ -168,7 +269,12 @@ def decode_endpoint_reach_trajectory_evidence(
 
 __all__ = [
     "ENDPOINT_REACH_TERMINAL_EVIDENCE",
+    "ENDPOINT_REACH_TERMINAL_PROVENANCE",
     "ENDPOINT_REACH_TRAJECTORY_EVIDENCE",
+    "ENDPOINT_REACH_TRAJECTORY_PROVENANCE",
+    "EndpointReachMotionStatus",
+    "EndpointReachObservation",
+    "EndpointReachTaskContext",
     "EndpointReachTerminalEvidence",
     "EndpointReachTrajectoryEvidence",
     "EndpointReachTrajectorySample",

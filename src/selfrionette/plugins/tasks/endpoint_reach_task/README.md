@@ -16,12 +16,25 @@ evidenceとして宣言する。
 ## parameters
 
 なし。target、tolerance、dwell、timeout、initial stateは上位evaluation manifestが唯一のcondition
-ownerである。#407 / #408が同じfrozen manifestへbindしたevidenceを渡す。
+ownerである。readinessがこれらをimmutable `EndpointReachTaskContext`へ一度だけprojectionする。
 
 ## lifecycleとside effect
 
-initial stateは`ready`で、runnerが提供するcanonical evidenceから`running`、`success`、`failure`、
-`technical_invalid`を分類する。Robot command、MuJoCo step、artifact出力は行わない。
+`EvaluationReadiness.task_execution_binding`が`EndpointReachObservation`を受け取り、measured world-frame
+endpoint、elapsed time、measurement status、held / rejected / stale / technical statusからpure transitionを
+生成する。Taskは連続dwell開始時刻をstateに保持し、tolerance外へ出た時点でdwellをresetする。
+最初のobservationはMuJoCoから取得したelapsed 0のendpointで、frozen initial positionとのexact一致を
+要求する。manifest値をmeasured sampleとして自動挿入しない。
+
+- tolerance外かつtimeout前: `running`
+- tolerance内でrequired dwell完了かつ`elapsed_time_s <= timeout_s`: `success`
+- successせずtimeout到達、またはheld / rejected / stale: `failure`
+- measurement unavailable / invalid、reset、non-monotonic stream、technical invalid: `technical_invalid`
+
+transitionはTask-owned `endpoint_reach_terminal_classification/v1`と
+`endpoint_reach_measured_trajectory/v1`を一意なprovenanceで返す。runnerはclassificationを作らず、
+この結果を#407のlog boundaryへserializeできる。Robot command、MuJoCo step、metric集計、artifact出力は
+Task pluginの責務ではない。
 
 ## compatibilityとcomposition
 
@@ -29,7 +42,7 @@ MuJoCo backendとmeter単位のRobot endpoint roleへ依存する。fast_arm固�
 
 ## constraintsとnon-goals
 
-- constraint: missing / unavailable / invalid evidenceをsuccessへ変換しない
+- constraint: missing / unavailable / invalid measurementをsuccessへ変換しない
 - non-goal: contact、force、grasp、metric aggregation、JSON / CSV export
 
 ## tests / validation

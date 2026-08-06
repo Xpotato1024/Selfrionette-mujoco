@@ -107,6 +107,10 @@ evaluator evidence、profile / runtime / model identity、named neutral home、q
 tip / orientationのframe・unit・quaternion、target geometry、manifestとactual executionのsoftware identity、
 Robot Bundle providerのcanonical initial-state contract（identity、keyframe、qpos、tip、orientation、frame、
 unit、quaternion order）、mapping comparison family / semantics identityを検証する。
+upper manifestの`initial_tip_position_m`、`target_world_position_m`、`target_tolerance_m`、
+`dwell_interval_s`、`timeout_s`をimmutable `EndpointReachTaskContext`へprojectionし、selected Taskの
+`TaskExecutionBinding`を構築する。Task parameterへ同じ値は保存せず、このbindingも既存manifest fieldから
+決定されるためfreeze materialの第二SoTにはしない。
 さらにselected command routeがMapping declarationに存在し、そのcontrol semanticsがMappingの
 `mapping_semantics_identity`と一致し、final command semanticのtyped providerをRobot Bundleが持ち、
 route strategyから解決したexecution bindingの3 identityがrouteと一致することを
@@ -117,7 +121,8 @@ execution binding、Robot providerのcommand typeがgeneric semantic contractと
 成功時だけ`EvaluationReadiness`を返す。resultはcanonical requested manifest identity、resolved
 identity tuple、`EvidenceProducerBinding`、initial-state identity、`ReadinessStatus.READY`、
 initial-state contract identity、software execution identity、mapping comparison identity、`FreezeRecord`を
-immutableに保持する。失敗時は`EvaluationReadinessError`を送出し、partial successの
+immutableに保持し、`task_execution_binding`を#406のrunner boundaryとして公開する。失敗時は
+`EvaluationReadinessError`を送出し、partial successの
 runner-facing objectを返さない。このgateはmeasured reachability、physics feasibility、task success、
 log validityを証明しない。
 
@@ -152,6 +157,14 @@ R7-G canonical fixtureは両条件で同じ`analog_fixture_mapping/v1`を選び�
 dwell、timeout、initial state、input / gain / deadzone / cadenceと他5軸selectionは同一であり、nested
 `mapping_config`へframeを重複保持しない。pair validatorはこの許可field以外の差分をfield path付きで拒否する。
 
+`build_r7_g_free_space_manifest_pair()`は+Y 100 mm target 1件だけのsingle-target
+execution-candidate smoke fixtureであり、canonical 4-target pilot designを置換または縮約しない。
+input列はinitial zero、50個の+Y sample、terminal zeroからなり、cadence 0.02 s、gain 0.1 m/sの
+nominal command budgetは`50 * 0.02 * 0.1 = 0.1 m`である。これは
+`target distance 0.1 m - tolerance 0.01 m`以上だが、static command budgetにすぎず、MuJoCo measured
+reachabilityを証明しない。source EOF後はterminal zeroをholdする。readinessはこのsource factoryを呼ばず、
+model load / stepも行わない。
+
 ## freeze identityとpackage migration
 
 `FreezeRecord`はcanonical manifest bytes、resolved identity bytes、manifest digest、resolved digest、
@@ -179,6 +192,10 @@ identityを変更する場合は、manifest contract versionまたは対象のve
 `build_evaluation_condition_pair_readiness(pair, registries, execution_identity=...)`、既存の`compose_experiment()`とresolved composition /
 provider boundaryである。runnerはready resultとfreeze identityを受け取り、別のimplicit selectionや
 default補完を行わない。
+runnerは`EvaluationReadiness.task_execution_binding.initial_state()`と
+`advance(state, EndpointReachObservation(...))`だけをTask実行境界として使い、terminal classificationを
+直接作成しない。transitionが返すterminal / trajectory evidenceをcanonical producer provenanceのまま
+後続logへ渡す。
 
 production catalog boundaryは
 `runtime/composition/production_experiment.py::PRODUCTION_EXPERIMENT_PLUGIN_REGISTRIES`と
@@ -191,6 +208,7 @@ resolved Bundleから必要なtyped providerをassembly時に取得する。`plu
 moduleと旧compatibility facadeは#406のimport boundaryではない。Bundleはprovider assemblyの境界であり、
 runner処理中のservice locatorとして使用しない。
 
-runner、experiment-motion-log/v1のrecord lifecycle、participant / repetition / retry、physics execution、
-measured tip outcome、task terminal classification、metric calculation、contact outcomeは本Issueの
-public API handoffに含まれない。#406 / 後続Issueで別途実装する。
+runner本体、experiment-motion-log/v1のrecord lifecycle、participant / repetition / retry、physics execution、
+measured tipの取得、metric集計 / artifact、contact outcomeは本Issueの実装に含まれない。Task-owned
+terminal derivation APIはhandoffに含むが、#406で実MuJoCo sampleを与えたmeasured reachability、world/tool
+execution、metric validityを検証する必要がある。

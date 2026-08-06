@@ -1,4 +1,4 @@
-"""Binary measured endpoint-reach success outcome for R7-G."""
+"""R7-G endpoint-reachのbinary measured success outcome。"""
 
 from collections.abc import Mapping
 
@@ -24,7 +24,7 @@ PROVENANCE = "endpoint_reach_task:endpoint_reach_terminal_classification/v1"
 
 
 class SuccessWithinTimeoutDeriver:
-    """Project the Task-owned closed terminal classification to a boolean metric."""
+    """Task-owned terminal classificationをboolean metricへ投影する。"""
 
     def derive(
         self,

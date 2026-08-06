@@ -1,4 +1,4 @@
-"""Descriptive completion time for successful endpoint-reach trials."""
+"""成功したendpoint-reach trialだけのdescriptive completion time。"""
 
 from collections.abc import Mapping
 
@@ -24,7 +24,7 @@ PROVENANCE = "endpoint_reach_task:endpoint_reach_terminal_classification/v1"
 
 
 class CompletionTimeDeriver:
-    """Return time only for success; never synthesize it for failed trials."""
+    """success時だけtimeを返し、failed trialには値を合成しない。"""
 
     def derive(
         self,

@@ -1,4 +1,4 @@
-"""completion_time/v1 public declaration."""
+"""completion_time/v1のpublic宣言。"""
 
 from .implementation import COMPLETION_TIME_PLUGIN
 

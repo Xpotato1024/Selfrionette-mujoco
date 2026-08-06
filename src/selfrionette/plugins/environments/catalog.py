@@ -11,7 +11,7 @@ ENVIRONMENT_PLUGINS: tuple[EnvironmentPlugin, ...] = ENVIRONMENT_REGISTRY.entrie
 
 
 def resolve_environment_plugin(selection: PluginSelection) -> EnvironmentPlugin:
-    """Resolve one production Environment without composing a scene."""
+    """sceneをcomposeせずproduction Environmentを1件解決する。"""
 
     return ENVIRONMENT_REGISTRY.resolve(selection)
 

@@ -11,7 +11,7 @@ EVALUATION_PLUGINS: tuple[EvaluationPlugin, ...] = EVALUATION_REGISTRY.entries
 
 
 def resolve_evaluation_plugin(selection: PluginSelection) -> EvaluationPlugin:
-    """Resolve one production Evaluation without deriving a metric."""
+    """metricを導出せずproduction Evaluationを1件解決する。"""
 
     return EVALUATION_REGISTRY.resolve(selection)
 

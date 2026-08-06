@@ -1,4 +1,4 @@
-"""Maximum perpendicular drift of the measured endpoint trajectory."""
+"""measured endpoint trajectoryの最大垂直距離を表すoff-axis drift。"""
 
 from collections.abc import Mapping
 from math import sqrt
@@ -24,7 +24,7 @@ WORLD_FRAME = "MuJoCo world / scene frame"
 
 
 class OffAxisDriftDeriver:
-    """Derive maximum distance from the initial-to-target world-frame line."""
+    """initial-to-target world-frame lineからの最大距離を導出する。"""
 
     def derive(
         self,

@@ -1,8 +1,8 @@
-"""Canonical production-catalog manifest fixture for R7-G free-space readiness.
+"""R7-G free-spaceのsingle-target execution-candidate manifest fixture。
 
-The fixture freezes one deterministic software-only input condition.  It does
-not start an Input Source, compose a MuJoCo scene, step physics, or claim an
-observed experiment result.
+production catalogだけでworld/tool conditionをfreezeし、+Y targetへ向かうbounded
+analog sample列と終端zero holdを宣言する。4-target pilot designの代替ではなく、
+readiness中にInput Source開始、MuJoCo model load/step、到達可能性の観測は行わない。
 """
 
 from __future__ import annotations
@@ -44,10 +44,11 @@ R7_G_EVALUATOR_SELECTIONS = (
     PluginSelection("final_endpoint_error", 1),
 )
 
+R7_G_FIXTURE_NONZERO_SAMPLE_COUNT = 50
 _FIXTURE_RAW_VALUES = (
-    (0.0, 0.0, 0.0),
-    (0.0, 1.0, 0.0),
-    (0.0, 0.0, 0.0),
+    ((0.0, 0.0, 0.0),)
+    + ((0.0, 1.0, 0.0),) * R7_G_FIXTURE_NONZERO_SAMPLE_COUNT
+    + ((0.0, 0.0, 0.0),)
 )
 
 _MAPPING_SHAPE_CONFIG = {
@@ -122,7 +123,7 @@ def build_r7_g_free_space_manifest_pair(
     *,
     software_revision_identity: str,
 ) -> EvaluationConditionPair:
-    """Build the canonical world/tool pair from explicit production selections."""
+    """production selectionだけからsingle-target world/tool pairを構築する。"""
 
     bundle = PRODUCTION_EXPERIMENT_PLUGIN_REGISTRIES.robot_bundles.resolve(
         R7_G_ROBOT_SELECTION
@@ -188,7 +189,7 @@ def build_r7_g_free_space_manifest_pair(
         dwell_interval_s=0.2,
         timeout_s=5.0,
         input_source_identity=R7_G_INPUT_SOURCE_SELECTION.plugin_id,
-        fixture_identity="r7-g-free-space-analog-y-v1",
+        fixture_identity="r7-g-free-space-analog-y-execution-smoke-v1",
         normalized_input_range=(-1.0, 1.0),
         gain=gain,
         deadzone=deadzone,
@@ -222,6 +223,7 @@ def build_r7_g_free_space_manifest_pair(
 __all__ = [
     "R7_G_ENVIRONMENT_SELECTION",
     "R7_G_EVALUATOR_SELECTIONS",
+    "R7_G_FIXTURE_NONZERO_SAMPLE_COUNT",
     "R7_G_INPUT_SOURCE_SELECTION",
     "R7_G_MAPPING_SELECTION",
     "R7_G_ROBOT_SELECTION",

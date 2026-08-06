@@ -19,7 +19,7 @@ ENVIRONMENT_PLUGIN_ENTRY_SYMBOL = "ENVIRONMENT_PLUGIN"
 
 
 class EnvironmentPluginDiscoveryError(RuntimeError):
-    """Fail-closed Environment Plugin discovery error."""
+    """Environment Plugin discoveryのfail-closed error。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +63,7 @@ def _load_plugin(
 def discover_environment_plugins(
     root: EnvironmentDiscoveryRoot,
 ) -> VersionedPluginRegistry[EnvironmentPlugin]:
-    """Discover public direct children only and reject every broken candidate."""
+    """public direct childだけを探索し、壊れたcandidateをすべて拒否する。"""
 
     package_names = direct_child_package_names(root.namespace)
     plugins = tuple(_load_plugin(root, name) for name in package_names)
@@ -82,7 +82,7 @@ def discover_environment_plugins(
 
 def discover_production_environment_plugins(
 ) -> VersionedPluginRegistry[EnvironmentPlugin]:
-    """Discover only the fixed first-party production namespace."""
+    """固定されたfirst-party production namespaceだけを探索する。"""
 
     from selfrionette.plugins import environments
 

@@ -1,4 +1,4 @@
-"""free_space_environment/v1 public declaration."""
+"""free_space_environment/v1のpublic宣言。"""
 
 from .implementation import FREE_SPACE_ENVIRONMENT_PLUGIN
 

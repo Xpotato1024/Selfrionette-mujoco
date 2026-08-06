@@ -1,4 +1,4 @@
-"""Descriptive final measured endpoint-to-target error for R7-G."""
+"""R7-Gのfinal measured endpoint-to-target errorを表すdescriptive metric。"""
 
 from collections.abc import Mapping
 from math import sqrt
@@ -24,7 +24,7 @@ WORLD_FRAME = "MuJoCo world / scene frame"
 
 
 class FinalEndpointErrorDeriver:
-    """Derive Euclidean error from the final measured world-frame sample."""
+    """最後のmeasured world-frame sampleからEuclidean errorを導出する。"""
 
     def derive(
         self,
