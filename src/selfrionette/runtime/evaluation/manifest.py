@@ -1062,7 +1062,11 @@ def _validate_control_mapping(
     manifest: EvaluationManifest,
     composition: ResolvedExperimentComposition,
 ) -> tuple[VersionedIdentity, VersionedIdentity]:
-    declared_frame = composition.control_mapping.control_frame
+    parameter_item = _parameter_item_for_owner(
+        manifest, PluginAxis.CONTROL_MAPPING
+    )
+    parameters = {} if parameter_item is None else parameter_item.values
+    declared_frame = composition.control_mapping.resolve_control_frame(parameters)
     if declared_frame is None:
         raise EvaluationReadinessError(
             "mapping plugin must declare control_frame for evaluation readiness"
@@ -1583,10 +1587,6 @@ class EvaluationConditionPair:
             raise EvaluationManifestError("condition order must contain exactly 0 and 1")
         if self.world.task_order != self.tool.task_order:
             raise EvaluationManifestError("task order must match across world/tool conditions")
-        if self.world.control_mapping == self.tool.control_mapping:
-            raise EvaluationManifestError(
-                "world/tool conditions must select corresponding distinct mapping plugins"
-            )
         left = _shared_condition_document(self.world)
         right = _shared_condition_document(self.tool)
         differences = _document_differences(left, right)
@@ -1697,7 +1697,12 @@ def _validate_condition_pair_compositions(
         ("world", pair.world, world_composition),
         ("tool", pair.tool, tool_composition),
     ):
-        if composition.control_mapping.control_frame != manifest.requested_control_frame:
+        parameter_item = _parameter_item_for_owner(
+            manifest, PluginAxis.CONTROL_MAPPING
+        )
+        parameters = {} if parameter_item is None else parameter_item.values
+        resolved_frame = composition.control_mapping.resolve_control_frame(parameters)
+        if resolved_frame != manifest.requested_control_frame:
             raise EvaluationReadinessError(
                 f"{label} mapping selection/requested frame mismatch"
             )

@@ -21,7 +21,7 @@ related:
 
 | owner | canonical responsibility |
 |---|---|
-| `composition/` | config、Robot Profile / Plugin / Bundle、typed provider adapter、pipeline assembly |
+| `composition/` | config、Robot Profile / Plugin / Bundle、typed provider adapter、pipeline assembly、production 6-axis catalog projection |
 | `execution/` | route-bound `ControlMappedRuntimePipeline`、input step loop、typed command / input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
@@ -94,8 +94,10 @@ axis-scoped parameter owner、typed semantic role、version-aware robot/environm
 evidence producer、evaluator requirementをfail-closedで検証する。詳細なtyped contractとreadiness順序は
 `docs/contracts/experiment-plugin-composition.md`を正とする。
 
-このgeneric experiment compositionはreadiness-onlyであり、current productionのEnvironment / Task /
-Evaluation catalog、scene spawn、task lifecycle、metric artifact、experiment runnerを所有しない。
+このgeneric experiment compositionはreadiness-onlyである。R7-G free-space用のproduction Environment /
+Task / Evaluation catalogは各axis packageが所有し、`composition/production_experiment.py`がconcrete IDを
+知らずに6軸registryを束ねる。`evaluation/r7_g_free_space.py`はproduction catalogだけで解決できるworld /
+tool manifest fixtureを所有するが、scene spawn、task lifecycle、metric artifact、experiment runnerは所有しない。
 application-facing replay / viewer / smokeはRobot、Input Source、Control Mapping、command semantics routeを
 接続するdiagnostic / operational runtimeである。全6軸を選択するproduction experiment runnerとviewer
 control planeはplanned #486のscopeであり、current diagnostic経路へ暗黙にEnvironment / Task /

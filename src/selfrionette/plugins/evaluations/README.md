@@ -6,32 +6,43 @@ Evaluation axisはgeneric experiment composition上の評価方法とresult cont
 
 ## 置けるもの / 置けないもの
 
-- 置けるもの: 将来のproduction evaluatorとmetric固有parameter
+- 置けるもの: production evaluator、metric unit / frame / provenance、metric固有parameter
 - 置けないもの: Task目標、Robot control、source acquisition、viewer diagnosticだけの表示
 
 ## contractとI/O
 
 - required contract: [experiment plugin composition](../../../../docs/contracts/experiment-plugin-composition.md)
-- input: generic compositionのversion付きselectionと将来のrun result
-- output: evaluation identityとcomposition role
+- input: generic compositionのversion付きselectionとcanonical evidence
+- output: status付き`MetricResult`、unit / frame / provenance declaration
 
 ## lifecycleとside effect
 
-現在はgeneric contractとtest fixtureだけであり、production evaluator、result persistence、
-external side effectはない。
+R7-G evaluatorはTask-owned canonical evidenceからpureかつdeterministicにmetricを導出する。
+trial aggregation、JSON / CSV artifact、condition summary、viewer計算、external side effectは所有しない。
 
 ## catalog / discovery / registration
 
-production concrete plugin、axis catalog、runner / UIは未実装である。
+`discovery.py`はpublic direct-child packageの`plugin.py::EVALUATION_PLUGIN`だけをbounded discoveryし、
+`catalog.py`がlogical identity順のproduction registryへ投影する。private package、test fixture、arbitrary
+dynamic importは対象外である。production runner / UIは未実装である。
 
 ## shared private owner
 
-なし。
+`_endpoint_reach_evidence.py`はendpoint reach evaluatorだけが共有するstrict evidence decoderであり、
+private packageとしてdiscoverしない。
 
 ## concrete pluginの追加
 
-最初のproduction pluginでは、metric / unit / aggregation owner、failure semantics、bounded discovery、
-catalog、runner / manifest結線、README、validationを同時に定義する。
+axis直下へself-contained packageを追加し、`plugin.py::EVALUATION_PLUGIN`、plugin-local README、focused
+testsを同じ変更に含める。package basenameとlogical identityを一致させ、missing / unavailable /
+invalid evidenceを数値0またはsuccessへ変換しない。
+
+## current concrete plugins
+
+- [`success_within_timeout/v1`](success_within_timeout/README.md): terminal classificationから導くprimary boolean outcome
+- [`off_axis_drift/v1`](off_axis_drift/README.md): initial-target axisからの最大world-frame drift（meter）
+- [`completion_time/v1`](completion_time/README.md): success時だけ利用可能なdescriptive duration（second）
+- [`final_endpoint_error/v1`](final_endpoint_error/README.md): measured final endpointとtarget間のdescriptive world-frame error（meter）
 
 ## canonical document
 

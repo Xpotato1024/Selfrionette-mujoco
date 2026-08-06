@@ -647,6 +647,29 @@ class ControlMappingPlugin:
         self.parameter_contract.validate(normalized)
         return MappingProxyType(dict(sorted(normalized.items())))
 
+    def resolve_control_frame(self, parameters: Mapping[str, object]) -> str | None:
+        """Resolve the evaluation control frame without executing the mapping.
+
+        A static declaration remains authoritative when present.  A mapping whose
+        frame is an explicit experiment condition may instead expose the
+        condition-owned ``control_frame`` parameter.
+        """
+
+        self.parameter_contract.validate(parameters)
+        parameter_frame = parameters.get("control_frame")
+        if parameter_frame is not None:
+            if not isinstance(parameter_frame, str) or parameter_frame not in {
+                "world",
+                "tool",
+            }:
+                raise ValueError("control_frame parameter must be 'world' or 'tool'")
+            if self.control_frame is not None and self.control_frame != parameter_frame:
+                raise ValueError(
+                    "control mapping static/parameter control frame mismatch"
+                )
+            return parameter_frame
+        return self.control_frame
+
 
 @dataclass(frozen=True, slots=True)
 class TaskPlugin:
@@ -695,12 +718,18 @@ class EvaluationPlugin:
     evidence_policy: EvidencePolicy
     parameter_contract: ParameterContract
     provenance: str
+    unit: str = "dimensionless"
+    frame: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.metric_deriver, MetricDerivationStrategy):
             raise TypeError("evaluation plugin requires a typed metric derivation strategy")
         if not self.provenance:
             raise ValueError("evaluation plugin provenance must not be empty")
+        if not self.unit:
+            raise ValueError("evaluation plugin unit must not be empty")
+        if self.frame is not None and not self.frame:
+            raise ValueError("evaluation plugin frame must be non-empty or None")
 
     def derive_metric(
         self,

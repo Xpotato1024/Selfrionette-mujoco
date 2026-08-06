@@ -3,10 +3,20 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from selfrionette.plugins import input_sources, mappings, robots
+from selfrionette.plugins import (
+    environments,
+    evaluations,
+    input_sources,
+    mappings,
+    robots,
+    tasks,
+)
 from selfrionette.plugins.bounded_discovery import direct_child_package_names
+from selfrionette.plugins.environments.catalog import ENVIRONMENT_REGISTRY
+from selfrionette.plugins.evaluations.catalog import EVALUATION_REGISTRY
 from selfrionette.plugins.input_sources.catalog import INPUT_SOURCE_CATALOG
 from selfrionette.plugins.mappings.catalog import CONTROL_MAPPING_REGISTRY
+from selfrionette.plugins.tasks.catalog import TASK_REGISTRY
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +45,15 @@ def test_discoverable_axes_use_fixed_package_entry_points() -> None:
         entry = PLUGINS / "mappings" / plugin_id / "plugin.py"
         assert entry.is_file(), plugin_id
         assert "CONTROL_MAPPING_PLUGIN" in entry.read_text(encoding="utf-8")
+    for axis, registry, symbol in (
+        ("environments", ENVIRONMENT_REGISTRY, "ENVIRONMENT_PLUGIN"),
+        ("tasks", TASK_REGISTRY, "TASK_PLUGIN"),
+        ("evaluations", EVALUATION_REGISTRY, "EVALUATION_PLUGIN"),
+    ):
+        for plugin_id in registry.ids:
+            entry = PLUGINS / axis / plugin_id / "plugin.py"
+            assert entry.is_file(), plugin_id
+            assert symbol in entry.read_text(encoding="utf-8")
 
 
 def test_plugin_readme_coverage_follows_bounded_discovery_candidates() -> None:
@@ -49,7 +68,14 @@ def test_plugin_readme_coverage_follows_bounded_discovery_candidates() -> None:
     ):
         assert (PLUGINS / axis / "README.md").is_file(), axis
 
-    for namespace in (robots, input_sources, mappings):
+    for namespace in (
+        robots,
+        input_sources,
+        mappings,
+        environments,
+        tasks,
+        evaluations,
+    ):
         axis_root = PLUGINS / namespace.__name__.rsplit(".", 1)[-1]
         for package_name in direct_child_package_names(namespace):
             readme = axis_root / package_name / "README.md"
@@ -63,11 +89,17 @@ def test_catalogs_and_generic_registration_do_not_list_concrete_plugins() -> Non
     guarded = (
         PLUGINS / "input_sources" / "catalog.py",
         PLUGINS / "mappings" / "catalog.py",
+        PLUGINS / "environments" / "catalog.py",
+        PLUGINS / "tasks" / "catalog.py",
+        PLUGINS / "evaluations" / "catalog.py",
         PLUGINS / "input_sources" / "registration.py",
     )
     concrete_ids = (
         *INPUT_SOURCE_CATALOG.ids,
         *CONTROL_MAPPING_REGISTRY.ids,
+        *ENVIRONMENT_REGISTRY.ids,
+        *TASK_REGISTRY.ids,
+        *EVALUATION_REGISTRY.ids,
     )
     for path in guarded:
         text = path.read_text(encoding="utf-8")
@@ -82,11 +114,17 @@ def test_catalogs_and_generic_registration_do_not_list_concrete_plugins() -> Non
             "selfrionette.plugins.input_sources.discovery",
             "selfrionette.plugins.input_sources.registration",
             "selfrionette.plugins.mappings.discovery",
+            "selfrionette.plugins.environments.discovery",
+            "selfrionette.plugins.tasks.discovery",
+            "selfrionette.plugins.evaluations.discovery",
         }
         assert not any(
             (
                 module.startswith("selfrionette.plugins.input_sources.")
                 or module.startswith("selfrionette.plugins.mappings.")
+                or module.startswith("selfrionette.plugins.environments.")
+                or module.startswith("selfrionette.plugins.tasks.")
+                or module.startswith("selfrionette.plugins.evaluations.")
             )
             and module not in allowed_axis_infrastructure
             for module in _imports(path)
@@ -162,15 +200,29 @@ def test_mapping_implementation_is_package_owned_without_cross_plugin_imports() 
     assert not any(plugin_id in shared_text for plugin_id in plugin_ids)
 
 
-def test_environment_task_evaluation_have_no_production_concrete_second_sot() -> None:
-    for axis in ("environments", "tasks", "evaluations"):
+def test_environment_task_evaluation_use_axis_local_bounded_infrastructure() -> None:
+    expected = {
+        "environments": ("free_space_environment",),
+        "tasks": ("endpoint_reach_task",),
+        "evaluations": (
+            "completion_time",
+            "final_endpoint_error",
+            "off_axis_drift",
+            "success_within_timeout",
+        ),
+    }
+    for axis, plugin_ids in expected.items():
         namespace = PLUGINS / axis
-        assert namespace.is_dir()
+        assert (namespace / "catalog.py").is_file()
+        assert (namespace / "discovery.py").is_file()
+        assert not (namespace / "registration.py").exists()
         assert tuple(
-            path.name
-            for path in namespace.iterdir()
-            if not path.name.startswith("_") and path.name != "README.md"
-        ) == ()
+            sorted(
+                path.name
+                for path in namespace.iterdir()
+                if path.is_dir() and not path.name.startswith("_")
+            )
+        ) == plugin_ids
 
 
 def test_generic_experiment_layer_has_no_concrete_plugin_imports() -> None:

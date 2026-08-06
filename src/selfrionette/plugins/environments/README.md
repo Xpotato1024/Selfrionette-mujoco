@@ -6,32 +6,39 @@ Environment axisはgeneric experiment composition上のworld / scene条件を表
 
 ## 置けるもの / 置けないもの
 
-- 置けるもの: 将来のproduction environment declarationとその固有resource
+- 置けるもの: production environment declaration、scene condition/providerと固有resource
 - 置けないもの: Robot model、Task目標、Evaluation metric、viewer独自physics
 
 ## contractとI/O
 
 - required contract: [experiment plugin composition](../../../../docs/contracts/experiment-plugin-composition.md)
 - input: generic compositionのversion付きselection
-- output: environment identityとcomposition role
+- output: environment identity、scene condition/provider、composition roleとevidence declaration
 
 ## lifecycleとside effect
 
-現在はgeneric contractとtest fixtureだけであり、production lifecycleやexternal side effectはない。
+`free_space_environment/v1`はRobot-owned base sceneへtask objectを追加しないfree-space条件を返す。
+compose/resetはside-effect-freeであり、MuJoCo load / stepやexternal I/Oを行わない。
 
 ## catalog / discovery / registration
 
-production concrete plugin、axis catalog、runner / UIは未実装である。generic registry testを
-production readinessの証拠にしない。
+`discovery.py`はpublic direct-child packageの`plugin.py::ENVIRONMENT_PLUGIN`だけをbounded discoveryし、
+`catalog.py`がlogical identity順のproduction registryへ投影する。private package、test fixture、arbitrary
+dynamic importは対象外である。production runner / UIは未実装である。
 
 ## shared private owner
 
-なし。
+現在はなし。
 
 ## concrete pluginの追加
 
-最初のproduction pluginでは、resource ownership、bounded discovery、catalog、lifecycle、
-runtime assembly、README、validationを同じ変更で設計する。planned control planeを先取りしない。
+axis直下へself-contained packageを追加し、`plugin.py::ENVIRONMENT_PLUGIN`、plugin-local README、
+focused testsを同じ変更に含める。package basenameとlogical identityを一致させ、catalogやgeneric
+runtimeへconcrete ID / importを追加しない。
+
+## current concrete plugins
+
+- [`free_space_environment/v1`](free_space_environment/README.md): Robot base sceneだけを使い、task objectとcontactを追加しないR7-G free-space条件
 
 ## canonical document
 

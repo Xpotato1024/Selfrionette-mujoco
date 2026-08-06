@@ -80,6 +80,20 @@ def test_viewer_remains_outside_task_contact_and_metric_ownership() -> None:
         assert "ContactEvidenceProvider" not in source
 
 
+def test_environment_task_evaluation_plugins_do_not_cross_import_concrete_axes() -> None:
+    plugin_root = ROOT / "src" / "selfrionette" / "plugins"
+    forbidden = {
+        "environments": ("plugins.tasks.", "plugins.evaluations.", "fast_arm"),
+        "tasks": ("plugins.environments.", "plugins.evaluations.", "fast_arm"),
+        "evaluations": ("plugins.environments.", "plugins.tasks.", "fast_arm"),
+    }
+    for axis, markers in forbidden.items():
+        for path in (plugin_root / axis).rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            for marker in markers:
+                assert marker not in source, f"{path}:{marker}"
+
+
 def test_runtime_public_surface_is_minimal_and_catalog_aware() -> None:
     import selfrionette.runtime as runtime
 

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-29
+last_verified: 2026-08-06
 canonical_for:
   - versioned evaluation manifest
   - canonical manifest serialization
@@ -124,8 +124,9 @@ log validityを証明しない。
 ## world / tool condition-pair
 
 `EvaluationConditionPair`は`world`と`tool`の二条件を一組として検証する。labelとrequested frameは
-それぞれ`world/world`、`tool/tool`でなければならず、condition orderは`0`と`1`、task orderは一致し、
-Control Mapping Plugin selectionは対応する別selectionでなければならない。
+それぞれ`world/world`、`tool/tool`でなければならず、condition orderは`0`と`1`、task orderは一致する。
+Control Mapping Plugin selectionは同一でも別selectionでもよいが、各conditionのresolved control frameを
+static declarationまたは明示的なcondition-specific parameterから一意に解決できなければならない。
 
 条件間で許可される差分は次だけである。
 
@@ -145,6 +146,11 @@ tolerance、dwell、timeout、deterministic seed policy、camera / visual feedba
 evaluator parameterは完全一致しなければならない。その他の差分は差分field pathを示してfail-closedで
 拒否する。pair readinessでは両conditionを個別にcomposeしてから、mapping/frameとcondition-specific
 parameter boundaryを検証する。
+
+R7-G canonical fixtureは両条件で同じ`analog_fixture_mapping/v1`を選び、top-level
+`control_frame`だけを`world` / `tool`としてupper manifestから明示projectionする。target、tolerance、
+dwell、timeout、initial state、input / gain / deadzone / cadenceと他5軸selectionは同一であり、nested
+`mapping_config`へframeを重複保持しない。pair validatorはこの許可field以外の差分をfield path付きで拒否する。
 
 ## freeze identityとpackage migration
 
@@ -173,6 +179,12 @@ identityを変更する場合は、manifest contract versionまたは対象のve
 `build_evaluation_condition_pair_readiness(pair, registries, execution_identity=...)`、既存の`compose_experiment()`とresolved composition /
 provider boundaryである。runnerはready resultとfreeze identityを受け取り、別のimplicit selectionや
 default補完を行わない。
+
+production catalog boundaryは
+`runtime/composition/production_experiment.py::PRODUCTION_EXPERIMENT_PLUGIN_REGISTRIES`と
+`resolve_production_experiment()`、canonical R7-G pair builderは
+`runtime/evaluation/r7_g_free_space.py::build_r7_g_free_space_manifest_pair()`である。#406はこれらを使い、
+test-only fixtureまたは`plugins.robots.fast_arm`のconcrete moduleから6軸を再構築しない。
 
 robot selectionが必要なcomposition rootは`selfrionette.plugins.robots.catalog`のresolverを使用し、
 resolved Bundleから必要なtyped providerをassembly時に取得する。`plugins.robots.fast_arm`のconcrete

@@ -156,10 +156,23 @@ def map_analog_fixture_sample(
 def _config_from_parameters(parameters: Mapping[str, object]) -> AnalogFixtureMappingConfig:
     value = parameters.get("mapping_config")
     if isinstance(value, AnalogFixtureMappingConfig):
-        return value
+        config = value
+        if "control_frame" in parameters:
+            raise ValueError(
+                "control_frame must not be duplicated in a typed mapping_config"
+            )
+        return config
     if not isinstance(value, Mapping):
         raise ValueError("analog_fixture mapping requires mapping_config")
-    return AnalogFixtureMappingConfig(**dict(value))
+    config_values = dict(value)
+    projected_frame = parameters.get("control_frame")
+    if projected_frame is not None:
+        if "control_frame" in config_values:
+            raise ValueError(
+                "control_frame must have one owner; use the top-level experiment projection"
+            )
+        config_values["control_frame"] = projected_frame
+    return AnalogFixtureMappingConfig(**config_values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,7 +216,17 @@ ANALOG_FIXTURE_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(
     identity=ANALOG_FIXTURE_MAPPING_IDENTITY,
     strategy=AnalogFixtureMappingStrategy(),
     accepted_input_sample_schemas=frozenset({ANALOG_FIXTURE_SAMPLE_SCHEMA}),
-    parameter_contract=ParameterContract((ParameterField("mapping_config", object),)),
+    parameter_contract=ParameterContract(
+        (
+            ParameterField("mapping_config", object),
+            ParameterField(
+                "control_frame",
+                str,
+                required=False,
+                condition_specific=True,
+            ),
+        )
+    ),
     control_frame=None,
     comparison_family_identity=VersionedIdentity("analog_fixture_comparison", 1),
     mapping_semantics_identity=ANALOG_FIXTURE_MAPPING_SEMANTICS_IDENTITY,
