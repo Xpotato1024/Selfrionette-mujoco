@@ -12,6 +12,7 @@ EXPECTED_MODULES = {
     "composition": {
         "config",
         "concrete_mujoco_pipeline",
+        "production_experiment",
         "replay_mujoco_pipeline",
         "robot_bundle",
         "robot_plugin",
@@ -33,7 +34,13 @@ EXPECTED_MODULES = {
         "viewer_control_ingress",
         "viewer_motion_policy",
     },
-    "evaluation": {"endpoint_metrics", "endpoint_progress", "kinematics", "manifest"},
+    "evaluation": {
+        "endpoint_metrics",
+        "endpoint_progress",
+        "kinematics",
+        "manifest",
+        "r7_g_free_space",
+    },
     "execution": {
         "command_routes",
         "input_step_loop",
@@ -41,7 +48,13 @@ EXPECTED_MODULES = {
         "live_timing",
         "pipeline",
     },
-    "experiment": {"composition", "contracts", "input_source", "registry"},
+    "experiment": {
+        "composition",
+        "contracts",
+        "endpoint_reach_evidence",
+        "input_source",
+        "registry",
+    },
     "runners": {
         "dry_run",
         "live_selfrionette",

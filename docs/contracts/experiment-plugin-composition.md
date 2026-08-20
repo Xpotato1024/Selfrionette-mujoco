@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-07-30
+last_verified: 2026-08-06
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -76,7 +76,10 @@ plugins/
 ├── bounded_discovery.py
 ├── robots/{catalog.py,discovery.py,registration.py}
 ├── input_sources/{catalog.py,discovery.py,registration.py}
-└── mappings/{catalog.py,discovery.py}
+├── mappings/{catalog.py,discovery.py}
+├── environments/{catalog.py,discovery.py}
+├── tasks/{catalog.py,discovery.py}
+└── evaluations/{catalog.py,discovery.py}
 ```
 
 Discoveryは固定entryからcandidate pluginを発見する。Registrationはplugin本体以外の
@@ -93,9 +96,9 @@ file symmetryだけを目的とする`mappings/registration.py`を作らない�
 | Robot | `plugins/robots/fast_arm/plugin.py::ROBOT_PLUGIN` | `robots/{catalog.py,discovery.py,registration.py}` |
 | Input Source | 6 packageの`plugin.py::INPUT_SOURCE_PLUGIN` | `input_sources/{catalog.py,discovery.py,registration.py}` |
 | Control Mapping | 4 packageの`plugin.py::CONTROL_MAPPING_PLUGIN` | `mappings/{catalog.py,discovery.py}`。追加registration layerなし |
-| Environment / Scene | concrete production packageなし。generic `EnvironmentPlugin`とtest fixtureのみ | production catalog / discoveryなし |
-| Task | concrete production packageなし。generic `TaskPlugin`とtest fixtureのみ | production catalog / discoveryなし |
-| Evaluation | concrete production packageなし。generic `EvaluationPlugin`とtest fixtureのみ | production catalog / discoveryなし |
+| Environment / Scene | `free_space_environment/plugin.py::ENVIRONMENT_PLUGIN` | `environments/{catalog.py,discovery.py}` |
+| Task | `endpoint_reach_task/plugin.py::TASK_PLUGIN` | `tasks/{catalog.py,discovery.py}` |
+| Evaluation | 4 packageの`plugin.py::EVALUATION_PLUGIN` | `evaluations/{catalog.py,discovery.py}` |
 
 discoverable first-party axisは、固定namespace直下のdirect child packageだけを対象にする。`_support`
 等のprivate/shared packageを除外し、candidateをsortして`<package>.plugin`だけをimportする。
@@ -136,6 +139,9 @@ unknown logical identityとしてfailする。
 | generic contract | `bounded_discovery.py`、axis discovery、`input_sources/registration.py`、`runtime/experiment/`、schemas |
 | concrete Input Source owner | `analog_fixture/`、`noop/`、`programmed_target/`、`replay/`、`selfrionette/`、`viewer/` |
 | concrete Mapping owner | `analog_fixture_mapping/`、`loadcell_endpoint_mapping/`、`replay_mapping/`、`viewer_keyboard_gamepad_mapping/` |
+| concrete Environment owner | `free_space_environment/` |
+| concrete Task owner | `endpoint_reach_task/` |
+| concrete Evaluation owner | `success_within_timeout/`、`off_axis_drift/`、`completion_time/`、`final_endpoint_error/` |
 | axis-local shared implementation | Mappingのalgorithm primitive `_continuous_endpoint_velocity.py`とdeclaration / route factory `_command_routes.py`。Input Sourceはshared owner不要 |
 | canonical public surface | concrete packageの`__all__`、catalog resolver、fixed `plugin.py` export |
 | retired compatibility / migration | root Input Source registration facade、Mapping root / flat facade、runtime移行alias、旧loadcell identity / package |
@@ -219,6 +225,11 @@ ambiguousとして拒否する。`SemanticRoleRequirement`はrole名に加えて
 要求し、`EnvironmentRole`またはrobot bindingとの一致をreadinessで検証する。任意の属性を許す場合は
 省略せず明示的な`*` wildcardを指定する。missing roleと各属性の不一致はstartup failureである。
 
+`free_space_environment/v1`はR7-Gのfree-space scene conditionである。Robot Bundleが所有するbase
+sceneを使用し、task objectとcontact requirementを追加しないことを明示する。parameter、semantic
+role、produced evidenceを持たず、MuJoCo backendとの互換性だけを宣言する。このidentityはobjectなしの
+universal fallbackではなく、free-space条件を選択した場合だけ解決されるversioned production pluginである。
+
 ## mappingとtask
 
 `ControlMappingPlugin`はtyped `ControlMappingStrategy`とstrict `ParameterContract`を持つ。
@@ -227,8 +238,10 @@ versioned `mapping_semantics_identity`、`control_frame`を明示する。family
 束ねるsemantic contractであり、strategy objectのhashやobject identityではない。strategyが宣言する
 mapping semantics identityとplugin fieldが一致しない場合はconstruction/readinessをfail-closedにする。
 world/tool mapping、gain、deadzone、assistance等はこの軸のpluginまたはparameterとして固定する。
-world/tool pairでcontrol-frame差を許可するparameterは`ParameterField.condition_specific=True`を
-明示し、mapping plugin自身の`control_frame` declarationとrequested frameを一致させる。
+world/tool pairでcontrol-frame差を許可するparameterは`ParameterField(condition_specific=True)`を
+明示する。static `control_frame`を宣言するpluginはrequested frameと一致させ、dynamic frameを持つ
+`analog_fixture_mapping/v1`はtop-level `control_frame` parameterをupper manifestから明示projectionする。
+同じframeをnested `mapping_config`にも重複指定した場合は二重SoTとして拒否する。
 mappingはrequired Robot capabilityを宣言し、利用不能時に別mappingへfallbackしない。
 
 ### control semanticsとRobot command semantics
@@ -300,6 +313,8 @@ runtime入口として使用しない。
 - typed `SemanticRoleRequirement`（role、object kind、frame、unit）
 - strict parameter contract
 - typed lifecycle strategy
+- upper contextへbindしたimmutable `TaskExecutionBinding`
+- observationごとの`TaskTransition`（次state、terminal classification、Task-owned evidence）
 - versioned canonical task event identity
 - produced evidence identity
 - `running` / `success` / `failure` / `technical_invalid`のterminal classification boundary
@@ -308,6 +323,24 @@ runtime入口として使用しない。
 canonical task event identityは`produced_evidence`にも含める。Task production codeはfast_armの
 joint名、geom名、site名、solver classを参照せず、capability、semantic role、canonical evidenceを
 入力とする。
+
+`TaskLifecycleStrategy`はpreclassified terminal evidenceを入力として読み戻さない。upper ownerから受けた
+contextを`bind_context()`で固定し、runnerはtyped observationだけを`TaskExecutionBinding.advance()`へ渡す。
+classificationとcanonical task eventはTask transitionの出力であり、runnerが直接作成しない。
+
+`endpoint_reach_task/v1`は`endpoint_pose/v1`、`reset_initial_state/v1`、typed
+`robot.tool_endpoint` roleを要求し、`endpoint_reach_terminal_classification/v1`と
+`endpoint_reach_measured_trajectory/v1`を生成するTaskとして宣言する。Task Pluginはtask stateと
+`running` / `success` / `failure` / `technical_invalid`のclosed classificationを所有するが、target、
+tolerance、dwell、timeout、initial stateはupper evaluation manifestを正本とし、plugin parameterへ複製しない。
+readinessはこれら5条件をimmutable `EndpointReachTaskContext`へprojectionする。Task bindingはworld-frame
+measured endpoint sampleとelapsed timeを消費し、tolerance内の連続dwell完了だけをtimeout以下のsuccessとする。
+最初のsampleはMuJoCo-owned elapsed 0 measurementとし、frozen initial positionとのexact一致を要求する。
+upper manifestのinitial positionをmeasured sampleへ自動変換しない。
+tolerance外へ戻ればdwellをresetし、success前のtimeout、held / rejected / staleはfailure、measurement
+unavailable / invalid、reset、non-monotonic stream、technical statusは`technical_invalid`とする。
+両evidence identityとstrict value shapeはcross-axis layer contract
+`runtime/experiment/endpoint_reach_evidence.py`を唯一の定義元とし、Task / Evaluation packageへ複製しない。
 
 Robot Bundle、Environment、Taskのcompatible identityが空集合の場合はgeneric/unconstrainedとして
 扱う。指定された場合はraw nameではなく`VersionedIdentity`をexact matchし、同名でもcontract
@@ -326,8 +359,8 @@ versionが異なるselectionを拒否する。本foundationではversion range�
 - `invalid`: evidenceとして利用不能。valueを持たずreasonを必須とする
 
 同じversioned evidence identityを一つの`CanonicalEvidenceSet`へ重複登録できない。
-R7-G / R7-H固有fieldはこのfoundationでは固定せず、後続pluginが新しいversioned identityとして
-追加する。
+task固有fieldはowning production pluginが新しいversioned identityとして追加する。R7-G endpoint
+reachではterminal classificationとmeasured trajectoryを固定済みであり、R7-H固有fieldは後続pluginが所有する。
 
 readinessはrobot/environment/mapping/taskの各`produced_evidence`を単なる集合和へ潰さず、
 `EvidenceProducerBinding(producer axis, producer plugin identity, evidence identity)`へ解決する。
@@ -336,7 +369,7 @@ readinessはrobot/environment/mapping/taskの各`produced_evidence`を単なる�
 freeze identityへproducerを記録できる。複数producerを許すaggregation contractは本Issueに含めない。
 
 `EvaluationPlugin`はrequired evidence、strict parameter contract、missing / unavailable /
-invalidごとの`EvidencePolicy`、typed deterministic metric strategy、provenanceを宣言する。
+invalidごとの`EvidencePolicy`、typed deterministic metric strategy、provenance、unit、optional frameを宣言する。
 required evidenceのidentityがtask/environment/mapping/robot extensionのproduced evidenceに
 存在しない場合はstartup readinessで拒否する。実行時にevidenceがmissing/unavailable/invalidの
 場合はdeclared policyに従い、default値を捏造しない。metricを返せないpolicyではvalueなしの
@@ -344,6 +377,16 @@ required evidenceのidentityがtask/environment/mapping/robot extensionのproduc
 `EvaluationPlugin.derive_metric()`はstrategyが返した`MetricResult`について、metric identityが
 selected Evaluation Plugin identityと一致し、provenanceがplugin宣言値と一致することも検証する。
 `unavailable` / `invalid`のvalueなし・reason必須invariantは`MetricResult` constructionで維持する。
+
+R7-G production evaluatorは次のordered tupleで使用する。いずれもcanonical evidenceだけからpureかつ
+deterministicに導出し、trial stream aggregation、artifact export、condition summaryを所有しない。
+
+| identity | outcome | required evidence | unit / frame | failure semantics |
+|---|---|---|---|---|
+| `success_within_timeout/v1` | primary success outcome | terminal classification | boolean / frameなし | missing / unavailableはunavailable、invalidはinvalid |
+| `off_axis_drift/v1` | initial-target axisからの最大直交距離 | measured trajectory | meter / MuJoCo world | missing / unavailableはunavailable、invalidはinvalid |
+| `completion_time/v1` | descriptive completion time | terminal classification | second / frameなし | success以外はvalueなしunavailable |
+| `final_endpoint_error/v1` | descriptive final tip-target distance | measured trajectory | meter / MuJoCo world | missing / unavailableはunavailable、invalidはinvalid |
 
 ### Input Source runtime reader readiness
 
@@ -390,16 +433,21 @@ readiness後に不足へ気付く設計や、特定robot/task/evaluatorの暗黙
 ## Generic experiment contractとproduction runtimeの区別
 
 `compose_experiment()`、`ExperimentPluginManifest`、`EvaluationManifest` / readiness / freezeは、
-6軸selectionと互換性を実行前に固定するgeneric contractである。test fixtureはEnvironment、
-Task、Evaluationを含むvalid / invalid compositionを検証するが、production concrete pluginや
+6軸selectionと互換性を実行前に固定するgeneric contractである。R7-G free-space向けには
+Environment、Task、Evaluationを含むproduction concrete pluginと各axis catalog、および6軸catalogを
+束ねる`runtime/composition/production_experiment.py`が存在する。ただしcatalog成立は
 production experiment runnerの存在を意味しない。
 
 current application-facing CLI、replay、viewer、offline smoke、WebSocket publisherは、
 Robot、Input Source、Control Mapping、command semantics routeを接続するdiagnostic / operational
 runtimeである。Environment、Task、Evaluationを選択しないことはcurrent contract違反ではない。
-Environment / Task / Evaluationのproduction catalog、全軸を明示選択するproduction experiment runner、
-viewer構成UIはplanned experiment control plane #486のscopeであり、このcontractは暗黙default pluginや
-未実装runnerを提供しない。
+全軸を明示選択するproduction experiment runnerとviewer構成UIは未実装であり、planned experiment
+control plane #486を先取りしない。既存diagnostic runtimeへ暗黙default pluginや未実装runnerを補わない。
+
+#406は`resolve_production_experiment()`へcanonical manifestを渡し、production catalogだけから6軸と
+command semantics routeを解決できる。R7-G world/tool pairのcanonical software-only fixtureは
+`runtime/evaluation/r7_g_free_space.py::build_r7_g_free_space_manifest_pair()`が所有する。このfixtureは
+Input Source生成、MuJoCo load / step、Task lifecycle、metric導出を開始しない。
 
 ## fast_arm migration
 

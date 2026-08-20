@@ -35,6 +35,13 @@ def _class_contract(path: str, name: str) -> tuple[set[str], str]:
     raise AssertionError(f"{name} was not found in {path}")
 
 
+def _contains_japanese(value: str) -> bool:
+    return any(
+        "\u3040" <= character <= "\u30ff" or "\u4e00" <= character <= "\u9fff"
+        for character in value
+    )
+
+
 def test_architecture_sensitive_python_contracts_have_semantic_documentation() -> None:
     required_symbols = {
         "src/selfrionette/runtime/experiment/contracts.py": {
@@ -68,6 +75,51 @@ def test_architecture_sensitive_python_contracts_have_semantic_documentation() -
         documented = _documented_top_level_symbols(path)
         assert names <= documented.keys()
         assert all(documented[name].strip() for name in names)
+
+
+def test_r7_g_public_plugin_contracts_use_japanese_documentation() -> None:
+    required_symbols = {
+        "src/selfrionette/plugins/environments/free_space_environment/implementation.py": {
+            "FreeSpaceSceneCondition",
+            "FreeSpaceSceneProvider",
+        },
+        "src/selfrionette/plugins/tasks/endpoint_reach_task/implementation.py": {
+            "EndpointReachTaskBinding",
+            "EndpointReachTaskLifecycle",
+            "EndpointReachTaskState",
+        },
+        "src/selfrionette/plugins/evaluations/success_within_timeout/implementation.py": {
+            "SuccessWithinTimeoutDeriver",
+        },
+        "src/selfrionette/plugins/evaluations/off_axis_drift/implementation.py": {
+            "OffAxisDriftDeriver",
+        },
+        "src/selfrionette/plugins/evaluations/completion_time/implementation.py": {
+            "CompletionTimeDeriver",
+        },
+        "src/selfrionette/plugins/evaluations/final_endpoint_error/implementation.py": {
+            "FinalEndpointErrorDeriver",
+        },
+        "src/selfrionette/runtime/experiment/endpoint_reach_evidence.py": {
+            "EndpointReachObservation",
+            "EndpointReachTaskContext",
+            "decode_endpoint_reach_terminal_evidence",
+            "decode_endpoint_reach_trajectory_evidence",
+        },
+        "src/selfrionette/runtime/composition/production_experiment.py": {
+            "resolve_production_experiment",
+        },
+        "src/selfrionette/runtime/evaluation/r7_g_free_space.py": {
+            "build_r7_g_free_space_manifest_pair",
+        },
+    }
+
+    for path, names in required_symbols.items():
+        module = _module(path)
+        assert _contains_japanese(ast.get_docstring(module) or "")
+        documented = _documented_top_level_symbols(path)
+        assert names <= documented.keys()
+        assert all(_contains_japanese(documented[name]) for name in names)
 
 
 def test_schema_documentation_matches_current_field_and_owner_boundaries() -> None:

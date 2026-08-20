@@ -322,7 +322,9 @@ generic contractとmapping-specific semantic validatorで検証し、explicit Ma
 Mapping plugin defaultsの順に解決する。Input Sourceからのparameter projectionは持たない。
 public facade、helper fallback、old packageをcurrent pathへ再導入しない。
 
-generic experiment compositionはEnvironment / Task / Evaluationを含む6軸readiness contractを所有するが、
-current productionのEnvironment / Task / Evaluation catalogまたはexperiment runnerを意味しない。
+generic experiment compositionはEnvironment / Task / Evaluationを含む6軸readiness contractを所有する。
+Environment / Task / Evaluationの各production catalogはowning axisのbounded discoveryだけから構築し、
+concrete package間のcross-axis import、fast_arm concrete import、generic runtimeのconcrete ID分岐を持たない。
+`runtime/composition/production_experiment.py`は6軸catalogのprojection ownerだがexperiment runnerではない。
 replay / viewer / smokeはRobot、Input Source、Mapping、command routeのdiagnostic / operational runtimeであり、
 planned experiment control plane #486まで暗黙のfull compositionへ変更しない。
