@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: evaluation
-last_verified: 2026-07-17
+last_verified: 2026-08-20
 canonical_for:
   - world/tool control-frame comparison design
 related:
@@ -18,7 +18,8 @@ related:
 ## 目的と研究質問
 
 この文書は最小の再現可能な評価とversioned logging contractを定義する。
-runtime、input mapping、logging schema、experiment runner、statistical implementationは定義しない。
+runtime、input mapping、logging schema、experiment runner、statistical implementationのownershipは持たず、
+current implementation boundaryを参照する。
 
 本designはlimited exploratory pilot designである。研究質問は次のとおりである。
 
@@ -150,6 +151,25 @@ versioned canonical initial-state contract（identity、keyframe、qpos、tip、
 したがって#405の`READY`は「runnerへ渡せる静的configuration identityがfreezeされた」ことだけを意味し、
 下記のmeasured MuJoCo reachability / progress条件の成立を意味しない。
 
+## current software-only runner
+
+#406のcurrent runnerは`build_r7_g_free_space_manifest_pair()`からproduction pair readinessを構築し、
+world/toolの各conditionを同じinput、gain、deadzone、cadence、target、initial state、tolerance、dwell、timeoutで
+有限実行する。差分はmanifestで許可されたrequested / condition-specific control frameだけである。
+
+trial開始時はselected Environmentを明示resetし、selected Robot / MuJoCoをcanonical keyframeへresetする。
+reset後のactual qposとmeasured tool orientationがfrozen manifestに一致しない場合はTask開始前にfail closedとする。
+一致後にMuJoCoの`endpoint_pose/v1` providerから取得したmeasured endpointをelapsed `0.0`でTaskへ渡す。
+manifest initial tipはreadiness referenceであり、measurementとして挿入しない。各step後もMuJoCo measurementと
+runtime motion status/reasonをTaskへ渡し、TaskTransitionのterminal classification / evidenceを利用する。
+
+manifestへ固定するsoftware revisionとstartup側が独立に取得するactual `SoftwareExecutionIdentity`は別入力とし、
+exact matchしない実行はreadinessで拒否する。
+
+simulation timeはmanifest cadenceで進み、`ceil(timeout / cadence)`をstep上限とする。wall-clock sleep、daemon、
+viewer、hardwareを実行条件にしない。#407のmotion-log lifecycle、#408のmetric / artifact、#409のfull E2Eと
+completion auditはこのrunnerに含めない。
+
 次のcheckがすべてpassするまでdata collectionを開始しない。
 
 1. experiment log contractが後述のlogging contractを満たすversioned schemaを実装・検証している。
@@ -208,5 +228,6 @@ missing measured motionをrequested、resolved、predicted、zero motionで置�
 
 ## scope境界
 
-本designはdocumentationだけを変更する。runtime behavior、input mapping、transport/logging schema、experiment runner、
-statistical code、viewer behavior、MuJoCo model、dependency、CI、hardware、serial、Arduino、OSC、robot outputは変更しない。
+このdesign document自体はruntime ownerではない。current #406 implementationはsoftware-only experiment runnerを
+追加したが、input mapping、transport/logging schema、statistical code、viewer behavior、MuJoCo model、dependency、
+CI、hardware、serial、Arduino、OSC、robot outputは変更しない。

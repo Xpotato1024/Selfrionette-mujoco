@@ -155,7 +155,8 @@ def test_runtime_composition_documents_current_responsibility_split() -> None:
     assert "only composition root" in text
     assert "render-only" in text
     assert "publish-before-ViewerInputSource-rebase" in text
-    assert "runtimeの別実装を追加しない" in text
+    assert "`experiment/world_tool_runner.py`" in text
+    assert "manifest initial tipをmeasurementへ変換せず" in text
     assert "diagnostic / operational runtime" in text
     assert "planned #486" in text
 
@@ -224,8 +225,8 @@ def test_plugin_infrastructure_and_shared_owners_match_current_tree() -> None:
     assert "root\n`plugins/input_source_registration.py`" in registry
     assert "plugins/input_sources/registration.py`はtyped registration contract" in registry
     assert "source registrationはMapping object、default selection、" in composition
-    assert "production experiment runnerの存在を意味しない" in composition
-    assert "production experiment runner" in composition
+    assert "production runnerは`runtime/experiment/world_tool_runner.py`" in composition
+    assert "TaskTransitionのclassification / evidenceを変更しない" in composition
     assert "#486" in composition
 
 
