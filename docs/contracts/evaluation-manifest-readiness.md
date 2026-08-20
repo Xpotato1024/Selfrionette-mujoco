@@ -214,5 +214,7 @@ physics execution、measured tipの取得、metric集計 / artifact、contact ou
 Input Source、Mapping、command route、MuJoCo、Task observationを接続する。manifest initial tipをmeasured sampleへ
 変換せず、reset後のactual qpos / measured tool orientationをfrozen manifestへ照合してからMuJoCo measurementを
 elapsed `0.0`で渡す。manifest revisionとactual `SoftwareExecutionIdentity`は独立入力であり、runnerが同一値から
-両方を生成しない。metric validity、artifact、full pilotは引き続き
-未実装である。
+両方を生成しない。#407のruntime recorderは`FreezeRecord.identity`を
+`ConfigurationRecord.configuration_id`へ直接bindし、runner traceと明示protocol contextから既存
+`experiment-motion-log/v1` lifecycleを構築する。readiness contractへparticipant、trial、retry、filesystem fieldを
+追加しない。metric validity、evaluation artifact、full pilotは引き続き未実装である。

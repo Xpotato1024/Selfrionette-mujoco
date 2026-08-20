@@ -14,10 +14,13 @@
 | `evaluation/` | FK / endpoint evaluation、progress、manifest / freeze readiness |
 | `runners/` | dry-run、live / offline smoke、WebSocket publisher、experimentのthin entry point |
 
-#406で成立したexperiment lifecycle / runnerは`experiment/`が所有する。
-`runners/`はthin entry pointだけを追加でき、Task判定、metric、logging、artifact責務を持たない。
+#406で成立したexperiment lifecycle / runnerは`experiment/`が所有する。#407のexecution trace / motion-log
+recorderも同じownerへ置く。
+`runners/`はthin entry pointだけを追加でき、Task判定、metric、record projection、artifact責務を持たない。
 entry pointはmanifest revisionとstartup側が独立に取得したactual execution revisionを別引数で受け、
 readinessのexact-match gateを通す。reset後はactual qpos / measured tool orientationをfrozen manifestへ照合する。
+recorderはfreeze identityへconfigurationをbindし、explicit protocol contextからtrial identityを決定的に作り、
+validationとstrict read-backを通過したcomplete trialだけをatomic JSONLとして保存する。
 
 ## 入力
 

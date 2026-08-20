@@ -508,8 +508,9 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
   `QposFeasibilityProvider`、`InitialStateContractProvider`等の必要なtyped providerだけを渡す。
 - #406は`selfrionette.plugins.robots.fast_arm.*`や旧compatibility facadeを直接importして
   concrete objectを組み立てない。Bundleをruntime service locatorとしてstepごとに参照しない。
-- #407は`WorldToolExperimentExecutionResult` / `ExperimentConditionExecutionResult`とexecution loopへ
-  lifecycle recordingを接続できるが、#406 resultをartifactまたはmetric集計へ拡張しない。
+- #407は`ExperimentConditionExecutionResult`へ既存loop由来のimmutable step traceを保持し、別のruntime recorderが
+  `WorldToolExperimentExecutionResult`とreadinessを既存`experiment-motion-log/v1` lifecycleへprojectionする。
+  Evaluation Plugin、metric集計、condition summary、CSV / JSON evaluation artifactは実行しない。
 
 ## non-goalsと主張範囲
 

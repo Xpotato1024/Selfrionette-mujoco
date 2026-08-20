@@ -21,8 +21,9 @@ related:
 これはpilot design limited world/tool pilot用の、独立して再構築可能なrecord-streamの
 canonical contractである。現在のversion discriminantは
 `experiment-motion-log/v1`である。evaluation artifact schemaであり、payload-v0や
-別のtransport payloadではない。experiment log contractはruntime recorder、runner、participant workflow、
-questionnaire、analysis、dashboard、viewer、hardware、filesystem lifecycleを追加しない。
+別のtransport payloadではない。schema moduleはpureなrecord、serialization、validationだけを所有し、
+runner、participant workflow、questionnaire、analysis、dashboard、viewer、hardware、filesystem lifecycleを
+追加しない。current runtime recorderはこのcontractを利用するconsumerであり、schema moduleの責務ではない。
 
 全recordは`schema_version`、`record_kind`、`experiment_id`、`session_id`、
 `participant_id`、`configuration_id`を持つ。trial recordはさらに`trial_id`を持つ。
@@ -66,6 +67,11 @@ configuration fieldはexperiment manifestが所有する。pre-runのcanonical s
 `evaluation-manifest/v1`であり、#405の`EvaluationManifest`がbytes、requested identity、resolved
 readiness、freeze identityを確定する。この文書はそのmanifestを参照するrecord schemaであり、#405は
 log recordの生成、stream lifecycle、trial close、outcome計算を実装しない。
+
+current runtime projectionは`ConfigurationRecord.configuration_id`へ
+`EvaluationReadiness.freeze_record.identity`、すなわちmanifest bytesとresolved identity bytesを束ねた
+`frozen_digest`をそのまま使用する。同じfrozen conditionから別configuration identityを生成せず、
+別のmanifest ID fieldまたはsecond SoTを追加しない。
 
 - `software_revision`、`configuration_id`、experiment/session/participant ID。
 - finiteな`initial_qpos_rad`、measured MuJoCo-world
@@ -131,6 +137,10 @@ before/after measurementがzeroを生成した場合だけである。operator�
 timeout/hold/rejection/staleは、`failure_attribution=operator`を伴う`failed` outcomeとして
 保持する。infrastructureまたはmissing-evidenceによるinvalidityは、
 `failure_attribution=technical`を伴う`technical_invalid`として保持する。
+
+Input Source取得前など、source timestampまたはbefore/after stateをownerが生成できなかったtechnical-invalid
+trialでは、必須sample fieldを推測せずzero-sample trialとしてoutcomeをcloseしてよい。生成済みの完全なstepだけを
+sampleとして残し、partial stepへfake timestamp、qpos、measurement、zero motionを追加しない。
 
 measurementが存在する場合、`actual_tip_delta_m`はafter minus beforeにEuclidean
 tolerance `1e-12`以内で等しく、unavailable reasonを許可しない。absentの場合、
@@ -200,6 +210,16 @@ nullのscalar valueだけであり、nested array/objectはrejectする。
 `validate_record_stream()`はcross-record context equality、uniqueness、retry
 protocol identity、sample ordering、timestamp、lifecycle closure、pilot design success evidenceを
 所有する。どちらのhelperもI/Oを実行せず、inputをmutateしない。
+
+current runtime recorderは、runnerの既存loopが生成時点で保持したinput、frame resolution、motion policy、
+MuJoCo before/after measurement、Task terminal evidenceだけをv1へprojectionする。loggingのためにMapping、
+motion policy、MuJoCo step、Task classificationを再実行または推定しない。trial IDは明示されたprotocol
+contextとfrozen configurationから決定的に導出し、wall-clock time、random UUID、process identityを使わない。
+
+filesystem ownerはruntime recorderである。保存前にtyped streamのvalidation、encode、decode、decoded streamの
+再validation、再encode一致を確認し、UTF-8 without BOM bytesへ固定する。同じdirectoryのtemporary fileへ書き、
+strict read-backが一致した場合だけatomic replaceし、replace後もtarget bytesをread-backする。partial / RUNNING
+trial、invalid retry chain、encodingまたはwrite failureではfinal artifactをcommitせず、既存artifactを保持する。
 
 1つのprotocol identityとrepetition内でattempt indexはuniqueであり、initial attemptは
 ちょうど1つである。各trialが持てるdirect retry childは最大1つである。retryは直前の

@@ -335,3 +335,7 @@ planned experiment control plane #486まで暗黙のfull compositionへ変更し
 `plugins.robots.fast_arm`のconcrete module、test registry、viewer、logging schemaをimportしない。
 execution loopはroute-bound `ControlMappedRuntimePipeline`とtyped command providerを使用し、Bundleへの反復lookup、
 独自IK / FK / Jacobian / frame transform、`MotionCommand`のbackend直渡しを行わない。
+
+#407のmotion-log recorderは`runtime/experiment/`でrunnerのimmutable traceを既存
+`schemas.experiment_log`へprojectionするfilesystem consumerである。schema moduleはruntimeまたはfilesystemへ
+依存せず、runnerはrecordを生成するためにMapping、motion policy、MuJoCo step、Task判定を再実行しない。
