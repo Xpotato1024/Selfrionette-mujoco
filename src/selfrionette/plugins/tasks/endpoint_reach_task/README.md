@@ -23,8 +23,11 @@ ownerである。readinessがこれらをimmutable `EndpointReachTaskContext`へ
 `EvaluationReadiness.task_execution_binding`が`EndpointReachObservation`を受け取り、measured world-frame
 endpoint、elapsed time、measurement status、held / rejected / stale / technical statusからpure transitionを
 生成する。Taskは連続dwell開始時刻をstateに保持し、tolerance外へ出た時点でdwellをresetする。
-最初のobservationはMuJoCoから取得したelapsed 0のendpointで、frozen initial positionとのexact一致を
-要求する。manifest値をmeasured sampleとして自動挿入しない。
+最初のobservationはMuJoCoから取得したelapsed 0のendpointである。frozen initial positionとの比較では、
+現行canonical initial-tip referenceの小数6桁表現とMuJoCo full-precision measurementの差を吸収するため、
+`1e-6 m`以下の数値表現差だけを許容する。このsoftware toleranceは物理的なreset許容差ではなく、
+それを超える差は`technical_invalid`とする。trajectory evidenceの`initial_position_world_m`には
+manifest値ではなく最初のmeasured endpointを使用し、manifest値をmeasured sampleとして自動挿入しない。
 
 - tolerance外かつtimeout前: `running`
 - tolerance内でrequired dwell完了かつ`elapsed_time_s <= timeout_s`: `success`
@@ -48,6 +51,8 @@ MuJoCo backendとmeter単位のRobot endpoint roleへ依存する。fast_arm固�
 ## tests / validation
 
 - [Task plugin test](../../../../../tests/plugins/tasks/test_endpoint_reach_task.py)
+- [Measured-origin regression test](../../../../../tests/plugins/tasks/test_endpoint_reach_task_measured_origin.py)
+- [Production MuJoCo handoff test](../../../../../tests/runtime/test_r7_g_measured_initial_sample.py)
 
 ## canonical architecture / contract
 
