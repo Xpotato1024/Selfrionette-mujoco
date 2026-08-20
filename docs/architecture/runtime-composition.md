@@ -25,18 +25,17 @@ related:
 | `execution/` | route-bound `ControlMappedRuntimePipeline`、input step loop、typed command / input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
-| `experiment/` | 6軸のexperiment plugin contract、registry、readiness-only composition |
+| `experiment/` | 6軸のexperiment plugin contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
-| `runners/` | 現行operational dry-run / smoke / publisher entry point |
+| `runners/` | operational dry-run / smoke / publisherとexperimentのthin entry point |
 
 `runtime.__init__`は`RuntimeConfig`と既存catalog resolver 5件だけをlazy exportする。
 interpreter-based `RuntimePipeline`はC4で退役し、`ControlMappedRuntimePipeline`だけをexecution ownerに残す。
 contractやrunnerをpackage rootからre-exportしない。catalog access前のlazy-load、resolved Bundleのtyped
 provider identity、plugin identityはこの移動で変更しない。
 
-#406以降のexperiment lifecycle / runnerを追加する場合のownerは`experiment/`である。`runners/`は現行の
-operational entry pointを所有するだけであり、future experiment framework、task lifecycle、metric artifact
-emissionを先回りして実装しない。
+#406で成立したexperiment lifecycle / runnerのownerは`experiment/`である。`runners/`はthin entry pointだけを
+所有し、Task判定、metric、logging、artifact emissionを実装しない。
 
 `runtime/` is the only composition root。input、motion、kinematics、MuJoCo backend、transportを
 layer横断で接続できるのはruntimeだけである。MuJoCo remains the physical source of truth。
@@ -97,16 +96,32 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 このgeneric experiment compositionはreadiness-onlyである。R7-G free-space用のproduction Environment /
 Task / Evaluation catalogは各axis packageが所有し、`composition/production_experiment.py`がconcrete IDを
 知らずに6軸registryを束ねる。`evaluation/r7_g_free_space.py`はproduction catalogだけで解決できるworld /
-tool manifest fixtureを所有するが、scene spawn、task lifecycle、metric artifact、experiment runnerは所有しない。
+tool manifest fixtureを所有するが、scene compose/reset、task lifecycle、metric artifact、experiment runnerは所有しない。
 R7-G readinessはupper `EvaluationManifest`のtarget、tolerance、dwell、timeout、initial tipをimmutable
 Task contextへbindし、`EvaluationReadiness.task_execution_binding`としてrunnerへ渡す。runnerは
 MuJoCo-owned measured endpointとstatusをtyped observationとして渡すだけで、terminal classificationや
 canonical task evidenceを作成しない。Task pluginがpure transitionとproducer provenanceを所有し、trial
 aggregation、artifact export、condition summaryは後続ownerへ残す。
+
+`experiment/world_tool_runner.py`はfrozen readinessからEnvironment scene condition、Input Source reader、
+Control Mapping、selected command route、Robot Bundleのtyped provider、MuJoCo simulatorをassembly時に一度だけ
+結線する。trial開始時にselected Environmentをresetし、MuJoCoをcanonical keyframeへresetした後、
+actual qposとmeasured tool orientationをfrozen manifestへ照合する。照合後の`endpoint_pose/v1`実測値を
+elapsed `0.0`でTaskへ渡す。各stepはmanifest cadenceのsimulation timeだけを進め、
+post-step measurementとruntime statusをTaskへ渡す。Bundleをloop中のservice locatorにせず、wall-clock pacingも
+正しさの条件にしない。step上限は`ceil(timeout / cadence)`で、Task terminalまたは明示上限で有限停止する。
+
+canonical pairへ固定するmanifest revisionとstartup側が取得したactual `SoftwareExecutionIdentity`は別入力とする。
+runner自身が同じcaller値から両者を合成せず、readinessのexact-match gateで不一致をfail closedにする。
+
+Evaluation Pluginはproduction composition / readinessのordered tupleとしてresolveするが、#408のmetric導出や
+artifact出力は実行しない。#407の`experiment-motion-log/v1` lifecycleも実装せず、runner resultはTask transition、
+step count、simulation elapsed time、freeze identityを保持するin-memory boundaryに限定する。
+
 application-facing replay / viewer / smokeはRobot、Input Source、Control Mapping、command semantics routeを
-接続するdiagnostic / operational runtimeである。全6軸を選択するproduction experiment runnerとviewer
-control planeはplanned #486のscopeであり、current diagnostic経路へ暗黙にEnvironment / Task /
-Evaluationを補わない。
+接続するdiagnostic / operational runtimeである。R7-G production experiment runnerはこの経路と別に6軸を
+明示選択する。viewer control planeはplanned #486のscopeであり、既存diagnostic経路へ暗黙にEnvironment /
+Task / Evaluationを補わない。
 
 ## composition-rootの責務分割
 
@@ -279,8 +294,12 @@ call、`motion_command_to_qpos_command()`使用、`command_type = MotionCommand`
 - evaluation manifest readinessはrunner / log / outcomeを開始せず、canonical requested identityとresolved
   identityをfreezeするsoftware-only gateである。world/tool pairの条件差分は
   `docs/contracts/evaluation-manifest-readiness.md`の許可リストに限定する。
+- experiment runnerはreset後のactual qpos / measured tool orientationをfrozen initial stateへ照合し、
+  manifest initial tipをmeasurementへ変換せず、reset直後と各step後の
+  `endpoint_pose/v1` observationだけをTaskへ渡す。stale、hold、rejection、unavailable、invalidは
+  typed status/reasonとして投影し、nominalまたはsuccessへ変換しない。
 
-この文書はcurrent responsibility boundaryを固定し、runtimeの別実装を追加しない。
+この文書はcurrent responsibility boundaryを固定する。
 fast_arm固有diagnosticsは`plugins/robots/fast_arm/adapter/diagnostics/`が所有し、generic runtime public surfaceや
 plugin discovery entry pointからeager importしない。production builderは`ControlMappedRuntimePipeline`を構築する。
 test-only mapped wiringは`tests/support/`が所有する。

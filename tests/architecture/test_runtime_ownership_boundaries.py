@@ -54,6 +54,7 @@ EXPECTED_MODULES = {
         "endpoint_reach_evidence",
         "input_source",
         "registry",
+        "world_tool_runner",
     },
     "runners": {
         "dry_run",
@@ -61,6 +62,7 @@ EXPECTED_MODULES = {
         "live_viewer_smoke",
         "live_websocket_delivery",
         "offline_input_smoke",
+        "r7_g_world_tool_experiment",
         "selfrionette_serial_dry_run",
         "websocket_publisher",
     },
@@ -126,7 +128,20 @@ def test_runtime_package_root_is_a_minimal_lazy_facade() -> None:
     assert set(runtime._PUBLIC_EXPORTS) == set(runtime.__all__)
 
 
-def test_experiment_runner_has_one_future_owner() -> None:
+def test_experiment_runner_has_one_owner_and_thin_entry_point() -> None:
     readme = (RUNTIME_ROOT / "README.md").read_text(encoding="utf-8")
     assert "experiment lifecycle / runnerは`experiment/`が所有する" in readme
-    assert "`runners/`は既存のoperational smoke / runnerだけを所有する" in readme
+    assert "`runners/`はthin entry point" in readme
+
+
+def test_production_experiment_runner_has_no_concrete_robot_or_test_fixture_import() -> None:
+    source = (RUNTIME_ROOT / "experiment" / "world_tool_runner.py").read_text(
+        encoding="utf-8"
+    )
+    for forbidden in (
+        "selfrionette.plugins.robots.fast_arm",
+        "FAST_ARM_",
+        "tests.",
+        "ExperimentPluginRegistries(",
+    ):
+        assert forbidden not in source

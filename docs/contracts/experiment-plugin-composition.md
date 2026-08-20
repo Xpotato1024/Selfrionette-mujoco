@@ -435,19 +435,27 @@ readiness後に不足へ気付く設計や、特定robot/task/evaluatorの暗黙
 `compose_experiment()`、`ExperimentPluginManifest`、`EvaluationManifest` / readiness / freezeは、
 6軸selectionと互換性を実行前に固定するgeneric contractである。R7-G free-space向けには
 Environment、Task、Evaluationを含むproduction concrete pluginと各axis catalog、および6軸catalogを
-束ねる`runtime/composition/production_experiment.py`が存在する。ただしcatalog成立は
-production experiment runnerの存在を意味しない。
+束ねる`runtime/composition/production_experiment.py`が存在する。catalog/readinessとphysics executionの責務は
+分離し、production runnerは`runtime/experiment/world_tool_runner.py`が所有する。
 
 current application-facing CLI、replay、viewer、offline smoke、WebSocket publisherは、
 Robot、Input Source、Control Mapping、command semantics routeを接続するdiagnostic / operational
 runtimeである。Environment、Task、Evaluationを選択しないことはcurrent contract違反ではない。
-全軸を明示選択するproduction experiment runnerとviewer構成UIは未実装であり、planned experiment
-control plane #486を先取りしない。既存diagnostic runtimeへ暗黙default pluginや未実装runnerを補わない。
+R7-G production experiment runnerだけが全6軸を明示選択し、既存diagnostic runtimeへ暗黙default pluginを
+補わない。viewer構成UIはplanned experiment control plane #486を先取りしない。
 
-#406は`resolve_production_experiment()`へcanonical manifestを渡し、production catalogだけから6軸と
-command semantics routeを解決できる。R7-G world/tool pairのcanonical software-only fixtureは
+#406 runnerはcanonical pairをproduction readinessへ渡し、`PRODUCTION_EXPERIMENT_PLUGIN_REGISTRIES` /
+`resolve_production_experiment()`と同じproduction catalogだけから6軸とcommand semantics routeを解決する。
+R7-G world/tool pairのcanonical software-only fixtureは
 `runtime/evaluation/r7_g_free_space.py::build_r7_g_free_space_manifest_pair()`が所有する。このfixtureは
 Input Source生成、MuJoCo load / step、Task lifecycle、metric導出を開始しない。
+
+runnerはEnvironment scene conditionを明示的にcompose/resetし、Input Source factory、Mapping strategy、
+selected route binding、Robot-owned local endpoint motion generator / qpos guard / command provider、MuJoCoを
+接続する。reset直後はactual qposとmeasured tool orientationをfrozen manifestへ照合し、Taskにはelapsed `0.0`
+measured endpointと各simulation step後のmeasured endpointを渡し、
+TaskTransitionのclassification / evidenceを変更しない。Evaluation tupleはresolve済みidentityとして保持するが、
+metric aggregation / artifact exportは#408へ残す。
 
 ## fast_arm migration
 
@@ -500,6 +508,8 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
   `QposFeasibilityProvider`、`InitialStateContractProvider`等の必要なtyped providerだけを渡す。
 - #406は`selfrionette.plugins.robots.fast_arm.*`や旧compatibility facadeを直接importして
   concrete objectを組み立てない。Bundleをruntime service locatorとしてstepごとに参照しない。
+- #407は`WorldToolExperimentExecutionResult` / `ExperimentConditionExecutionResult`とexecution loopへ
+  lifecycle recordingを接続できるが、#406 resultをartifactまたはmetric集計へ拡張しない。
 
 ## non-goalsと主張範囲
 

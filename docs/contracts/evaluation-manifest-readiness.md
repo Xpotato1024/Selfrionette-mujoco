@@ -182,7 +182,7 @@ manifest digest、resolved identity digest、freeze identityを変更する。
 source file path、package location、compatibility re-exportだけの変更はfreeze identityを変更しない。
 identityを変更する場合は、manifest contract versionまたは対象のversioned identityを明示的に上げる。
 
-## #406 runnerへのhandoff
+## production runner boundary
 
 #406が使用できるpublic APIは、`EvaluationManifest`、`encode_evaluation_manifest()`、
 `decode_evaluation_manifest()`、`evaluation_manifest_digest()`、`SoftwareExecutionIdentity`、
@@ -200,7 +200,7 @@ runnerは`EvaluationReadiness.task_execution_binding.initial_state()`と
 production catalog boundaryは
 `runtime/composition/production_experiment.py::PRODUCTION_EXPERIMENT_PLUGIN_REGISTRIES`と
 `resolve_production_experiment()`、canonical R7-G pair builderは
-`runtime/evaluation/r7_g_free_space.py::build_r7_g_free_space_manifest_pair()`である。#406はこれらを使い、
+`runtime/evaluation/r7_g_free_space.py::build_r7_g_free_space_manifest_pair()`である。#406 runnerはこれらを使い、
 test-only fixtureまたは`plugins.robots.fast_arm`のconcrete moduleから6軸を再構築しない。
 
 robot selectionが必要なcomposition rootは`selfrionette.plugins.robots.catalog`のresolverを使用し、
@@ -208,7 +208,11 @@ resolved Bundleから必要なtyped providerをassembly時に取得する。`plu
 moduleと旧compatibility facadeは#406のimport boundaryではない。Bundleはprovider assemblyの境界であり、
 runner処理中のservice locatorとして使用しない。
 
-runner本体、experiment-motion-log/v1のrecord lifecycle、participant / repetition / retry、physics execution、
-measured tipの取得、metric集計 / artifact、contact outcomeは本Issueの実装に含まれない。Task-owned
-terminal derivation APIはhandoffに含むが、#406で実MuJoCo sampleを与えたmeasured reachability、world/tool
-execution、metric validityを検証する必要がある。
+readiness contract自体はrunner、experiment-motion-log/v1のrecord lifecycle、participant / repetition / retry、
+physics execution、measured tipの取得、metric集計 / artifact、contact outcomeを実装しない。
+`runtime/experiment/world_tool_runner.py`はこのhandoffを受け、freeze再検証後にEnvironment、typed provider、
+Input Source、Mapping、command route、MuJoCo、Task observationを接続する。manifest initial tipをmeasured sampleへ
+変換せず、reset後のactual qpos / measured tool orientationをfrozen manifestへ照合してからMuJoCo measurementを
+elapsed `0.0`で渡す。manifest revisionとactual `SoftwareExecutionIdentity`は独立入力であり、runnerが同一値から
+両方を生成しない。metric validity、artifact、full pilotは引き続き
+未実装である。

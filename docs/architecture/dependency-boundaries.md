@@ -328,3 +328,10 @@ concrete package間のcross-axis import、fast_arm concrete import、generic run
 `runtime/composition/production_experiment.py`は6軸catalogのprojection ownerだがexperiment runnerではない。
 replay / viewer / smokeはRobot、Input Source、Mapping、command routeのdiagnostic / operational runtimeであり、
 planned experiment control plane #486まで暗黙のfull compositionへ変更しない。
+
+`runtime/experiment/world_tool_runner.py`は#406のproduction execution ownerである。production readinessに
+含まれるresolved compositionからEnvironment、Input Source、Mapping、Task、ordered Evaluation、command routeを
+受け取り、Robot Bundleのtyped providerをassembly時に一度だけ取得する。runnerから
+`plugins.robots.fast_arm`のconcrete module、test registry、viewer、logging schemaをimportしない。
+execution loopはroute-bound `ControlMappedRuntimePipeline`とtyped command providerを使用し、Bundleへの反復lookup、
+独自IK / FK / Jacobian / frame transform、`MotionCommand`のbackend直渡しを行わない。

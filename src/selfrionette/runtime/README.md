@@ -10,12 +10,14 @@
 | `execution/` | pipeline lifecycle、input step loop、timing / pacing |
 | `control/` | input selection/state、endpoint target、viewer control ingress、step diagnostics |
 | `safety/` | stale input policy、qpos feasibility |
-| `experiment/` | versioned experiment contract、registry、readiness composition |
+| `experiment/` | versioned experiment contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint evaluation、progress、manifest / freeze readiness |
-| `runners/` | 既存のdry-run、live / offline smoke、WebSocket publisher entry point |
+| `runners/` | dry-run、live / offline smoke、WebSocket publisher、experimentのthin entry point |
 
-将来#406以降のexperiment lifecycle / runnerは`experiment/`が所有する。
-`runners/`は既存のoperational smoke / runnerだけを所有する。新しいframeworkや先行runnerは追加しない。
+#406で成立したexperiment lifecycle / runnerは`experiment/`が所有する。
+`runners/`はthin entry pointだけを追加でき、Task判定、metric、logging、artifact責務を持たない。
+entry pointはmanifest revisionとstartup側が独立に取得したactual execution revisionを別引数で受け、
+readinessのexact-match gateを通す。reset後はactual qpos / measured tool orientationをfrozen manifestへ照合する。
 
 ## 入力
 
