@@ -38,6 +38,11 @@ from selfrionette.runtime.experiment.endpoint_reach_evidence import (
 
 ENDPOINT_REACH_TASK_IDENTITY = VersionedIdentity("endpoint_reach_task", 1)
 
+# canonical initial tipは現行contractで小数6桁のreferenceを保持する一方、MuJoCoの
+# measured site positionはfull precisionで返る。この値は物理的なreset許容差ではなく、
+# 同一stateの数値表現差だけを許容するためのsoftware toleranceである。
+_INITIAL_POSITION_NUMERICAL_TOLERANCE_M = 1e-6
+
 
 @dataclass(frozen=True, slots=True)
 class EndpointReachTaskState:
@@ -92,8 +97,13 @@ class EndpointReachTaskBinding(TaskExecutionBinding):
     ) -> CanonicalEvidenceSet:
         trajectory_value: object | None = None
         if trajectory_status is EvidenceStatus.MEASURED:
+            measured_initial_position = (
+                state.samples[0].position_world_m
+                if state.samples
+                else self.context.initial_position_world_m
+            )
             trajectory_value = {
-                "initial_position_world_m": self.context.initial_position_world_m,
+                "initial_position_world_m": measured_initial_position,
                 "target_position_world_m": self.context.target_position_world_m,
                 "samples": tuple(
                     {
@@ -195,23 +205,28 @@ class EndpointReachTaskBinding(TaskExecutionBinding):
             )
 
         assert observation.position_world_m is not None
-        if not state.samples and (
-            elapsed != 0.0
-            or observation.position_world_m != self.context.initial_position_world_m
-        ):
-            invalid = EndpointReachTaskState(
-                classification=TaskTerminalClassification.TECHNICAL_INVALID,
-                terminal_reason=(
-                    "first measured endpoint sample must match the frozen initial "
-                    "position at elapsed_time_s=0"
-                ),
+        if not state.samples:
+            initial_position_error_m = _distance_m(
+                observation.position_world_m,
+                self.context.initial_position_world_m,
             )
-            return self._transition(
-                invalid,
-                elapsed_time_s=elapsed,
-                trajectory_status=EvidenceStatus.INVALID,
-                trajectory_reason=invalid.terminal_reason,
-            )
+            if (
+                elapsed != 0.0
+                or initial_position_error_m > _INITIAL_POSITION_NUMERICAL_TOLERANCE_M
+            ):
+                invalid = EndpointReachTaskState(
+                    classification=TaskTerminalClassification.TECHNICAL_INVALID,
+                    terminal_reason=(
+                        "first measured endpoint sample must start at elapsed_time_s=0 "
+                        "and match the frozen initial position within numerical tolerance"
+                    ),
+                )
+                return self._transition(
+                    invalid,
+                    elapsed_time_s=elapsed,
+                    trajectory_status=EvidenceStatus.INVALID,
+                    trajectory_reason=invalid.terminal_reason,
+                )
         samples = state.samples + (
             EndpointReachTrajectorySample(elapsed, observation.position_world_m),
         )
