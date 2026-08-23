@@ -361,7 +361,7 @@ def test_atomic_writer_uses_persistent_sidecar_without_owner_probe(
     world = build_world_tool_evaluation_artifacts(readiness, records)[0]
     target = tmp_path / "evaluation.json"
     lock = target.with_name(f".{target.name}.lock")
-    sidecar_bytes = b'{"pid":1,"created_ns":1}'
+    sidecar_bytes = b'{"pid":1'
     lock.write_bytes(sidecar_bytes)
 
     def forbidden_process_probe(*_: object) -> None:
