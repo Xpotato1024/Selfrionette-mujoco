@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-import time
+import threading
+import weakref
 from contextlib import contextmanager
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -19,6 +20,11 @@ from hashlib import sha256
 from math import isfinite
 from pathlib import Path
 from types import MappingProxyType
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from selfrionette.runtime.evaluation.manifest import (
     EvaluationConditionPairReadiness,
@@ -1222,100 +1228,114 @@ def _target_lock_path(path: Path) -> Path:
     return path.with_name(f".{path.name}.lock")
 
 
-def _process_is_alive(pid: int) -> bool:
-    if pid == os.getpid():
-        return True
+class _ProcessPathLock:
+    __slots__ = ("lock", "users", "__weakref__")
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.users = 0
+
+
+_PROCESS_PATH_LOCKS: weakref.WeakValueDictionary[str, _ProcessPathLock] = (
+    weakref.WeakValueDictionary()
+)
+_PROCESS_PATH_LOCKS_GUARD = threading.Lock()
+
+
+def _target_lock_key(path: Path) -> str:
+    return os.path.normcase(os.path.abspath(os.fspath(path)))
+
+
+@contextmanager
+def _process_local_target_lock(target_path: Path):
+    """同一process内のthread再入を防ぐboundedなnon-blocking lock。"""
+
+    key = _target_lock_key(target_path)
+    with _PROCESS_PATH_LOCKS_GUARD:
+        holder = _PROCESS_PATH_LOCKS.get(key)
+        if holder is None:
+            holder = _ProcessPathLock()
+            _PROCESS_PATH_LOCKS[key] = holder
+        holder.users += 1
+    if not holder.lock.acquire(blocking=False):
+        with _PROCESS_PATH_LOCKS_GUARD:
+            holder.users -= 1
+            if holder.users == 0 and _PROCESS_PATH_LOCKS.get(key) is holder:
+                del _PROCESS_PATH_LOCKS[key]
+        raise EvaluationArtifactError(
+            f"evaluation artifact target lock is already held in process: {target_path.name}"
+        )
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
+        yield
+    finally:
+        holder.lock.release()
+        with _PROCESS_PATH_LOCKS_GUARD:
+            holder.users -= 1
+            if holder.users == 0 and _PROCESS_PATH_LOCKS.get(key) is holder:
+                del _PROCESS_PATH_LOCKS[key]
+
+
+def _open_kernel_target_lock(target_path: Path) -> int:
+    """persistent sidecarをkernel advisory lockでnon-blocking取得する。"""
+
+    lock_path = _target_lock_path(target_path)
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            lock_path,
+            os.O_CREAT | os.O_RDWR,
+            0o600,
+        )
+        if os.name == "nt" and os.fstat(descriptor).st_size == 0:
+            os.write(descriptor, b"\0")
+            os.fsync(descriptor)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        if os.name == "nt":
+            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError as exc:
-        if exc.errno == 3 or getattr(exc, "winerror", None) in {87, 1168}:
-            return False
-        return True
-    return True
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        raise EvaluationArtifactError(
+            f"evaluation artifact target lock is already held or unavailable: {lock_path.name}"
+        ) from exc
+    return descriptor
 
 
-def _stale_lock_owner(lock_path: Path) -> int | None:
+def _close_kernel_target_lock(descriptor: int) -> None:
+    """lockをreleaseし、sidecarはpersistent operational stateとして残す。"""
+
     try:
-        document = json.loads(lock_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, TypeError, ValueError):
-        return None
-    if (
-        not isinstance(document, Mapping)
-        or set(document) != {"created_ns", "pid"}
-        or type(document["created_ns"]) is not int
-        or document["created_ns"] <= 0
-        or type(document["pid"]) is not int
-        or document["pid"] <= 0
-    ):
-        return None
-    return document["pid"]
-
-
-def _remove_stale_lock(lock_path: Path) -> bool:
-    pid = _stale_lock_owner(lock_path)
-    if pid is None or _process_is_alive(pid):
-        return False
-    try:
-        lock_path.unlink()
-    except FileNotFoundError:
-        return True
-    return True
+        try:
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            if os.name == "nt":
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        except OSError:
+            # closeがkernel lockを解放する。sidecar unlinkは行わない。
+            pass
+    finally:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
 
 
 @contextmanager
 def _exclusive_target_lock(target_path: Path):
-    """同一targetへの協調writerをexclusive-create lockで直列化する。"""
+    """persistent sidecarのkernel lockをcritical section全体で保持する。"""
 
-    lock_path = _target_lock_path(target_path)
-    descriptor: int | None = None
-    for attempt in range(2):
+    with _process_local_target_lock(target_path):
+        descriptor = _open_kernel_target_lock(target_path)
         try:
-            descriptor = os.open(
-                lock_path,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                0o600,
-            )
-            break
-        except FileExistsError as exc:
-            if attempt == 0 and _remove_stale_lock(lock_path):
-                continue
-            raise EvaluationArtifactError(
-                f"evaluation artifact target lock is already held: {lock_path.name}"
-            ) from exc
-        except OSError as exc:
-            raise EvaluationArtifactError(
-                f"evaluation artifact target lock acquisition failed: {exc}"
-            ) from exc
-    if descriptor is None:
-        raise EvaluationArtifactError("evaluation artifact target lock could not be acquired")
-    try:
-        try:
-            payload = json.dumps(
-                {"created_ns": time.time_ns(), "pid": os.getpid()},
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("ascii")
-            written = 0
-            while written < len(payload):
-                written += os.write(descriptor, payload[written:])
-            os.fsync(descriptor)
-        except OSError as exc:
-            raise EvaluationArtifactError(
-                f"evaluation artifact target lock initialization failed: {exc}"
-            ) from exc
-        yield
-    finally:
-        try:
-            os.close(descriptor)
+            yield
         finally:
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
+            _close_kernel_target_lock(descriptor)
 
 
 def _write_fsynced(path: Path, value: bytes) -> None:

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 from hashlib import sha256
-import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 from threading import Event, Thread
 
 import pytest
@@ -352,28 +353,27 @@ def test_artifact_rejects_identity_or_schema_tampering_and_preserves_atomic_targ
     assert decode_evaluation_artifact(written) == world
 
 
-def test_atomic_writer_rejects_live_lock_and_recovers_stale_lock(tmp_path: Path) -> None:
+def test_atomic_writer_uses_persistent_sidecar_without_owner_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     readiness, _, records = _canonical_records()
     world = build_world_tool_evaluation_artifacts(readiness, records)[0]
     target = tmp_path / "evaluation.json"
     lock = target.with_name(f".{target.name}.lock")
-    lock.write_text(
-        json.dumps({"created_ns": 1, "pid": os.getpid()}),
-        encoding="utf-8",
-    )
-    with pytest.raises(EvaluationArtifactError, match="target lock"):
-        write_evaluation_artifact_atomic(target, world)
-    assert lock.exists()
-    lock.write_text(
-        json.dumps({"created_ns": 1, "pid": 2_000_000_000}),
-        encoding="utf-8",
-    )
+    sidecar_bytes = b'{"pid":1,"created_ns":1}'
+    lock.write_bytes(sidecar_bytes)
+
+    def forbidden_process_probe(*_: object) -> None:
+        raise AssertionError("artifact lock must not probe or signal a process")
+
+    monkeypatch.setattr(artifact_module.os, "kill", forbidden_process_probe)
     write_evaluation_artifact_atomic(target, world)
     assert target.exists()
-    assert not lock.exists()
+    assert lock.read_bytes() == sidecar_bytes
 
 
-def test_atomic_writer_serializes_cooperative_writers_and_cleans_lock_on_failure(
+def test_atomic_writer_serializes_cooperative_writers_and_keeps_sidecar_on_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -414,7 +414,7 @@ def test_atomic_writer_serializes_cooperative_writers_and_cleans_lock_on_failure
     assert not worker.is_alive()
     assert len(first_result) == 1
     assert isinstance(first_result[0], bytes)
-    assert not lock.exists()
+    assert lock.exists()
 
     previous = target.read_bytes()
     monkeypatch.setattr(
@@ -425,7 +425,52 @@ def test_atomic_writer_serializes_cooperative_writers_and_cleans_lock_on_failure
     with pytest.raises(EvaluationArtifactError, match="replace failure"):
         write_evaluation_artifact_atomic(target, world)
     assert target.read_bytes() == previous
-    assert not lock.exists()
+    assert lock.exists()
+    assert not artifact_module._PROCESS_PATH_LOCKS
+
+
+def test_atomic_writer_excludes_concurrent_process_and_recovers_after_crash(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "evaluation.json"
+    script = """
+import os
+from pathlib import Path
+import sys
+import time
+
+from selfrionette.runtime.evaluation.artifact import _exclusive_target_lock
+
+target = Path(sys.argv[1])
+with _exclusive_target_lock(target):
+    print("ready", flush=True)
+    time.sleep(0.5)
+    os._exit(0)
+"""
+    process = subprocess.Popen(
+        [sys.executable, "-c", script, str(target)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        assert process.stdout.readline().strip() == "ready"
+        with pytest.raises(EvaluationArtifactError, match="target lock"):
+            with artifact_module._exclusive_target_lock(target):
+                pass
+        assert process.wait(timeout=5.0) == 0
+        with artifact_module._exclusive_target_lock(target):
+            pass
+        assert target.with_name(f".{target.name}.lock").exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5.0)
+        if process.stdout is not None:
+            process.stdout.close()
+        if process.stderr is not None:
+            process.stderr.close()
 
 
 def test_canonical_artifact_bytes_have_independent_reproducible_hashes() -> None:

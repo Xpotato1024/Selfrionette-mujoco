@@ -23,8 +23,11 @@ recorderはfreeze identityへconfigurationをbindし、explicit protocol context
 validationとstrict read-backを通過したcomplete trialだけをatomic JSONLとして保存する。
 validated `experiment-motion-log/v1`からのTask evidence再構成、ordered production evaluatorへのmetric委譲、
 deterministic `evaluation-artifact/v1`のstrict JSON / atomic emissionは`evaluation/artifact.py`が所有する。
-artifact writerはsame-directoryのcooperative exclusive lockをcritical sectionとして使い、live writerを拒否し、
-stale lockだけを終了owner確認後に回収する。#407のJSONL writerとは責務を共有しない。
+artifact writerはtargetごとのsame-directory persistent sidecar
+(`.<target-name>.lock`, creation permission `0600`)をkernel advisory lockとしてcritical section全体で保持する。sidecarの
+existence/contentはinertで、PID probe、JSON owner metadata、stale cleanup、sidecar unlinkを行わない。
+Windowsは`msvcrt.locking`、POSIXは`fcntl.flock`、process-local path lockを併用し、handle closeまたは
+process crashでkernelがlockを解放する。#407のJSONL writerとは責務を共有しない。
 
 ## 入力
 

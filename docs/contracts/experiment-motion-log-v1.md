@@ -244,9 +244,12 @@ identity、trial、condition/requested control frame、ordered evaluator identit
 およびdescriptive condition summaryを持つ。JSONはsorted compact UTF-8、finite number、unknown field拒否、decode / round-tripを
 必須とし、保存はsame-directory temporary file、read-back、atomic replaceの順で行う。これはsoftware-only evaluation artifactであり、
 pilot、inferential statistics、superiority、#409 full E2Eの証拠を作らない。
-cooperative writer間のoverwrite raceはtargetと同じdirectoryのexclusive-create lockで直列化し、live lockは拒否し、
-stale lockだけをowner processの終了確認後に回収する。lock取得から既存bytes確認、replace、rollback、cleanupまでを同じ
-critical sectionとして扱う。
+cooperative writer間のoverwrite raceはtargetと同じdirectoryのpersistent sidecar
+(`.<target-name>.lock`, creation permission `0600`)をkernel advisory lockで直列化する。sidecarの存在とcontentはinertなoperational
+lock stateであり、PID / JSON owner metadataを読まず、stale lockの回収やsidecarのunlinkを行わない。
+Windowsでは`msvcrt.locking`、POSIXでは`fcntl.flock`をnon-blockingで使い、process-local path lockも併用する。
+lock取得から既存bytes確認、replace、rollback、kernel handle closeまでを同じcritical sectionとして扱う。
+handleは正常終了・失敗・process crashでkernelに解放され、sidecar自体は次回writerのために残る。
 
 1つのprotocol identityとrepetition内でattempt indexはuniqueであり、initial attemptは
 ちょうど1つである。各trialが持てるdirect retry childは最大1つである。retryは直前の
