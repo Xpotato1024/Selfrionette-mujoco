@@ -1286,9 +1286,6 @@ def _open_kernel_target_lock(target_path: Path) -> int:
             os.O_CREAT | os.O_RDWR,
             0o600,
         )
-        if os.name == "nt" and os.fstat(descriptor).st_size == 0:
-            os.write(descriptor, b"\0")
-            os.fsync(descriptor)
         os.lseek(descriptor, 0, os.SEEK_SET)
         if os.name == "nt":
             msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)

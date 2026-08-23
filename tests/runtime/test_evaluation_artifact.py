@@ -4,6 +4,7 @@ from dataclasses import replace
 from hashlib import sha256
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 from threading import Event, Thread
@@ -363,6 +364,7 @@ def test_atomic_writer_uses_persistent_sidecar_without_owner_probe(
     lock = target.with_name(f".{target.name}.lock")
     sidecar_bytes = b'{"pid":1'
     lock.write_bytes(sidecar_bytes)
+    inode_before = lock.stat().st_ino
 
     def forbidden_process_probe(*_: object) -> None:
         raise AssertionError("artifact lock must not probe or signal a process")
@@ -371,6 +373,30 @@ def test_atomic_writer_uses_persistent_sidecar_without_owner_probe(
     write_evaluation_artifact_atomic(target, world)
     assert target.exists()
     assert lock.read_bytes() == sidecar_bytes
+    assert lock.stat().st_ino == inode_before
+
+
+def test_atomic_writer_keeps_empty_sidecar_empty_and_persistent(
+    tmp_path: Path,
+) -> None:
+    readiness, _, records = _canonical_records()
+    world = build_world_tool_evaluation_artifacts(readiness, records)[0]
+    target = tmp_path / "evaluation.json"
+    lock = target.with_name(f".{target.name}.lock")
+    lock.write_bytes(b"")
+    existing_inode = lock.stat().st_ino
+    write_evaluation_artifact_atomic(target, world)
+    assert lock.read_bytes() == b""
+    assert lock.stat().st_ino == existing_inode
+
+    new_target = tmp_path / "new-evaluation.json"
+    new_lock = new_target.with_name(f".{new_target.name}.lock")
+    assert not new_lock.exists()
+    write_evaluation_artifact_atomic(new_target, world)
+    assert new_lock.exists()
+    assert new_lock.read_bytes() == b""
+    if os.name != "nt":
+        assert stat.S_IMODE(new_lock.stat().st_mode) == 0o600
 
 
 def test_atomic_writer_serializes_cooperative_writers_and_keeps_sidecar_on_failure(

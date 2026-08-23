@@ -24,8 +24,10 @@ validationとstrict read-backを通過したcomplete trialだけをatomic JSONL�
 validated `experiment-motion-log/v1`からのTask evidence再構成、ordered production evaluatorへのmetric委譲、
 deterministic `evaluation-artifact/v1`のstrict JSON / atomic emissionは`evaluation/artifact.py`が所有する。
 artifact writerはtargetごとのsame-directory persistent sidecar
-(`.<target-name>.lock`, creation permission `0600`)をkernel advisory lockとしてcritical section全体で保持する。sidecarの
+(`.<target-name>.lock`)をkernel advisory lockとしてcritical section全体で保持する。sidecarの
 existence/contentはinertで、PID probe、JSON owner metadata、stale cleanup、sidecar unlinkを行わない。
+sidecarは`os.open(..., 0o600)`で作成し、POSIXではowner-only modeを要求する。Windowsのnumeric modeは保証せず、
+current OS security semantics / inherited ACLに従う。empty sidecarもcontent・inodeを変更せず保持する。
 Windowsは`msvcrt.locking`、POSIXは`fcntl.flock`、process-local path lockを併用し、handle closeまたは
 process crashでkernelがlockを解放する。#407のJSONL writerとは責務を共有しない。
 

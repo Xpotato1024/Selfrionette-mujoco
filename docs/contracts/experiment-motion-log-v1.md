@@ -245,8 +245,10 @@ identity、trial、condition/requested control frame、ordered evaluator identit
 必須とし、保存はsame-directory temporary file、read-back、atomic replaceの順で行う。これはsoftware-only evaluation artifactであり、
 pilot、inferential statistics、superiority、#409 full E2Eの証拠を作らない。
 cooperative writer間のoverwrite raceはtargetと同じdirectoryのpersistent sidecar
-(`.<target-name>.lock`, creation permission `0600`)をkernel advisory lockで直列化する。sidecarの存在とcontentはinertなoperational
+(`.<target-name>.lock`)をkernel advisory lockで直列化する。sidecarの存在とcontentはinertなoperational
 lock stateであり、PID / JSON owner metadataを読まず、stale lockの回収やsidecarのunlinkを行わない。
+sidecarは`os.open(..., 0o600)`で作成し、POSIXではowner-only modeを要求する。Windowsではnumeric modeを保証せず、
+current OS security semantics / inherited ACLに従う。empty sidecarもcontent・inodeを変更せず保持する。
 Windowsでは`msvcrt.locking`、POSIXでは`fcntl.flock`をnon-blockingで使い、process-local path lockも併用する。
 lock取得から既存bytes確認、replace、rollback、kernel handle closeまでを同じcritical sectionとして扱う。
 handleは正常終了・失敗・process crashでkernelに解放され、sidecar自体は次回writerのために残る。
