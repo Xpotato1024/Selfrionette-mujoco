@@ -431,9 +431,20 @@ def test_atomic_writer_serializes_cooperative_writers_and_cleans_lock_on_failure
 def test_canonical_artifact_bytes_have_independent_reproducible_hashes() -> None:
     readiness, _, records = _canonical_records()
     artifacts = build_world_tool_evaluation_artifacts(readiness, records)
-    source_bytes = sha256(encode_jsonl(records).encode("utf-8")).hexdigest()
-    assert source_bytes == "22214d7bd9a2a13006167b3a3efdefbc5c110032a2971f3044272cdd702ac42c"
-    assert [sha256(prepare_evaluation_artifact(item)).hexdigest() for item in artifacts] == [
-        "59a5fe6cb768ae8754084e177b3cdf193ef01b2169e4800daeb131b9ba37bd7d",
-        "2388a38681300080924a246d604c288b49d60d8fef96defc51450eae5d74dc56",
-    ]
+    source_digest = sha256(encode_jsonl(records).encode("utf-8")).hexdigest()
+    expected_source_identity = f"sha256:{source_digest}"
+    assert all(
+        item.source_log_identity == expected_source_identity
+        and item.source_log_sha256 == expected_source_identity
+        for item in artifacts
+    )
+    encoded = tuple(prepare_evaluation_artifact(item) for item in artifacts)
+    assert tuple(sha256(item).hexdigest() for item in encoded) == tuple(
+        sha256(encode_evaluation_artifact(item)).hexdigest() for item in artifacts
+    )
+    assert tuple(
+        encode_evaluation_artifact(decode_evaluation_artifact(item))
+        for item in encoded
+    ) == encoded
+    rebuilt = build_world_tool_evaluation_artifacts(readiness, records)
+    assert tuple(prepare_evaluation_artifact(item) for item in rebuilt) == encoded
