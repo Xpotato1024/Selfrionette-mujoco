@@ -14,7 +14,8 @@ related:
 
 # R7-G deterministic E2E
 
-`selfrionette-r7-g-e2e`は、固定したR7-G manifest / protocol contextを
+`selfrionette-r7-g-e2e`は、callerが明示したmanifest revisionと独立したactual execution
+revisionで、固定したR7-G manifest / protocol contextを
 production six-axis readiness、world/tool MuJoCo runner、
 `experiment-motion-log/v1`、Task-owned canonical evidence reconstruction、
 production Evaluation Plugin、`evaluation-artifact/v1`へ順番に渡す有限の
@@ -28,10 +29,26 @@ canonical namesをstrict read-back後にatomic replaceする。
 
 ```powershell
 $out = 'C:\path\to\task-temp\r7-g-e2e-output'
-uv run selfrionette-r7-g-e2e --output-dir $out
+$manifestRevision = $env:R7_G_MANIFEST_REVISION
+$executionRevision = $env:R7_G_EXECUTION_REVISION
+if ([string]::IsNullOrWhiteSpace($manifestRevision) -or [string]::IsNullOrWhiteSpace($executionRevision)) {
+    throw 'R7_G_MANIFEST_REVISION and R7_G_EXECUTION_REVISION are required caller inputs'
+}
+uv run selfrionette-r7-g-e2e `
+    --output-dir $out `
+    --manifest-software-revision $manifestRevision `
+    --execution-software-revision $executionRevision
 ```
 
-commandは同一のrevision、manifest、protocol contextでE2Eを2回実行し、次の値が
+`--manifest-software-revision`はmanifestへ宣言する`git-sha1:<40 hex>`、
+`git-sha256:<64 hex>`、またはfixture専用の`test-revision:<token>`である。
+`--execution-software-revision`はcallerがstartup時に独立取得したactual execution identityであり、
+manifestから自動導出しない。2値がexact matchしない場合はreadinessでstatus `1`となり、
+MuJoCo execution、motion log、artifact生成は開始しない。
+
+installed wheelやrepository外の実行ではgit lookupを自動実行しないため、callerはactual revisionを
+明示して渡す。fixture smokeでは両引数へ同じ明示的な`test-revision:issue-409-fixture`を渡せるが、
+これはHEADの証明ではない。commandは同一のrevision、manifest、protocol contextでE2Eを2回実行し、次の値が
 一致しなければ終了status `1`で停止する。
 
 - world/toolのTask terminal classification
@@ -65,8 +82,8 @@ identityやowner情報として解釈しない。
 determinismの受入境界は同一OS、Python / MuJoCo依存環境での反復実行である。OSや依存版を
 跨いだartifact bytes / SHA-256の一致はこのcommandの仕様値としない。
 
-stdoutはpathを含まないdeterministic summary（bytes、SHA-256、classification、metric
-status/value、negative-control名）を1行のJSONで出力する。
+stdoutはpathを含まないdeterministic summary（manifest / execution revision、freeze digest、bytes、
+SHA-256、classification、metric status/value、negative-control名）を1行のJSONで出力する。
 
 ## negative controlsと終了status
 

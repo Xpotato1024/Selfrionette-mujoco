@@ -20,19 +20,30 @@ operationの第二の正本ではない。current commandとoutput contractは
 自動E2Eはsoftware-only evidenceであり、formal participant pilotやphysical safety
 validationへ昇格させない。
 
+## 現在のlifecycle（2026-08-23）
+
+- #499（#408 artifact）と#500（#409 E2E）はともにOpen/Draftであり、#408/#409 IssueもOpenである。
+- 独立reviewの検出値はP0=0、P1=2、P2=1であり、revision identity、sample-only negative control、
+  lifecycle記述をこのPRで修正中である。したがって本書はmerge済み・Issue完了の宣言ではない。
+- 修正後の再reviewで実装stackがmerge-order readyと判断できても、parent-firstのmergeとIssue lifecycle更新が
+  完了するまでは#408/#409をcompletedまたはclose-readyと扱わない。
+
 ## 監査対象と再現結果
 
-`selfrionette-r7-g-e2e --output-dir <absolute-directory>`を、同一のmanifest、protocol
-context、software revisionで2回実行する。#408のstrict artifact APIを経由し、runner、
+`selfrionette-r7-g-e2e --output-dir <absolute-directory> --manifest-software-revision <declared>
+--execution-software-revision <observed>`を、callerが独立に渡した同一のmanifest / actual
+execution revision、protocol contextで2回実行する。#408のstrict artifact APIを経由し、runner、
 recorder、evaluator、artifact mathをこのauditへ複製しない。
 
 | condition | terminal | samples / simulation time | artifact bytes / SHA-256 |
 | --- | --- | ---: | --- |
-| world | `success` | 57 / 1.14 s | 3045 / `59a5fe6cb768ae8754084e177b3cdf193ef01b2169e4800daeb131b9ba37bd7d` |
-| tool | `failure` (`failed-timeout`) | 250 / 5.00 s | 3112 / `2388a38681300080924a246d604c288b49d60d8fef96defc51450eae5d74dc56` |
+| world | `success` | 57 / 1.14 s | 3044 / `804af2bf79ddbd69f211f430592afd603e878ba95ba0cc29b2f022001ddd546a` |
+| tool | `failure` (`failed-timeout`) | 250 / 5.00 s | 3111 / `5ec0c003e863937f6d5db2fab02c9395b10e7f56b5c7fe5d91eb5fe2b71c72d3` |
 
-このtask-runはWindows x64、CPython 3.12.13、MuJoCo 3.12.0の環境で実施した。canonical motion logは313 records、597161 bytes、SHA-256
-`22214d7bd9a2a13006167b3a3efdefbc5c110032a2971f3044272cdd702ac42c`である。source log、
+このtask-runはWindows x64、CPython 3.12.13、MuJoCo 3.12.0で、明示的fixture revision
+`test-revision:issue-409-fixture`をmanifest / caller-observed executionの両方へ渡して実施した。
+canonical motion logは313 records、597159 bytes、SHA-256
+`8a6da45eef06a090dd52012f4c579a09b31629ed305cf553d978cfe61155b14e`である。source log、
 reconstructed Task evidence、metric result、artifact bytesの各比較は反復run間で一致し、
 artifactのstrict decode / re-encodeとatomic read-backを通過する。SHA-256はこの固定protocol、
 revision、依存環境で取得したtraceableな観測値であり、別OS / 依存版の任意hashを仕様値としない。
@@ -73,7 +84,7 @@ revision、依存環境で取得したtraceableな観測値であり、別OS / �
 
 ## handoff
 
-R7-Gのfree-space software-only completion boundaryを越えて、次のroadmap parentへ渡す。
+R7-Gのfree-space software-only observed boundaryを記録し、次のroadmap parentへhandoff候補として渡す。
 
 | Round | Handoff | このauditで行わないこと |
 | --- | --- | --- |
@@ -84,13 +95,13 @@ R7-Gのfree-space software-only completion boundaryを越えて、次のroadmap 
 
 ## #404 / #293の状態
 
-#404のsoftware-only acceptance criteriaは本auditの範囲で観測済みと判断できる。ただし、
-#404またはnumbering SoT #293のclose-ready metadataはこのPRから更新しない。independent
-reviewでP0/P1/P2がないことを確認した後、parent側で次のlocalized metadataだけを再取得した
-bodyへ適用する提案とする。
+#404のsoftware-only acceptance criteriaは本auditの範囲で観測した候補 evidenceである。ただし、
+#404またはnumbering SoT #293のclose-ready metadataはこのPRから更新しない。#499/#500がparent-firstで
+mergeされ、再reviewとIssue lifecycle確認が完了した後にだけ、parent側で次のlocalized metadataを
+再取得したbodyへ適用する提案とする。
 
-- #404のremaining child statusを#409完了へ更新する。
+- #404のremaining child statusを#409のmerge済み状態へ更新する。
 - #404のcurrent handoffを本auditと#408 artifact identityへ狭く更新する。
 - R7-H/I/J/Kをfuture handoffとして明記し、physical / participant claimsを追加しない。
 
-これは提案であり、このaudit作成時点のGitHub Issue bodyを変更した証拠ではない。
+これはpost-merge用の提案であり、このaudit作成時点のGitHub Issue bodyを変更した証拠ではない。

@@ -66,7 +66,6 @@ from selfrionette.schemas.experiment_log import (
 )
 
 
-R7_G_E2E_SOFTWARE_REVISION = "test-revision:issue-408-artifact"
 R7_G_E2E_REPOSITORY_IDENTITY = "Xpotato1024/Selfrionette-mujoco"
 R7_G_E2E_EXPERIMENT_ID = "experiment-408"
 R7_G_E2E_SESSION_ID = "session-408"
@@ -156,13 +155,6 @@ def _canonical_contexts() -> WorldToolTrialProtocolContext:
     return WorldToolTrialProtocolContext(
         world=TrialProtocolContext(**common, direction_order=0),
         tool=TrialProtocolContext(**common, direction_order=1),
-    )
-
-
-def _canonical_execution_identity() -> SoftwareExecutionIdentity:
-    return SoftwareExecutionIdentity(
-        repository_identity=R7_G_E2E_REPOSITORY_IDENTITY,
-        software_revision_identity=R7_G_E2E_SOFTWARE_REVISION,
     )
 
 
@@ -263,11 +255,14 @@ def _assert_expected_execution(execution: WorldToolExperimentExecutionResult) ->
             )
 
 
-def _build_run() -> R7GE2ERun:
+def _build_run(
+    *,
+    manifest_software_revision_identity: str,
+    execution_identity: SoftwareExecutionIdentity,
+) -> R7GE2ERun:
     pair: EvaluationConditionPair = build_r7_g_free_space_manifest_pair(
-        software_revision_identity=R7_G_E2E_SOFTWARE_REVISION,
+        software_revision_identity=manifest_software_revision_identity,
     )
-    execution_identity = _canonical_execution_identity()
     readiness = build_evaluation_condition_pair_readiness(
         pair,
         PRODUCTION_EXPERIMENT_PLUGIN_REGISTRIES,
@@ -381,19 +376,31 @@ def _failed_outcome(outcome: TrialOutcomeRecord, reason: str) -> TrialOutcomeRec
 def _mutated_world_records(
     run: R7GE2ERun,
     sample_mutator: Callable[[MotionSampleRecord], MotionSampleRecord],
-    *,
-    reason: str,
 ) -> tuple[ExperimentMotionLogRecord, ...]:
-    configuration, start, samples, outcome = _condition_records(run.records, "world")
+    _, _, samples, _ = _condition_records(run.records, "world")
     if not samples:
         raise R7GE2EError("negative control requires a canonical world sample")
     first_sample = samples[0]
     mutated = sample_mutator(first_sample)
     return tuple(
-        mutated if item is first_sample else
-        _failed_outcome(item, reason) if item is outcome else item
+        mutated if item is first_sample else item
         for item in run.records
     )
+
+
+def _assert_artifact_rejected(
+    run: R7GE2ERun,
+    records: Iterable[ExperimentMotionLogRecord],
+    control_name: str,
+) -> None:
+    try:
+        build_world_tool_evaluation_artifacts_from_jsonl(
+            run.readiness,
+            prepare_motion_log(records).bytes_value,
+        )
+    except (EvaluationArtifactError, TypeError, ValueError, UnicodeError):
+        return
+    raise R7GE2EError(f"negative control {control_name!r} was accepted")
 
 
 def _assert_not_successful_artifact(
@@ -415,16 +422,26 @@ def _assert_not_successful_artifact(
     )
     if metric.value is True:
         raise R7GE2EError(f"negative control {control_name!r} was accepted as success")
+    if artifact.trials[0].terminal_classification is TaskTerminalClassification.SUCCESS:
+        raise R7GE2EError(
+            f"negative control {control_name!r} retained a successful terminal classification"
+        )
+    if control_name == "technical_invalid" and not any(
+        item.status.value == "invalid" for item in artifact.trials[0].metrics
+    ):
+        raise R7GE2EError(
+            "technical-invalid negative control did not produce an invalid metric"
+        )
 
 
 def _run_negative_controls(run: R7GE2ERun) -> tuple[str, ...]:
     names: list[str] = []
 
     pair = build_r7_g_free_space_manifest_pair(
-        software_revision_identity=R7_G_E2E_SOFTWARE_REVISION,
+        software_revision_identity=run.readiness.world.manifest.software_revision_identity,
     )
-    mismatched_identity = SoftwareExecutionIdentity(
-        repository_identity=R7_G_E2E_REPOSITORY_IDENTITY,
+    mismatched_identity = replace(
+        run.readiness.world.software_execution_identity,
         software_revision_identity="test-revision:issue-409-tampered",
     )
     try:
@@ -472,9 +489,9 @@ def _run_negative_controls(run: R7GE2ERun) -> tuple[str, ...]:
         )
 
     for name, mutator in (("held", held), ("rejected", rejected), ("stale", stale)):
-        _assert_not_successful_artifact(
+        _assert_artifact_rejected(
             run,
-            _mutated_world_records(run, mutator, reason=f"negative-control:{name}"),
+            _mutated_world_records(run, mutator),
             name,
         )
         names.append(name)
@@ -495,13 +512,9 @@ def _run_negative_controls(run: R7GE2ERun) -> tuple[str, ...]:
             measurement_unavailable_reason="negative-control:measurement-unavailable",
         )
 
-    _assert_not_successful_artifact(
+    _assert_artifact_rejected(
         run,
-        _mutated_world_records(
-            run,
-            unavailable,
-            reason="negative-control:measurement-unavailable",
-        ),
+        _mutated_world_records(run, unavailable),
         "measurement_unavailable",
     )
     names.append("measurement_unavailable")
@@ -565,8 +578,15 @@ def _write_outputs(run: R7GE2ERun, output_dir: Path) -> None:
 
 
 def _summary(result: R7GE2EResult) -> dict[str, object]:
+    world_readiness = result.run.readiness.world
+    tool_readiness = result.run.readiness.tool
     return {
-        "software_revision": R7_G_E2E_SOFTWARE_REVISION,
+        "manifest_software_revision": world_readiness.manifest.software_revision_identity,
+        "execution_repository_identity": world_readiness.software_execution_identity.repository_identity,
+        "execution_software_revision": world_readiness.software_execution_identity.software_revision_identity,
+        "manifest_pair_identity": result.run.readiness.pair_identity,
+        "world_manifest_digest": world_readiness.manifest_digest,
+        "tool_manifest_digest": tool_readiness.manifest_digest,
         "motion_log": {
             "name": R7_G_E2E_MOTION_LOG_NAME,
             "bytes": len(result.run.motion_log_bytes),
@@ -613,12 +633,20 @@ def _summary(result: R7GE2EResult) -> dict[str, object]:
 
 def run_r7_g_deterministic_e2e(
     *,
+    manifest_software_revision_identity: str,
+    execution_identity: SoftwareExecutionIdentity,
     output_dir: str | Path | None = None,
 ) -> R7GE2EResult:
-    """canonical pairを2回実行し、strict outputとnegative controlを検証する。"""
+    """独立したmanifest/actual revision入力でcanonical E2Eを2回実行する。"""
 
-    first = _build_run()
-    second = _build_run()
+    first = _build_run(
+        manifest_software_revision_identity=manifest_software_revision_identity,
+        execution_identity=execution_identity,
+    )
+    second = _build_run(
+        manifest_software_revision_identity=manifest_software_revision_identity,
+        execution_identity=execution_identity,
+    )
     _assert_deterministic(first, second)
     negative_controls = _run_negative_controls(first)
     output_names = (
@@ -643,13 +671,30 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="absolute directory for canonical JSONL/JSON outputs",
     )
+    parser.add_argument(
+        "--manifest-software-revision",
+        required=True,
+        help="manifest-declared git-sha1/git-sha256 or explicit test-revision identity",
+    )
+    parser.add_argument(
+        "--execution-software-revision",
+        required=True,
+        help="caller-observed actual execution revision; never inferred from the manifest",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
-        result = run_r7_g_deterministic_e2e(output_dir=args.output_dir)
+        result = run_r7_g_deterministic_e2e(
+            manifest_software_revision_identity=args.manifest_software_revision,
+            execution_identity=SoftwareExecutionIdentity(
+                repository_identity=R7_G_E2E_REPOSITORY_IDENTITY,
+                software_revision_identity=args.execution_software_revision,
+            ),
+            output_dir=args.output_dir,
+        )
     except (OSError, R7GE2EError, RuntimeError, TypeError, ValueError) as exc:
         print(f"selfrionette-r7-g-e2e: error: {exc}", file=sys.stderr)
         return 1
@@ -670,7 +715,6 @@ __all__ = [
     "R7_G_E2E_MOTION_LOG_NAME",
     "R7_G_E2E_REPOSITORY_IDENTITY",
     "R7_G_E2E_SESSION_ID",
-    "R7_G_E2E_SOFTWARE_REVISION",
     "R7_G_E2E_TOOL_ARTIFACT_NAME",
     "R7_G_E2E_WORLD_ARTIFACT_NAME",
     "main",
