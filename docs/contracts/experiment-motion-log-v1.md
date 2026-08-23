@@ -221,6 +221,24 @@ filesystem ownerはruntime recorderである。保存前にtyped streamのvalida
 strict read-backが一致した場合だけatomic replaceし、replace後もtarget bytesをread-backする。partial / RUNNING
 trial、invalid retry chain、encodingまたはwrite failureではfinal artifactをcommitせず、既存artifactを保持する。
 
+## evaluation-artifact/v1へのhandoff
+
+`experiment-motion-log/v1`は実行時のtruth-levelを保持する入力ログであり、metric resultやcondition summaryの正本ではない。
+`runtime/evaluation/artifact.py`は、strict stream validationを通過したv1 bytesと入力`EvaluationReadiness`を受け、
+configurationの`initial_measured_tip_position_m`とordered `MotionSampleRecord`のmeasured endpoint factsから
+Task-owned trajectory evidence equivalentを再構成する。requested、predicted、またはzeroの値をmeasured trajectoryへ昇格させない。
+
+`TrialOutcomeRecord`とvalidated lifecycleからterminal classificationを再構成し、既存endpoint reach evidence codecと
+producer provenanceをそのまま検証する。source logのconfiguration ID、software revision、target、condition、freeze / manifest
+identityはreadinessとexact matchで照合し、別manifestや別revisionへ黙って適用しない。technical-invalid、missing、unavailableの
+evidenceはsuccess、trajectory、completion time、zero値へ補完せず、既存Evaluation Pluginのdeclared policyに従う。
+
+生成される`evaluation-artifact/v1`はschema/version、source log identity / SHA-256、software revision、configuration / freeze
+identity、trial、condition/requested control frame、ordered evaluator identity、各metricのstatus/value/unit/frame/provenance/reason、
+およびdescriptive condition summaryを持つ。JSONはsorted compact UTF-8、finite number、unknown field拒否、decode / round-tripを
+必須とし、保存はsame-directory temporary file、read-back、atomic replaceの順で行う。これはsoftware-only evaluation artifactであり、
+pilot、inferential statistics、superiority、#409 full E2Eの証拠を作らない。
+
 1つのprotocol identityとrepetition内でattempt indexはuniqueであり、initial attemptは
 ちょうど1つである。各trialが持てるdirect retry childは最大1つである。retryは直前の
 completed technical-invalid attemptを参照し、1本のlinearな`0 -> 1 -> 2 ...` chainを

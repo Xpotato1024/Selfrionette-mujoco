@@ -35,6 +35,7 @@ EXPECTED_MODULES = {
         "viewer_motion_policy",
     },
     "evaluation": {
+        "artifact",
         "endpoint_metrics",
         "endpoint_progress",
         "kinematics",

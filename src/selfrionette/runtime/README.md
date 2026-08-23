@@ -21,6 +21,8 @@ entry pointはmanifest revisionとstartup側が独立に取得したactual execu
 readinessのexact-match gateを通す。reset後はactual qpos / measured tool orientationをfrozen manifestへ照合する。
 recorderはfreeze identityへconfigurationをbindし、explicit protocol contextからtrial identityを決定的に作り、
 validationとstrict read-backを通過したcomplete trialだけをatomic JSONLとして保存する。
+validated `experiment-motion-log/v1`からのTask evidence再構成、ordered production evaluatorへのmetric委譲、
+deterministic `evaluation-artifact/v1`のstrict JSON / atomic emissionは`evaluation/artifact.py`が所有する。
 
 ## 入力
 

@@ -36,7 +36,8 @@ provider identity、plugin identityはこの移動で変更しない。
 
 #406で成立したexperiment lifecycle / runnerと、#407で追加したexecution trace / motion-log recorderのownerは
 `experiment/`である。`runners/`はthin entry pointだけを所有し、Task判定、metric、record projection、
-artifact emissionを実装しない。
+artifact emissionを実装しない。validated v1 logからのmetric導出とcanonical artifact emissionは
+`evaluation/artifact.py`が所有する。
 
 `runtime/` is the only composition root。input、motion、kinematics、MuJoCo backend、transportを
 layer横断で接続できるのはruntimeだけである。MuJoCo remains the physical source of truth。
@@ -97,12 +98,12 @@ evidence producer、evaluator requirementをfail-closedで検証する。詳細�
 このgeneric experiment compositionはreadiness-onlyである。R7-G free-space用のproduction Environment /
 Task / Evaluation catalogは各axis packageが所有し、`composition/production_experiment.py`がconcrete IDを
 知らずに6軸registryを束ねる。`evaluation/r7_g_free_space.py`はproduction catalogだけで解決できるworld /
-tool manifest fixtureを所有するが、scene compose/reset、task lifecycle、metric artifact、experiment runnerは所有しない。
+tool manifest fixtureを所有するが、scene compose/reset、task lifecycle、metric導出、artifact export、experiment runnerは所有しない。
 R7-G readinessはupper `EvaluationManifest`のtarget、tolerance、dwell、timeout、initial tipをimmutable
 Task contextへbindし、`EvaluationReadiness.task_execution_binding`としてrunnerへ渡す。runnerは
 MuJoCo-owned measured endpointとstatusをtyped observationとして渡すだけで、terminal classificationや
 canonical task evidenceを作成しない。Task pluginがpure transitionとproducer provenanceを所有し、trial
-aggregation、artifact export、condition summaryは後続ownerへ残す。
+aggregation、artifact export、condition summaryは`evaluation/artifact.py`へ残す。
 
 `experiment/world_tool_runner.py`はfrozen readinessからEnvironment scene condition、Input Source reader、
 Control Mapping、selected command route、Robot Bundleのtyped provider、MuJoCo simulatorをassembly時に一度だけ
@@ -115,8 +116,8 @@ post-step measurementとruntime statusをTaskへ渡す。Bundleをloop中のserv
 canonical pairへ固定するmanifest revisionとstartup側が取得したactual `SoftwareExecutionIdentity`は別入力とする。
 runner自身が同じcaller値から両者を合成せず、readinessのexact-match gateで不一致をfail closedにする。
 
-Evaluation Pluginはproduction composition / readinessのordered tupleとしてresolveするが、#408のmetric導出や
-evaluation artifact出力は実行しない。#407のrunner resultはTask transition、step count、simulation elapsed time、
+Evaluation Pluginはproduction composition / readinessのordered tupleとしてresolveするが、metric導出や
+evaluation artifact出力は実行しない。#408のartifact ownerがvalidated v1 logから順序付きpluginへ委譲する。#407のrunner resultはTask transition、step count、simulation elapsed time、
 freeze identityに加え、既存execution loopでownerが生成したimmutable step traceを保持する。runtime recorderは
 そのtraceを`experiment-motion-log/v1`へprojectionし、strict validation後だけatomic JSONLとして保存する。
 
