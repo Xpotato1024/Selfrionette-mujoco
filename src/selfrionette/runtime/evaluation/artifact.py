@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
+from contextlib import contextmanager
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
@@ -21,6 +23,7 @@ from types import MappingProxyType
 from selfrionette.runtime.evaluation.manifest import (
     EvaluationConditionPairReadiness,
     EvaluationReadiness,
+    comparison_parameters_for_readiness,
     verify_freeze_identity,
 )
 from selfrionette.runtime.composition.production_experiment import (
@@ -73,6 +76,11 @@ _COMPLETION_TO_TERMINAL = {
     "success": TaskTerminalClassification.SUCCESS,
     "failed": TaskTerminalClassification.FAILURE,
     "technical_invalid": TaskTerminalClassification.TECHNICAL_INVALID,
+}
+_COMPLETION_TO_FAILURE_ATTRIBUTION = {
+    "success": "none",
+    "failed": "operator",
+    "technical_invalid": "technical",
 }
 _FAILURE_ATTRIBUTIONS = frozenset({"none", "operator", "technical"})
 
@@ -220,6 +228,19 @@ class EvaluationArtifactMetric:
     def __post_init__(self) -> None:
         if not isinstance(self.evaluator, VersionedIdentity):
             raise TypeError("artifact evaluator must use VersionedIdentity")
+        production = _production_evaluator(self.evaluator)
+        if self.unit != production.unit:
+            raise ValueError(
+                f"metric unit does not match production evaluator {self.evaluator.canonical_id!r}"
+            )
+        if self.frame != production.frame:
+            raise ValueError(
+                f"metric frame does not match production evaluator {self.evaluator.canonical_id!r}"
+            )
+        if self.provenance != production.provenance:
+            raise ValueError(
+                f"metric provenance does not match production evaluator {self.evaluator.canonical_id!r}"
+            )
         if self.status not in _METRIC_STATUSES:
             raise ValueError("artifact metric status must be measured, unavailable, or invalid")
         _identifier("metric unit", self.unit)
@@ -231,6 +252,8 @@ class EvaluationArtifactMetric:
         if self.status is EvidenceStatus.MEASURED:
             if self.value is None:
                 raise ValueError("measured artifact metric requires a value")
+            if self.reason is not None:
+                raise ValueError("measured artifact metric must not carry a reason")
             if isinstance(self.value, bool):
                 return
             if not isinstance(self.value, (int, float)) or not isfinite(float(self.value)):
@@ -333,6 +356,8 @@ class EvaluationArtifactTrial:
             raise ValueError("trial completion and terminal classifications disagree")
         if self.failure_attribution not in _FAILURE_ATTRIBUTIONS:
             raise ValueError("trial failure attribution is unsupported")
+        if self.failure_attribution != _COMPLETION_TO_FAILURE_ATTRIBUTION[self.completion_status]:
+            raise ValueError("trial completion status and failure attribution disagree")
         if self.outcome_reason is not None:
             _identifier("trial outcome_reason", self.outcome_reason)
         if self.terminal_classification is TaskTerminalClassification.SUCCESS:
@@ -752,18 +777,6 @@ def _source_bytes(
     return provided
 
 
-def _expected_comparison_parameters(readiness: EvaluationReadiness) -> Mapping[str, object]:
-    manifest = readiness.manifest
-    return {
-        "condition_id": manifest.condition_id,
-        "condition_order": manifest.condition_order,
-        "manifest_digest": readiness.manifest_digest,
-        "requested_control_frame": manifest.requested_control_frame,
-        "resolved_identity_digest": readiness.resolved_identity_digest,
-        "task_order": manifest.task_order,
-    }
-
-
 def _verify_configuration(
     readiness: EvaluationReadiness,
     configuration: ConfigurationRecord,
@@ -806,19 +819,39 @@ def _verify_configuration(
     )
     if not (direct or negated):
         raise EvaluationArtifactError("log initial tool orientation does not match manifest")
-    known_parameters = _expected_comparison_parameters(readiness)
+    known_parameters = dict(comparison_parameters_for_readiness(readiness))
     comparison_parameters = dict(configuration.comparison_parameters)
     missing_parameters = sorted(set(known_parameters) - set(comparison_parameters))
-    if missing_parameters:
+    extra_parameters = sorted(set(comparison_parameters) - set(known_parameters))
+    if missing_parameters or extra_parameters:
         raise EvaluationArtifactError(
-            f"log comparison parameters are missing readiness identity facts: {missing_parameters}"
+            "log comparison parameters do not exactly match canonical readiness projection: "
+            f"missing={missing_parameters}, extra={extra_parameters}"
         )
     for key, expected in known_parameters.items():
         if comparison_parameters[key] != expected:
             raise EvaluationArtifactError(f"log comparison parameter {key!r} does not match readiness")
 
 
-def _terminal_evidence(outcome: TrialOutcomeRecord) -> CanonicalEvidence:
+def _elapsed_from_trial_start(
+    trial_start: TrialStartRecord,
+    timestamp_s: float,
+    name: str,
+) -> float:
+    elapsed = _finite(name, timestamp_s) - _finite(
+        "trial_start.runtime_timestamp_s", trial_start.runtime_timestamp_s
+    )
+    if elapsed < 0.0:
+        raise EvaluationArtifactError(
+            f"{name} precedes trial start runtime timestamp"
+        )
+    return elapsed
+
+
+def _terminal_evidence(
+    trial_start: TrialStartRecord,
+    outcome: TrialOutcomeRecord,
+) -> CanonicalEvidence:
     try:
         classification = _COMPLETION_TO_TERMINAL[outcome.completion_status]
     except KeyError as exc:
@@ -828,7 +861,11 @@ def _terminal_evidence(outcome: TrialOutcomeRecord) -> CanonicalEvidence:
         status=EvidenceStatus.MEASURED,
         value={
             "classification": classification.value,
-            "elapsed_time_s": outcome.runtime_timestamp_s,
+            "elapsed_time_s": _elapsed_from_trial_start(
+                trial_start,
+                outcome.runtime_timestamp_s,
+                "outcome.runtime_timestamp_s",
+            ),
             "reason": outcome.outcome_reason,
         },
         provenance=ENDPOINT_REACH_TERMINAL_PROVENANCE,
@@ -837,9 +874,18 @@ def _terminal_evidence(outcome: TrialOutcomeRecord) -> CanonicalEvidence:
 
 def _trajectory_evidence(
     configuration: ConfigurationRecord,
+    trial_start: TrialStartRecord,
     samples: Sequence[MotionSampleRecord],
     outcome: TrialOutcomeRecord,
 ) -> CanonicalEvidence:
+    if outcome.completion_status == "technical_invalid":
+        return CanonicalEvidence(
+            identity=ENDPOINT_REACH_TRAJECTORY_EVIDENCE,
+            status=EvidenceStatus.INVALID,
+            value=None,
+            provenance=ENDPOINT_REACH_TRAJECTORY_PROVENANCE,
+            reason=outcome.outcome_reason or "technical-invalid trial invalidates endpoint trajectory",
+        )
     if not samples:
         status = (
             EvidenceStatus.INVALID
@@ -881,18 +927,29 @@ def _trajectory_evidence(
         assert current.measured_tip_position_before_m is not None
         if not _vector_close(previous.measured_tip_position_after_m, current.measured_tip_position_before_m):
             raise EvaluationArtifactError("measured endpoint trajectory is discontinuous")
+    sample_values: list[dict[str, object]] = []
+    previous_elapsed = 0.0
+    for sample in samples:
+        elapsed = _elapsed_from_trial_start(
+            trial_start,
+            sample.runtime_timestamp_s,
+            f"motion sample {sample.sample_index}.runtime_timestamp_s",
+        )
+        if elapsed < previous_elapsed:
+            raise EvaluationArtifactError("measured endpoint sample times are not monotonic")
+        previous_elapsed = elapsed
+        sample_values.append(
+            {
+                "elapsed_time_s": elapsed,
+                "position_world_m": sample.measured_tip_position_after_m,
+            }
+        )
     values: tuple[dict[str, object], ...] = (
         {
             "elapsed_time_s": 0.0,
             "position_world_m": configuration.initial_measured_tip_position_m,
         },
-        *(
-            {
-                "elapsed_time_s": sample.runtime_timestamp_s,
-                "position_world_m": sample.measured_tip_position_after_m,
-            }
-            for sample in samples
-        ),
+        *sample_values,
     )
     return CanonicalEvidence(
         identity=ENDPOINT_REACH_TRAJECTORY_EVIDENCE,
@@ -924,8 +981,8 @@ def reconstruct_task_evidence_from_motion_log(
         raise EvaluationArtifactError("motion sample trial identity mismatch")
     return CanonicalEvidenceSet(
         (
-            _terminal_evidence(outcome),
-            _trajectory_evidence(configuration, samples, outcome),
+            _terminal_evidence(trial_start, outcome),
+            _trajectory_evidence(configuration, trial_start, samples, outcome),
         )
     )
 
@@ -1161,6 +1218,106 @@ def _read_bytes(path: Path) -> bytes:
     return path.read_bytes()
 
 
+def _target_lock_path(path: Path) -> Path:
+    return path.with_name(f".{path.name}.lock")
+
+
+def _process_is_alive(pid: int) -> bool:
+    if pid == os.getpid():
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError as exc:
+        if exc.errno == 3 or getattr(exc, "winerror", None) in {87, 1168}:
+            return False
+        return True
+    return True
+
+
+def _stale_lock_owner(lock_path: Path) -> int | None:
+    try:
+        document = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, TypeError, ValueError):
+        return None
+    if (
+        not isinstance(document, Mapping)
+        or set(document) != {"created_ns", "pid"}
+        or type(document["created_ns"]) is not int
+        or document["created_ns"] <= 0
+        or type(document["pid"]) is not int
+        or document["pid"] <= 0
+    ):
+        return None
+    return document["pid"]
+
+
+def _remove_stale_lock(lock_path: Path) -> bool:
+    pid = _stale_lock_owner(lock_path)
+    if pid is None or _process_is_alive(pid):
+        return False
+    try:
+        lock_path.unlink()
+    except FileNotFoundError:
+        return True
+    return True
+
+
+@contextmanager
+def _exclusive_target_lock(target_path: Path):
+    """同一targetへの協調writerをexclusive-create lockで直列化する。"""
+
+    lock_path = _target_lock_path(target_path)
+    descriptor: int | None = None
+    for attempt in range(2):
+        try:
+            descriptor = os.open(
+                lock_path,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+            )
+            break
+        except FileExistsError as exc:
+            if attempt == 0 and _remove_stale_lock(lock_path):
+                continue
+            raise EvaluationArtifactError(
+                f"evaluation artifact target lock is already held: {lock_path.name}"
+            ) from exc
+        except OSError as exc:
+            raise EvaluationArtifactError(
+                f"evaluation artifact target lock acquisition failed: {exc}"
+            ) from exc
+    if descriptor is None:
+        raise EvaluationArtifactError("evaluation artifact target lock could not be acquired")
+    try:
+        try:
+            payload = json.dumps(
+                {"created_ns": time.time_ns(), "pid": os.getpid()},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("ascii")
+            written = 0
+            while written < len(payload):
+                written += os.write(descriptor, payload[written:])
+            os.fsync(descriptor)
+        except OSError as exc:
+            raise EvaluationArtifactError(
+                f"evaluation artifact target lock initialization failed: {exc}"
+            ) from exc
+        yield
+    finally:
+        try:
+            os.close(descriptor)
+        finally:
+            try:
+                lock_path.unlink()
+            except FileNotFoundError:
+                pass
+
+
 def _write_fsynced(path: Path, value: bytes) -> None:
     with path.open("wb") as stream:
         stream.write(value)
@@ -1184,21 +1341,7 @@ def _restore_target(path: Path, previous: bytes | None) -> None:
             rollback.unlink()
 
 
-def write_evaluation_artifact_atomic(
-    target: str | os.PathLike[str],
-    artifact: EvaluationArtifact,
-) -> bytes:
-    """strict round-trip済みartifactをsame-directory atomic replaceする。
-
-    既存targetは成功時だけ置換し、write前のbytesとtargetが競合して変化した場合は
-    overwriteを拒否する。temporary read-backまたはfinal read-backに失敗した場合は
-    既存bytesへrollbackする。
-    """
-
-    encoded = prepare_evaluation_artifact(artifact)
-    target_path = Path(target)
-    if not target_path.parent.is_dir():
-        raise EvaluationArtifactError("evaluation artifact target directory must already exist")
+def _write_evaluation_artifact_locked(target_path: Path, encoded: bytes) -> bytes:
     previous = _read_bytes(target_path) if target_path.exists() else None
     descriptor, temporary_name = tempfile.mkstemp(
         dir=target_path.parent,
@@ -1240,6 +1383,20 @@ def write_evaluation_artifact_atomic(
         if temporary_path.exists():
             temporary_path.unlink()
     return encoded
+
+
+def write_evaluation_artifact_atomic(
+    target: str | os.PathLike[str],
+    artifact: EvaluationArtifact,
+) -> bytes:
+    """strict round-trip済みartifactをlock内でsame-directory atomic replaceする。"""
+
+    encoded = prepare_evaluation_artifact(artifact)
+    target_path = Path(target)
+    if not target_path.parent.is_dir():
+        raise EvaluationArtifactError("evaluation artifact target directory must already exist")
+    with _exclusive_target_lock(target_path):
+        return _write_evaluation_artifact_locked(target_path, encoded)
 
 
 __all__ = [

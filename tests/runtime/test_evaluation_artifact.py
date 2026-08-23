@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
+import json
+import os
 from pathlib import Path
+from threading import Event, Thread
 
 import pytest
 
+import selfrionette.runtime.evaluation.artifact as artifact_module
 from selfrionette.runtime.composition.production_experiment import (
     PRODUCTION_EXPERIMENT_PLUGIN_REGISTRIES,
 )
@@ -21,14 +26,18 @@ from selfrionette.runtime.evaluation.artifact import (
 from selfrionette.runtime.evaluation.manifest import (
     SoftwareExecutionIdentity,
     build_evaluation_condition_pair_readiness,
+    comparison_parameters_for_readiness,
 )
 from selfrionette.runtime.evaluation.r7_g_free_space import (
     build_r7_g_free_space_manifest_pair,
 )
 from selfrionette.runtime.experiment.endpoint_reach_evidence import (
+    ENDPOINT_REACH_TERMINAL_EVIDENCE,
+    ENDPOINT_REACH_TRAJECTORY_EVIDENCE,
     decode_endpoint_reach_terminal_evidence,
     decode_endpoint_reach_trajectory_evidence,
 )
+from selfrionette.runtime.experiment.contracts import EvidenceStatus
 from selfrionette.runtime.experiment.motion_log_recorder import (
     TrialProtocolContext,
     WorldToolTrialProtocolContext,
@@ -42,6 +51,7 @@ from selfrionette.schemas.experiment_log import (
     MotionSampleRecord,
     TrialOutcomeRecord,
     TrialStartRecord,
+    encode_jsonl,
 )
 
 
@@ -52,7 +62,7 @@ EXECUTION_IDENTITY = SoftwareExecutionIdentity(
 )
 
 
-def _canonical_records():
+def _canonical_records(*, runtime_offset_s: float = 0.0):
     pair = build_r7_g_free_space_manifest_pair(
         software_revision_identity=REVISION,
     )
@@ -79,6 +89,13 @@ def _canonical_records():
         tool=TrialProtocolContext(**common, direction_order=1),
     )
     records = build_world_tool_motion_log_records(readiness, execution, contexts)
+    if runtime_offset_s:
+        records = tuple(
+            replace(item, runtime_timestamp_s=item.runtime_timestamp_s + runtime_offset_s)
+            if isinstance(item, (TrialStartRecord, MotionSampleRecord, TrialOutcomeRecord))
+            else item
+            for item in records
+        )
     return readiness, execution, records
 
 
@@ -147,6 +164,26 @@ def test_reconstructed_task_evidence_is_semantically_equivalent_to_runner_eviden
     assert decode_endpoint_reach_trajectory_evidence(reconstructed) == decode_endpoint_reach_trajectory_evidence(expected)
 
 
+def test_parallel_shifted_trial_rebases_terminal_and_trajectory_elapsed_time() -> None:
+    readiness, execution, records = _canonical_records(runtime_offset_s=37.5)
+    configuration, start, samples, outcome = _trial_records(records, "world")
+    evidence = reconstruct_task_evidence_from_motion_log(
+        configuration,
+        start,
+        samples,
+        outcome,
+    )
+    terminal = decode_endpoint_reach_terminal_evidence(evidence)
+    trajectory = decode_endpoint_reach_trajectory_evidence(evidence)
+    duration = outcome.runtime_timestamp_s - start.runtime_timestamp_s
+    assert terminal.elapsed_time_s == pytest.approx(duration)
+    assert terminal.elapsed_time_s == pytest.approx(execution.world.final_elapsed_time_s)
+    assert trajectory.samples[0].elapsed_time_s == 0.0
+    assert trajectory.samples[-1].elapsed_time_s == pytest.approx(duration)
+    artifact = build_evaluation_artifact(readiness.world, records)
+    assert artifact.trials[0].metrics[2].value == pytest.approx(duration)
+
+
 def test_failed_and_technical_invalid_trials_keep_unavailable_policy() -> None:
     readiness, _, records = _canonical_records()
     configuration, start, _, outcome = _trial_records(records, "world")
@@ -192,6 +229,38 @@ def test_failed_and_technical_invalid_trials_keep_unavailable_policy() -> None:
     assert all(item.value is None for item in technical_metrics.values())
 
 
+def test_technical_invalid_after_measured_samples_invalidates_trajectory_and_all_metrics() -> None:
+    readiness, _, records = _canonical_records()
+    configuration, start, samples, outcome = _trial_records(records, "world")
+    technical_invalid = replace(
+        outcome,
+        completion_status="technical_invalid",
+        success_within_timeout=False,
+        final_measured_endpoint_error_m=None,
+        failure_attribution="technical",
+        outcome_reason="late technical invalidation",
+        primary_outcome_sample_index=None,
+    )
+    evidence = reconstruct_task_evidence_from_motion_log(
+        configuration,
+        start,
+        samples,
+        technical_invalid,
+    )
+    assert evidence.require(ENDPOINT_REACH_TERMINAL_EVIDENCE).status is EvidenceStatus.MEASURED
+    trajectory = evidence.require(ENDPOINT_REACH_TRAJECTORY_EVIDENCE)
+    assert trajectory.status is EvidenceStatus.INVALID
+    assert trajectory.value is None
+    assert trajectory.reason == "late technical invalidation"
+    changed_records = tuple(
+        technical_invalid if item is outcome else item
+        for item in records
+    )
+    artifact = build_evaluation_artifact(readiness.world, changed_records)
+    assert {item.status for item in artifact.trials[0].metrics} == {EvidenceStatus.INVALID}
+    assert all(item.value is None for item in artifact.trials[0].metrics)
+
+
 def test_artifact_rejects_identity_or_schema_tampering_and_preserves_atomic_target(
     tmp_path: Path,
 ) -> None:
@@ -206,6 +275,34 @@ def test_artifact_rejects_identity_or_schema_tampering_and_preserves_atomic_targ
     unknown_evaluator["evaluators"][0]["name"] = "unknown-production-evaluator"
     with pytest.raises(EvaluationArtifactError, match="unknown production evaluator"):
         decode_evaluation_artifact(unknown_evaluator)
+
+    for field, value in (
+        ("unit", "tampered-unit"),
+        ("frame", "tampered-frame"),
+        ("provenance", "tampered-provenance"),
+    ):
+        changed_metric = world.to_document()
+        changed_metric["trials"][0]["metrics"][0][field] = value
+        with pytest.raises(EvaluationArtifactError, match="does not match production evaluator"):
+            decode_evaluation_artifact(changed_metric)
+
+    changed_reason = world.to_document()
+    changed_reason["trials"][0]["metrics"][0]["reason"] = "tampered measured reason"
+    with pytest.raises(EvaluationArtifactError, match="must not carry a reason"):
+        decode_evaluation_artifact(changed_reason)
+
+    for completion_status, terminal_classification, attribution in (
+        ("failed", "failure", "technical"),
+        ("technical_invalid", "technical_invalid", "operator"),
+    ):
+        changed_terminal = world.to_document()
+        trial = changed_terminal["trials"][0]
+        trial["completion_status"] = completion_status
+        trial["terminal_classification"] = terminal_classification
+        trial["failure_attribution"] = attribution
+        trial["outcome_reason"] = "tampered terminal mapping"
+        with pytest.raises(EvaluationArtifactError, match="failure attribution"):
+            decode_evaluation_artifact(changed_terminal)
 
     configuration, _, _, _ = _trial_records(records, "world")
     changed = replace(configuration, software_revision="test-revision:tampered")
@@ -224,8 +321,28 @@ def test_artifact_rejects_identity_or_schema_tampering_and_preserves_atomic_targ
     missing_records = tuple(
         missing_identity if item is configuration else item for item in records
     )
-    with pytest.raises(EvaluationArtifactError, match="missing readiness identity"):
+    with pytest.raises(EvaluationArtifactError, match="canonical readiness projection"):
         build_world_tool_evaluation_artifacts(readiness, missing_records)
+
+    expected_parameters = dict(comparison_parameters_for_readiness(readiness.world))
+    for key, expected in expected_parameters.items():
+        tampered_parameters = dict(expected_parameters)
+        if isinstance(expected, str):
+            tampered_parameters[key] = expected + ":tampered"
+        elif isinstance(expected, bool):
+            tampered_parameters[key] = not expected
+        else:
+            tampered_parameters[key] = expected + 1
+        changed_comparison = replace(
+            configuration,
+            comparison_parameters=tuple(tampered_parameters.items()),
+        )
+        changed_records = tuple(
+            changed_comparison if item is configuration else item
+            for item in records
+        )
+        with pytest.raises(EvaluationArtifactError, match="comparison parameter"):
+            build_world_tool_evaluation_artifacts(readiness, changed_records)
 
     target = tmp_path / "evaluation.json"
     previous = b"previous-valid-artifact"
@@ -233,3 +350,90 @@ def test_artifact_rejects_identity_or_schema_tampering_and_preserves_atomic_targ
     written = write_evaluation_artifact_atomic(target, world)
     assert target.read_bytes() == written
     assert decode_evaluation_artifact(written) == world
+
+
+def test_atomic_writer_rejects_live_lock_and_recovers_stale_lock(tmp_path: Path) -> None:
+    readiness, _, records = _canonical_records()
+    world = build_world_tool_evaluation_artifacts(readiness, records)[0]
+    target = tmp_path / "evaluation.json"
+    lock = target.with_name(f".{target.name}.lock")
+    lock.write_text(
+        json.dumps({"created_ns": 1, "pid": os.getpid()}),
+        encoding="utf-8",
+    )
+    with pytest.raises(EvaluationArtifactError, match="target lock"):
+        write_evaluation_artifact_atomic(target, world)
+    assert lock.exists()
+    lock.write_text(
+        json.dumps({"created_ns": 1, "pid": 2_000_000_000}),
+        encoding="utf-8",
+    )
+    write_evaluation_artifact_atomic(target, world)
+    assert target.exists()
+    assert not lock.exists()
+
+
+def test_atomic_writer_serializes_cooperative_writers_and_cleans_lock_on_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    readiness, _, records = _canonical_records()
+    world = build_world_tool_evaluation_artifacts(readiness, records)[0]
+    target = tmp_path / "evaluation.json"
+    target.write_bytes(b"previous")
+    lock = target.with_name(f".{target.name}.lock")
+    first_read_started = Event()
+    release_first_read = Event()
+    original_read = artifact_module._read_bytes
+    blocked = False
+
+    def blocking_read(path: Path) -> bytes:
+        nonlocal blocked
+        if path == target and not blocked:
+            blocked = True
+            first_read_started.set()
+            assert release_first_read.wait(timeout=5.0)
+        return original_read(path)
+
+    monkeypatch.setattr(artifact_module, "_read_bytes", blocking_read)
+    first_result: list[object] = []
+
+    def first_writer() -> None:
+        try:
+            first_result.append(write_evaluation_artifact_atomic(target, world))
+        except BaseException as exc:  # pragma: no cover - surfaced below
+            first_result.append(exc)
+
+    worker = Thread(target=first_writer)
+    worker.start()
+    assert first_read_started.wait(timeout=5.0)
+    with pytest.raises(EvaluationArtifactError, match="target lock"):
+        write_evaluation_artifact_atomic(target, world)
+    release_first_read.set()
+    worker.join(timeout=5.0)
+    assert not worker.is_alive()
+    assert len(first_result) == 1
+    assert isinstance(first_result[0], bytes)
+    assert not lock.exists()
+
+    previous = target.read_bytes()
+    monkeypatch.setattr(
+        artifact_module.os,
+        "replace",
+        lambda *_: (_ for _ in ()).throw(OSError("replace failure")),
+    )
+    with pytest.raises(EvaluationArtifactError, match="replace failure"):
+        write_evaluation_artifact_atomic(target, world)
+    assert target.read_bytes() == previous
+    assert not lock.exists()
+
+
+def test_canonical_artifact_bytes_have_independent_reproducible_hashes() -> None:
+    readiness, _, records = _canonical_records()
+    artifacts = build_world_tool_evaluation_artifacts(readiness, records)
+    source_bytes = sha256(encode_jsonl(records).encode("utf-8")).hexdigest()
+    assert source_bytes == "22214d7bd9a2a13006167b3a3efdefbc5c110032a2971f3044272cdd702ac42c"
+    assert [sha256(prepare_evaluation_artifact(item)).hexdigest() for item in artifacts] == [
+        "59a5fe6cb768ae8754084e177b3cdf193ef01b2169e4800daeb131b9ba37bd7d",
+        "2388a38681300080924a246d604c288b49d60d8fef96defc51450eae5d74dc56",
+    ]

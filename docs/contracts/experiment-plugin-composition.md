@@ -377,6 +377,9 @@ required evidenceのidentityがtask/environment/mapping/robot extensionのproduc
 `EvaluationPlugin.derive_metric()`はstrategyが返した`MetricResult`について、metric identityが
 selected Evaluation Plugin identityと一致し、provenanceがplugin宣言値と一致することも検証する。
 `unavailable` / `invalid`のvalueなし・reason必須invariantは`MetricResult` constructionで維持する。
+`evaluation-artifact/v1`のstrict decoderも同じproduction declarationを再解決し、identityに対応するunit、frame、
+provenanceとmetric status/value/reasonのinvariantを再検証する。JSON内の宣言値だけを信頼して別evaluatorへ
+付け替えることはできない。
 
 R7-G production evaluatorは次のordered tupleで使用する。いずれもcanonical evidenceだけからpureかつ
 deterministicに導出し、trial stream aggregation、artifact export、condition summaryを所有しない。

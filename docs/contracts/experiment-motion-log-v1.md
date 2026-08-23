@@ -232,12 +232,21 @@ Task-owned trajectory evidence equivalentを再構成する。requested、predic
 producer provenanceをそのまま検証する。source logのconfiguration ID、software revision、target、condition、freeze / manifest
 identityはreadinessとexact matchで照合し、別manifestや別revisionへ黙って適用しない。technical-invalid、missing、unavailableの
 evidenceはsuccess、trajectory、completion time、zero値へ補完せず、既存Evaluation Pluginのdeclared policyに従う。
+artifact側のterminal elapsedとtrajectory sample elapsedは`TrialStartRecord.runtime_timestamp_s`を基準に
+non-negativeなtrial-relative timeへrebaseする。complete measured sampleが残る場合でも、terminalが
+`technical_invalid`ならTask-owned trajectory evidenceも`invalid`とし、4 evaluatorのdeclared policyへ渡す。
+configurationの`comparison_parameters`はreadinessがfreezeするcadence、camera、seed、fixture、input source、
+normalized range、presentation、feedback、condition/order、manifest/resolved identityを含む15-fieldのcanonical
+projectionと完全一致しなければならない。
 
 生成される`evaluation-artifact/v1`はschema/version、source log identity / SHA-256、software revision、configuration / freeze
 identity、trial、condition/requested control frame、ordered evaluator identity、各metricのstatus/value/unit/frame/provenance/reason、
 およびdescriptive condition summaryを持つ。JSONはsorted compact UTF-8、finite number、unknown field拒否、decode / round-tripを
 必須とし、保存はsame-directory temporary file、read-back、atomic replaceの順で行う。これはsoftware-only evaluation artifactであり、
 pilot、inferential statistics、superiority、#409 full E2Eの証拠を作らない。
+cooperative writer間のoverwrite raceはtargetと同じdirectoryのexclusive-create lockで直列化し、live lockは拒否し、
+stale lockだけをowner processの終了確認後に回収する。lock取得から既存bytes確認、replace、rollback、cleanupまでを同じ
+critical sectionとして扱う。
 
 1つのprotocol identityとrepetition内でattempt indexはuniqueであり、initial attemptは
 ちょうど1つである。各trialが持てるdirect retry childは最大1つである。retryは直前の

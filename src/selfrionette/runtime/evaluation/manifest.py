@@ -1379,6 +1379,33 @@ class EvaluationReadiness:
         return self.resolved_identity_digest
 
 
+def comparison_parameters_for_readiness(
+    readiness: EvaluationReadiness,
+) -> tuple[tuple[str, object], ...]:
+    """configuration recordへ保存するcanonical comparison projection。"""
+
+    if not isinstance(readiness, EvaluationReadiness):
+        raise TypeError("comparison parameter projection requires EvaluationReadiness")
+    manifest = readiness.manifest
+    return (
+        ("cadence_s", manifest.cadence_s),
+        ("camera_identity", manifest.camera_identity),
+        ("condition_id", manifest.condition_id),
+        ("condition_order", manifest.condition_order),
+        ("deterministic_seed", manifest.deterministic_seed),
+        ("fixture_identity", manifest.fixture_identity),
+        ("input_source_identity", manifest.input_source_identity),
+        ("manifest_digest", readiness.manifest_digest),
+        ("normalized_input_max", manifest.normalized_input_range[1]),
+        ("normalized_input_min", manifest.normalized_input_range[0]),
+        ("presentation_identity", manifest.presentation_identity),
+        ("requested_control_frame", manifest.requested_control_frame),
+        ("resolved_identity_digest", readiness.resolved_identity_digest),
+        ("task_order", manifest.task_order),
+        ("visual_feedback_identity", manifest.visual_feedback_identity),
+    )
+
+
 def _readiness_from_composition(
     manifest: EvaluationManifest,
     composition: ResolvedExperimentComposition,
@@ -1845,6 +1872,7 @@ __all__ = [
     "WorldToolConditionPair",
     "assert_freeze_identity",
     "build_evaluation_condition_pair_readiness",
+    "comparison_parameters_for_readiness",
     "build_evaluation_readiness",
     "canonical_decode",
     "canonical_encode",
