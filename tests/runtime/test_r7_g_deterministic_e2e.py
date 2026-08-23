@@ -124,6 +124,54 @@ def test_r7_g_e2e_revision_mismatch_fails_before_execution_or_output(
     assert not (tmp_path / "mismatch-output").exists()
 
 
+@pytest.mark.parametrize(
+    "revision",
+    (
+        "test-revision:issue-409-tampered",
+        "test-revision:caller-supplied-r7-g-negative-control",
+    ),
+)
+def test_r7_g_e2e_derived_mismatch_control_handles_suffix_like_inputs(
+    revision: str,
+) -> None:
+    result = run_r7_g_deterministic_e2e(
+        manifest_software_revision_identity=revision,
+        execution_identity=SoftwareExecutionIdentity(
+            repository_identity=R7_G_E2E_REPOSITORY_IDENTITY,
+            software_revision_identity=revision,
+        ),
+    )
+    assert result.negative_controls == (
+        "readiness_mismatch",
+        "malformed_log",
+        "held",
+        "rejected",
+        "stale",
+        "measurement_unavailable",
+        "technical_invalid",
+        "artifact_identity_mismatch",
+    )
+
+
+@pytest.mark.parametrize(
+    "revision",
+    (
+        "test-revision:caller-supplied-r7-g-negative-control",
+        "git-sha1:" + "0" * 40,
+        "git-sha256:" + "f" * 64,
+    ),
+)
+def test_derived_negative_revision_is_valid_and_always_differs(
+    revision: str,
+) -> None:
+    derived = e2e._derived_negative_revision_identity(revision)
+    assert derived != revision
+    SoftwareExecutionIdentity(
+        repository_identity=R7_G_E2E_REPOSITORY_IDENTITY,
+        software_revision_identity=derived,
+    )
+
+
 def test_sample_only_negative_controls_reject_and_noop_is_not_a_control() -> None:
     run = e2e._build_run(**_run_kwargs())
     _, _, _, original_outcome = e2e._condition_records(run.records, "world")

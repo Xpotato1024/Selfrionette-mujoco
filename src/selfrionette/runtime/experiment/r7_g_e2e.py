@@ -403,6 +403,23 @@ def _assert_artifact_rejected(
     raise R7GE2EError(f"negative control {control_name!r} was accepted")
 
 
+def _derived_negative_revision_identity(revision: str) -> str:
+    """現在のdeclared revisionから、syntaxを保った異なるnegative identityを導出する。"""
+
+    if revision.startswith("test-revision:"):
+        # suffixが既に付いていてもさらにappendするため、常に入力と異なる。
+        candidate = f"{revision}-r7-g-negative-control"
+    elif revision.startswith(("git-sha1:", "git-sha256:")):
+        # git schemeは固定長のため、末尾hexを別の有効値へ反転する。
+        replacement = "1" if revision[-1] == "0" else "0"
+        candidate = f"{revision[:-1]}{replacement}"
+    else:  # pragma: no cover - manifest readiness already validates this boundary
+        raise R7GE2EError(f"unsupported software revision identity: {revision!r}")
+    if candidate == revision:
+        raise R7GE2EError("negative revision identity must differ from its declared input")
+    return candidate
+
+
 def _assert_not_successful_artifact(
     run: R7GE2ERun,
     records: Iterable[ExperimentMotionLogRecord],
@@ -440,9 +457,12 @@ def _run_negative_controls(run: R7GE2ERun) -> tuple[str, ...]:
     pair = build_r7_g_free_space_manifest_pair(
         software_revision_identity=run.readiness.world.manifest.software_revision_identity,
     )
+    tampered_revision = _derived_negative_revision_identity(
+        run.readiness.world.manifest.software_revision_identity,
+    )
     mismatched_identity = replace(
         run.readiness.world.software_execution_identity,
-        software_revision_identity="test-revision:issue-409-tampered",
+        software_revision_identity=tampered_revision,
     )
     try:
         build_evaluation_condition_pair_readiness(
@@ -534,7 +554,9 @@ def _run_negative_controls(run: R7GE2ERun) -> tuple[str, ...]:
     configuration, _, _, _ = _condition_records(run.records, "world")
     tampered_configuration = replace(
         configuration,
-        software_revision="test-revision:issue-409-tampered",
+        software_revision=_derived_negative_revision_identity(
+            configuration.software_revision,
+        ),
     )
     tampered_records = tuple(
         tampered_configuration if item is configuration else item
