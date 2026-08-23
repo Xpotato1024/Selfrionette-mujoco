@@ -57,6 +57,7 @@ EXPECTED_MODULES = {
         "measured_state",
         "motion_log_recorder",
         "registry",
+        "r7_g_e2e",
         "world_tool_runner",
     },
     "runners": {
