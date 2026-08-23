@@ -34,8 +34,9 @@ interpreter-based `RuntimePipeline`はC4で退役し、`ControlMappedRuntimePipe
 contractやrunnerをpackage rootからre-exportしない。catalog access前のlazy-load、resolved Bundleのtyped
 provider identity、plugin identityはこの移動で変更しない。
 
-#406で成立したexperiment lifecycle / runnerのownerは`experiment/`である。`runners/`はthin entry pointだけを
-所有し、Task判定、metric、logging、artifact emissionを実装しない。
+#406で成立したexperiment lifecycle / runnerと、#407で追加したexecution trace / motion-log recorderのownerは
+`experiment/`である。`runners/`はthin entry pointだけを所有し、Task判定、metric、record projection、
+artifact emissionを実装しない。
 
 `runtime/` is the only composition root。input、motion、kinematics、MuJoCo backend、transportを
 layer横断で接続できるのはruntimeだけである。MuJoCo remains the physical source of truth。
@@ -115,8 +116,9 @@ canonical pairへ固定するmanifest revisionとstartup側が取得したactual
 runner自身が同じcaller値から両者を合成せず、readinessのexact-match gateで不一致をfail closedにする。
 
 Evaluation Pluginはproduction composition / readinessのordered tupleとしてresolveするが、#408のmetric導出や
-artifact出力は実行しない。#407の`experiment-motion-log/v1` lifecycleも実装せず、runner resultはTask transition、
-step count、simulation elapsed time、freeze identityを保持するin-memory boundaryに限定する。
+evaluation artifact出力は実行しない。#407のrunner resultはTask transition、step count、simulation elapsed time、
+freeze identityに加え、既存execution loopでownerが生成したimmutable step traceを保持する。runtime recorderは
+そのtraceを`experiment-motion-log/v1`へprojectionし、strict validation後だけatomic JSONLとして保存する。
 
 application-facing replay / viewer / smokeはRobot、Input Source、Control Mapping、command semantics routeを
 接続するdiagnostic / operational runtimeである。R7-G production experiment runnerはこの経路と別に6軸を

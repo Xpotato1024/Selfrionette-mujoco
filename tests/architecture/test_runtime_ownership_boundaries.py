@@ -53,6 +53,7 @@ EXPECTED_MODULES = {
         "contracts",
         "endpoint_reach_evidence",
         "input_source",
+        "motion_log_recorder",
         "registry",
         "world_tool_runner",
     },
@@ -134,14 +135,13 @@ def test_experiment_runner_has_one_owner_and_thin_entry_point() -> None:
     assert "`runners/`はthin entry point" in readme
 
 
-def test_production_experiment_runner_has_no_concrete_robot_or_test_fixture_import() -> None:
-    source = (RUNTIME_ROOT / "experiment" / "world_tool_runner.py").read_text(
-        encoding="utf-8"
-    )
-    for forbidden in (
-        "selfrionette.plugins.robots.fast_arm",
-        "FAST_ARM_",
-        "tests.",
-        "ExperimentPluginRegistries(",
-    ):
-        assert forbidden not in source
+def test_production_experiment_runtime_has_no_concrete_robot_or_test_fixture_import() -> None:
+    for name in ("world_tool_runner.py", "motion_log_recorder.py"):
+        source = (RUNTIME_ROOT / "experiment" / name).read_text(encoding="utf-8")
+        for forbidden in (
+            "selfrionette.plugins.robots.fast_arm",
+            "FAST_ARM_",
+            "tests.",
+            "ExperimentPluginRegistries(",
+        ):
+            assert forbidden not in source, name

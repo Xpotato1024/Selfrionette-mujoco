@@ -167,8 +167,13 @@ manifestへ固定するsoftware revisionとstartup側が独立に取得するact
 exact matchしない実行はreadinessで拒否する。
 
 simulation timeはmanifest cadenceで進み、`ceil(timeout / cadence)`をstep上限とする。wall-clock sleep、daemon、
-viewer、hardwareを実行条件にしない。#407のmotion-log lifecycle、#408のmetric / artifact、#409のfull E2Eと
-completion auditはこのrunnerに含めない。
+viewer、hardwareを実行条件にしない。
+
+#407のcurrent integrationは、同じexecution loopからowner-generated input / resolution / policy / MuJoCo
+before-after / Task terminal factsをimmutable traceとして受け、既存`experiment-motion-log/v1`へprojectionする。
+configuration identityはconditionごとの`FreezeRecord.identity`へbindし、trial protocol identityはcallerが
+明示する。complete streamはstrict round-trip validationとsame-directory atomic write / read-backを通過した場合だけ
+保存する。#408のmetric / evaluation artifactと#409のfull E2E / completion auditは実行しない。
 
 次のcheckがすべてpassするまでdata collectionを開始しない。
 
@@ -228,6 +233,6 @@ missing measured motionをrequested、resolved、predicted、zero motionで置�
 
 ## scope境界
 
-このdesign document自体はruntime ownerではない。current #406 implementationはsoftware-only experiment runnerを
-追加したが、input mapping、transport/logging schema、statistical code、viewer behavior、MuJoCo model、dependency、
-CI、hardware、serial、Arduino、OSC、robot outputは変更しない。
+このdesign document自体はruntime ownerではない。current #406 / #407 implementationはsoftware-only experiment
+runnerと既存v1へのrecording boundaryを追加したが、input mapping、logging schema、statistical code、viewer behavior、
+MuJoCo model、dependency、CI、hardware、serial、Arduino、OSC、robot outputは変更しない。

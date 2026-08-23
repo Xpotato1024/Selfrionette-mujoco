@@ -37,13 +37,14 @@ from selfrionette.runtime.experiment.input_source import (
 from selfrionette.runtime.experiment.world_tool_runner import (
     ExperimentRunnerError,
     ExperimentStopReason,
+    _immutable_execution_fact,
     _validate_measured_initial_state,
     _project_motion_status,
     run_r7_g_world_tool_experiment,
     run_experiment_condition,
 )
 from selfrionette.runtime.safety.input_safety import RuntimeInputSafetyResult
-from selfrionette.schemas import MotionCommand
+from selfrionette.schemas import InputIntent, MotionCommand
 
 
 REVISION = "test-revision:issue-406-runner"
@@ -84,6 +85,18 @@ def _safety_result(
         command_age_ms=0,
         qpos_feasibility_rejected=qpos_rejected,
     )
+
+
+def test_execution_fact_snapshot_deep_freezes_nested_metadata() -> None:
+    metadata = {"nested": {"axis": [1.0, 0.0, 0.0]}}
+    intent = InputIntent(source="fixture", timestamp_s=0.0, metadata=metadata)
+
+    frozen = _immutable_execution_fact(intent)
+    metadata["nested"]["axis"][0] = 9.0  # type: ignore[index]
+
+    assert frozen.metadata["nested"]["axis"] == (1.0, 0.0, 0.0)  # type: ignore[index]
+    with pytest.raises(TypeError):
+        frozen.metadata["changed"] = True  # type: ignore[index]
 
 
 @pytest.mark.parametrize(
@@ -310,6 +323,7 @@ def test_source_failure_becomes_task_owned_technical_invalid() -> None:
 
     assert result.classification is TaskTerminalClassification.TECHNICAL_INVALID
     assert result.step_count == 1
+    assert result.motion_steps == ()
 
 
 def test_explicit_step_bound_returns_running_task_as_bounded_stop(monkeypatch) -> None:
@@ -324,3 +338,8 @@ def test_explicit_step_bound_returns_running_task_as_bounded_stop(monkeypatch) -
     assert result.classification is TaskTerminalClassification.RUNNING
     assert result.stop_reason is ExperimentStopReason.BOUNDED_STEP_LIMIT
     assert result.step_count == 1
+    assert len(result.motion_steps) == 1
+    assert result.motion_steps[0].sample_index == 0
+    assert result.motion_steps[0].runtime_timestamp_s == pytest.approx(
+        readiness.manifest.cadence_s
+    )

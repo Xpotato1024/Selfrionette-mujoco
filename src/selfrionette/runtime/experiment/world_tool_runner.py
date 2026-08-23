@@ -8,9 +8,11 @@ artifact出力は後続ownerへ残す。
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
 from enum import Enum
 from math import ceil, isclose
+from types import MappingProxyType
+from typing import TypeVar, cast
 
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.production_experiment import (
@@ -85,6 +87,63 @@ class ExperimentStopReason(str, Enum):
 
 
 _INITIAL_STATE_ABS_TOLERANCE = 1e-9
+_ExecutionFact = TypeVar("_ExecutionFact")
+
+
+def _immutable_execution_fact(value: _ExecutionFact) -> _ExecutionFact:
+    """owner生成時のnested runtime valueをtrace用にdeep-freezeする。"""
+
+    if isinstance(value, Mapping):
+        return cast(
+            _ExecutionFact,
+            MappingProxyType(
+                {
+                    key: _immutable_execution_fact(item)
+                    for key, item in value.items()
+                }
+            ),
+        )
+    if isinstance(value, (list, tuple)):
+        return cast(
+            _ExecutionFact,
+            tuple(_immutable_execution_fact(item) for item in value),
+        )
+    if isinstance(value, (set, frozenset)):
+        return cast(
+            _ExecutionFact,
+            frozenset(_immutable_execution_fact(item) for item in value),
+        )
+    if is_dataclass(value) and not isinstance(value, type):
+        return cast(
+            _ExecutionFact,
+            replace(
+                value,
+                **{
+                    item.name: _immutable_execution_fact(
+                        getattr(value, item.name)
+                    )
+                    for item in fields(value)
+                    if item.init
+                },
+            ),
+        )
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentMotionStepTrace:
+    """既存execution loopが生成した1 stepのowner facts。"""
+
+    sample_index: int
+    runtime_timestamp_s: float
+    raw_frame: RawInputFrame
+    intent: InputIntent
+    safety_result: RuntimeInputSafetyResult
+    pre_state: MuJoCoState
+    pre_endpoint_world_m: tuple[float, float, float] | None
+    post_state: MuJoCoState
+    post_endpoint_world_m: tuple[float, float, float] | None
+    task_observation: EndpointReachObservation
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,8 +158,11 @@ class ExperimentConditionExecutionResult:
     step_count: int
     final_elapsed_time_s: float
     stop_reason: ExperimentStopReason
+    initial_measured_qpos_rad: tuple[float, ...]
     initial_measured_endpoint_world_m: tuple[float, float, float] | None
+    initial_measured_tool_orientation_wxyz: tuple[float, float, float, float]
     final_measured_endpoint_world_m: tuple[float, float, float] | None
+    motion_steps: tuple[ExperimentMotionStepTrace, ...]
 
     @property
     def classification(self) -> TaskTerminalClassification:
@@ -481,6 +543,7 @@ def run_experiment_condition(
     final_elapsed = 0.0
     executed_steps = 0
     stop_reason = ExperimentStopReason.TASK_TERMINAL
+    motion_steps: list[ExperimentMotionStepTrace] = []
 
     for step_index in range(_bounded_step_count(readiness)):
         if transition.classification is not TaskTerminalClassification.RUNNING:
@@ -534,13 +597,28 @@ def run_experiment_condition(
             if not isinstance(safety_result, RuntimeInputSafetyResult):
                 raise TypeError("command route returned an invalid safety result")
             pipeline.simulator.step(manifest.cadence_s)
+            post_state = pipeline.simulator.snapshot()
             motion_status, reason = _project_motion_status(safety_result)
             task_observation = _measurement_observation(
                 assembled.endpoint_pose_provider,
-                pipeline.simulator.snapshot(),
+                post_state,
                 elapsed_time_s=elapsed,
                 motion_status=motion_status,
                 reason=reason,
+            )
+            motion_steps.append(
+                ExperimentMotionStepTrace(
+                    sample_index=step_index,
+                    runtime_timestamp_s=elapsed,
+                    raw_frame=_immutable_execution_fact(raw_frame),
+                    intent=_immutable_execution_fact(motion_intent),
+                    safety_result=_immutable_execution_fact(safety_result),
+                    pre_state=_immutable_execution_fact(pre_state),
+                    pre_endpoint_world_m=pre_pose.position_m,
+                    post_state=_immutable_execution_fact(post_state),
+                    post_endpoint_world_m=task_observation.position_world_m,
+                    task_observation=_immutable_execution_fact(task_observation),
+                )
             )
         except (TypeError, ValueError, RuntimeError) as exc:
             task_observation = _technical_invalid_observation(
@@ -566,8 +644,11 @@ def run_experiment_condition(
         step_count=executed_steps,
         final_elapsed_time_s=final_elapsed,
         stop_reason=stop_reason,
+        initial_measured_qpos_rad=tuple(initial_state.qpos),
         initial_measured_endpoint_world_m=initial_endpoint,
+        initial_measured_tool_orientation_wxyz=tuple(initial_pose.quaternion_wxyz),
         final_measured_endpoint_world_m=final_endpoint,
+        motion_steps=tuple(motion_steps),
     )
 
 
@@ -617,6 +698,7 @@ def run_r7_g_world_tool_experiment(
 
 __all__ = [
     "ExperimentConditionExecutionResult",
+    "ExperimentMotionStepTrace",
     "ExperimentRunnerError",
     "ExperimentStopReason",
     "WorldToolExperimentExecutionResult",
