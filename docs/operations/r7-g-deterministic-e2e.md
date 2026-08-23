@@ -62,6 +62,9 @@ logとartifactはUTF-8、canonical serialization、strict decode、round-trip、
 operational stateであり、canonical artifactの一部ではない。lockのcontentをartifact
 identityやowner情報として解釈しない。
 
+determinismの受入境界は同一OS、Python / MuJoCo依存環境での反復実行である。OSや依存版を
+跨いだartifact bytes / SHA-256の一致はこのcommandの仕様値としない。
+
 stdoutはpathを含まないdeterministic summary（bytes、SHA-256、classification、metric
 status/value、negative-control名）を1行のJSONで出力する。
 

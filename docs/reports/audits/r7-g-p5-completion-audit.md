@@ -31,11 +31,11 @@ recorder、evaluator、artifact mathをこのauditへ複製しない。
 | world | `success` | 57 / 1.14 s | 3045 / `59a5fe6cb768ae8754084e177b3cdf193ef01b2169e4800daeb131b9ba37bd7d` |
 | tool | `failure` (`failed-timeout`) | 250 / 5.00 s | 3112 / `2388a38681300080924a246d604c288b49d60d8fef96defc51450eae5d74dc56` |
 
-canonical motion logは313 records、597161 bytes、SHA-256
+このtask-runはWindows x64、CPython 3.12.13、MuJoCo 3.12.0の環境で実施した。canonical motion logは313 records、597161 bytes、SHA-256
 `22214d7bd9a2a13006167b3a3efdefbc5c110032a2971f3044272cdd702ac42c`である。source log、
 reconstructed Task evidence、metric result、artifact bytesの各比較は反復run間で一致し、
 artifactのstrict decode / re-encodeとatomic read-backを通過する。SHA-256はこの固定protocol、
-revision、依存環境で取得したtraceableな観測値であり、別環境の任意hashを仕様値としない。
+revision、依存環境で取得したtraceableな観測値であり、別OS / 依存版の任意hashを仕様値としない。
 
 ## 到達範囲の分類
 
