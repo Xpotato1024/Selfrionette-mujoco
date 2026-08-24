@@ -50,6 +50,9 @@ from selfrionette.runtime.experiment.endpoint_reach_evidence import (
     ENDPOINT_REACH_TRAJECTORY_EVIDENCE,
     ENDPOINT_REACH_TRAJECTORY_PROVENANCE,
 )
+from selfrionette.runtime.experiment.measured_state import (
+    runtime_measurement_matches_frozen,
+)
 from selfrionette.schemas.experiment_log import (
     EXPERIMENT_MOTION_LOG_SCHEMA_VERSION,
     ConfigurationRecord,
@@ -809,7 +812,10 @@ def _verify_configuration(
     ):
         if abs(actual - expected) > _VECTOR_TOLERANCE:
             raise EvaluationArtifactError(f"log {name} does not match manifest")
-    if not _vector_close(configuration.initial_qpos_rad, manifest.initial_qpos_rad):
+    if not runtime_measurement_matches_frozen(
+        configuration.initial_qpos_rad,
+        manifest.initial_qpos_rad,
+    ):
         raise EvaluationArtifactError("log initial qpos does not match manifest")
     if not _vector_close(
         configuration.initial_measured_tip_position_m,
@@ -817,13 +823,11 @@ def _verify_configuration(
         _INITIAL_POSITION_NUMERICAL_TOLERANCE_M,
     ):
         raise EvaluationArtifactError("log initial measured tip does not match manifest")
-    expected_orientation = manifest.initial_tool_orientation_wxyz
-    direct = _vector_close(configuration.initial_tool_orientation_wxyz, expected_orientation)
-    negated = _vector_close(
+    if not runtime_measurement_matches_frozen(
         configuration.initial_tool_orientation_wxyz,
-        tuple(-value for value in expected_orientation),
-    )
-    if not (direct or negated):
+        manifest.initial_tool_orientation_wxyz,
+        allow_quaternion_sign_equivalence=True,
+    ):
         raise EvaluationArtifactError("log initial tool orientation does not match manifest")
     known_parameters = dict(comparison_parameters_for_readiness(readiness))
     comparison_parameters = dict(configuration.comparison_parameters)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from hashlib import sha256
+from math import sqrt
 import os
 from pathlib import Path
 import stat
@@ -127,6 +128,65 @@ def _trial_records(records, condition: str):
     return configuration, start, samples, outcome
 
 
+def _unit_quaternion_with_component_delta(
+    expected: tuple[float, float, float, float],
+    delta: float,
+) -> tuple[float, float, float, float]:
+    index = min(range(len(expected)), key=lambda item: abs(expected[item]))
+    values = list(expected)
+    values[index] += delta
+    norm = sqrt(sum(value * value for value in values))
+    return tuple(value / norm for value in values)  # type: ignore[return-value]
+
+
+def _shift_world_qpos_measurements(
+    records,
+    configuration: ConfigurationRecord,
+    delta: float,
+):
+    shifted_qpos = lambda values: tuple(value + delta for value in values)
+    return tuple(
+        replace(
+            item,
+            initial_qpos_rad=shifted_qpos(item.initial_qpos_rad),
+        )
+        if isinstance(item, ConfigurationRecord)
+        and item.configuration_id == configuration.configuration_id
+        else replace(
+            item,
+            qpos_before_rad=shifted_qpos(item.qpos_before_rad),
+            qpos_after_rad=shifted_qpos(item.qpos_after_rad),
+            candidate_qpos_rad=(
+                None
+                if item.candidate_qpos_rad is None
+                else shifted_qpos(item.candidate_qpos_rad)
+            ),
+        )
+        if isinstance(item, MotionSampleRecord)
+        and item.configuration_id == configuration.configuration_id
+        else item
+        for item in records
+    )
+
+
+def _shift_world_orientation_measurement(
+    records,
+    configuration: ConfigurationRecord,
+    delta: float,
+):
+    expected = configuration.initial_tool_orientation_wxyz
+    shifted = tuple(
+        -value for value in _unit_quaternion_with_component_delta(expected, delta)
+    )
+    return tuple(
+        replace(item, initial_tool_orientation_wxyz=shifted)
+        if isinstance(item, ConfigurationRecord)
+        and item.configuration_id == configuration.configuration_id
+        else item
+        for item in records
+    )
+
+
 def test_canonical_world_tool_artifacts_are_deterministic_and_measured_only() -> None:
     readiness, execution, records = _canonical_records()
     artifacts = build_world_tool_evaluation_artifacts(readiness, records)
@@ -184,6 +244,73 @@ def test_parallel_shifted_trial_rebases_terminal_and_trajectory_elapsed_time() -
     assert trajectory.samples[-1].elapsed_time_s == pytest.approx(duration)
     artifact = build_evaluation_artifact(readiness.world, records)
     assert artifact.trials[0].metrics[2].value == pytest.approx(duration)
+
+
+@pytest.mark.parametrize(
+    ("measurement", "delta", "accepted"),
+    (
+        ("qpos", 5e-10, True),
+        ("qpos", 2e-9, False),
+        ("orientation", 5e-10, True),
+        ("orientation", 2e-9, False),
+    ),
+)
+def test_artifact_runtime_initial_measurements_use_bounded_tolerance(
+    measurement: str,
+    delta: float,
+    accepted: bool,
+) -> None:
+    readiness, _, records = _canonical_records()
+    configuration, _, _, _ = _trial_records(records, "world")
+    if measurement == "qpos":
+        changed_records = _shift_world_qpos_measurements(
+            records,
+            configuration,
+            delta,
+        )
+        expected_error = "initial qpos"
+    else:
+        changed_records = _shift_world_orientation_measurement(
+            records,
+            configuration,
+            delta,
+        )
+        expected_error = "initial tool orientation"
+
+    if accepted:
+        artifact = build_evaluation_artifact(readiness.world, changed_records)
+        assert artifact.condition_id == "world"
+    else:
+        with pytest.raises(EvaluationArtifactError, match=expected_error):
+            build_evaluation_artifact(readiness.world, changed_records)
+
+
+def test_artifact_static_target_and_scalar_comparisons_remain_one_e12_strict() -> None:
+    readiness, _, records = _canonical_records()
+    configuration, _, _, _ = _trial_records(records, "world")
+
+    changed_target = replace(
+        configuration,
+        target_world_position_m=(
+            configuration.target_world_position_m[0] + 2e-12,
+            *configuration.target_world_position_m[1:],
+        ),
+    )
+    changed_target_records = tuple(
+        changed_target if item is configuration else item for item in records
+    )
+    with pytest.raises(EvaluationArtifactError, match="target position"):
+        build_evaluation_artifact(readiness.world, changed_target_records)
+
+    changed_scalar = replace(
+        configuration,
+        target_tolerance_m=configuration.target_tolerance_m + 2e-12,
+    )
+    changed_scalar_records = tuple(
+        changed_scalar if item is configuration else item for item in records
+    )
+    with pytest.raises(EvaluationArtifactError, match="target_tolerance_m"):
+        build_evaluation_artifact(readiness.world, changed_scalar_records)
 
 
 def test_failed_and_technical_invalid_trials_keep_unavailable_policy() -> None:

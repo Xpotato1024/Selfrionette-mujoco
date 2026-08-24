@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, fields, is_dataclass, replace
 from enum import Enum
-from math import ceil, isclose
+from math import ceil
 from types import MappingProxyType
 from typing import TypeVar, cast
 
@@ -66,6 +66,9 @@ from selfrionette.runtime.experiment.endpoint_reach_evidence import (
     EndpointReachMotionStatus,
     EndpointReachObservation,
 )
+from selfrionette.runtime.experiment.measured_state import (
+    runtime_measurement_matches_frozen,
+)
 from selfrionette.runtime.experiment.input_source import (
     InputSourceHealth,
     InputSourceMode,
@@ -86,7 +89,6 @@ class ExperimentStopReason(str, Enum):
     BOUNDED_STEP_LIMIT = "bounded_step_limit"
 
 
-_INITIAL_STATE_ABS_TOLERANCE = 1e-9
 _ExecutionFact = TypeVar("_ExecutionFact")
 
 
@@ -412,29 +414,18 @@ def _validate_measured_initial_state(
             "reset state qpos dimension is smaller than the frozen initial state"
         )
     actual_qpos = state.qpos[: len(expected_qpos)]
-    if any(
-        not isclose(actual, expected, rel_tol=0.0, abs_tol=_INITIAL_STATE_ABS_TOLERANCE)
-        for actual, expected in zip(actual_qpos, expected_qpos, strict=True)
-    ):
+    if not runtime_measurement_matches_frozen(actual_qpos, expected_qpos):
         raise ExperimentRunnerError("reset state qpos does not match the frozen manifest")
 
     actual_orientation = observation.quaternion_wxyz
     expected_orientation = readiness.manifest.initial_tool_orientation_wxyz
     if actual_orientation is None or len(actual_orientation) != 4:
         raise ExperimentRunnerError("reset endpoint orientation is unavailable")
-    direct_match = all(
-        isclose(actual, expected, rel_tol=0.0, abs_tol=_INITIAL_STATE_ABS_TOLERANCE)
-        for actual, expected in zip(
-            actual_orientation, expected_orientation, strict=True
-        )
-    )
-    negated_match = all(
-        isclose(actual, -expected, rel_tol=0.0, abs_tol=_INITIAL_STATE_ABS_TOLERANCE)
-        for actual, expected in zip(
-            actual_orientation, expected_orientation, strict=True
-        )
-    )
-    if not (direct_match or negated_match):
+    if not runtime_measurement_matches_frozen(
+        actual_orientation,
+        expected_orientation,
+        allow_quaternion_sign_equivalence=True,
+    ):
         raise ExperimentRunnerError(
             "reset endpoint orientation does not match the frozen manifest"
         )

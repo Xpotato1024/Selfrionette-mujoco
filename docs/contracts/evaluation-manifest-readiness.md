@@ -213,7 +213,10 @@ physics execution、measured tipの取得、metric集計 / artifact、contact ou
 `runtime/experiment/world_tool_runner.py`はこのhandoffを受け、freeze再検証後にEnvironment、typed provider、
 Input Source、Mapping、command route、MuJoCo、Task observationを接続する。manifest initial tipをmeasured sampleへ
 変換せず、reset後のactual qpos / measured tool orientationをfrozen manifestへ照合してからMuJoCo measurementを
-elapsed `0.0`で渡す。manifest revisionとactual `SoftwareExecutionIdentity`は独立入力であり、runnerが同一値から
+elapsed `0.0`で渡す。このactual runtime measurement照合は共通のabsolute numerical tolerance `1e-9`を使用し、
+manifest同士または`experiment-motion-log/v1`内部のstatic canonical validationが使用する`1e-12`とは分離する。
+#408 artifact再構成も、logに保存されたactual initial qpos / orientationをfrozen manifestへ照合するこのruntime境界だけは
+同じ`1e-9`を使用する。manifest revisionとactual `SoftwareExecutionIdentity`は独立入力であり、runnerが同一値から
 両方を生成しない。#407のruntime recorderは`FreezeRecord.identity`を
 `ConfigurationRecord.configuration_id`へ直接bindし、runner traceと明示protocol contextから既存
 `experiment-motion-log/v1` lifecycleを構築する。readiness contractへparticipant、trial、retry、filesystem fieldを
