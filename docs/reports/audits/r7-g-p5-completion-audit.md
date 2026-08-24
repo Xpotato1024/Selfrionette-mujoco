@@ -20,13 +20,13 @@ operationの第二の正本ではない。current commandとoutput contractは
 自動E2Eはsoftware-only evidenceであり、formal participant pilotやphysical safety
 validationへ昇格させない。
 
-## 現在のlifecycle（2026-08-23）
+## 現在のlifecycle（exact-head re-review）
 
 - #499（#408 artifact）と#500（#409 E2E）はともにOpen/Draftであり、#408/#409 IssueもOpenである。
-- 独立reviewの検出値はP0=0、P1=2、P2=1であり、revision identity、sample-only negative control、
-  lifecycle記述をこのPRで修正中である。したがって本書はmerge済み・Issue完了の宣言ではない。
-- 修正後の再reviewで実装stackがmerge-order readyと判断できても、parent-firstのmergeとIssue lifecycle更新が
-  完了するまでは#408/#409をcompletedまたはclose-readyと扱わない。
+- initial reviewではP0=0、P1=2、P2=1を検出した。revision identity、sample-only negative control、
+  lifecycle記述のfindingsは修正済みである。
+- current exact-head re-reviewではP0=0、P1=0、P2=0である。本書はmerge済み・Issue完了を宣言せず、
+  parent-firstのmergeとIssue lifecycle更新が完了するまでは#408/#409をcompletedまたはclose-readyと扱わない。
 
 ## 監査対象と再現結果
 
