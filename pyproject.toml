@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 selfrionette = "selfrionette.cli:main"
+selfrionette-r7-g-e2e = "selfrionette.runtime.experiment.r7_g_e2e:main"
 
 [tool.setuptools]
 include-package-data = false

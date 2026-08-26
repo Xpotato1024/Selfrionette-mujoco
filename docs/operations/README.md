@@ -46,3 +46,4 @@ related:
 - `r7-c-axis-sanity-check.md`: axis sanity protocol
 - `r7-d-p3-fast-arm-endpoint-command-check-procedure.md`: no-hardware endpoint command smoke
 - `r7-e-p1-fast-arm-endpoint-motion-sanity.md`: endpoint motion sanity gate
+- `r7-g-deterministic-e2e.md`: R7-G manifestからevaluation artifactまでの有限deterministic software-only E2E
