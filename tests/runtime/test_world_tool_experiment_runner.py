@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from math import sqrt
 
 import pytest
 
@@ -236,6 +237,96 @@ def test_measured_reset_accepts_equivalent_quaternion_sign() -> None:
     )
 
     _validate_measured_initial_state(readiness, state, equivalent)
+
+
+def _unit_quaternion_with_component_delta(
+    expected: tuple[float, float, float, float],
+    delta: float,
+) -> tuple[float, float, float, float]:
+    index = min(range(len(expected)), key=lambda item: abs(expected[item]))
+    values = list(expected)
+    values[index] += delta
+    norm = sqrt(sum(value * value for value in values))
+    return tuple(value / norm for value in values)  # type: ignore[return-value]
+
+
+@pytest.mark.parametrize(
+    ("delta", "accepted"),
+    ((5e-10, True), (2e-9, False)),
+)
+def test_measured_reset_qpos_uses_bounded_runtime_tolerance(
+    delta: float,
+    accepted: bool,
+) -> None:
+    readiness = _world_readiness()
+    bundle = readiness.composition.robot_bundle
+    simulator = bundle.runtime_plugin.build_simulator(
+        model_path=None,
+        initial_keyframe_name=readiness.manifest.initial_keyframe_name,
+    )
+    endpoint_provider = bundle.provider(ENDPOINT_POSE_V1)
+    assert isinstance(endpoint_provider, EndpointPoseProvider)
+    state = simulator.snapshot()
+    observation = endpoint_provider.observe_endpoint_pose(state)
+    shifted_qpos = tuple(
+        value + delta for value in readiness.manifest.initial_qpos_rad
+    )
+
+    if accepted:
+        _validate_measured_initial_state(
+            readiness,
+            replace(state, qpos=shifted_qpos),
+            observation,
+        )
+    else:
+        with pytest.raises(ExperimentRunnerError, match="reset state qpos"):
+            _validate_measured_initial_state(
+                readiness,
+                replace(state, qpos=shifted_qpos),
+                observation,
+            )
+
+
+@pytest.mark.parametrize(
+    ("delta", "accepted"),
+    ((5e-10, True), (2e-9, False)),
+)
+def test_measured_reset_accepts_sign_equivalent_quaternion_with_bounded_tolerance(
+    delta: float,
+    accepted: bool,
+) -> None:
+    readiness = _world_readiness()
+    bundle = readiness.composition.robot_bundle
+    simulator = bundle.runtime_plugin.build_simulator(
+        model_path=None,
+        initial_keyframe_name=readiness.manifest.initial_keyframe_name,
+    )
+    endpoint_provider = bundle.provider(ENDPOINT_POSE_V1)
+    assert isinstance(endpoint_provider, EndpointPoseProvider)
+    state = simulator.snapshot()
+    observation = endpoint_provider.observe_endpoint_pose(state)
+    assert observation.quaternion_wxyz is not None
+    expected_orientation = readiness.manifest.initial_tool_orientation_wxyz
+    shifted_orientation = tuple(
+        -value
+        for value in _unit_quaternion_with_component_delta(
+            expected_orientation,
+            delta,
+        )
+    )
+    shifted_observation = replace(
+        observation,
+        quaternion_wxyz=shifted_orientation,
+    )
+
+    if accepted:
+        _validate_measured_initial_state(readiness, state, shifted_observation)
+    else:
+        with pytest.raises(
+            ExperimentRunnerError,
+            match="reset endpoint orientation",
+        ):
+            _validate_measured_initial_state(readiness, state, shifted_observation)
 
 
 def test_malformed_fixture_fails_closed_during_reader_assembly() -> None:

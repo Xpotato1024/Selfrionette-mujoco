@@ -173,7 +173,8 @@ viewer、hardwareを実行条件にしない。
 before-after / Task terminal factsをimmutable traceとして受け、既存`experiment-motion-log/v1`へprojectionする。
 configuration identityはconditionごとの`FreezeRecord.identity`へbindし、trial protocol identityはcallerが
 明示する。complete streamはstrict round-trip validationとsame-directory atomic write / read-backを通過した場合だけ
-保存する。#408のmetric / evaluation artifactと#409のfull E2E / completion auditは実行しない。
+保存する。#408はこのvalidated v1 logからmeasured-only metricとdeterministic `evaluation-artifact/v1`を生成する。
+これはsoftware-only smokeの再構成であり、#409のfull E2E / completion audit、pilot、inferential claimは実行しない。
 
 次のcheckがすべてpassするまでdata collectionを開始しない。
 

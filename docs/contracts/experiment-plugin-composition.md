@@ -377,9 +377,14 @@ required evidenceのidentityがtask/environment/mapping/robot extensionのproduc
 `EvaluationPlugin.derive_metric()`はstrategyが返した`MetricResult`について、metric identityが
 selected Evaluation Plugin identityと一致し、provenanceがplugin宣言値と一致することも検証する。
 `unavailable` / `invalid`のvalueなし・reason必須invariantは`MetricResult` constructionで維持する。
+`evaluation-artifact/v1`のstrict decoderも同じproduction declarationを再解決し、identityに対応するunit、frame、
+provenanceとmetric status/value/reasonのinvariantを再検証する。JSON内の宣言値だけを信頼して別evaluatorへ
+付け替えることはできない。
 
 R7-G production evaluatorは次のordered tupleで使用する。いずれもcanonical evidenceだけからpureかつ
 deterministicに導出し、trial stream aggregation、artifact export、condition summaryを所有しない。
+validated `experiment-motion-log/v1`からのcanonical reconstruction、ordered metric delegation、
+deterministic JSON artifactの所有者は`runtime/evaluation/artifact.py`である。
 
 | identity | outcome | required evidence | unit / frame | failure semantics |
 |---|---|---|---|---|
@@ -454,8 +459,8 @@ runnerはEnvironment scene conditionを明示的にcompose/resetし、Input Sour
 selected route binding、Robot-owned local endpoint motion generator / qpos guard / command provider、MuJoCoを
 接続する。reset直後はactual qposとmeasured tool orientationをfrozen manifestへ照合し、Taskにはelapsed `0.0`
 measured endpointと各simulation step後のmeasured endpointを渡し、
-TaskTransitionのclassification / evidenceを変更しない。Evaluation tupleはresolve済みidentityとして保持するが、
-metric aggregation / artifact exportは#408へ残す。
+TaskTransitionのclassification / evidenceを変更しない。Evaluation tupleはresolve済みidentityとして保持し、#408のartifact ownerがこの順序を保持したまま
+metric aggregation / artifact exportを行う。
 
 ## fast_arm migration
 
@@ -510,11 +515,13 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
   concrete objectを組み立てない。Bundleをruntime service locatorとしてstepごとに参照しない。
 - #407は`ExperimentConditionExecutionResult`へ既存loop由来のimmutable step traceを保持し、別のruntime recorderが
   `WorldToolExperimentExecutionResult`とreadinessを既存`experiment-motion-log/v1` lifecycleへprojectionする。
-  Evaluation Plugin、metric集計、condition summary、CSV / JSON evaluation artifactは実行しない。
+  Evaluation Plugin、metric集計、condition summary、CSV / JSON evaluation artifactは実行しない。#408の
+  artifact ownerはこのvalidated logとreadiness identityを照合し、Task evidenceを再構成してから各pluginへ委譲する。
 
 ## non-goalsと主張範囲
 
-このfoundationはR7-G production runner、pilot、metric artifact、R7-H cube scene、contact extraction、
+R7-G production runnerとvalidated logからのmeasured evaluation artifactは#406/#407/#408で成立する。このfoundationは
+pilot、#409 full E2E / completion audit、R7-H cube scene、contact extraction、
 virtual reaction force、viewer feature、hardware/serial/Arduino/OSC/robot outputを実装しない。
 conformance testはcontractとreadinessの成立を示すが、実験結果、metric妥当性、接触物理、physical
 safetyを証明しない。

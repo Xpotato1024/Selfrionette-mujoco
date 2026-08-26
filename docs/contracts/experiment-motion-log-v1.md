@@ -221,6 +221,38 @@ filesystem ownerはruntime recorderである。保存前にtyped streamのvalida
 strict read-backが一致した場合だけatomic replaceし、replace後もtarget bytesをread-backする。partial / RUNNING
 trial、invalid retry chain、encodingまたはwrite failureではfinal artifactをcommitせず、既存artifactを保持する。
 
+## evaluation-artifact/v1へのhandoff
+
+`experiment-motion-log/v1`は実行時のtruth-levelを保持する入力ログであり、metric resultやcondition summaryの正本ではない。
+`runtime/evaluation/artifact.py`は、strict stream validationを通過したv1 bytesと入力`EvaluationReadiness`を受け、
+configurationの`initial_measured_tip_position_m`とordered `MotionSampleRecord`のmeasured endpoint factsから
+Task-owned trajectory evidence equivalentを再構成する。requested、predicted、またはzeroの値をmeasured trajectoryへ昇格させない。
+
+`TrialOutcomeRecord`とvalidated lifecycleからterminal classificationを再構成し、既存endpoint reach evidence codecと
+producer provenanceをそのまま検証する。source logのconfiguration ID、software revision、target、condition、freeze / manifest
+identityはreadinessとexact matchで照合し、別manifestや別revisionへ黙って適用しない。technical-invalid、missing、unavailableの
+evidenceはsuccess、trajectory、completion time、zero値へ補完せず、既存Evaluation Pluginのdeclared policyに従う。
+artifact側のterminal elapsedとtrajectory sample elapsedは`TrialStartRecord.runtime_timestamp_s`を基準に
+non-negativeなtrial-relative timeへrebaseする。complete measured sampleが残る場合でも、terminalが
+`technical_invalid`ならTask-owned trajectory evidenceも`invalid`とし、4 evaluatorのdeclared policyへ渡す。
+configurationの`comparison_parameters`はreadinessがfreezeするcadence、camera、seed、fixture、input source、
+normalized range、presentation、feedback、condition/order、manifest/resolved identityを含む15-fieldのcanonical
+projectionと完全一致しなければならない。
+
+生成される`evaluation-artifact/v1`はschema/version、source log identity / SHA-256、software revision、configuration / freeze
+identity、trial、condition/requested control frame、ordered evaluator identity、各metricのstatus/value/unit/frame/provenance/reason、
+およびdescriptive condition summaryを持つ。JSONはsorted compact UTF-8、finite number、unknown field拒否、decode / round-tripを
+必須とし、保存はsame-directory temporary file、read-back、atomic replaceの順で行う。これはsoftware-only evaluation artifactであり、
+pilot、inferential statistics、superiority、#409 full E2Eの証拠を作らない。
+cooperative writer間のoverwrite raceはtargetと同じdirectoryのpersistent sidecar
+(`.<target-name>.lock`)をkernel advisory lockで直列化する。sidecarの存在とcontentはinertなoperational
+lock stateであり、PID / JSON owner metadataを読まず、stale lockの回収やsidecarのunlinkを行わない。
+sidecarは`os.open(..., 0o600)`で作成し、POSIXではowner-only modeを要求する。Windowsではnumeric modeを保証せず、
+current OS security semantics / inherited ACLに従う。empty sidecarもcontent・inodeを変更せず保持する。
+Windowsでは`msvcrt.locking`、POSIXでは`fcntl.flock`をnon-blockingで使い、process-local path lockも併用する。
+lock取得から既存bytes確認、replace、rollback、kernel handle closeまでを同じcritical sectionとして扱う。
+handleは正常終了・失敗・process crashでkernelに解放され、sidecar自体は次回writerのために残る。
+
 1つのprotocol identityとrepetition内でattempt indexはuniqueであり、initial attemptは
 ちょうど1つである。各trialが持てるdirect retry childは最大1つである。retryは直前の
 completed technical-invalid attemptを参照し、1本のlinearな`0 -> 1 -> 2 ...` chainを

@@ -35,6 +35,7 @@ EXPECTED_MODULES = {
         "viewer_motion_policy",
     },
     "evaluation": {
+        "artifact",
         "endpoint_metrics",
         "endpoint_progress",
         "kinematics",
@@ -53,6 +54,7 @@ EXPECTED_MODULES = {
         "contracts",
         "endpoint_reach_evidence",
         "input_source",
+        "measured_state",
         "motion_log_recorder",
         "registry",
         "world_tool_runner",

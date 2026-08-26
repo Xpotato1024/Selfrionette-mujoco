@@ -21,6 +21,15 @@ entry pointはmanifest revisionとstartup側が独立に取得したactual execu
 readinessのexact-match gateを通す。reset後はactual qpos / measured tool orientationをfrozen manifestへ照合する。
 recorderはfreeze identityへconfigurationをbindし、explicit protocol contextからtrial identityを決定的に作り、
 validationとstrict read-backを通過したcomplete trialだけをatomic JSONLとして保存する。
+validated `experiment-motion-log/v1`からのTask evidence再構成、ordered production evaluatorへのmetric委譲、
+deterministic `evaluation-artifact/v1`のstrict JSON / atomic emissionは`evaluation/artifact.py`が所有する。
+artifact writerはtargetごとのsame-directory persistent sidecar
+(`.<target-name>.lock`)をkernel advisory lockとしてcritical section全体で保持する。sidecarの
+existence/contentはinertで、PID probe、JSON owner metadata、stale cleanup、sidecar unlinkを行わない。
+sidecarは`os.open(..., 0o600)`で作成し、POSIXではowner-only modeを要求する。Windowsのnumeric modeは保証せず、
+current OS security semantics / inherited ACLに従う。empty sidecarもcontent・inodeを変更せず保持する。
+Windowsは`msvcrt.locking`、POSIXは`fcntl.flock`、process-local path lockを併用し、handle closeまたは
+process crashでkernelがlockを解放する。#407のJSONL writerとは責務を共有しない。
 
 ## 入力
 

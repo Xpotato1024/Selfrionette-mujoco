@@ -21,6 +21,8 @@ R7-G evaluatorはTask-owned canonical evidenceからpureかつdeterministicにme
 measured terminal / trajectoryはcross-axis contractで固定したTask producer provenanceを要求し、runner等が
 同じshapeのpreclassified evidenceを作成して代用することを拒否する。
 trial aggregation、JSON / CSV artifact、condition summary、viewer計算、external side effectは所有しない。
+validated v1 logのidentity照合、Task evidence reconstruction、artifact serializationはruntimeの
+`evaluation/artifact.py`へ委譲する。
 
 ## catalog / discovery / registration
 

@@ -22,6 +22,7 @@ from selfrionette.runtime.evaluation.manifest import (
     EvaluationReadiness,
     SoftwareExecutionIdentity,
     build_evaluation_condition_pair_readiness,
+    comparison_parameters_for_readiness,
 )
 from selfrionette.runtime.evaluation.r7_g_free_space import (
     build_r7_g_free_space_manifest_pair,
@@ -174,27 +175,6 @@ def _trial_id(
     return f"trial-{sha256(material).hexdigest()}"
 
 
-def _comparison_parameters(readiness: EvaluationReadiness) -> tuple[tuple[str, object], ...]:
-    manifest = readiness.manifest
-    return (
-        ("cadence_s", manifest.cadence_s),
-        ("camera_identity", manifest.camera_identity),
-        ("condition_id", manifest.condition_id),
-        ("condition_order", manifest.condition_order),
-        ("deterministic_seed", manifest.deterministic_seed),
-        ("fixture_identity", manifest.fixture_identity),
-        ("input_source_identity", manifest.input_source_identity),
-        ("manifest_digest", readiness.manifest_digest),
-        ("normalized_input_max", manifest.normalized_input_range[1]),
-        ("normalized_input_min", manifest.normalized_input_range[0]),
-        ("presentation_identity", manifest.presentation_identity),
-        ("requested_control_frame", manifest.requested_control_frame),
-        ("resolved_identity_digest", readiness.resolved_identity_digest),
-        ("task_order", manifest.task_order),
-        ("visual_feedback_identity", manifest.visual_feedback_identity),
-    )
-
-
 def _configuration_record(
     readiness: EvaluationReadiness,
     result: ExperimentConditionExecutionResult,
@@ -229,7 +209,7 @@ def _configuration_record(
         local_endpoint_speed_m_s=readiness.manifest.gain,
         deadzone=readiness.manifest.deadzone,
         local_endpoint_max_delta_m=readiness.manifest.maximum_per_step_delta_m,
-        comparison_parameters=_comparison_parameters(readiness),
+        comparison_parameters=comparison_parameters_for_readiness(readiness),
     )
 
 
