@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-31
+last_verified: 2026-08-27
 canonical_for:
   - documentation source of truth map
 related:
@@ -21,6 +21,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | Topic | Canonical document | Notes |
 |---|---|---|
 | 開発方針 | `docs/architecture/development-policy.md` | 現在のtaskに適用するlayer責務と責務driftの防止 |
+| 研究実行優先順位 / 実機contact roadmap | `docs/architecture/research-execution-roadmap.md` | R7-G後のcontact-core、physical safety、minimal output、pilotのdependency |
 | skeleton構造とlayer責務 | `docs/architecture/mujoco-skeleton-first-spec.md` | MuJoCo SoT、Three.js rendering-only、layer ownership |
 | 文書governance | `docs/architecture/documentation-sot-policy.md` | 文書role、配置、1 topic = 1 canonical document |
 | code / plugin documentation | `docs/architecture/code-documentation-policy.md` | comment、docstring / JSDoc、TODO、suppression、README責務 |
