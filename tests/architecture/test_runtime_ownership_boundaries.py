@@ -76,6 +76,7 @@ EXPECTED_MODULES = {
         "input_safety",
         "limit_resolution",
         "physical_limits",
+        "physical_safety_core",
         "qpos_feasibility",
         "trajectory_feasibility",
     },
