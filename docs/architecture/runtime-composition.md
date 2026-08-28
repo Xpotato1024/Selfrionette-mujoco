@@ -25,6 +25,7 @@ related:
 | `execution/` | route-bound `ControlMappedRuntimePipeline`、input step loop、typed command / input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
+| `output/` | physical output request permission decision、lossless recording / dry-run trace。transport / hardware送信は行わない |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
 | `runners/` | operational dry-run / smoke / publisherとexperimentのthin entry point |
@@ -135,7 +136,7 @@ Task / Evaluationを補わない。
 | control-frame resolution | runtime control-frame resolver | pure frame resolver | requested frame、pre-step orientation、`dt_s` | resolved world intentまたはunavailable status |
 | motion policy | selected plugin / runtime coordinator | motion policy adapter | intent、current qpos、target lifecycle | `MotionCommand`またはhold / reject |
 | backend update | typed Robot command provider / MuJoCo backend boundary | semantic-specific backend command applier | `JointPositionCommand`等のvalidated typed command | updated model stateまたは適用前failure |
-| physical output permission | runtime output boundary | typed `PhysicalOutputRequest` / permission evaluator | target、session、sequence、cadence、explicit operator gate | accepted / rejected decision。送信実績とは別 |
+| physical output permission / trace | runtime output boundary | typed `PhysicalOutputRequest` / permission evaluator / recording sink | target、session、sequence、cadence、explicit operator gate | accepted / rejected / permitted / dropped evidence。送信実績とは別 |
 | MuJoCo measurement | post-step measurement helper | pure measurement helper | post-step `MuJoCoState` | physical `tip` site measurement |
 | diagnostic annotation | runtime diagnostics | pure annotator | intent、prediction、measurement、source state | precedenceを固定したmetadata |
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |
