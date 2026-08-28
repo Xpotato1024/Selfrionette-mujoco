@@ -10,7 +10,7 @@
 | `execution/` | pipeline lifecycle、input step loop、timing / pacing |
 | `control/` | input selection/state、endpoint target、viewer control ingress、step diagnostics |
 | `safety/` | stale input policy、qpos feasibility |
-| `output/` | typed physical output permission decision。transport / hardware送信は所有しない |
+| `output/` | typed physical output permission decision、recording / dry-run trace。transport / hardware送信は所有しない |
 | `experiment/` | versioned experiment contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint evaluation、progress、manifest / freeze readiness |
 | `runners/` | dry-run、live / offline smoke、WebSocket publisher、experimentのthin entry point |
