@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
+
 from selfrionette.runtime.safety.collision_policy import (
     CollisionCheckResult,
     CollisionEvaluation,
@@ -22,6 +26,7 @@ from selfrionette.runtime.safety.physical_safety_core import (
 )
 from selfrionette.runtime.safety.trajectory_feasibility import (
     ConfigurationFeasibilityResult,
+    FeasibilityDiagnostic,
     FeasibilityStatus,
 )
 from selfrionette.runtime.safety.physical_limits import EvidenceStatus
@@ -39,10 +44,25 @@ def _limits(status: LimitResolutionStatus) -> LimitResolutionResult:
                 LimitParityRecord(
                     name,
                     f"{name}-source",
-                    ParityStatus.MATCH if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else ParityStatus.UNKNOWN,
+                    (
+                        ParityStatus.MATCH
+                        if status
+                        in {
+                            LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
+                            LimitResolutionStatus.RESOLVED_PROVISIONAL,
+                        }
+                        else ParityStatus.MISMATCH
+                        if status is LimitResolutionStatus.MISMATCH
+                        else ParityStatus.INVALID
+                        if status is LimitResolutionStatus.INVALID
+                        else ParityStatus.UNAVAILABLE
+                        if status is LimitResolutionStatus.UNAVAILABLE
+                        else ParityStatus.UNKNOWN
+                    ),
                     -1.0 if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else None,
                     1.0 if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else None,
                     "rad",
+                    None if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else status.value,
                 ),
             ),
             reason=None if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else status.value,
@@ -62,7 +82,8 @@ def _collision(status: CollisionStatus) -> CollisionCheckResult:
         reason_code=f"fixture_{status.value}",
         provenance="fixture-collision",
     )
-    return CollisionCheckResult(status, (evaluation,), f"fixture_{status.value}")
+    reason_code = "collision_clear" if status is CollisionStatus.CLEAR else f"fixture_{status.value}"
+    return CollisionCheckResult(status, (evaluation,), reason_code)
 
 
 def _dynamic(
@@ -74,10 +95,13 @@ def _dynamic(
         EvidenceStatus.PROVISIONAL,
         EvidenceStatus.PROVISIONAL,
     )
+    diagnostics = () if status is FeasibilityStatus.FEASIBLE else (
+        FeasibilityDiagnostic(f"{status.value}_fixture", f"fixture {status.value}"),
+    )
     return ConfigurationFeasibilityResult(
         status,
-        f"fixture_{status.value}",
-        (),
+        "feasibility_clear" if not diagnostics else diagnostics[0].code,
+        diagnostics,
         "fixture-dynamic",
         evidence,
     )
@@ -148,8 +172,8 @@ def test_unknown_unavailable_and_invalid_never_allow() -> None:
     empty_clear = evaluate_physical_safety(
         SafetyInput("empty-clear", _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE), CollisionCheckResult(CollisionStatus.CLEAR, (), "fixture_clear"), _dynamic(FeasibilityStatus.FEASIBLE))
     )
-    assert empty_clear.action is SafetyDecisionAction.UNAVAILABLE
-    assert empty_clear.reason.reason_code == "collision_result_unavailable"
+    assert empty_clear.action is SafetyDecisionAction.INVALID
+    assert empty_clear.reason.reason_code == "collision_result_inconsistent"
 
     collision = _collision(CollisionStatus.COLLISION)
     inconsistent_clear = evaluate_physical_safety(
@@ -174,6 +198,114 @@ def test_provisional_evidence_holds_and_mismatch_rejects() -> None:
     mismatch = evaluate_physical_safety(_input(limits=LimitResolutionStatus.MISMATCH))
     assert mismatch.action is SafetyDecisionAction.REJECT
     assert mismatch.reason.reason_code == "limit_resolution_mismatch"
+
+
+def test_limit_aggregate_status_must_match_parity() -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    bound = result.bounds[0]
+    inconsistent_bound = replace(
+        bound,
+        parity=(
+            replace(
+                bound.parity[0],
+                status=ParityStatus.UNKNOWN,
+                lower=None,
+                upper=None,
+                reason="source unknown",
+            ),
+        ),
+        lower_rad=None,
+        upper_rad=None,
+        status=LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
+        reason=None,
+    )
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "inconsistent-limit",
+            replace(result, bounds=(inconsistent_bound, result.bounds[1])),
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+
+
+def test_collision_aggregate_reason_must_match_pair_diagnostic() -> None:
+    collision = _collision(CollisionStatus.CLEAR)
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "inconsistent-collision",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            replace(collision, reason_code="wrong-clear-reason"),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "collision:collision_result_inconsistent"
+
+
+@pytest.mark.parametrize(
+    ("status", "diagnostics", "reason_code"),
+    (
+        (
+            FeasibilityStatus.FEASIBLE,
+            (FeasibilityDiagnostic("rejected_dynamic_limit", "unexpected rejection"),),
+            "rejected_dynamic_limit",
+        ),
+        (
+            FeasibilityStatus.REJECTED,
+            (),
+            "feasibility_clear",
+        ),
+    ),
+)
+def test_dynamic_aggregate_status_and_diagnostics_must_match(
+    status: FeasibilityStatus,
+    diagnostics: tuple[FeasibilityDiagnostic, ...],
+    reason_code: str,
+) -> None:
+    dynamic = ConfigurationFeasibilityResult(
+        status,
+        reason_code,
+        diagnostics,
+        "fixture-dynamic",
+        (EvidenceStatus.AUTHORITATIVE,),
+    )
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "inconsistent-dynamic",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            dynamic,
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
+
+
+def test_dynamic_limit_diagnostic_must_match_bound_evidence() -> None:
+    dynamic = ConfigurationFeasibilityResult(
+        FeasibilityStatus.UNKNOWN,
+        "unknown_limit_source",
+        (FeasibilityDiagnostic("unknown_limit_source", "source is unknown"),),
+        "fixture-dynamic",
+        (EvidenceStatus.AUTHORITATIVE,),
+    )
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "inconsistent-dynamic-evidence",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            dynamic,
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
 
 
 def test_near_collision_and_task_contact_are_hold_not_allow() -> None:
