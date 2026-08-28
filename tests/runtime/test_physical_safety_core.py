@@ -269,6 +269,28 @@ def test_malformed_clear_pair_is_invalid_at_p5_boundary() -> None:
     assert decision.reason.identity == "collision:collision_result_inconsistent"
 
 
+def test_unknown_collision_kind_clear_is_invalid_at_p5_boundary() -> None:
+    malformed = object.__new__(CollisionEvaluation)
+    object.__setattr__(malformed, "pair_id", "fore|upper")
+    object.__setattr__(malformed, "kind", CollisionKind.UNKNOWN)
+    object.__setattr__(malformed, "status", CollisionStatus.CLEAR)
+    object.__setattr__(malformed, "distance_m", 0.1)
+    object.__setattr__(malformed, "clearance_m", 0.01)
+    object.__setattr__(malformed, "reason_code", "pair_clear")
+    object.__setattr__(malformed, "provenance", "fixture-collision")
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "unknown-kind-clear",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            CollisionCheckResult(CollisionStatus.CLEAR, (malformed,), "collision_clear"),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "collision:collision_result_inconsistent"
+
+
 @pytest.mark.parametrize(
     ("status", "diagnostics", "reason_code"),
     (

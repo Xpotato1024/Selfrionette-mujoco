@@ -103,7 +103,8 @@ canonical identity（`first|second`）でなければならない。`not-a-pair`
 
 P3 constructorがこのschemaを検証し、P5 physical-safety-coreも再検証する。不正なpair identityや
 clear evidenceは別componentのallowで隠さず、`collision:collision_result_inconsistent`として
-`invalid`へ写像する。
+`invalid`へ写像する。`CollisionKind.UNKNOWN`もclearへ分類せず、role不明のpairは必ず`invalid`
+として扱う。
 
 ## Exclusion provenance
 
