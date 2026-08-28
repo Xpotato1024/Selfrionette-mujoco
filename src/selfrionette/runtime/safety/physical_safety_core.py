@@ -11,13 +11,24 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 
-from selfrionette.runtime.safety.collision_policy import CollisionCheckResult, CollisionStatus
-from selfrionette.runtime.safety.limit_resolution import LimitResolutionResult, LimitResolutionStatus
+from selfrionette.runtime.safety.collision_policy import (
+    CollisionCheckResult,
+    CollisionEvaluation,
+    CollisionStatus,
+)
+from selfrionette.runtime.safety.limit_resolution import (
+    LimitResolutionResult,
+    LimitResolutionStatus,
+    ParityStatus,
+    ResolvedJointBound,
+)
 from selfrionette.runtime.safety.trajectory_feasibility import (
     ConfigurationFeasibilityResult,
+    FeasibilityDiagnostic,
     FeasibilityStatus,
     TrajectoryFeasibilityResult,
 )
+from selfrionette.runtime.safety.physical_limits import EvidenceStatus
 
 
 class SafetyDecisionAction(str, Enum):
@@ -170,6 +181,199 @@ def _reason(
     return SafetyReason(reason_code, component, message, tuple(sorted(set(provenance))))
 
 
+def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
+    """P2 aggregate statusとper-source parityの整合性を検証する。"""
+
+    for bound in result.bounds:
+        if not isinstance(bound, ResolvedJointBound):
+            return "limit resolution contains an invalid bound"
+        if tuple(item.source_name for item in bound.parity) != bound.source_names:
+            return f"limit parity source identity does not match {bound.joint_name}"
+        if len({item.source_name for item in bound.parity}) != len(bound.parity):
+            return f"limit parity source identity is duplicated for {bound.joint_name}"
+        if any(item.joint_name != bound.joint_name for item in bound.parity):
+            return f"limit parity joint identity does not match {bound.joint_name}"
+        for item in bound.parity:
+            if item.status is not ParityStatus.MATCH and item.reason is None:
+                return f"limit parity status has no reason for {bound.joint_name}"
+            if item.status in {
+                ParityStatus.UNKNOWN,
+                ParityStatus.UNAVAILABLE,
+                ParityStatus.INVALID,
+            } and (item.lower is not None or item.upper is not None):
+                return f"unresolved limit parity contains bounds for {bound.joint_name}"
+
+        parity_statuses = tuple(item.status for item in bound.parity)
+        signatures = {(item.lower, item.upper, item.unit) for item in bound.parity}
+        range_mismatch = len(signatures) > 1
+        if any(status is ParityStatus.INVALID for status in parity_statuses):
+            expected = LimitResolutionStatus.INVALID
+        elif any(status is ParityStatus.MISMATCH for status in parity_statuses) or range_mismatch:
+            expected = LimitResolutionStatus.MISMATCH
+        elif any(status is ParityStatus.UNAVAILABLE for status in parity_statuses):
+            expected = LimitResolutionStatus.UNAVAILABLE
+        elif any(status is ParityStatus.UNKNOWN for status in parity_statuses):
+            expected = LimitResolutionStatus.UNKNOWN
+        elif all(status is ParityStatus.MATCH for status in parity_statuses):
+            expected = None
+        else:
+            return f"limit parity contains an unsupported status for {bound.joint_name}"
+
+        if expected is None:
+            if bound.status not in {
+                LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
+                LimitResolutionStatus.RESOLVED_PROVISIONAL,
+            }:
+                return f"resolved limit status does not match parity for {bound.joint_name}"
+            if not bound.bounded:
+                return f"resolved limit status is unbounded for {bound.joint_name}"
+            if bound.reason is not None:
+                return f"resolved limit status has an unexpected reason for {bound.joint_name}"
+            if any(item.unit != "rad" for item in bound.parity):
+                return f"resolved limit parity unit is not normalized to rad for {bound.joint_name}"
+            if any(
+                (item.lower, item.upper) != (bound.lower_rad, bound.upper_rad)
+                for item in bound.parity
+            ):
+                return f"resolved limit range does not match parity for {bound.joint_name}"
+            continue
+
+        if bound.status is not expected:
+            return f"limit aggregate status does not match parity for {bound.joint_name}"
+        if bound.bounded:
+            return f"unresolved limit status contains bounds for {bound.joint_name}"
+        if bound.reason is None:
+            return f"unresolved limit status has no reason for {bound.joint_name}"
+    return None
+
+
+def _collision_result_inconsistency(result: CollisionCheckResult) -> str | None:
+    """P3 aggregate statusとpair evaluation / diagnosticの整合性を検証する。"""
+
+    evaluations = result.evaluations
+    if any(not isinstance(item, CollisionEvaluation) for item in evaluations):
+        return "collision result contains an invalid pair evaluation"
+    pair_ids = tuple(item.pair_id for item in evaluations)
+    if len(set(pair_ids)) != len(pair_ids):
+        return "collision result contains duplicate pair identities"
+
+    if not evaluations:
+        # P3 uses an empty INVALID aggregate for inventory/policy/input failures.
+        if result.status is CollisionStatus.INVALID:
+            return None
+        expected_status, expected_reason = CollisionStatus.UNKNOWN, "no_collision_pair_evidence"
+    else:
+        precedence = (
+            CollisionStatus.INVALID,
+            CollisionStatus.COLLISION,
+            CollisionStatus.NEAR_COLLISION,
+            CollisionStatus.CONTACT,
+            CollisionStatus.UNAVAILABLE,
+            CollisionStatus.UNKNOWN,
+        )
+        expected_status = CollisionStatus.CLEAR
+        expected_reason = "collision_clear"
+        for status in precedence:
+            found = next((item for item in evaluations if item.status is status), None)
+            if found is not None:
+                expected_status, expected_reason = status, found.reason_code
+                break
+    if result.status is not expected_status:
+        return "collision aggregate status does not match pair evidence"
+    if result.reason_code != expected_reason:
+        return "collision aggregate reason does not match pair evidence"
+    return None
+
+
+def _diagnostic_status(diagnostic: FeasibilityDiagnostic) -> FeasibilityStatus | None:
+    for status in (
+        FeasibilityStatus.INVALID,
+        FeasibilityStatus.REJECTED,
+        FeasibilityStatus.UNAVAILABLE,
+        FeasibilityStatus.UNKNOWN,
+    ):
+        if diagnostic.code.startswith(status.value):
+            return status
+    return None
+
+
+def _dynamic_result_inconsistency(
+    result: ConfigurationFeasibilityResult | TrajectoryFeasibilityResult,
+) -> str | None:
+    """P4 aggregate status / diagnostic / evidenceの整合性を検証する。"""
+
+    diagnostic_statuses: list[FeasibilityStatus] = []
+    for diagnostic in result.diagnostics:
+        status = _diagnostic_status(diagnostic)
+        if status is None:
+            return "dynamic diagnostic code has no closed status prefix"
+        diagnostic_statuses.append(status)
+
+    if not diagnostic_statuses:
+        expected_status = FeasibilityStatus.FEASIBLE
+        expected_reason = "feasibility_clear"
+    else:
+        expected_status = next(
+            status
+            for status in (
+                FeasibilityStatus.INVALID,
+                FeasibilityStatus.REJECTED,
+                FeasibilityStatus.UNAVAILABLE,
+                FeasibilityStatus.UNKNOWN,
+            )
+            if status in diagnostic_statuses
+        )
+        expected_reason = next(
+            diagnostic.code
+            for diagnostic in result.diagnostics
+            if diagnostic.code.startswith(expected_status.value)
+        )
+    if result.status is not expected_status:
+        return "dynamic aggregate status does not match diagnostics"
+    if result.reason_code != expected_reason:
+        return "dynamic aggregate reason does not match diagnostics"
+
+    if isinstance(result, TrajectoryFeasibilityResult) and result.sample_count < 2:
+        if not (
+            result.status is FeasibilityStatus.INVALID
+            and result.reason_code == "invalid_trajectory_length"
+            and any(item.code == "invalid_trajectory_length" for item in result.diagnostics)
+        ):
+            return "trajectory aggregate does not explain its insufficient sample count"
+
+    evidence_prefix = {
+        EvidenceStatus.INVALID: "invalid_limit_",
+        EvidenceStatus.UNAVAILABLE: "unavailable_limit_",
+        EvidenceStatus.UNKNOWN: "unknown_limit_",
+        EvidenceStatus.CONFLICT: "unknown_limit_",
+    }
+    for evidence_status, prefix in evidence_prefix.items():
+        if evidence_status in result.bound_statuses and not any(
+            item.code.startswith(prefix) for item in result.diagnostics
+        ):
+            return "dynamic bound evidence status has no matching diagnostic"
+    diagnostic_evidence = {
+        "invalid_limit_source": {EvidenceStatus.INVALID},
+        "unavailable_limit_source": {EvidenceStatus.UNAVAILABLE},
+        "unknown_limit_source": {EvidenceStatus.UNKNOWN, EvidenceStatus.CONFLICT},
+    }
+    for diagnostic in result.diagnostics:
+        required_evidence = diagnostic_evidence.get(diagnostic.code)
+        if required_evidence is not None and not any(
+            status in required_evidence for status in result.bound_statuses
+        ):
+            return "dynamic limit diagnostic has no matching evidence status"
+    if result.status is FeasibilityStatus.FEASIBLE:
+        if not result.bound_statuses:
+            return "dynamic feasible result has no bound evidence"
+        if any(
+            status not in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL}
+            for status in result.bound_statuses
+        ):
+            return "dynamic feasible result contains unresolved bound evidence"
+    return None
+
+
 def _limit_assessment(result: LimitResolutionResult | None) -> SafetyComponentAssessment:
     component = SafetyComponent.LIMIT
     if result is None:
@@ -177,6 +381,18 @@ def _limit_assessment(result: LimitResolutionResult | None) -> SafetyComponentAs
             component,
             SafetyDecisionAction.UNAVAILABLE,
             _reason(component, "limit_resolution_unavailable", "physical limit resolution is unavailable"),
+        )
+    inconsistency = _limit_result_inconsistency(result)
+    if inconsistency is not None:
+        provenance = tuple(
+            source
+            for bound in result.bounds
+            for source in bound.source_names
+        )
+        return SafetyComponentAssessment(
+            component,
+            SafetyDecisionAction.INVALID,
+            _reason(component, "limit_resolution_inconsistent", inconsistency, provenance),
         )
     statuses = tuple(bound.status for bound in result.bounds)
     provenance = tuple(
@@ -230,6 +446,18 @@ def _collision_assessment(result: CollisionCheckResult | None) -> SafetyComponen
             SafetyDecisionAction.UNAVAILABLE,
             _reason(component, "collision_result_unavailable", "collision result is unavailable"),
         )
+    inconsistency = _collision_result_inconsistency(result)
+    if inconsistency is not None:
+        provenance = tuple(
+            evaluation.provenance
+            for evaluation in result.evaluations
+            if evaluation.provenance is not None
+        )
+        return SafetyComponentAssessment(
+            component,
+            SafetyDecisionAction.INVALID,
+            _reason(component, "collision_result_inconsistent", inconsistency, provenance),
+        )
     if result.status is CollisionStatus.CLEAR and not result.evaluations:
         action, code, message = SafetyDecisionAction.UNAVAILABLE, "collision_result_unavailable", "collision result has no pair evidence"
     elif result.status is CollisionStatus.CLEAR and any(
@@ -267,6 +495,14 @@ def _dynamic_assessment(
             component,
             SafetyDecisionAction.UNAVAILABLE,
             _reason(component, "dynamic_result_unavailable", "dynamic feasibility result is unavailable"),
+        )
+    inconsistency = _dynamic_result_inconsistency(result)
+    if inconsistency is not None:
+        provenance = result.source_ids if isinstance(result, TrajectoryFeasibilityResult) else (result.source_id,)
+        return SafetyComponentAssessment(
+            component,
+            SafetyDecisionAction.INVALID,
+            _reason(component, "dynamic_result_inconsistent", inconsistency, provenance),
         )
     provenance = result.source_ids if isinstance(result, TrajectoryFeasibilityResult) else (result.source_id,)
     if result.status is FeasibilityStatus.INVALID:

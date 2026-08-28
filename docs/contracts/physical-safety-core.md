@@ -45,6 +45,15 @@ provenanceを一体で保持する。`reason.identity`（`component:reason_code`
 limit source name、collision evidence source、dynamic source identity、candidate provenanceを
 重複なくsorted tupleへ束ねる。個別`SafetyComponentAssessment`も同じreason contractを持つ。
 
+## Upstream aggregate integrity
+
+P5 boundaryはP2〜P4のtyped aggregateを盲目的に信頼しない。P2では各boundのstatus、source
+identity、parity record、rangeの対応を検証し、resolved statusはboundedな`rad` parityと一致する
+場合だけ受け入れる。P3ではpair evaluationから導出されるaggregate status / reasonと入力結果を
+照合する。P4ではdiagnostic codeのstatus prefix、aggregate status / reason、dynamic bound
+evidenceを照合する。いずれかの不整合、重複identity、diagnostic欠落は該当componentの
+`invalid`へ写像し、他componentのclear evidenceで上書きしない。
+
 ## Component mapping
 
 P2 `resolved_authoritative`はallow、`resolved_provisional`はhold、mismatchはreject、unknown /
