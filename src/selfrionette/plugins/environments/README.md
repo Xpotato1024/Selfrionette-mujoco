@@ -18,7 +18,8 @@ Environment axisはgeneric experiment composition上のworld / scene条件を表
 ## lifecycleとside effect
 
 `free_space_environment/v1`はRobot-owned base sceneへtask objectを追加しないfree-space条件を返す。
-compose/resetはside-effect-freeであり、MuJoCo load / stepやexternal I/Oを行わない。
+`contact_cube_environment/v1`はtyped requestからbackend-owned MuJoCo task sceneをloadする。各pluginの
+compose/resetはviewer独自physicsを持たず、contact sceneのmodel mutationはruntime ownerが行う。
 
 ## catalog / discovery / registration
 
@@ -39,6 +40,7 @@ runtimeへconcrete ID / importを追加しない。
 ## current concrete plugins
 
 - [`free_space_environment/v1`](free_space_environment/README.md): Robot base sceneだけを使い、task objectとcontactを追加しないR7-G free-space条件
+- [`contact_cube_environment/v1`](contact_cube_environment/README.md): manifestからMuJoCo cube body / geomを構成し、trial resetと初期contact readinessをbackendへ委譲するR7-H条件
 
 ## canonical document
 

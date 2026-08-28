@@ -27,6 +27,7 @@ EXPECTED_MODULES = {
     },
     "contact": {
         "manifest",
+        "scene",
     },
     "control": {
         "desired_endpoint_resolver",

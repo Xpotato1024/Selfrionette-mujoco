@@ -26,6 +26,7 @@ related:
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
 | `output/` | physical output request permission decision、lossless recording / dry-run trace、lifecycle / bounded stop。transport / hardware送信は行わない |
+| `contact/` | versioned contact manifest、backend-owned MuJoCo scene composition / reset |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
 | `runners/` | operational dry-run / smoke / publisherとexperimentのthin entry point |
@@ -43,6 +44,11 @@ artifact emissionを実装しない。validated v1 logからのmetric導出とca
 `runtime/` is the only composition root。input、motion、kinematics、MuJoCo backend、transportを
 layer横断で接続できるのはruntimeだけである。MuJoCo remains the physical source of truth。
 viewerはrender-onlyであり、runtime stateを再計算しない。
+
+R7-Hの`runtime/contact/`はmanifestからMuJoCo scene variantを構成し、task objectのbackend body / geom、
+model settings、trial reset、初期contact readinessを所有する。scene compositionはviewerへ装飾cubeを
+追加せず、disabled sceneも明示的にobjectなしとして扱う。contact measurementは後続#413、task outcomeは
+#415のownerであり、scene ownerがforceやterminal判定を実装しない。
 
 production compositionは明示的に選択した`RobotRuntimePlugin`を解決し、model、joint order、
 startup keyframe、IK / FK、motion policy、qpos feasibility guardの整合を検証する。generic stub、
