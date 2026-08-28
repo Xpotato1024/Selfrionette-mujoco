@@ -81,7 +81,7 @@ class JointSpaceConversion:
     sign: float
     offset: float
     relation_id: str
-    unit: str = "rad"
+    unit: str
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_space, LimitSpace):
@@ -299,7 +299,22 @@ def project_limit_to_joint_space(
             "limit/conversion source space mismatch: "
             f"{limit.space.value} != {conversion.source_space.value}"
         )
-    target_name = conversion.joint_name if joint_name is None else _text("joint_name", joint_name)
+    if limit.name != conversion.source_name:
+        raise ValueError(
+            "limit/conversion source identity mismatch: "
+            f"{limit.name} != {conversion.source_name}"
+        )
+    if limit.unit != conversion.unit:
+        raise ValueError(
+            "limit/conversion unit mismatch: "
+            f"{limit.unit} != {conversion.unit}"
+        )
+    if joint_name is not None and _text("joint_name", joint_name) != conversion.joint_name:
+        raise ValueError(
+            "conversion target joint identity mismatch: "
+            f"{joint_name} != {conversion.joint_name}"
+        )
+    target_name = conversion.joint_name
     lower = upper = None
     if limit.lower is not None and limit.upper is not None:
         lower, upper = conversion.project_range(limit.lower, limit.upper)
@@ -348,10 +363,24 @@ def resolve_joint_space_bounds(
         raise ValueError("expected_joint_names must be unique and non-empty")
     _text("robot_id", robot_id)
     relation_map: dict[str, JointSpaceConversion] = {}
+    source_relation_map: dict[str, JointSpaceConversion] = {}
     for relation in conversion_relations:
+        if not isinstance(relation, JointSpaceConversion):
+            raise TypeError("conversion_relations must contain JointSpaceConversion values")
+        if relation.joint_name not in names:
+            raise ValueError(
+                "conversion relation target joint is not expected: "
+                f"{relation.joint_name}"
+            )
         if relation.joint_name in relation_map:
             raise ValueError(f"duplicate conversion relation for joint: {relation.joint_name}")
+        if relation.source_name in source_relation_map:
+            raise ValueError(
+                "duplicate conversion relation for source: "
+                f"{relation.source_name}"
+            )
         relation_map[relation.joint_name] = relation
+        source_relation_map[relation.source_name] = relation
     projected: list[PhysicalLimit] = []
     for limit in limits:
         if not isinstance(limit, PhysicalLimit):
@@ -359,18 +388,14 @@ def resolve_joint_space_bounds(
         if limit.quantity is not LimitQuantity.POSITION:
             continue
         if limit.space is LimitSpace.JOINT:
+            if limit.name not in names:
+                raise ValueError(
+                    "joint limit target identity is not expected: "
+                    f"{limit.name}"
+                )
             projected.append(limit)
             continue
-        relation = relation_map.get(limit.name)
-        if relation is None:
-            relation = next(
-                (
-                    candidate
-                    for candidate in relation_map.values()
-                    if candidate.source_name == limit.name
-                ),
-                None,
-            )
+        relation = source_relation_map.get(limit.name)
         if relation is None:
             projected.append(
                 make_unknown_limit(
@@ -422,7 +447,10 @@ def resolve_joint_space_bounds(
         parity: list[LimitParityRecord] = []
         source_names: list[str] = []
         for limit in candidates:
-            source_name = f"{limit.source.source_kind}:{limit.source.source_id}@{limit.source.revision}"
+            source_name = (
+                f"{limit.source.source_kind}:{limit.source.source_id}"
+                f"@{limit.source.revision}[unit={limit.unit}]"
+            )
             source_names.append(source_name)
             parity_status, reason = _status_for_limit(limit)
             parity.append(
@@ -455,6 +483,9 @@ def resolve_joint_space_bounds(
             continue
         first = known[0]
         assert first.lower is not None and first.upper is not None
+        if any(limit.unit != first.unit for limit in known[1:]):
+            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "limit units disagree"))
+            continue
         if any(abs(limit.lower - first.lower) > tolerance_rad or abs(limit.upper - first.upper) > tolerance_rad for limit in known[1:]):
             bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "limit ranges disagree"))
             continue
