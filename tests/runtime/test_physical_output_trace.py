@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from threading import Barrier
 
 import pytest
 
 from selfrionette.runtime.output import (
     PhysicalOutputRecordingSink,
     PhysicalOutputTrace,
+    PhysicalOutputTraceEvent,
     physical_output_traces_equivalent,
     replay_physical_output_trace,
 )
@@ -123,3 +127,40 @@ def test_rejected_decision_is_recorded_without_sent_or_acknowledged_claim() -> N
     assert event.reason == "physical_output_disabled"
     assert not hasattr(event, "sent")
     assert not hasattr(event, "acknowledged")
+
+
+def test_recording_sink_serializes_concurrent_sequence_assignment() -> None:
+    sink = PhysicalOutputRecordingSink()
+    permission = PhysicalOutputPermission(mode="dry_run")
+    base_request = _endpoint_request()
+    start = Barrier(16)
+
+    def record(index: int):
+        start.wait()
+        request = replace(
+            base_request,
+            session_id=f"concurrent-session-{index}",
+            sequence=0,
+        )
+        return sink.record_requested(request, permission)
+
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        recorded = list(executor.map(record, range(64)))
+
+    returned_sequences = sorted(event.event_sequence for event in recorded)
+    stored = sink.events
+    assert returned_sequences == list(range(64))
+    assert [event.event_sequence for event in stored] == list(range(64))
+    assert len(stored) == 64
+    assert PhysicalOutputTrace(events=stored).to_jsonl_bytes() == sink.to_jsonl_bytes()
+
+
+def test_permitted_trace_rejects_disabled_permission() -> None:
+    with pytest.raises(ValueError, match="non-disabled permission"):
+        PhysicalOutputTraceEvent(
+            event_sequence=0,
+            event_kind="permitted",
+            request=_endpoint_request(),
+            permission=PhysicalOutputPermission(),
+            decision_status="accepted",
+        )

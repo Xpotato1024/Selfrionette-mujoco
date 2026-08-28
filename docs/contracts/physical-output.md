@@ -75,6 +75,8 @@ requested -> accepted / rejected -> sent -> acknowledged
 `transmission_enabled`または`physical_actuation`ではexplicit operator gateを
 伴わなければならない。これはpermission decisionであり、送信実績ではない。
 `sent`と`acknowledged`は後続のtrace / transport boundaryで別eventとして記録する。
+traceの`permitted` eventも、non-disabled permissionに対する`accepted` decisionと
+explicit operator gateを要求し、disabled permissionを成功として記録しない。
 
 ## Recording / dry-run trace
 
