@@ -71,6 +71,7 @@ EXPECTED_MODULES = {
         "websocket_publisher",
     },
     "safety": {
+        "collision_policy",
         "input_safety",
         "limit_resolution",
         "physical_limits",
