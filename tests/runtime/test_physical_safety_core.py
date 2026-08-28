@@ -79,7 +79,7 @@ def _collision(status: CollisionStatus) -> CollisionCheckResult:
         status=status,
         distance_m=0.1 if status is CollisionStatus.CLEAR else 0.0,
         clearance_m=0.01,
-        reason_code=f"fixture_{status.value}",
+        reason_code="pair_clear" if status is CollisionStatus.CLEAR else f"fixture_{status.value}",
         provenance="fixture-collision",
     )
     reason_code = "collision_clear" if status is CollisionStatus.CLEAR else f"fixture_{status.value}"
@@ -239,6 +239,28 @@ def test_collision_aggregate_reason_must_match_pair_diagnostic() -> None:
             "inconsistent-collision",
             _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
             replace(collision, reason_code="wrong-clear-reason"),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "collision:collision_result_inconsistent"
+
+
+def test_malformed_clear_pair_is_invalid_at_p5_boundary() -> None:
+    malformed = object.__new__(CollisionEvaluation)
+    object.__setattr__(malformed, "pair_id", "not-a-pair")
+    object.__setattr__(malformed, "kind", CollisionKind.ENVIRONMENT_COLLISION)
+    object.__setattr__(malformed, "status", CollisionStatus.CLEAR)
+    object.__setattr__(malformed, "distance_m", None)
+    object.__setattr__(malformed, "clearance_m", 0.01)
+    object.__setattr__(malformed, "reason_code", "collision_clear")
+    object.__setattr__(malformed, "provenance", None)
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-clear",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            CollisionCheckResult(CollisionStatus.CLEAR, (malformed,), "collision_clear"),
             _dynamic(FeasibilityStatus.FEASIBLE),
         )
     )

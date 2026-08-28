@@ -10,11 +10,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 from selfrionette.runtime.safety.collision_policy import (
     CollisionCheckResult,
     CollisionEvaluation,
+    CollisionKind,
     CollisionStatus,
+    _pair_id_parts,
 )
 from selfrionette.runtime.safety.limit_resolution import (
     LimitResolutionResult,
@@ -247,12 +250,62 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
     return None
 
 
+def _collision_evaluation_inconsistency(evaluation: CollisionEvaluation) -> str | None:
+    """P3 evaluationのidentityとclear evidence semanticsを再検証する。"""
+
+    try:
+        _pair_id_parts(evaluation.pair_id)
+    except (TypeError, ValueError):
+        return "collision evaluation pair identity is not canonical"
+    if not isinstance(evaluation.kind, CollisionKind):
+        return "collision evaluation kind is invalid"
+    if not isinstance(evaluation.status, CollisionStatus):
+        return "collision evaluation status is invalid"
+    if isinstance(evaluation.clearance_m, bool) or not isinstance(evaluation.clearance_m, (int, float)):
+        return "collision evaluation clearance is invalid"
+    clearance = float(evaluation.clearance_m)
+    if not math.isfinite(clearance) or clearance < 0.0:
+        return "collision evaluation clearance is invalid"
+    if evaluation.distance_m is not None:
+        if isinstance(evaluation.distance_m, bool) or not isinstance(evaluation.distance_m, (int, float)):
+            return "collision evaluation distance is invalid"
+        if not math.isfinite(float(evaluation.distance_m)):
+            return "collision evaluation distance is invalid"
+    if not isinstance(evaluation.reason_code, str) or not evaluation.reason_code or evaluation.reason_code != evaluation.reason_code.strip():
+        return "collision evaluation reason is invalid"
+    if evaluation.provenance is not None and (
+        not isinstance(evaluation.provenance, str)
+        or not evaluation.provenance
+        or evaluation.provenance != evaluation.provenance.strip()
+    ):
+        return "collision evaluation provenance is invalid"
+
+    if evaluation.status is CollisionStatus.CLEAR:
+        if evaluation.reason_code == "explicit_structural_exclusion":
+            if evaluation.kind is not CollisionKind.STRUCTURAL_PROXIMITY:
+                return "structural exclusion clear evidence has the wrong kind"
+            if evaluation.distance_m is not None or evaluation.provenance is None:
+                return "structural exclusion clear evidence is incomplete"
+        elif evaluation.reason_code == "pair_clear":
+            if evaluation.distance_m is None or float(evaluation.distance_m) <= clearance:
+                return "pair_clear evidence is not beyond clearance"
+            if evaluation.provenance is None:
+                return "pair_clear evidence has no provenance"
+        else:
+            return "clear collision evidence has an unsupported reason"
+    return None
+
+
 def _collision_result_inconsistency(result: CollisionCheckResult) -> str | None:
     """P3 aggregate statusとpair evaluation / diagnosticの整合性を検証する。"""
 
     evaluations = result.evaluations
-    if any(not isinstance(item, CollisionEvaluation) for item in evaluations):
-        return "collision result contains an invalid pair evaluation"
+    for item in evaluations:
+        if not isinstance(item, CollisionEvaluation):
+            return "collision result contains an invalid pair evaluation"
+        evaluation_inconsistency = _collision_evaluation_inconsistency(item)
+        if evaluation_inconsistency is not None:
+            return evaluation_inconsistency
     pair_ids = tuple(item.pair_id for item in evaluations)
     if len(set(pair_ids)) != len(pair_ids):
         return "collision result contains duplicate pair identities"
