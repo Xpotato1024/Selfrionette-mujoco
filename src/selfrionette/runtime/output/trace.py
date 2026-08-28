@@ -528,8 +528,12 @@ class PhysicalOutputRecordingSink:
         self,
         event: PhysicalOutputLifecycleEvent,
     ) -> PhysicalOutputLifecycleEvent:
-        if not callable(getattr(event, "to_json_bytes", None)):
-            raise TypeError("lifecycle sink requires a serializable lifecycle event")
+        # Keep the runtime boundary typed: an arbitrary object exposing a
+        # to_json_bytes method must not enter the lifecycle evidence stream.
+        from selfrionette.runtime.output.lifecycle import PhysicalOutputLifecycleEvent
+
+        if not isinstance(event, PhysicalOutputLifecycleEvent):
+            raise TypeError("lifecycle sink requires PhysicalOutputLifecycleEvent")
         with self._lock:
             self._lifecycle_events.append(event)
         return event

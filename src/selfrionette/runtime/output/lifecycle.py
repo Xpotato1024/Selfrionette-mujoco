@@ -591,6 +591,7 @@ class PhysicalOutputLifecycle:
         self._event_sequence = 0
         self._events: list[PhysicalOutputLifecycleEvent] = []
         self._stop_deadline_s: float | None = None
+        self._stop_started_s: float | None = None
 
     @property
     @_lifecycle_locked
@@ -624,6 +625,11 @@ class PhysicalOutputLifecycle:
 
     @property
     @_lifecycle_locked
+    def stop_started_s(self) -> float | None:
+        return self._stop_started_s
+
+    @property
+    @_lifecycle_locked
     def events(self) -> tuple[PhysicalOutputLifecycleEvent, ...]:
         return tuple(self._events)
 
@@ -641,6 +647,10 @@ class PhysicalOutputLifecycle:
         timestamp_s: float | None = None,
         reason: str | None = None,
     ) -> PhysicalOutputLifecycleEvent:
+        # Normalize before constructing evidence; public transitions also do
+        # this before changing state so invalid timestamps cannot partially
+        # commit a transition.
+        timestamp_s = _lifecycle_timestamp("timestamp_s", timestamp_s)
         event = PhysicalOutputLifecycleEvent(
             event_sequence=self._event_sequence,
             event_kind=event_kind,
@@ -663,6 +673,7 @@ class PhysicalOutputLifecycle:
                 self._state = failure_state
                 self._latest_request = None
                 self._stop_deadline_s = None
+                self._stop_started_s = None
                 failure_event = PhysicalOutputLifecycleEvent(
                     event_sequence=self._event_sequence,
                     event_kind="failure",
@@ -705,6 +716,7 @@ class PhysicalOutputLifecycle:
     ) -> PhysicalOutputLifecycleResult:
         """Explicitly arm; reconnect alone never invokes this transition."""
 
+        timestamp_s = _lifecycle_timestamp("timestamp_s", timestamp_s)
         if not isinstance(permission, PhysicalOutputPermission):
             raise TypeError("lifecycle arm requires PhysicalOutputPermission")
         if permission.mode == "disabled":
@@ -775,6 +787,7 @@ class PhysicalOutputLifecycle:
         self._permission = permission
         self._latest_request = None
         self._stop_deadline_s = None
+        self._stop_started_s = None
         self._state = "armed"
         event = self._record(
             "armed",
@@ -788,6 +801,7 @@ class PhysicalOutputLifecycle:
     def reconnect(self, *, timestamp_s: float | None = None) -> PhysicalOutputLifecycleEvent:
         """Record reconnect only; it never changes state or accepts output."""
 
+        timestamp_s = _lifecycle_timestamp("timestamp_s", timestamp_s)
         return self._record(
             "reconnect",
             state_before=self._state,
@@ -806,6 +820,7 @@ class PhysicalOutputLifecycle:
     ) -> PhysicalOutputLifecycleResult:
         """Accept only fresh, increasing requests in armed/active state."""
 
+        now_s = _lifecycle_timestamp("now_s", now_s)
         if not isinstance(request, PhysicalOutputRequest):
             raise TypeError("lifecycle submit requires PhysicalOutputRequest")
         if request.session_id != self._session_id:
@@ -906,6 +921,7 @@ class PhysicalOutputLifecycle:
         *,
         timestamp_s: float | None,
     ) -> PhysicalOutputLifecycleResult:
+        timestamp_s = _lifecycle_timestamp("timestamp_s", timestamp_s)
         reason = _lifecycle_identifier("reason", reason)
         before = self._state
         if self._state in {"active", "armed"}:
@@ -989,6 +1005,7 @@ class PhysicalOutputLifecycle:
             self._state = "failed"
             self._latest_request = None
             self._stop_deadline_s = None
+            self._stop_started_s = None
             event = self._record(
                 "failure",
                 state_before=before,
@@ -1001,6 +1018,7 @@ class PhysicalOutputLifecycle:
         self._state = "stopping"
         self._latest_request = None
         self._stop_deadline_s = deadline
+        self._stop_started_s = now
         event = self._record(
             event_kind,
             state_before=before,
@@ -1028,10 +1046,15 @@ class PhysicalOutputLifecycle:
             return self._result(True, event=event)
         if self._state != "stopping":
             return self._result(False, "stop_not_pending")
+        if self._stop_started_s is None:
+            return self._result(False, "stop_start_timestamp_missing")
+        if now < self._stop_started_s:
+            return self._result(False, "stop_completion_before_start")
         if self._stop_deadline_s is not None and now > self._stop_deadline_s:
             before = self._state
             self._state = "failed"
             self._stop_deadline_s = None
+            self._stop_started_s = None
             event = self._record(
                 "stop_deadline_exceeded",
                 state_before=before,
@@ -1044,6 +1067,7 @@ class PhysicalOutputLifecycle:
         self._state = "stopped"
         self._latest_request = None
         self._stop_deadline_s = None
+        self._stop_started_s = None
         event = self._record(
             "stop_completed",
             state_before=before,
@@ -1077,10 +1101,12 @@ class PhysicalOutputLifecycle:
         *,
         timestamp_s: float | None = None,
     ) -> PhysicalOutputLifecycleResult:
+        timestamp_s = _lifecycle_timestamp("timestamp_s", timestamp_s)
         reason = _lifecycle_identifier("reason", reason)
         before = self._state
         if self._state in {"failed", "aborted"}:
             self._stop_deadline_s = None
+            self._stop_started_s = None
             event = self._record(
                 "cleanup_failure",
                 state_before=before,
@@ -1092,6 +1118,7 @@ class PhysicalOutputLifecycle:
         self._state = "failed"
         self._latest_request = None
         self._stop_deadline_s = None
+        self._stop_started_s = None
         event = self._record(
             "cleanup_failure",
             state_before=before,
@@ -1164,10 +1191,12 @@ class PhysicalOutputLifecycle:
         reason: str,
         timestamp_s: float | None,
     ) -> PhysicalOutputLifecycleResult:
+        timestamp_s = _lifecycle_timestamp("timestamp_s", timestamp_s)
         reason = _lifecycle_identifier("reason", reason)
         before = self._state
         if self._state in {"failed", "aborted"}:
             self._stop_deadline_s = None
+            self._stop_started_s = None
             event = self._record(
                 event_kind,
                 state_before=before,
@@ -1179,6 +1208,7 @@ class PhysicalOutputLifecycle:
         self._state = terminal_state
         self._latest_request = None
         self._stop_deadline_s = None
+        self._stop_started_s = None
         event = self._record(
             event_kind,
             state_before=before,
