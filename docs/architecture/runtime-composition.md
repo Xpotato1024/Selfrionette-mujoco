@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-30
+last_verified: 2026-08-28
 canonical_for:
   - runtime composition root
 related:
@@ -25,7 +25,7 @@ related:
 | `execution/` | route-bound `ControlMappedRuntimePipeline`、input step loop、typed command / input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
-| `contact/` | versioned contact manifest、backend-owned MuJoCo scene composition / reset、MuJoCo measured contact evidence |
+| `contact/` | versioned contact manifest、backend-owned MuJoCo scene composition / reset、MuJoCo measured contact evidence、Task contractの共有型 |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
 | `runners/` | operational dry-run / smoke / publisherとexperimentのthin entry point |
@@ -50,8 +50,10 @@ model settings、trial reset、初期contact readinessを所有する。scene co
 `mjData.contact`と公式`mj_contactForce`からpoint、frame、normal、distance / penetration、force / wrenchを
 測定し、target-object、self、environmentの分類とdeterministic aggregationを所有する。contact evidenceの
 failure stateは`no_contact`、`measurement_unavailable`、`invalid_contact`、`solver_invalid`を分離し、
-task outcomeは#415のownerである。scene ownerがforce filter、reaction-force、terminal判定を実装せず、
-viewerはcontactを再計算しない。
+task outcomeのlifecycleは`plugins/tasks/contact_press_hold_task/`、canonical outcome / terminal shapeの
+共有型は`task_contract.py`がownerである。scene ownerがforce filter、reaction-force、terminal判定を実装せず、
+viewerはcontactを再計算しない。#415のfixture runnerはraw measured evidenceのreplayだけを扱い、MuJoCoの
+physical sceneやRobot commandを二重に所有しない。
 
 production compositionは明示的に選択した`RobotRuntimePlugin`を解決し、model、joint order、
 startup keyframe、IK / FK、motion policy、qpos feasibility guardの整合を検証する。generic stub、

@@ -18,7 +18,10 @@ Task axisはgeneric experiment composition上の目的と条件を表す。
 ## lifecycleとside effect
 
 `endpoint_reach_task/v1`はendpoint reachのstateとclosed terminal classificationを所有する。
-runner execution、target parameter、metric導出、artifact出力は所有せず、external side effectはない。
+generic runner execution、target parameter、metric導出、artifact出力は所有せず、external side effectはない。
+`contact_press_hold_task/v1`は#413 raw MuJoCo contact evidenceからpress / hold lifecycleとclosed
+contact outcomeを導出する。#414のfiltered / clamped reaction-force、viewer contact calculation、
+Robot command、hardware outputはTask ownershipの外である。
 
 ## catalog / discovery / registration
 
@@ -39,6 +42,7 @@ concrete ID / importを追加しない。
 ## current concrete plugins
 
 - [`endpoint_reach_task/v1`](endpoint_reach_task/README.md): endpoint pose / initial stateと`robot.tool_endpoint`を要求し、terminal classificationとmeasured trajectory evidenceを宣言するR7-G task
+- [`contact_press_hold_task/v1`](contact_press_hold_task/README.md): #413 raw measured contact evidenceからtarget band、dwell、contact loss、retry、closed outcomeを所有するR7-H task
 
 ## canonical document
 
