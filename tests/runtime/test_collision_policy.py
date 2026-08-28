@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from selfrionette.runtime.safety.collision_policy import (
+    build_mujoco_geometry_inventory,
     CollisionExclusion,
     CollisionKind,
     CollisionObservation,
@@ -162,6 +165,29 @@ def test_unknown_geometry_role_fails_closed() -> None:
 
     assert result.status is CollisionStatus.INVALID
     assert result.reason_code == "unknown_geometry_role"
+
+
+def test_overlapping_body_roles_fail_closed() -> None:
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("upper", "shared_body", GeometryRole.ROBOT),
+            GeometryIdentity("shield", "shared_body", GeometryRole.ENVIRONMENT),
+        )
+    )
+
+    result = evaluate_collision_configuration(inventory, (), _policy())
+
+    assert result.status is CollisionStatus.INVALID
+    assert result.reason_code == "body_role_overlap"
+
+
+def test_geometry_inventory_builder_rejects_overlapping_body_role_sets() -> None:
+    with pytest.raises(ValueError, match="body role sets must be disjoint"):
+        build_mujoco_geometry_inventory(
+            object(),
+            robot_body_names=("arm",),
+            environment_body_names=("arm",),
+        )
 
 
 def test_task_object_contact_is_not_self_interference() -> None:

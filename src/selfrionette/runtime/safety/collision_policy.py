@@ -285,6 +285,11 @@ def _validate_inventory(inventory: GeometryInventory) -> str | None:
     names = inventory.by_name()
     if any(geom.role is GeometryRole.UNKNOWN for geom in names.values()):
         return "unknown_geometry_role"
+    roles_by_body: dict[str, set[GeometryRole]] = {}
+    for geometry in names.values():
+        roles_by_body.setdefault(geometry.body_name, set()).add(geometry.role)
+    if any(len(roles) > 1 for roles in roles_by_body.values()):
+        return "body_role_overlap"
     if not any(geom.role in {GeometryRole.ROBOT, GeometryRole.TOOL} for geom in names.values()):
         return "robot_geometry_missing"
     return None
@@ -415,6 +420,13 @@ def build_mujoco_geometry_inventory(
     tool = set(tool_body_names)
     if not robot:
         raise ValueError("robot_body_names must not be empty")
+    role_sets = (robot, environment, task, tool)
+    if any(
+        left.intersection(right)
+        for index, left in enumerate(role_sets)
+        for right in role_sets[index + 1 :]
+    ):
+        raise ValueError("body role sets must be disjoint")
     try:
         import mujoco
 
