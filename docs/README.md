@@ -58,6 +58,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | experiment motion log v1 | `docs/contracts/experiment-motion-log-v1.md` | versioned experiment record contract |
 | fast_arm joint-limit configuration | `docs/contracts/fast-arm-joint-limit-config.md` | TOML SoTとqpos feasibility guard |
 | physical safety envelope / limit evidence | `docs/contracts/physical-safety-envelope.md` | physical source provenanceとtyped bounded limit |
+| physical limit resolution / parity | `docs/contracts/physical-limit-resolution.md` | joint / motor / actuator projectionとread-only parity |
 | world/tool control-frame評価 | `docs/evaluation/world-tool-frame-comparison-design.md` | limited exploratory pilot design |
 | Git / PR workflow | `docs/operations/git-pr-workflow.md` | branch、diff、PR、head一致のgate |
 | Codex workflow | `docs/operations/codex-workflow.md` | repository-local ruleとtask-specific deltaの適用 |
