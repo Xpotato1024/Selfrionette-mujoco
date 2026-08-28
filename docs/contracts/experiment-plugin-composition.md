@@ -200,6 +200,9 @@ R7-H #413の`runtime/contact/evidence.py`は、`ContactSceneInstance`の同じMu
 Evaluationへcontact force抽出を複製しない。`ContactEvidenceProvider`を選択するRobot Bundleは
 optionalなcapability / evidence declarationを公開できるが、target filtering、frame変換、
 sign convention、deterministic aggregationのsecond implementationを持たない。
+extractorはsceneの`ContactTaskManifest`からcanonical bytesを再計算し、sceneが保持するdigestと一致する場合
+だけ有効なmeasurementを返す。manifest不在、digest mismatch、または公開`ContactRecord` / `ContactEvidence`
+constructorのframe・force・status・aggregate整合性違反は、推測やzero fallbackをせずinvalidとして扱う。
 未提供または利用不能なcapability / evidenceはzeroまたは成功へfallbackせず、canonical evidenceの
 unavailable / invalid semanticsへ残す。
 

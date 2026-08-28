@@ -87,6 +87,14 @@ normal forceとする。`mj_contactForce`のgeom2 forceを基準にし、target 
 point、distance、normal順に安定ソートしてから`math.fsum`で集約し、world-originのwrenchも
 同じ順序で合算する。
 
+`ContactRecord`の公開constructorは、contact frameの3行が有限な正規直交基底であり、第一行が
+`normal_world`と一致することを検証する。local force / torqueとworld force / torqueの両方がある場合は、
+そのframe変換結果が一致しなければならない。target recordでは`object_on_tool`と`tool_on_object`の
+反対符号、normal / tangential / resultantの分解も再計算して検証し、未測定・solver invalidのrecordは
+force fieldを保持できない。`ContactEvidence`はtarget recordのstatus、count、normal / tangential /
+resultant、force、wrenchをaggregateと照合するため、countだけを変更したartifactや不整合なaggregateを
+`measured`として受け付けない。
+
 Evidence statusは次を区別する。
 
 - `no_contact`: target-object contactが存在しないvalid measured state。target force aggregateは
@@ -102,6 +110,9 @@ Evidence statusは次を区別する。
 measurementへ入り、self-contact、environment contact、別objectは分類済みraw recordとして保持する。
 evidenceにはscene / object identity、manifest digest、sample time、simulation time、frame indexを
 含め、canonical JSON bytesをdeterministicに生成できる。
+extractorは正規表現でdigestの形だけを確認せず、必ず`ContactTaskManifest`を受け取り、
+`encode_contact_manifest()`から再計算したdigestと一致することを検証する。manifestがない、または
+sceneから受け取ったdigestとcanonical bytesが一致しない場合、validなcontact evidenceを生成しない。
 
 ## canonical serialization
 
