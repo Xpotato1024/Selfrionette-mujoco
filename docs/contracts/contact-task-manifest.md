@@ -133,7 +133,14 @@ Task-owned `contact_press_hold_terminal/v1`はclassification、phase、terminal 
 completion time、manifest / trial identityを保持する。`contact_press_hold_outcome/v1`はfirst-contact time、
 peak normal force、penetration overshoot、steady-state error、force variability、tangential force / slip
 proxy、final tip / object pose、contact-location drift、normal alignment、loss / recontact countを保持する。
+outcome artifactには、manifestから解決したpenetration bandと、bind済みのdwell / timeout、normal-force band、alignment / drift gate、
+pose-measurement requirementも保存する。これらのtask条件はcanonical outcome bytesへ含まれるため、同じmanifest digestとtrial identityを
+持つartifactと対応manifestから判定条件を再構成でき、別条件のsummaryを同じoutcome identityへ混在させない。
 未観測値はnullのままとし、failed trialへcompletion time、force、zero、successを補完しない。
+Taskはtechnical-invalidへ遷移する入力もraw observationとしてstate / replay順序へ追加する。各trial内の
+`sample_time_s`と`simulation_time_s`はstrictly increasingでなければならず、後退または同値のstale入力は
+technical-invalidとする。`measured` top-levelのrecord status、aggregate count、force、wrenchが不整合になった場合も
+同じくsuccessへ進めない。
 
 `ContactTaskRunner`は同じmanifestと事前取得済みraw observation logを再生するsoftware-only fixtureであり、
 MuJoCoを二重にstepせず、Robot outputも行わない。retryはtechnical-invalidだけを事前に宣言した上限内で

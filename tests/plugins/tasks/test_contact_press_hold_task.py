@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from selfrionette.plugins.evaluations.contact_outcome import CONTACT_OUTCOME_PLUGIN
@@ -190,11 +192,11 @@ def _contact(
                 object_on_tool_force_world_n=(normal_force_n, 0.0, 0.0),
                 tool_on_object_force_world_n=(-normal_force_n, 0.0, 0.0),
                 object_on_tool_wrench_world_nm=(
+                    normal_force_n,
+                    0.0,
+                    0.0,
+                    0.0,
                     normal_force_n * 0.2,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
                     0.0,
                 ),
             ),
@@ -251,6 +253,10 @@ def test_measured_contact_band_and_dwell_produce_success_outcome() -> None:
     assert outcome.value["completion_time_s"] == pytest.approx(0.4)  # type: ignore[index]
     assert outcome.value["first_contact_time_s"] == pytest.approx(0.2)  # type: ignore[index]
     assert outcome.value["peak_normal_force_n"] == pytest.approx(2.0)  # type: ignore[index]
+    assert outcome.value["dwell_interval_s"] == pytest.approx(context.dwell_interval_s)  # type: ignore[index]
+    assert outcome.value["timeout_s"] == pytest.approx(context.timeout_s)  # type: ignore[index]
+    assert outcome.value["target_penetration_band_m"] == [0.0, 0.002]  # type: ignore[index]
+    assert outcome.value["require_pose_measurement"] is False  # type: ignore[index]
     assert terminal.evidence.require(CONTACT_TASK_TERMINAL_EVIDENCE).status is EvidenceStatus.MEASURED
 
     metric = CONTACT_OUTCOME_PLUGIN.derive_metric(terminal.evidence, {})
@@ -307,6 +313,111 @@ def test_declared_approach_gate_rejects_missing_tip_measurement() -> None:
 
 
 @pytest.mark.parametrize(
+    (
+        "first_sample_time_s",
+        "first_simulation_time_s",
+        "sample_time_s",
+        "simulation_time_s",
+        "reason_fragment",
+    ),
+    (
+        (0.0, 0.0, 0.0, 0.2, "sample_time_s is stale"),
+        (0.2, 0.2, 0.3, 0.1, "simulation_time_s moved backwards"),
+    ),
+)
+def test_nonmonotonic_or_stale_measured_time_is_invalid_and_replayable(
+    first_sample_time_s: float,
+    first_simulation_time_s: float,
+    sample_time_s: float,
+    simulation_time_s: float,
+    reason_fragment: str,
+) -> None:
+    context = _context()
+    manifest = context.manifest
+    binding = CONTACT_PRESS_HOLD_TASK_PLUGIN.bind_context(context, {})
+    first = _no_contact(manifest, 0.0)
+    first = replace(
+        first,
+        contact_evidence=replace(
+            first.contact_evidence,
+            sample_time_s=first_sample_time_s,
+            simulation_time_s=first_simulation_time_s,
+        ),
+    )
+    state = binding.advance(binding.initial_state(), first).state
+    second = _no_contact(manifest, 0.2)
+    second = replace(
+        second,
+        contact_evidence=replace(
+            second.contact_evidence,
+            sample_time_s=sample_time_s,
+            simulation_time_s=simulation_time_s,
+        ),
+    )
+    terminal = binding.advance(state, second)
+
+    assert terminal.classification is TaskTerminalClassification.TECHNICAL_INVALID
+    assert reason_fragment in (terminal.state.terminal_reason or "")
+    assert terminal.state.observations == (first, second)
+    outcome = terminal.evidence.require(CONTACT_TASK_OUTCOME_EVIDENCE)
+    assert outcome.status is EvidenceStatus.INVALID
+
+
+def test_measured_aggregate_mismatch_is_rejected_before_task_success() -> None:
+    context = _context()
+    manifest = context.manifest
+    observation = _contact(manifest, 0.0)
+    evidence = observation.contact_evidence
+    assert evidence.aggregate is not None
+    # ContactEvidence constructorのguardとは独立して、task boundaryを検証する。
+    # hostile callerが構築後のobjectを変更してもsuccessへ進めないことを確認する。
+    object.__setattr__(
+        evidence,
+        "aggregate",
+        replace(evidence.aggregate, contact_count=2),
+    )
+    binding = CONTACT_PRESS_HOLD_TASK_PLUGIN.bind_context(context, {})
+    terminal = binding.advance(binding.initial_state(), observation)
+
+    assert terminal.classification is TaskTerminalClassification.TECHNICAL_INVALID
+    assert terminal.state.observations == (observation,)
+    assert "aggregate" in (terminal.state.terminal_reason or "")
+
+
+def test_measured_aggregate_value_mismatch_is_rejected_before_task_success() -> None:
+    context = _context()
+    manifest = context.manifest
+    observation = _contact(manifest, 0.0)
+    evidence = observation.contact_evidence
+    assert evidence.aggregate is not None
+    object.__setattr__(
+        evidence,
+        "aggregate",
+        replace(evidence.aggregate, normal_force_n=999.0),
+    )
+    binding = CONTACT_PRESS_HOLD_TASK_PLUGIN.bind_context(context, {})
+    terminal = binding.advance(binding.initial_state(), observation)
+
+    assert terminal.classification is TaskTerminalClassification.TECHNICAL_INVALID
+    assert terminal.state.observations == (observation,)
+    assert "failed validation" in (terminal.state.terminal_reason or "")
+
+
+def test_measured_target_force_status_mismatch_is_rejected_before_task_success() -> None:
+    context = _context()
+    manifest = context.manifest
+    observation = _contact(manifest, 0.0)
+    record = observation.contact_evidence.contacts[0]
+    object.__setattr__(record, "force_status", ContactEvidenceStatus.INVALID_CONTACT)
+    binding = CONTACT_PRESS_HOLD_TASK_PLUGIN.bind_context(context, {})
+    terminal = binding.advance(binding.initial_state(), observation)
+
+    assert terminal.classification is TaskTerminalClassification.TECHNICAL_INVALID
+    assert terminal.state.observations == (observation,)
+    assert "failed validation" in (terminal.state.terminal_reason or "")
+
+
+@pytest.mark.parametrize(
     "status",
     (
         ContactEvidenceStatus.MEASUREMENT_UNAVAILABLE,
@@ -336,6 +447,7 @@ def test_invalid_or_unavailable_contact_is_technical_invalid(status: ContactEvid
     terminal = binding.advance(binding.initial_state(), observation)
 
     assert terminal.classification is TaskTerminalClassification.TECHNICAL_INVALID
+    assert terminal.state.observations == (observation,)
     assert terminal.evidence.require(CONTACT_TASK_OUTCOME_EVIDENCE).status is EvidenceStatus.INVALID
     metric = CONTACT_OUTCOME_PLUGIN.derive_metric(terminal.evidence, {})
     assert metric.value is None

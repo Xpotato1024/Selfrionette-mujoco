@@ -380,6 +380,11 @@ unavailable、solver invalid、reset failure、identity drift、非単調時刻�
 `contact_press_hold_outcome/v1`はfirst-contact time、peak normal force、penetration overshoot、
 steady-state error、force variability、tangential force / slip proxy、final tip / object pose、
 contact-location drift、normal alignment、loss / recontact countをcanonical artifactとして保持する。
+さらにmanifest-bound penetration bandと、Task contextへbindしたdwell / timeout、normal-force band、
+alignment / drift gate、pose-measurement requirementをartifactへ含めるため、outcome条件をcanonical bytesから
+再構成できる。Taskはtechnical-invalidへ遷移する入力もraw observationとしてstate / replay順序へ保持し、
+`sample_time_s`または`simulation_time_s`の後退・同値をstaleとしてsuccessへ進めない。`measured` top-levelの
+record status、aggregate count、force、wrench不整合もtechnical-invalid境界である。
 failed trialのcompletion timeや未観測forceはnullのままとし、zeroやsuccessへ変換しない。Task-owned
 evidenceは`ContactOutcome` Evaluation Pluginがstrict decodeし、terminal / outcome identity、trial、
 manifest digest、classification、phase、completion timeの一致を検証してmetric resultへ投影する。

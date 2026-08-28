@@ -17,6 +17,7 @@ from selfrionette.runtime.composition.robot_bundle import (
     ROBOT_TOOL_ENDPOINT_ROLE,
 )
 from selfrionette.runtime.contact.evidence import (
+    ContactEvidence,
     ContactEvidenceStatus,
     ContactRecord,
 )
@@ -214,6 +215,70 @@ def _last_value(
     return None
 
 
+def _temporal_reason(
+    state: "ContactTaskState",
+    observation: ContactTaskObservation,
+) -> str | None:
+    """Reject non-monotonic or stale measured clocks at the task boundary."""
+
+    if not state.observations:
+        return None
+    previous = state.observations[-1]
+    if observation.elapsed_time_s < previous.elapsed_time_s:
+        return "contact observation elapsed time moved backwards"
+    for name in ("sample_time_s", "simulation_time_s"):
+        current = getattr(observation.contact_evidence, name)
+        prior = getattr(previous.contact_evidence, name)
+        if current < prior:
+            return f"contact evidence {name} moved backwards"
+        if current == prior:
+            return f"contact evidence {name} is stale"
+    return None
+
+
+def _measured_evidence_reason(
+    evidence: object,
+) -> str | None:
+    """Recheck measured evidence invariants before any task success path."""
+
+    if not isinstance(evidence, ContactEvidence):
+        return "contact task requires typed contact evidence"
+    if evidence.status is not ContactEvidenceStatus.MEASURED:
+        return None
+    # ContactEvidenceはfrozenだが、構築後にfieldを変更したobjectをcallerが渡すことはできる。
+    # ここでpublic contractを再構築し、容易に検出できるcount mismatchだけでなく、
+    # aggregate / recordの全不整合をsuccess gateでfail-closedにする。
+    try:
+        validated_contacts = tuple(replace(record) for record in evidence.contacts)
+        ContactEvidence(
+            status=evidence.status,
+            scene_identity=evidence.scene_identity,
+            object_identity=evidence.object_identity,
+            manifest_digest=evidence.manifest_digest,
+            sample_time_s=evidence.sample_time_s,
+            simulation_time_s=evidence.simulation_time_s,
+            contacts=validated_contacts,
+            aggregate=evidence.aggregate,
+            reason=evidence.reason,
+            frame_index=evidence.frame_index,
+        )
+    except (TypeError, ValueError, OverflowError) as exc:
+        return f"measured contact evidence failed validation: {exc}"
+    target = evidence.target_contacts
+    if not target:
+        return "measured contact evidence has no target record"
+    if evidence.aggregate is None:
+        return "measured contact evidence has no aggregate"
+    if any(
+        record.force_status is not ContactEvidenceStatus.MEASURED
+        for record in target
+    ):
+        return "measured target contact contains unavailable or invalid force"
+    if evidence.aggregate.contact_count != len(target):
+        return "measured contact aggregate count does not match target records"
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class ContactTaskState:
     """Immutable Task-owned state; every raw observation remains replayable."""
@@ -232,11 +297,6 @@ class ContactTaskState:
         observations = tuple(self.observations)
         if any(not isinstance(item, ContactTaskObservation) for item in observations):
             raise TypeError("contact task state observations must be typed")
-        if any(
-            observations[index].elapsed_time_s > observations[index + 1].elapsed_time_s
-            for index in range(len(observations) - 1)
-        ):
-            raise ValueError("contact task state observations must be time ordered")
         if not isinstance(self.phase, ContactTaskPhase):
             raise TypeError("contact task state phase must be typed")
         if not isinstance(self.classification, TaskTerminalClassification):
@@ -300,6 +360,14 @@ def _outcome(
     return ContactTaskOutcome(
         manifest_digest=context.manifest_digest,
         trial=context.trial,
+        dwell_interval_s=context.dwell_interval_s,
+        timeout_s=context.timeout_s,
+        target_penetration_band_m=context.target_penetration_band_m,
+        target_normal_force_band_n=context.target_normal_force_band_n,
+        approach_alignment_min_cosine=context.approach_alignment_min_cosine,
+        normal_alignment_min_cosine=context.normal_alignment_min_cosine,
+        max_contact_location_drift_m=context.max_contact_location_drift_m,
+        require_pose_measurement=context.require_pose_measurement,
         phase=state.phase,
         classification=state.classification,
         reason=state.terminal_reason,
@@ -397,9 +465,14 @@ class ContactTaskBinding(TaskExecutionBinding):
         *,
         elapsed_time_s: float,
         reason: str,
+        observation: ContactTaskObservation | None = None,
     ) -> TaskTransition:
+        observations = state.observations
+        if observation is not None:
+            observations = observations + (observation,)
         next_state = replace(
             state,
+            observations=observations,
             phase=ContactTaskPhase.TECHNICAL_INVALID,
             classification=TaskTerminalClassification.TECHNICAL_INVALID,
             terminal_reason=reason,
@@ -469,18 +542,33 @@ class ContactTaskBinding(TaskExecutionBinding):
         elapsed = observation.elapsed_time_s
         identity_reason = self._validate_evidence_identity(observation)
         if identity_reason is not None:
-            return self._invalid(state, elapsed_time_s=elapsed, reason=identity_reason)
+            return self._invalid(
+                state,
+                elapsed_time_s=elapsed,
+                reason=identity_reason,
+                observation=observation,
+            )
         if state.observations and elapsed < state.observations[-1].elapsed_time_s:
             return self._invalid(
                 state,
                 elapsed_time_s=elapsed,
-                reason="contact observation time moved backwards",
+                reason="contact observation elapsed time moved backwards",
+                observation=observation,
             )
         if not state.observations and elapsed != 0.0:
             return self._invalid(
                 state,
                 elapsed_time_s=elapsed,
                 reason="first contact observation must start at elapsed_time_s=0",
+                observation=observation,
+            )
+        temporal_reason = _temporal_reason(state, observation)
+        if temporal_reason is not None:
+            return self._invalid(
+                state,
+                elapsed_time_s=elapsed,
+                reason=temporal_reason,
+                observation=observation,
             )
         if observation.operator_status in {
             ContactOperatorStatus.RESET_FAILURE,
@@ -490,6 +578,7 @@ class ContactTaskBinding(TaskExecutionBinding):
                 state,
                 elapsed_time_s=elapsed,
                 reason=observation.reason or "operator reported a technical-invalid trial",
+                observation=observation,
             )
         evidence_status = observation.contact_evidence.status
         if evidence_status in {
@@ -503,6 +592,15 @@ class ContactTaskBinding(TaskExecutionBinding):
                 reason=observation.reason
                 or observation.contact_evidence.reason
                 or "contact measurement is unavailable or invalid",
+                observation=observation,
+            )
+        measured_reason = _measured_evidence_reason(observation.contact_evidence)
+        if measured_reason is not None:
+            return self._invalid(
+                state,
+                elapsed_time_s=elapsed,
+                reason=measured_reason,
+                observation=observation,
             )
         if self.context.require_pose_measurement and any(
             value is None
@@ -516,6 +614,7 @@ class ContactTaskBinding(TaskExecutionBinding):
                 state,
                 elapsed_time_s=elapsed,
                 reason="required final pose measurement is unavailable",
+                observation=observation,
             )
         if self.context.approach_alignment_min_cosine is not None:
             previous_tip = (
@@ -530,6 +629,7 @@ class ContactTaskBinding(TaskExecutionBinding):
                     state,
                     elapsed_time_s=elapsed,
                     reason="approach alignment gate requires measured tip positions",
+                    observation=observation,
                 )
         if (
             observation.has_target_contact
@@ -540,6 +640,7 @@ class ContactTaskBinding(TaskExecutionBinding):
                 state,
                 elapsed_time_s=elapsed,
                 reason="normal alignment gate requires measured object orientation",
+                observation=observation,
             )
 
         observations = state.observations + (observation,)
@@ -612,7 +713,12 @@ class ContactTaskBinding(TaskExecutionBinding):
                 state.observations,
             )
             if band_reason is not None:
-                return self._invalid(state, elapsed_time_s=elapsed, reason=band_reason)
+                return self._invalid(
+                    state,
+                    elapsed_time_s=elapsed,
+                    reason=band_reason,
+                    observation=observation,
+                )
         dwell_started = state.dwell_started_at_s
         if current_contact and within_band and dwell_started is None:
             dwell_started = elapsed

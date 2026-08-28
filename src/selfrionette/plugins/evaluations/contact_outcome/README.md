@@ -12,7 +12,8 @@ canonical declaration: [`EVALUATION_PLUGIN`](plugin.py)
 
 inputは`contact_press_hold_task/v1`が生成したprovenance付きcanonical evidence、outputは
 `MetricResult`の`contact_task_outcome` artifactである。terminal / outcome identity、trial、manifest
-digest、classification、phase、completion timeの一致を検証する。
+digest、classification、phase、completion timeの一致を検証する。outcome artifact内のdwell / timeout、
+target band、force / alignment / drift gate、pose requirementはTask contextの再構成用にstrict decodeされる。
 
 ## failure semantics
 
