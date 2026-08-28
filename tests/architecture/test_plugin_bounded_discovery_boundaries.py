@@ -203,9 +203,10 @@ def test_mapping_implementation_is_package_owned_without_cross_plugin_imports() 
 def test_environment_task_evaluation_use_axis_local_bounded_infrastructure() -> None:
     expected = {
         "environments": ("contact_cube_environment", "free_space_environment"),
-        "tasks": ("endpoint_reach_task",),
+        "tasks": ("contact_press_hold_task", "endpoint_reach_task"),
         "evaluations": (
             "completion_time",
+            "contact_outcome",
             "final_endpoint_error",
             "off_axis_drift",
             "success_within_timeout",

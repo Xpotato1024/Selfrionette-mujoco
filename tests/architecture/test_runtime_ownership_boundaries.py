@@ -28,6 +28,7 @@ EXPECTED_MODULES = {
         "evidence",
         "manifest",
         "scene",
+        "task_contract",
     },
     "control": {
         "desired_endpoint_resolver",

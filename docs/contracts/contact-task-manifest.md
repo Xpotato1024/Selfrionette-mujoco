@@ -114,6 +114,33 @@ extractorは正規表現でdigestの形だけを確認せず、必ず`ContactTas
 `encode_contact_manifest()`から再計算したdigestと一致することを検証する。manifestがない、または
 sceneから受け取ったdigestとcanonical bytesが一致しない場合、validなcontact evidenceを生成しない。
 
+## #415 task outcome contract
+
+`contact_press_hold_task/v1`は、このmanifestを参照する上位`ContactTaskContext`へ明示されたdwell / timeout、
+任意のnormal-force band、alignment / drift gate、trial / repetition / attempt identityを一度だけbindする。
+Taskは#413のraw `ContactEvidence`をmanifest digest、scene identity、object identityと照合し、別のforce
+filter、clamp、reaction-force推定、viewer計算を入力として受け付けない。
+
+Task phaseは`ready`、`approach`、`first_contact`、`press`、`hold`、`success`、`failure`、
+`technical_invalid`をversionedに区別する。target contactのpenetration band、任意のnormal-force / normal
+alignment / contact-location drift gate、連続hold dwell、timeoutを満たしたときだけsuccessとなる。
+`no_contact`は測定済みの不在であり、measurement unavailable、invalid contact、solver invalid、reset
+failure、identity drift、非単調時刻はtechnical-invalidである。held / rejected / stale / operator timeoutは
+operator-caused failureであり、technical-invalid retryへ自動変換しない。contact lossはhold dwellをresetし、
+再接触と併せてcounterへ保持する。
+
+Task-owned `contact_press_hold_terminal/v1`はclassification、phase、terminal time、success時だけの
+completion time、manifest / trial identityを保持する。`contact_press_hold_outcome/v1`はfirst-contact time、
+peak normal force、penetration overshoot、steady-state error、force variability、tangential force / slip
+proxy、final tip / object pose、contact-location drift、normal alignment、loss / recontact countを保持する。
+未観測値はnullのままとし、failed trialへcompletion time、force、zero、successを補完しない。
+
+`ContactTaskRunner`は同じmanifestと事前取得済みraw observation logを再生するsoftware-only fixtureであり、
+MuJoCoを二重にstepせず、Robot outputも行わない。retryはtechnical-invalidだけを事前に宣言した上限内で
+許可し、元trialとretry attemptを`trial_id` / `retry_of_trial_id`で保持する。Task outcomeとsummaryは
+canonical bytesから決定的に再生成できる。このfixture validationはformal experiment observationやhardware
+evidenceではない。
+
 ## canonical serialization
 
 `encode_contact_manifest()`はUTF-8、`ensure_ascii=False`、`allow_nan=False`、sorted keys、compact

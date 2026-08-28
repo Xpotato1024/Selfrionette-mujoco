@@ -23,6 +23,9 @@ measured terminal / trajectoryはcross-axis contractで固定したTask producer
 trial aggregation、JSON / CSV artifact、condition summary、viewer計算、external side effectは所有しない。
 validated v1 logのidentity照合、Task evidence reconstruction、artifact serializationはruntimeの
 `evaluation/artifact.py`へ委譲する。
+`contact_outcome/v1`は`contact_press_hold_task/v1`のTask-owned terminal / outcome evidenceだけを
+strict decodeする。#414のfiltered / clamped reaction-force、viewer診断、Task lifecycle、trial aggregationを
+参照または所有しない。
 
 ## catalog / discovery / registration
 
@@ -47,6 +50,7 @@ invalid evidenceを数値0またはsuccessへ変換しない。
 - [`off_axis_drift/v1`](off_axis_drift/README.md): initial-target axisからの最大world-frame drift（meter）
 - [`completion_time/v1`](completion_time/README.md): success時だけ利用可能なdescriptive duration（second）
 - [`final_endpoint_error/v1`](final_endpoint_error/README.md): measured final endpointとtarget間のdescriptive world-frame error（meter）
+- [`contact_outcome/v1`](contact_outcome/README.md): Task-owned contact press/hold outcome artifactのstrict deterministic projection
 
 ## canonical document
 
