@@ -233,7 +233,7 @@ universal fallbackではなく、free-space条件を選択した場合だけ解�
 `contact_cube_environment/v1`はR7-Hのtyped `ContactSceneBuildRequest`を受け取り、
 `ContactSceneComposer`へ委譲してRobot-owned base MJCFへcube body / freejoint / geom / materialを
 追加する。scene providerがMuJoCo model/dataをloadし、同じinstanceのresetでmanifestのqpos、qvel、
-actuator、object pose、simulation time、warm-startを再適用する。base model name衝突、identity / role /
+`ctrl`（`data.ctrl`）、`act`（`data.act`）、object pose、simulation time、warm-startを再適用する。base model name衝突、identity / role /
 capability mismatch、reset dimension mismatch、未知のMuJoCo setting、初期object contact / penetrationは
 startup successへ変換しない。viewerはphysical objectを生成せず、contact evidenceやtask outcomeは後続の
 typed provider / Task ownerへ残す。disabled contact sceneはobjectを構成せず、contact evidenceを暗黙に

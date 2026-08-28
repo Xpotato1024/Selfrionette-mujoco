@@ -43,7 +43,7 @@ MODEL_XML = b"""
     </body>
   </worldbody>
   <actuator>
-    <motor name="tool_motor" joint="tool_slide" gear="1"/>
+    <general name="tool_motor" joint="tool_slide" gear="1" dyntype="integrator"/>
   </actuator>
 </mujoco>
 """
@@ -63,7 +63,8 @@ def _manifest(
     reset = ContactResetState(
         qpos_rad=(0.0,),
         qvel_rad_s=(0.0,),
-        actuator=(0.0,),
+        ctrl=(0.0,),
+        act=(0.25,),
         object_position_m=object_value.position_m,
         object_orientation_wxyz=object_value.orientation_wxyz,
     )
@@ -135,6 +136,9 @@ def test_composer_adds_a_real_mujoco_object_and_is_deterministic() -> None:
     assert tuple(simulator.model.geom_size[geom_id]) == pytest.approx((0.03, 0.03, 0.03))
     assert float(simulator.model.body_mass[body_id]) == pytest.approx(0.2)
     assert tuple(simulator.model.geom_friction[geom_id]) == pytest.approx((0.7, 0.01, 0.001))
+    assert int(simulator.model.geom_contype[geom_id]) == 1
+    assert int(simulator.model.geom_conaffinity[geom_id]) == 1
+    assert int(simulator.model.geom_condim[geom_id]) == 3
     assert simulator.model.opt.integrator == mujoco.mjtIntegrator.mjINT_EULER
     assert simulator.model.opt.solver == mujoco.mjtSolver.mjSOL_NEWTON
     assert simulator.data.ncon == 0
@@ -147,6 +151,7 @@ def test_reset_reapplies_all_declared_state_without_trial_leakage() -> None:
     simulator.data.qpos[0] = 0.4
     simulator.data.qvel[0] = 2.0
     simulator.data.ctrl[0] = 0.8
+    simulator.data.act[0] = 4.0
     simulator.data.qacc_warmstart[:] = 4.0
     simulator.data.time = 3.0
     simulator.step(0.01)
@@ -157,6 +162,7 @@ def test_reset_reapplies_all_declared_state_without_trial_leakage() -> None:
     assert tuple(simulator.data.qpos[:1]) == pytest.approx((0.0,))
     assert tuple(simulator.data.qvel[:1]) == pytest.approx((0.0,))
     assert tuple(simulator.data.ctrl) == pytest.approx((0.0,))
+    assert tuple(simulator.data.act) == pytest.approx((0.25,))
     assert tuple(simulator.data.qacc_warmstart) == pytest.approx((0.0,) * simulator.model.nv)
     assert simulator.data.time == 0.0
     assert simulator.data.ncon == 0
@@ -177,6 +183,56 @@ def test_initial_object_contact_or_penetration_is_fail_closed() -> None:
     manifest = _manifest(object_position_m=(0.3, 0.0, 0.02))
     with pytest.raises(ContactSceneError, match="initial object"):
         ContactSceneComposer(_request(manifest)).build()
+
+
+def test_manifest_contact_parameters_are_bound_to_the_mujoco_geom() -> None:
+    manifest = _manifest()
+    object_value = replace(
+        manifest.object,
+        contype=2,
+        conaffinity=4,
+        condim=6,
+    )
+    manifest = replace(manifest, scene=replace(manifest.scene, object=object_value))
+    scene = ContactSceneComposer(_request(manifest)).compose()
+    simulator = scene.build_simulator()
+    import mujoco
+
+    geom_id = mujoco.mj_name2id(
+        simulator.model,
+        mujoco.mjtObj.mjOBJ_GEOM,
+        object_value.geom_name,
+    )
+    assert int(simulator.model.geom_contype[geom_id]) == 2
+    assert int(simulator.model.geom_conaffinity[geom_id]) == 4
+    assert int(simulator.model.geom_condim[geom_id]) == 6
+
+
+def test_initial_penetration_tolerance_must_match_manifest_identity() -> None:
+    manifest = _manifest()
+    assert (
+        ContactSceneBuildRequest(
+            manifest=manifest,
+            model_xml=MODEL_XML,
+            assets={},
+            logical_model_path="fixtures/contact_scene.xml",
+            robot_bundle_identity=VersionedIdentity("fast_arm", 1),
+            environment_identity=VersionedIdentity("contact_cube_environment", 1),
+            viewer_scene_identity="contact-cube/v1",
+        ).initial_penetration_tolerance_m
+        == manifest.scene.initial_penetration_tolerance_m
+    )
+    with pytest.raises(ContactSceneError, match="match manifest"):
+        ContactSceneBuildRequest(
+            manifest=manifest,
+            model_xml=MODEL_XML,
+            assets={},
+            logical_model_path="fixtures/contact_scene.xml",
+            robot_bundle_identity=VersionedIdentity("fast_arm", 1),
+            environment_identity=VersionedIdentity("contact_cube_environment", 1),
+            viewer_scene_identity="contact-cube/v1",
+            initial_penetration_tolerance_m=1e-6,
+        )
 
 
 def test_unknown_object_or_scene_identity_is_rejected() -> None:
@@ -262,7 +318,8 @@ def test_robot_bundle_resource_is_a_supported_scene_composition_source() -> None
                 manifest.reset,
                 qpos_rad=(0.0, -0.5235987755982989, 0.0, -1.0471975511965976),
                 qvel_rad_s=(0.0, 0.0, 0.0, 0.0),
-                actuator=(0.0, 0.0, 0.0, 0.0),
+                ctrl=(0.0, 0.0, 0.0, 0.0),
+                act=(),
             ),
         ),
     )

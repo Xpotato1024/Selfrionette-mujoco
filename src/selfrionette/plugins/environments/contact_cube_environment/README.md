@@ -9,8 +9,10 @@
 
 `ContactSceneBuildRequest`を受け取った`compose_scene()`が、Robot-owned base model resourceへ
 決定的なcube body、freejoint、geom、materialを追加してMuJoCo model/dataをloadする。`reset_scene()`
-はmanifestのqpos、qvel、actuator、object pose、time、warm-startを再適用し、`mj_forward`後に
-objectの初期contact / penetrationを検証する。
+はmanifestのqpos、qvel、`ctrl`（`data.ctrl`）、`act`（`data.act`）、object pose、time、warm-startを
+それぞれのMuJoCo ownerへ再適用し、`mj_forward`後にobjectの初期contact / penetrationを検証する。
+contact parameterと`initial_penetration_tolerance_m`はmanifest digestへbindされ、scene側の別defaultで
+readinessを変更しない。
 
 ## identityとfail-closed
 
