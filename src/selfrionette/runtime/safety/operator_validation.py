@@ -15,7 +15,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from selfrionette.runtime.safety.physical_safety_core import SafetyDecisionAction
+from selfrionette.runtime.safety.physical_safety_core import SafetyComponent, SafetyDecisionAction
 
 
 VALIDATION_ARTIFACT_SCHEMA_VERSION = 1
@@ -157,6 +157,27 @@ def _enum(enum_type: type[Enum], name: str, value: object) -> Any:
     except ValueError as exc:
         allowed = ", ".join(item.value for item in enum_type)
         raise ValueError(f"{name} must be one of: {allowed}") from exc
+
+
+def _reason_identity(value: object) -> str:
+    """P5 component-owned reason identityをstrictに検証する。"""
+
+    identity = _text("reason_identity", value)
+    parts = identity.split(":")
+    if len(parts) != 2:
+        raise ValueError("reason_identity must be component:reason_code")
+    try:
+        SafetyComponent(parts[0])
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in SafetyComponent)
+        raise ValueError(f"reason_identity component must be one of: {allowed}") from exc
+    reason_code = parts[1]
+    if not reason_code or not reason_code[0].islower() or any(
+        not (character.isascii() and (character.islower() or character.isdigit() or character == "_"))
+        for character in reason_code
+    ):
+        raise ValueError("reason_identity reason_code must use lowercase underscore notation")
+    return identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -449,11 +470,11 @@ class SafetyDecisionEvidence:
     def __post_init__(self) -> None:
         if not isinstance(self.action, SafetyDecisionAction):
             object.__setattr__(self, "action", SafetyDecisionAction(self.action))
-        _text("reason_identity", self.reason_identity)
-        if not isinstance(self.provenance, tuple) or not all(
+        object.__setattr__(self, "reason_identity", _reason_identity(self.reason_identity))
+        if not isinstance(self.provenance, tuple) or not self.provenance or not all(
             isinstance(item, str) and item == item.strip() and item for item in self.provenance
         ):
-            raise TypeError("provenance must contain non-empty strings")
+            raise ValueError("provenance must be a non-empty tuple of non-empty strings")
         if len(set(self.provenance)) != len(self.provenance):
             raise ValueError("provenance must be unique")
 
@@ -739,9 +760,18 @@ def build_dry_run_validation_artifact(
 
     if not isinstance(procedure, ValidationProcedure) or not procedure.dry_run_only:
         raise ValueError("dry-run builder requires a dry-run-only ValidationProcedure")
+    if procedure.clearance.source.kind.is_physical:
+        raise ValueError("dry-run builder rejects physical clearance sources; physical validation belongs to #509")
+    if not isinstance(checks, Sequence) or isinstance(checks, (str, bytes)):
+        raise TypeError("checks must be a sequence")
+    typed_checks = tuple(checks)
+    if not all(isinstance(item, ValidationCheckEvidence) for item in typed_checks):
+        raise TypeError("checks must contain ValidationCheckEvidence values")
+    if any(item.measurement_source.kind.is_physical for item in typed_checks):
+        raise ValueError("dry-run builder rejects physical measurement sources; physical validation belongs to #509")
     return build_validation_artifact(
         procedure,
-        checks,
+        typed_checks,
         artifact_id=artifact_id,
         started_at=started_at,
         completed_at=completed_at,
