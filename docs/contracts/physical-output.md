@@ -91,7 +91,9 @@ requested predecessorのないevent、duplicate / late / out-of-order event、un
 duplicate field、request / permission bytesとの不一致をrejectする。atomic write後にbytesと
 decoded semanticをstrict read-backし、`replay_physical_output_trace`はsinkへ再生してbyte
 equivalenceを確認する。複数writerからのsequence採番、validation、appendはsink内で直列化
-する。trace replayはdry-runであり、transportを実行しない。
+する。lifecycle trace sinkへ渡せるeventはtyped `PhysicalOutputLifecycleEvent`に限り、
+任意のserializable objectを証拠として受け入れない。trace replayはdry-runであり、transportを
+実行しない。
 
 ## Lifecycle / bounded stop
 
@@ -113,6 +115,8 @@ operator stopとruntime shutdownは`stopping`へ遷移し、明示されたdeadl
 finiteでない場合も`failed`とする。terminal stateだけでなく`hold`からの再-armにも新しい未使用
 session identityと明示permissionが必要であり、session IDをlifetime内で再利用しない。
 public transitionは一つのreducer lockで直列化し、event sinkの失敗はlifecycleをfail-closedにする。
+各transitionのtimestampは有限値であることを状態、permission、session、sequenceのmutation前に
+検証する。`complete_stop`はstop開始時刻より前のtimestampを拒否し、停止状態とtraceを変更しない。
 
 ## Serialization / failure
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from math import inf, nan
 from threading import Barrier
 
 import pytest
@@ -156,6 +157,81 @@ def test_stop_is_idempotent_and_bounded() -> None:
     assert exceeded.reason == "bounded_shutdown_deadline_exceeded"
     assert timed_out.state == "failed"
     assert timed_out.stop_deadline_s is None
+
+
+def test_complete_stop_rejects_timestamp_before_stop_start_without_mutation() -> None:
+    lifecycle = PhysicalOutputLifecycle("session-order", shutdown_timeout_s=2.0)
+    lifecycle.arm(PhysicalOutputPermission(mode="dry_run"))
+    lifecycle.operator_stop(now_s=10.0)
+    before_events = lifecycle.events
+
+    result = lifecycle.complete_stop(now_s=9.0)
+
+    assert not result.accepted
+    assert result.reason == "stop_completion_before_start"
+    assert lifecycle.state == "stopping"
+    assert lifecycle.stop_started_s == 10.0
+    assert lifecycle.stop_deadline_s == 12.0
+    assert lifecycle.events == before_events
+
+
+@pytest.mark.parametrize("timestamp", (nan, inf, -inf))
+@pytest.mark.parametrize(
+    "operation",
+    ("arm", "submit", "source_stale", "source_invalid", "abort", "fail", "cleanup", "reconnect"),
+)
+def test_non_finite_transition_timestamp_cannot_partially_commit(
+    timestamp: float,
+    operation: str,
+) -> None:
+    lifecycle = PhysicalOutputLifecycle("session-timestamp")
+    permission = PhysicalOutputPermission(mode="dry_run")
+    request = _endpoint_request()
+    if operation != "arm":
+        lifecycle.arm(permission)
+    if operation in {"submit", "source_stale", "source_invalid", "abort", "fail", "cleanup", "reconnect"}:
+        if operation != "submit":
+            lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
+    before = (
+        lifecycle.state,
+        lifecycle.permission,
+        lifecycle.session_id,
+        lifecycle.latest_request,
+        lifecycle.last_request_sequence,
+        lifecycle.stop_started_s,
+        lifecycle.stop_deadline_s,
+        lifecycle.events,
+    )
+
+    with pytest.raises(ValueError, match="finite"):
+        if operation == "arm":
+            lifecycle.arm(permission, timestamp_s=timestamp)
+        elif operation == "submit":
+            lifecycle.submit(request, now_s=timestamp, max_age_s=1.0)
+        elif operation == "source_stale":
+            lifecycle.source_stale(timestamp_s=timestamp)
+        elif operation == "source_invalid":
+            lifecycle.source_invalid("invalid", timestamp_s=timestamp)
+        elif operation == "abort":
+            lifecycle.abort("abort", timestamp_s=timestamp)
+        elif operation == "fail":
+            lifecycle.fail("failure", timestamp_s=timestamp)
+        elif operation == "cleanup":
+            lifecycle.record_cleanup_failure("cleanup", timestamp_s=timestamp)
+        else:
+            lifecycle.reconnect(timestamp_s=timestamp)
+
+    after = (
+        lifecycle.state,
+        lifecycle.permission,
+        lifecycle.session_id,
+        lifecycle.latest_request,
+        lifecycle.last_request_sequence,
+        lifecycle.stop_started_s,
+        lifecycle.stop_deadline_s,
+        lifecycle.events,
+    )
+    assert after == before
 
 
 def test_source_invalid_aborts_and_new_session_is_required_after_terminal_state() -> None:
