@@ -27,7 +27,6 @@ CONTACT_SCENE_CONTRACT_VERSION: Final[int] = 1
 CONTACT_SCENE_IDENTITY: Final[VersionedIdentity] = VersionedIdentity(
     "contact_cube_scene", 1
 )
-_DEFAULT_INITIAL_PENETRATION_TOLERANCE_M: Final[float] = 1e-12
 _OBJECT_FREEJOINT_SUFFIX: Final[str] = "_freejoint"
 
 
@@ -157,9 +156,9 @@ def _compose_model_xml(
                 "mass": format(object_value.mass_kg, ".17g"),
                 "material": material_name,
                 "friction": _format_values(object_value.friction),
-                "contype": "1",
-                "conaffinity": "1",
-                "condim": "3",
+                "contype": str(object_value.contype),
+                "conaffinity": str(object_value.conaffinity),
+                "condim": str(object_value.condim),
             },
         )
 
@@ -383,7 +382,7 @@ class ContactSceneBuildRequest:
     viewer_scene_identity: str
     robot_capabilities: tuple[VersionedIdentity, ...] | None = None
     robot_roles: tuple[EnvironmentRole, ...] | None = None
-    initial_penetration_tolerance_m: float = _DEFAULT_INITIAL_PENETRATION_TOLERANCE_M
+    initial_penetration_tolerance_m: float | None = None
 
     @classmethod
     def from_robot_bundle(
@@ -473,13 +472,23 @@ class ContactSceneBuildRequest:
             )
         if self.robot_roles is not None:
             object.__setattr__(self, "robot_roles", tuple(self.robot_roles))
-        if isinstance(self.initial_penetration_tolerance_m, bool):
-            raise TypeError("contact scene initial penetration tolerance must be numeric")
-        tolerance = float(self.initial_penetration_tolerance_m)
-        if not isfinite(tolerance) or tolerance < 0.0:
-            raise ContactSceneError(
-                "contact scene initial penetration tolerance must be finite and non-negative"
-            )
+        declared_tolerance = self.manifest.scene.initial_penetration_tolerance_m
+        if self.initial_penetration_tolerance_m is None:
+            tolerance = declared_tolerance
+        else:
+            if isinstance(self.initial_penetration_tolerance_m, bool):
+                raise TypeError(
+                    "contact scene initial penetration tolerance must be numeric"
+                )
+            tolerance = float(self.initial_penetration_tolerance_m)
+            if not isfinite(tolerance) or tolerance < 0.0:
+                raise ContactSceneError(
+                    "contact scene initial penetration tolerance must be finite and non-negative"
+                )
+            if tolerance != declared_tolerance:
+                raise ContactSceneError(
+                    "contact scene initial penetration tolerance must match manifest"
+                )
         object.__setattr__(self, "initial_penetration_tolerance_m", tolerance)
         validate_contact_scene_compatibility(
             self.manifest,
@@ -561,15 +570,22 @@ class ContactScene:
                 data.qpos[object_qpos_address + offset] = value
             for offset in range(6):
                 data.qvel[object_qvel_address + offset] = 0.0
-        if len(reset.actuator) not in (0, int(model.nu)):
+        if len(reset.ctrl) not in (0, int(model.nu)):
             raise ContactSceneError(
-                f"contact reset actuator dimension mismatch: expected {model.nu}, "
-                f"got {len(reset.actuator)}"
+                f"contact reset ctrl dimension mismatch: expected {model.nu}, "
+                f"got {len(reset.ctrl)}"
             )
         data.ctrl[:] = 0.0
-        if reset.actuator:
-            data.ctrl[:] = reset.actuator
+        if reset.ctrl:
+            data.ctrl[:] = reset.ctrl
+        if len(reset.act) not in (0, int(model.na)):
+            raise ContactSceneError(
+                f"contact reset act dimension mismatch: expected {model.na}, "
+                f"got {len(reset.act)}"
+            )
         data.act[:] = 0.0
+        if reset.act:
+            data.act[:] = reset.act
         if len(reset.warm_start) not in (0, int(model.nv)):
             raise ContactSceneError(
                 f"contact reset warm_start dimension mismatch: expected {model.nv}, "
@@ -681,7 +697,7 @@ class ContactSceneComposer:
             object_body_name=object_value.body_name,
             object_geom_name=object_value.geom_name,
             enabled=manifest.scene.enabled,
-            initial_penetration_tolerance_m=self.request.initial_penetration_tolerance_m,
+            initial_penetration_tolerance_m=manifest.scene.initial_penetration_tolerance_m,
         )
 
     def build(self) -> ContactSceneInstance:
