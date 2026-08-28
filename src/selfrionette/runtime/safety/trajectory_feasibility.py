@@ -43,14 +43,21 @@ def _text(name: str, value: object) -> str:
     return value
 
 
-def _finite(name: str, value: object, *, allow_positive_infinity: bool = False) -> float:
+def _finite(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a number")
     number = float(value)
-    if math.isnan(number) or (not allow_positive_infinity and not math.isfinite(number)):
+    if not math.isfinite(number):
         raise ValueError(f"{name} must be finite")
-    if allow_positive_infinity and number < 0.0:
-        raise ValueError(f"{name} must be non-negative")
+    return 0.0 if number == 0.0 else number
+
+
+def _numeric(name: str, value: object) -> float:
+    """Validate a numeric diagnostic while retaining non-finite values for classification."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{name} must be a number")
+    number = float(value)
     return 0.0 if number == 0.0 else number
 
 
@@ -89,8 +96,8 @@ class JacobianDiagnostic:
             raise ValueError("numeric_rank exceeds Jacobian dimensions")
         if self.effective_rank > self.numeric_rank:
             raise ValueError("effective_rank exceeds numeric_rank")
-        minimum = _finite("minimum_singular_value", self.minimum_singular_value)
-        condition = _finite("condition_number", self.condition_number, allow_positive_infinity=True)
+        minimum = _numeric("minimum_singular_value", self.minimum_singular_value)
+        condition = _numeric("condition_number", self.condition_number)
         object.__setattr__(self, "minimum_singular_value", minimum)
         object.__setattr__(self, "condition_number", condition)
 
@@ -210,9 +217,7 @@ class TrajectoryFeasibilityPolicy:
         if isinstance(rank, bool) or not isinstance(rank, int) or rank <= 0:
             raise ValueError("required_jacobian_rank must be a positive integer")
         minimum = _finite("minimum_singular_value", self.minimum_singular_value)
-        maximum_condition = _finite(
-            "maximum_condition_number", self.maximum_condition_number, allow_positive_infinity=True
-        )
+        maximum_condition = _finite("maximum_condition_number", self.maximum_condition_number)
         consistency = _finite("qvel_consistency_tolerance_rad_s", self.qvel_consistency_tolerance_rad_s)
         if minimum <= 0.0 or maximum_condition <= 0.0 or consistency < 0.0:
             raise ValueError("Jacobian thresholds must be positive and consistency tolerance non-negative")
@@ -360,6 +365,7 @@ def _validate_state_vector(
     *,
     name: str,
     expected_size: int,
+    joint_names: Sequence[str],
     sample_index: int | None,
 ) -> FeasibilityDiagnostic | None:
     if not isinstance(values, tuple) or not values:
@@ -379,7 +385,7 @@ def _validate_state_vector(
             return FeasibilityDiagnostic(
                 "invalid_non_finite",
                 f"{name}[{index}] is not finite",
-                joint_name=None if index >= expected_size else str(index),
+                joint_name=joint_names[index] if index < len(joint_names) else None,
                 sample_index=sample_index,
             )
     return None
@@ -501,6 +507,30 @@ def _jacobian_diagnostics(
         )
     diagnostics: list[FeasibilityDiagnostic] = []
     statuses: list[FeasibilityStatus] = []
+    if not math.isfinite(diagnostic.minimum_singular_value) or not math.isfinite(diagnostic.condition_number):
+        return (
+            (
+                FeasibilityDiagnostic(
+                    "invalid_jacobian_diagnostic",
+                    "Jacobian singular-value or condition diagnostic is non-finite",
+                    sample_index=sample_index,
+                    provenance=diagnostic.source_id,
+                ),
+            ),
+            (FeasibilityStatus.INVALID,),
+        )
+    if diagnostic.minimum_singular_value < 0.0 or diagnostic.condition_number <= 0.0:
+        return (
+            (
+                FeasibilityDiagnostic(
+                    "invalid_jacobian_diagnostic",
+                    "Jacobian singular-value and condition diagnostics must be positive",
+                    sample_index=sample_index,
+                    provenance=diagnostic.source_id,
+                ),
+            ),
+            (FeasibilityStatus.INVALID,),
+        )
     if diagnostic.row_count < policy.required_jacobian_rank or diagnostic.column_count < policy.required_jacobian_rank:
         diagnostics.append(
             FeasibilityDiagnostic(
@@ -568,6 +598,7 @@ def evaluate_configuration_feasibility(
         state.qpos_rad,
         name="qpos_rad",
         expected_size=len(policy.joint_names),
+        joint_names=policy.joint_names,
         sample_index=None,
     )
     if qpos_error is not None:
@@ -581,6 +612,7 @@ def evaluate_configuration_feasibility(
             state.qvel_rad_s,
             name="qvel_rad_s",
             expected_size=len(policy.joint_names),
+            joint_names=policy.joint_names,
             sample_index=None,
         )
         if qvel_error is not None:
@@ -642,6 +674,7 @@ def evaluate_trajectory_feasibility(
             sample.qpos_rad,
             name="qpos_rad",
             expected_size=len(policy.joint_names),
+            joint_names=policy.joint_names,
             sample_index=index,
         )
         if qpos_error is not None:
@@ -652,6 +685,7 @@ def evaluate_trajectory_feasibility(
                 sample.qvel_rad_s,
                 name="qvel_rad_s",
                 expected_size=len(policy.joint_names),
+                joint_names=policy.joint_names,
                 sample_index=index,
             )
             if qvel_error is not None:

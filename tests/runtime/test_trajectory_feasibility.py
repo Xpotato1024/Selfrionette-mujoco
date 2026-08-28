@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import math
 from types import SimpleNamespace
+
+import pytest
 
 from selfrionette.runtime.safety.physical_limits import (
     EvidenceStatus,
@@ -55,7 +58,12 @@ def _limit(
     )
 
 
-def _policy(*, status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE) -> TrajectoryFeasibilityPolicy:
+def _policy(
+    *,
+    status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
+    minimum_singular_value: float = 0.1,
+    maximum_condition_number: float = 100.0,
+) -> TrajectoryFeasibilityPolicy:
     limits = tuple(
         limit
         for joint_name in JOINTS
@@ -71,8 +79,8 @@ def _policy(*, status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE) -> Traject
         cadence_tolerance_s=1e-9,
         maximum_gap_s=0.2,
         required_jacobian_rank=3,
-        minimum_singular_value=0.1,
-        maximum_condition_number=100.0,
+        minimum_singular_value=minimum_singular_value,
+        maximum_condition_number=maximum_condition_number,
     )
 
 
@@ -177,6 +185,9 @@ def test_cadence_dimension_and_nonfinite_inputs_fail_closed() -> None:
     )
     assert nonfinite_result.status is FeasibilityStatus.INVALID
     assert nonfinite_result.reason_code == "invalid_non_finite"
+    assert next(
+        item for item in nonfinite_result.diagnostics if item.code == "invalid_non_finite"
+    ).joint_name == JOINTS[0]
 
 
 def test_missing_qvel_jacobian_and_dynamic_source_are_not_success() -> None:
@@ -223,6 +234,40 @@ def test_jacobian_rank_condition_and_singularity_thresholds_reject() -> None:
     )
     assert condition_result.status is FeasibilityStatus.REJECTED
     assert condition_result.reason_code == "rejected_jacobian_condition"
+
+
+def test_jacobian_thresholds_must_be_finite_and_positive() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        _policy(maximum_condition_number=math.inf)
+    with pytest.raises(ValueError, match="positive"):
+        _policy(maximum_condition_number=0.0)
+    with pytest.raises(ValueError, match="positive"):
+        _policy(minimum_singular_value=-1.0)
+
+
+@pytest.mark.parametrize(
+    ("minimum", "condition"),
+    ((math.inf, 2.0), (0.5, math.inf), (0.5, math.nan), (0.5, -1.0)),
+)
+def test_nonfinite_or_invalid_jacobian_diagnostic_is_typed_invalid(
+    minimum: float,
+    condition: float,
+) -> None:
+    result = evaluate_configuration_feasibility(
+        ConfigurationState(
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            _jacobian(minimum=minimum, condition=condition),
+        ),
+        _policy(),
+    )
+
+    assert result.status is FeasibilityStatus.INVALID
+    assert result.reason_code == "invalid_jacobian_diagnostic"
+    diagnostic = next(
+        item for item in result.diagnostics if item.code == "invalid_jacobian_diagnostic"
+    )
+    assert diagnostic.provenance == "fixture-jacobian"
 
 
 def test_existing_jacobian_metrics_are_adapted_without_reimplementation() -> None:
