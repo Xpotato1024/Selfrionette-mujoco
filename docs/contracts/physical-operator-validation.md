@@ -52,15 +52,22 @@ software revision、P5 safety decision（action、reason identity、provenance�
 `expected` / `observed`はfiniteなJSON objectであり、値の意味やphysical authorityをこのmoduleが
 推測しない。
 
+`SafetyDecisionEvidence.provenance`は空を許さず、`reason_identity`はP5のcomponent enum
+（`limit`、`collision`、`dynamic`、`input`）とlowercase underscore形式のreason codeを
+`component:reason_code`として保持する。未知のcomponent、区切りのないidentity、空のoriginは
+strict validationで拒否する。
+
 | source kind | evidence class | 扱い |
 | --- | --- | --- |
 | `software_dry_run`、`mujoco_simulation` | software | fixture / simulationの結果。physical claimにしない |
-| `manufacturer_document`、`physical_measurement` | physical | evidence reference付きのcaller-provided sourceとして区別する |
+| `manufacturer_document`、`physical_measurement` | physical | generic artifactではevidence reference付きのcaller-provided sourceとして区別する。dry-run builderでは拒否し、#509へ残す |
 | `unknown` | 不確定 | check classificationを`unavailable`にする |
 
 `EvidenceClass`はsoftware-only、physical-only、mixed、unknown、noneを明示する。physical sourceには
-資料ID・測定記録ID等の`evidence_reference`が必要であり、artifactへの記録は観測を実施したことの
-証明ではない。#508のdry-run fixtureはsoftware-onlyで検証し、physical sourceの実測は取得しない。
+資料ID・測定記録ID等の`evidence_reference`が必要であり、generic artifactへの記録は観測を実施した
+ことの証明ではない。`build_dry_run_validation_artifact()`はphysical sourceを受け付けず、
+`manufacturer_document`や`physical_measurement`を含む入力を#509 boundaryへ戻す。#508のdry-run
+fixtureはsoftware-onlyで検証し、physical sourceの実測は取得しない。
 
 ## Closed lifecycle classification
 

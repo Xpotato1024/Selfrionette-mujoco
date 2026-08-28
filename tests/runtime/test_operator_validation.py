@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -95,7 +96,7 @@ def _check(
         measurement_source=source or MeasurementSource(MeasurementSourceKind.SOFTWARE_DRY_RUN, "fixture", "revision-001"),
         observed_at=None if status in {ValidationCheckStatus.UNAVAILABLE, ValidationCheckStatus.TECHNICAL_INVALID} else OBSERVED,
         software_revision=software_revision,
-        safety_decision=SafetyDecisionEvidence(action, f"fixture:{action.value}", ("fixture",)),
+        safety_decision=SafetyDecisionEvidence(action, f"input:fixture_{action.value}", ("fixture",)),
         reason="fixture check",
     )
 
@@ -228,6 +229,28 @@ def test_physical_source_is_visible_and_not_collapsed_into_software() -> None:
     assert artifact.evidence_class is EvidenceClass.PHYSICAL_ONLY
     assert artifact.physical_evidence_present
 
+    with pytest.raises(ValueError, match="#509"):
+        build_dry_run_validation_artifact(
+            _procedure(),
+            _all_checks(source=source),
+            artifact_id="artifact-physical-dry-run",
+            started_at=STARTED,
+            completed_at=COMPLETED,
+        )
+
+    physical_clearance_procedure = replace(
+        _procedure(),
+        clearance=replace(_procedure().clearance, source=source),
+    )
+    with pytest.raises(ValueError, match="#509"):
+        build_dry_run_validation_artifact(
+            physical_clearance_procedure,
+            _all_checks(),
+            artifact_id="artifact-physical-clearance-dry-run",
+            started_at=STARTED,
+            completed_at=COMPLETED,
+        )
+
     document_source = MeasurementSource(MeasurementSourceKind.MANUFACTURER_DOCUMENT, "manual-001", "rev-001", "page-12")
     document_artifact = build_validation_artifact(
         _procedure(),
@@ -239,6 +262,15 @@ def test_physical_source_is_visible_and_not_collapsed_into_software() -> None:
     assert document_artifact.evidence_class is EvidenceClass.PHYSICAL_ONLY
     with pytest.raises(ValueError, match="evidence_reference"):
         MeasurementSource(MeasurementSourceKind.MANUFACTURER_DOCUMENT, "manual-001", "rev-001")
+
+
+def test_safety_decision_evidence_requires_component_reason_identity_and_provenance() -> None:
+    with pytest.raises(ValueError, match="component:reason_code"):
+        SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "allow", ("fixture",))
+    with pytest.raises(ValueError, match="component must"):
+        SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "fixture:allow", ("fixture",))
+    with pytest.raises(ValueError, match="non-empty tuple"):
+        SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "input:fixture_allow", ())
 
 
 def test_strict_decoder_rejects_unknown_duplicate_bom_and_nonfinite_values() -> None:
@@ -281,7 +313,7 @@ def test_check_contract_requires_status_specific_safety_action_and_observation()
             source,
             None,
             "revision-001",
-            SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "fixture:allow", ("fixture",)),
+            SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "input:fixture_allow", ("fixture",)),
             "missing timestamp",
         )
 
