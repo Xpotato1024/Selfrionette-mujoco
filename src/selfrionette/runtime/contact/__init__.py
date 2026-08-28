@@ -25,6 +25,17 @@ from .manifest import (
     encode_contact_manifest,
     contact_manifest_digest,
 )
+from .scene import (
+    CONTACT_SCENE_CONTRACT_VERSION,
+    CONTACT_SCENE_IDENTITY,
+    ContactScene,
+    ContactSceneBuildRequest,
+    ContactSceneComposer,
+    ContactSceneError,
+    ContactSceneInstance,
+    build_contact_scene,
+    validate_contact_scene_compatibility,
+)
 
 __all__ = [
     "CONTACT_ENVIRONMENT_ROLE",
@@ -32,6 +43,8 @@ __all__ = [
     "CONTACT_MANIFEST_DIGEST_ALGORITHM",
     "CONTACT_MANIFEST_SCHEMA_VERSION",
     "CONTACT_OBJECT_IDENTITY",
+    "CONTACT_SCENE_CONTRACT_VERSION",
+    "CONTACT_SCENE_IDENTITY",
     "CONTACT_TASK_IDENTITY",
     "CONTACT_TOOL_ROLE",
     "ContactCubeObject",
@@ -40,6 +53,11 @@ __all__ = [
     "ContactMaterial",
     "ContactResetState",
     "ContactSceneContract",
+    "ContactScene",
+    "ContactSceneBuildRequest",
+    "ContactSceneComposer",
+    "ContactSceneError",
+    "ContactSceneInstance",
     "ContactTarget",
     "ContactTaskManifest",
     "MuJoCoSettingsIdentity",
@@ -50,4 +68,6 @@ __all__ = [
     "decode_contact_manifest",
     "encode_contact_manifest",
     "contact_manifest_digest",
+    "build_contact_scene",
+    "validate_contact_scene_compatibility",
 ]

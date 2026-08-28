@@ -46,6 +46,13 @@ MuJoCo dataへ適用し、contact、velocity、actuator、simulation time、warm
 `ContactSceneContract.initial_penetration_tolerance_m`は初期接触判定の許容値としてmanifestへbindされ、
 contact parameterと同じcanonical identityに含まれる。scene側が別の値を暗黙に補ってreadinessを変えてはならない。
 
+R7-H v1 scene identityは`contact_cube_scene/v1`である。`ContactCubeObject.size_m`はMuJoCo `box`
+geomの各軸half-extentとして解釈する。#412の
+`ContactSceneComposer`はRobot-owned base MJCFへversioned object body、freejoint、geom、materialを
+追加し、viewerへ別のcubeを生成しない。disabled sceneではobjectを追加せず、contact task用sceneとして
+誤って扱わない。scene load時はmanifestのEnvironment / Robot / viewer identity、MuJoCo settings、
+reset vector dimensionを照合し、`mj_forward`後の初期contactまたはpenetrationをfail-closedで拒否する。
+
 ## targetとMuJoCo設定
 
 `ContactTarget`はtarget face、object-frame normal、world-frame approach direction、penetration band
