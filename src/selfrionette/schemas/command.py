@@ -249,6 +249,19 @@ class PhysicalOutputDecision:
             raise ValueError("rejected physical output decision requires a reason")
         if self.status == "accepted" and reason is not None:
             raise ValueError("accepted physical output decision cannot carry a reason")
+        if self.status == "accepted" and self.permission.mode == "disabled":
+            raise ValueError(
+                "accepted physical output decision requires non-disabled permission"
+            )
+        if (
+            self.status == "accepted"
+            and self.permission.mode
+            in {"transmission_enabled", "physical_actuation"}
+            and not self.permission.explicitly_enabled
+        ):
+            raise ValueError(
+                "accepted physical output decision requires explicit operator enable gate"
+            )
         object.__setattr__(self, "reason", reason)
 
     @property

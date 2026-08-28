@@ -71,8 +71,10 @@ requested -> accepted / rejected -> sent -> acknowledged
 ```
 
 `PhysicalOutputDecision`はrequestとpermissionに対する`accepted`または`rejected`
-だけを保持する。`accepted`はpermission decisionであり、送信実績ではない。`sent`と
-`acknowledged`は後続のtrace / transport boundaryで別eventとして記録する。
+だけを保持する。`accepted`はnon-disabled permissionに対するdecisionであり、
+`transmission_enabled`または`physical_actuation`ではexplicit operator gateを
+伴わなければならない。これはpermission decisionであり、送信実績ではない。
+`sent`と`acknowledged`は後続のtrace / transport boundaryで別eventとして記録する。
 
 ## Serialization / failure
 

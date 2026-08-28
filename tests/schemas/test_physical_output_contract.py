@@ -8,6 +8,7 @@ from selfrionette.schemas import (
     EndpointVelocityCommand,
     JointPositionCommand,
     MotionCommand,
+    PhysicalOutputDecision,
     PhysicalOutputPermission,
     PhysicalOutputRequest,
     decode_physical_output_permission,
@@ -186,3 +187,37 @@ def test_permission_json_round_trip_preserves_state_and_gate_identity() -> None:
     tampered["state"] = "disabled"
     with pytest.raises(ValueError, match="state does not match mode"):
         decode_physical_output_permission(tampered)
+
+
+def test_decision_rejects_accepted_disabled_permission() -> None:
+    with pytest.raises(
+        ValueError,
+        match="accepted physical output decision requires non-disabled permission",
+    ):
+        PhysicalOutputDecision(
+            request=_endpoint_request(),
+            permission=PhysicalOutputPermission(),
+            status="accepted",
+        )
+
+
+def test_decision_acceptance_keeps_operator_gate_invariant() -> None:
+    request = _endpoint_request()
+    accepted = PhysicalOutputDecision(
+        request=request,
+        permission=PhysicalOutputPermission(mode="dry_run"),
+        status="accepted",
+    )
+    assert accepted.status == "accepted"
+
+    enabled = PhysicalOutputPermission(
+        mode="transmission_enabled",
+        operator_id="operator-1",
+        enable_token_id="gate-1",
+    )
+    gated = PhysicalOutputDecision(
+        request=request,
+        permission=enabled,
+        status="accepted",
+    )
+    assert gated.permission.explicitly_enabled
