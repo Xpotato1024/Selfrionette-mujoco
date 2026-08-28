@@ -26,6 +26,7 @@ EXPECTED_MODULES = {
         "viewer_package_resource_manifest",
     },
     "contact": {
+        "evidence",
         "manifest",
         "scene",
     },

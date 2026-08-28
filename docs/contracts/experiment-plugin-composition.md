@@ -194,6 +194,15 @@ runtimeで照合する。一つのbundleで同じcapabilityを複数providerが�
 新しいcapabilityはtyped provider contractとの対応を明示登録する。未登録capabilityと未提供
 capabilityへのlookupは例外であり、zero、empty、no-opを返さない。
 
+R7-H #413の`runtime/contact/evidence.py`は、`ContactSceneInstance`の同じMuJoCo model/dataから
+`mjData.contact`と公式`mj_contactForce`を読むbackend measurement ownerである。scene instanceの
+`observe_contact_evidence()`はこのownerへのthin facadeであり、Robot Bundle、viewer、Task、
+Evaluationへcontact force抽出を複製しない。`ContactEvidenceProvider`を選択するRobot Bundleは
+optionalなcapability / evidence declarationを公開できるが、target filtering、frame変換、
+sign convention、deterministic aggregationのsecond implementationを持たない。
+未提供または利用不能なcapability / evidenceはzeroまたは成功へfallbackせず、canonical evidenceの
+unavailable / invalid semanticsへ残す。
+
 共通処理は`NamedKeyframeInitialStateProvider`、`RuntimeEndpointPoseProvider`、
 `RuntimeEndpointCommandProvider`、`RuntimeQposFeasibilityProvider`、
 `ProfileEndpointSceneRoleProvider`のような小さなdelegating providerとして再利用する。
