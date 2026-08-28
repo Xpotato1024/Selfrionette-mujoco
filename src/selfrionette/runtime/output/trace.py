@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import mkstemp
+from threading import RLock
 from typing import Literal, TypeAlias
 
 from selfrionette.schemas import (
@@ -219,6 +220,18 @@ class PhysicalOutputTraceEvent:
         elif self.event_kind == "permitted":
             if self.decision_status != "accepted" or reason is not None:
                 raise ValueError("permitted trace event requires accepted status only")
+            if self.permission.mode == "disabled":
+                raise ValueError(
+                    "permitted trace event requires non-disabled permission"
+                )
+            if (
+                self.permission.mode
+                in {"transmission_enabled", "physical_actuation"}
+                and not self.permission.explicitly_enabled
+            ):
+                raise ValueError(
+                    "permitted trace event requires explicit operator enable gate"
+                )
         elif self.event_kind == "rejected":
             if self.decision_status != "rejected" or reason is None:
                 raise ValueError("rejected trace event requires a reason")
@@ -477,16 +490,25 @@ class PhysicalOutputRecordingSink:
     """Recording-only sink for request and permission evidence."""
 
     def __init__(self) -> None:
+        self._lock = RLock()
         self._events: list[PhysicalOutputTraceEvent] = []
 
     @property
     def events(self) -> tuple[PhysicalOutputTraceEvent, ...]:
-        return tuple(self._events)
+        with self._lock:
+            return tuple(self._events)
 
-    def _append(self, event: PhysicalOutputTraceEvent) -> PhysicalOutputTraceEvent:
-        candidate = PhysicalOutputTrace(events=(*self._events, event))
-        self._events = list(candidate.events)
-        return event
+    def _append(
+        self,
+        event_factory: Callable[[int], PhysicalOutputTraceEvent],
+    ) -> PhysicalOutputTraceEvent:
+        # sequence採番、strict validation、appendを同一critical sectionへ置き、
+        # concurrent writerによるevent sequence再利用を防ぐ。
+        with self._lock:
+            event = event_factory(len(self._events))
+            candidate = PhysicalOutputTrace(events=(*self._events, event))
+            self._events = list(candidate.events)
+            return event
 
     def record_requested(
         self,
@@ -494,8 +516,8 @@ class PhysicalOutputRecordingSink:
         permission: PhysicalOutputPermission,
     ) -> PhysicalOutputTraceEvent:
         return self._append(
-            PhysicalOutputTraceEvent(
-                event_sequence=len(self._events),
+            lambda event_sequence: PhysicalOutputTraceEvent(
+                event_sequence=event_sequence,
                 event_kind="requested",
                 request=request,
                 permission=permission,
@@ -510,8 +532,8 @@ class PhysicalOutputRecordingSink:
             raise TypeError("physical output trace requires PhysicalOutputDecision")
         if decision.status == "accepted":
             return self._append(
-                PhysicalOutputTraceEvent(
-                    event_sequence=len(self._events),
+                lambda event_sequence: PhysicalOutputTraceEvent(
+                    event_sequence=event_sequence,
                     event_kind="permitted",
                     request=decision.request,
                     permission=decision.permission,
@@ -519,8 +541,8 @@ class PhysicalOutputRecordingSink:
                 )
             )
         return self._append(
-            PhysicalOutputTraceEvent(
-                event_sequence=len(self._events),
+            lambda event_sequence: PhysicalOutputTraceEvent(
+                event_sequence=event_sequence,
                 event_kind="rejected",
                 request=decision.request,
                 permission=decision.permission,
@@ -539,8 +561,8 @@ class PhysicalOutputRecordingSink:
         reason: str,
     ) -> PhysicalOutputTraceEvent:
         return self._append(
-            PhysicalOutputTraceEvent(
-                event_sequence=len(self._events),
+            lambda event_sequence: PhysicalOutputTraceEvent(
+                event_sequence=event_sequence,
                 event_kind="dropped",
                 request=request,
                 permission=permission,
@@ -549,7 +571,8 @@ class PhysicalOutputRecordingSink:
         )
 
     def snapshot(self) -> PhysicalOutputTrace:
-        return PhysicalOutputTrace(events=self.events)
+        with self._lock:
+            return PhysicalOutputTrace(events=tuple(self._events))
 
     def to_jsonl_bytes(self) -> bytes:
         return self.snapshot().to_jsonl_bytes()
