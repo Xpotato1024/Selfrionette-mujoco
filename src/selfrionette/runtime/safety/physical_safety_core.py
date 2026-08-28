@@ -7,10 +7,10 @@ allowへfallbackしないphysical-output前のruntime boundaryである。
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-import math
 
 from selfrionette.runtime.safety.collision_policy import (
     CollisionCheckResult,
@@ -281,6 +281,8 @@ def _collision_evaluation_inconsistency(evaluation: CollisionEvaluation) -> str 
         return "collision evaluation provenance is invalid"
 
     if evaluation.status is CollisionStatus.CLEAR:
+        if evaluation.kind is CollisionKind.UNKNOWN:
+            return "unknown collision kind cannot produce clear evidence"
         if evaluation.reason_code == "explicit_structural_exclusion":
             if evaluation.kind is not CollisionKind.STRUCTURAL_PROXIMITY:
                 return "structural exclusion clear evidence has the wrong kind"

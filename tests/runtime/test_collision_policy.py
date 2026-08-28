@@ -722,6 +722,19 @@ def test_exclusion_clear_cannot_override_environment_pair_kind() -> None:
         )
 
 
+def test_unknown_collision_kind_cannot_be_clear() -> None:
+    with pytest.raises(ValueError, match="unknown collision kind"):
+        CollisionEvaluation(
+            pair_id="fore|upper",
+            kind=CollisionKind.UNKNOWN,
+            status=CollisionStatus.CLEAR,
+            distance_m=0.1,
+            clearance_m=0.01,
+            reason_code="pair_clear",
+            provenance="fixture",
+        )
+
+
 def test_global_or_non_structural_exclusion_is_rejected() -> None:
     try:
         CollisionExclusion("*|*", "bad", "fixture")
