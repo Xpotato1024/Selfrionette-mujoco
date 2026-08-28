@@ -90,7 +90,33 @@ permission decisionのacceptedを表すだけで、`sent`または`acknowledged`
 requested predecessorのないevent、duplicate / late / out-of-order event、unknown / missing /
 duplicate field、request / permission bytesとの不一致をrejectする。atomic write後にbytesと
 decoded semanticをstrict read-backし、`replay_physical_output_trace`はsinkへ再生してbyte
-equivalenceを確認する。trace replayはdry-runであり、transportを実行しない。
+equivalenceを確認する。複数writerからのsequence採番、validation、appendはsink内で直列化
+する。lifecycle trace sinkへ渡せるeventはtyped `PhysicalOutputLifecycleEvent`に限り、
+任意のserializable objectを証拠として受け入れない。trace replayはdry-runであり、transportを
+実行しない。
+
+## Lifecycle / bounded stop
+
+`PhysicalOutputLifecycle`は`disabled`、`armed`、`active`、`hold`、`stopping`、`stopped`、
+`aborted`、`failed`をclosed stateとして管理する。defaultは`disabled`であり、明示的な
+permission付き`arm`だけが`armed`へ遷移する。`reconnect`は観測eventを記録するだけで、
+自動re-armや過去requestの再送を行わない。
+
+source stale / disconnectはactive requestを破棄して`hold`へ入り、source invalidは`aborted`
+へ入る。requestはsession identityと単調増加sequence、caller-providedなfreshness policyと
+現在時刻を必須で照合し、contextがない場合もacceptせず`hold`またはrejectとして記録する。
+duplicate / late / stale requestもrejectする。最新request stateはtrace artifactとは別に保持し、
+hold / stop / abort / failure時に再利用しない。
+
+operator stopとruntime shutdownは`stopping`へ遷移し、明示されたdeadline内の
+`complete_stop`だけが`stopped`を確定する。stopはidempotentで、deadline超過は`failed`となる。
+既に`aborted`または`failed`のprimary stateへcleanup failureを記録しても、primary stateを
+上書きしない。cleanup後の実測monotonic elapsedをdeadline判定へ使い、計算されたdeadlineが
+finiteでない場合も`failed`とする。terminal stateだけでなく`hold`からの再-armにも新しい未使用
+session identityと明示permissionが必要であり、session IDをlifetime内で再利用しない。
+public transitionは一つのreducer lockで直列化し、event sinkの失敗はlifecycleをfail-closedにする。
+各transitionのtimestampは有限値であることを状態、permission、session、sequenceのmutation前に
+検証する。`complete_stop`はstop開始時刻より前のtimestampを拒否し、停止状態とtraceを変更しない。
 
 ## Serialization / failure
 
@@ -103,7 +129,8 @@ serializeし、decode時にunknown field、missing field、duplicate key、non-f
 
 - `schemas.command`がshared request、permission、decision、serialization shapeを所有する。
 - `runtime.output.permission`がpermission decisionを所有し、`runtime.output.trace`がrecording /
-  dry-run trace、artifact、replayを所有する。
+  dry-run request trace、artifact、replayを所有し、`runtime.output.lifecycle`がstate、stop、
+  lifecycle traceを所有する。
 - `runtime/`が将来のcompositionを所有し、Input Source固有分岐をphysical output coreへ持ち込まない。
 - K-preの実装とtestはsocket、network、serial、Arduino、OSC、Robot providerを開かない・呼ばない。
 - 実機作動は`docs/operations/hardware-safety.md`と専用Issue / 明示許可の範囲に限る。
