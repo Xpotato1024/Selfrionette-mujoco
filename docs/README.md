@@ -35,6 +35,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | Robot Plugin / Profile / Runtime Plugin / Viewer declaration | `docs/contracts/robot-profile-runtime-viewer-profile.md` | bounded discovery、robot selection、resource ownership、backend/viewer compatibility |
 | experiment plugin composition | `docs/contracts/experiment-plugin-composition.md` | Robot、Environment、Mapping、Task、Evaluationのversioned compositionとreadiness |
 | evaluation manifest / readiness freeze | `docs/contracts/evaluation-manifest-readiness.md` | pre-run manifestのcanonical bytes、world/tool pair invariant、requested/resolved identity、software-only readiness |
+| R7-H contact task / object manifest | `docs/contracts/contact-task-manifest.md` | cube physical condition、reset、target、MuJoCo setting、semantic role、canonical serialization |
 | kinematics / command境界 | `docs/contracts/kinematics-command-contract.md` | solver、command、qpos境界 |
 | fast_arm MuJoCo model name | `docs/contracts/mujoco-model-name-contract.md` | plugin-owned body/site name、fallback、failure contract |
 | forward kinematics | `docs/contracts/forward-kinematics.md` | robot-specific FK ownership |

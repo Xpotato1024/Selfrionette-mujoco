@@ -24,6 +24,9 @@ EXPECTED_MODULES = {
         "viewer_robot_declaration",
         "viewer_package_resource_manifest",
     },
+    "contact": {
+        "manifest",
+    },
     "control": {
         "desired_endpoint_resolver",
         "endpoint_target_generator",
