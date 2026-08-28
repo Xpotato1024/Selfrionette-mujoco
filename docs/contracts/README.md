@@ -28,3 +28,4 @@ canonical contract文書:
 - `docs/contracts/endpoint-target-generator.md`
 - `docs/contracts/experiment-plugin-composition.md`
 - `docs/contracts/evaluation-manifest-readiness.md`
+- `docs/contracts/physical-operator-validation.md`

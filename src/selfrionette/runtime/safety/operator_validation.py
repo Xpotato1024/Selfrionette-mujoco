@@ -1,0 +1,1031 @@
+"""Operator-gated physical validation procedure and evidence artifact.
+
+これは実機を操作するadapterではない。target / operator / clearance / preflight / stop /
+rollbackを明示したprocedureと、expected / observed / source / revision / safety decisionを
+strictに保存するsoftware-only boundaryであり、actual hardware runは#509の責務として残す。
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+from typing import Any
+
+from selfrionette.runtime.safety.physical_safety_core import SafetyDecisionAction
+
+
+VALIDATION_ARTIFACT_SCHEMA_VERSION = 1
+
+
+class ValidationClassification(str, Enum):
+    """procedure / artifactのclosed lifecycle classification。"""
+
+    PASS = "pass"
+    FAIL = "fail"
+    UNAVAILABLE = "unavailable"
+    ABORTED = "aborted"
+    TECHNICAL_INVALID = "technical_invalid"
+
+
+class ValidationCheckStatus(str, Enum):
+    """個別checkのclosed outcome。"""
+
+    PASS = "pass"
+    FAIL = "fail"
+    UNAVAILABLE = "unavailable"
+    TECHNICAL_INVALID = "technical_invalid"
+
+
+class ValidationCheckKind(str, Enum):
+    """procedureが要求する検証axis。"""
+
+    LIMIT_RANGE = "limit_range"
+    COLLISION_CLEARANCE = "collision_clearance"
+    TRAJECTORY_FEASIBILITY = "trajectory_feasibility"
+    STOP_PROCEDURE = "stop_procedure"
+    ROLLBACK_PROCEDURE = "rollback_procedure"
+
+
+class MeasurementSourceKind(str, Enum):
+    """observed値の出所。softwareとphysicalを混同しない。"""
+
+    SOFTWARE_DRY_RUN = "software_dry_run"
+    MUJOCO_SIMULATION = "mujoco_simulation"
+    MANUFACTURER_DOCUMENT = "manufacturer_document"
+    PHYSICAL_MEASUREMENT = "physical_measurement"
+    UNKNOWN = "unknown"
+
+    @property
+    def is_physical(self) -> bool:
+        return self in {
+            MeasurementSourceKind.MANUFACTURER_DOCUMENT,
+            MeasurementSourceKind.PHYSICAL_MEASUREMENT,
+        }
+
+
+class EvidenceClass(str, Enum):
+    """artifact内のevidence source composition。"""
+
+    NONE = "none"
+    SOFTWARE_ONLY = "software_only"
+    PHYSICAL_ONLY = "physical_only"
+    MIXED = "mixed"
+    UNKNOWN = "unknown"
+
+
+def _text(name: str, value: object) -> str:
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return value
+
+
+def _parse_timestamp(name: str, value: object) -> datetime:
+    text = _text(name, value)
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{name} must include a timezone")
+    return parsed
+
+
+def _timestamp(name: str, value: object) -> str:
+    text = _text(name, value)
+    _parse_timestamp(name, text)
+    return text
+
+
+def _finite_value(name: str, value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{name} must be a finite number")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{name} must be finite")
+    return 0.0 if number == 0.0 else number
+
+
+def _json_value(name: str, value: object) -> object:
+    """expected / observedのfinite JSON subsetを再帰的に検証する。"""
+
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if isinstance(value, (int, float)):
+        return _finite_value(name, value)
+    if isinstance(value, Mapping):
+        result: dict[str, object] = {}
+        for key, child in value.items():
+            _text(f"{name} key", key)
+            if key in result:
+                raise ValueError(f"{name} contains duplicate key: {key}")
+            result[key] = _json_value(f"{name}.{key}", child)
+        return result
+    if isinstance(value, (list, tuple)):
+        return [_json_value(f"{name}[{index}]", child) for index, child in enumerate(value)]
+    raise TypeError(f"{name} contains a value that is not JSON-compatible")
+
+
+def _mapping(name: str, value: object) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{name} must be an object")
+    return value
+
+
+def _fields(name: str, value: object, allowed: set[str]) -> Mapping[str, object]:
+    raw = _mapping(name, value)
+    unknown = set(raw) - allowed
+    if unknown:
+        raise ValueError(f"{name} contains unknown fields: {sorted(unknown)!r}")
+    missing = allowed - set(raw)
+    if missing:
+        raise ValueError(f"{name} is missing fields: {sorted(missing)!r}")
+    return raw
+
+
+def _enum(enum_type: type[Enum], name: str, value: object) -> Any:
+    if isinstance(value, enum_type):
+        return value
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a string")
+    try:
+        return enum_type(value)
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in enum_type)
+        raise ValueError(f"{name} must be one of: {allowed}") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class TargetIdentity:
+    """検証対象robot/controller/connection/model identity。"""
+
+    target_id: str
+    robot_id: str
+    controller_id: str
+    connection_id: str
+    model_id: str
+
+    def __post_init__(self) -> None:
+        for name in ("target_id", "robot_id", "controller_id", "connection_id", "model_id"):
+            _text(name, getattr(self, name))
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "target_id": self.target_id,
+            "robot_id": self.robot_id,
+            "controller_id": self.controller_id,
+            "connection_id": self.connection_id,
+            "model_id": self.model_id,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorIdentity:
+    """operator identity。"""
+
+    operator_id: str
+    role: str
+
+    def __post_init__(self) -> None:
+        _text("operator_id", self.operator_id)
+        _text("role", self.role)
+
+    def to_dict(self) -> dict[str, object]:
+        return {"operator_id": self.operator_id, "role": self.role}
+
+
+@dataclass(frozen=True, slots=True)
+class MeasurementSource:
+    """expected / observed valueのsourceとevidence reference。"""
+
+    kind: MeasurementSourceKind
+    source_id: str
+    revision: str
+    evidence_reference: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, MeasurementSourceKind):
+            object.__setattr__(self, "kind", MeasurementSourceKind(self.kind))
+        _text("source_id", self.source_id)
+        _text("revision", self.revision)
+        if self.evidence_reference is not None:
+            _text("evidence_reference", self.evidence_reference)
+        if self.kind.is_physical and not self.evidence_reference:
+            raise ValueError("physical source requires evidence_reference")
+
+    def to_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {
+            "kind": self.kind.value,
+            "source_id": self.source_id,
+            "revision": self.revision,
+            "evidence_reference": self.evidence_reference,
+        }
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class PreflightItem:
+    """operatorが確認する一項目。"""
+
+    item_id: str
+    description: str
+    checked: bool
+
+    def __post_init__(self) -> None:
+        _text("item_id", self.item_id)
+        _text("description", self.description)
+        if not isinstance(self.checked, bool):
+            raise TypeError("checked must be bool")
+
+    def to_dict(self) -> dict[str, object]:
+        return {"item_id": self.item_id, "description": self.description, "checked": self.checked}
+
+
+@dataclass(frozen=True, slots=True)
+class PreflightChecklist:
+    """preflight項目とoperator acknowledgment。"""
+
+    items: tuple[PreflightItem, ...]
+    acknowledged_by: str
+    acknowledged_at: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.items, tuple) or not self.items:
+            raise ValueError("preflight items must be a non-empty tuple")
+        if not all(isinstance(item, PreflightItem) for item in self.items):
+            raise TypeError("preflight items must contain PreflightItem values")
+        ids = tuple(item.item_id for item in self.items)
+        if len(ids) != len(set(ids)):
+            raise ValueError("preflight item IDs must be unique")
+        _text("acknowledged_by", self.acknowledged_by)
+        _timestamp("acknowledged_at", self.acknowledged_at)
+
+    @property
+    def complete(self) -> bool:
+        return all(item.checked for item in self.items)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "items": [item.to_dict() for item in self.items],
+            "acknowledged_by": self.acknowledged_by,
+            "acknowledged_at": self.acknowledged_at,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ClearanceDeclaration:
+    """required physical clearanceとverification evidence。"""
+
+    required_clearance_m: float
+    verified_clearance_m: float | None
+    source: MeasurementSource
+    verified_at: str | None
+
+    def __post_init__(self) -> None:
+        required = _finite_value("required_clearance_m", self.required_clearance_m)
+        if required <= 0.0:
+            raise ValueError("required_clearance_m must be positive")
+        verified = None if self.verified_clearance_m is None else _finite_value("verified_clearance_m", self.verified_clearance_m)
+        if verified is not None and verified < 0.0:
+            raise ValueError("verified_clearance_m must be non-negative")
+        if not isinstance(self.source, MeasurementSource):
+            raise TypeError("source must be MeasurementSource")
+        if self.verified_at is not None:
+            _timestamp("verified_at", self.verified_at)
+        object.__setattr__(self, "required_clearance_m", required)
+        object.__setattr__(self, "verified_clearance_m", verified)
+
+    @property
+    def verified(self) -> bool:
+        return self.verified_clearance_m is not None and self.verified_clearance_m >= self.required_clearance_m
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "required_clearance_m": self.required_clearance_m,
+            "verified_clearance_m": self.verified_clearance_m,
+            "source": self.source.to_dict(),
+            "verified_at": self.verified_at,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class StopProcedure:
+    """normal stop / emergency stop procedure。"""
+
+    normal_stop_steps: tuple[str, ...]
+    emergency_stop_steps: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        for name, steps in (("normal_stop_steps", self.normal_stop_steps), ("emergency_stop_steps", self.emergency_stop_steps)):
+            if not isinstance(steps, tuple) or not steps or not all(isinstance(step, str) and step.strip() for step in steps):
+                raise ValueError(f"{name} must contain non-empty steps")
+
+    def to_dict(self) -> dict[str, object]:
+        return {"normal_stop_steps": list(self.normal_stop_steps), "emergency_stop_steps": list(self.emergency_stop_steps)}
+
+
+@dataclass(frozen=True, slots=True)
+class RollbackProcedure:
+    """失敗 / abort後のrollback procedure。"""
+
+    steps: tuple[str, ...]
+    target_state: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.steps, tuple) or not self.steps or not all(isinstance(step, str) and step.strip() for step in self.steps):
+            raise ValueError("rollback steps must contain non-empty steps")
+        _text("target_state", self.target_state)
+
+    def to_dict(self) -> dict[str, object]:
+        return {"steps": list(self.steps), "target_state": self.target_state}
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationCheckSpec:
+    """procedureが要求するcheck identity。"""
+
+    check_id: str
+    kind: ValidationCheckKind
+    description: str
+
+    def __post_init__(self) -> None:
+        _text("check_id", self.check_id)
+        if not isinstance(self.kind, ValidationCheckKind):
+            object.__setattr__(self, "kind", ValidationCheckKind(self.kind))
+        _text("description", self.description)
+
+    def to_dict(self) -> dict[str, object]:
+        return {"check_id": self.check_id, "kind": self.kind.value, "description": self.description}
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationProcedure:
+    """operator gateを満たしたsoftware-only validation plan。"""
+
+    procedure_id: str
+    target: TargetIdentity
+    operator: OperatorIdentity
+    software_revision: str
+    created_at: str
+    preflight: PreflightChecklist
+    clearance: ClearanceDeclaration
+    stop: StopProcedure
+    rollback: RollbackProcedure
+    required_checks: tuple[ValidationCheckSpec, ...]
+    operator_confirmed: bool
+    dry_run_only: bool = True
+
+    def __post_init__(self) -> None:
+        _text("procedure_id", self.procedure_id)
+        if not isinstance(self.target, TargetIdentity):
+            raise TypeError("target must be TargetIdentity")
+        if not isinstance(self.operator, OperatorIdentity):
+            raise TypeError("operator must be OperatorIdentity")
+        _text("software_revision", self.software_revision)
+        _timestamp("created_at", self.created_at)
+        expected_types = (
+            ("preflight", self.preflight, PreflightChecklist),
+            ("clearance", self.clearance, ClearanceDeclaration),
+            ("stop", self.stop, StopProcedure),
+            ("rollback", self.rollback, RollbackProcedure),
+        )
+        for name, value, expected_type in expected_types:
+            if not isinstance(value, expected_type):
+                raise TypeError(f"{name} has an invalid type")
+        if not isinstance(self.required_checks, tuple) or not self.required_checks:
+            raise ValueError("required_checks must be a non-empty tuple")
+        if not all(isinstance(item, ValidationCheckSpec) for item in self.required_checks):
+            raise TypeError("required_checks must contain ValidationCheckSpec values")
+        check_ids = tuple(item.check_id for item in self.required_checks)
+        if len(check_ids) != len(set(check_ids)):
+            raise ValueError("required check IDs must be unique")
+        if not isinstance(self.operator_confirmed, bool):
+            raise TypeError("operator_confirmed must be bool")
+        if self.dry_run_only is not True:
+            raise ValueError("R7-J operator procedure is dry-run-only; actual hardware belongs to #509")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "procedure_id": self.procedure_id,
+            "target": self.target.to_dict(),
+            "operator": self.operator.to_dict(),
+            "software_revision": self.software_revision,
+            "created_at": self.created_at,
+            "preflight": self.preflight.to_dict(),
+            "clearance": self.clearance.to_dict(),
+            "stop": self.stop.to_dict(),
+            "rollback": self.rollback.to_dict(),
+            "required_checks": [item.to_dict() for item in self.required_checks],
+            "operator_confirmed": self.operator_confirmed,
+            "dry_run_only": self.dry_run_only,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ProcedureGateResult:
+    """operator gateのreadiness。"""
+
+    classification: ValidationClassification
+    reason_code: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.classification, ValidationClassification):
+            object.__setattr__(self, "classification", ValidationClassification(self.classification))
+        _text("reason_code", self.reason_code)
+
+
+@dataclass(frozen=True, slots=True)
+class SafetyDecisionEvidence:
+    """P5 decision identityのartifact projection。"""
+
+    action: SafetyDecisionAction
+    reason_identity: str
+    provenance: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.action, SafetyDecisionAction):
+            object.__setattr__(self, "action", SafetyDecisionAction(self.action))
+        _text("reason_identity", self.reason_identity)
+        if not isinstance(self.provenance, tuple) or not all(
+            isinstance(item, str) and item == item.strip() and item for item in self.provenance
+        ):
+            raise TypeError("provenance must contain non-empty strings")
+        if len(set(self.provenance)) != len(self.provenance):
+            raise ValueError("provenance must be unique")
+
+    def to_dict(self) -> dict[str, object]:
+        return {"action": self.action.value, "reason_identity": self.reason_identity, "provenance": list(self.provenance)}
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationCheckEvidence:
+    """expected / observed / source / decision付きcheck result。"""
+
+    check_id: str
+    kind: ValidationCheckKind
+    status: ValidationCheckStatus
+    expected: Mapping[str, object]
+    observed: Mapping[str, object] | None
+    measurement_source: MeasurementSource
+    observed_at: str | None
+    software_revision: str
+    safety_decision: SafetyDecisionEvidence
+    reason: str
+
+    def __post_init__(self) -> None:
+        _text("check_id", self.check_id)
+        if not isinstance(self.kind, ValidationCheckKind):
+            object.__setattr__(self, "kind", ValidationCheckKind(self.kind))
+        if not isinstance(self.status, ValidationCheckStatus):
+            object.__setattr__(self, "status", ValidationCheckStatus(self.status))
+        expected = _json_value("expected", self.expected)
+        if not isinstance(expected, dict) or not expected:
+            raise ValueError("expected must be a non-empty object")
+        observed = None if self.observed is None else _json_value("observed", self.observed)
+        if observed is not None and not isinstance(observed, dict):
+            raise ValueError("observed must be an object or None")
+        if self.status in {ValidationCheckStatus.PASS, ValidationCheckStatus.FAIL} and observed is None:
+            raise ValueError("pass/fail check requires observed evidence")
+        if not isinstance(self.measurement_source, MeasurementSource):
+            raise TypeError("measurement_source must be MeasurementSource")
+        if self.observed_at is not None:
+            _timestamp("observed_at", self.observed_at)
+        if self.status in {ValidationCheckStatus.PASS, ValidationCheckStatus.FAIL} and self.observed_at is None:
+            raise ValueError("pass/fail check requires observed_at")
+        _text("software_revision", self.software_revision)
+        if not isinstance(self.safety_decision, SafetyDecisionEvidence):
+            raise TypeError("safety_decision must be SafetyDecisionEvidence")
+        _text("reason", self.reason)
+        if self.status is ValidationCheckStatus.PASS and self.safety_decision.action is not SafetyDecisionAction.ALLOW:
+            raise ValueError("pass check requires allow safety decision")
+        if self.status is ValidationCheckStatus.UNAVAILABLE and self.safety_decision.action is not SafetyDecisionAction.UNAVAILABLE:
+            raise ValueError("unavailable check requires unavailable safety decision")
+        if self.status is ValidationCheckStatus.TECHNICAL_INVALID and self.safety_decision.action is not SafetyDecisionAction.INVALID:
+            raise ValueError("technical-invalid check requires invalid safety decision")
+        if self.status is ValidationCheckStatus.FAIL and self.safety_decision.action in {
+            SafetyDecisionAction.ALLOW,
+            SafetyDecisionAction.UNAVAILABLE,
+            SafetyDecisionAction.INVALID,
+        }:
+            raise ValueError("fail check requires reject, hold, or stop safety decision")
+        object.__setattr__(self, "expected", expected)
+        object.__setattr__(self, "observed", observed)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "check_id": self.check_id,
+            "kind": self.kind.value,
+            "status": self.status.value,
+            "expected": dict(self.expected),
+            "observed": None if self.observed is None else dict(self.observed),
+            "measurement_source": self.measurement_source.to_dict(),
+            "observed_at": self.observed_at,
+            "software_revision": self.software_revision,
+            "safety_decision": self.safety_decision.to_dict(),
+            "reason": self.reason,
+        }
+
+
+def _derive_evidence_class(checks: Sequence[ValidationCheckEvidence]) -> EvidenceClass:
+    if not checks:
+        return EvidenceClass.NONE
+    if any(item.measurement_source.kind is MeasurementSourceKind.UNKNOWN for item in checks):
+        return EvidenceClass.UNKNOWN
+    physical = any(item.measurement_source.kind.is_physical for item in checks)
+    software = any(not item.measurement_source.kind.is_physical for item in checks)
+    if physical and software:
+        return EvidenceClass.MIXED
+    if physical:
+        return EvidenceClass.PHYSICAL_ONLY
+    return EvidenceClass.SOFTWARE_ONLY
+
+
+def validate_operator_gate(procedure: ValidationProcedure) -> ProcedureGateResult:
+    """operator / preflight / clearance gateをhardwareなしで評価する。"""
+
+    if not isinstance(procedure, ValidationProcedure):
+        return ProcedureGateResult(ValidationClassification.TECHNICAL_INVALID, "invalid_procedure")
+    if not procedure.operator_confirmed:
+        return ProcedureGateResult(ValidationClassification.UNAVAILABLE, "operator_confirmation_required")
+    if procedure.preflight.acknowledged_by != procedure.operator.operator_id:
+        return ProcedureGateResult(ValidationClassification.UNAVAILABLE, "preflight_operator_mismatch")
+    if not procedure.preflight.complete:
+        return ProcedureGateResult(ValidationClassification.UNAVAILABLE, "preflight_incomplete")
+    if procedure.clearance.verified_clearance_m is None or procedure.clearance.verified_at is None:
+        return ProcedureGateResult(ValidationClassification.UNAVAILABLE, "clearance_verification_unavailable")
+    if procedure.clearance.source.kind is MeasurementSourceKind.UNKNOWN:
+        return ProcedureGateResult(ValidationClassification.UNAVAILABLE, "clearance_source_unknown")
+    if not procedure.clearance.verified:
+        return ProcedureGateResult(ValidationClassification.FAIL, "clearance_below_required")
+    return ProcedureGateResult(ValidationClassification.PASS, "operator_gate_ready")
+
+
+def _classify(
+    procedure: ValidationProcedure,
+    checks: Sequence[ValidationCheckEvidence],
+    *,
+    completed_at: str | None,
+    operator_aborted: bool,
+) -> tuple[ValidationClassification, str]:
+    gate = validate_operator_gate(procedure)
+    if gate.classification is ValidationClassification.TECHNICAL_INVALID:
+        return gate.classification, gate.reason_code
+    if completed_at is None:
+        return ValidationClassification.TECHNICAL_INVALID, "completion_timestamp_missing"
+    if operator_aborted:
+        return ValidationClassification.ABORTED, "operator_aborted"
+    required = {item.check_id: item for item in procedure.required_checks}
+    actual_ids = tuple(item.check_id for item in checks)
+    if len(actual_ids) != len(set(actual_ids)) or any(item.check_id not in required for item in checks):
+        return ValidationClassification.TECHNICAL_INVALID, "check_identity_invalid"
+    if set(actual_ids) != set(required):
+        return ValidationClassification.UNAVAILABLE, "required_check_observation_incomplete"
+    for check in checks:
+        if check.kind is not required[check.check_id].kind:
+            return ValidationClassification.TECHNICAL_INVALID, "check_kind_mismatch"
+        if check.software_revision != procedure.software_revision:
+            return ValidationClassification.TECHNICAL_INVALID, "software_revision_mismatch"
+        if check.measurement_source.kind is MeasurementSourceKind.UNKNOWN:
+            return ValidationClassification.UNAVAILABLE, "check_source_unknown"
+    if gate.classification is ValidationClassification.FAIL:
+        return ValidationClassification.FAIL, gate.reason_code
+    if gate.classification is ValidationClassification.UNAVAILABLE:
+        return ValidationClassification.UNAVAILABLE, gate.reason_code
+    statuses = tuple(item.status for item in checks)
+    if ValidationCheckStatus.TECHNICAL_INVALID in statuses:
+        return ValidationClassification.TECHNICAL_INVALID, "technical_invalid_check"
+    if ValidationCheckStatus.FAIL in statuses:
+        return ValidationClassification.FAIL, "validation_check_failed"
+    if ValidationCheckStatus.UNAVAILABLE in statuses:
+        return ValidationClassification.UNAVAILABLE, "validation_check_unavailable"
+    return ValidationClassification.PASS, "all_validation_checks_passed"
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationEvidenceArtifact:
+    """strict round-trip可能なoperator validation evidence artifact。"""
+
+    artifact_id: str
+    procedure: ValidationProcedure
+    started_at: str
+    completed_at: str | None
+    classification: ValidationClassification
+    classification_reason: str
+    checks: tuple[ValidationCheckEvidence, ...]
+    operator_aborted: bool = False
+    schema_version: int = VALIDATION_ARTIFACT_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        _text("artifact_id", self.artifact_id)
+        if not isinstance(self.procedure, ValidationProcedure):
+            raise TypeError("procedure must be ValidationProcedure")
+        started_at = _parse_timestamp("started_at", self.started_at)
+        if self.completed_at is not None:
+            completed_at = _parse_timestamp("completed_at", self.completed_at)
+            if completed_at < started_at:
+                raise ValueError("completed_at must not precede started_at")
+        if not isinstance(self.classification, ValidationClassification):
+            object.__setattr__(self, "classification", ValidationClassification(self.classification))
+        _text("classification_reason", self.classification_reason)
+        if not isinstance(self.checks, tuple) or not all(isinstance(item, ValidationCheckEvidence) for item in self.checks):
+            raise TypeError("checks must contain ValidationCheckEvidence values")
+        if not isinstance(self.operator_aborted, bool):
+            raise TypeError("operator_aborted must be bool")
+        if (
+            isinstance(self.schema_version, bool)
+            or not isinstance(self.schema_version, int)
+            or self.schema_version != VALIDATION_ARTIFACT_SCHEMA_VERSION
+        ):
+            raise ValueError(f"unsupported validation artifact schema version: {self.schema_version!r}")
+        derived, reason = _classify(
+            self.procedure,
+            self.checks,
+            completed_at=self.completed_at,
+            operator_aborted=self.operator_aborted,
+        )
+        if self.classification is not derived or self.classification_reason != reason:
+            raise ValueError(
+                "validation artifact classification does not match procedure/check evidence: "
+                f"declared={self.classification.value}/{self.classification_reason}, "
+                f"derived={derived.value}/{reason}"
+            )
+
+    @property
+    def evidence_class(self) -> EvidenceClass:
+        return _derive_evidence_class(self.checks)
+
+    @property
+    def physical_evidence_present(self) -> bool:
+        return self.evidence_class in {EvidenceClass.PHYSICAL_ONLY, EvidenceClass.MIXED}
+
+    @property
+    def complete(self) -> bool:
+        return self.classification is ValidationClassification.PASS
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "artifact_id": self.artifact_id,
+            "procedure": self.procedure.to_dict(),
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+            "classification": self.classification.value,
+            "classification_reason": self.classification_reason,
+            "evidence_class": self.evidence_class.value,
+            "checks": [item.to_dict() for item in self.checks],
+            "operator_aborted": self.operator_aborted,
+        }
+
+    def to_json_bytes(self) -> bytes:
+        return json.dumps(
+            self.to_dict(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+
+
+def build_validation_artifact(
+    procedure: ValidationProcedure,
+    checks: Sequence[ValidationCheckEvidence],
+    *,
+    artifact_id: str,
+    started_at: str,
+    completed_at: str | None,
+    operator_aborted: bool = False,
+) -> ValidationEvidenceArtifact:
+    """typed evidenceからclassificationを導出してartifactを構築する。"""
+
+    if not isinstance(procedure, ValidationProcedure):
+        raise TypeError("procedure must be ValidationProcedure")
+    if not isinstance(checks, Sequence) or isinstance(checks, (str, bytes)):
+        raise TypeError("checks must be a sequence")
+    typed_checks = tuple(checks)
+    if not all(isinstance(item, ValidationCheckEvidence) for item in typed_checks):
+        raise TypeError("checks must contain ValidationCheckEvidence values")
+    classification, reason = _classify(
+        procedure,
+        typed_checks,
+        completed_at=completed_at,
+        operator_aborted=operator_aborted,
+    )
+    return ValidationEvidenceArtifact(
+        artifact_id=artifact_id,
+        procedure=procedure,
+        started_at=started_at,
+        completed_at=completed_at,
+        classification=classification,
+        classification_reason=reason,
+        checks=typed_checks,
+        operator_aborted=operator_aborted,
+    )
+
+
+def build_dry_run_validation_artifact(
+    procedure: ValidationProcedure,
+    checks: Sequence[ValidationCheckEvidence],
+    *,
+    artifact_id: str,
+    started_at: str,
+    completed_at: str | None,
+    operator_aborted: bool = False,
+) -> ValidationEvidenceArtifact:
+    """software fixture専用のartifact builder。hardware pathを持たない。"""
+
+    if not isinstance(procedure, ValidationProcedure) or not procedure.dry_run_only:
+        raise ValueError("dry-run builder requires a dry-run-only ValidationProcedure")
+    return build_validation_artifact(
+        procedure,
+        checks,
+        artifact_id=artifact_id,
+        started_at=started_at,
+        completed_at=completed_at,
+        operator_aborted=operator_aborted,
+    )
+
+
+def _reject_duplicate_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _decode_target(value: object) -> TargetIdentity:
+    raw = _fields("target", value, {"target_id", "robot_id", "controller_id", "connection_id", "model_id"})
+    return TargetIdentity(
+        _text("target_id", raw["target_id"]),
+        _text("robot_id", raw["robot_id"]),
+        _text("controller_id", raw["controller_id"]),
+        _text("connection_id", raw["connection_id"]),
+        _text("model_id", raw["model_id"]),
+    )
+
+
+def _decode_operator(value: object) -> OperatorIdentity:
+    raw = _fields("operator", value, {"operator_id", "role"})
+    return OperatorIdentity(_text("operator_id", raw["operator_id"]), _text("role", raw["role"]))
+
+
+def _decode_source(value: object) -> MeasurementSource:
+    raw = _fields("measurement_source", value, {"kind", "source_id", "revision", "evidence_reference"})
+    evidence = raw["evidence_reference"]
+    if evidence is not None:
+        evidence = _text("evidence_reference", evidence)
+    return MeasurementSource(
+        _enum(MeasurementSourceKind, "kind", raw["kind"]),
+        _text("source_id", raw["source_id"]),
+        _text("revision", raw["revision"]),
+        evidence,
+    )
+
+
+def _decode_preflight(value: object) -> PreflightChecklist:
+    raw = _fields("preflight", value, {"items", "acknowledged_by", "acknowledged_at"})
+    items_raw = raw["items"]
+    if not isinstance(items_raw, list):
+        raise ValueError("preflight items must be an array")
+    items: list[PreflightItem] = []
+    for index, item in enumerate(items_raw):
+        item_raw = _fields(f"preflight.items[{index}]", item, {"item_id", "description", "checked"})
+        items.append(
+            PreflightItem(
+                _text("item_id", item_raw["item_id"]),
+                _text("description", item_raw["description"]),
+                item_raw["checked"],
+            )
+        )
+    return PreflightChecklist(
+        tuple(items),
+        _text("acknowledged_by", raw["acknowledged_by"]),
+        _timestamp("acknowledged_at", raw["acknowledged_at"]),
+    )
+
+
+def _decode_clearance(value: object) -> ClearanceDeclaration:
+    raw = _fields("clearance", value, {"required_clearance_m", "verified_clearance_m", "source", "verified_at"})
+    verified_at = raw["verified_at"]
+    if verified_at is not None:
+        verified_at = _timestamp("verified_at", verified_at)
+    return ClearanceDeclaration(
+        _finite_value("required_clearance_m", raw["required_clearance_m"]),
+        None if raw["verified_clearance_m"] is None else _finite_value("verified_clearance_m", raw["verified_clearance_m"]),
+        _decode_source(raw["source"]),
+        verified_at,
+    )
+
+
+def _decode_stop(value: object) -> StopProcedure:
+    raw = _fields("stop", value, {"normal_stop_steps", "emergency_stop_steps"})
+    normal = raw["normal_stop_steps"]
+    emergency = raw["emergency_stop_steps"]
+    if not isinstance(normal, list) or not isinstance(emergency, list):
+        raise ValueError("stop procedure steps must be arrays")
+    return StopProcedure(tuple(_text("normal_stop_step", item) for item in normal), tuple(_text("emergency_stop_step", item) for item in emergency))
+
+
+def _decode_rollback(value: object) -> RollbackProcedure:
+    raw = _fields("rollback", value, {"steps", "target_state"})
+    steps = raw["steps"]
+    if not isinstance(steps, list):
+        raise ValueError("rollback steps must be an array")
+    return RollbackProcedure(tuple(_text("rollback_step", item) for item in steps), _text("target_state", raw["target_state"]))
+
+
+def _decode_spec(value: object, index: int) -> ValidationCheckSpec:
+    raw = _fields(f"required_checks[{index}]", value, {"check_id", "kind", "description"})
+    return ValidationCheckSpec(
+        _text("check_id", raw["check_id"]),
+        _enum(ValidationCheckKind, "kind", raw["kind"]),
+        _text("description", raw["description"]),
+    )
+
+
+def _decode_procedure(value: object) -> ValidationProcedure:
+    raw = _fields(
+        "procedure",
+        value,
+        {
+            "procedure_id",
+            "target",
+            "operator",
+            "software_revision",
+            "created_at",
+            "preflight",
+            "clearance",
+            "stop",
+            "rollback",
+            "required_checks",
+            "operator_confirmed",
+            "dry_run_only",
+        },
+    )
+    required_raw = raw["required_checks"]
+    if not isinstance(required_raw, list):
+        raise ValueError("required_checks must be an array")
+    return ValidationProcedure(
+        _text("procedure_id", raw["procedure_id"]),
+        _decode_target(raw["target"]),
+        _decode_operator(raw["operator"]),
+        _text("software_revision", raw["software_revision"]),
+        _timestamp("created_at", raw["created_at"]),
+        _decode_preflight(raw["preflight"]),
+        _decode_clearance(raw["clearance"]),
+        _decode_stop(raw["stop"]),
+        _decode_rollback(raw["rollback"]),
+        tuple(_decode_spec(item, index) for index, item in enumerate(required_raw)),
+        raw["operator_confirmed"],
+        raw["dry_run_only"],
+    )
+
+
+def _decode_safety_decision(value: object) -> SafetyDecisionEvidence:
+    raw = _fields("safety_decision", value, {"action", "reason_identity", "provenance"})
+    provenance = raw["provenance"]
+    if not isinstance(provenance, list):
+        raise ValueError("safety decision provenance must be an array")
+    return SafetyDecisionEvidence(
+        _enum(SafetyDecisionAction, "action", raw["action"]),
+        _text("reason_identity", raw["reason_identity"]),
+        tuple(_text("provenance", item) for item in provenance),
+    )
+
+
+def _decode_check(value: object, index: int) -> ValidationCheckEvidence:
+    raw = _fields(
+        f"checks[{index}]",
+        value,
+        {
+            "check_id",
+            "kind",
+            "status",
+            "expected",
+            "observed",
+            "measurement_source",
+            "observed_at",
+            "software_revision",
+            "safety_decision",
+            "reason",
+        },
+    )
+    expected = _json_value(f"checks[{index}].expected", raw["expected"])
+    observed = None if raw["observed"] is None else _json_value(f"checks[{index}].observed", raw["observed"])
+    if not isinstance(expected, dict) or (observed is not None and not isinstance(observed, dict)):
+        raise ValueError("check expected/observed must be objects")
+    observed_at = raw["observed_at"]
+    if observed_at is not None:
+        observed_at = _timestamp("observed_at", observed_at)
+    return ValidationCheckEvidence(
+        _text("check_id", raw["check_id"]),
+        _enum(ValidationCheckKind, "kind", raw["kind"]),
+        _enum(ValidationCheckStatus, "status", raw["status"]),
+        expected,
+        observed,
+        _decode_source(raw["measurement_source"]),
+        observed_at,
+        _text("software_revision", raw["software_revision"]),
+        _decode_safety_decision(raw["safety_decision"]),
+        _text("reason", raw["reason"]),
+    )
+
+
+def decode_validation_artifact(document: bytes | str | Mapping[str, object]) -> ValidationEvidenceArtifact:
+    """unknown field、duplicate key、BOM、non-finite valueを拒否するstrict decoder。"""
+
+    try:
+        if isinstance(document, bytes):
+            if document.startswith(b"\xef\xbb\xbf"):
+                raise ValueError("validation artifact must not contain a UTF-8 BOM")
+            raw_document = document.decode("utf-8")
+            raw = json.loads(raw_document, object_pairs_hook=_reject_duplicate_pairs)
+        elif isinstance(document, str):
+            if document.startswith("\ufeff"):
+                raise ValueError("validation artifact must not contain a UTF-8 BOM")
+            raw = json.loads(document, object_pairs_hook=_reject_duplicate_pairs)
+        else:
+            raw = document
+        root = _fields(
+            "validation artifact",
+            raw,
+            {
+                "schema_version",
+                "artifact_id",
+                "procedure",
+                "started_at",
+                "completed_at",
+                "classification",
+                "classification_reason",
+                "evidence_class",
+                "checks",
+                "operator_aborted",
+            },
+        )
+        checks_raw = root["checks"]
+        if not isinstance(checks_raw, list):
+            raise ValueError("checks must be an array")
+        artifact = ValidationEvidenceArtifact(
+            artifact_id=_text("artifact_id", root["artifact_id"]),
+            procedure=_decode_procedure(root["procedure"]),
+            started_at=_timestamp("started_at", root["started_at"]),
+            completed_at=None if root["completed_at"] is None else _timestamp("completed_at", root["completed_at"]),
+            classification=_enum(ValidationClassification, "classification", root["classification"]),
+            classification_reason=_text("classification_reason", root["classification_reason"]),
+            checks=tuple(_decode_check(item, index) for index, item in enumerate(checks_raw)),
+            operator_aborted=root["operator_aborted"],
+            schema_version=root["schema_version"],
+        )
+        declared_evidence_class = _enum(EvidenceClass, "evidence_class", root["evidence_class"])
+        if declared_evidence_class is not artifact.evidence_class:
+            raise ValueError("evidence_class does not match check sources")
+        return artifact
+    except (TypeError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        if isinstance(exc, ValueError) and str(exc).startswith("validation artifact"):
+            raise
+        raise ValueError(f"invalid validation artifact: {exc}") from exc
+
+
+def validate_validation_artifact(artifact: ValidationEvidenceArtifact) -> ValidationEvidenceArtifact:
+    """strict encode/decode/round-tripを通過したartifactを返す。"""
+
+    if not isinstance(artifact, ValidationEvidenceArtifact):
+        raise TypeError("artifact must be ValidationEvidenceArtifact")
+    encoded = artifact.to_json_bytes()
+    decoded = decode_validation_artifact(encoded)
+    if decoded.to_json_bytes() != encoded:
+        raise ValueError("validation artifact JSON round-trip is not deterministic")
+    return decoded
+
+
+__all__ = [
+    "ClearanceDeclaration",
+    "EvidenceClass",
+    "MeasurementSource",
+    "MeasurementSourceKind",
+    "OperatorIdentity",
+    "PreflightChecklist",
+    "PreflightItem",
+    "ProcedureGateResult",
+    "RollbackProcedure",
+    "SafetyDecisionEvidence",
+    "StopProcedure",
+    "TargetIdentity",
+    "ValidationCheckEvidence",
+    "ValidationCheckKind",
+    "ValidationCheckSpec",
+    "ValidationCheckStatus",
+    "ValidationClassification",
+    "ValidationEvidenceArtifact",
+    "ValidationProcedure",
+    "build_dry_run_validation_artifact",
+    "build_validation_artifact",
+    "decode_validation_artifact",
+    "validate_operator_gate",
+    "validate_validation_artifact",
+]
