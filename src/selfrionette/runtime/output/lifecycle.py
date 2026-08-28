@@ -11,8 +11,11 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import wraps
 from math import isfinite
 from numbers import Real
+from threading import RLock
+from time import monotonic
 from typing import Literal, Protocol, TypeAlias
 
 from selfrionette.schemas import PhysicalOutputPermission, PhysicalOutputRequest
@@ -88,6 +91,21 @@ class PhysicalOutputLifecycleSink(Protocol):
     """Minimal recording-only sink protocol used by the lifecycle owner."""
 
     def record_lifecycle_event(self, event: "PhysicalOutputLifecycleEvent") -> object: ...
+
+
+def _lifecycle_locked(method: Callable[..., object]) -> Callable[..., object]:
+    """Serialize public lifecycle access through one re-entrant reducer lock."""
+
+    @wraps(method)
+    def synchronized(
+        self: "PhysicalOutputLifecycle",
+        *args: object,
+        **kwargs: object,
+    ) -> object:
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return synchronized
 
 
 def _lifecycle_identifier(name: str, value: object) -> str:
@@ -235,6 +253,84 @@ class PhysicalOutputLifecycleEvent:
             raise ValueError("cleanup_failure event must preserve state or enter failed")
         if self.event_kind == "reconnect" and self.state_after != self.state_before:
             raise ValueError("reconnect event cannot change lifecycle state")
+        if self.event_kind in {"source_stale", "source_disconnected"}:
+            if self.state_after == "hold" and self.state_before not in {
+                "armed",
+                "active",
+                "hold",
+            }:
+                raise ValueError(
+                    f"{self.event_kind} cannot enter hold from {self.state_before}"
+                )
+        if (
+            self.event_kind == "request_rejected"
+            and self.state_after == "hold"
+            and self.state_before != "hold"
+        ):
+            if self.state_before not in {"armed", "active"}:
+                raise ValueError(
+                    "request_rejected can enter hold only from armed or active state"
+                )
+            if self.reason not in {
+                "physical_output_freshness_context_missing",
+                "physical_output_freshness_context_invalid",
+                "physical_output_request_stale",
+                "physical_output_timestamp_in_future",
+            }:
+                raise ValueError(
+                    "request_rejected can enter hold only for a freshness failure"
+                )
+        if self.event_kind in {"operator_stop", "runtime_shutdown"}:
+            enters_stopping = self.state_after == "stopping"
+            if enters_stopping and self.state_before not in {
+                "armed",
+                "active",
+                "hold",
+                "stopping",
+            }:
+                raise ValueError(
+                    f"{self.event_kind} cannot enter stopping from {self.state_before}"
+                )
+        if self.event_kind == "source_invalid":
+            expected_state = (
+                self.state_before
+                if self.state_before in {"aborted", "failed"}
+                else "aborted"
+            )
+            if self.state_after != expected_state:
+                raise ValueError(
+                    "source_invalid must enter aborted or preserve a terminal state"
+                )
+        if self.event_kind == "abort":
+            expected_state = (
+                self.state_before
+                if self.state_before in {"aborted", "failed"}
+                else "aborted"
+            )
+            if self.state_after != expected_state:
+                raise ValueError(
+                    "abort must enter aborted or preserve a terminal state"
+                )
+        if self.event_kind == "failure":
+            expected_state = (
+                self.state_before
+                if self.state_before in {"aborted", "failed"}
+                else "failed"
+            )
+            if self.state_after != expected_state:
+                raise ValueError(
+                    "failure must enter failed or preserve a terminal state"
+                )
+        if self.event_kind == "cleanup_failure":
+            expected_state = (
+                self.state_before
+                if self.state_before in {"aborted", "failed"}
+                else "failed"
+            )
+            if self.state_after != expected_state:
+                raise ValueError(
+                    "cleanup_failure must enter failed or preserve a terminal state"
+                )
         object.__setattr__(self, "request_sequence", request_sequence)
         object.__setattr__(self, "timestamp_s", timestamp_s)
         object.__setattr__(self, "reason", reason)
@@ -345,6 +441,7 @@ def _validate_lifecycle_events(events: tuple[PhysicalOutputLifecycleEvent, ...])
     expected_sequence = 0
     previous_state: PhysicalOutputLifecycleState = "disabled"
     session_id: str | None = None
+    used_session_ids: set[str] = set()
     latest_request_sequence_by_session: dict[str, int] = {}
     seen_request_sequences_by_session: dict[str, set[int]] = {}
     for event in events:
@@ -355,21 +452,36 @@ def _validate_lifecycle_events(events: tuple[PhysicalOutputLifecycleEvent, ...])
             raise ValueError("physical output lifecycle event state chain is inconsistent")
         if session_id is None:
             session_id = event.session_id
+            used_session_ids.add(session_id)
         elif event.session_id != session_id:
             if not (
                 event.event_kind == "armed"
-                and previous_state in {"stopped", "aborted", "failed"}
+                and previous_state in {"hold", "stopped", "aborted", "failed"}
             ):
                 raise ValueError(
-                    "physical output lifecycle session may change only on terminal re-arm"
+                    "physical output lifecycle session may change only on re-arm"
                 )
+            if event.session_id in used_session_ids:
+                raise ValueError("physical output lifecycle session id may not be reused")
             session_id = event.session_id
+            used_session_ids.add(session_id)
+        elif event.event_kind == "armed" and previous_state in {
+            "hold",
+            "stopped",
+            "aborted",
+            "failed",
+        }:
+            raise ValueError("physical output lifecycle re-arm requires a new session")
         previous_state = event.state_after
         if event.event_kind in {"request_accepted", "request_rejected"}:
             if event.request_sequence is None and not (
                 event.event_kind == "request_rejected"
                 and event.reason
-                in {"session_mismatch", "duplicate_or_out_of_order_sequence"}
+                in {
+                    "session_mismatch",
+                    "duplicate_or_out_of_order_sequence",
+                    "lifecycle_state_not_accepting",
+                }
             ):
                 raise ValueError(f"{event.event_kind} requires request_sequence")
             if event.request_sequence is None:
@@ -456,7 +568,9 @@ class PhysicalOutputLifecycle:
         *,
         shutdown_timeout_s: float = 1.0,
         sink: PhysicalOutputLifecycleSink | None = None,
+        clock: Callable[[], Real] | None = None,
     ) -> None:
+        self._lock = RLock()
         self._session_id = _lifecycle_identifier("session_id", session_id)
         if isinstance(shutdown_timeout_s, bool) or not isinstance(shutdown_timeout_s, Real):
             raise TypeError("shutdown_timeout_s must be numeric")
@@ -465,7 +579,11 @@ class PhysicalOutputLifecycle:
             raise ValueError("shutdown_timeout_s must be finite and positive")
         if sink is not None and not callable(getattr(sink, "record_lifecycle_event", None)):
             raise TypeError("lifecycle sink must implement record_lifecycle_event")
+        if clock is not None and not callable(clock):
+            raise TypeError("clock must be callable")
         self._sink = sink
+        self._clock = monotonic if clock is None else clock
+        self._used_session_ids: set[str] = {self._session_id}
         self._state: PhysicalOutputLifecycleState = "disabled"
         self._permission: PhysicalOutputPermission | None = None
         self._latest_request: PhysicalOutputRequest | None = None
@@ -475,35 +593,43 @@ class PhysicalOutputLifecycle:
         self._stop_deadline_s: float | None = None
 
     @property
+    @_lifecycle_locked
     def session_id(self) -> str:
         return self._session_id
 
     @property
+    @_lifecycle_locked
     def state(self) -> PhysicalOutputLifecycleState:
         return self._state
 
     @property
+    @_lifecycle_locked
     def permission(self) -> PhysicalOutputPermission | None:
         return self._permission
 
     @property
+    @_lifecycle_locked
     def latest_request(self) -> PhysicalOutputRequest | None:
         return self._latest_request
 
     @property
+    @_lifecycle_locked
     def last_request_sequence(self) -> int | None:
         return self._last_request_sequence
 
     @property
+    @_lifecycle_locked
     def stop_deadline_s(self) -> float | None:
         return self._stop_deadline_s
 
     @property
+    @_lifecycle_locked
     def events(self) -> tuple[PhysicalOutputLifecycleEvent, ...]:
         return tuple(self._events)
 
+    @_lifecycle_locked
     def trace(self) -> PhysicalOutputLifecycleTrace:
-        return PhysicalOutputLifecycleTrace(events=self.events)
+        return PhysicalOutputLifecycleTrace(events=tuple(self._events))
 
     def _record(
         self,
@@ -528,7 +654,29 @@ class PhysicalOutputLifecycle:
         self._event_sequence += 1
         self._events.append(event)
         if self._sink is not None:
-            self._sink.record_lifecycle_event(event)
+            try:
+                self._sink.record_lifecycle_event(event)
+            except Exception as exc:
+                failure_state: PhysicalOutputLifecycleState = (
+                    "aborted" if event.state_after == "aborted" else "failed"
+                )
+                self._state = failure_state
+                self._latest_request = None
+                self._stop_deadline_s = None
+                failure_event = PhysicalOutputLifecycleEvent(
+                    event_sequence=self._event_sequence,
+                    event_kind="failure",
+                    session_id=self._session_id,
+                    state_before=event.state_after,
+                    state_after=failure_state,
+                    timestamp_s=timestamp_s,
+                    reason=f"lifecycle_event_recording_failed:{type(exc).__name__}",
+                )
+                self._event_sequence += 1
+                self._events.append(failure_event)
+                raise RuntimeError(
+                    "physical output lifecycle event recording failed"
+                ) from exc
         return event
 
     def _result(
@@ -544,6 +692,10 @@ class PhysicalOutputLifecycle:
             event=event,
         )
 
+    def _clock_now(self) -> float:
+        return _required_timestamp("clock", self._clock())
+
+    @_lifecycle_locked
     def arm(
         self,
         permission: PhysicalOutputPermission,
@@ -573,7 +725,7 @@ class PhysicalOutputLifecycle:
                 reason="lifecycle_already_running",
             )
             return self._result(False, "lifecycle_already_running", event)
-        if self._state in {"stopped", "aborted", "failed"}:
+        if self._state in {"hold", "stopped", "aborted", "failed"}:
             if session_id is None:
                 reason = "new_session_required_for_rearm"
                 event = self._record(
@@ -595,7 +747,18 @@ class PhysicalOutputLifecycle:
                     reason=reason,
                 )
                 return self._result(False, reason, event)
+            if resolved_session_id in self._used_session_ids:
+                reason = "session_id_reuse_forbidden"
+                event = self._record(
+                    "arm_rejected",
+                    state_before=self._state,
+                    state_after=self._state,
+                    timestamp_s=timestamp_s,
+                    reason=reason,
+                )
+                return self._result(False, reason, event)
             self._session_id = resolved_session_id
+            self._used_session_ids.add(resolved_session_id)
             self._last_request_sequence = None
         elif session_id is not None and _lifecycle_identifier("session_id", session_id) != self._session_id:
             reason = "session_mismatch"
@@ -621,6 +784,7 @@ class PhysicalOutputLifecycle:
         )
         return self._result(True, event=event)
 
+    @_lifecycle_locked
     def reconnect(self, *, timestamp_s: float | None = None) -> PhysicalOutputLifecycleEvent:
         """Record reconnect only; it never changes state or accepts output."""
 
@@ -632,6 +796,7 @@ class PhysicalOutputLifecycle:
             reason=None,
         )
 
+    @_lifecycle_locked
     def submit(
         self,
         request: PhysicalOutputRequest,
@@ -661,11 +826,11 @@ class PhysicalOutputLifecycle:
                 record_sequence=False,
             )
         if self._state not in {"armed", "active"}:
-            self._last_request_sequence = request.sequence
             return self._reject_request(
                 request,
                 "lifecycle_state_not_accepting",
                 timestamp_s=now_s,
+                record_sequence=False,
             )
         freshness_reason = _request_freshness_reason(
             request,
@@ -716,6 +881,7 @@ class PhysicalOutputLifecycle:
         )
         return self._result(False, reason, event)
 
+    @_lifecycle_locked
     def source_stale(
         self,
         reason: str = "source_stale",
@@ -724,6 +890,7 @@ class PhysicalOutputLifecycle:
     ) -> PhysicalOutputLifecycleResult:
         return self._enter_hold("source_stale", reason, timestamp_s=timestamp_s)
 
+    @_lifecycle_locked
     def source_disconnected(
         self,
         reason: str = "source_disconnected",
@@ -753,6 +920,7 @@ class PhysicalOutputLifecycle:
         )
         return self._result(True, event=event)
 
+    @_lifecycle_locked
     def source_invalid(
         self,
         reason: str = "source_invalid",
@@ -761,6 +929,7 @@ class PhysicalOutputLifecycle:
     ) -> PhysicalOutputLifecycleResult:
         return self._terminal_transition("source_invalid", "aborted", reason, timestamp_s)
 
+    @_lifecycle_locked
     def operator_stop(
         self,
         reason: str = "operator_stop",
@@ -769,6 +938,7 @@ class PhysicalOutputLifecycle:
     ) -> PhysicalOutputLifecycleResult:
         return self._request_stop("operator_stop", reason, now_s=now_s)
 
+    @_lifecycle_locked
     def runtime_shutdown(
         self,
         reason: str = "runtime_shutdown",
@@ -813,10 +983,24 @@ class PhysicalOutputLifecycle:
                 reason="terminal_state_preserved",
             )
             return self._result(True, event=event)
+        deadline = now + self._shutdown_timeout_s
+        if not isfinite(deadline):
+            before = self._state
+            self._state = "failed"
+            self._latest_request = None
+            self._stop_deadline_s = None
+            event = self._record(
+                "failure",
+                state_before=before,
+                state_after=self._state,
+                timestamp_s=now,
+                reason="bounded_shutdown_deadline_overflow",
+            )
+            return self._result(False, "bounded_shutdown_deadline_overflow", event)
         before = self._state
         self._state = "stopping"
         self._latest_request = None
-        self._stop_deadline_s = now + self._shutdown_timeout_s
+        self._stop_deadline_s = deadline
         event = self._record(
             event_kind,
             state_before=before,
@@ -826,6 +1010,7 @@ class PhysicalOutputLifecycle:
         )
         return self._result(True, event=event)
 
+    @_lifecycle_locked
     def complete_stop(
         self,
         *,
@@ -867,6 +1052,7 @@ class PhysicalOutputLifecycle:
         )
         return self._result(True, event=event)
 
+    @_lifecycle_locked
     def abort(
         self,
         reason: str = "operator_abort",
@@ -875,6 +1061,7 @@ class PhysicalOutputLifecycle:
     ) -> PhysicalOutputLifecycleResult:
         return self._terminal_transition("abort", "aborted", reason, timestamp_s)
 
+    @_lifecycle_locked
     def fail(
         self,
         reason: str = "output_failure",
@@ -883,6 +1070,7 @@ class PhysicalOutputLifecycle:
     ) -> PhysicalOutputLifecycleResult:
         return self._terminal_transition("failure", "failed", reason, timestamp_s)
 
+    @_lifecycle_locked
     def record_cleanup_failure(
         self,
         reason: str = "cleanup_failure",
@@ -913,6 +1101,7 @@ class PhysicalOutputLifecycle:
         )
         return self._result(False, reason, event)
 
+    @_lifecycle_locked
     def shutdown(
         self,
         reason: str = "runtime_shutdown",
@@ -927,16 +1116,45 @@ class PhysicalOutputLifecycle:
         if primary_failure is not None:
             self.fail(primary_failure, timestamp_s=now)
         stop_result = self.runtime_shutdown(reason, now_s=now)
+        completion_now = now
         if cleanup is not None:
+            try:
+                cleanup_started = self._clock_now()
+            except Exception:
+                return self.record_cleanup_failure(
+                    "cleanup_clock_invalid",
+                    timestamp_s=now,
+                )
             try:
                 cleanup()
             except Exception as exc:  # cleanup must not hide primary failure
+                try:
+                    cleanup_finished = self._clock_now()
+                    cleanup_timestamp = _cleanup_completion_timestamp(
+                        now,
+                        cleanup_started,
+                        cleanup_finished,
+                    )
+                except Exception:
+                    cleanup_timestamp = now
                 return self.record_cleanup_failure(
                     f"cleanup_failed:{type(exc).__name__}",
+                    timestamp_s=cleanup_timestamp,
+                )
+            try:
+                cleanup_finished = self._clock_now()
+                completion_now = _cleanup_completion_timestamp(
+                    now,
+                    cleanup_started,
+                    cleanup_finished,
+                )
+            except Exception:
+                return self.record_cleanup_failure(
+                    "cleanup_clock_invalid",
                     timestamp_s=now,
                 )
         if self._state == "stopping":
-            return self.complete_stop(now_s=now)
+            return self.complete_stop(now_s=completion_now)
         return stop_result
 
     def _terminal_transition(
@@ -971,6 +1189,20 @@ class PhysicalOutputLifecycle:
         return self._result(False, reason, event)
 
 
+def _cleanup_completion_timestamp(
+    shutdown_timestamp: float,
+    cleanup_started: float,
+    cleanup_finished: float,
+) -> float:
+    elapsed = cleanup_finished - cleanup_started
+    if not isfinite(elapsed) or elapsed < 0.0:
+        raise ValueError("cleanup monotonic clock moved backwards or became non-finite")
+    completion_timestamp = shutdown_timestamp + elapsed
+    if not isfinite(completion_timestamp):
+        raise ValueError("cleanup completion timestamp became non-finite")
+    return completion_timestamp
+
+
 def _required_timestamp(name: str, value: object) -> float:
     timestamp = _lifecycle_timestamp(name, value)
     if timestamp is None:
@@ -984,14 +1216,30 @@ def _request_freshness_reason(
     now_s: float | None,
     max_age_s: float | None,
 ) -> str | None:
-    if max_age_s is None:
+    if now_s is None or max_age_s is None:
         if now_s is not None:
-            _required_timestamp("now_s", now_s)
-        return None
-    max_age = _lifecycle_timestamp("max_age_s", max_age_s)
+            try:
+                _required_timestamp("now_s", now_s)
+            except Exception:
+                return "physical_output_freshness_context_invalid"
+        if max_age_s is not None:
+            try:
+                max_age = _lifecycle_timestamp("max_age_s", max_age_s)
+            except (TypeError, ValueError):
+                return "physical_output_freshness_context_invalid"
+            if max_age is None or max_age < 0.0:
+                return "physical_output_freshness_context_invalid"
+        return "physical_output_freshness_context_missing"
+    try:
+        max_age = _lifecycle_timestamp("max_age_s", max_age_s)
+    except (TypeError, ValueError):
+        return "physical_output_freshness_context_invalid"
     if max_age is None or max_age < 0.0:
-        raise ValueError("max_age_s must be finite and non-negative")
-    now = _required_timestamp("now_s", now_s)
+        return "physical_output_freshness_context_invalid"
+    try:
+        now = _required_timestamp("now_s", now_s)
+    except (TypeError, ValueError):
+        return "physical_output_freshness_context_invalid"
     age = now - request.timestamp_s
     if age < 0.0:
         return "physical_output_timestamp_in_future"

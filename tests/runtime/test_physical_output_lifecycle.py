@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from threading import Barrier
 
 import pytest
 
@@ -27,13 +29,14 @@ def test_default_disabled_and_explicit_arm_are_fail_closed() -> None:
     assert lifecycle.state == "disabled"
     repeated = lifecycle.submit(request)
     assert not repeated.accepted
-    assert repeated.reason == "duplicate_or_out_of_order_sequence"
+    assert repeated.reason == "lifecycle_state_not_accepting"
     assert lifecycle.trace().events[-1].request_sequence is None
 
     assert not lifecycle.arm(PhysicalOutputPermission()).accepted
     assert lifecycle.state == "disabled"
     assert lifecycle.arm(PhysicalOutputPermission(mode="dry_run")).accepted
     assert lifecycle.state == "armed"
+    assert lifecycle.submit(request, now_s=1.0, max_age_s=1.0).accepted
 
 
 def test_submit_tracks_latest_state_but_rejects_duplicate_late_and_stale_requests() -> None:
@@ -42,7 +45,7 @@ def test_submit_tracks_latest_state_but_rejects_duplicate_late_and_stale_request
     request = _endpoint_request()
     lifecycle.arm(permission)
 
-    accepted = lifecycle.submit(request, now_s=1.0)
+    accepted = lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
     assert accepted.accepted
     assert lifecycle.state == "active"
     assert lifecycle.latest_request == request
@@ -89,7 +92,7 @@ def test_session_mismatch_rejection_is_not_bound_to_current_sequence() -> None:
     assert rejected.event is not None
     assert rejected.event.request_sequence is None
 
-    accepted = lifecycle.submit(_endpoint_request(), now_s=1.0)
+    accepted = lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
     assert accepted.accepted
     assert lifecycle.trace().events[-1].request_sequence == 4
 
@@ -99,7 +102,7 @@ def test_reconnect_does_not_rearm_and_explicit_rearm_keeps_stale_commands_out() 
     permission = PhysicalOutputPermission(mode="dry_run")
     request = _endpoint_request()
     lifecycle.arm(permission)
-    lifecycle.submit(request, now_s=1.0)
+    lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
     lifecycle.source_disconnected(timestamp_s=2.0)
 
     reconnect = lifecycle.reconnect(timestamp_s=3.0)
@@ -108,22 +111,23 @@ def test_reconnect_does_not_rearm_and_explicit_rearm_keeps_stale_commands_out() 
     assert lifecycle.state == "hold"
     assert not lifecycle.submit(replace(request, sequence=5), now_s=3.1).accepted
 
-    assert lifecycle.arm(permission).accepted
+    assert lifecycle.arm(permission, session_id="session-2").accepted
     assert lifecycle.state == "armed"
     next_request = replace(
         request,
+        session_id="session-2",
         sequence=6,
         command=replace(request.command, timestamp_s=3.2),
         timestamp_s=3.2,
     )
-    assert lifecycle.submit(next_request, now_s=3.2).accepted
+    assert lifecycle.submit(next_request, now_s=3.2, max_age_s=1.0).accepted
 
 
 def test_stop_is_idempotent_and_bounded() -> None:
     lifecycle = PhysicalOutputLifecycle("session-1", shutdown_timeout_s=1.0)
     permission = PhysicalOutputPermission(mode="dry_run")
     lifecycle.arm(permission)
-    lifecycle.submit(_endpoint_request(), now_s=1.0)
+    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
 
     stopping = lifecycle.operator_stop(now_s=2.0)
     assert stopping.accepted
@@ -145,7 +149,7 @@ def test_stop_is_idempotent_and_bounded() -> None:
 
     timed_out = PhysicalOutputLifecycle("session-timeout", shutdown_timeout_s=1.0)
     timed_out.arm(permission)
-    timed_out.submit(_endpoint_request(), now_s=0.0)
+    timed_out.submit(_endpoint_request(), now_s=0.0, max_age_s=1.0)
     timed_out.operator_stop(now_s=0.0)
     exceeded = timed_out.complete_stop(now_s=1.1)
     assert not exceeded.accepted
@@ -158,7 +162,7 @@ def test_source_invalid_aborts_and_new_session_is_required_after_terminal_state(
     lifecycle = PhysicalOutputLifecycle("session-1")
     permission = PhysicalOutputPermission(mode="dry_run")
     lifecycle.arm(permission)
-    lifecycle.submit(_endpoint_request(), now_s=1.0)
+    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
 
     invalid = lifecycle.source_invalid("source_payload_invalid", timestamp_s=2.0)
     assert not invalid.accepted
@@ -176,7 +180,7 @@ def test_source_invalid_aborts_and_new_session_is_required_after_terminal_state(
 def test_cleanup_failure_does_not_hide_primary_failure() -> None:
     lifecycle = PhysicalOutputLifecycle("session-1")
     lifecycle.arm(PhysicalOutputPermission(mode="dry_run"))
-    lifecycle.submit(_endpoint_request(), now_s=1.0)
+    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
 
     def cleanup() -> None:
         raise RuntimeError("cleanup broke")
@@ -202,7 +206,7 @@ def test_dry_run_sink_captures_lifecycle_trace_separately_from_output_trace() ->
     request = _endpoint_request()
     lifecycle.arm(permission)
     decision = evaluate_physical_output_permission(request, permission)
-    lifecycle.submit(request, now_s=1.0)
+    lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
     sink.record_requested(request, permission)
     sink.record_permission_decision(decision)
     lifecycle.source_stale(timestamp_s=2.0)
@@ -256,4 +260,182 @@ def test_lifecycle_event_rejects_impossible_state_transition() -> None:
                 replace(lifecycle.events[0], session_id="session-2"),
                 *lifecycle.events[1:],
             )
+        )
+
+    with pytest.raises(ValueError, match="cannot enter hold"):
+        PhysicalOutputLifecycleEvent(
+            event_sequence=0,
+            event_kind="source_stale",
+            session_id="session-1",
+            state_before="disabled",
+            state_after="hold",
+            reason="source_stale",
+        )
+
+    with pytest.raises(ValueError, match="cannot enter stopping"):
+        PhysicalOutputLifecycleEvent(
+            event_sequence=0,
+            event_kind="operator_stop",
+            session_id="session-1",
+            state_before="disabled",
+            state_after="stopping",
+            reason="operator_stop",
+        )
+
+
+def test_missing_freshness_context_enters_hold_without_acceptance() -> None:
+    lifecycle = PhysicalOutputLifecycle("session-1")
+    permission = PhysicalOutputPermission(mode="dry_run")
+    lifecycle.arm(permission)
+
+    result = lifecycle.submit(_endpoint_request(), now_s=1.0)
+
+    assert not result.accepted
+    assert result.reason == "physical_output_freshness_context_missing"
+    assert lifecycle.state == "hold"
+    assert lifecycle.latest_request is None
+    assert lifecycle.last_request_sequence == 4
+
+
+def test_hold_rearm_requires_an_unused_session_id_for_lifetime() -> None:
+    lifecycle = PhysicalOutputLifecycle("session-1")
+    permission = PhysicalOutputPermission(mode="dry_run")
+    lifecycle.arm(permission)
+    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
+    lifecycle.source_stale(timestamp_s=2.0)
+
+    same_session = lifecycle.arm(permission, session_id="session-1")
+    assert not same_session.accepted
+    assert same_session.reason == "new_session_required_for_rearm"
+
+    assert lifecycle.arm(permission, session_id="session-2").accepted
+    lifecycle.source_invalid("invalid", timestamp_s=3.0)
+    reused_session = lifecycle.arm(permission, session_id="session-1")
+    assert not reused_session.accepted
+    assert reused_session.reason == "session_id_reuse_forbidden"
+
+
+@pytest.mark.parametrize("health_event", ("source_stale", "source_disconnected"))
+def test_submit_and_source_health_are_serialized_without_trace_corruption(
+    health_event: str,
+) -> None:
+    lifecycle = PhysicalOutputLifecycle("session-1")
+    permission = PhysicalOutputPermission(mode="dry_run")
+    request = _endpoint_request()
+    lifecycle.arm(permission)
+    barrier = Barrier(2)
+
+    def submit() -> object:
+        barrier.wait()
+        return lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
+
+    def stale() -> object:
+        barrier.wait()
+        return getattr(lifecycle, health_event)(timestamp_s=1.0)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda operation: operation(), (submit, stale)))
+
+    assert len(results) == 2
+    assert lifecycle.state == "hold"
+    assert lifecycle.latest_request is None
+    trace = lifecycle.trace()
+    assert PhysicalOutputLifecycleTrace.from_jsonl(trace.to_jsonl_bytes()) == trace
+
+
+def test_sink_event_failure_fails_closed_and_keeps_internal_trace_valid() -> None:
+    class BrokenSink:
+        def record_lifecycle_event(self, event: PhysicalOutputLifecycleEvent) -> None:
+            raise RuntimeError("sink unavailable")
+
+    lifecycle = PhysicalOutputLifecycle("session-1", sink=BrokenSink())
+    with pytest.raises(RuntimeError, match="event recording failed"):
+        lifecycle.arm(PhysicalOutputPermission(mode="dry_run"))
+
+    assert lifecycle.state == "failed"
+    assert lifecycle.latest_request is None
+    assert lifecycle.events[-1].event_kind == "failure"
+    assert "lifecycle_event_recording_failed:RuntimeError" == lifecycle.events[-1].reason
+    assert PhysicalOutputLifecycleTrace.from_jsonl(lifecycle.trace().to_jsonl_bytes()) == lifecycle.trace()
+
+
+def test_shutdown_uses_post_cleanup_monotonic_time_and_marks_overrun_failed() -> None:
+    clock_values = iter((0.0, 2.0))
+    lifecycle = PhysicalOutputLifecycle(
+        "session-slow-cleanup",
+        shutdown_timeout_s=1.0,
+        clock=lambda: next(clock_values),
+    )
+    lifecycle.arm(PhysicalOutputPermission(mode="dry_run"))
+    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
+
+    result = lifecycle.shutdown(now_s=2.0, cleanup=lambda: None)
+
+    assert not result.accepted
+    assert result.reason == "bounded_shutdown_deadline_exceeded"
+    assert lifecycle.state == "failed"
+
+
+def test_stop_deadline_overflow_fails_closed() -> None:
+    lifecycle = PhysicalOutputLifecycle(
+        "session-overflow",
+        shutdown_timeout_s=1.0e308,
+    )
+    lifecycle.arm(PhysicalOutputPermission(mode="dry_run"))
+
+    result = lifecycle.operator_stop(now_s=1.0e308)
+
+    assert not result.accepted
+    assert result.reason == "bounded_shutdown_deadline_overflow"
+    assert lifecycle.state == "failed"
+    assert lifecycle.stop_deadline_s is None
+
+
+def test_lifecycle_trace_rejects_same_session_rearm_from_stopped() -> None:
+    events = (
+        PhysicalOutputLifecycleEvent(
+            event_sequence=0,
+            event_kind="armed",
+            session_id="session-1",
+            state_before="disabled",
+            state_after="armed",
+        ),
+        PhysicalOutputLifecycleEvent(
+            event_sequence=1,
+            event_kind="operator_stop",
+            session_id="session-1",
+            state_before="armed",
+            state_after="stopping",
+            reason="operator_stop",
+        ),
+        PhysicalOutputLifecycleEvent(
+            event_sequence=2,
+            event_kind="stop_completed",
+            session_id="session-1",
+            state_before="stopping",
+            state_after="stopped",
+        ),
+        PhysicalOutputLifecycleEvent(
+            event_sequence=3,
+            event_kind="armed",
+            session_id="session-1",
+            state_before="stopped",
+            state_after="armed",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="re-arm requires a new session"):
+        PhysicalOutputLifecycleTrace(events=events)
+
+
+def test_lifecycle_trace_rejects_disabled_request_to_hold() -> None:
+    with pytest.raises(ValueError, match="request_rejected can enter hold"):
+        PhysicalOutputLifecycleEvent(
+            event_sequence=0,
+            event_kind="request_rejected",
+            session_id="session-1",
+            state_before="disabled",
+            state_after="hold",
+            request_sequence=0,
+            reason="physical_output_request_stale",
         )
