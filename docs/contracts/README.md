@@ -30,3 +30,4 @@ canonical contract文書:
 - `docs/contracts/experiment-plugin-composition.md`
 - `docs/contracts/evaluation-manifest-readiness.md`
 - `docs/contracts/physical-operator-validation.md`
+- `docs/contracts/contact-task-manifest.md`
