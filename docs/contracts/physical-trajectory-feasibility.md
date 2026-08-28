@@ -64,7 +64,9 @@ sampleが二つだけの場合はaccelerationを推定せず`unavailable`とす�
 各configuration / trajectory sampleは、既存Jacobian producerが提供する`numeric_rank`、
 `effective_rank`、`minimum_singular_value`、`condition_number`を明示する。required rank未満、
 minimum singular valueがthreshold以下、condition numberがthreshold超過は`rejected`である。
-diagnostic欠落、dimension不整合、非有限値は`unavailable`または`invalid`であり、clearへ
+thresholdはfiniteかつ正でなければならず、diagnosticの非有限または非妥当なsummaryは
+`invalid`として保持する。state vectorのnon-finite診断は`joint_names[index]`のcanonical identity
+を使用する。diagnostic欠落、dimension不整合は`unavailable`または`invalid`であり、clearへ
 fallbackしない。
 
 ## Resultと後続compose
