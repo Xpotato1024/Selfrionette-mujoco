@@ -25,7 +25,8 @@ physical output前に検査できる境界を提供する。これはmesh非接�
 
 各geomは`robot`、`tool`、`environment`、`task_object`、`unknown`のexplicit roleを持つ。
 `unknown` role、missing geom/body name、robot geometry欠落は`invalid`であり、環境やself pairへ
-黙って分類しない。pairは二つの具体的geom nameから決まり、wildcardは使わない。
+黙って分類しない。同じbodyへ複数の異なるroleを割り当てるrole集合の重複も`invalid`とする。
+pairは二つの具体的geom nameから決まり、wildcardは使わない。
 
 | pair | classification |
 |---|---|
