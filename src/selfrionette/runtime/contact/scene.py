@@ -646,6 +646,45 @@ class ContactSceneInstance:
 
         self.definition.reset(self.simulator)
 
+    def observe_contact_evidence(
+        self,
+        *,
+        robot_geom_ids: Sequence[int] | None = None,
+        robot_geom_names: Sequence[str] | None = None,
+        sample_time_s: float | None = None,
+        frame_index: int | None = None,
+    ) -> object:
+        """MuJoCoのraw contact recordからevidenceを抽出する。"""
+
+        from selfrionette.runtime.contact.evidence import (
+            extract_contact_evidence_from_scene_instance,
+        )
+
+        return extract_contact_evidence_from_scene_instance(
+            self,
+            robot_geom_ids=robot_geom_ids,
+            robot_geom_names=robot_geom_names,
+            sample_time_s=sample_time_s,
+            frame_index=frame_index,
+        )
+
+    def measure_contact_evidence(
+        self,
+        *,
+        robot_geom_ids: Sequence[int] | None = None,
+        robot_geom_names: Sequence[str] | None = None,
+        sample_time_s: float | None = None,
+        frame_index: int | None = None,
+    ) -> object:
+        """observe_contact_evidenceの明示的なmeasurement alias。"""
+
+        return self.observe_contact_evidence(
+            robot_geom_ids=robot_geom_ids,
+            robot_geom_names=robot_geom_names,
+            sample_time_s=sample_time_s,
+            frame_index=frame_index,
+        )
+
 
 class ContactSceneComposer:
     """Manifestからbackend-ownedなContactScene variantを構成する。"""
