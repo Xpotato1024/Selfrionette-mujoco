@@ -32,7 +32,11 @@ joint = sign * source / gear_ratio + offset
 
 gear ratioはnon-zero、signは`-1`または`1`、すべての数値はfiniteでなければならない。
 負のsignではlower / upperを並べ替え、conversion provenanceとrelation IDを結果へ保持する。
-relationが欠落する場合、zero、TOML値、identity relationを暗黙適用せず`unknown`へ移行する。
+`source_name`は入力`PhysicalLimit.name`と、`joint_name`は期待するcanonical joint identityと
+必ず一致しなければならない。source identityまたはtarget identityの重複・曖昧なfallbackは拒否する。
+limitとrelationの`unit`は完全一致を必須とし、暗黙のdegree / radianなどのunit変換は行わない。
+明示的なunit変換relationがない不一致は`unknown`へ移行し、zero、TOML値、identity relationを
+暗黙適用しない。
 
 ## Parity and resolution
 
@@ -52,7 +56,8 @@ unresolved statusではlower / upperを`None`とする。sourceのstatusに
 authoritative resolutionを成立させない。全sourceがsoftware-onlyでも、同じrangeなら
 `resolved_provisional`に留める。
 
-`LimitParityRecord`はjoint、source identity、status、range、unit、reasonを保持する。
+`LimitParityRecord`はjoint、source identity（unitを含む）、status、range、unit、reasonを保持する。
+同一jointのbounded sourceはunitも一致しなければ`mismatch`となる。
 `ResolvedJointBound`と`LimitResolutionResult`はtuple / frozen dataclassのread-only valueで、
 callerがProfile、TOML、MJCF、model stateを書き換える機能を持たない。
 

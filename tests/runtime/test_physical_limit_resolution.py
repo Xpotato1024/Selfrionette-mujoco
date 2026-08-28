@@ -68,6 +68,7 @@ def test_negative_gear_sign_reverses_projected_range_and_retains_provenance() ->
         sign=-1.0,
         offset=0.25,
         relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
     )
 
     projected = project_limit_to_joint_space(source, relation)
@@ -78,6 +79,118 @@ def test_negative_gear_sign_reverses_projected_range_and_retains_provenance() ->
     assert projected.upper == pytest.approx(1.25)
     assert projected.conversion is not None
     assert projected.conversion.relation_id == relation.relation_id
+
+
+def test_projection_requires_source_and_target_joint_identity() -> None:
+    source = _limit(name="motor_1", space=LimitSpace.MOTOR)
+    relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+
+    with pytest.raises(ValueError, match="source identity mismatch"):
+        project_limit_to_joint_space(
+            _limit(name="motor_other", space=LimitSpace.MOTOR),
+            relation,
+        )
+    with pytest.raises(ValueError, match="target joint identity mismatch"):
+        project_limit_to_joint_space(source, relation, joint_name="joint_other")
+
+
+def test_projection_rejects_implicit_unit_conversion() -> None:
+    source = _limit(name="motor_1", space=LimitSpace.MOTOR)
+    relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="deg",
+    )
+
+    with pytest.raises(ValueError, match="unit mismatch"):
+        project_limit_to_joint_space(source, relation)
+
+
+def test_duplicate_or_unexpected_conversion_identity_is_rejected() -> None:
+    first = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+    duplicate_source = JointSpaceConversion(
+        source_space=LimitSpace.ACTUATOR,
+        joint_name="joint_2",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_2/v1",
+        unit="rad",
+    )
+    with pytest.raises(ValueError, match="duplicate conversion relation for source"):
+        resolve_joint_space_bounds(
+            (),
+            expected_joint_names=("joint_1", "joint_2"),
+            robot_id="fixture",
+            conversion_relations=(first, duplicate_source),
+        )
+
+    unexpected_target = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_other",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_other/v1",
+        unit="rad",
+    )
+    with pytest.raises(ValueError, match="target joint is not expected"):
+        resolve_joint_space_bounds(
+            (),
+            expected_joint_names=("joint_1",),
+            robot_id="fixture",
+            conversion_relations=(unexpected_target,),
+        )
+
+
+def test_parity_unit_is_part_of_identity_and_mismatch_fails_closed() -> None:
+    degree_source = PhysicalLimit(
+        name="joint_1",
+        quantity=LimitQuantity.POSITION,
+        lower=-1.0,
+        upper=1.0,
+        unit="deg",
+        space=LimitSpace.JOINT,
+        frame="fast_arm joint space",
+        status=EvidenceStatus.PROVISIONAL,
+        source=_source(EvidenceStatus.PROVISIONAL, "degree_profile"),
+    )
+    result = resolve_joint_space_bounds(
+        (_limit(source_kind="joint_limit_toml"), degree_source),
+        expected_joint_names=("joint_1",),
+        robot_id="fixture",
+    )
+
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.MISMATCH
+    assert bound.lower_rad is None
+    assert "unit=rad" in bound.parity[0].source_name
+    assert "unit=deg" in bound.parity[1].source_name
 
 
 def test_missing_conversion_is_unknown_not_a_zero_or_toml_fallback() -> None:
@@ -177,6 +290,7 @@ def test_invalid_conversion_values_fail_closed() -> None:
             sign=1.0,
             offset=0.0,
             relation_id="invalid",
+            unit="rad",
         )
     with pytest.raises(ValueError, match="either -1 or 1"):
         JointSpaceConversion(
@@ -187,4 +301,5 @@ def test_invalid_conversion_values_fail_closed() -> None:
             sign=0.0,
             offset=0.0,
             relation_id="invalid",
+            unit="rad",
         )
