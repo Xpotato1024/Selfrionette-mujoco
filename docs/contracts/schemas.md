@@ -26,7 +26,7 @@ ownerとし、1型1fileの旧pathはcompatibility facadeなしで退役する。
 | wire domain | canonical module | 主な型 |
 |---|---|---|
 | input frame / intent | `schemas.input` | `RawInputFrame`、`InputIntent`、`ContinuousEndpointVelocityIntent` |
-| command | `schemas.command` | `TargetCommand`、`JointCommand`、`MotionCommand`、`JointPositionCommand`、`EndpointVelocityCommand` |
+| command | `schemas.command` | `TargetCommand`、`JointCommand`、`MotionCommand`、`JointPositionCommand`、`EndpointVelocityCommand`、`PhysicalOutputRequest`、`PhysicalOutputPermission`、`PhysicalOutputDecision` |
 | MuJoCo / render state | `schemas.state` | `BodyTransform`、`SiteTransform`、`MuJoCoState`、`RenderState` |
 | endpoint metadata | `schemas.endpoint` | `EndpointMetadata`とframe / status vocabulary |
 | viewer control message | `schemas.viewer_control` | viewer-to-backend control envelopeとstrict decoder |
@@ -63,6 +63,10 @@ domain間依存は`input / command / state / endpoint -> types`、`experiment_lo
   endpoint-velocity専用Robot/backend command。timestampとexactly 3のvelocity componentは
   bool / numeric stringを拒否するfinite numericで、保存時にfloatへnormalizeする。frameは
   `world | tool`だけを受理する。
+- `PhysicalOutputRequest`、`PhysicalOutputPermission`、`PhysicalOutputDecision`: typed
+  RobotCommandを物理出力要求へ投影する際のtarget / session / sequence / cadence / timestamp、
+  permission mode、operator gate、requested / accepted / rejected evidenceを表す。
+  物理出力のmodeと責務境界は`docs/contracts/physical-output.md`を参照する。
 - `BodyTransform`、`SiteTransform`: backendが抽出するrigid transform。
 - `MuJoCoState`: transport layerとviewer layerへ渡すbackend snapshot。
   `docs/contracts/mujoco-state.md`を参照する。
