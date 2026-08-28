@@ -25,6 +25,10 @@ def test_default_disabled_and_explicit_arm_are_fail_closed() -> None:
     assert not rejected.accepted
     assert rejected.reason == "lifecycle_state_not_accepting"
     assert lifecycle.state == "disabled"
+    repeated = lifecycle.submit(request)
+    assert not repeated.accepted
+    assert repeated.reason == "duplicate_or_out_of_order_sequence"
+    assert lifecycle.trace().events[-1].request_sequence is None
 
     assert not lifecycle.arm(PhysicalOutputPermission()).accepted
     assert lifecycle.state == "disabled"
@@ -53,6 +57,7 @@ def test_submit_tracks_latest_state_but_rejects_duplicate_late_and_stale_request
     assert not late.accepted
     assert late.reason == "duplicate_or_out_of_order_sequence"
     assert lifecycle.latest_request == request
+    assert lifecycle.trace().events[-1].request_sequence is None
 
     stale_request = replace(
         request,
@@ -134,6 +139,7 @@ def test_stop_is_idempotent_and_bounded() -> None:
     stopped = lifecycle.complete_stop(now_s=2.9)
     assert stopped.accepted
     assert lifecycle.state == "stopped"
+    assert lifecycle.stop_deadline_s is None
     assert lifecycle.complete_stop(now_s=3.0).accepted
     assert lifecycle.state == "stopped"
 
@@ -145,6 +151,7 @@ def test_stop_is_idempotent_and_bounded() -> None:
     assert not exceeded.accepted
     assert exceeded.reason == "bounded_shutdown_deadline_exceeded"
     assert timed_out.state == "failed"
+    assert timed_out.stop_deadline_s is None
 
 
 def test_source_invalid_aborts_and_new_session_is_required_after_terminal_state() -> None:
@@ -236,5 +243,17 @@ def test_lifecycle_event_rejects_impossible_state_transition() -> None:
                     state_before="disabled",
                     state_after="armed",
                 ),
+            )
+        )
+
+    lifecycle = PhysicalOutputLifecycle("session-1")
+    lifecycle.arm(PhysicalOutputPermission(mode="dry_run"))
+    lifecycle.source_invalid("invalid", timestamp_s=1.0)
+    lifecycle.arm(PhysicalOutputPermission(mode="dry_run"), session_id="session-2")
+    with pytest.raises(ValueError, match="session may change"):
+        PhysicalOutputLifecycleTrace(
+            events=(
+                replace(lifecycle.events[0], session_id="session-2"),
+                *lifecycle.events[1:],
             )
         )
