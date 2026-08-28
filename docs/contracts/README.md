@@ -16,6 +16,7 @@ canonical contract文書:
 
 - `docs/contracts/parallel-work-contracts.md`
 - `docs/contracts/motion-command.md`
+- `docs/contracts/physical-output.md`
 - `docs/contracts/mujoco-state.md`
 - `docs/contracts/mujoco-model-name-contract.md`
 - `docs/contracts/runtime-forward-kinematics-evaluation.md`
