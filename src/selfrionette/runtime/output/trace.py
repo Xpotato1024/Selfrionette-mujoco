@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import mkstemp
 from threading import RLock
-from typing import Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
 
 from selfrionette.schemas import (
     PhysicalOutputDecision,
@@ -26,6 +26,12 @@ from selfrionette.schemas import (
     encode_physical_output_permission,
     encode_physical_output_request,
 )
+
+if TYPE_CHECKING:
+    from selfrionette.runtime.output.lifecycle import (
+        PhysicalOutputLifecycleEvent,
+        PhysicalOutputLifecycleTrace,
+    )
 
 
 PHYSICAL_OUTPUT_TRACE_SCHEMA_VERSION = "physical-output-trace/v1"
@@ -492,6 +498,7 @@ class PhysicalOutputRecordingSink:
     def __init__(self) -> None:
         self._lock = RLock()
         self._events: list[PhysicalOutputTraceEvent] = []
+        self._lifecycle_events: list[PhysicalOutputLifecycleEvent] = []
 
     @property
     def events(self) -> tuple[PhysicalOutputTraceEvent, ...]:
@@ -509,6 +516,37 @@ class PhysicalOutputRecordingSink:
             candidate = PhysicalOutputTrace(events=(*self._events, event))
             self._events = list(candidate.events)
             return event
+
+    @property
+    def lifecycle_events(self) -> tuple[PhysicalOutputLifecycleEvent, ...]:
+        """Lifecycle evidence kept separate from physical request events."""
+
+        with self._lock:
+            return tuple(self._lifecycle_events)
+
+    def record_lifecycle_event(
+        self,
+        event: PhysicalOutputLifecycleEvent,
+    ) -> PhysicalOutputLifecycleEvent:
+        if not callable(getattr(event, "to_json_bytes", None)):
+            raise TypeError("lifecycle sink requires a serializable lifecycle event")
+        with self._lock:
+            self._lifecycle_events.append(event)
+        return event
+
+    def lifecycle_trace(self) -> PhysicalOutputLifecycleTrace:
+        """Build the separate lifecycle trace captured by this dry-run sink."""
+
+        from selfrionette.runtime.output.lifecycle import PhysicalOutputLifecycleTrace
+
+        with self._lock:
+            events = tuple(self._lifecycle_events)
+        return PhysicalOutputLifecycleTrace(events=events)
+
+    def lifecycle_trace_bytes(self) -> bytes:
+        trace = self.lifecycle_trace()
+        return trace.to_jsonl_bytes()
+
 
     def record_requested(
         self,
