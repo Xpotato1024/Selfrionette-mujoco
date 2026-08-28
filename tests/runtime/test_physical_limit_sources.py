@@ -149,6 +149,74 @@ def test_invalid_and_conflicting_values_do_not_become_authoritative() -> None:
 
 
 @pytest.mark.parametrize(
+    "status",
+    (
+        EvidenceStatus.UNKNOWN,
+        EvidenceStatus.UNAVAILABLE,
+        EvidenceStatus.CONFLICT,
+        EvidenceStatus.INVALID,
+    ),
+)
+def test_unresolved_limit_statuses_are_always_unbounded(
+    status: EvidenceStatus,
+) -> None:
+    limit = PhysicalLimit(
+        name="joint_1",
+        quantity=LimitQuantity.POSITION,
+        lower=None,
+        upper=None,
+        unit="rad",
+        space=LimitSpace.JOINT,
+        frame="fast_arm joint space",
+        status=status,
+        source=_source(status=status, evidence_reference=None),
+        reason=f"{status.value} source",
+    )
+
+    assert not limit.is_bounded
+    with pytest.raises(ValueError, match="must not contain bounds"):
+        PhysicalLimit(
+            name="joint_1",
+            quantity=LimitQuantity.POSITION,
+            lower=-1.0,
+            upper=1.0,
+            unit="rad",
+            space=LimitSpace.JOINT,
+            frame="fast_arm joint space",
+            status=status,
+            source=_source(status=status, evidence_reference=None),
+            reason=f"{status.value} source",
+        )
+
+
+def test_envelope_decoder_rejects_duplicate_json_keys() -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fixture",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+
+    duplicate_root = (
+        b'{"schema_version":1,"schema_version":1,'
+        b'"envelope_id":"fixture","envelope_version":1,'
+        b'"robot_id":"fast_arm","model_id":"fast_arm","limits":[]}'
+    )
+    with pytest.raises(ValueError, match="duplicate JSON object key"):
+        PhysicalSafetyEnvelope.from_json_bytes(duplicate_root)
+
+    raw = envelope.to_json_bytes().decode("utf-8")
+    duplicate_nested = raw.replace(
+        '"source_kind":"lab_document"',
+        '"source_kind":"lab_document","source_kind":"lab_document"',
+        1,
+    ).encode("utf-8")
+    with pytest.raises(ValueError, match="duplicate JSON object key"):
+        PhysicalSafetyEnvelope.from_json_bytes(duplicate_nested)
+
+
+@pytest.mark.parametrize(
     ("kind", "evidence_reference", "authority_asserted", "expected"),
     (
         ("joint_limit_toml", "record", True, EvidenceStatus.PROVISIONAL),

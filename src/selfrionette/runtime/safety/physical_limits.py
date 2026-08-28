@@ -246,10 +246,14 @@ class PhysicalLimit:
                 raise ValueError(f"{status.value} limit requires finite lower and upper")
             if lower > upper:
                 raise ValueError("limit lower must not exceed upper")
-        if status in {EvidenceStatus.UNKNOWN, EvidenceStatus.UNAVAILABLE, EvidenceStatus.CONFLICT, EvidenceStatus.INVALID}:
-            if lower is not None and upper is not None and lower > upper:
-                raise ValueError("known limit lower must not exceed upper")
-        if status is EvidenceStatus.UNKNOWN or status is EvidenceStatus.UNAVAILABLE:
+        if status in {
+            EvidenceStatus.UNKNOWN,
+            EvidenceStatus.UNAVAILABLE,
+            EvidenceStatus.CONFLICT,
+            EvidenceStatus.INVALID,
+        }:
+            if lower is not None or upper is not None:
+                raise ValueError(f"{status.value} limit must not contain bounds")
             if not self.reason:
                 raise ValueError(f"{status.value} limit requires reason")
         if self.reason is not None:
@@ -382,7 +386,10 @@ class PhysicalSafetyEnvelope:
         if data.startswith(b"\xef\xbb\xbf"):
             raise ValueError("physical safety envelope must not contain a UTF-8 BOM")
         try:
-            raw = json.loads(data.decode("utf-8"))
+            raw = json.loads(
+                data.decode("utf-8"),
+                object_pairs_hook=_reject_duplicate_keys,
+            )
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ValueError("invalid physical safety envelope JSON") from exc
         return _envelope_from_mapping(raw)
@@ -392,6 +399,19 @@ def _mapping(value: object, name: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{name} must be an object")
     return value
+
+
+def _reject_duplicate_keys(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    """JSON object hook that fails closed on duplicate field names."""
+
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key!r}")
+        result[key] = value
+    return result
 
 
 def _optional_text(data: Mapping[str, object], name: str) -> str | None:
