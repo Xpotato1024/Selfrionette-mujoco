@@ -124,6 +124,14 @@ def test_manifest_rejects_invalid_object_values_without_defaulting() -> None:
             _manifest().scene.target,
             penetration_band_m=(0.2, 0.1),
         )
+    with pytest.raises(ContactManifestError, match="contype"):
+        replace(_manifest().object, contype=-1)
+    with pytest.raises(ContactManifestError, match="conaffinity"):
+        replace(_manifest().object, conaffinity=True)
+    with pytest.raises(ContactManifestError, match="condim"):
+        replace(_manifest().object, condim=True)
+    with pytest.raises(ContactManifestError, match="initial_penetration"):
+        replace(_manifest().scene, initial_penetration_tolerance_m=-1.0)
 
 
 def test_manifest_rejects_scene_enabled_mismatch_and_nonzero_reset_time() -> None:
@@ -160,6 +168,54 @@ def test_decoder_rejects_unknown_missing_duplicate_and_nonfinite_fields() -> Non
     nonfinite["scene"]["object"]["mass_kg"] = float("nan")
     with pytest.raises(ContactManifestDecodeError, match="non-finite|finite"):
         decode_contact_manifest(json.dumps(nonfinite))
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    (
+        (("scene", "identity", "name"), 123),
+        (("scene", "object", "identity", "name"), 123),
+        (("robot_bundle", "plugin_id"), 123),
+        (("scene", "required_robot_roles", 0, "role"), 123),
+        (("software_revision_identity",), 123),
+    ),
+)
+def test_decoder_rejects_non_string_identity_fields_without_coercion(
+    path: tuple[object, ...], value: object
+) -> None:
+    document = _manifest().to_document()
+    current: object = document
+    for key in path[:-1]:
+        current = current[key]  # type: ignore[index]
+    current[path[-1]] = value  # type: ignore[index]
+
+    with pytest.raises(ContactManifestDecodeError, match="string|invalid"):
+        decode_contact_manifest(document)
+
+
+def test_contact_parameters_and_initial_tolerance_are_canonical_identity() -> None:
+    manifest = _manifest()
+    document = manifest.to_document()
+    assert document["scene"]["object"]["contype"] == 1  # type: ignore[index]
+    assert document["scene"]["object"]["conaffinity"] == 1  # type: ignore[index]
+    assert document["scene"]["object"]["condim"] == 3  # type: ignore[index]
+    assert document["scene"]["initial_penetration_tolerance_m"] == pytest.approx(1e-12)  # type: ignore[index]
+
+    changed_object = replace(
+        manifest.object,
+        contype=2,
+        conaffinity=4,
+        condim=6,
+    )
+    changed_scene = replace(
+        manifest.scene,
+        object=changed_object,
+        initial_penetration_tolerance_m=1e-6,
+    )
+    changed = replace(manifest, scene=changed_scene)
+
+    assert contact_manifest_digest(changed) != contact_manifest_digest(manifest)
+    assert decode_contact_manifest(encode_contact_manifest(changed)) == changed
 
 
 def test_contact_role_requirement_is_typed_and_does_not_accept_wrong_value() -> None:

@@ -28,6 +28,7 @@ from selfrionette.runtime.experiment.contracts import (
 CONTACT_MANIFEST_SCHEMA_VERSION: Final[str] = "contact-task-manifest/v1"
 CONTACT_MANIFEST_CONTRACT_VERSION: Final[int] = 1
 CONTACT_MANIFEST_DIGEST_ALGORITHM: Final[str] = "sha256"
+CONTACT_INITIAL_PENETRATION_TOLERANCE_M: Final[float] = 1e-12
 CONTACT_TASK_IDENTITY: Final[VersionedIdentity] = VersionedIdentity(
     "contact_press_hold_task", 1
 )
@@ -168,6 +169,9 @@ class ContactCubeObject:
     body_name: str = "contact_cube"
     geom_name: str = "contact_cube_geom"
     enabled: bool = True
+    contype: int = 1
+    conaffinity: int = 1
+    condim: int = 3
 
     def __post_init__(self) -> None:
         _identity("object.identity", self.identity)
@@ -199,6 +203,16 @@ class ContactCubeObject:
         _stable_identifier("object.geom_name", self.geom_name)
         if type(self.enabled) is not bool:
             raise ContactManifestError("object.enabled must be a bool")
+        for name, value in (
+            ("object.contype", self.contype),
+            ("object.conaffinity", self.conaffinity),
+        ):
+            if type(value) is not int or value < 0:
+                raise ContactManifestError(
+                    f"{name} must be a non-negative integer bitmask"
+                )
+        if type(self.condim) is not int or self.condim not in (1, 3, 4, 6):
+            raise ContactManifestError("object.condim must be one of 1, 3, 4, or 6")
 
     @property
     def pose_position_m(self) -> tuple[float, float, float]:
@@ -358,6 +372,7 @@ class ContactSceneContract:
     required_robot_roles: frozenset[SemanticRoleRequirement]
     presentation: ScenePresentationIdentity
     enabled: bool = True
+    initial_penetration_tolerance_m: float = CONTACT_INITIAL_PENETRATION_TOLERANCE_M
 
     def __post_init__(self) -> None:
         _identity("scene.identity", self.identity)
@@ -383,6 +398,15 @@ class ContactSceneContract:
         object.__setattr__(self, "required_robot_roles", roles)
         if type(self.enabled) is not bool:
             raise ContactManifestError("scene.enabled must be a bool")
+        object.__setattr__(
+            self,
+            "initial_penetration_tolerance_m",
+            _finite(
+                "scene.initial_penetration_tolerance_m",
+                self.initial_penetration_tolerance_m,
+                non_negative=True,
+            ),
+        )
         if self.enabled != self.object.enabled:
             raise ContactManifestError("scene/object enabled conditions must match")
         if self.reset.object_position_m != self.object.position_m:
@@ -511,6 +535,7 @@ def _manifest_document(manifest: ContactTaskManifest) -> dict[str, object]:
         "scene": {
             "enabled": scene.enabled,
             "identity": _identity_document(scene.identity),
+            "initial_penetration_tolerance_m": scene.initial_penetration_tolerance_m,
             "mujoco": {
                 "integrator": mujoco.integrator,
                 "iterations": mujoco.iterations,
@@ -521,6 +546,9 @@ def _manifest_document(manifest: ContactTaskManifest) -> dict[str, object]:
             },
             "object": {
                 "body_name": object_value.body_name,
+                "conaffinity": object_value.conaffinity,
+                "condim": object_value.condim,
+                "contype": object_value.contype,
                 "enabled": object_value.enabled,
                 "friction": _vector_document(object_value.friction),
                 "geom_name": object_value.geom_name,
@@ -621,7 +649,10 @@ def _strict_mapping(value: object, name: str, fields: frozenset[str]) -> Mapping
 def _as_identity(value: object, name: str) -> VersionedIdentity:
     mapping = _strict_mapping(value, name, frozenset({"name", "version"}))
     try:
-        return VersionedIdentity(str(mapping["name"]), mapping["version"])  # type: ignore[arg-type]
+        identity_name = mapping["name"]
+        if not isinstance(identity_name, str):
+            raise ContactManifestDecodeError(f"{name}.name must be a string")
+        return VersionedIdentity(identity_name, mapping["version"])  # type: ignore[arg-type]
     except (TypeError, ValueError) as exc:
         raise ContactManifestDecodeError(f"{name} is invalid: {exc}") from exc
 
@@ -629,8 +660,11 @@ def _as_identity(value: object, name: str) -> VersionedIdentity:
 def _as_selection(value: object, name: str) -> PluginSelection:
     mapping = _strict_mapping(value, name, frozenset({"plugin_id", "contract_version"}))
     try:
+        plugin_id = mapping["plugin_id"]
+        if not isinstance(plugin_id, str):
+            raise ContactManifestDecodeError(f"{name}.plugin_id must be a string")
         return PluginSelection(
-            str(mapping["plugin_id"]), mapping["contract_version"]  # type: ignore[arg-type]
+            plugin_id, mapping["contract_version"]  # type: ignore[arg-type]
         )
     except (TypeError, ValueError) as exc:
         raise ContactManifestDecodeError(f"{name} is invalid: {exc}") from exc
@@ -639,11 +673,17 @@ def _as_selection(value: object, name: str) -> PluginSelection:
 def _as_role_requirement(value: object, name: str) -> SemanticRoleRequirement:
     mapping = _strict_mapping(value, name, frozenset({"role", "object_kind", "frame", "unit"}))
     try:
+        role_name = mapping["role"]
+        object_kind = mapping["object_kind"]
+        frame = mapping["frame"]
+        unit = mapping["unit"]
+        if not all(isinstance(item, str) for item in (role_name, object_kind, frame, unit)):
+            raise ContactManifestDecodeError(f"{name} fields must be strings")
         return SemanticRoleRequirement(
-            role=SemanticRole(str(mapping["role"])),
-            object_kind=str(mapping["object_kind"]),
-            frame=str(mapping["frame"]),
-            unit=str(mapping["unit"]),
+            role=SemanticRole(role_name),
+            object_kind=object_kind,
+            frame=frame,
+            unit=unit,
         )
     except (TypeError, ValueError) as exc:
         raise ContactManifestDecodeError(f"{name} is invalid: {exc}") from exc
@@ -706,6 +746,7 @@ def decode_contact_manifest(value: bytes | str | Mapping[str, object]) -> Contac
         frozenset({
             "enabled",
             "identity",
+            "initial_penetration_tolerance_m",
             "mujoco",
             "object",
             "presentation",
@@ -720,6 +761,9 @@ def decode_contact_manifest(value: bytes | str | Mapping[str, object]) -> Contac
         "manifest.scene.object",
         frozenset({
             "body_name",
+            "conaffinity",
+            "condim",
+            "contype",
             "enabled",
             "friction",
             "geom_name",
@@ -776,21 +820,24 @@ def decode_contact_manifest(value: bytes | str | Mapping[str, object]) -> Contac
     )
     try:
         material = ContactMaterial(
-            str(material_root["material_id"]),
+            material_root["material_id"],  # type: ignore[arg-type]
             tuple(material_root["rgba"]),  # type: ignore[arg-type]
         )
         object_value = ContactCubeObject(
             identity=_as_identity(object_root["identity"], "manifest.scene.object.identity"),
-            shape=str(object_root["shape"]),
+            shape=object_root["shape"],  # type: ignore[arg-type]
             position_m=tuple(object_root["position_m"]),  # type: ignore[arg-type]
             orientation_wxyz=tuple(object_root["orientation_wxyz"]),  # type: ignore[arg-type]
             size_m=tuple(object_root["size_m"]),  # type: ignore[arg-type]
             mass_kg=object_root["mass_kg"],  # type: ignore[arg-type]
             material=material,
             friction=tuple(object_root["friction"]),  # type: ignore[arg-type]
-            body_name=str(object_root["body_name"]),
-            geom_name=str(object_root["geom_name"]),
+            body_name=object_root["body_name"],  # type: ignore[arg-type]
+            geom_name=object_root["geom_name"],  # type: ignore[arg-type]
             enabled=object_root["enabled"],  # type: ignore[arg-type]
+            contype=object_root["contype"],  # type: ignore[arg-type]
+            conaffinity=object_root["conaffinity"],  # type: ignore[arg-type]
+            condim=object_root["condim"],  # type: ignore[arg-type]
         )
         reset = ContactResetState(
             qpos_rad=tuple(reset_root["qpos_rad"]),  # type: ignore[arg-type]
@@ -804,7 +851,7 @@ def decode_contact_manifest(value: bytes | str | Mapping[str, object]) -> Contac
             warm_start=tuple(reset_root["warm_start"]),  # type: ignore[arg-type]
         )
         target = ContactTarget(
-            face=str(target_root["face"]),
+            face=target_root["face"],  # type: ignore[arg-type]
             normal_object=tuple(target_root["normal_object"]),  # type: ignore[arg-type]
             approach_direction_world=tuple(
                 target_root["approach_direction_world"]  # type: ignore[arg-type]
@@ -818,8 +865,8 @@ def decode_contact_manifest(value: bytes | str | Mapping[str, object]) -> Contac
             target=target,
             mujoco=MuJoCoSettingsIdentity(
                 timestep_s=mujoco_root["timestep_s"],  # type: ignore[arg-type]
-                integrator=str(mujoco_root["integrator"]),
-                solver=str(mujoco_root["solver"]),
+                integrator=mujoco_root["integrator"],  # type: ignore[arg-type]
+                solver=mujoco_root["solver"],  # type: ignore[arg-type]
                 iterations=mujoco_root["iterations"],  # type: ignore[arg-type]
                 ls_iterations=mujoco_root["ls_iterations"],  # type: ignore[arg-type]
                 noslip_iterations=mujoco_root["noslip_iterations"],  # type: ignore[arg-type]
@@ -837,10 +884,13 @@ def decode_contact_manifest(value: bytes | str | Mapping[str, object]) -> Contac
                 )
             ),
             presentation=ScenePresentationIdentity(
-                camera_identity=str(presentation_root["camera_identity"]),
-                visual_feedback_identity=str(presentation_root["visual_feedback_identity"]),
+                camera_identity=presentation_root["camera_identity"],  # type: ignore[arg-type]
+                visual_feedback_identity=presentation_root["visual_feedback_identity"],  # type: ignore[arg-type]
             ),
             enabled=scene_root["enabled"],  # type: ignore[arg-type]
+            initial_penetration_tolerance_m=scene_root[
+                "initial_penetration_tolerance_m"
+            ],  # type: ignore[arg-type]
         )
         evaluators_value = root["evaluators"]
         if not isinstance(evaluators_value, Sequence) or isinstance(
@@ -856,8 +906,8 @@ def decode_contact_manifest(value: bytes | str | Mapping[str, object]) -> Contac
                 for index, item in enumerate(evaluators_value)
             ),
             scene=scene,
-            software_revision_identity=str(root["software_revision_identity"]),
-            schema_version=str(root["schema_version"]),
+            software_revision_identity=root["software_revision_identity"],  # type: ignore[arg-type]
+            schema_version=root["schema_version"],  # type: ignore[arg-type]
             contract_version=root["contract_version"],  # type: ignore[arg-type]
         )
     except ContactManifestError as exc:
@@ -876,6 +926,7 @@ def canonical_decode(value: bytes | str | Mapping[str, object]) -> ContactTaskMa
 
 __all__ = [
     "CONTACT_ENVIRONMENT_ROLE",
+    "CONTACT_INITIAL_PENETRATION_TOLERANCE_M",
     "CONTACT_MANIFEST_CONTRACT_VERSION",
     "CONTACT_MANIFEST_DIGEST_ALGORITHM",
     "CONTACT_MANIFEST_SCHEMA_VERSION",

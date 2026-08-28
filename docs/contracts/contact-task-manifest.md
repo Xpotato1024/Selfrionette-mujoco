@@ -35,11 +35,16 @@ mismatch、missing capability、role mismatchを後段のdefaultやzeroで補わ
 
 `ContactCubeObject`は`box` shapeのpose（MuJoCo world frame、m、`wxyz`）、size（m）、mass（kg）、
 material / RGBA、3成分friction、body / geom name、enable conditionを保持する。sizeとmassは正、
-sliding frictionは正、その他frictionは非負でなければならない。非有限値、未定義shape、空identityは拒否する。
+sliding frictionは正、その他frictionは非負でなければならない。MuJoCoのcontact parameterである
+`contype`、`conaffinity`、`condim`もobject physical identityの一部であり、bitmaskは非負整数、
+`condim`はMuJoCoが許す`1`、`3`、`4`、`6`のいずれかでなければならない。非有限値、未定義shape、
+空identityは拒否する。
 
 `ContactResetState`はrobot qpos / qvel、actuator、object pose、simulation time、warm-start stateを
 保持する。qpos / qvelのdimensionは一致し、reset simulation timeは`0`に固定する。#412はこの値を
 MuJoCo dataへ適用し、contact、velocity、actuator、simulation time、warm-startのtrial間leakageを防ぐ。
+`ContactSceneContract.initial_penetration_tolerance_m`は初期接触判定の許容値としてmanifestへbindされ、
+contact parameterと同じcanonical identityに含まれる。scene側が別の値を暗黙に補ってreadinessを変えてはならない。
 
 ## targetとMuJoCo設定
 
@@ -55,6 +60,9 @@ viewerへ判定責務を移さない。
 `encode_contact_manifest()`はUTF-8、`ensure_ascii=False`、`allow_nan=False`、sorted keys、compact
 separatorsでcanonical bytesを生成する。`decode_contact_manifest()`はrootとnested objectのunknown /
 missing / duplicate field、malformed JSON、non-finite JSON constant、型不一致をfail-closedで拒否する。
+identity名、plugin ID、semantic role、frame、unit、object / material / target / MuJoCo / presentationの
+文字列はdecoderで別型から文字列へcoerceしない。contact parameterと初期penetration toleranceも
+canonical bytesへ含め、decoderで検証する。
 同一semantic contentは入力mappingの挿入順に依存せず同一bytesになり、`contact_manifest_digest()`は
 canonical bytesの`sha256:<64 lowercase hex>`を返す。
 
