@@ -504,7 +504,9 @@ generic pipelineのprofile-free behaviorは変更しない。fast_arm bundleは`
   変更しない。
 - #411は`EnvironmentPlugin`、`EnvironmentRole`、`SemanticRoleRequirement`、`TaskPlugin`、
   `EvaluationPlugin`、`contact_evidence/v1` extension pointを使い、typed object/frame/unit requirementと
-  cube/contact固有fieldをgeneric contractへ追加できる。
+  cube/contact固有fieldをgeneric contractへ追加できる。contact task/object manifestのphysical condition、
+  reset、target、MuJoCo setting、canonical serializationは`docs/contracts/contact-task-manifest.md`を
+  正本とし、このgeneric composition contractへ複製しない。
 - どちらもTask/Evaluationへfast_arm固有nameまたはsolver classを持ち込まず、viewerへ判定を追加しない。
 - #406のproduction compositionは`selfrionette.plugins.robots.catalog`の
   `resolve_robot_bundle()` / `resolve_robot_profile()` / `resolve_robot_runtime_plugin()` /
