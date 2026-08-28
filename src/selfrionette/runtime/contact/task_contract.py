@@ -142,6 +142,34 @@ def _optional_finite(name: str, value: object | None) -> float | None:
     return None if value is None else _finite(name, value, non_negative=True)
 
 
+def _band(
+    name: str,
+    value: object,
+    *,
+    non_negative: bool = False,
+) -> tuple[float, float]:
+    if (
+        not isinstance(value, Sequence)
+        or isinstance(value, (str, bytes, bytearray))
+        or len(value) != 2
+    ):
+        raise ContactTaskContractError(f"{name} must contain two values")
+    low = _finite(f"{name}[0]", value[0], non_negative=non_negative)
+    high = _finite(f"{name}[1]", value[1], non_negative=non_negative)
+    if high < low:
+        raise ContactTaskContractError(f"{name} upper bound must not be below lower bound")
+    return (low, high)
+
+
+def _optional_cosine(name: str, value: object | None) -> float | None:
+    if value is None:
+        return None
+    result = _finite(name, value)
+    if result < -1.0 or result > 1.0:
+        raise ContactTaskContractError(f"{name} must be within [-1, 1]")
+    return result
+
+
 def _stable_id(name: str, value: object) -> str:
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         raise ContactTaskContractError(f"{name} must be a non-empty string")
@@ -286,6 +314,20 @@ class ContactTaskObservation:
         elapsed = _finite("observation.elapsed_time_s", self.elapsed_time_s, non_negative=True)
         if not isinstance(self.contact_evidence, ContactEvidence):
             raise TypeError("contact observation requires raw ContactEvidence")
+        if self.contact_evidence.status is ContactEvidenceStatus.MEASURED:
+            target_records = self.contact_evidence.target_contacts
+            aggregate = self.contact_evidence.aggregate
+            if not target_records or aggregate is None:
+                raise ContactTaskContractError(
+                    "measured contact observation requires target records and aggregate"
+                )
+            if aggregate.contact_count != len(target_records) or any(
+                item.force_status is not ContactEvidenceStatus.MEASURED
+                for item in target_records
+            ):
+                raise ContactTaskContractError(
+                    "measured contact observation has inconsistent target force evidence"
+                )
         status = self.operator_status
         if self.motion_status is not None:
             if not isinstance(self.motion_status, ContactOperatorStatus):
@@ -357,6 +399,14 @@ class ContactTaskOutcome:
 
     manifest_digest: str
     trial: ContactTrialIdentity
+    dwell_interval_s: float
+    timeout_s: float
+    target_penetration_band_m: tuple[float, float]
+    target_normal_force_band_n: tuple[float, float] | None
+    approach_alignment_min_cosine: float | None
+    normal_alignment_min_cosine: float | None
+    max_contact_location_drift_m: float | None
+    require_pose_measurement: bool
     phase: ContactTaskPhase
     classification: TaskTerminalClassification
     reason: str | None
@@ -390,6 +440,47 @@ class ContactTaskOutcome:
             raise ContactTaskContractError("outcome manifest digest is invalid")
         if not isinstance(self.trial, ContactTrialIdentity):
             raise TypeError("outcome trial must use ContactTrialIdentity")
+        dwell = _finite("outcome.dwell_interval_s", self.dwell_interval_s, non_negative=True)
+        timeout = _finite("outcome.timeout_s", self.timeout_s, non_negative=True)
+        if dwell <= 0.0 or timeout <= 0.0 or dwell > timeout:
+            raise ContactTaskContractError(
+                "outcome dwell and timeout must be positive, with dwell <= timeout"
+            )
+        penetration_band = _band(
+            "outcome.target_penetration_band_m",
+            self.target_penetration_band_m,
+            non_negative=True,
+        )
+        force_band = (
+            None
+            if self.target_normal_force_band_n is None
+            else _band(
+                "outcome.target_normal_force_band_n",
+                self.target_normal_force_band_n,
+                non_negative=True,
+            )
+        )
+        approach_alignment = _optional_cosine(
+            "outcome.approach_alignment_min_cosine",
+            self.approach_alignment_min_cosine,
+        )
+        normal_alignment = _optional_cosine(
+            "outcome.normal_alignment_min_cosine",
+            self.normal_alignment_min_cosine,
+        )
+        drift = _optional_finite(
+            "outcome.max_contact_location_drift_m",
+            self.max_contact_location_drift_m,
+        )
+        if type(self.require_pose_measurement) is not bool:
+            raise TypeError("outcome.require_pose_measurement must be a bool")
+        object.__setattr__(self, "dwell_interval_s", dwell)
+        object.__setattr__(self, "timeout_s", timeout)
+        object.__setattr__(self, "target_penetration_band_m", penetration_band)
+        object.__setattr__(self, "target_normal_force_band_n", force_band)
+        object.__setattr__(self, "approach_alignment_min_cosine", approach_alignment)
+        object.__setattr__(self, "normal_alignment_min_cosine", normal_alignment)
+        object.__setattr__(self, "max_contact_location_drift_m", drift)
         if not isinstance(self.phase, ContactTaskPhase):
             raise TypeError("outcome phase must use ContactTaskPhase")
         if not isinstance(self.classification, TaskTerminalClassification):
@@ -488,10 +579,12 @@ class ContactTaskOutcome:
 
     def to_document(self) -> dict[str, object]:
         return {
+            "approach_alignment_min_cosine": self.approach_alignment_min_cosine,
             "classification": self.classification.value,
             "completion_time_s": self.completion_time_s,
             "contact_location_drift_m": self.contact_location_drift_m,
             "contact_loss_count": self.contact_loss_count,
+            "dwell_interval_s": self.dwell_interval_s,
             "final_contact_location_world_m": self._optional_document(
                 self.final_contact_location_world_m
             ),
@@ -509,6 +602,8 @@ class ContactTaskOutcome:
             "force_variability_n": self.force_variability_n,
             "manifest_digest": self.manifest_digest,
             "max_penetration_m": self.max_penetration_m,
+            "max_contact_location_drift_m": self.max_contact_location_drift_m,
+            "normal_alignment_min_cosine": self.normal_alignment_min_cosine,
             "observations_count": self.observations_count,
             "overshoot_m": self.overshoot_m,
             "peak_normal_force_n": self.peak_normal_force_n,
@@ -520,7 +615,15 @@ class ContactTaskOutcome:
             "slip_proxy_m": self.slip_proxy_m,
             "steady_state_error_m": self.steady_state_error_m,
             "terminal_time_s": self.terminal_time_s,
+            "target_normal_force_band_n": self._optional_document(
+                self.target_normal_force_band_n
+            ),
+            "target_penetration_band_m": self._optional_document(
+                self.target_penetration_band_m
+            ),
             "trial": self.trial.to_document(),
+            "require_pose_measurement": self.require_pose_measurement,
+            "timeout_s": self.timeout_s,
         }
 
     def canonical_bytes(self) -> bytes:
@@ -537,10 +640,12 @@ class ContactTaskOutcome:
         if not isinstance(value, Mapping):
             raise ContactTaskContractError("contact task outcome must be an object")
         expected = {
+            "approach_alignment_min_cosine",
             "classification",
             "completion_time_s",
             "contact_location_drift_m",
             "contact_loss_count",
+            "dwell_interval_s",
             "final_contact_location_world_m",
             "final_normal_alignment_cosine",
             "final_object_orientation_wxyz",
@@ -549,7 +654,9 @@ class ContactTaskOutcome:
             "first_contact_time_s",
             "force_variability_n",
             "manifest_digest",
+            "max_contact_location_drift_m",
             "max_penetration_m",
+            "normal_alignment_min_cosine",
             "observations_count",
             "overshoot_m",
             "peak_normal_force_n",
@@ -561,7 +668,11 @@ class ContactTaskOutcome:
             "slip_proxy_m",
             "steady_state_error_m",
             "terminal_time_s",
+            "target_normal_force_band_n",
+            "target_penetration_band_m",
             "trial",
+            "require_pose_measurement",
+            "timeout_s",
         }
         if set(value) != expected:
             raise ContactTaskContractError(
@@ -590,6 +701,14 @@ class ContactTaskOutcome:
         return cls(
             manifest_digest=value["manifest_digest"],  # type: ignore[arg-type]
             trial=trial,
+            dwell_interval_s=value["dwell_interval_s"],  # type: ignore[arg-type]
+            timeout_s=value["timeout_s"],  # type: ignore[arg-type]
+            target_penetration_band_m=value["target_penetration_band_m"],  # type: ignore[arg-type]
+            target_normal_force_band_n=value["target_normal_force_band_n"],  # type: ignore[arg-type]
+            approach_alignment_min_cosine=value["approach_alignment_min_cosine"],  # type: ignore[arg-type]
+            normal_alignment_min_cosine=value["normal_alignment_min_cosine"],  # type: ignore[arg-type]
+            max_contact_location_drift_m=value["max_contact_location_drift_m"],  # type: ignore[arg-type]
+            require_pose_measurement=value["require_pose_measurement"],  # type: ignore[arg-type]
             phase=phase,
             classification=classification,
             reason=value["reason"],  # type: ignore[arg-type]

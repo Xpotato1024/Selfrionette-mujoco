@@ -38,6 +38,14 @@ def _outcome(
     return ContactTaskOutcome(
         manifest_digest=_DIGEST,
         trial=ContactTrialIdentity("evaluation-trial"),
+        dwell_interval_s=0.2,
+        timeout_s=1.0,
+        target_penetration_band_m=(0.0, 0.002),
+        target_normal_force_band_n=None,
+        approach_alignment_min_cosine=None,
+        normal_alignment_min_cosine=None,
+        max_contact_location_drift_m=None,
+        require_pose_measurement=False,
         phase=phase,
         classification=classification,
         reason=None if classification in {
@@ -165,3 +173,22 @@ def test_contact_outcome_contract_rejects_malformed_digest_and_missing_failure_r
         replace(_outcome(TaskTerminalClassification.SUCCESS), manifest_digest=object())
     with pytest.raises(ValueError, match="requires a reason"):
         replace(_outcome(TaskTerminalClassification.FAILURE), reason=None)
+
+
+def test_outcome_context_conditions_are_canonical_and_reconstructable() -> None:
+    outcome = _outcome(TaskTerminalClassification.SUCCESS)
+    decoded = ContactTaskOutcome.from_document(outcome.to_document())
+
+    assert decoded == outcome
+    configured = replace(
+        outcome,
+        target_penetration_band_m=(0.001, 0.002),
+        target_normal_force_band_n=(1.0, 2.0),
+        approach_alignment_min_cosine=0.5,
+        normal_alignment_min_cosine=0.6,
+        max_contact_location_drift_m=0.01,
+        require_pose_measurement=True,
+    )
+    assert ContactTaskOutcome.from_document(configured.to_document()) == configured
+    changed = replace(outcome, dwell_interval_s=0.3)
+    assert changed.canonical_bytes() != outcome.canonical_bytes()

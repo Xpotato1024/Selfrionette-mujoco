@@ -32,7 +32,11 @@ gate、trial / repetition / attempt identityを一度だけbindする。
 
 Task outcome artifactにはfirst-contact time、peak normal force、penetration overshoot、steady-state
 error、force variability、tangential-force / slip proxy、final pose、contact-location drift、normal
-alignmentを含める。未観測値は`null`のままとし、failureへcompletion timeやforceを補完しない。
+alignmentを含める。さらにmanifest-bound penetration bandと、bind済みのdwell / timeout、normal-force /
+alignment / drift gate、pose-measurement requirementをcanonical artifactへ保存する。未観測値は`null`のままとし、
+failureへcompletion timeやforceを補完しない。各raw observationはtechnical-invalidへ遷移する場合もstate / replay
+順序へ保持し、sample / simulation timeの後退・同値stale、または`measured` evidenceのrecord / aggregate不整合を
+successへ流さない。
 
 ## runner / retry
 
