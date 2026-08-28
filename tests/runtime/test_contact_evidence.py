@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import mujoco
 import pytest
 
@@ -12,9 +14,12 @@ from selfrionette.runtime.contact.manifest import (
     ContactTaskManifest,
     MuJoCoSettingsIdentity,
     ScenePresentationIdentity,
+    contact_manifest_digest,
 )
 from selfrionette.runtime.contact.evidence import (
     CONTACT_EVIDENCE_PROVENANCE,
+    ContactEvidence,
+    ContactEvidenceError,
     ContactEvidenceExtractor,
     ContactEvidenceStatus,
     ContactPairClassification,
@@ -132,6 +137,7 @@ def _direct_extractor(
     object_body_name: str = "object",
     object_geom_name: str = "object_geom",
 ) -> tuple[ContactEvidenceExtractor, object, object]:
+    manifest = _scene_request().manifest
     model = mujoco.MjModel.from_xml_string(xml or _contact_fixture_xml())
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
@@ -141,15 +147,37 @@ def _direct_extractor(
             data=data,
             scene_identity=VersionedIdentity("contact_cube_scene", 1),
             object_identity=VersionedIdentity("contact_cube", 1),
-            manifest_digest="sha256:" + "1" * 64,
+            manifest_digest=contact_manifest_digest(manifest),
             object_body_name=object_body_name,
             object_geom_name=object_geom_name,
             robot_geom_names=robot_geom_names,
             frame_index=3,
+            manifest=manifest,
         ),
         model,
         data,
     )
+
+
+def _target_evidence() -> tuple[ContactEvidenceExtractor, ContactEvidence]:
+    extractor, model, data = _direct_extractor()
+    object_joint = int(
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "object_freejoint")
+    )
+    object_qpos = int(model.jnt_qposadr[object_joint])
+    data.qpos[object_qpos : object_qpos + 7] = (
+        0.0,
+        0.0,
+        0.05,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+    )
+    mujoco.mj_forward(model, data)
+    evidence = extractor.extract()
+    assert evidence.status is ContactEvidenceStatus.MEASURED
+    return extractor, evidence
 
 
 def test_no_contact_is_measured_zero_target_force_without_zeroing_failures() -> None:
@@ -202,6 +230,108 @@ def test_target_contact_uses_official_force_api_and_explicit_frames_and_sign() -
     assert evidence.aggregate.contact_count == len(target)
     assert evidence.aggregate.normal_force_n > 0.0
     assert evidence.aggregate.resultant_force_n > 0.0
+
+
+def test_contact_record_rejects_malformed_frame_and_normal_relationship() -> None:
+    _, evidence = _target_evidence()
+    record = evidence.target_contacts[0]
+    with pytest.raises(ValueError, match="orthogonal|orthonormal"):
+        replace(
+            record,
+            contact_frame_world=(
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+            ),
+        )
+    with pytest.raises(ValueError, match="normal row"):
+        replace(record, normal_world=tuple(-value for value in record.normal_world))
+
+
+def test_contact_record_rejects_force_transform_or_object_tool_sign_mismatch() -> None:
+    _, evidence = _target_evidence()
+    record = evidence.target_contacts[0]
+    assert record.force_world_n is not None
+    with pytest.raises(ValueError, match="force transform"):
+        replace(
+            record,
+            force_world_n=(record.force_world_n[0] + 1.0, *record.force_world_n[1:]),
+        )
+    assert record.object_on_tool_force_world_n is not None
+    with pytest.raises(ValueError, match="oppose"):
+        replace(
+            record,
+            tool_on_object_force_world_n=record.object_on_tool_force_world_n,
+        )
+
+
+def test_contact_evidence_rejects_aggregate_count_or_value_mismatch() -> None:
+    _, evidence = _target_evidence()
+    assert evidence.aggregate is not None
+    with pytest.raises(ValueError, match="aggregate"):
+        ContactEvidence(
+            status=evidence.status,
+            scene_identity=evidence.scene_identity,
+            object_identity=evidence.object_identity,
+            manifest_digest=evidence.manifest_digest,
+            sample_time_s=evidence.sample_time_s,
+            simulation_time_s=evidence.simulation_time_s,
+            contacts=evidence.contacts,
+            aggregate=replace(
+                evidence.aggregate,
+                contact_count=evidence.aggregate.contact_count + 1,
+            ),
+            frame_index=evidence.frame_index,
+        )
+    with pytest.raises(ValueError, match="aggregate"):
+        ContactEvidence(
+            status=evidence.status,
+            scene_identity=evidence.scene_identity,
+            object_identity=evidence.object_identity,
+            manifest_digest=evidence.manifest_digest,
+            sample_time_s=evidence.sample_time_s,
+            simulation_time_s=evidence.simulation_time_s,
+            contacts=evidence.contacts,
+            aggregate=replace(
+                evidence.aggregate,
+                resultant_force_n=evidence.aggregate.resultant_force_n + 1.0,
+            ),
+            frame_index=evidence.frame_index,
+        )
+
+
+def test_extractor_requires_manifest_canonical_digest_boundary() -> None:
+    extractor, model, data = _direct_extractor()
+    with pytest.raises(ContactEvidenceError, match="canonical manifest"):
+        ContactEvidenceExtractor(
+            model=model,
+            data=data,
+            scene_identity=extractor.scene_identity,
+            object_identity=extractor.object_identity,
+            manifest_digest="sha256:" + "1" * 64,
+            object_body_name=extractor.object_body_name,
+            object_geom_name=extractor.object_geom_name,
+            robot_geom_names=("tool_geom",),
+            manifest=extractor.manifest,
+        )
+    no_manifest = ContactEvidenceExtractor(
+        model=model,
+        data=data,
+        scene_identity=extractor.scene_identity,
+        object_identity=extractor.object_identity,
+        manifest_digest=extractor.manifest_digest,
+        object_body_name=extractor.object_body_name,
+        object_geom_name=extractor.object_geom_name,
+        robot_geom_names=("tool_geom",),
+    ).extract()
+    assert no_manifest.status is ContactEvidenceStatus.INVALID_CONTACT
+    assert no_manifest.reason is not None and "manifest" in no_manifest.reason
 
 
 def test_contact_order_and_canonical_artifact_are_deterministic() -> None:
@@ -295,6 +425,7 @@ def test_missing_model_or_model_identity_is_explicit_failure() -> None:
         manifest_digest=extractor.manifest_digest,
         object_body_name=extractor.object_body_name,
         object_geom_name=extractor.object_geom_name,
+        manifest=extractor.manifest,
     ).extract()
     assert unavailable.status is ContactEvidenceStatus.MEASUREMENT_UNAVAILABLE
     assert unavailable.aggregate is None
@@ -308,6 +439,7 @@ def test_missing_model_or_model_identity_is_explicit_failure() -> None:
         manifest_digest=extractor.manifest_digest,
         object_body_name="wrong_object",
         object_geom_name=extractor.object_geom_name,
+        manifest=extractor.manifest,
     ).extract()
     assert mismatch.status is ContactEvidenceStatus.INVALID_CONTACT
     assert mismatch.aggregate is None
@@ -327,6 +459,7 @@ def test_model_and_data_mismatch_is_invalid_not_a_zero_measurement() -> None:
         object_body_name=extractor.object_body_name,
         object_geom_name=extractor.object_geom_name,
         robot_geom_names=("tool_geom",),
+        manifest=extractor.manifest,
     ).extract()
 
     assert mismatch.status is ContactEvidenceStatus.INVALID_CONTACT

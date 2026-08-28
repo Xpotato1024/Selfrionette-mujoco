@@ -23,7 +23,11 @@ from selfrionette.runtime.experiment.contracts import (
     EvidenceStatus,
     VersionedIdentity,
 )
-from selfrionette.runtime.contact.manifest import CONTACT_OBJECT_IDENTITY
+from selfrionette.runtime.contact.manifest import (
+    CONTACT_OBJECT_IDENTITY,
+    ContactTaskManifest,
+    contact_manifest_digest,
+)
 from selfrionette.runtime.contact.scene import CONTACT_SCENE_IDENTITY
 
 
@@ -47,6 +51,9 @@ _ZERO6: Final[tuple[float, float, float, float, float, float]] = (
     0.0,
     0.0,
 )
+_FRAME_TOLERANCE: Final[float] = 1e-8
+_DERIVED_VALUE_REL_TOLERANCE: Final[float] = 1e-8
+_DERIVED_VALUE_ABS_TOLERANCE: Final[float] = 1e-9
 
 
 class ContactEvidenceStatus(str, Enum):
@@ -131,6 +138,51 @@ def _add_vectors(values: Sequence[Sequence[float]]) -> tuple[float, float, float
     )  # type: ignore[return-value]
 
 
+def _close_scalar(left: float, right: float) -> bool:
+    return math.isclose(
+        left,
+        right,
+        rel_tol=_DERIVED_VALUE_REL_TOLERANCE,
+        abs_tol=_DERIVED_VALUE_ABS_TOLERANCE,
+    )
+
+
+def _close_vector(left: Sequence[float], right: Sequence[float]) -> bool:
+    return len(left) == len(right) and all(
+        _close_scalar(float(a), float(b)) for a, b in zip(left, right, strict=True)
+    )
+
+
+def _determinant3(rows: Sequence[Sequence[float]]) -> float:
+    return (
+        rows[0][0] * (rows[1][1] * rows[2][2] - rows[1][2] * rows[2][1])
+        - rows[0][1] * (rows[1][0] * rows[2][2] - rows[1][2] * rows[2][0])
+        + rows[0][2] * (rows[1][0] * rows[2][1] - rows[1][1] * rows[2][0])
+    )
+
+
+def _validate_contact_frame(
+    name: str,
+    value: object,
+    *,
+    normal: Sequence[float],
+) -> tuple[float, ...]:
+    frame = _vector(name, value, length=9)
+    rows = (frame[0:3], frame[3:6], frame[6:9])
+    for index, row in enumerate(rows):
+        if abs(_magnitude(row) - 1.0) > _FRAME_TOLERANCE:
+            raise ValueError(f"{name} row {index} must be unit length")
+    for left_index in range(3):
+        for right_index in range(left_index + 1, 3):
+            if abs(_dot(rows[left_index], rows[right_index])) > _FRAME_TOLERANCE:
+                raise ValueError(f"{name} rows must be pairwise orthogonal")
+    if abs(abs(_determinant3(rows)) - 1.0) > _FRAME_TOLERANCE:
+        raise ValueError(f"{name} must be an orthonormal frame")
+    if not _close_vector(rows[0], normal):
+        raise ValueError(f"{name} normal row must match normal_world")
+    return frame
+
+
 def _contact_frame_to_world(
     frame: Sequence[float],
     local: Sequence[float],
@@ -190,8 +242,22 @@ class ContactForceAggregate:
             self.object_on_tool_wrench_world_nm,
         )
         magnitude = _finite("aggregate.resultant_force_n", self.resultant_force_n)
+        if normal < 0.0:
+            raise ValueError("aggregate.normal_force_n must be non-negative")
         if magnitude < 0.0:
             raise ValueError("aggregate.resultant_force_n must be non-negative")
+        if not _close_vector(resultant, object_force):
+            raise ValueError(
+                "aggregate resultant_force_world_n must match object_on_tool_force_world_n"
+            )
+        if not _close_vector(tool_force, _scale(object_force, -1.0)):
+            raise ValueError(
+                "aggregate tool_on_object_force_world_n must oppose object_on_tool_force_world_n"
+            )
+        if not _close_scalar(magnitude, _magnitude(resultant)):
+            raise ValueError(
+                "aggregate resultant_force_n must match resultant force magnitude"
+            )
         if self.contact_count == 0 and any(
             component != 0.0
             for component in (
@@ -302,9 +368,13 @@ class ContactRecord:
         penetration = _finite("contact.penetration_m", self.penetration_m)
         if penetration < 0.0:
             raise ValueError("contact penetration must be non-negative")
-        if penetration != max(0.0, -distance):
+        if not _close_scalar(penetration, max(0.0, -distance)):
             raise ValueError("contact penetration must match signed distance")
-        frame = _vector("contact.contact_frame_world", self.contact_frame_world, length=9)
+        frame = _validate_contact_frame(
+            "contact.contact_frame_world",
+            self.contact_frame_world,
+            normal=normal,
+        )
         if self.force_contact_frame_n is None:
             if self.force_world_n is not None:
                 raise ValueError("missing local force cannot carry world force")
@@ -320,17 +390,58 @@ class ContactRecord:
             )
             if world_force is None:
                 raise ValueError("measured local force requires world force")
+            expected_world_force = _contact_frame_to_world(frame, local_force)
+            if not _close_vector(world_force, expected_world_force):
+                raise ValueError(
+                    "contact world force must match contact-frame force transform"
+                )
             object.__setattr__(self, "force_contact_frame_n", local_force)
             object.__setattr__(self, "force_world_n", world_force)
-        for name, value in (
-            ("torque_contact_frame_nm", self.torque_contact_frame_nm),
-            ("torque_world_nm", self.torque_world_nm),
-            ("object_on_tool_force_world_n", self.object_on_tool_force_world_n),
-            ("tool_on_object_force_world_n", self.tool_on_object_force_world_n),
-            ("tangential_force_world_n", self.tangential_force_world_n),
-        ):
-            if value is not None:
-                object.__setattr__(self, name, _vector3(f"contact.{name}", value))
+        if self.torque_contact_frame_nm is None:
+            if self.torque_world_nm is not None:
+                raise ValueError("missing local torque cannot carry world torque")
+        else:
+            local_torque = _vector3(
+                "contact.torque_contact_frame_nm",
+                self.torque_contact_frame_nm,
+            )
+            if self.torque_world_nm is None:
+                raise ValueError("measured local torque requires world torque")
+            world_torque = _vector3(
+                "contact.torque_world_nm",
+                self.torque_world_nm,
+            )
+            expected_world_torque = _contact_frame_to_world(frame, local_torque)
+            if not _close_vector(world_torque, expected_world_torque):
+                raise ValueError(
+                    "contact world torque must match contact-frame torque transform"
+                )
+            object.__setattr__(self, "torque_contact_frame_nm", local_torque)
+            object.__setattr__(self, "torque_world_nm", world_torque)
+        object_force = (
+            None
+            if self.object_on_tool_force_world_n is None
+            else _vector3(
+                "contact.object_on_tool_force_world_n",
+                self.object_on_tool_force_world_n,
+            )
+        )
+        tool_force = (
+            None
+            if self.tool_on_object_force_world_n is None
+            else _vector3(
+                "contact.tool_on_object_force_world_n",
+                self.tool_on_object_force_world_n,
+            )
+        )
+        tangential_force = (
+            None
+            if self.tangential_force_world_n is None
+            else _vector3(
+                "contact.tangential_force_world_n",
+                self.tangential_force_world_n,
+            )
+        )
         normal_force = (
             None
             if self.normal_force_n is None
@@ -341,31 +452,99 @@ class ContactRecord:
             if self.resultant_force_n is None
             else _finite("contact.resultant_force_n", self.resultant_force_n)
         )
+        if normal_force is not None and normal_force < 0.0:
+            raise ValueError("contact normal force must be non-negative")
         if resultant is not None and resultant < 0.0:
             raise ValueError("contact resultant force must be non-negative")
-        if self.force_status in {
-            ContactEvidenceStatus.MEASUREMENT_UNAVAILABLE,
-            ContactEvidenceStatus.SOLVER_INVALID,
-        } and any(
+        if self.force_status is ContactEvidenceStatus.NO_CONTACT:
+            raise ValueError("contact record cannot use no_contact force status")
+        force_values = (
+            self.force_contact_frame_n,
+            self.force_world_n,
+            self.torque_contact_frame_nm,
+            self.torque_world_nm,
+            object_force,
+            tool_force,
+            normal_force,
+            tangential_force,
+            resultant,
+        )
+        if self.force_status is not ContactEvidenceStatus.MEASURED and any(
             value is not None
-            for value in (
-                self.force_contact_frame_n,
-                self.force_world_n,
-                self.torque_contact_frame_nm,
-                self.torque_world_nm,
-                self.object_on_tool_force_world_n,
-                self.tool_on_object_force_world_n,
-                self.normal_force_n,
-                self.tangential_force_world_n,
-                self.resultant_force_n,
-            )
+            for value in force_values
         ):
-            raise ValueError("unavailable or invalid force status must not carry force")
+            raise ValueError("non-measured force status must not carry force")
+        if self.force_status is ContactEvidenceStatus.MEASURED:
+            if self.force_contact_frame_n is None or self.force_world_n is None:
+                raise ValueError("measured contact requires local and world force")
+            if self.torque_contact_frame_nm is None or self.torque_world_nm is None:
+                raise ValueError("measured contact requires local and world torque")
+            if self.classification is ContactPairClassification.TARGET_OBJECT:
+                if (
+                    object_force is None
+                    or tool_force is None
+                    or normal_force is None
+                    or tangential_force is None
+                    or resultant is None
+                ):
+                    raise ValueError(
+                        "measured target contact requires normalized force fields"
+                    )
+                if not _close_vector(tool_force, _scale(object_force, -1.0)):
+                    raise ValueError(
+                        "tool_on_object force must oppose object_on_tool force"
+                    )
+                if not (
+                    _close_vector(object_force, self.force_world_n)
+                    or _close_vector(object_force, _scale(self.force_world_n, -1.0))
+                ):
+                    raise ValueError(
+                        "object_on_tool force must preserve MuJoCo force sign"
+                    )
+                if not _close_scalar(resultant, _magnitude(object_force)):
+                    raise ValueError(
+                        "resultant force must match object_on_tool force magnitude"
+                    )
+                if not _close_scalar(
+                    normal_force,
+                    abs(_dot(object_force, normal)),
+                ):
+                    raise ValueError(
+                        "normal force must match object_on_tool normal component"
+                    )
+                if abs(_dot(tangential_force, normal)) > _FRAME_TOLERANCE * max(
+                    1.0,
+                    _magnitude(tangential_force),
+                ):
+                    raise ValueError("tangential force must be normal-orthogonal")
+                if not _close_scalar(
+                    _magnitude(tangential_force) ** 2,
+                    max(0.0, resultant * resultant - normal_force * normal_force),
+                ):
+                    raise ValueError(
+                        "tangential force must match normal/resultant decomposition"
+                    )
+            elif any(
+                value is not None
+                for value in (
+                    object_force,
+                    tool_force,
+                    normal_force,
+                    tangential_force,
+                    resultant,
+                )
+            ):
+                raise ValueError(
+                    "non-target measured contact must not carry target force fields"
+                )
         object.__setattr__(self, "point_world_m", point)
         object.__setattr__(self, "normal_world", normal)
         object.__setattr__(self, "distance_m", distance)
         object.__setattr__(self, "penetration_m", penetration)
         object.__setattr__(self, "contact_frame_world", frame)
+        object.__setattr__(self, "object_on_tool_force_world_n", object_force)
+        object.__setattr__(self, "tool_on_object_force_world_n", tool_force)
+        object.__setattr__(self, "tangential_force_world_n", tangential_force)
         object.__setattr__(self, "normal_force_n", normal_force)
         object.__setattr__(self, "resultant_force_n", resultant)
 
@@ -440,12 +619,9 @@ class ContactEvidence:
             raise TypeError("contact evidence scene identity must be typed")
         if not isinstance(self.object_identity, VersionedIdentity):
             raise TypeError("contact evidence object identity must be typed")
-        if not isinstance(self.manifest_digest, str) or not self.manifest_digest:
-            raise ValueError("contact evidence manifest digest must be non-empty")
-        if self.status in {
-            ContactEvidenceStatus.MEASURED,
-            ContactEvidenceStatus.NO_CONTACT,
-        } and not _MANIFEST_DIGEST_PATTERN.fullmatch(self.manifest_digest):
+        if not isinstance(self.manifest_digest, str) or not _MANIFEST_DIGEST_PATTERN.fullmatch(
+            self.manifest_digest
+        ):
             raise ValueError("contact evidence manifest digest is invalid")
         sample = _finite("contact evidence sample_time_s", self.sample_time_s)
         simulation = _finite(
@@ -466,6 +642,11 @@ class ContactEvidence:
             ContactEvidenceStatus.NO_CONTACT,
         } and self.aggregate is None:
             raise ValueError("measured contact evidence requires an aggregate")
+        if self.aggregate is not None and not isinstance(
+            self.aggregate,
+            ContactForceAggregate,
+        ):
+            raise TypeError("contact evidence aggregate must use ContactForceAggregate")
         if self.status in {
             ContactEvidenceStatus.MEASUREMENT_UNAVAILABLE,
             ContactEvidenceStatus.INVALID_CONTACT,
@@ -475,16 +656,47 @@ class ContactEvidence:
                 raise ValueError("failed contact evidence must not carry aggregate")
             if not isinstance(self.reason, str) or not self.reason.strip():
                 raise ValueError("failed contact evidence requires a reason")
+            if contacts and not any(
+                item.force_status is self.status for item in contacts
+            ):
+                raise ValueError(
+                    "failed contact evidence status must match a failed contact record"
+                )
         if self.status is ContactEvidenceStatus.NO_CONTACT and any(
             item.classification is ContactPairClassification.TARGET_OBJECT
             for item in contacts
         ):
             raise ValueError("no_contact evidence must not contain target contacts")
+        if self.status is ContactEvidenceStatus.NO_CONTACT:
+            if any(
+                item.force_status is not ContactEvidenceStatus.MEASURED
+                for item in contacts
+            ):
+                raise ValueError("no_contact evidence must contain only measured records")
+            if self.aggregate != ContactForceAggregate.no_contact():
+                raise ValueError("no_contact evidence requires an empty aggregate")
         if self.status is ContactEvidenceStatus.MEASURED and not any(
             item.classification is ContactPairClassification.TARGET_OBJECT
             for item in contacts
         ):
             raise ValueError("measured contact evidence requires target contacts")
+        if self.status is ContactEvidenceStatus.MEASURED:
+            target_contacts = tuple(
+                item
+                for item in contacts
+                if item.classification is ContactPairClassification.TARGET_OBJECT
+            )
+            if any(
+                item.force_status is not ContactEvidenceStatus.MEASURED
+                for item in contacts
+            ):
+                raise ValueError("measured evidence requires only measured records")
+            assert self.aggregate is not None
+            expected = _aggregate_from_records(target_contacts)
+            if not _aggregates_match(self.aggregate, expected):
+                raise ValueError(
+                    "contact evidence aggregate does not match target records"
+                )
         if self.reason is not None and (
             not isinstance(self.reason, str) or not self.reason.strip()
         ):
@@ -600,6 +812,104 @@ def _stable_contact_sort_key(record: ContactRecord) -> tuple[object, ...]:
     )
 
 
+def _aggregate_from_records(
+    records: Sequence[ContactRecord],
+) -> ContactForceAggregate:
+    """Reconstruct the public aggregate without a second geometry identity SoT."""
+
+    object_forces = [
+        record.object_on_tool_force_world_n
+        for record in records
+        if record.object_on_tool_force_world_n is not None
+    ]
+    tool_forces = [
+        record.tool_on_object_force_world_n
+        for record in records
+        if record.tool_on_object_force_world_n is not None
+    ]
+    tangential = [
+        record.tangential_force_world_n
+        for record in records
+        if record.tangential_force_world_n is not None
+    ]
+    resultant = _add_vectors(object_forces)
+    tangential_sum = _add_vectors(tangential)
+    normal_force = math.fsum(
+        record.normal_force_n
+        for record in records
+        if record.normal_force_n is not None
+    )
+    wrenches: list[tuple[float, float, float, float, float, float]] = []
+    for record in records:
+        if record.object_on_tool_force_world_n is None:
+            continue
+        force = record.object_on_tool_force_world_n
+        torque = record.torque_world_nm or _ZERO3
+        if record.force_world_n is not None and not _close_vector(
+            force,
+            record.force_world_n,
+        ):
+            torque = _scale(torque, -1.0)
+        point = record.point_world_m
+        moment = (
+            point[1] * force[2] - point[2] * force[1],
+            point[2] * force[0] - point[0] * force[2],
+            point[0] * force[1] - point[1] * force[0],
+        )
+        wrenches.append(
+            (*force, *(moment[index] + torque[index] for index in range(3)))
+        )
+    wrench = (
+        tuple(
+            math.fsum(item[index] for item in wrenches)
+            for index in range(6)
+        )
+        if wrenches
+        else _ZERO6
+    )
+    return ContactForceAggregate(
+        contact_count=len(records),
+        normal_force_n=normal_force,
+        tangential_force_world_n=tangential_sum,
+        resultant_force_world_n=resultant,
+        resultant_force_n=_magnitude(resultant),
+        object_on_tool_force_world_n=resultant,
+        tool_on_object_force_world_n=_add_vectors(tool_forces),
+        object_on_tool_wrench_world_nm=wrench,  # type: ignore[arg-type]
+    )
+
+
+def _aggregates_match(
+    actual: ContactForceAggregate,
+    expected: ContactForceAggregate,
+) -> bool:
+    return (
+        actual.contact_count == expected.contact_count
+        and _close_scalar(actual.normal_force_n, expected.normal_force_n)
+        and _close_vector(
+            actual.tangential_force_world_n,
+            expected.tangential_force_world_n,
+        )
+        and _close_vector(
+            actual.resultant_force_world_n,
+            expected.resultant_force_world_n,
+        )
+        and _close_scalar(actual.resultant_force_n, expected.resultant_force_n)
+        and _close_vector(
+            actual.object_on_tool_force_world_n,
+            expected.object_on_tool_force_world_n,
+        )
+        and _close_vector(
+            actual.tool_on_object_force_world_n,
+            expected.tool_on_object_force_world_n,
+        )
+        and _close_vector(
+            actual.object_on_tool_wrench_world_nm,
+            expected.object_on_tool_wrench_world_nm,
+        )
+    )
+
+
 class ContactEvidenceExtractor:
     """Read one compiled MuJoCo state and produce raw contact evidence."""
 
@@ -617,12 +927,26 @@ class ContactEvidenceExtractor:
         robot_geom_names: Sequence[str] | None = None,
         sample_time_s: float | None = None,
         frame_index: int | None = None,
+        manifest: ContactTaskManifest | None = None,
     ) -> None:
         self.model = model
         self.data = data
         self.scene_identity = scene_identity
         self.object_identity = object_identity
+        if not isinstance(manifest_digest, str) or not _MANIFEST_DIGEST_PATTERN.fullmatch(
+            manifest_digest
+        ):
+            raise ContactEvidenceError("contact evidence manifest digest is invalid")
         self.manifest_digest = manifest_digest
+        if manifest is not None and not isinstance(manifest, ContactTaskManifest):
+            raise TypeError("contact evidence manifest must use ContactTaskManifest")
+        if manifest is not None:
+            actual_digest = contact_manifest_digest(manifest)
+            if manifest_digest != actual_digest:
+                raise ContactEvidenceError(
+                    "contact evidence manifest digest does not match canonical manifest"
+                )
+        self.manifest = manifest
         self.object_body_name = object_body_name
         self.object_geom_name = object_geom_name
         self.robot_geom_ids = None if robot_geom_ids is None else tuple(robot_geom_ids)
@@ -658,6 +982,7 @@ class ContactEvidenceExtractor:
             robot_geom_names=robot_geom_names,
             sample_time_s=sample_time_s,
             frame_index=frame_index,
+            manifest=manifest,
         )
 
     @classmethod
@@ -836,6 +1161,18 @@ class ContactEvidenceExtractor:
             raise ContactEvidenceError("contact object identity mismatch")
         if not _MANIFEST_DIGEST_PATTERN.fullmatch(self.manifest_digest):
             raise ContactEvidenceError("contact manifest digest is invalid")
+        if self.manifest is None:
+            raise ContactEvidenceError(
+                "contact evidence manifest is required for canonical digest verification"
+            )
+        if self.scene_identity != self.manifest.scene.identity:
+            raise ContactEvidenceError("contact evidence scene/manifest identity mismatch")
+        if self.object_identity != self.manifest.object.identity:
+            raise ContactEvidenceError("contact evidence object/manifest identity mismatch")
+        if contact_manifest_digest(self.manifest) != self.manifest_digest:
+            raise ContactEvidenceError(
+                "contact evidence manifest digest does not match canonical manifest"
+            )
         data_model = getattr(self.data, "model", None)
         if data_model is not None and data_model is not self.model:
             raise ContactEvidenceError("contact model/data identity mismatch")
