@@ -344,6 +344,7 @@ def _lifecycle_event_from_json(
 def _validate_lifecycle_events(events: tuple[PhysicalOutputLifecycleEvent, ...]) -> None:
     expected_sequence = 0
     previous_state: PhysicalOutputLifecycleState = "disabled"
+    session_id: str | None = None
     latest_request_sequence_by_session: dict[str, int] = {}
     seen_request_sequences_by_session: dict[str, set[int]] = {}
     for event in events:
@@ -352,11 +353,23 @@ def _validate_lifecycle_events(events: tuple[PhysicalOutputLifecycleEvent, ...])
         expected_sequence += 1
         if event.state_before != previous_state:
             raise ValueError("physical output lifecycle event state chain is inconsistent")
+        if session_id is None:
+            session_id = event.session_id
+        elif event.session_id != session_id:
+            if not (
+                event.event_kind == "armed"
+                and previous_state in {"stopped", "aborted", "failed"}
+            ):
+                raise ValueError(
+                    "physical output lifecycle session may change only on terminal re-arm"
+                )
+            session_id = event.session_id
         previous_state = event.state_after
         if event.event_kind in {"request_accepted", "request_rejected"}:
             if event.request_sequence is None and not (
                 event.event_kind == "request_rejected"
-                and event.reason == "session_mismatch"
+                and event.reason
+                in {"session_mismatch", "duplicate_or_out_of_order_sequence"}
             ):
                 raise ValueError(f"{event.event_kind} requires request_sequence")
             if event.request_sequence is None:
@@ -645,8 +658,10 @@ class PhysicalOutputLifecycle:
                 request,
                 "duplicate_or_out_of_order_sequence",
                 timestamp_s=now_s,
+                record_sequence=False,
             )
         if self._state not in {"armed", "active"}:
+            self._last_request_sequence = request.sequence
             return self._reject_request(
                 request,
                 "lifecycle_state_not_accepting",
@@ -831,6 +846,7 @@ class PhysicalOutputLifecycle:
         if self._stop_deadline_s is not None and now > self._stop_deadline_s:
             before = self._state
             self._state = "failed"
+            self._stop_deadline_s = None
             event = self._record(
                 "stop_deadline_exceeded",
                 state_before=before,
@@ -842,6 +858,7 @@ class PhysicalOutputLifecycle:
         before = self._state
         self._state = "stopped"
         self._latest_request = None
+        self._stop_deadline_s = None
         event = self._record(
             "stop_completed",
             state_before=before,
@@ -875,6 +892,7 @@ class PhysicalOutputLifecycle:
         reason = _lifecycle_identifier("reason", reason)
         before = self._state
         if self._state in {"failed", "aborted"}:
+            self._stop_deadline_s = None
             event = self._record(
                 "cleanup_failure",
                 state_before=before,
@@ -885,6 +903,7 @@ class PhysicalOutputLifecycle:
             return self._result(True, event=event)
         self._state = "failed"
         self._latest_request = None
+        self._stop_deadline_s = None
         event = self._record(
             "cleanup_failure",
             state_before=before,
@@ -930,6 +949,7 @@ class PhysicalOutputLifecycle:
         reason = _lifecycle_identifier("reason", reason)
         before = self._state
         if self._state in {"failed", "aborted"}:
+            self._stop_deadline_s = None
             event = self._record(
                 event_kind,
                 state_before=before,
@@ -940,6 +960,7 @@ class PhysicalOutputLifecycle:
             return self._result(True, event=event)
         self._state = terminal_state
         self._latest_request = None
+        self._stop_deadline_s = None
         event = self._record(
             event_kind,
             state_before=before,
