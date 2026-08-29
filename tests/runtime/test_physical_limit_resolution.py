@@ -9,8 +9,10 @@ from selfrionette.plugins.robots.fast_arm.adapter.resources import FAST_ARM_JOIN
 from selfrionette.runtime.safety.limit_resolution import (
     FastArmResolvedBoundsProvider,
     JointSpaceConversion,
+    LimitParityRecord,
     LimitResolutionStatus,
     ParityStatus,
+    ResolvedJointBound,
     build_fast_arm_resolved_bounds_provider,
     fast_arm_toml_limits_to_physical_limits,
     project_limit_to_joint_space,
@@ -43,13 +45,14 @@ def _limit(
     space: LimitSpace = LimitSpace.JOINT,
     status: EvidenceStatus = EvidenceStatus.PROVISIONAL,
     source_kind: str = "software_config",
+    unit: str = "rad",
 ) -> PhysicalLimit:
     return PhysicalLimit(
         name=name,
         quantity=LimitQuantity.POSITION,
         lower=lower,
         upper=upper,
-        unit="rad",
+        unit=unit,
         space=space,
         frame="fast_arm joint space",
         status=status,
@@ -189,8 +192,41 @@ def test_parity_unit_is_part_of_identity_and_mismatch_fails_closed() -> None:
     bound = result.bound_for("joint_1")
     assert bound.status is LimitResolutionStatus.MISMATCH
     assert bound.lower_rad is None
+    assert bound.upper_rad is None
+    assert bound.reason == "limit units disagree"
     assert "unit=rad" in bound.parity[0].source_name
     assert "unit=deg" in bound.parity[1].source_name
+
+
+def test_single_non_rad_provisional_source_is_unknown_and_unbounded() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(unit="deg"),),
+        expected_joint_names=("joint_1",),
+        robot_id="fixture",
+    )
+
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.UNKNOWN
+    assert bound.lower_rad is None
+    assert bound.upper_rad is None
+    assert bound.reason is not None
+    assert "rad" in bound.reason
+    assert "conversion" in bound.reason
+
+
+def test_matching_non_rad_provisional_sources_are_unknown_and_unbounded() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(unit="deg", source_kind="profile"), _limit(unit="deg", source_kind="model")),
+        expected_joint_names=("joint_1",),
+        robot_id="fixture",
+    )
+
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.UNKNOWN
+    assert bound.lower_rad is None
+    assert bound.upper_rad is None
+    assert bound.reason is not None
+    assert "rad" in bound.reason
 
 
 def test_missing_conversion_is_unknown_not_a_zero_or_toml_fallback() -> None:
@@ -221,6 +257,20 @@ def test_equal_provisional_sources_resolve_without_becoming_authoritative() -> N
     assert [item.status for item in bound.parity] == [ParityStatus.MATCH, ParityStatus.MATCH]
 
 
+def test_single_rad_provisional_source_remains_resolved_provisional() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fixture",
+    )
+
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.RESOLVED_PROVISIONAL
+    assert bound.lower_rad == pytest.approx(-1.0)
+    assert bound.upper_rad == pytest.approx(1.0)
+    assert bound.reason is None
+
+
 def test_authoritative_and_matching_provisional_source_resolve_authoritatively() -> None:
     result = resolve_joint_space_bounds(
         (
@@ -231,7 +281,11 @@ def test_authoritative_and_matching_provisional_source_resolve_authoritatively()
         robot_id="fixture",
     )
 
-    assert result.bound_for("joint_1").status is LimitResolutionStatus.RESOLVED_AUTHORITATIVE
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.RESOLVED_AUTHORITATIVE
+    assert bound.lower_rad == pytest.approx(-1.0)
+    assert bound.upper_rad == pytest.approx(1.0)
+    assert bound.reason is None
     assert result.authoritative
 
 
@@ -302,4 +356,25 @@ def test_invalid_conversion_values_fail_closed() -> None:
             offset=0.0,
             relation_id="invalid",
             unit="rad",
+        )
+
+
+def test_resolved_bound_rejects_non_rad_parity_units() -> None:
+    parity = LimitParityRecord(
+        joint_name="joint_1",
+        source_name="fixture",
+        status=ParityStatus.MATCH,
+        lower=-1.0,
+        upper=1.0,
+        unit="deg",
+    )
+
+    with pytest.raises(ValueError, match="parity units must be rad"):
+        ResolvedJointBound(
+            joint_name="joint_1",
+            lower_rad=-1.0,
+            upper_rad=1.0,
+            status=LimitResolutionStatus.RESOLVED_PROVISIONAL,
+            source_names=("fixture",),
+            parity=(parity,),
         )

@@ -203,6 +203,21 @@ class ResolvedJointBound:
             raise TypeError("parity must contain LimitParityRecord values")
         if self.reason is not None:
             _text("reason", self.reason)
+        if self.status in {
+            LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
+            LimitResolutionStatus.RESOLVED_PROVISIONAL,
+        }:
+            if self.lower_rad is None or self.upper_rad is None:
+                raise ValueError("resolved bound requires both lower_rad and upper_rad")
+            if any(item.unit != "rad" for item in self.parity):
+                raise ValueError("resolved bound parity units must be rad")
+            if self.reason is not None:
+                raise ValueError("resolved bound must not have a reason")
+        else:
+            if self.lower_rad is not None or self.upper_rad is not None:
+                raise ValueError(f"{self.status.value} bound must not contain bounds")
+            if not self.reason:
+                raise ValueError(f"{self.status.value} bound requires a reason")
 
     @property
     def authoritative(self) -> bool:
@@ -485,6 +500,19 @@ def resolve_joint_space_bounds(
         assert first.lower is not None and first.upper is not None
         if any(limit.unit != first.unit for limit in known[1:]):
             bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "limit units disagree"))
+            continue
+        if first.unit != "rad":
+            bounds.append(
+                ResolvedJointBound(
+                    joint_name,
+                    None,
+                    None,
+                    LimitResolutionStatus.UNKNOWN,
+                    tuple(source_names),
+                    tuple(parity),
+                    "non-rad joint limit unit cannot be normalized; implicit unit conversion is disabled",
+                )
+            )
             continue
         if any(abs(limit.lower - first.lower) > tolerance_rad or abs(limit.upper - first.upper) > tolerance_rad for limit in known[1:]):
             bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "limit ranges disagree"))
