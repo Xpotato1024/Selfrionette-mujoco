@@ -677,7 +677,6 @@ def test_direct_clear_exclusion_must_match_context_policy_declaration() -> None:
         "arbitrary-review-001",
         policy.near_collision_margin_m,
     )
-
     with pytest.raises(ValueError, match="aggregate status/reason"):
         CollisionCheckResult(
             context,

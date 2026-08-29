@@ -33,7 +33,7 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
     FeasibilityStatus,
     TrajectoryFeasibilityResult,
 )
-from selfrionette.runtime.safety.physical_limits import EvidenceStatus
+from selfrionette.runtime.safety.physical_limits import EvidenceStatus, LimitSpace
 
 
 class SafetyDecisionAction(str, Enum):
@@ -186,11 +186,77 @@ def _reason(
     return SafetyReason(reason_code, component, message, tuple(sorted(set(provenance))))
 
 
+def _valid_text(value: object) -> bool:
+    """壊れたprovider objectから安全に使える文字列identityだけを通す。"""
+
+    try:
+        return type(value) is str and bool(value) and value == value.strip()
+    except Exception:
+        return False
+
+
+def _safe_text_tuple(value: object) -> tuple[str, ...]:
+    """tupleの内容を例外なく走査し、妥当な文字列だけを返す。"""
+
+    if type(value) is not tuple:
+        return ()
+    try:
+        return tuple(item for item in value if _valid_text(item))
+    except Exception:
+        return ()
+
+
+def _safe_limit_provenance(result: object) -> tuple[str, ...]:
+    """malformed boundからのprovenance参照をfail-closedにする。"""
+
+    try:
+        bounds = result.bounds
+    except Exception:
+        return ()
+    if type(bounds) is not tuple:
+        return ()
+    try:
+        bound_values = tuple(bounds)
+    except Exception:
+        return ()
+    provenance: list[str] = []
+    for bound in bound_values:
+        try:
+            source_names = bound.source_names
+        except Exception:
+            continue
+        provenance.extend(_safe_text_tuple(source_names))
+    return tuple(provenance)
+
+
+def _safe_collision_provenance(result: object) -> tuple[str, ...]:
+    """malformed collision evaluationからのprovenance参照をfail-closedにする。"""
+
+    try:
+        evaluations = result.evaluations
+    except Exception:
+        return ()
+    if type(evaluations) is not tuple:
+        return ()
+    try:
+        evaluation_values = tuple(evaluations)
+    except Exception:
+        return ()
+    provenance: list[str] = []
+    for evaluation in evaluation_values:
+        try:
+            value = evaluation.provenance
+        except Exception:
+            continue
+        if _valid_text(value):
+            provenance.append(value)
+    return tuple(provenance)
+
+
 def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
     """P2 aggregateの構造・status・per-source parityをP5で再検証する。"""
 
-    def valid_text(value: object) -> bool:
-        return isinstance(value, str) and bool(value) and value == value.strip()
+    valid_text = _valid_text
 
     def finite_number(value: object) -> bool:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -218,26 +284,54 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
         robot_id = result.robot_id
         bounds = result.bounds
         conversion_relations = result.conversion_relations
-    except AttributeError:
+    except Exception:
         return "limit resolution result is structurally incomplete"
     if type(schema_version) is not int or schema_version != 1:
         return "limit resolution schema version is invalid"
     if not valid_text(robot_id):
         return "limit resolution robot identity is invalid"
-    if not isinstance(bounds, tuple) or not bounds:
+    if type(bounds) is not tuple or not bounds:
         return "limit resolution bounds must be a non-empty tuple"
     if any(not isinstance(bound, ResolvedJointBound) for bound in bounds):
         return "limit resolution contains an invalid bound"
-    if not isinstance(conversion_relations, tuple):
+    if type(conversion_relations) is not tuple:
         return "limit resolution conversion relations must be a tuple"
     if any(not isinstance(relation, JointSpaceConversion) for relation in conversion_relations):
         return "limit resolution contains an invalid conversion relation"
+    relation_ids: list[object] = []
+    for relation in conversion_relations:
+        try:
+            source_space = relation.source_space
+            joint_name = relation.joint_name
+            source_name = relation.source_name
+            gear_ratio = relation.gear_ratio
+            sign = relation.sign
+            offset = relation.offset
+            relation_id = relation.relation_id
+            unit = relation.unit
+        except Exception:
+            return "limit resolution conversion relation is structurally incomplete"
+        if not isinstance(source_space, LimitSpace):
+            return "limit resolution conversion relation source space is invalid"
+        if not valid_text(joint_name) or not valid_text(source_name):
+            return "limit resolution conversion relation identity is invalid"
+        if not valid_text(relation_id) or not valid_text(unit):
+            return "limit resolution conversion relation identity is invalid"
+        if not finite_number(gear_ratio) or float(gear_ratio) == 0.0:
+            return "limit resolution conversion relation gear ratio is invalid"
+        if not finite_number(sign) or float(sign) not in (-1.0, 1.0):
+            return "limit resolution conversion relation sign is invalid"
+        if not finite_number(offset):
+            return "limit resolution conversion relation offset is invalid"
+        relation_ids.append(relation_id)
+    if len(set(relation_ids)) != len(relation_ids):
+        return "limit resolution conversion relation identities are duplicated"
 
     joint_names_list: list[object] = []
     for bound in bounds:
         try:
             joint_names_list.append(bound.joint_name)
-        except AttributeError:
+        except Exception:
             return "limit resolution bound is structurally incomplete"
     joint_names = tuple(joint_names_list)
     if any(not valid_text(name) for name in joint_names):
@@ -254,19 +348,19 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
             source_names = bound.source_names
             parity = bound.parity
             reason = bound.reason
-        except AttributeError:
+        except Exception:
             return "limit resolution bound is structurally incomplete"
         if not valid_text(joint_name):
             return "limit resolution contains an invalid joint identity"
         if not isinstance(status, LimitResolutionStatus):
             return f"limit status is invalid for {joint_name}"
-        if not isinstance(source_names, tuple) or not source_names:
+        if type(source_names) is not tuple or not source_names:
             return f"limit source identity is empty for {joint_name}"
         if any(not valid_text(source_name) for source_name in source_names):
             return f"limit source identity is invalid for {joint_name}"
         if len(set(source_names)) != len(source_names):
             return f"limit source identity is duplicated for {joint_name}"
-        if not isinstance(parity, tuple) or not parity:
+        if type(parity) is not tuple or not parity:
             return f"limit parity is empty for {joint_name}"
         if any(not isinstance(item, LimitParityRecord) for item in parity):
             return f"limit parity contains an invalid record for {joint_name}"
@@ -285,7 +379,7 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
                 item_upper = item.upper
                 item_unit = item.unit
                 item_reason = item.reason
-            except AttributeError:
+            except Exception:
                 return f"limit parity is structurally incomplete for {joint_name}"
             if not valid_text(item_joint_name):
                 return f"limit parity joint identity is invalid for {joint_name}"
@@ -379,45 +473,63 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
 def _collision_evaluation_inconsistency(evaluation: CollisionEvaluation) -> str | None:
     """P3 evaluationのidentityとclear evidence semanticsを再検証する。"""
 
+    if not isinstance(evaluation, CollisionEvaluation):
+        return "collision evaluation has an invalid type"
     try:
-        _pair_id_parts(evaluation.pair_id)
-    except (TypeError, ValueError):
+        pair_id = evaluation.pair_id
+        kind = evaluation.kind
+        status = evaluation.status
+        distance_m = evaluation.distance_m
+        clearance_m = evaluation.clearance_m
+        reason_code = evaluation.reason_code
+        provenance = evaluation.provenance
+    except Exception:
+        return "collision evaluation is structurally incomplete"
+    if not _valid_text(pair_id):
         return "collision evaluation pair identity is not canonical"
-    if not isinstance(evaluation.kind, CollisionKind):
+    try:
+        _pair_id_parts(pair_id)
+    except Exception:
+        return "collision evaluation pair identity is not canonical"
+    if not isinstance(kind, CollisionKind):
         return "collision evaluation kind is invalid"
-    if not isinstance(evaluation.status, CollisionStatus):
+    if not isinstance(status, CollisionStatus):
         return "collision evaluation status is invalid"
-    if isinstance(evaluation.clearance_m, bool) or not isinstance(evaluation.clearance_m, (int, float)):
+    if isinstance(clearance_m, bool) or not isinstance(clearance_m, (int, float)):
         return "collision evaluation clearance is invalid"
-    clearance = float(evaluation.clearance_m)
+    try:
+        clearance = float(clearance_m)
+    except (OverflowError, TypeError, ValueError):
+        return "collision evaluation clearance is invalid"
     if not math.isfinite(clearance) or clearance < 0.0:
         return "collision evaluation clearance is invalid"
-    if evaluation.distance_m is not None:
-        if isinstance(evaluation.distance_m, bool) or not isinstance(evaluation.distance_m, (int, float)):
+    distance: float | None = None
+    if distance_m is not None:
+        if isinstance(distance_m, bool) or not isinstance(distance_m, (int, float)):
             return "collision evaluation distance is invalid"
-        if not math.isfinite(float(evaluation.distance_m)):
+        try:
+            distance = float(distance_m)
+        except (OverflowError, TypeError, ValueError):
             return "collision evaluation distance is invalid"
-    if not isinstance(evaluation.reason_code, str) or not evaluation.reason_code or evaluation.reason_code != evaluation.reason_code.strip():
+        if not math.isfinite(distance):
+            return "collision evaluation distance is invalid"
+    if not _valid_text(reason_code):
         return "collision evaluation reason is invalid"
-    if evaluation.provenance is not None and (
-        not isinstance(evaluation.provenance, str)
-        or not evaluation.provenance
-        or evaluation.provenance != evaluation.provenance.strip()
-    ):
+    if provenance is not None and not _valid_text(provenance):
         return "collision evaluation provenance is invalid"
 
-    if evaluation.status is CollisionStatus.CLEAR:
-        if evaluation.kind is CollisionKind.UNKNOWN:
+    if status is CollisionStatus.CLEAR:
+        if kind is CollisionKind.UNKNOWN:
             return "unknown collision kind cannot produce clear evidence"
-        if evaluation.reason_code == "explicit_structural_exclusion":
-            if evaluation.kind is not CollisionKind.STRUCTURAL_PROXIMITY:
+        if reason_code == "explicit_structural_exclusion":
+            if kind is not CollisionKind.STRUCTURAL_PROXIMITY:
                 return "structural exclusion clear evidence has the wrong kind"
-            if evaluation.distance_m is not None or evaluation.provenance is None:
+            if distance is not None or provenance is None:
                 return "structural exclusion clear evidence is incomplete"
-        elif evaluation.reason_code == "pair_clear":
-            if evaluation.distance_m is None or float(evaluation.distance_m) <= clearance:
+        elif reason_code == "pair_clear":
+            if distance is None or distance <= clearance:
                 return "pair_clear evidence is not beyond clearance"
-            if evaluation.provenance is None:
+            if provenance is None:
                 return "pair_clear evidence has no provenance"
         else:
             return "clear collision evidence has an unsupported reason"
@@ -427,20 +539,49 @@ def _collision_evaluation_inconsistency(evaluation: CollisionEvaluation) -> str 
 def _collision_result_inconsistency(result: CollisionCheckResult) -> str | None:
     """P3 aggregate statusとpair evaluation / diagnosticの整合性を検証する。"""
 
-    evaluations = result.evaluations
-    for item in evaluations:
+    if not isinstance(result, CollisionCheckResult):
+        return "collision result has an invalid type"
+    try:
+        result_status = result.status
+        evaluations = result.evaluations
+        reason_code = result.reason_code
+    except Exception:
+        return "collision result is structurally incomplete"
+    if not isinstance(result_status, CollisionStatus):
+        return "collision result status is invalid"
+    if type(evaluations) is not tuple:
+        return "collision result evaluations must be a tuple"
+    if not _valid_text(reason_code):
+        return "collision result reason is invalid"
+    try:
+        evaluation_values = tuple(evaluations)
+    except Exception:
+        return "collision result evaluations are not readable"
+    for item in evaluation_values:
         if not isinstance(item, CollisionEvaluation):
             return "collision result contains an invalid pair evaluation"
         evaluation_inconsistency = _collision_evaluation_inconsistency(item)
         if evaluation_inconsistency is not None:
             return evaluation_inconsistency
-    pair_ids = tuple(item.pair_id for item in evaluations)
-    if len(set(pair_ids)) != len(pair_ids):
+    pair_ids: list[str] = []
+    for item in evaluation_values:
+        try:
+            pair_id = item.pair_id
+        except Exception:
+            return "collision result pair identity is structurally incomplete"
+        if not _valid_text(pair_id):
+            return "collision result pair identity is invalid"
+        pair_ids.append(pair_id)
+    try:
+        duplicate_pairs = len(set(pair_ids)) != len(pair_ids)
+    except Exception:
+        return "collision result pair identities are unreadable"
+    if duplicate_pairs:
         return "collision result contains duplicate pair identities"
 
-    if not evaluations:
+    if not evaluation_values:
         # P3 uses an empty INVALID aggregate for inventory/policy/input failures.
-        if result.status is CollisionStatus.INVALID:
+        if result_status is CollisionStatus.INVALID:
             return None
         expected_status, expected_reason = CollisionStatus.UNKNOWN, "no_collision_pair_evidence"
     else:
@@ -455,13 +596,13 @@ def _collision_result_inconsistency(result: CollisionCheckResult) -> str | None:
         expected_status = CollisionStatus.CLEAR
         expected_reason = "collision_clear"
         for status in precedence:
-            found = next((item for item in evaluations if item.status is status), None)
+            found = next((item for item in evaluation_values if item.status is status), None)
             if found is not None:
                 expected_status, expected_reason = status, found.reason_code
                 break
-    if result.status is not expected_status:
+    if result_status is not expected_status:
         return "collision aggregate status does not match pair evidence"
-    if result.reason_code != expected_reason:
+    if reason_code != expected_reason:
         return "collision aggregate reason does not match pair evidence"
     return None
 
@@ -565,29 +706,42 @@ def _limit_assessment(result: LimitResolutionResult | None) -> SafetyComponentAs
         )
     inconsistency = _limit_result_inconsistency(result)
     if inconsistency is not None:
-        provenance = tuple(
-            source
-            for bound in result.bounds
-            for source in bound.source_names
-        )
         return SafetyComponentAssessment(
             component,
             SafetyDecisionAction.INVALID,
-            _reason(component, "limit_resolution_inconsistent", inconsistency, provenance),
+            _reason(
+                component,
+                "limit_resolution_inconsistent",
+                inconsistency,
+                _safe_limit_provenance(result),
+            ),
         )
-    statuses = tuple(bound.status for bound in result.bounds)
-    provenance = tuple(
-        source
-        for bound in result.bounds
-        for source in bound.source_names
-    )
+    try:
+        bounds = result.bounds
+        statuses = tuple(bound.status for bound in bounds)
+        bounded = tuple(
+            bound.lower_rad is not None and bound.upper_rad is not None
+            for bound in bounds
+        )
+    except Exception:
+        return SafetyComponentAssessment(
+            component,
+            SafetyDecisionAction.INVALID,
+            _reason(
+                component,
+                "limit_resolution_inconsistent",
+                "limit resolution result became unreadable after validation",
+                _safe_limit_provenance(result),
+            ),
+        )
+    provenance = _safe_limit_provenance(result)
     if any(
         status in {
             LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
             LimitResolutionStatus.RESOLVED_PROVISIONAL,
         }
-        and not bound.bounded
-        for bound, status in zip(result.bounds, statuses, strict=True)
+        and not is_bounded
+        for is_bounded, status in zip(bounded, statuses, strict=True)
     ):
         action = SafetyDecisionAction.INVALID
         code = "limit_resolution_unbounded"
@@ -629,41 +783,52 @@ def _collision_assessment(result: CollisionCheckResult | None) -> SafetyComponen
         )
     inconsistency = _collision_result_inconsistency(result)
     if inconsistency is not None:
-        provenance = tuple(
-            evaluation.provenance
-            for evaluation in result.evaluations
-            if evaluation.provenance is not None
-        )
         return SafetyComponentAssessment(
             component,
             SafetyDecisionAction.INVALID,
-            _reason(component, "collision_result_inconsistent", inconsistency, provenance),
+            _reason(
+                component,
+                "collision_result_inconsistent",
+                inconsistency,
+                _safe_collision_provenance(result),
+            ),
         )
-    if result.status is CollisionStatus.CLEAR and not result.evaluations:
+    try:
+        result_status = result.status
+        evaluations = tuple(result.evaluations)
+        evaluation_statuses = tuple(evaluation.status for evaluation in evaluations)
+    except Exception:
+        return SafetyComponentAssessment(
+            component,
+            SafetyDecisionAction.INVALID,
+            _reason(
+                component,
+                "collision_result_inconsistent",
+                "collision result became unreadable after validation",
+                _safe_collision_provenance(result),
+            ),
+        )
+    if result_status is CollisionStatus.CLEAR and not evaluations:
         action, code, message = SafetyDecisionAction.UNAVAILABLE, "collision_result_unavailable", "collision result has no pair evidence"
-    elif result.status is CollisionStatus.CLEAR and any(
-        evaluation.status is not CollisionStatus.CLEAR for evaluation in result.evaluations
+    elif result_status is CollisionStatus.CLEAR and any(
+        status is not CollisionStatus.CLEAR for status in evaluation_statuses
     ):
         action, code, message = SafetyDecisionAction.INVALID, "collision_result_inconsistent", "collision result status does not match pair evidence"
-    elif result.status is CollisionStatus.INVALID:
+    elif result_status is CollisionStatus.INVALID:
         action, code, message = SafetyDecisionAction.INVALID, "collision_result_invalid", "collision result is invalid"
-    elif result.status is CollisionStatus.UNAVAILABLE:
+    elif result_status is CollisionStatus.UNAVAILABLE:
         action, code, message = SafetyDecisionAction.UNAVAILABLE, "collision_result_unavailable", "collision observation is unavailable"
-    elif result.status is CollisionStatus.UNKNOWN:
+    elif result_status is CollisionStatus.UNKNOWN:
         action, code, message = SafetyDecisionAction.UNAVAILABLE, "collision_result_unknown", "collision distance evidence is unknown"
-    elif result.status is CollisionStatus.COLLISION:
+    elif result_status is CollisionStatus.COLLISION:
         action, code, message = SafetyDecisionAction.STOP, "collision_detected", "collision or penetration requires stop"
-    elif result.status is CollisionStatus.NEAR_COLLISION:
+    elif result_status is CollisionStatus.NEAR_COLLISION:
         action, code, message = SafetyDecisionAction.HOLD, "near_collision_detected", "clearance is inside the near-collision margin"
-    elif result.status is CollisionStatus.CONTACT:
+    elif result_status is CollisionStatus.CONTACT:
         action, code, message = SafetyDecisionAction.HOLD, "task_object_contact", "task-object contact requires a held decision"
     else:
         action, code, message = SafetyDecisionAction.ALLOW, "collision_clear", "collision evidence is clear"
-    provenance = tuple(
-        evaluation.provenance
-        for evaluation in result.evaluations
-        if evaluation.provenance is not None
-    )
+    provenance = _safe_collision_provenance(result)
     return SafetyComponentAssessment(component, action, _reason(component, code, message, provenance))
 
 

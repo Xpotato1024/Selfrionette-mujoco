@@ -12,9 +12,11 @@ from selfrionette.runtime.safety.collision_policy import (
     CollisionStatus,
 )
 from selfrionette.runtime.safety.limit_resolution import (
+    JointSpaceConversion,
     LimitParityRecord,
     LimitResolutionResult,
     LimitResolutionStatus,
+    LimitSpace,
     ParityStatus,
     ResolvedJointBound,
 )
@@ -71,6 +73,19 @@ def _limits(status: LimitResolutionStatus) -> LimitResolutionResult:
         for name in ("joint_a", "joint_b")
     )
     return LimitResolutionResult(1, "fixture-robot", bounds, ())
+
+
+def _conversion(relation_id: str = "fixture-relation") -> JointSpaceConversion:
+    return JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_a",
+        source_name="motor_a",
+        gear_ratio=2.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id=relation_id,
+        unit="tick",
+    )
 
 
 def _collision(status: CollisionStatus) -> CollisionCheckResult:
@@ -276,6 +291,64 @@ def test_resolved_degree_parity_never_allows_without_conversion() -> None:
     assert malformed_bound.parity[0].unit == "deg"
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("source_space", "motor"),
+        ("joint_name", ""),
+        ("source_name", ""),
+        ("gear_ratio", 0.0),
+        ("sign", 0.0),
+        ("offset", float("nan")),
+        ("relation_id", ""),
+        ("unit", ""),
+    ),
+)
+def test_malformed_conversion_relation_is_invalid_at_p5_boundary(field: str, value: object) -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    malformed_relation = copy(_conversion())
+    # test専用: constructorを迂回してconversion relationのinvariantを壊す。
+    object.__setattr__(malformed_relation, field, value)
+    malformed_result = copy(result)
+    object.__setattr__(malformed_result, "conversion_relations", (malformed_relation,))
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-conversion",
+            malformed_result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+
+
+def test_duplicate_conversion_relation_identity_is_invalid_at_p5_boundary() -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    malformed_result = copy(result)
+    object.__setattr__(
+        malformed_result,
+        "conversion_relations",
+        (_conversion("duplicate"), _conversion("duplicate")),
+    )
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "duplicate-conversion",
+            malformed_result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+
+
 def test_empty_limit_provenance_is_invalid_at_p5_boundary() -> None:
     result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
     # test専用: constructorを迂回して、finite authoritative boundの証拠集合だけを空にする。
@@ -297,6 +370,29 @@ def test_empty_limit_provenance_is_invalid_at_p5_boundary() -> None:
     assert decision.action is SafetyDecisionAction.INVALID
     assert not decision.allowed
     assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+
+
+def test_malformed_limit_source_identity_is_invalid_without_exception() -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    malformed_bound = copy(result.bounds[0])
+    # test専用: constructorを迂回してsource identityへ非文字列を注入する。
+    object.__setattr__(malformed_bound, "source_names", (None,))
+    malformed_result = copy(result)
+    object.__setattr__(malformed_result, "bounds", (malformed_bound, result.bounds[1]))
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-limit-source",
+            malformed_result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+    assert all(isinstance(item, str) for item in decision.reason.provenance)
 
 
 def test_empty_limit_result_bounds_are_invalid_at_p5_boundary() -> None:
@@ -395,6 +491,92 @@ def test_unknown_collision_kind_clear_is_invalid_at_p5_boundary() -> None:
     )
 
     assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "collision:collision_result_inconsistent"
+
+
+def test_wildcard_collision_pair_is_invalid_at_p5_boundary() -> None:
+    malformed = object.__new__(CollisionEvaluation)
+    object.__setattr__(malformed, "pair_id", "*|upper")
+    object.__setattr__(malformed, "kind", CollisionKind.ENVIRONMENT_COLLISION)
+    object.__setattr__(malformed, "status", CollisionStatus.CLEAR)
+    object.__setattr__(malformed, "distance_m", 0.1)
+    object.__setattr__(malformed, "clearance_m", 0.01)
+    object.__setattr__(malformed, "reason_code", "pair_clear")
+    object.__setattr__(malformed, "provenance", "fixture-collision")
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "wildcard-pair",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            CollisionCheckResult(CollisionStatus.CLEAR, (malformed,), "collision_clear"),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "collision:collision_result_inconsistent"
+
+
+def test_malformed_collision_provenance_is_invalid_without_exception() -> None:
+    result = _collision(CollisionStatus.CLEAR)
+    malformed_evaluation = copy(result.evaluations[0])
+    # test専用: constructorを迂回してprovenanceを不正型へ置き換える。
+    object.__setattr__(malformed_evaluation, "provenance", object())
+    malformed_result = copy(result)
+    object.__setattr__(malformed_result, "evaluations", (malformed_evaluation,))
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-collision-provenance",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            malformed_result,
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "collision:collision_result_inconsistent"
+    assert all(isinstance(item, str) for item in decision.reason.provenance)
+
+
+def test_malformed_collision_result_member_is_invalid_without_exception() -> None:
+    result = _collision(CollisionStatus.CLEAR)
+    malformed_result = copy(result)
+    # test専用: aggregate tupleへ非CollisionEvaluation memberを注入する。
+    object.__setattr__(malformed_result, "evaluations", (object(),))
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-collision-member",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            malformed_result,
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "collision:collision_result_inconsistent"
+
+
+def test_malformed_collision_result_shape_is_invalid_without_exception() -> None:
+    result = _collision(CollisionStatus.CLEAR)
+    malformed_result = copy(result)
+    # test専用: aggregate evaluationsをtuple以外へ置き換える。
+    object.__setattr__(malformed_result, "evaluations", object())
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-collision-result",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            malformed_result,
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
     assert decision.reason.identity == "collision:collision_result_inconsistent"
 
 
