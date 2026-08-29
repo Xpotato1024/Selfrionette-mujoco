@@ -377,6 +377,28 @@ def test_strict_decoder_rejects_unknown_duplicate_bom_and_nonfinite_values() -> 
         decode_validation_artifact(nonfinite)
 
 
+@pytest.mark.parametrize("field_name", ["expected", "observed"])
+@pytest.mark.parametrize("representation", ["mapping", "json_text", "json_bytes"])
+def test_strict_decoder_rejects_huge_nested_integer_as_value_error(field_name: str, representation: str) -> None:
+    artifact = build_dry_run_validation_artifact(
+        _procedure(),
+        _all_checks(),
+        artifact_id="artifact-huge-integer",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    document = artifact.to_dict()
+    document["checks"][0][field_name] = {"nested": {"value": 10**400}}
+    if representation == "mapping":
+        malformed: object = document
+    else:
+        encoded = json.dumps(document, separators=(",", ":"))
+        malformed = encoded if representation == "json_text" else encoded.encode("utf-8")
+
+    with pytest.raises(ValueError, match="finite"):
+        decode_validation_artifact(malformed)
+
+
 def test_check_contract_requires_status_specific_safety_action_and_observation() -> None:
     source = MeasurementSource(MeasurementSourceKind.SOFTWARE_DRY_RUN, "fixture", "revision-001")
     with pytest.raises(ValueError, match="observed_at"):
