@@ -253,6 +253,20 @@ def _safe_collision_provenance(result: object) -> tuple[str, ...]:
     return tuple(provenance)
 
 
+def _safe_dynamic_provenance(result: object) -> tuple[str, ...]:
+    """malformed dynamic resultからのprovenance参照をfail-closedにする。"""
+
+    try:
+        if isinstance(result, TrajectoryFeasibilityResult):
+            return _safe_text_tuple(result.source_ids)
+        if isinstance(result, ConfigurationFeasibilityResult):
+            source_id = result.source_id
+            return (source_id,) if _valid_text(source_id) else ()
+    except Exception:
+        return ()
+    return ()
+
+
 def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
     """P2 aggregateの構造・status・per-source parityをP5で再検証する。"""
 
@@ -424,7 +438,9 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
             )
             for item in parity
         }
-        range_mismatch = len(signatures) > 1
+        # 未解決sourceのNone値やunit差は、P2のUNKNOWN/UNAVAILABLE優先順位を
+        # range mismatchへ変換しない。完全比較可能なall-MATCHだけを比較する。
+        range_mismatch = all(status is ParityStatus.MATCH for status in parity_statuses) and len(signatures) > 1
         if any(status is ParityStatus.INVALID for status in parity_statuses):
             expected = LimitResolutionStatus.INVALID
         elif any(status is ParityStatus.MISMATCH for status in parity_statuses) or range_mismatch:
@@ -619,13 +635,104 @@ def _diagnostic_status(diagnostic: FeasibilityDiagnostic) -> FeasibilityStatus |
     return None
 
 
+def _dynamic_result_structure_inconsistency(
+    result: ConfigurationFeasibilityResult | TrajectoryFeasibilityResult,
+) -> str | None:
+    """P4 result constructor invariantをP5で再検証する。"""
+
+    def finite_number(value: object) -> bool:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        try:
+            return math.isfinite(float(value))
+        except (OverflowError, TypeError, ValueError):
+            return False
+
+    if not isinstance(result, (ConfigurationFeasibilityResult, TrajectoryFeasibilityResult)):
+        return "dynamic result has an invalid type"
+    try:
+        status = result.status
+        reason_code = result.reason_code
+        diagnostics = result.diagnostics
+        bound_statuses = result.bound_statuses
+        if isinstance(result, TrajectoryFeasibilityResult):
+            sample_count = result.sample_count
+            source_ids = result.source_ids
+        else:
+            source_id = result.source_id
+    except Exception:
+        return "dynamic result is structurally incomplete"
+
+    if not isinstance(status, FeasibilityStatus):
+        return "dynamic result status is invalid"
+    if not _valid_text(reason_code):
+        return "dynamic result reason identity is invalid"
+    if type(diagnostics) is not tuple:
+        return "dynamic diagnostics must be a tuple"
+    if type(bound_statuses) is not tuple or any(
+        not isinstance(item, EvidenceStatus) for item in bound_statuses
+    ):
+        return "dynamic bound evidence statuses are invalid"
+    if isinstance(result, TrajectoryFeasibilityResult):
+        if isinstance(sample_count, bool) or not isinstance(sample_count, int) or sample_count < 0:
+            return "dynamic trajectory sample count is invalid"
+        if type(source_ids) is not tuple or not source_ids or any(
+            not _valid_text(source_id) for source_id in source_ids
+        ):
+            return "dynamic trajectory source identities are invalid"
+    elif not _valid_text(source_id):
+        return "dynamic source identity is invalid"
+
+    for diagnostic in diagnostics:
+        if not isinstance(diagnostic, FeasibilityDiagnostic):
+            return "dynamic diagnostics contain an invalid member"
+        try:
+            code = diagnostic.code
+            detail = diagnostic.detail
+            joint_name = diagnostic.joint_name
+            sample_index = diagnostic.sample_index
+            observed = diagnostic.observed
+            threshold = diagnostic.threshold
+            provenance = diagnostic.provenance
+        except Exception:
+            return "dynamic diagnostic is structurally incomplete"
+        if not _valid_text(code) or not _valid_text(detail):
+            return "dynamic diagnostic identity or detail is invalid"
+        if joint_name is not None and not _valid_text(joint_name):
+            return "dynamic diagnostic joint identity is invalid"
+        if sample_index is not None and (
+            isinstance(sample_index, bool) or not isinstance(sample_index, int) or sample_index < 0
+        ):
+            return "dynamic diagnostic sample index is invalid"
+        if observed is not None and not finite_number(observed):
+            return "dynamic diagnostic observed value is invalid"
+        if threshold is not None and not finite_number(threshold):
+            return "dynamic diagnostic threshold is invalid"
+        if provenance is not None and not _valid_text(provenance):
+            return "dynamic diagnostic provenance is invalid"
+    return None
+
+
 def _dynamic_result_inconsistency(
     result: ConfigurationFeasibilityResult | TrajectoryFeasibilityResult,
 ) -> str | None:
     """P4 aggregate status / diagnostic / evidenceの整合性を検証する。"""
 
+    structure_error = _dynamic_result_structure_inconsistency(result)
+    if structure_error is not None:
+        return structure_error
+
+    try:
+        result_status = result.status
+        reason_code = result.reason_code
+        diagnostics = tuple(result.diagnostics)
+        bound_statuses = tuple(result.bound_statuses)
+        sample_count = result.sample_count if isinstance(result, TrajectoryFeasibilityResult) else None
+    except Exception:
+        return "dynamic result became unreadable during validation"
+
     diagnostic_statuses: list[FeasibilityStatus] = []
-    for diagnostic in result.diagnostics:
+    for diagnostic in diagnostics:
         status = _diagnostic_status(diagnostic)
         if status is None:
             return "dynamic diagnostic code has no closed status prefix"
@@ -647,19 +754,19 @@ def _dynamic_result_inconsistency(
         )
         expected_reason = next(
             diagnostic.code
-            for diagnostic in result.diagnostics
+            for diagnostic in diagnostics
             if diagnostic.code.startswith(expected_status.value)
         )
-    if result.status is not expected_status:
+    if result_status is not expected_status:
         return "dynamic aggregate status does not match diagnostics"
-    if result.reason_code != expected_reason:
+    if reason_code != expected_reason:
         return "dynamic aggregate reason does not match diagnostics"
 
-    if isinstance(result, TrajectoryFeasibilityResult) and result.sample_count < 2:
+    if isinstance(result, TrajectoryFeasibilityResult) and sample_count is not None and sample_count < 2:
         if not (
-            result.status is FeasibilityStatus.INVALID
-            and result.reason_code == "invalid_trajectory_length"
-            and any(item.code == "invalid_trajectory_length" for item in result.diagnostics)
+            result_status is FeasibilityStatus.INVALID
+            and reason_code == "invalid_trajectory_length"
+            and any(item.code == "invalid_trajectory_length" for item in diagnostics)
         ):
             return "trajectory aggregate does not explain its insufficient sample count"
 
@@ -670,8 +777,8 @@ def _dynamic_result_inconsistency(
         EvidenceStatus.CONFLICT: "unknown_limit_",
     }
     for evidence_status, prefix in evidence_prefix.items():
-        if evidence_status in result.bound_statuses and not any(
-            item.code.startswith(prefix) for item in result.diagnostics
+        if evidence_status in bound_statuses and not any(
+            item.code.startswith(prefix) for item in diagnostics
         ):
             return "dynamic bound evidence status has no matching diagnostic"
     diagnostic_evidence = {
@@ -679,18 +786,17 @@ def _dynamic_result_inconsistency(
         "unavailable_limit_source": {EvidenceStatus.UNAVAILABLE},
         "unknown_limit_source": {EvidenceStatus.UNKNOWN, EvidenceStatus.CONFLICT},
     }
-    for diagnostic in result.diagnostics:
+    for diagnostic in diagnostics:
         required_evidence = diagnostic_evidence.get(diagnostic.code)
         if required_evidence is not None and not any(
-            status in required_evidence for status in result.bound_statuses
+            status in required_evidence for status in bound_statuses
         ):
             return "dynamic limit diagnostic has no matching evidence status"
-    if result.status is FeasibilityStatus.FEASIBLE:
-        if not result.bound_statuses:
+    if result_status is FeasibilityStatus.FEASIBLE:
+        if not bound_statuses:
             return "dynamic feasible result has no bound evidence"
         if any(
-            status not in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL}
-            for status in result.bound_statuses
+            status not in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL} for status in bound_statuses
         ):
             return "dynamic feasible result contains unresolved bound evidence"
     return None
@@ -844,22 +950,35 @@ def _dynamic_assessment(
         )
     inconsistency = _dynamic_result_inconsistency(result)
     if inconsistency is not None:
-        provenance = result.source_ids if isinstance(result, TrajectoryFeasibilityResult) else (result.source_id,)
         return SafetyComponentAssessment(
             component,
             SafetyDecisionAction.INVALID,
-            _reason(component, "dynamic_result_inconsistent", inconsistency, provenance),
+            _reason(component, "dynamic_result_inconsistent", inconsistency, _safe_dynamic_provenance(result)),
         )
-    provenance = result.source_ids if isinstance(result, TrajectoryFeasibilityResult) else (result.source_id,)
-    if result.status is FeasibilityStatus.INVALID:
+    provenance = _safe_dynamic_provenance(result)
+    try:
+        result_status = result.status
+        authoritative = result.authoritative
+    except Exception:
+        return SafetyComponentAssessment(
+            component,
+            SafetyDecisionAction.INVALID,
+            _reason(
+                component,
+                "dynamic_result_inconsistent",
+                "dynamic result became unreadable after validation",
+                provenance,
+            ),
+        )
+    if result_status is FeasibilityStatus.INVALID:
         action, code, message = SafetyDecisionAction.INVALID, "dynamic_result_invalid", "dynamic feasibility result is invalid"
-    elif result.status is FeasibilityStatus.UNAVAILABLE:
+    elif result_status is FeasibilityStatus.UNAVAILABLE:
         action, code, message = SafetyDecisionAction.UNAVAILABLE, "dynamic_result_unavailable", "dynamic feasibility evidence is unavailable"
-    elif result.status is FeasibilityStatus.UNKNOWN:
+    elif result_status is FeasibilityStatus.UNKNOWN:
         action, code, message = SafetyDecisionAction.UNAVAILABLE, "dynamic_result_unknown", "dynamic feasibility evidence is unknown"
-    elif result.status is FeasibilityStatus.REJECTED:
+    elif result_status is FeasibilityStatus.REJECTED:
         action, code, message = SafetyDecisionAction.REJECT, "dynamic_feasibility_rejected", "velocity, acceleration, or numerical feasibility was rejected"
-    elif not result.authoritative:
+    elif not authoritative:
         action, code, message = SafetyDecisionAction.HOLD, "dynamic_result_provisional", "dynamic result relies on provisional evidence"
     else:
         action, code, message = SafetyDecisionAction.ALLOW, "dynamic_feasibility_clear", "dynamic feasibility is clear"

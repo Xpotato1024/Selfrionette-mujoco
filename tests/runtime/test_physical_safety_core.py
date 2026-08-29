@@ -31,6 +31,7 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
     ConfigurationFeasibilityResult,
     FeasibilityDiagnostic,
     FeasibilityStatus,
+    TrajectoryFeasibilityResult,
 )
 from selfrionette.runtime.safety.physical_limits import EvidenceStatus
 
@@ -85,6 +86,44 @@ def _conversion(relation_id: str = "fixture-relation") -> JointSpaceConversion:
         offset=0.0,
         relation_id=relation_id,
         unit="tick",
+    )
+
+
+def _mixed_limit_result(
+    parity_status: ParityStatus,
+    resolution_status: LimitResolutionStatus,
+) -> LimitResolutionResult:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    bound = result.bounds[0]
+    matched = bound.parity[0]
+    unresolved = replace(
+        matched,
+        source_name="joint_a-unresolved",
+        status=parity_status,
+        lower=None,
+        upper=None,
+        reason=f"source {parity_status.value}",
+    )
+    mixed_bound = ResolvedJointBound(
+        joint_name=bound.joint_name,
+        lower_rad=None,
+        upper_rad=None,
+        status=resolution_status,
+        source_names=(matched.source_name, unresolved.source_name),
+        parity=(matched, unresolved),
+        reason=f"limit source {resolution_status.value}",
+    )
+    return replace(result, bounds=(mixed_bound, result.bounds[1]))
+
+
+def _trajectory_dynamic() -> TrajectoryFeasibilityResult:
+    return TrajectoryFeasibilityResult(
+        FeasibilityStatus.FEASIBLE,
+        "feasibility_clear",
+        3,
+        (),
+        ("fixture-trajectory",),
+        (EvidenceStatus.AUTHORITATIVE,),
     )
 
 
@@ -214,6 +253,79 @@ def test_provisional_evidence_holds_and_mismatch_rejects() -> None:
     mismatch = evaluate_physical_safety(_input(limits=LimitResolutionStatus.MISMATCH))
     assert mismatch.action is SafetyDecisionAction.REJECT
     assert mismatch.reason.reason_code == "limit_resolution_mismatch"
+
+
+def test_mixed_match_and_unknown_limit_evidence_is_unavailable_not_invalid() -> None:
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "mixed-limit-unknown",
+            _mixed_limit_result(ParityStatus.UNKNOWN, LimitResolutionStatus.UNKNOWN),
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.UNAVAILABLE
+    assert decision.reason.identity == "limit:limit_resolution_unavailable"
+
+
+def test_mixed_match_and_unavailable_limit_evidence_is_unavailable_not_invalid() -> None:
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "mixed-limit-unavailable",
+            _mixed_limit_result(ParityStatus.UNAVAILABLE, LimitResolutionStatus.UNAVAILABLE),
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.UNAVAILABLE
+    assert decision.reason.identity == "limit:limit_resolution_unavailable"
+
+
+@pytest.mark.parametrize(
+    ("second_unit", "second_lower", "second_upper", "reason"),
+    (
+        ("rad", -2.0, 2.0, "limit ranges disagree"),
+        ("deg", -1.0, 1.0, "limit units disagree"),
+    ),
+)
+def test_fully_comparable_matching_parity_mismatch_remains_rejected(
+    second_unit: str,
+    second_lower: float,
+    second_upper: float,
+    reason: str,
+) -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    bound = result.bounds[0]
+    first = bound.parity[0]
+    second = replace(
+        first,
+        source_name="joint_a-second-source",
+        lower=second_lower,
+        upper=second_upper,
+        unit=second_unit,
+    )
+    mismatch_bound = ResolvedJointBound(
+        joint_name=bound.joint_name,
+        lower_rad=None,
+        upper_rad=None,
+        status=LimitResolutionStatus.MISMATCH,
+        source_names=(first.source_name, second.source_name),
+        parity=(first, second),
+        reason=reason,
+    )
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "fully-comparable-limit-mismatch",
+            replace(result, bounds=(mismatch_bound, result.bounds[1])),
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.REJECT
+    assert decision.reason.identity == "limit:limit_resolution_mismatch"
 
 
 def test_resolved_bound_constructor_rejects_inconsistent_aggregate_shape() -> None:
@@ -638,6 +750,120 @@ def test_dynamic_limit_diagnostic_must_match_bound_evidence() -> None:
     )
 
     assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
+
+
+def test_authoritative_trajectory_dynamic_result_can_allow() -> None:
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "valid-trajectory-dynamic",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            _trajectory_dynamic(),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.ALLOW
+    assert decision.reason.identity == "limit:limit_resolution_authoritative"
+
+
+def test_empty_trajectory_source_ids_are_invalid_at_p5_boundary() -> None:
+    dynamic = copy(_trajectory_dynamic())
+    # test専用: constructorを迂回し、dynamic source identityを空集合へ置き換える。
+    object.__setattr__(dynamic, "source_ids", ())
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "empty-trajectory-sources",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            dynamic,
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
+    assert all(isinstance(item, str) for item in decision.reason.provenance)
+
+
+@pytest.mark.parametrize("diagnostics", (object(), (object(),)))
+def test_malformed_trajectory_diagnostics_are_invalid_without_exception(diagnostics: object) -> None:
+    dynamic = copy(_trajectory_dynamic())
+    # test専用: immutable resultのdiagnostics tuple/memberを壊す。
+    object.__setattr__(dynamic, "diagnostics", diagnostics)
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-trajectory-diagnostics",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            dynamic,
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
+
+
+def test_malformed_trajectory_diagnostic_fields_are_invalid_without_exception() -> None:
+    dynamic = copy(_trajectory_dynamic())
+    diagnostic = copy(FeasibilityDiagnostic("rejected_fixture", "fixture rejection"))
+    # test専用: constructorを迂回し、diagnosticの有限値を非有限値へ置き換える。
+    object.__setattr__(diagnostic, "observed", float("nan"))
+    object.__setattr__(dynamic, "diagnostics", (diagnostic,))
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-trajectory-diagnostic-fields",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            dynamic,
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
+
+
+def test_malformed_configuration_source_id_is_invalid_without_exception() -> None:
+    dynamic = copy(_dynamic(FeasibilityStatus.FEASIBLE))
+    # test専用: immutable configuration resultのsource identityを空文字へ置き換える。
+    object.__setattr__(dynamic, "source_id", "")
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-configuration-source",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            dynamic,
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
+    assert all(isinstance(item, str) for item in decision.reason.provenance)
+
+
+def test_malformed_dynamic_bound_statuses_are_invalid_without_exception() -> None:
+    dynamic = copy(_trajectory_dynamic())
+    # test専用: constructorを迂回し、bound evidence tupleを不正型へ置き換える。
+    object.__setattr__(dynamic, "bound_statuses", object())
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-dynamic-evidence",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            dynamic,
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
     assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
 
 
