@@ -57,7 +57,10 @@ evidenceを照合する。いずれかの不整合、重複identity、diagnostic
 さらにP5は、immutable constructorを迂回したprovider corruptionも防御境界で再検証する。
 resultのschema・robot identity・bounds・conversion relation、boundのjoint / source / parity
 identity、有限かつ順序付きのrange、parityのstatus・unit・reason整合性を確認し、空集合や
-重複identityが`all()`によって`allow`へ到達することを許さない。この再検証はP2のresolutionや
+重複identityが`all()`によって`allow`へ到達することを許さない。conversion relationもsource
+space、joint / source / relation / unit identity、有限なnon-zero gear ratio、`sign`、offset、
+relation identityの重複を検証する。malformedなsource / evaluation provenanceは安全に読み取れる
+文字列だけをreasonへ渡し、例外を上位へ漏らさず`invalid`へ閉じる。この再検証はP2のresolutionや
 unit conversionを再実行せず、欠落したauthorityを補完しない。
 
 ## Component mapping

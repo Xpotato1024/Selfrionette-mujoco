@@ -92,7 +92,8 @@ evidenceを構成できない。
 `CollisionEvaluation.pair_id`は、異なる二つの具体的geom nameを`|`で結び、name順に並べた
 canonical identity（`first|second`）でなければならない。`not-a-pair`、同一geom、逆順、wildcard、
 三つ以上のnameはinvalidである。aggregate reasonの`collision_clear`をpair evaluationのreasonへ
-流用しない。
+流用しない。`*`を含むwildcard tokenは、共通のpair parserでP3 constructorとP5 boundaryの双方から
+拒否する。
 
 `clear` evaluationには、次のどちらかの根拠を必ず持たせる。
 
