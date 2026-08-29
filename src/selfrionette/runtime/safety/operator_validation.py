@@ -50,6 +50,18 @@ class ValidationCheckKind(str, Enum):
     ROLLBACK_PROCEDURE = "rollback_procedure"
 
 
+# R7-J procedureがPASSへ進むために、各axisを少なくとも一つ要求する。
+_MANDATORY_VALIDATION_CHECK_KINDS = frozenset(
+    {
+        ValidationCheckKind.LIMIT_RANGE,
+        ValidationCheckKind.COLLISION_CLEARANCE,
+        ValidationCheckKind.TRAJECTORY_FEASIBILITY,
+        ValidationCheckKind.STOP_PROCEDURE,
+        ValidationCheckKind.ROLLBACK_PROCEDURE,
+    }
+)
+
+
 class MeasurementSourceKind(str, Enum):
     """observed値の出所。softwareとphysicalを混同しない。"""
 
@@ -383,6 +395,11 @@ class ValidationCheckSpec:
         return {"check_id": self.check_id, "kind": self.kind.value, "description": self.description}
 
 
+def _missing_mandatory_check_kinds(required_checks: Sequence[ValidationCheckSpec]) -> frozenset[ValidationCheckKind]:
+    present_kinds = {item.kind for item in required_checks}
+    return _MANDATORY_VALIDATION_CHECK_KINDS - present_kinds
+
+
 @dataclass(frozen=True, slots=True)
 class ValidationProcedure:
     """operator gateを満たしたsoftware-only validation plan。"""
@@ -424,6 +441,10 @@ class ValidationProcedure:
         check_ids = tuple(item.check_id for item in self.required_checks)
         if len(check_ids) != len(set(check_ids)):
             raise ValueError("required check IDs must be unique")
+        missing_kinds = _missing_mandatory_check_kinds(self.required_checks)
+        if missing_kinds:
+            missing = ", ".join(sorted(kind.value for kind in missing_kinds))
+            raise ValueError(f"required_checks must include all mandatory validation check kinds: {missing}")
         if not isinstance(self.operator_confirmed, bool):
             raise TypeError("operator_confirmed must be bool")
         if self.dry_run_only is not True:
@@ -599,6 +620,8 @@ def _classify(
         return ValidationClassification.TECHNICAL_INVALID, "completion_timestamp_missing"
     if operator_aborted:
         return ValidationClassification.ABORTED, "operator_aborted"
+    if _missing_mandatory_check_kinds(procedure.required_checks):
+        return ValidationClassification.TECHNICAL_INVALID, "required_check_kind_coverage_incomplete"
     required = {item.check_id: item for item in procedure.required_checks}
     actual_ids = tuple(item.check_id for item in checks)
     if len(actual_ids) != len(set(actual_ids)) or any(item.check_id not in required for item in checks):

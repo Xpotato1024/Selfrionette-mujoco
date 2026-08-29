@@ -44,7 +44,15 @@ def _procedure(
     verified_clearance_m: float | None = 1.0,
     clearance_verified_at: str | None = OBSERVED,
     acknowledged_by: str = "operator-001",
+    required_checks: tuple[ValidationCheckSpec, ...] | None = None,
 ) -> ValidationProcedure:
+    checks = required_checks if required_checks is not None else (
+        ValidationCheckSpec("limits", ValidationCheckKind.LIMIT_RANGE, "range check"),
+        ValidationCheckSpec("collision", ValidationCheckKind.COLLISION_CLEARANCE, "clearance check"),
+        ValidationCheckSpec("trajectory", ValidationCheckKind.TRAJECTORY_FEASIBILITY, "bounded trajectory check"),
+        ValidationCheckSpec("stop", ValidationCheckKind.STOP_PROCEDURE, "stop check"),
+        ValidationCheckSpec("rollback", ValidationCheckKind.ROLLBACK_PROCEDURE, "rollback check"),
+    )
     return ValidationProcedure(
         procedure_id="procedure-001",
         target=TargetIdentity("target-001", "fast-arm", "controller-001", "connection-001", "model-001"),
@@ -67,13 +75,7 @@ def _procedure(
         ),
         stop=StopProcedure(("stop command",), ("emergency stop",)),
         rollback=RollbackProcedure(("restore neutral state",), "neutral-home"),
-        required_checks=(
-            ValidationCheckSpec("limits", ValidationCheckKind.LIMIT_RANGE, "range check"),
-            ValidationCheckSpec("collision", ValidationCheckKind.COLLISION_CLEARANCE, "clearance check"),
-            ValidationCheckSpec("trajectory", ValidationCheckKind.TRAJECTORY_FEASIBILITY, "bounded trajectory check"),
-            ValidationCheckSpec("stop", ValidationCheckKind.STOP_PROCEDURE, "stop check"),
-            ValidationCheckSpec("rollback", ValidationCheckKind.ROLLBACK_PROCEDURE, "rollback check"),
-        ),
+        required_checks=checks,
         operator_confirmed=operator_confirmed,
     )
 
@@ -109,6 +111,80 @@ def _all_checks(**kwargs: object) -> tuple[ValidationCheckEvidence, ...]:
         _check("stop", ValidationCheckKind.STOP_PROCEDURE, **kwargs),
         _check("rollback", ValidationCheckKind.ROLLBACK_PROCEDURE, **kwargs),
     )
+
+
+def test_procedure_requires_all_mandatory_check_kinds_at_construction() -> None:
+    stop_only = (ValidationCheckSpec("stop", ValidationCheckKind.STOP_PROCEDURE, "stop check"),)
+    with pytest.raises(ValueError, match="mandatory validation check kinds"):
+        _procedure(required_checks=stop_only)
+
+
+@pytest.mark.parametrize("missing_kind", tuple(ValidationCheckKind))
+def test_procedure_rejects_each_missing_mandatory_check_kind(missing_kind: ValidationCheckKind) -> None:
+    required_checks = tuple(spec for spec in _procedure().required_checks if spec.kind is not missing_kind)
+    with pytest.raises(ValueError, match="mandatory validation check kinds"):
+        _procedure(required_checks=required_checks)
+
+
+def test_mandatory_coverage_allows_distinct_same_kind_checks() -> None:
+    required_checks = _procedure().required_checks + (
+        ValidationCheckSpec("limits-secondary", ValidationCheckKind.LIMIT_RANGE, "secondary range check"),
+    )
+    procedure = _procedure(required_checks=required_checks)
+    artifact = build_dry_run_validation_artifact(
+        procedure,
+        _all_checks() + (_check("limits-secondary", ValidationCheckKind.LIMIT_RANGE),),
+        artifact_id="artifact-extra-same-kind",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    assert artifact.classification is ValidationClassification.PASS
+
+
+def test_duplicate_required_check_ids_remain_invalid() -> None:
+    required_checks = _procedure().required_checks + (
+        ValidationCheckSpec("limits", ValidationCheckKind.LIMIT_RANGE, "duplicate range check"),
+    )
+    with pytest.raises(ValueError, match="required check IDs must be unique"):
+        _procedure(required_checks=required_checks)
+
+
+def test_strict_decode_rejects_procedure_missing_mandatory_coverage() -> None:
+    artifact = build_dry_run_validation_artifact(
+        _procedure(),
+        _all_checks(),
+        artifact_id="artifact-missing-coverage",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    document = artifact.to_dict()
+    document["procedure"]["required_checks"] = [
+        ValidationCheckSpec("stop", ValidationCheckKind.STOP_PROCEDURE, "stop check").to_dict()
+    ]
+
+    with pytest.raises(ValueError, match="mandatory validation check kinds"):
+        decode_validation_artifact(json.dumps(document, separators=(",", ":")))
+
+
+def test_classifier_rejects_malformed_procedure_without_pass() -> None:
+    valid_procedure = _procedure()
+    malformed_procedure = object.__new__(ValidationProcedure)
+    for field_name in ValidationProcedure.__dataclass_fields__:
+        object.__setattr__(malformed_procedure, field_name, getattr(valid_procedure, field_name))
+    object.__setattr__(
+        malformed_procedure,
+        "required_checks",
+        (ValidationCheckSpec("stop", ValidationCheckKind.STOP_PROCEDURE, "stop check"),),
+    )
+
+    artifact = build_dry_run_validation_artifact(
+        malformed_procedure,
+        (_check("stop", ValidationCheckKind.STOP_PROCEDURE),),
+        artifact_id="artifact-malformed-procedure",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
 
 
 def test_operator_gate_requires_confirmation_preflight_clearance_stop_and_rollback() -> None:

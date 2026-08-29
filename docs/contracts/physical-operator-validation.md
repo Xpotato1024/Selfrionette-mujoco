@@ -38,7 +38,13 @@ procedureは次のidentityと安全情報を必須とする。
 | clearance | required / verified clearance（meter）、source、verification timestamp |
 | stop | normal stop stepsとemergency stop steps |
 | rollback | rollback stepsと到達すべきtarget state |
-| checks | limit、collision、trajectory、stop、rollbackの具体的なcheck ID / kind |
+| checks | limit、collision、trajectory、stop、rollbackの各axisを少なくとも一つ含む具体的なcheck ID / kind |
+
+`required_checks`は5つのmandatory axis（`limit_range`、`collision_clearance`、
+`trajectory_feasibility`、`stop_procedure`、`rollback_procedure`）をすべて含まなければならない。
+各axisに複数の異なるcheck IDを割り当てることは許可するが、procedureが宣言したsubsetだけを
+coverageの完了とは扱わない。artifactのclassificationは、procedureに宣言されたすべてのcheck IDの
+observationが揃った場合だけ`pass`へ進む。
 
 `validate_operator_gate()`はoperator confirmation、preflightの完了と本人一致、clearanceの
 finiteなverification値・timestamp・sourceを順番に検査する。clearanceがrequired値未満なら
@@ -67,7 +73,8 @@ strict validationで拒否する。
 資料ID・測定記録ID等の`evidence_reference`が必要であり、generic artifactへの記録は観測を実施した
 ことの証明ではない。`build_dry_run_validation_artifact()`はphysical sourceを受け付けず、
 `manufacturer_document`や`physical_measurement`を含む入力を#509 boundaryへ戻す。#508のdry-run
-fixtureはsoftware-onlyで検証し、physical sourceの実測は取得しない。
+fixtureはsoftware-onlyで検証し、physical sourceの実測は取得しない。software dry-runの`pass`を
+physical evidenceの成立へ読み替えない。
 
 ## Closed lifecycle classification
 
