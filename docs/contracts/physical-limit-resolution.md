@@ -37,6 +37,9 @@ gear ratioはnon-zero、signは`-1`または`1`、すべての数値はfiniteで
 limitとrelationの`unit`は完全一致を必須とし、暗黙のdegree / radianなどのunit変換は行わない。
 明示的なunit変換relationがない不一致は`unknown`へ移行し、zero、TOML値、identity relationを
 暗黙適用しない。
+normalizedなjoint boundの単位は`rad`だけである。同じnon-rad unitのsourceが1つだけ、または
+複数一致していても`unknown`として扱い、mixed unitは`mismatch`とする。resolverはnon-radの
+値を`rad`へ暗黙変換しない。
 
 ## Parity and resolution
 
@@ -58,6 +61,9 @@ authoritative resolutionを成立させない。全sourceがsoftware-onlyでも�
 
 `LimitParityRecord`はjoint、source identity（unitを含む）、status、range、unit、reasonを保持する。
 同一jointのbounded sourceはunitも一致しなければ`mismatch`となる。
+`resolved_authoritative` / `resolved_provisional`の`lower_rad` / `upper_rad`は両方存在し、
+parityの全unitが`rad`で、reasonを持たない場合だけ成立する。unresolved statusは両boundを
+`None`とし、reasonを必須とする。
 `ResolvedJointBound`と`LimitResolutionResult`はtuple / frozen dataclassのread-only valueで、
 callerがProfile、TOML、MJCF、model stateを書き換える機能を持たない。
 
