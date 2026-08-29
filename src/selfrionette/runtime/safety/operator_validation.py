@@ -116,7 +116,10 @@ def _timestamp(name: str, value: object) -> str:
 def _finite_value(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a finite number")
-    number = float(value)
+    try:
+        number = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be finite") from exc
     if not math.isfinite(number):
         raise ValueError(f"{name} must be finite")
     return 0.0 if number == 0.0 else number
@@ -1038,7 +1041,7 @@ def decode_validation_artifact(document: bytes | str | Mapping[str, object]) -> 
         if declared_evidence_class is not artifact.evidence_class:
             raise ValueError("evidence_class does not match check sources")
         return artifact
-    except (TypeError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (TypeError, ValueError, OverflowError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         if isinstance(exc, ValueError) and str(exc).startswith("validation artifact"):
             raise
         raise ValueError(f"invalid validation artifact: {exc}") from exc

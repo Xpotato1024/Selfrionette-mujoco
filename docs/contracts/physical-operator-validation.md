@@ -56,7 +56,8 @@ finiteなverification値・timestamp・sourceを順番に検査する。clearanc
 各checkは`expected`、`observed`、measurement source、source revision、観測timestamp、
 software revision、P5 safety decision（action、reason identity、provenance）を持つ。
 `expected` / `observed`はfiniteなJSON objectであり、値の意味やphysical authorityをこのmoduleが
-推測しない。
+推測しない。巨大整数などfloatへ正規化できない数値もstrict validationで`ValueError`へ閉じ、
+conversion exceptionをartifactの外へ漏らさない。
 
 `SafetyDecisionEvidence.provenance`は空を許さず、`reason_identity`はP5のcomponent enum
 （`limit`、`collision`、`dynamic`、`input`）とlowercase underscore形式のreason codeを
