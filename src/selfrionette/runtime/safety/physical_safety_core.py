@@ -20,6 +20,8 @@ from selfrionette.runtime.safety.collision_policy import (
     _pair_id_parts,
 )
 from selfrionette.runtime.safety.limit_resolution import (
+    JointSpaceConversion,
+    LimitParityRecord,
     LimitResolutionResult,
     LimitResolutionStatus,
     ParityStatus,
@@ -185,29 +187,149 @@ def _reason(
 
 
 def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
-    """P2 aggregate statusとper-source parityの整合性を検証する。"""
+    """P2 aggregateの構造・status・per-source parityをP5で再検証する。"""
 
-    for bound in result.bounds:
-        if not isinstance(bound, ResolvedJointBound):
-            return "limit resolution contains an invalid bound"
-        if tuple(item.source_name for item in bound.parity) != bound.source_names:
-            return f"limit parity source identity does not match {bound.joint_name}"
-        if len({item.source_name for item in bound.parity}) != len(bound.parity):
-            return f"limit parity source identity is duplicated for {bound.joint_name}"
-        if any(item.joint_name != bound.joint_name for item in bound.parity):
-            return f"limit parity joint identity does not match {bound.joint_name}"
-        for item in bound.parity:
-            if item.status is not ParityStatus.MATCH and item.reason is None:
-                return f"limit parity status has no reason for {bound.joint_name}"
-            if item.status in {
+    def valid_text(value: object) -> bool:
+        return isinstance(value, str) and bool(value) and value == value.strip()
+
+    def finite_number(value: object) -> bool:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        try:
+            return math.isfinite(float(value))
+        except (OverflowError, TypeError, ValueError):
+            return False
+
+    def bounds_are_valid(lower: object, upper: object, label: str) -> str | None:
+        if (lower is None) != (upper is None):
+            return f"{label} must contain both lower and upper values"
+        if lower is None:
+            return None
+        if not finite_number(lower) or not finite_number(upper):
+            return f"{label} must contain finite values"
+        if float(lower) > float(upper):
+            return f"{label} lower must not exceed upper"
+        return None
+
+    if not isinstance(result, LimitResolutionResult):
+        return "limit resolution result has an invalid type"
+    try:
+        schema_version = result.schema_version
+        robot_id = result.robot_id
+        bounds = result.bounds
+        conversion_relations = result.conversion_relations
+    except AttributeError:
+        return "limit resolution result is structurally incomplete"
+    if type(schema_version) is not int or schema_version != 1:
+        return "limit resolution schema version is invalid"
+    if not valid_text(robot_id):
+        return "limit resolution robot identity is invalid"
+    if not isinstance(bounds, tuple) or not bounds:
+        return "limit resolution bounds must be a non-empty tuple"
+    if any(not isinstance(bound, ResolvedJointBound) for bound in bounds):
+        return "limit resolution contains an invalid bound"
+    if not isinstance(conversion_relations, tuple):
+        return "limit resolution conversion relations must be a tuple"
+    if any(not isinstance(relation, JointSpaceConversion) for relation in conversion_relations):
+        return "limit resolution contains an invalid conversion relation"
+
+    joint_names_list: list[object] = []
+    for bound in bounds:
+        try:
+            joint_names_list.append(bound.joint_name)
+        except AttributeError:
+            return "limit resolution bound is structurally incomplete"
+    joint_names = tuple(joint_names_list)
+    if any(not valid_text(name) for name in joint_names):
+        return "limit resolution contains an invalid joint identity"
+    if len(set(joint_names)) != len(joint_names):
+        return "limit resolution joint identities are duplicated"
+
+    for bound in bounds:
+        try:
+            joint_name = bound.joint_name
+            status = bound.status
+            lower_rad = bound.lower_rad
+            upper_rad = bound.upper_rad
+            source_names = bound.source_names
+            parity = bound.parity
+            reason = bound.reason
+        except AttributeError:
+            return "limit resolution bound is structurally incomplete"
+        if not valid_text(joint_name):
+            return "limit resolution contains an invalid joint identity"
+        if not isinstance(status, LimitResolutionStatus):
+            return f"limit status is invalid for {joint_name}"
+        if not isinstance(source_names, tuple) or not source_names:
+            return f"limit source identity is empty for {joint_name}"
+        if any(not valid_text(source_name) for source_name in source_names):
+            return f"limit source identity is invalid for {joint_name}"
+        if len(set(source_names)) != len(source_names):
+            return f"limit source identity is duplicated for {joint_name}"
+        if not isinstance(parity, tuple) or not parity:
+            return f"limit parity is empty for {joint_name}"
+        if any(not isinstance(item, LimitParityRecord) for item in parity):
+            return f"limit parity contains an invalid record for {joint_name}"
+        bounds_error = bounds_are_valid(lower_rad, upper_rad, f"limit bound for {joint_name}")
+        if bounds_error is not None:
+            return bounds_error
+        if reason is not None and not valid_text(reason):
+            return f"limit reason is invalid for {joint_name}"
+
+        for item in parity:
+            try:
+                item_joint_name = item.joint_name
+                item_source_name = item.source_name
+                item_status = item.status
+                item_lower = item.lower
+                item_upper = item.upper
+                item_unit = item.unit
+                item_reason = item.reason
+            except AttributeError:
+                return f"limit parity is structurally incomplete for {joint_name}"
+            if not valid_text(item_joint_name):
+                return f"limit parity joint identity is invalid for {joint_name}"
+            if not valid_text(item_source_name):
+                return f"limit parity source identity is invalid for {joint_name}"
+            if not isinstance(item_status, ParityStatus):
+                return f"limit parity status is invalid for {joint_name}"
+            if not valid_text(item_unit):
+                return f"limit parity unit is invalid for {joint_name}"
+            parity_bounds_error = bounds_are_valid(
+                item_lower,
+                item_upper,
+                f"limit parity range for {joint_name}",
+            )
+            if parity_bounds_error is not None:
+                return parity_bounds_error
+            if item_status is ParityStatus.MATCH:
+                if item_reason is not None:
+                    return f"matched limit parity has an unexpected reason for {joint_name}"
+            elif not valid_text(item_reason):
+                return f"limit parity status has no reason for {joint_name}"
+            if item_status in {
                 ParityStatus.UNKNOWN,
                 ParityStatus.UNAVAILABLE,
                 ParityStatus.INVALID,
-            } and (item.lower is not None or item.upper is not None):
-                return f"unresolved limit parity contains bounds for {bound.joint_name}"
+            } and (item_lower is not None or item_upper is not None):
+                return f"unresolved limit parity contains bounds for {joint_name}"
 
-        parity_statuses = tuple(item.status for item in bound.parity)
-        signatures = {(item.lower, item.upper, item.unit) for item in bound.parity}
+        if tuple(item.source_name for item in parity) != source_names:
+            return f"limit parity source identity does not match {joint_name}"
+        if len({item.source_name for item in parity}) != len(parity):
+            return f"limit parity source identity is duplicated for {joint_name}"
+        if any(item.joint_name != joint_name for item in parity):
+            return f"limit parity joint identity does not match {joint_name}"
+
+        parity_statuses = tuple(item.status for item in parity)
+        signatures = {
+            (
+                None if item.lower is None else float(item.lower),
+                None if item.upper is None else float(item.upper),
+                item.unit,
+            )
+            for item in parity
+        }
         range_mismatch = len(signatures) > 1
         if any(status is ParityStatus.INVALID for status in parity_statuses):
             expected = LimitResolutionStatus.INVALID
@@ -220,33 +342,37 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
         elif all(status is ParityStatus.MATCH for status in parity_statuses):
             expected = None
         else:
-            return f"limit parity contains an unsupported status for {bound.joint_name}"
+            return f"limit parity contains an unsupported status for {joint_name}"
 
         if expected is None:
-            if bound.status not in {
+            if status not in {
                 LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
                 LimitResolutionStatus.RESOLVED_PROVISIONAL,
             }:
-                return f"resolved limit status does not match parity for {bound.joint_name}"
-            if not bound.bounded:
-                return f"resolved limit status is unbounded for {bound.joint_name}"
-            if bound.reason is not None:
-                return f"resolved limit status has an unexpected reason for {bound.joint_name}"
-            if any(item.unit != "rad" for item in bound.parity):
-                return f"resolved limit parity unit is not normalized to rad for {bound.joint_name}"
+                return f"resolved limit status does not match parity for {joint_name}"
+            if lower_rad is None or upper_rad is None:
+                return f"resolved limit status is unbounded for {joint_name}"
+            if reason is not None:
+                return f"resolved limit status has an unexpected reason for {joint_name}"
+            if any(item.unit != "rad" for item in parity):
+                return f"resolved limit parity unit is not normalized to rad for {joint_name}"
             if any(
-                (item.lower, item.upper) != (bound.lower_rad, bound.upper_rad)
-                for item in bound.parity
+                (
+                    None if item.lower is None else float(item.lower),
+                    None if item.upper is None else float(item.upper),
+                )
+                != (float(lower_rad), float(upper_rad))
+                for item in parity
             ):
-                return f"resolved limit range does not match parity for {bound.joint_name}"
+                return f"resolved limit range does not match parity for {joint_name}"
             continue
 
-        if bound.status is not expected:
-            return f"limit aggregate status does not match parity for {bound.joint_name}"
-        if bound.bounded:
-            return f"unresolved limit status contains bounds for {bound.joint_name}"
-        if bound.reason is None:
-            return f"unresolved limit status has no reason for {bound.joint_name}"
+        if status is not expected:
+            return f"limit aggregate status does not match parity for {joint_name}"
+        if lower_rad is not None or upper_rad is not None:
+            return f"unresolved limit status contains bounds for {joint_name}"
+        if not valid_text(reason):
+            return f"unresolved limit status has no reason for {joint_name}"
     return None
 
 

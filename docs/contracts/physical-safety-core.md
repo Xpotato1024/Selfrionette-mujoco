@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-08-28
+last_verified: 2026-08-30
 canonical_for:
   - physical safety core decision
   - limit / collision / dynamic composition
@@ -53,6 +53,12 @@ identity、parity record、rangeの対応を検証し、resolved statusはbounde
 照合する。P4ではdiagnostic codeのstatus prefix、aggregate status / reason、dynamic bound
 evidenceを照合する。いずれかの不整合、重複identity、diagnostic欠落は該当componentの
 `invalid`へ写像し、他componentのclear evidenceで上書きしない。
+
+さらにP5は、immutable constructorを迂回したprovider corruptionも防御境界で再検証する。
+resultのschema・robot identity・bounds・conversion relation、boundのjoint / source / parity
+identity、有限かつ順序付きのrange、parityのstatus・unit・reason整合性を確認し、空集合や
+重複identityが`all()`によって`allow`へ到達することを許さない。この再検証はP2のresolutionや
+unit conversionを再実行せず、欠落したauthorityを補完しない。
 
 ## Component mapping
 
