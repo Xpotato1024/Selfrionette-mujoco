@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import copy
 from dataclasses import replace
 
 import pytest
@@ -200,25 +201,44 @@ def test_provisional_evidence_holds_and_mismatch_rejects() -> None:
     assert mismatch.reason.reason_code == "limit_resolution_mismatch"
 
 
+def test_resolved_bound_constructor_rejects_inconsistent_aggregate_shape() -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    bound = result.bounds[0]
+    unknown_parity = replace(
+        bound.parity[0],
+        status=ParityStatus.UNKNOWN,
+        lower=None,
+        upper=None,
+        reason="source unknown",
+    )
+
+    with pytest.raises(ValueError, match="resolved bound requires both lower_rad and upper_rad"):
+        ResolvedJointBound(
+            joint_name=bound.joint_name,
+            lower_rad=None,
+            upper_rad=None,
+            status=LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
+            source_names=bound.source_names,
+            parity=(unknown_parity,),
+            reason=None,
+        )
+
+
 def test_limit_aggregate_status_must_match_parity() -> None:
     result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
     bound = result.bounds[0]
-    inconsistent_bound = replace(
-        bound,
-        parity=(
-            replace(
-                bound.parity[0],
-                status=ParityStatus.UNKNOWN,
-                lower=None,
-                upper=None,
-                reason="source unknown",
-            ),
-        ),
-        lower_rad=None,
-        upper_rad=None,
-        status=LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
-        reason=None,
+    inconsistent_parity = replace(
+        bound.parity[0],
+        status=ParityStatus.UNKNOWN,
+        lower=None,
+        upper=None,
+        reason="source unknown",
     )
+    # test専用: validなimmutable boundをcopyし、P5の防御境界だけへ不整合を注入する。
+    inconsistent_bound = copy(bound)
+    object.__setattr__(inconsistent_bound, "parity", (inconsistent_parity,))
+    object.__setattr__(inconsistent_bound, "lower_rad", None)
+    object.__setattr__(inconsistent_bound, "upper_rad", None)
     decision = evaluate_physical_safety(
         SafetyInput(
             "inconsistent-limit",
@@ -230,6 +250,30 @@ def test_limit_aggregate_status_must_match_parity() -> None:
 
     assert decision.action is SafetyDecisionAction.INVALID
     assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+
+
+def test_resolved_degree_parity_never_allows_without_conversion() -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    bound = result.bounds[0]
+    degree_parity = replace(bound.parity[0], unit="deg")
+    # test専用: validなimmutable boundのcopyへnon-rad parityを注入し、変換やauthority補完を許さない。
+    malformed_bound = copy(bound)
+    object.__setattr__(malformed_bound, "parity", (degree_parity,))
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "degree-limit",
+            replace(result, bounds=(malformed_bound, result.bounds[1])),
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+    assert malformed_bound.status is LimitResolutionStatus.RESOLVED_AUTHORITATIVE
+    assert malformed_bound.lower_rad == -1.0
+    assert malformed_bound.parity[0].unit == "deg"
 
 
 def test_collision_aggregate_reason_must_match_pair_diagnostic() -> None:
