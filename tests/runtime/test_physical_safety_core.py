@@ -276,6 +276,69 @@ def test_resolved_degree_parity_never_allows_without_conversion() -> None:
     assert malformed_bound.parity[0].unit == "deg"
 
 
+def test_empty_limit_provenance_is_invalid_at_p5_boundary() -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    # test専用: constructorを迂回して、finite authoritative boundの証拠集合だけを空にする。
+    malformed_bound = copy(result.bounds[0])
+    object.__setattr__(malformed_bound, "source_names", ())
+    object.__setattr__(malformed_bound, "parity", ())
+    malformed_result = copy(result)
+    object.__setattr__(malformed_result, "bounds", (malformed_bound, result.bounds[1]))
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "empty-limit-provenance",
+            malformed_result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+
+
+def test_empty_limit_result_bounds_are_invalid_at_p5_boundary() -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    # test専用: immutable aggregateを迂回して、result-level boundsを空集合にする。
+    malformed_result = copy(result)
+    object.__setattr__(malformed_result, "bounds", ())
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "empty-limit-result",
+            malformed_result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+
+
+def test_duplicate_limit_result_bounds_are_invalid_at_p5_boundary() -> None:
+    result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
+    # test専用: immutable aggregateを迂回して、同一joint boundを重複させる。
+    malformed_result = copy(result)
+    object.__setattr__(malformed_result, "bounds", (result.bounds[0], result.bounds[0]))
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "duplicate-limit-result",
+            malformed_result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+
+
 def test_collision_aggregate_reason_must_match_pair_diagnostic() -> None:
     collision = _collision(CollisionStatus.CLEAR)
     decision = evaluate_physical_safety(
