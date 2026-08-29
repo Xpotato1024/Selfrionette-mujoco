@@ -63,6 +63,13 @@ relation identityの重複を検証する。malformedなsource / evaluation prov
 文字列だけをreasonへ渡し、例外を上位へ漏らさず`invalid`へ閉じる。この再検証はP2のresolutionや
 unit conversionを再実行せず、欠落したauthorityを補完しない。
 
+P4のconfiguration / trajectory resultも同じ防御境界で、status・reason、diagnosticsのtuple/memberと
+有限値・optional identity、source identity、trajectoryのsample count、bound evidence status tupleを
+再検証する。空のtrajectory provenanceや壊れたdiagnosticは`dynamic:dynamic_result_inconsistent`へ閉じ、
+`authoritative`や`all()`の評価で`allow`へ進めない。P2 parityは、完全比較可能なall-`match`のrange差だけを
+mismatchとし、`match`と`unknown` / `unavailable`の未解決値はそれぞれP2の`unknown` / `unavailable`
+優先順位を維持する。
+
 ## Component mapping
 
 P2 `resolved_authoritative`はallow、`resolved_provisional`はhold、mismatchはreject、unknown /
