@@ -19,6 +19,7 @@ from selfrionette.runtime.safety.limit_resolution import (
     LimitSpace,
     ParityStatus,
     ResolvedJointBound,
+    resolve_joint_space_bounds,
 )
 from selfrionette.runtime.safety.physical_safety_core import (
     SafetyComponent,
@@ -33,7 +34,12 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
     FeasibilityStatus,
     TrajectoryFeasibilityResult,
 )
-from selfrionette.runtime.safety.physical_limits import EvidenceStatus
+from selfrionette.runtime.safety.physical_limits import (
+    EvidenceStatus,
+    LimitQuantity,
+    LimitSourceProvenance,
+    PhysicalLimit,
+)
 
 
 def _limits(status: LimitResolutionStatus) -> LimitResolutionResult:
@@ -74,6 +80,32 @@ def _limits(status: LimitResolutionStatus) -> LimitResolutionResult:
         for name in ("joint_a", "joint_b")
     )
     return LimitResolutionResult(1, "fixture-robot", bounds, ())
+
+
+def _position_limit(
+    unit: str,
+    source_kind: str,
+    *,
+    status: EvidenceStatus = EvidenceStatus.PROVISIONAL,
+) -> PhysicalLimit:
+    source = LimitSourceProvenance(
+        source_kind=source_kind,
+        source_id=f"{source_kind}-source",
+        revision="rev-1",
+        status=status,
+        evidence_reference="fixture-record" if status is EvidenceStatus.AUTHORITATIVE else None,
+    )
+    return PhysicalLimit(
+        name="joint_a",
+        quantity=LimitQuantity.POSITION,
+        lower=-1.0,
+        upper=1.0,
+        unit=unit,
+        space=LimitSpace.JOINT,
+        frame="fast_arm joint space",
+        status=status,
+        source=source,
+    )
 
 
 def _conversion(relation_id: str = "fixture-relation") -> JointSpaceConversion:
@@ -281,6 +313,85 @@ def test_mixed_match_and_unavailable_limit_evidence_is_unavailable_not_invalid()
 
     assert decision.action is SafetyDecisionAction.UNAVAILABLE
     assert decision.reason.identity == "limit:limit_resolution_unavailable"
+
+
+@pytest.mark.parametrize("source_units", (("deg",), ("deg", "deg")))
+def test_matching_non_rad_resolver_result_is_unavailable_at_p5(
+    source_units: tuple[str, ...],
+) -> None:
+    result = resolve_joint_space_bounds(
+        tuple(
+            _position_limit(unit, f"degree-source-{index}")
+            for index, unit in enumerate(source_units)
+        ),
+        expected_joint_names=("joint_a",),
+        robot_id="fixture",
+    )
+
+    bound = result.bound_for("joint_a")
+    assert bound.status is LimitResolutionStatus.UNKNOWN
+    assert bound.lower_rad is None
+    assert bound.upper_rad is None
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "matching-non-rad-limit",
+            result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.UNAVAILABLE
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_unavailable"
+
+
+def test_mixed_rad_and_non_rad_resolver_result_remains_mismatch_at_p5() -> None:
+    result = resolve_joint_space_bounds(
+        (
+            _position_limit("rad", "rad-source"),
+            _position_limit("deg", "degree-source"),
+        ),
+        expected_joint_names=("joint_a",),
+        robot_id="fixture",
+    )
+
+    bound = result.bound_for("joint_a")
+    assert bound.status is LimitResolutionStatus.MISMATCH
+    assert bound.reason == "limit units disagree"
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "mixed-rad-non-rad-limit",
+            result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.REJECT
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_mismatch"
+
+
+def test_matching_rad_resolver_result_remains_authoritative_at_p5() -> None:
+    result = resolve_joint_space_bounds(
+        (_position_limit("rad", "authoritative-rad", status=EvidenceStatus.AUTHORITATIVE),),
+        expected_joint_names=("joint_a",),
+        robot_id="fixture",
+    )
+
+    assert result.bound_for("joint_a").status is LimitResolutionStatus.RESOLVED_AUTHORITATIVE
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "matching-rad-limit",
+            result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.ALLOW
+    assert decision.allowed
 
 
 @pytest.mark.parametrize(
@@ -765,6 +876,56 @@ def test_authoritative_trajectory_dynamic_result_can_allow() -> None:
 
     assert decision.action is SafetyDecisionAction.ALLOW
     assert decision.reason.identity == "limit:limit_resolution_authoritative"
+
+
+def test_two_sample_unavailable_acceleration_result_remains_unavailable_at_p5() -> None:
+    dynamic = TrajectoryFeasibilityResult(
+        FeasibilityStatus.UNAVAILABLE,
+        "unavailable_acceleration",
+        2,
+        (
+            FeasibilityDiagnostic(
+                "unavailable_acceleration",
+                "at least three valid samples are required for finite-difference acceleration",
+            ),
+        ),
+        ("fixture-trajectory",),
+        (EvidenceStatus.AUTHORITATIVE,),
+    )
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "two-sample-trajectory",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            dynamic,
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.UNAVAILABLE
+    assert not decision.allowed
+
+
+def test_two_sample_feasible_without_unavailable_acceleration_is_invalid_at_p5() -> None:
+    dynamic = TrajectoryFeasibilityResult(
+        FeasibilityStatus.FEASIBLE,
+        "feasibility_clear",
+        2,
+        (),
+        ("fixture-trajectory",),
+        (EvidenceStatus.AUTHORITATIVE,),
+    )
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "malformed-two-sample-trajectory",
+            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
+            _collision(CollisionStatus.CLEAR),
+            dynamic,
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
 
 
 def test_empty_trajectory_source_ids_are_invalid_at_p5_boundary() -> None:

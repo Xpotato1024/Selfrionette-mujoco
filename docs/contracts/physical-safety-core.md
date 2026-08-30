@@ -68,7 +68,8 @@ P4のconfiguration / trajectory resultも同じ防御境界で、status・reason
 再検証する。空のtrajectory provenanceや壊れたdiagnosticは`dynamic:dynamic_result_inconsistent`へ閉じ、
 `authoritative`や`all()`の評価で`allow`へ進めない。P2 parityは、完全比較可能なall-`match`のrange差だけを
 mismatchとし、`match`と`unknown` / `unavailable`の未解決値はそれぞれP2の`unknown` / `unavailable`
-優先順位を維持する。
+優先順位を維持する。`sample_count == 2` のtrajectoryは有限差分accelerationを生成できないため、
+`unavailable_acceleration` diagnosticを必須とし、これを欠くFEASIBLE aggregateは`invalid`へ閉じる。
 
 ## Component mapping
 

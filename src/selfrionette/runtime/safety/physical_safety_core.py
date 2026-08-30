@@ -440,16 +440,22 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
         }
         # 未解決sourceのNone値やunit差は、P2のUNKNOWN/UNAVAILABLE優先順位を
         # range mismatchへ変換しない。完全比較可能なall-MATCHだけを比較する。
-        range_mismatch = all(status is ParityStatus.MATCH for status in parity_statuses) and len(signatures) > 1
+        all_match = all(status is ParityStatus.MATCH for status in parity_statuses)
+        matching_units = {item.unit for item in parity} if all_match else set()
+        mixed_units = all_match and len(matching_units) > 1
+        common_non_rad_unit = all_match and len(matching_units) == 1 and matching_units != {"rad"}
+        range_mismatch = all_match and matching_units == {"rad"} and len(signatures) > 1
         if any(status is ParityStatus.INVALID for status in parity_statuses):
             expected = LimitResolutionStatus.INVALID
-        elif any(status is ParityStatus.MISMATCH for status in parity_statuses) or range_mismatch:
+        elif any(status is ParityStatus.MISMATCH for status in parity_statuses) or mixed_units or range_mismatch:
             expected = LimitResolutionStatus.MISMATCH
         elif any(status is ParityStatus.UNAVAILABLE for status in parity_statuses):
             expected = LimitResolutionStatus.UNAVAILABLE
         elif any(status is ParityStatus.UNKNOWN for status in parity_statuses):
             expected = LimitResolutionStatus.UNKNOWN
-        elif all(status is ParityStatus.MATCH for status in parity_statuses):
+        elif common_non_rad_unit:
+            expected = LimitResolutionStatus.UNKNOWN
+        elif all_match:
             expected = None
         else:
             return f"limit parity contains an unsupported status for {joint_name}"
@@ -761,6 +767,10 @@ def _dynamic_result_inconsistency(
         return "dynamic aggregate status does not match diagnostics"
     if reason_code != expected_reason:
         return "dynamic aggregate reason does not match diagnostics"
+
+    if isinstance(result, TrajectoryFeasibilityResult) and sample_count == 2:
+        if not any(item.code == "unavailable_acceleration" for item in diagnostics):
+            return "two-sample trajectory has no unavailable acceleration diagnostic"
 
     if isinstance(result, TrajectoryFeasibilityResult) and sample_count is not None and sample_count < 2:
         if not (
