@@ -686,6 +686,21 @@ def test_public_result_validator_rejects_object_setattr_and_constructor_bypass()
         validate_trajectory_feasibility_result(bypassed)
 
 
+def test_two_samples_report_unavailable_acceleration_without_fabricating_value() -> None:
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0), qvel=(0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0), qvel=(1.0, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+
+    assert trajectory.status is FeasibilityStatus.UNAVAILABLE
+    assert trajectory.reason_code == "unavailable_acceleration"
+    assert trajectory.sample_count == 2
+    assert any(item.code == "unavailable_acceleration" for item in trajectory.diagnostics)
+
+
 def test_provisional_bounds_remain_distinct_from_authoritative_evidence() -> None:
     result = evaluate_configuration_feasibility(
         ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
