@@ -24,6 +24,7 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
     VelocityEvidenceKind,
     evaluate_configuration_feasibility,
     evaluate_trajectory_feasibility,
+    validate_trajectory_feasibility_policy,
     validate_configuration_feasibility_result,
     validate_trajectory_feasibility_result,
 )
@@ -131,6 +132,13 @@ def _jacobian(*, rank: int = 3, minimum: float = 0.5, condition: float = 2.0) ->
     )
 
 
+def _malformed_jacobian(*, minimum: float = 0.5, condition: float = 2.0) -> JacobianDiagnostic:
+    diagnostic = _jacobian()
+    object.__setattr__(diagnostic, "minimum_singular_value", minimum)
+    object.__setattr__(diagnostic, "condition_number", condition)
+    return diagnostic
+
+
 def _sample(
     timestamp: float,
     qpos: tuple[float, ...],
@@ -205,6 +213,9 @@ def test_feasible_result_requires_complete_diagnostics_and_evidence() -> None:
         bound_evidence_ids=("velocity-evidence",) * len(JOINTS),
         qvel_available=True,
         jacobian_available=True,
+        policy_fingerprint=_policy().canonical_fingerprint,
+        jacobian_source_ids=("fixture-jacobian",),
+        jacobian_evidence_ids=("fixture-jacobian",),
     )
     with pytest.raises(ValueError, match="clear diagnostics"):
         ConfigurationFeasibilityResult(
@@ -234,6 +245,9 @@ def test_feasible_result_rejects_unknown_bound_and_missing_source_identity() -> 
         bound_evidence_ids=("velocity-evidence",) * len(JOINTS),
         qvel_available=True,
         jacobian_available=True,
+        policy_fingerprint=_policy().canonical_fingerprint,
+        jacobian_source_ids=("fixture-jacobian",),
+        jacobian_evidence_ids=("fixture-jacobian",),
     )
     with pytest.raises(ValueError, match="unresolved dynamic evidence"):
         ConfigurationFeasibilityResult(
@@ -461,7 +475,7 @@ def test_nonfinite_or_invalid_jacobian_diagnostic_is_typed_invalid(
         ConfigurationState(
             (0.0, 0.0, 0.0),
             (0.0, 0.0, 0.0),
-            _jacobian(minimum=minimum, condition=condition),
+            _malformed_jacobian(minimum=minimum, condition=condition),
         ),
         _policy(),
     )
@@ -489,3 +503,249 @@ def test_existing_jacobian_metrics_are_adapted_without_reimplementation() -> Non
     )
     assert result.status is FeasibilityStatus.FEASIBLE
     assert diagnostic.source_id == "existing-fast-arm-diagnostic"
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    (
+        ("cadence_tolerance_s", math.nan),
+        ("maximum_gap_s", -0.1),
+        ("required_jacobian_rank", True),
+        ("minimum_singular_value", math.inf),
+        ("maximum_condition_number", -1.0),
+        ("qvel_consistency_tolerance_rad_s", True),
+        ("policy_id", "unknown"),
+    ),
+)
+def test_public_policy_validator_rejects_tampered_thresholds_and_placeholders(
+    field_name: str,
+    value: object,
+) -> None:
+    policy = _policy()
+    object.__setattr__(policy, field_name, value)
+    with pytest.raises((TypeError, ValueError)):
+        validate_trajectory_feasibility_policy(policy)
+
+
+def test_public_policy_validator_deep_rejects_tampered_limit_unit_and_source() -> None:
+    policy = _policy()
+    object.__setattr__(policy.dynamic_limits[0], "unit", "m/s")
+    with pytest.raises(ValueError, match="unit"):
+        validate_trajectory_feasibility_policy(policy)
+
+    policy = _policy()
+    object.__setattr__(policy.dynamic_limits[0].source, "source_id", "unknown")
+    with pytest.raises(ValueError, match="non-placeholder"):
+        validate_trajectory_feasibility_policy(policy)
+
+    policy = _policy()
+    object.__setattr__(policy.dynamic_limits[0].source, "source_kind", "fixture")
+    with pytest.raises(ValueError, match="synthetic source"):
+        validate_trajectory_feasibility_policy(policy)
+
+
+def test_policy_constructor_bypass_is_typed_invalid_at_evaluator_boundary() -> None:
+    policy = _policy()
+    object.__setattr__(policy, "dynamic_limits", "not-a-tuple")
+    result = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        policy,
+    )
+    assert result.status is FeasibilityStatus.INVALID
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    (
+        ("source_id", "unknown"),
+        ("minimum_singular_value", math.nan),
+        ("condition_number", True),
+    ),
+)
+def test_jacobian_constructor_rejects_placeholder_or_non_numeric_values(
+    field_name: str,
+    value: object,
+) -> None:
+    kwargs = dict(
+        source_id="jacobian-source",
+        row_count=3,
+        column_count=3,
+        numeric_rank=3,
+        effective_rank=3,
+        minimum_singular_value=0.5,
+        condition_number=2.0,
+    )
+    kwargs[field_name] = value
+    with pytest.raises((TypeError, ValueError)):
+        JacobianDiagnostic(**kwargs)
+
+
+def test_nested_jacobian_mutation_becomes_typed_invalid_without_leaking() -> None:
+    diagnostic = _jacobian()
+    object.__setattr__(diagnostic, "source_id", "unknown")
+    result = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), diagnostic),
+        _policy(),
+    )
+    assert result.status is FeasibilityStatus.INVALID
+    assert result.reason_code == "invalid_jacobian_diagnostic"
+
+    trajectory_diagnostic = _jacobian()
+    object.__setattr__(trajectory_diagnostic, "condition_number", math.nan)
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0), jacobian=trajectory_diagnostic),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+    assert trajectory.status is FeasibilityStatus.INVALID
+
+
+@pytest.mark.parametrize(
+    "field_value",
+    ("bad", (float("inf"), 0.0, 0.0)),
+)
+def test_malformed_configuration_state_fields_are_typed_invalid(field_value: object) -> None:
+    state = object.__new__(ConfigurationState)
+    object.__setattr__(state, "qpos_rad", field_value)
+    object.__setattr__(state, "qvel_rad_s", (0.0, 0.0, 0.0))
+    object.__setattr__(state, "jacobian", _jacobian())
+    object.__setattr__(state, "source_id", "configuration-source")
+    result = evaluate_configuration_feasibility(state, _policy())
+    assert result.status is FeasibilityStatus.INVALID
+
+
+def test_unknown_configuration_source_and_malformed_qvel_are_typed_invalid() -> None:
+    state = ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian(), source_id="unknown")
+    result = evaluate_configuration_feasibility(state, _policy())
+    assert result.status is FeasibilityStatus.INVALID
+
+    state = object.__new__(ConfigurationState)
+    object.__setattr__(state, "qpos_rad", (0.0, 0.0, 0.0))
+    object.__setattr__(state, "qvel_rad_s", "bad")
+    object.__setattr__(state, "jacobian", _jacobian())
+    object.__setattr__(state, "source_id", "configuration-source")
+    result = evaluate_configuration_feasibility(state, _policy())
+    assert result.status is FeasibilityStatus.INVALID
+
+
+def test_malformed_trajectory_container_and_samples_are_typed_invalid() -> None:
+    policy = _policy()
+    iterator_result = evaluate_trajectory_feasibility(
+        iter((_sample(0.0, (0.0, 0.0, 0.0)), _sample(0.1, (0.1, 0.0, 0.0)))),
+        policy,
+    )
+    assert iterator_result.status is FeasibilityStatus.INVALID
+
+    non_sample_result = evaluate_trajectory_feasibility((object(), object()), policy)
+    assert non_sample_result.status is FeasibilityStatus.INVALID
+
+    sample = object.__new__(TrajectorySample)
+    object.__setattr__(sample, "timestamp_s", 0.0)
+    object.__setattr__(sample, "qpos_rad", (0.0, 0.0, 0.0))
+    object.__setattr__(sample, "qvel_rad_s", (0.0, 0.0, 0.0))
+    object.__setattr__(sample, "jacobian", _jacobian())
+    object.__setattr__(sample, "source_id", "unknown")
+    result = evaluate_trajectory_feasibility((sample, _sample(0.1, (0.1, 0.0, 0.0)), _sample(0.2, (0.2, 0.0, 0.0))), policy)
+    assert result.status is FeasibilityStatus.INVALID
+
+    huge = object.__new__(TrajectorySample)
+    object.__setattr__(huge, "timestamp_s", 0.0)
+    object.__setattr__(huge, "qpos_rad", (1e308, -1e308, 0.0))
+    object.__setattr__(huge, "qvel_rad_s", None)
+    object.__setattr__(huge, "jacobian", _jacobian())
+    object.__setattr__(huge, "source_id", "huge-source")
+    huge_result = evaluate_trajectory_feasibility(
+        (huge, _sample(0.1, (0.0, 0.0, 0.0)), _sample(0.2, (0.0, 0.0, 0.0))),
+        policy,
+    )
+    assert huge_result.status is FeasibilityStatus.INVALID
+
+
+def test_policy_tamper_and_missing_feasible_evidence_never_produce_success() -> None:
+    policy = _policy()
+    object.__setattr__(policy, "maximum_condition_number", 0.0)
+    result = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        policy,
+    )
+    assert result.status is FeasibilityStatus.INVALID
+
+    valid = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(),
+    )
+    with pytest.raises(ValueError, match="policy fingerprint"):
+        replace(valid, policy_fingerprint=())
+    with pytest.raises(ValueError, match="Jacobian source/evidence"):
+        replace(valid, jacobian_source_ids=())
+
+
+def test_result_policy_fingerprint_binds_limit_source_status_and_evidence() -> None:
+    valid = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(),
+    )
+    with pytest.raises(ValueError, match="dynamic limit binding"):
+        replace(valid, limit_source_ids=tuple(f"swapped-source-{index}" for index in range(len(JOINTS))))
+
+    provisional = _policy(status=EvidenceStatus.PROVISIONAL).canonical_fingerprint
+    with pytest.raises(ValueError, match="dynamic limit binding"):
+        replace(
+            valid,
+            policy_fingerprint=provisional,
+            bound_statuses=(EvidenceStatus.AUTHORITATIVE,) * len(JOINTS),
+        )
+
+
+def test_result_properties_fail_closed_after_status_or_binding_tamper() -> None:
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(),
+    )
+    object.__setattr__(configuration, "status", FeasibilityStatus.INVALID)
+    assert configuration.feasible is False
+    assert configuration.authoritative is False
+
+    trajectory = evaluate_trajectory_feasibility(
+        (_sample(0.0, (0.0, 0.0, 0.0)), _sample(0.1, (0.1, 0.0, 0.0)), _sample(0.2, (0.2, 0.0, 0.0))),
+        _policy(),
+    )
+    object.__setattr__(trajectory, "bound_evidence_ids", ())
+    assert trajectory.feasible is False
+    assert trajectory.authoritative is False
+
+    bypassed = _bypass_constructor(configuration)
+    object.__delattr__(bypassed, "_binding_fingerprint")
+    assert bypassed.feasible is False
+    assert bypassed.authoritative is False
+
+
+@pytest.mark.parametrize("field_name", ("qpos_rad", "qvel_rad_s"))
+def test_huge_integer_state_values_are_typed_invalid(field_name: str) -> None:
+    state = object.__new__(ConfigurationState)
+    object.__setattr__(state, "qpos_rad", (0.0, 0.0, 0.0))
+    object.__setattr__(state, "qvel_rad_s", (0.0, 0.0, 0.0))
+    object.__setattr__(state, field_name, (10**1000, 0.0, 0.0))
+    object.__setattr__(state, "jacobian", _jacobian())
+    object.__setattr__(state, "source_id", "huge-integer-state")
+    result = evaluate_configuration_feasibility(state, _policy())
+    assert result.status is FeasibilityStatus.INVALID
+
+
+def test_legitimate_unavailable_dynamic_inputs_remain_unavailable() -> None:
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), None, _jacobian()),
+        _policy(),
+    )
+    assert configuration.status is FeasibilityStatus.UNAVAILABLE
+    assert configuration.reason_code == "unavailable_qvel"
+
+    trajectory = evaluate_trajectory_feasibility(
+        (_sample(0.0, (0.0, 0.0, 0.0)), _sample(0.1, (0.1, 0.0, 0.0))),
+        _policy(),
+    )
+    assert trajectory.status is FeasibilityStatus.UNAVAILABLE
+    assert trajectory.reason_code == "unavailable_acceleration"
