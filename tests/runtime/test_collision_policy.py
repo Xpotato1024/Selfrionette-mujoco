@@ -52,6 +52,8 @@ def _context(
     model_id: str = "fast-arm-mujoco-v1",
     policy_revision: str = "policy-revision-1",
     inventory_revision: str = "inventory-revision-1",
+    policy_fingerprint_id: str | None = None,
+    policy_fingerprint_thresholds: tuple[float, float] | None = None,
 ) -> CollisionContext:
     pair_ids = tuple(pair.pair_id for pair in inventory.pairs())
     if not pair_ids:
@@ -70,6 +72,28 @@ def _context(
         inventory_revision=inventory_revision,
         expected_pair_ids=(
             pair_ids if expected_pair_ids is None else expected_pair_ids
+        ),
+        inventory_fingerprint=tuple(
+            (geom.geom_name, geom.body_name, geom.role.value, geom.source_id)
+            for geom in inventory.geometries
+        ),
+        policy_fingerprint=(
+            policy.policy_id if policy_fingerprint_id is None else policy_fingerprint_id,
+            policy.clearance_m
+            if policy_fingerprint_thresholds is None
+            else policy_fingerprint_thresholds[0],
+            policy.near_collision_margin_m
+            if policy_fingerprint_thresholds is None
+            else policy_fingerprint_thresholds[1],
+            tuple(
+                (
+                    exclusion.pair_id,
+                    exclusion.reason,
+                    exclusion.evidence_reference,
+                    exclusion.classification.value,
+                )
+                for exclusion in policy.exclusions
+            ),
         ),
     )
 
@@ -191,6 +215,66 @@ def test_exclusion_requires_explicit_pair_and_provenance() -> None:
     assert excluded.provenance == "geometry-review-001"
 
 
+def test_direct_clear_exclusion_must_match_context_policy_declaration() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    evaluations = list(_clear_evaluations(inventory, policy, context))
+    evaluations[0] = CollisionEvaluation(
+        evaluations[0].pair_id,
+        CollisionKind.STRUCTURAL_PROXIMITY,
+        CollisionStatus.CLEAR,
+        None,
+        policy.clearance_m,
+        "explicit_structural_exclusion",
+        "arbitrary-review-001",
+        policy.near_collision_margin_m,
+    )
+
+    with pytest.raises(ValueError, match="aggregate status/reason"):
+        CollisionCheckResult(
+            context,
+            CollisionStatus.CLEAR,
+            tuple(evaluations),
+            "collision_clear",
+        )
+
+
+def test_exclusion_clear_cannot_override_environment_pair_kind() -> None:
+    inventory = _inventory()
+    exclusion = CollisionExclusion(
+        "floor|upper",
+        "invalid environment exclusion fixture",
+        "geometry-review-environment",
+    )
+    policy = _policy(exclusion)
+    context = _context(inventory, policy)
+    evaluations = list(_clear_evaluations(inventory, policy, context))
+    index = next(
+        index
+        for index, evaluation in enumerate(evaluations)
+        if evaluation.pair_id == "floor|upper"
+    )
+    evaluations[index] = CollisionEvaluation(
+        "floor|upper",
+        CollisionKind.STRUCTURAL_PROXIMITY,
+        CollisionStatus.CLEAR,
+        None,
+        policy.clearance_m,
+        "explicit_structural_exclusion",
+        exclusion.evidence_reference,
+        policy.near_collision_margin_m,
+    )
+
+    with pytest.raises(ValueError, match="aggregate status/reason"):
+        CollisionCheckResult(
+            context,
+            CollisionStatus.CLEAR,
+            tuple(evaluations),
+            "collision_clear",
+        )
+
+
 def test_global_or_non_structural_exclusion_is_rejected() -> None:
     try:
         CollisionExclusion("*|*", "bad", "fixture")
@@ -295,6 +379,65 @@ def test_task_object_contact_is_not_self_interference() -> None:
     assert result.status is CollisionStatus.CONTACT
 
 
+def test_stale_context_rejects_inventory_role_change_with_same_pair_ids() -> None:
+    inventory = _inventory(include_task_object=True)
+    policy = _policy()
+    context = _context(inventory, policy)
+    changed_inventory = GeometryInventory(
+        tuple(
+            GeometryIdentity(
+                geom.geom_name,
+                geom.body_name,
+                GeometryRole.TASK_OBJECT
+                if geom.geom_name == "floor"
+                else geom.role,
+                geom.source_id,
+            )
+            for geom in inventory.geometries
+        ),
+        inventory_id=inventory.inventory_id,
+    )
+    observations = tuple(
+        CollisionObservation(pair.pair_id, 0.1, "fixture")
+        for pair in changed_inventory.pairs()
+    )
+
+    result = evaluate_collision_configuration(
+        changed_inventory,
+        observations,
+        policy,
+        context,
+    )
+
+    assert result.status is CollisionStatus.INVALID
+    assert result.reason_code == "collision_context_inventory_binding_mismatch"
+
+
+def test_stale_context_rejects_policy_threshold_change() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    changed_policy = CollisionPolicy(
+        policy.policy_id,
+        policy.clearance_m * 2.0,
+        policy.near_collision_margin_m,
+    )
+    observations = tuple(
+        CollisionObservation(pair.pair_id, 0.1, "fixture")
+        for pair in inventory.pairs()
+    )
+
+    result = evaluate_collision_configuration(
+        inventory,
+        observations,
+        changed_policy,
+        context,
+    )
+
+    assert result.status is CollisionStatus.INVALID
+    assert result.reason_code == "collision_context_policy_binding_mismatch"
+
+
 def test_bounded_trajectory_stops_at_first_non_clear_sample() -> None:
     inventory = _inventory()
     policy = _policy()
@@ -338,6 +481,8 @@ def test_context_requires_explicit_immutable_identity_and_pair_inventory() -> No
         _context(inventory, policy, expected_pair_ids=(pair_ids[0], pair_ids[0]))
     with pytest.raises(ValueError, match="placeholder"):
         _context(inventory, policy, robot_id="unknown")
+    with pytest.raises(ValueError, match="policy_id must match policy fingerprint"):
+        _context(inventory, policy, policy_fingerprint_id="other-policy/v1")
     with pytest.raises(TypeError, match="typed context or explicit"):
         evaluate_collision_configuration(inventory, (), policy)
 
@@ -406,6 +551,17 @@ def test_collision_evaluation_rejects_contradictory_success_on_construction() ->
             "fixture",
             policy.near_collision_margin_m,
         )
+    with pytest.raises(ValueError, match="unknown collision kind"):
+        CollisionEvaluation(
+            "fore|upper",
+            CollisionKind.UNKNOWN,
+            CollisionStatus.COLLISION,
+            -0.001,
+            policy.clearance_m,
+            "self_interference_penetration",
+            "fixture",
+            policy.near_collision_margin_m,
+        )
     with pytest.raises(ValueError, match="pair_clear evidence"):
         CollisionEvaluation(
             "fore|upper",
@@ -416,6 +572,48 @@ def test_collision_evaluation_rejects_contradictory_success_on_construction() ->
             "pair_clear",
             "fixture",
             policy.near_collision_margin_m,
+        )
+    with pytest.raises(ValueError, match="near-collision margin"):
+        CollisionEvaluation(
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
+            CollisionStatus.CLEAR,
+            0.02,
+            policy.clearance_m,
+            "pair_clear",
+            "fixture",
+            0.1,
+        )
+    with pytest.raises(ValueError, match="non-negative distance"):
+        CollisionEvaluation(
+            "fore|target",
+            CollisionKind.TASK_OBJECT_CONTACT,
+            CollisionStatus.CONTACT,
+            -0.001,
+            policy.clearance_m,
+            "arbitrary_reason",
+            "fixture",
+            policy.near_collision_margin_m,
+        )
+
+
+def test_collision_provenance_and_pair_id_reject_reserved_placeholders() -> None:
+    with pytest.raises(ValueError, match="non-placeholder identity"):
+        CollisionObservation("fore|upper", 0.1, "unknown")
+    with pytest.raises(ValueError, match="non-placeholder identity"):
+        CollisionExclusion("fore|upper", "known overlap", "unknown")
+    with pytest.raises(ValueError, match="concrete geometry identities"):
+        CollisionObservation("floor|unknown", 0.1, "fixture")
+    with pytest.raises(ValueError, match="non-placeholder identity"):
+        CollisionEvaluation(
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
+            CollisionStatus.CLEAR,
+            0.1,
+            0.01,
+            "pair_clear",
+            "unknown",
+            0.02,
         )
 
 
@@ -563,28 +761,125 @@ def test_unknown_clear_nested_evaluation_is_invalid_not_clear() -> None:
     assert invalid.status is CollisionStatus.INVALID
 
 
+def test_public_clear_revalidates_nested_evaluation_after_mutation() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    result = _clear_result(inventory, policy, context)
+    object.__setattr__(result.evaluations[0], "kind", CollisionKind.UNKNOWN)
+
+    assert not result.clear
+
+    role_mismatch = _clear_result(inventory, policy, context)
+    object.__setattr__(
+        role_mismatch.evaluations[0],
+        "kind",
+        CollisionKind.ENVIRONMENT_COLLISION,
+    )
+
+    assert not role_mismatch.clear
+
+    trajectory = BoundedCollisionTrajectoryResult(
+        CollisionStatus.CLEAR,
+        (_clear_result(inventory, policy, context),),
+        (0,),
+        None,
+    )
+    object.__setattr__(
+        trajectory.sample_results[0].evaluations[0],
+        "kind",
+        CollisionKind.UNKNOWN,
+    )
+
+    assert not trajectory.clear
+
+    malformed = object.__new__(CollisionEvaluation)
+    bypassed = _clear_result(inventory, policy, context)
+    object.__setattr__(
+        bypassed,
+        "evaluations",
+        (malformed,) + bypassed.evaluations[1:],
+    )
+
+    assert not bypassed.clear
+
+
+def test_clear_rejects_nested_thresholds_not_bound_to_context_policy() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(
+        inventory,
+        policy,
+        policy_fingerprint_thresholds=(0.1, 0.1),
+    )
+    kinds = {pair.pair_id: pair.kind for pair in inventory.pairs()}
+    evaluations = tuple(
+        CollisionEvaluation(
+            pair_id,
+            kinds[pair_id],
+            CollisionStatus.CLEAR,
+            0.05,
+            0.0,
+            "pair_clear",
+            "fixture",
+            0.0,
+        )
+        for pair_id in context.expected_pair_ids
+    )
+
+    with pytest.raises(ValueError, match="aggregate status/reason"):
+        CollisionCheckResult(
+            context,
+            CollisionStatus.CLEAR,
+            evaluations,
+            "collision_clear",
+        )
+
+
+def test_context_without_evaluable_pair_cannot_produce_clear() -> None:
+    inventory = GeometryInventory(
+        (GeometryIdentity("single", "single_body", GeometryRole.ROBOT),)
+    )
+    policy = _policy()
+    context = _context(inventory, policy)
+    evaluation = CollisionEvaluation(
+        context.expected_pair_ids[0],
+        CollisionKind.SELF_INTERFERENCE,
+        CollisionStatus.CLEAR,
+        0.1,
+        policy.clearance_m,
+        "pair_clear",
+        "fixture",
+        policy.near_collision_margin_m,
+    )
+
+    with pytest.raises(ValueError, match="aggregate status/reason"):
+        CollisionCheckResult(
+            context,
+            CollisionStatus.CLEAR,
+            (evaluation,),
+            "collision_clear",
+        )
+
+
 def test_deleted_or_extra_dangerous_pair_in_context_fails_closed() -> None:
     inventory = _inventory()
     policy = _policy()
     pair_ids = tuple(pair.pair_id for pair in inventory.pairs())
 
-    deleted_context = _context(
-        inventory,
-        policy,
-        expected_pair_ids=pair_ids[1:],
-    )
-    deleted = evaluate_collision_configuration(inventory, (), policy, deleted_context)
-    assert deleted.status is CollisionStatus.INVALID
-    assert deleted.reason_code == "collision_context_pair_coverage_mismatch"
+    with pytest.raises(ValueError, match="exactly match inventory fingerprint pairs"):
+        _context(
+            inventory,
+            policy,
+            expected_pair_ids=pair_ids[1:],
+        )
 
-    extra_context = _context(
-        inventory,
-        policy,
-        expected_pair_ids=pair_ids + ("ghost|upper",),
-    )
-    extra = evaluate_collision_configuration(inventory, (), policy, extra_context)
-    assert extra.status is CollisionStatus.INVALID
-    assert extra.reason_code == "collision_context_pair_coverage_mismatch"
+    with pytest.raises(ValueError, match="exactly match inventory fingerprint pairs"):
+        _context(
+            inventory,
+            policy,
+            expected_pair_ids=pair_ids + ("ghost|upper",),
+        )
 
 
 def test_explicit_exclusion_remains_a_complete_result_evaluation() -> None:
