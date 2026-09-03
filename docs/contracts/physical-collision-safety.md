@@ -46,21 +46,31 @@ distanceのunitはgeom surface間のmeterである。`distance < 0`はpenetratio
 `contact`となる。distance欠落は`unknown`、contact observation欠落は`unavailable`であり、
 clearへfallbackしない。`CollisionEvaluation`は`near_collision_margin_m`も保持し、
 near evidenceの上限を同じthresholdから検証する。`collision` evidenceは負のdistance、
-`pair_clear` evidenceは`clearance_m`を超えるdistanceを必須とする。
+`pair_clear` evidenceは`clearance_m + near_collision_margin_m`を超えるdistanceを必須とする。
+`contact` evidenceはnon-negative distanceとcanonicalな`task_object_contact` reasonを必須とし、
+負のdistanceはcollisionとして扱う。`unknown` kindはどのstatusでもevidenceを構成できない。
 
 ## Exclusion provenance
 
 collision exclusionは具体的な`pair_id`、理由、evidence referenceを持つsingle-pair declaration
 だけを許可する。`*|*`等のglobal ignore、environment collisionの除外、根拠なしのstructural
-exclusionは拒否する。exclusionの存在は全geomのcollision filterを変更せず、そのpairだけを
-`explicit_structural_exclusion`として追跡可能にする。
+exclusionは拒否する。`unknown`等のplaceholder pair/source/provenanceは拒否する。
+exclusionの存在は全geomのcollision filterを変更せず、そのpairだけを
+`explicit_structural_exclusion`として追跡可能にする。clear evaluationのpairとevidence referenceは
+contextへbindされたpolicy exclusionと一致しなければならず、callerが直接作ったarbitrary exclusion
+をclearへ昇格させない。
 
 ## Configuration / trajectory result
 
 `CollisionContext`はfrozenなtyped bindingであり、robot/model、policy ID/revision、inventory
-ID/revision、non-emptyかつuniqueな具体的`expected_pair_ids`を保持する。identityは空値や
-placeholderの`"unknown"`を許可しない。factoryはtyped context、またはcontextを組み立てる
-明示的なidentity値を要求し、暗黙の`"unknown"`へfallbackしない。
+ID/revision、non-emptyかつuniqueな具体的`expected_pair_ids`を保持する。さらにinventoryの
+geom name/body/role/source identity tupleと、policyのID/clearance threshold/exclusion pair・
+evidence identity tupleをcanonical fingerprintとして保持する。`expected_pair_ids`はそのinventory
+fingerprintから導出したpair集合と順序まで一致しなければならず、factoryとconfiguration evaluatorは
+callerのrevision文字列だけを信頼しない。identityは空値やplaceholderの`"unknown"`を許可しない。
+factoryはtyped context、またはcontextを組み立てる明示的なidentity値を要求し、暗黙の`"unknown"`
+へfallbackしない。inventory role、body、source identity、policy threshold、exclusion内容が変わった
+stale contextは`invalid`として停止する。
 
 `CollisionCheckResult`はpairごとの`CollisionEvaluation`とaggregate statusを返す。statusは
 `clear`、`near_collision`、`collision`、`contact`、`unknown`、`unavailable`、`invalid`である。
@@ -68,6 +78,8 @@ constructorは空、duplicate、subset、extraのevaluation coverageを拒否し
 は一つのcanonical derivationと完全一致しなければならない。明示structural exclusionも一つの
 evaluationとしてexpected pair coverageへ含める。`clear`はexpected inventoryを完全に覆う、
 各pairのvalid clear evidenceだけで成立し、unknown・unavailable・invalidや欠落をclearへ変換しない。
+constructorとpublicな`.clear` accessはnested evaluation/resultを再導出・再検証し、constructor bypassや
+`object.__setattr__`によるkind、status、distance、provenanceの改変をclearとして残さない。
 aggregateはinvalid、collision、near-collision、contact、unavailable、unknownの順でfail-closedに
 優先する。
 

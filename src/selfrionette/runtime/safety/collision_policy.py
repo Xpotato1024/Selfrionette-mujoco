@@ -39,6 +39,24 @@ class CollisionStatus(str, Enum):
     INVALID = "invalid"
 
 
+_PLACEHOLDER_IDENTITIES = frozenset(
+    {
+        "n-a",
+        "n/a",
+        "na",
+        "n_a",
+        "nil",
+        "none",
+        "not-applicable",
+        "not_available",
+        "null",
+        "placeholder",
+        "unknown",
+        "unavailable",
+    }
+)
+
+
 def _text(name: str, value: object) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise ValueError(f"{name} must be a non-empty string")
@@ -47,7 +65,7 @@ def _text(name: str, value: object) -> str:
 
 def _identity_text(name: str, value: object) -> str:
     text = _text(name, value)
-    if text.casefold() == "unknown":
+    if text.casefold() in _PLACEHOLDER_IDENTITIES:
         raise ValueError(f"{name} must be an explicit non-placeholder identity")
     return text
 
@@ -68,6 +86,8 @@ def _pair_id(name: str, value: object) -> str:
     parts = pair_id.split("|")
     if len(parts) != 2 or any(not part or part != part.strip() for part in parts):
         raise ValueError(f"{name} must contain two geometry names")
+    if any(part.casefold() in _PLACEHOLDER_IDENTITIES for part in parts):
+        raise ValueError(f"{name} must contain concrete geometry identities")
     if parts[0] == parts[1]:
         raise ValueError(f"{name} must identify two different geometries")
     if pair_id != "|".join(sorted(parts)):
@@ -86,6 +106,13 @@ class CollisionContext:
     inventory_id: str
     inventory_revision: str
     expected_pair_ids: tuple[str, ...]
+    inventory_fingerprint: tuple[tuple[str, str, str, str], ...]
+    policy_fingerprint: tuple[
+        str,
+        float,
+        float,
+        tuple[tuple[str, str, str, str], ...],
+    ]
     _binding_fingerprint: tuple[object, ...] = field(
         init=False,
         repr=False,
@@ -94,6 +121,119 @@ class CollisionContext:
 
     def __post_init__(self) -> None:
         _validate_collision_context(self, initialize=True)
+
+
+def _canonical_inventory_fingerprint(
+    value: object,
+) -> tuple[tuple[str, str, str, str], ...]:
+    if not isinstance(value, tuple) or not value:
+        raise ValueError("inventory_fingerprint must be a non-empty tuple")
+    roles = {role.value for role in GeometryRole}
+    normalized: list[tuple[str, str, str, str]] = []
+    for item in value:
+        if not isinstance(item, tuple) or len(item) != 4:
+            raise TypeError(
+                "inventory_fingerprint must contain geometry identity tuples"
+            )
+        geom_name = _identity_text("inventory geometry name", item[0])
+        body_name = _identity_text("inventory body name", item[1])
+        role = item[2]
+        if not isinstance(role, str) or role not in roles:
+            raise ValueError("inventory geometry role is invalid")
+        source_id = _identity_text("inventory source identity", item[3])
+        normalized.append((geom_name, body_name, role, source_id))
+    if len({item[0] for item in normalized}) != len(normalized):
+        raise ValueError("inventory_fingerprint geometry names must be unique")
+    return tuple(normalized)
+
+
+def _pair_ids_from_inventory_fingerprint(
+    fingerprint: tuple[tuple[str, str, str, str], ...],
+) -> tuple[str, ...]:
+    robot_roles = {GeometryRole.ROBOT.value, GeometryRole.TOOL.value}
+    pair_ids = tuple(
+        "|".join(sorted((first[0], second[0])))
+        for first, second in itertools.combinations(fingerprint, 2)
+        if first[1] != second[1]
+        and (first[2] in robot_roles or second[2] in robot_roles)
+    )
+    if pair_ids:
+        return pair_ids
+    fallback = tuple(
+        "|".join(sorted((first[0], second[0])))
+        for first, second in itertools.combinations(fingerprint, 2)
+    )
+    return fallback or ("__invalid_geometry__|__missing_geometry__",)
+
+
+def _inventory_has_evaluable_pairs(
+    fingerprint: tuple[tuple[str, str, str, str], ...],
+) -> bool:
+    robot_roles = {GeometryRole.ROBOT.value, GeometryRole.TOOL.value}
+    return any(
+        first[1] != second[1]
+        and (first[2] in robot_roles or second[2] in robot_roles)
+        for first, second in itertools.combinations(fingerprint, 2)
+    )
+
+
+def _kind_from_inventory_fingerprint(
+    fingerprint: tuple[tuple[str, str, str, str], ...],
+    pair_id: str,
+) -> CollisionKind:
+    by_name = {item[0]: item for item in fingerprint}
+    first_name, second_name = pair_id.split("|")
+    first = by_name.get(first_name)
+    second = by_name.get(second_name)
+    if first is None or second is None:
+        return CollisionKind.UNKNOWN
+    roles = {first[2], second[2]}
+    if GeometryRole.UNKNOWN.value in roles:
+        return CollisionKind.UNKNOWN
+    if GeometryRole.TASK_OBJECT.value in roles:
+        return CollisionKind.TASK_OBJECT_CONTACT
+    if GeometryRole.ENVIRONMENT.value in roles:
+        return CollisionKind.ENVIRONMENT_COLLISION
+    if first[1] == second[1]:
+        return CollisionKind.STRUCTURAL_PROXIMITY
+    return CollisionKind.SELF_INTERFERENCE
+
+
+def _canonical_policy_fingerprint(
+    value: object,
+) -> tuple[str, float, float, tuple[tuple[str, str, str, str], ...]]:
+    if not isinstance(value, tuple) or len(value) != 4:
+        raise TypeError(
+            "policy_fingerprint must contain policy identity, thresholds, and exclusions"
+        )
+    policy_id = _identity_text("policy fingerprint policy_id", value[0])
+    if type(value[1]) is not float or type(value[2]) is not float:
+        raise TypeError("policy fingerprint thresholds must be float values")
+    clearance = _finite("policy fingerprint clearance_m", value[1])
+    margin = _finite("policy fingerprint near_collision_margin_m", value[2])
+    if clearance < 0.0 or margin < 0.0:
+        raise ValueError("policy fingerprint thresholds must be non-negative")
+    exclusions_value = value[3]
+    if not isinstance(exclusions_value, tuple):
+        raise TypeError("policy fingerprint exclusions must be a tuple")
+    exclusions: list[tuple[str, str, str, str]] = []
+    for item in exclusions_value:
+        if not isinstance(item, tuple) or len(item) != 4:
+            raise TypeError(
+                "policy fingerprint exclusions must contain identity tuples"
+            )
+        pair_id = _pair_id("policy fingerprint exclusion pair_id", item[0])
+        reason = _text("policy fingerprint exclusion reason", item[1])
+        evidence_reference = _identity_text(
+            "policy fingerprint exclusion evidence_reference", item[2]
+        )
+        classification = item[3]
+        if classification != CollisionKind.STRUCTURAL_PROXIMITY.value:
+            raise ValueError("policy fingerprint exclusion classification is invalid")
+        exclusions.append((pair_id, reason, evidence_reference, classification))
+    if len({item[0] for item in exclusions}) != len(exclusions):
+        raise ValueError("policy fingerprint exclusion pair IDs must be unique")
+    return (policy_id, clearance, margin, tuple(sorted(exclusions)))
 
 
 def _validate_collision_context(
@@ -105,25 +245,39 @@ def _validate_collision_context(
 
     if not isinstance(context, CollisionContext):
         raise TypeError("context must be CollisionContext")
-    for name, value in (
-        ("robot_id", context.robot_id),
-        ("model_id", context.model_id),
-        ("policy_id", context.policy_id),
-        ("policy_revision", context.policy_revision),
-        ("inventory_id", context.inventory_id),
-        ("inventory_revision", context.inventory_revision),
-    ):
-        _identity_text(name, value)
-    if not isinstance(context.expected_pair_ids, tuple):
-        raise TypeError("expected_pair_ids must be a tuple")
-    expected_pair_ids = tuple(
-        _pair_id("expected_pair_id", pair_id)
-        for pair_id in context.expected_pair_ids
-    )
-    if not expected_pair_ids:
-        raise ValueError("expected_pair_ids must be non-empty")
-    if len(expected_pair_ids) != len(set(expected_pair_ids)):
-        raise ValueError("expected_pair_ids must be unique")
+    try:
+        for name, value in (
+            ("robot_id", context.robot_id),
+            ("model_id", context.model_id),
+            ("policy_id", context.policy_id),
+            ("policy_revision", context.policy_revision),
+            ("inventory_id", context.inventory_id),
+            ("inventory_revision", context.inventory_revision),
+        ):
+            _identity_text(name, value)
+        if not isinstance(context.expected_pair_ids, tuple):
+            raise TypeError("expected_pair_ids must be a tuple")
+        expected_pair_ids = tuple(
+            _pair_id("expected_pair_id", pair_id)
+            for pair_id in context.expected_pair_ids
+        )
+        if not expected_pair_ids:
+            raise ValueError("expected_pair_ids must be non-empty")
+        if len(expected_pair_ids) != len(set(expected_pair_ids)):
+            raise ValueError("expected_pair_ids must be unique")
+        inventory_fingerprint = _canonical_inventory_fingerprint(
+            context.inventory_fingerprint
+        )
+        policy_fingerprint = _canonical_policy_fingerprint(context.policy_fingerprint)
+        canonical_pair_ids = _pair_ids_from_inventory_fingerprint(inventory_fingerprint)
+    except AttributeError as exc:
+        raise ValueError("collision context binding is incomplete") from exc
+    if context.policy_id != policy_fingerprint[0]:
+        raise ValueError("context policy_id must match policy fingerprint identity")
+    if initialize and expected_pair_ids != canonical_pair_ids:
+        raise ValueError(
+            "expected_pair_ids must exactly match inventory fingerprint pairs"
+        )
     fingerprint = (
         context.robot_id,
         context.model_id,
@@ -132,9 +286,13 @@ def _validate_collision_context(
         context.inventory_id,
         context.inventory_revision,
         expected_pair_ids,
+        inventory_fingerprint,
+        policy_fingerprint,
     )
     if initialize:
         object.__setattr__(context, "expected_pair_ids", expected_pair_ids)
+        object.__setattr__(context, "inventory_fingerprint", inventory_fingerprint)
+        object.__setattr__(context, "policy_fingerprint", policy_fingerprint)
         object.__setattr__(context, "_binding_fingerprint", fingerprint)
         return
     try:
@@ -143,6 +301,10 @@ def _validate_collision_context(
         raise ValueError("collision context binding fingerprint is missing") from exc
     if original_fingerprint != fingerprint:
         raise ValueError("collision context binding was mutated")
+    if expected_pair_ids != canonical_pair_ids:
+        raise ValueError(
+            "expected_pair_ids must exactly match inventory fingerprint pairs"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,11 +317,11 @@ class GeometryIdentity:
     source_id: str = "mujoco-model"
 
     def __post_init__(self) -> None:
-        _text("geom_name", self.geom_name)
-        _text("body_name", self.body_name)
+        _identity_text("geom_name", self.geom_name)
+        _identity_text("body_name", self.body_name)
         if not isinstance(self.role, GeometryRole):
             object.__setattr__(self, "role", GeometryRole(self.role))
-        _text("source_id", self.source_id)
+        _identity_text("source_id", self.source_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +356,17 @@ class GeometryInventory:
                 or second.role in {GeometryRole.ROBOT, GeometryRole.TOOL}
             )
         )
+
+
+def _inventory_fingerprint(
+    inventory: GeometryInventory,
+) -> tuple[tuple[str, str, str, str], ...]:
+    return _canonical_inventory_fingerprint(
+        tuple(
+            (geom.geom_name, geom.body_name, geom.role.value, geom.source_id)
+            for geom in inventory.geometries
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,16 +410,9 @@ class CollisionExclusion:
     classification: CollisionKind = CollisionKind.STRUCTURAL_PROXIMITY
 
     def __post_init__(self) -> None:
-        pair_id = _text("pair_id", self.pair_id)
+        pair_id = _pair_id("pair_id", self.pair_id)
         _text("reason", self.reason)
-        _text("evidence_reference", self.evidence_reference)
-        if "*" in pair_id:
-            raise ValueError("collision exclusions must identify one explicit pair")
-        parts = pair_id.split("|")
-        if len(parts) != 2 or any(not part or part != part.strip() for part in parts):
-            raise ValueError("collision exclusion pair_id must contain two geometry names")
-        if pair_id != "|".join(sorted(parts)):
-            raise ValueError("collision exclusion pair_id must be name-ordered")
+        _identity_text("evidence_reference", self.evidence_reference)
         if not isinstance(self.classification, CollisionKind):
             object.__setattr__(self, "classification", CollisionKind(self.classification))
         if self.classification is not CollisionKind.STRUCTURAL_PROXIMITY:
@@ -285,6 +451,27 @@ class CollisionPolicy:
         return None
 
 
+def _policy_fingerprint(
+    policy: CollisionPolicy,
+) -> tuple[str, float, float, tuple[tuple[str, str, str, str], ...]]:
+    return _canonical_policy_fingerprint(
+        (
+            policy.policy_id,
+            _finite("clearance_m", policy.clearance_m),
+            _finite("near_collision_margin_m", policy.near_collision_margin_m),
+            tuple(
+                (
+                    exclusion.pair_id,
+                    exclusion.reason,
+                    exclusion.evidence_reference,
+                    exclusion.classification.value,
+                )
+                for exclusion in policy.exclusions
+            ),
+        )
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class CollisionObservation:
     """1 pairのdistance evidence。distanceはgeom surface間のmeter。"""
@@ -296,7 +483,7 @@ class CollisionObservation:
 
     def __post_init__(self) -> None:
         pair_id = _pair_id("pair_id", self.pair_id)
-        _text("source_id", self.source_id)
+        _identity_text("source_id", self.source_id)
         object.__setattr__(self, "pair_id", pair_id)
         if self.distance_m is not None:
             object.__setattr__(self, "distance_m", _finite("distance_m", self.distance_m))
@@ -338,7 +525,7 @@ class CollisionEvaluation:
         object.__setattr__(self, "near_collision_margin_m", near_margin)
         _text("reason_code", self.reason_code)
         if self.provenance is not None:
-            _text("provenance", self.provenance)
+            _identity_text("provenance", self.provenance)
         inconsistency = _collision_evaluation_inconsistency(self)
         if inconsistency is not None:
             raise ValueError(inconsistency)
@@ -370,7 +557,29 @@ class CollisionCheckResult:
 
     @property
     def clear(self) -> bool:
+        try:
+            _validate_collision_check_result(self)
+        except Exception:
+            return False
         return self.status is CollisionStatus.CLEAR
+
+
+def _validate_collision_check_result(result: CollisionCheckResult) -> None:
+    """aggregateとnested evaluationをpublic clear accessでも再検証する。"""
+
+    if not isinstance(result, CollisionCheckResult):
+        raise TypeError("result must be CollisionCheckResult")
+    _validate_collision_context(result.context)
+    if not isinstance(result.status, CollisionStatus):
+        raise TypeError("collision result status is invalid")
+    if not isinstance(result.evaluations, tuple):
+        raise TypeError("collision result evaluations must be a tuple")
+    _text("reason_code", result.reason_code)
+    status, reason_code = _derive_collision_status_reason(
+        result.context, result.evaluations
+    )
+    if result.status is not status or result.reason_code != reason_code:
+        raise ValueError("collision aggregate status/reason is inconsistent")
 
 
 def _collision_evaluation_inconsistency(
@@ -422,20 +631,23 @@ def _collision_evaluation_inconsistency(
         not isinstance(provenance, str)
         or not provenance
         or provenance != provenance.strip()
+        or provenance.casefold() in _PLACEHOLDER_IDENTITIES
     ):
         return "collision evaluation provenance is invalid"
 
+    if kind is CollisionKind.UNKNOWN:
+        return "unknown collision kind cannot produce evidence"
     if status is CollisionStatus.CLEAR:
-        if kind is CollisionKind.UNKNOWN:
-            return "unknown collision kind cannot produce clear evidence"
         if reason_code == "explicit_structural_exclusion":
             if kind is not CollisionKind.STRUCTURAL_PROXIMITY:
                 return "structural exclusion clear evidence has the wrong kind"
             if distance is not None or provenance is None:
                 return "structural exclusion clear evidence is incomplete"
         elif reason_code == "pair_clear":
-            if distance is None or distance <= clearance:
-                return "pair_clear evidence is not beyond clearance"
+            if distance is None or distance <= clearance + near_margin:
+                return (
+                    "pair_clear evidence is not beyond clearance and near-collision margin"
+                )
             if provenance is None:
                 return "pair_clear evidence has no provenance"
         else:
@@ -445,6 +657,10 @@ def _collision_evaluation_inconsistency(
             return "only task-object pairs may produce contact evidence"
         if distance is None:
             return "contact evidence requires distance"
+        if distance < 0.0:
+            return "contact evidence requires non-negative distance"
+        if reason_code != "task_object_contact":
+            return "contact evidence has an unsupported reason"
     elif status is CollisionStatus.NEAR_COLLISION:
         if distance is None or distance < 0.0 or distance > clearance + near_margin:
             return "near-collision evidence is outside the clearance margin"
@@ -482,6 +698,54 @@ def _derive_collision_status_reason(
     ordered = tuple(by_pair_id[pair_id] for pair_id in context.expected_pair_ids)
     if any(_collision_evaluation_inconsistency(item) is not None for item in ordered):
         return CollisionStatus.INVALID, "collision_result_inconsistent"
+    policy_clearance = context.policy_fingerprint[1]
+    policy_near_margin = context.policy_fingerprint[2]
+    if any(
+        type(item.clearance_m) is not float
+        or type(item.near_collision_margin_m) is not float
+        or item.clearance_m != policy_clearance
+        or item.near_collision_margin_m != policy_near_margin
+        for item in ordered
+    ):
+        return CollisionStatus.INVALID, "collision_result_inconsistent"
+    inventory_fingerprint = context.inventory_fingerprint
+    if not _inventory_has_evaluable_pairs(inventory_fingerprint) and any(
+        item.status is not CollisionStatus.INVALID for item in ordered
+    ):
+        return CollisionStatus.INVALID, "collision_result_inconsistent"
+    for evaluation in ordered:
+        if evaluation.status is CollisionStatus.INVALID:
+            continue
+        inventory_kind = _kind_from_inventory_fingerprint(
+            inventory_fingerprint,
+            evaluation.pair_id,
+        )
+        if evaluation.reason_code == "explicit_structural_exclusion":
+            if (
+                inventory_kind
+                not in {
+                    CollisionKind.SELF_INTERFERENCE,
+                    CollisionKind.STRUCTURAL_PROXIMITY,
+                }
+                or evaluation.kind is not CollisionKind.STRUCTURAL_PROXIMITY
+            ):
+                return CollisionStatus.INVALID, "collision_result_inconsistent"
+        elif evaluation.kind is not inventory_kind:
+            return CollisionStatus.INVALID, "collision_result_inconsistent"
+    declared_exclusions = {
+        item[0]: (item[2], item[3])
+        for item in context.policy_fingerprint[3]
+    }
+    for evaluation in ordered:
+        if evaluation.reason_code != "explicit_structural_exclusion":
+            continue
+        declared = declared_exclusions.get(evaluation.pair_id)
+        if (
+            declared is None
+            or evaluation.provenance != declared[0]
+            or declared[1] != CollisionKind.STRUCTURAL_PROXIMITY.value
+        ):
+            return CollisionStatus.INVALID, "collision_result_inconsistent"
 
     precedence = (
         CollisionStatus.INVALID,
@@ -567,6 +831,8 @@ def _resolve_collision_context(
         inventory_id=inventory.inventory_id,
         inventory_revision=inventory_revision,
         expected_pair_ids=_context_expected_pair_ids(inventory),
+        inventory_fingerprint=_inventory_fingerprint(inventory),
+        policy_fingerprint=_policy_fingerprint(policy),
     )
 
 
@@ -576,6 +842,8 @@ def _invalid_collision_result(
     reason_code: str,
     inventory: GeometryInventory | None = None,
 ) -> CollisionCheckResult:
+    clearance_m = context.policy_fingerprint[1]
+    near_collision_margin_m = context.policy_fingerprint[2]
     pair_by_id = (
         {pair.pair_id: pair for pair in inventory.pairs()}
         if inventory is not None
@@ -584,14 +852,17 @@ def _invalid_collision_result(
     evaluations = tuple(
         CollisionEvaluation(
             pair_id,
-            pair_by_id[pair_id].kind
-            if pair_id in pair_by_id
-            else CollisionKind.UNKNOWN,
+            (
+                pair_by_id[pair_id].kind
+                if pair_id in pair_by_id
+                and pair_by_id[pair_id].kind is not CollisionKind.UNKNOWN
+                else CollisionKind.SELF_INTERFERENCE
+            ),
             CollisionStatus.INVALID,
             None,
-            policy.clearance_m,
+            clearance_m,
             reason_code,
-            near_collision_margin_m=policy.near_collision_margin_m,
+            near_collision_margin_m=near_collision_margin_m,
         )
         for pair_id in context.expected_pair_ids
     )
@@ -633,6 +904,30 @@ def evaluate_collision_configuration(
     invalid_policy = _validate_policy(inventory, policy)
     if invalid_policy is not None:
         return _invalid_collision_result(context, policy, invalid_policy, inventory)
+    try:
+        inventory_fingerprint = _inventory_fingerprint(inventory)
+        policy_fingerprint = _policy_fingerprint(policy)
+    except (AttributeError, TypeError, ValueError):
+        return _invalid_collision_result(
+            context,
+            policy,
+            "collision_context_binding_invalid",
+            inventory,
+        )
+    if context.inventory_fingerprint != inventory_fingerprint:
+        return _invalid_collision_result(
+            context,
+            policy,
+            "collision_context_inventory_binding_mismatch",
+            inventory,
+        )
+    if context.policy_fingerprint != policy_fingerprint:
+        return _invalid_collision_result(
+            context,
+            policy,
+            "collision_context_policy_binding_mismatch",
+            inventory,
+        )
     expected_pair_ids = tuple(pair.pair_id for pair in inventory.pairs())
     if not expected_pair_ids:
         return _invalid_collision_result(
@@ -808,6 +1103,7 @@ class BoundedCollisionTrajectoryResult:
             raise TypeError("sample_results must contain CollisionCheckResult values")
         for item in self.sample_results:
             _validate_collision_context(item.context)
+            _validate_collision_check_result(item)
         if not isinstance(self.sample_indices, tuple):
             raise TypeError("sample_indices must be a tuple")
         if any(
@@ -862,11 +1158,85 @@ class BoundedCollisionTrajectoryResult:
 
     @property
     def clear(self) -> bool:
+        try:
+            _validate_bounded_collision_trajectory_result(self)
+        except Exception:
+            return False
         return self.status is CollisionStatus.CLEAR
 
     @property
     def context(self) -> CollisionContext:
         return self.sample_results[0].context
+
+
+def _validate_bounded_collision_trajectory_result(
+    result: BoundedCollisionTrajectoryResult,
+) -> None:
+    """trajectoryとnested configuration resultをpublic accessでも再検証する。"""
+
+    if not isinstance(result, BoundedCollisionTrajectoryResult):
+        raise TypeError("result must be BoundedCollisionTrajectoryResult")
+    if not isinstance(result.status, CollisionStatus):
+        raise TypeError("trajectory status is invalid")
+    if not isinstance(result.sample_results, tuple):
+        raise TypeError("sample_results must be a tuple")
+    if not result.sample_results:
+        raise ValueError("sample_results must be non-empty")
+    if not all(isinstance(item, CollisionCheckResult) for item in result.sample_results):
+        raise TypeError("sample_results must contain CollisionCheckResult values")
+    for item in result.sample_results:
+        _validate_collision_check_result(item)
+    if not isinstance(result.sample_indices, tuple):
+        raise TypeError("sample_indices must be a tuple")
+    if any(
+        isinstance(index, bool) or not isinstance(index, int)
+        for index in result.sample_indices
+    ):
+        raise TypeError("sample_indices must contain integer values")
+    expected_sample_indices = tuple(range(len(result.sample_results)))
+    if result.sample_indices != expected_sample_indices:
+        raise ValueError(
+            "sample_indices must exactly match sample_results order and length"
+        )
+    first_context = result.sample_results[0].context
+    if any(item.context != first_context for item in result.sample_results[1:]):
+        raise ValueError(
+            "trajectory samples must share identical collision context binding"
+        )
+    if result.failed_sample_index is not None and (
+        isinstance(result.failed_sample_index, bool)
+        or not isinstance(result.failed_sample_index, int)
+        or result.failed_sample_index < 0
+    ):
+        raise ValueError("failed_sample_index must be a non-negative integer or None")
+    first_non_clear = next(
+        (
+            index
+            for index, sample in enumerate(result.sample_results)
+            if sample.status is not CollisionStatus.CLEAR
+        ),
+        None,
+    )
+    if first_non_clear is None:
+        if result.status is not CollisionStatus.CLEAR:
+            raise ValueError(
+                "trajectory aggregate status must be CLEAR when every sample is CLEAR"
+            )
+        if result.failed_sample_index is not None:
+            raise ValueError("CLEAR trajectory must not have a failed sample index")
+        return
+    if result.failed_sample_index != result.sample_indices[first_non_clear]:
+        raise ValueError(
+            "failed_sample_index must identify the first non-clear sample"
+        )
+    if len(result.sample_results) != first_non_clear + 1:
+        raise ValueError("trajectory samples must stop at the first non-clear sample")
+    if result.status is CollisionStatus.CLEAR:
+        raise ValueError("trajectory aggregate status cannot be synthetic CLEAR")
+    if result.status is not result.sample_results[first_non_clear].status:
+        raise ValueError(
+            "trajectory aggregate status must match the first non-clear sample"
+        )
 
 
 def evaluate_bounded_collision_trajectory(
