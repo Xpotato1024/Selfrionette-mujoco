@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-08-30
+last_verified: 2026-09-04
 canonical_for:
   - physical safety core decision
   - limit / collision / dynamic composition
@@ -22,6 +22,20 @@ related:
 P4のdynamic feasibility resultを一つのcandidate-level decisionへcomposeするpure boundaryで
 ある。個別checkerの実装、MuJoCo state、command application、viewer判定、hardware outputは
 このmoduleが所有しない。resultはimmutableで、state / commandを書き換えない。
+
+## Upstream guaranteeとP5 defense
+
+P2、P3、P4のconstructorと公開validatorが、それぞれのcanonical data、inventory、policy、
+identity、evidence、status、aggregateを生成・検証する。P5はその保証を置き換えず、公開validator
+とtyped DTO invariantをdecision直前に再利用して、constructor bypass、部分的な削除、contextや
+policyのidentity tamper、malformed provenanceを防御する。P5はP2のrange / conversion formula、
+P3のcollision evaluator、P4のdynamic evaluatorを複製せず、欠落したbound、pair、source、evidence、
+authorityを作成・補完しない。
+
+したがってP5の`allow`は、全componentのcanonical aggregateが完全で、かつ必要なphysical
+authority evidenceが明示された場合だけ成立する。completeなprovisional resultは`hold`へ写像し、
+`UNAVAILABLE/unavailable_qvel`、`UNAVAILABLE/unavailable_acceleration`など正規の未取得証拠は
+`unavailable`へ保持する。P5は新しいphysical authorityや実機測定値を生成しない。
 
 ## Closed decision vocabulary
 
@@ -50,8 +64,9 @@ limit source name、collision evidence source、dynamic source identity、candid
 P5 boundaryはP2〜P4のtyped aggregateを盲目的に信頼しない。P2では各boundのstatus、source
 identity、parity record、rangeの対応を検証し、resolved statusはboundedな`rad` parityと一致する
 場合だけ受け入れる。P3ではpair evaluationから導出されるaggregate status / reasonと入力結果を
-照合する。P4ではdiagnostic codeのstatus prefix、aggregate status / reason、dynamic bound
-evidenceを照合する。いずれかの不整合、重複identity、diagnostic欠落は該当componentの
+照合し、typed `CollisionContext`のrobot / model / policy / inventory identityとexpected pair coverageも
+保持する。P4では公開validatorを呼び出し、diagnostic codeのstatus prefix、aggregate status / reason、
+dynamic bound、availability、source、velocity evidenceを照合する。いずれかの不整合、重複identity、diagnostic欠落は該当componentの
 `invalid`へ写像し、他componentのclear evidenceで上書きしない。
 
 さらにP5は、immutable constructorを迂回したprovider corruptionも防御境界で再検証する。
