@@ -27,6 +27,7 @@ from selfrionette.runtime.safety.operator_validation import (
     build_validation_artifact,
     decode_validation_artifact,
     validate_operator_gate,
+    validate_validation_check_evidence,
     validate_validation_artifact,
 )
 from selfrionette.runtime.safety.physical_safety_core import SafetyDecisionAction
@@ -279,7 +280,11 @@ def test_source_revision_and_kind_identity_are_strict() -> None:
     )
     assert kind_mismatch.classification is ValidationClassification.TECHNICAL_INVALID
 
-    unknown_source = _all_checks(source=MeasurementSource(MeasurementSourceKind.UNKNOWN, "unknown", "unknown"))
+    unknown_source = _all_checks(
+        status=ValidationCheckStatus.UNAVAILABLE,
+        action=SafetyDecisionAction.UNAVAILABLE,
+        source=MeasurementSource(MeasurementSourceKind.UNKNOWN, "unknown", "unknown"),
+    )
     unavailable = build_dry_run_validation_artifact(
         _procedure(),
         unknown_source,
@@ -417,6 +422,129 @@ def test_check_contract_requires_status_specific_safety_action_and_observation()
 
     with pytest.raises(ValueError, match="unavailable safety decision"):
         _check("check", ValidationCheckKind.LIMIT_RANGE, status=ValidationCheckStatus.UNAVAILABLE, action=SafetyDecisionAction.HOLD)
+
+
+def test_pass_check_requires_non_empty_observed_evidence() -> None:
+    source = MeasurementSource(MeasurementSourceKind.SOFTWARE_DRY_RUN, "fixture", "revision-001")
+    with pytest.raises(ValueError, match="non-empty observed"):
+        ValidationCheckEvidence(
+            "check",
+            ValidationCheckKind.LIMIT_RANGE,
+            ValidationCheckStatus.PASS,
+            {"expected": 1},
+            {},
+            source,
+            OBSERVED,
+            "revision-001",
+            SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "input:fixture_allow", ("fixture",)),
+            "observed evidence is empty",
+        )
+
+
+def test_unknown_source_cannot_be_pass_or_allow() -> None:
+    unknown = MeasurementSource(MeasurementSourceKind.UNKNOWN, "unknown", "unknown")
+    with pytest.raises(ValueError, match="cannot pass or allow"):
+        _check("check", ValidationCheckKind.LIMIT_RANGE, source=unknown)
+
+
+def test_nested_measurement_source_bypass_is_revalidated() -> None:
+    check = _check("check", ValidationCheckKind.LIMIT_RANGE)
+    object.__setattr__(check.measurement_source, "source_id", "")
+
+    with pytest.raises(ValueError, match="source_id"):
+        validate_validation_check_evidence(check)
+
+
+def test_nested_constructor_bypass_is_revalidated() -> None:
+    check = _check("check", ValidationCheckKind.LIMIT_RANGE)
+    malformed_source = object.__new__(MeasurementSource)
+    object.__setattr__(check, "measurement_source", malformed_source)
+
+    with pytest.raises(ValueError, match="structurally incomplete"):
+        validate_validation_check_evidence(check)
+
+
+def test_nested_safety_decision_bypass_is_revalidated() -> None:
+    check = _check("check", ValidationCheckKind.LIMIT_RANGE)
+    object.__setattr__(check.safety_decision, "provenance", ())
+
+    with pytest.raises(ValueError, match="non-empty tuple"):
+        validate_validation_check_evidence(check)
+
+
+def test_classifier_rejects_nested_bypass_without_pass() -> None:
+    checks = list(_all_checks())
+    object.__setattr__(checks[0].measurement_source, "source_id", "")
+
+    artifact = build_dry_run_validation_artifact(
+        _procedure(),
+        checks,
+        artifact_id="artifact-nested-bypass",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+    assert artifact.evidence_class is EvidenceClass.UNKNOWN
+
+
+@pytest.mark.parametrize("mutation", ("expected", "observed", "reason", "provenance", "whole_check"))
+def test_artifact_boundary_rejects_constructor_bypassed_check(
+    mutation: str,
+) -> None:
+    checks = list(_all_checks())
+    if mutation == "expected":
+        object.__setattr__(checks[0], "expected", {})
+    elif mutation == "observed":
+        object.__setattr__(checks[0], "observed", {})
+    elif mutation == "reason":
+        object.__setattr__(checks[0], "reason", "")
+    elif mutation == "provenance":
+        object.__setattr__(checks[0].safety_decision, "provenance", ())
+    else:
+        checks[0] = object.__new__(ValidationCheckEvidence)
+
+    try:
+        artifact = build_dry_run_validation_artifact(
+            _procedure(),
+            checks,
+            artifact_id=f"artifact-bypassed-{mutation}",
+            started_at=STARTED,
+            completed_at=COMPLETED,
+        )
+    except (TypeError, ValueError):
+        return
+
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+    assert not artifact.complete
+
+
+def test_artifact_complete_rechecks_nested_evidence_after_mutation() -> None:
+    artifact = build_dry_run_validation_artifact(
+        _procedure(),
+        _all_checks(),
+        artifact_id="artifact-mutated-nested",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    object.__setattr__(artifact.checks[0].safety_decision, "action", SafetyDecisionAction.STOP)
+
+    assert not artifact.complete
+
+
+def test_strict_decode_reconstructs_nested_measurement_source() -> None:
+    artifact = build_dry_run_validation_artifact(
+        _procedure(),
+        _all_checks(),
+        artifact_id="artifact-nested-decode",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    document = artifact.to_dict()
+    document["checks"][0]["measurement_source"]["source_id"] = ""
+
+    with pytest.raises(ValueError, match="source_id"):
+        decode_validation_artifact(document)
 
 
 def test_artifact_lifecycle_rejects_reversed_timestamps_and_boolean_schema_version() -> None:
