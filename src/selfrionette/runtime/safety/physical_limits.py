@@ -291,6 +291,38 @@ class PhysicalLimit:
         return result
 
 
+_EFFECTIVE_STATUS_PRECEDENCE = (
+    EvidenceStatus.INVALID,
+    EvidenceStatus.CONFLICT,
+    EvidenceStatus.UNAVAILABLE,
+    EvidenceStatus.UNKNOWN,
+)
+
+
+def effective_limit_status(limit: PhysicalLimit) -> EvidenceStatus:
+    """値とsource provenanceを合わせたcanonicalなeffective statusを返す。
+
+    ``PhysicalLimit.status``だけを見てsourceの欠落・衝突をbounded valueへ昇格
+    させない。unresolved statusはtypedな優先順位で閉じ、authorityはlimitとsource
+    の両方が明示的に``AUTHORITATIVE``の場合だけ成立する。
+    """
+
+    if not isinstance(limit, PhysicalLimit):
+        raise TypeError("limit must be PhysicalLimit")
+    statuses = (limit.status, limit.source.status)
+    if any(not isinstance(status, EvidenceStatus) for status in statuses):
+        return EvidenceStatus.INVALID
+    for status in _EFFECTIVE_STATUS_PRECEDENCE:
+        if status in statuses:
+            return status
+    if (
+        limit.status is EvidenceStatus.AUTHORITATIVE
+        and limit.source.status is EvidenceStatus.AUTHORITATIVE
+    ):
+        return EvidenceStatus.AUTHORITATIVE
+    return EvidenceStatus.PROVISIONAL
+
+
 @dataclass(frozen=True, slots=True)
 class PhysicalSafetyEnvelope:
     """後続のphysical-safety gateが参照するversioned envelope。"""
@@ -326,12 +358,12 @@ class PhysicalSafetyEnvelope:
 
     @property
     def statuses(self) -> frozenset[EvidenceStatus]:
-        return frozenset(limit.status for limit in self.limits)
+        return frozenset(effective_limit_status(limit) for limit in self.limits)
 
     @property
     def has_unresolved_evidence(self) -> bool:
         return any(
-            limit.status
+            effective_limit_status(limit)
             in {
                 EvidenceStatus.UNKNOWN,
                 EvidenceStatus.UNAVAILABLE,
@@ -573,6 +605,7 @@ __all__ = [
     "PhysicalSafetyEnvelope",
     "PHYSICAL_SAFETY_ENVELOPE_SCHEMA_VERSION",
     "classify_source_status",
+    "effective_limit_status",
     "make_unknown_limit",
     "validate_envelope",
 ]

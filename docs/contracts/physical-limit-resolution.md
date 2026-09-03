@@ -24,7 +24,10 @@ stateを再実装しない。
 ## Conversion
 
 `JointSpaceConversion`はsource space、joint name、source name、gear ratio、sign、offset、
-relation ID、unitを必須とする。projectionは次の一式に限定する。
+relation ID、unitを必須とする。source spaceは`motor`または`actuator`だけを許可し、
+`joint`からのconversion relationは作らない。既にjoint spaceにある`PhysicalLimit`は、
+そのidentity provenanceを保持したまま直接比較し、conversionを再適用しない。projectionは
+次の一式に限定する。
 
 ```text
 joint = sign * source / gear_ratio + offset
@@ -33,7 +36,8 @@ joint = sign * source / gear_ratio + offset
 gear ratioはnon-zero、signは`-1`または`1`、すべての数値はfiniteでなければならない。
 負のsignではlower / upperを並べ替え、conversion provenanceとrelation IDを結果へ保持する。
 `source_name`は入力`PhysicalLimit.name`と、`joint_name`は期待するcanonical joint identityと
-必ず一致しなければならない。source identityまたはtarget identityの重複・曖昧なfallbackは拒否する。
+必ず一致しなければならない。source identityまたはrelation identityの重複・曖昧なfallbackは
+拒否する。同一jointへ複数の異なるsourceを投影することはparity比較のために許可する。
 limitとrelationの`unit`は完全一致を必須とし、暗黙のdegree / radianなどのunit変換は行わない。
 明示的なunit変換relationがない不一致は`unknown`へ移行し、zero、TOML値、identity relationを
 暗黙適用しない。
@@ -43,7 +47,10 @@ normalizedなjoint boundの単位は`rad`だけである。同じnon-rad unitの
 
 ## Parity and resolution
 
-同一jointのsourceを比較し、次のstatusを返す。
+同一jointのsourceを比較し、次のstatusを返す。resolverは`PhysicalLimit.status`だけを
+参照せず、`effective_limit_status`（値と`PhysicalLimit.source.status`を合わせる唯一の
+canonical helper）を使う。`INVALID`、`CONFLICT`、`UNAVAILABLE`、`UNKNOWN`の順でtyped
+statusを優先し、値が`PROVISIONAL`でもsourceが未解決なら`MATCH`またはresolvedへ進めない。
 
 | status | 意味 |
 |---|---|
@@ -59,13 +66,20 @@ unresolved statusではlower / upperを`None`とする。sourceのstatusに
 authoritative resolutionを成立させない。全sourceがsoftware-onlyでも、同じrangeなら
 `resolved_provisional`に留める。
 
-`LimitParityRecord`はjoint、source identity（unitを含む）、status、range、unit、reasonを保持する。
+`LimitParityRecord`はjoint、source identity（unitを含む）、typedなsource provenance、status、
+range、unit、reasonを保持する。`MATCH`には`provisional`または`authoritative`のtyped source
+だけを許可し、source名文字列からstatusを推測しない。
 同一jointのbounded sourceはunitも一致しなければ`mismatch`となる。
 `resolved_authoritative` / `resolved_provisional`の`lower_rad` / `upper_rad`は両方存在し、
-parityの全unitが`rad`で、reasonを持たない場合だけ成立する。unresolved statusは両boundを
-`None`とし、reasonを必須とする。
-`ResolvedJointBound`と`LimitResolutionResult`はtuple / frozen dataclassのread-only valueで、
-callerがProfile、TOML、MJCF、model stateを書き換える機能を持たない。
+parityが空でなく、source identityとparityの長さ・順序・joint identityが一致し、parityの
+全statusが`MATCH`、全unitが`rad`、全rangeがfiniteで、canonical tolerance以内でnormalized
+boundと一致し、reasonを持たない場合だけ成立する。`resolved_authoritative`にはtypedな
+`LimitSourceProvenance(status=authoritative)`を少なくとも1つ含め、source名文字列の解析で
+authorityを推測しない。unresolved statusは両boundを`None`とし、reasonを必須とする。
+`LimitResolutionResult`はimmutableなnon-empty `expected_joint_names`と
+`comparison_tolerance_rad`を保持し、boundsのjoint setが期待集合と完全一致することを
+検証する。`ResolvedJointBound`と`LimitResolutionResult`はtuple / frozen dataclassの
+read-only valueで、callerがProfile、TOML、MJCF、model stateを書き換える機能を持たない。
 
 ## fast_arm projection
 
