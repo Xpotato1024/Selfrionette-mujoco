@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import fields, replace
 from types import SimpleNamespace
 
 import pytest
@@ -13,26 +14,40 @@ from selfrionette.runtime.safety.physical_limits import (
     PhysicalLimit,
 )
 from selfrionette.runtime.safety.trajectory_feasibility import (
+    ConfigurationFeasibilityResult,
     ConfigurationState,
+    FeasibilityDiagnostic,
     FeasibilityStatus,
     JacobianDiagnostic,
     TrajectoryFeasibilityPolicy,
     TrajectorySample,
+    VelocityEvidenceKind,
     evaluate_configuration_feasibility,
     evaluate_trajectory_feasibility,
+    validate_configuration_feasibility_result,
+    validate_trajectory_feasibility_result,
 )
 
 
 JOINTS = ("joint_a", "joint_b", "joint_c")
 
 
-def _source(status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE) -> LimitSourceProvenance:
+def _source(
+    status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
+    *,
+    source_status: EvidenceStatus | None = None,
+) -> LimitSourceProvenance:
+    resolved_source_status = status if source_status is None else source_status
     return LimitSourceProvenance(
-        source_kind="manufacturer_manual" if status is EvidenceStatus.AUTHORITATIVE else "software_config",
+        source_kind="manufacturer_manual"
+        if resolved_source_status is EvidenceStatus.AUTHORITATIVE
+        else "software_config",
         source_id="dynamic-fixture",
         revision="v1",
-        status=status,
-        evidence_reference="fixture-manual-001" if status is EvidenceStatus.AUTHORITATIVE else None,
+        status=resolved_source_status,
+        evidence_reference="fixture-manual-001"
+        if resolved_source_status is EvidenceStatus.AUTHORITATIVE
+        else None,
     )
 
 
@@ -43,6 +58,8 @@ def _limit(
     upper: float,
     *,
     status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
+    source_status: EvidenceStatus | None = None,
+    frame: str = "fast_arm joint space",
 ) -> PhysicalLimit:
     return PhysicalLimit(
         name=joint_name,
@@ -51,9 +68,9 @@ def _limit(
         upper=upper if status in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL} else None,
         unit="rad/s" if quantity is LimitQuantity.VELOCITY else "rad/s^2",
         space=LimitSpace.JOINT,
-        frame="joint-space",
+        frame=frame,
         status=status,
-        source=_source(status),
+        source=_source(status, source_status=source_status),
         reason=None if status in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL} else "fixture source unavailable",
     )
 
@@ -61,6 +78,8 @@ def _limit(
 def _policy(
     *,
     status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
+    source_status: EvidenceStatus | None = None,
+    frame: str = "fast_arm joint space",
     minimum_singular_value: float = 0.1,
     maximum_condition_number: float = 100.0,
 ) -> TrajectoryFeasibilityPolicy:
@@ -68,8 +87,24 @@ def _policy(
         limit
         for joint_name in JOINTS
         for limit in (
-            _limit(joint_name, LimitQuantity.VELOCITY, -2.0, 2.0, status=status),
-            _limit(joint_name, LimitQuantity.ACCELERATION, -10.0, 10.0, status=status),
+            _limit(
+                joint_name,
+                LimitQuantity.VELOCITY,
+                -2.0,
+                2.0,
+                status=status,
+                source_status=source_status,
+                frame=frame,
+            ),
+            _limit(
+                joint_name,
+                LimitQuantity.ACCELERATION,
+                -10.0,
+                10.0,
+                status=status,
+                source_status=source_status,
+                frame=frame,
+            ),
         )
     )
     return TrajectoryFeasibilityPolicy(
@@ -106,6 +141,13 @@ def _sample(
     return TrajectorySample(timestamp, qpos, qvel, jacobian or _jacobian())
 
 
+def _bypass_constructor(result: object) -> object:
+    bypassed = object.__new__(type(result))
+    for item in fields(result):
+        object.__setattr__(bypassed, item.name, getattr(result, item.name))
+    return bypassed
+
+
 def test_configuration_and_trajectory_are_separate_and_feasible() -> None:
     policy = _policy()
     configuration = evaluate_configuration_feasibility(
@@ -126,6 +168,166 @@ def test_configuration_and_trajectory_are_separate_and_feasible() -> None:
     assert trajectory.status is FeasibilityStatus.FEASIBLE
     assert trajectory.sample_count == 3
     assert trajectory.authoritative
+
+
+def test_dynamic_limits_require_the_canonical_fast_arm_joint_frame() -> None:
+    with pytest.raises(ValueError, match="canonical fast_arm joint-space frame"):
+        _policy(frame="world")
+
+    policy = _policy()
+    assert all(limit.frame == "fast_arm joint space" for limit in policy.dynamic_limits)
+
+
+def test_finite_difference_velocity_evidence_keeps_missing_qvel_trajectory_valid() -> None:
+    result = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+
+    assert result.status is FeasibilityStatus.FEASIBLE
+    assert result.qvel_available == (False, False, False)
+    assert len(result.velocity_evidence) == 2
+    assert all(item.kind is VelocityEvidenceKind.FINITE_DIFFERENCE for item in result.velocity_evidence)
+
+
+def test_feasible_result_requires_complete_diagnostics_and_evidence() -> None:
+    kwargs = dict(
+        source_id="configuration",
+        bound_statuses=(EvidenceStatus.AUTHORITATIVE,) * len(JOINTS),
+        expected_joint_names=JOINTS,
+        policy_id="trajectory-feasibility",
+        policy_revision="v1",
+        limit_source_ids=tuple(f"velocity-source-{index}" for index in range(len(JOINTS))),
+        bound_evidence_ids=("velocity-evidence",) * len(JOINTS),
+        qvel_available=True,
+        jacobian_available=True,
+    )
+    with pytest.raises(ValueError, match="clear diagnostics"):
+        ConfigurationFeasibilityResult(
+            FeasibilityStatus.FEASIBLE,
+            "feasibility_clear",
+            (),
+            **kwargs,
+        )
+
+    with pytest.raises(ValueError, match="equal length"):
+        ConfigurationFeasibilityResult(
+            FeasibilityStatus.FEASIBLE,
+            "feasibility_clear",
+            (FeasibilityDiagnostic("feasibility_clear", "clear"),),
+            **{**kwargs, "bound_evidence_ids": ()},
+        )
+
+
+def test_feasible_result_rejects_unknown_bound_and_missing_source_identity() -> None:
+    clear = (FeasibilityDiagnostic("feasibility_clear", "clear"),)
+    common = dict(
+        source_id="configuration",
+        expected_joint_names=JOINTS,
+        policy_id="trajectory-feasibility",
+        policy_revision="v1",
+        limit_source_ids=tuple(f"velocity-source-{index}" for index in range(len(JOINTS))),
+        bound_evidence_ids=("velocity-evidence",) * len(JOINTS),
+        qvel_available=True,
+        jacobian_available=True,
+    )
+    with pytest.raises(ValueError, match="unresolved dynamic evidence"):
+        ConfigurationFeasibilityResult(
+            status=FeasibilityStatus.FEASIBLE,
+            reason_code="feasibility_clear",
+            diagnostics=clear,
+            bound_statuses=(EvidenceStatus.UNKNOWN,) * len(JOINTS),
+            **common,
+        )
+    with pytest.raises(ValueError, match="source_id"):
+        ConfigurationFeasibilityResult(
+            status=FeasibilityStatus.FEASIBLE,
+            reason_code="feasibility_clear",
+            diagnostics=clear,
+            bound_statuses=(EvidenceStatus.AUTHORITATIVE,) * len(JOINTS),
+            **{**common, "source_id": ""},
+        )
+
+
+def test_unknown_source_status_does_not_calculate_provisional_bounds() -> None:
+    result = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(status=EvidenceStatus.PROVISIONAL, source_status=EvidenceStatus.UNKNOWN),
+    )
+
+    assert result.status is FeasibilityStatus.UNKNOWN
+    assert result.reason_code == "unknown_limit_source"
+    assert all(status is EvidenceStatus.UNKNOWN for status in result.bound_statuses)
+    assert not any(item.code == "rejected_dynamic_limit" for item in result.diagnostics)
+
+
+def test_every_result_status_requires_policy_and_joint_identity() -> None:
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), None, _jacobian()),
+        _policy(),
+    )
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+    for result in (configuration, trajectory):
+        for field_name, value in (
+            ("expected_joint_names", ()),
+            ("policy_id", ""),
+            ("policy_revision", ""),
+        ):
+            with pytest.raises(ValueError):
+                replace(result, **{field_name: value})
+
+
+def test_trajectory_result_rejects_sample_source_and_velocity_evidence_contradictions() -> None:
+    result = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+    assert result.status is FeasibilityStatus.FEASIBLE
+    for field_name, value in (
+        ("sample_count", 2),
+        ("source_ids", ("wrong", "wrong", "wrong")),
+        ("velocity_evidence", ()),
+    ):
+        with pytest.raises((TypeError, ValueError)):
+            replace(result, **{field_name: value})
+
+
+def test_public_result_validator_rejects_object_setattr_and_constructor_bypass() -> None:
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(),
+    )
+    object.__setattr__(configuration, "policy_id", "tampered-policy")
+    with pytest.raises(ValueError, match="binding was mutated"):
+        validate_configuration_feasibility_result(configuration)
+
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+    bypassed = _bypass_constructor(trajectory)
+    object.__setattr__(bypassed, "velocity_evidence", ())
+    with pytest.raises(ValueError, match="evidence"):
+        validate_trajectory_feasibility_result(bypassed)
 
 
 def test_provisional_bounds_remain_distinct_from_authoritative_evidence() -> None:
@@ -197,6 +399,8 @@ def test_missing_qvel_jacobian_and_dynamic_source_are_not_success() -> None:
     )
     assert no_qvel.status is FeasibilityStatus.UNAVAILABLE
     assert no_qvel.reason_code == "unavailable_qvel"
+    assert no_qvel.qvel_available is False
+    assert validate_configuration_feasibility_result(no_qvel) is no_qvel
 
     no_jacobian = evaluate_configuration_feasibility(
         ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), None),

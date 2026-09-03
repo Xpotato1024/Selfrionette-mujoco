@@ -33,11 +33,15 @@ state SoTとして保持され、resultはstateやcommandを変更しない。
 
 ## Dynamic limitsとevidence
 
-velocityはjoint-space `rad/s`、accelerationはjoint-space `rad/s^2`の有限intervalである。
-各limitはP1 `PhysicalLimit`としてjoint name、source provenance、statusを保持する。authoritative
+velocityは`space=JOINT`かつcanonicalな`fast_arm joint space` frameの`rad/s`、accelerationは
+同じframeの`rad/s^2`の有限intervalである。実装は
+`FAST_ARM_JOINT_SPACE_FRAME`と`canonical_fast_arm_joint_space_frame()`を唯一のframe
+constant / helperとして公開し、別frameやworld-spaceのevidenceを受け付けない。各limitはP1
+`PhysicalLimit`としてjoint name、source provenance、statusを保持する。authoritative
 とprovisionalは同じ数値判定へ使えても同一視せず、resultの`authoritative`は全gateがfeasible
 かつ使用boundがauthoritativeのときだけtrueになる。unknown、unavailable、conflict、invalid、
-missing limitは、別の値やzeroで補完しない。
+missing limitは、別の値やzeroで補完しない。`effective_limit_status()`でlimit値とsource
+statusを合わせ、sourceがunknownのbounded valueも計算へ入れない。
 
 ## Cadenceとfinite difference
 
@@ -57,7 +61,10 @@ a_i = (v_i - v_(i-1)) / ((dt_i + dt_(i-1)) / 2)
 expected cadenceが設定されている場合は`cadence_tolerance_s`以内を要求し、strictly increasing
 でないtimestamp、最大gap超過、cadence不一致、dimension mismatch、non-finite値は`invalid`へ
 移行する。provided qvelがある場合もfinite-difference qpos velocityとの不連続を許可しない。
-sampleが二つだけの場合はaccelerationを推定せず`unavailable`とする。
+sampleが二つだけの場合はaccelerationを推定せず`unavailable`とする。trajectory resultは各sampleの
+source identityとqvel / Jacobian availabilityに加え、sample qvelまたは隣接sample segmentの
+finite-differenceを表すimmutableなtyped velocity evidence bindingを保持する。qvelが欠落していても、
+全segmentのfinite-difference evidenceが揃えばvelocity gateを評価できる。
 
 ## Jacobian diagnostic
 
@@ -74,8 +81,13 @@ fallbackしない。
 `FeasibilityStatus`は`feasible`、`rejected`、`unknown`、`unavailable`、`invalid`である。
 `ConfigurationFeasibilityResult`は1 configurationのqvel / Jacobian boundaryを、
 `TrajectoryFeasibilityResult`は有限sample列のfirst-order / second-order transitionと全sampleの
-Jacobian boundaryを保持する。collision policyはこのresultと独立しており、P5 physical-safety-core
-がlimit、collision、dynamic resultをclosed decision vocabularyへcomposeする。
+Jacobian boundaryを保持する。両resultはexpected joint inventory、policy id / revision、limit source
+identity / effective status、bound evidence identityをimmutableにbindする。`feasible`はclear
+diagnostic、完全なidentity / evidence、有限な数値gateの整合が揃った場合だけ成立し、missing
+identity、diagnostic / reason / statusの矛盾、sample countとsource列の不一致、unresolved evidence
+からnumeric successへ補完しない。qvelが欠落したconfigurationはcanonicalな
+`UNAVAILABLE/unavailable_qvel`として検証できる。collision policyはこのresultと独立しており、
+P5 physical-safety-coreがlimit、collision、dynamic resultをclosed decision vocabularyへcomposeする。
 
 serial、OSC、robot output、hardware validation、実機のdynamic measurementはこのcontractの
 scope外である。
