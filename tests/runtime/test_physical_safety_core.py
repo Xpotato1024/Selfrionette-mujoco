@@ -7,11 +7,13 @@ import pytest
 
 from selfrionette.runtime.safety.collision_policy import (
     CollisionCheckResult,
+    CollisionContext,
     CollisionEvaluation,
     CollisionKind,
     CollisionStatus,
 )
 from selfrionette.runtime.safety.limit_resolution import (
+    DEFAULT_COMPARISON_TOLERANCE_RAD,
     JointSpaceConversion,
     LimitParityRecord,
     LimitResolutionResult,
@@ -33,6 +35,8 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
     FeasibilityDiagnostic,
     FeasibilityStatus,
     TrajectoryFeasibilityResult,
+    VelocityEvidenceBinding,
+    VelocityEvidenceKind,
 )
 from selfrionette.runtime.safety.physical_limits import (
     EvidenceStatus,
@@ -42,44 +46,120 @@ from selfrionette.runtime.safety.physical_limits import (
 )
 
 
-def _limits(status: LimitResolutionStatus) -> LimitResolutionResult:
-    bounds = tuple(
-        ResolvedJointBound(
-            joint_name=name,
-            lower_rad=-1.0 if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else None,
-            upper_rad=1.0 if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else None,
-            status=status,
-            source_names=(f"{name}-source",),
-            parity=(
-                LimitParityRecord(
-                    name,
-                    f"{name}-source",
-                    (
-                        ParityStatus.MATCH
-                        if status
-                        in {
-                            LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
-                            LimitResolutionStatus.RESOLVED_PROVISIONAL,
-                        }
-                        else ParityStatus.MISMATCH
-                        if status is LimitResolutionStatus.MISMATCH
-                        else ParityStatus.INVALID
-                        if status is LimitResolutionStatus.INVALID
-                        else ParityStatus.UNAVAILABLE
-                        if status is LimitResolutionStatus.UNAVAILABLE
-                        else ParityStatus.UNKNOWN
-                    ),
-                    -1.0 if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else None,
-                    1.0 if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else None,
-                    "rad",
-                    None if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else status.value,
-                ),
-            ),
-            reason=None if status in {LimitResolutionStatus.RESOLVED_AUTHORITATIVE, LimitResolutionStatus.RESOLVED_PROVISIONAL} else status.value,
-        )
-        for name in ("joint_a", "joint_b")
+JOINTS = ("joint_a", "joint_b")
+LIMIT_TOLERANCE_RAD = DEFAULT_COMPARISON_TOLERANCE_RAD
+POLICY_ID = "fixture-dynamic-policy"
+POLICY_REVISION = "rev-1"
+
+
+def _source(name: str, status: EvidenceStatus) -> LimitSourceProvenance:
+    return LimitSourceProvenance(
+        source_kind="manufacturer_manual"
+        if status is EvidenceStatus.AUTHORITATIVE
+        else "software_config",
+        source_id=name,
+        revision="rev-1",
+        status=status,
+        evidence_reference="fixture-record" if status is EvidenceStatus.AUTHORITATIVE else None,
     )
-    return LimitResolutionResult(1, "fixture-robot", bounds, ())
+
+
+def _limits(
+    status: LimitResolutionStatus = LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
+    *,
+    parity_delta: float = 0.0,
+    tolerance: float = LIMIT_TOLERANCE_RAD,
+    expected_joint_names: tuple[str, ...] = JOINTS,
+    robot_id: str = "fixture-robot",
+) -> LimitResolutionResult:
+    def _bound(name: str) -> ResolvedJointBound:
+        if status in {
+            LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
+            LimitResolutionStatus.RESOLVED_PROVISIONAL,
+        }:
+            source_status = (
+                EvidenceStatus.AUTHORITATIVE
+                if status is LimitResolutionStatus.RESOLVED_AUTHORITATIVE
+                else EvidenceStatus.PROVISIONAL
+            )
+            source = _source(f"{name}-source", source_status)
+            parity = LimitParityRecord(
+                joint_name=name,
+                source_name=source.source_id,
+                status=ParityStatus.MATCH,
+                lower=-1.0 + parity_delta,
+                upper=1.0 + parity_delta,
+                unit="rad",
+                source=source,
+            )
+            return ResolvedJointBound(
+                joint_name=name,
+                lower_rad=-1.0,
+                upper_rad=1.0,
+                status=status,
+                source_names=(source.source_id,),
+                parity=(parity,),
+                comparison_tolerance_rad=tolerance,
+            )
+        source_status = {
+            LimitResolutionStatus.MISMATCH: EvidenceStatus.PROVISIONAL,
+            LimitResolutionStatus.UNKNOWN: EvidenceStatus.UNKNOWN,
+            LimitResolutionStatus.UNAVAILABLE: EvidenceStatus.UNAVAILABLE,
+            LimitResolutionStatus.INVALID: EvidenceStatus.INVALID,
+        }[status]
+        if status is LimitResolutionStatus.MISMATCH:
+            first = _source(f"{name}-source", source_status)
+            second = _source(f"{name}-second-source", source_status)
+            parity = (
+                LimitParityRecord(name, first.source_id, ParityStatus.MISMATCH, -1.0, 1.0, "rad", "source ranges disagree", first),
+                LimitParityRecord(name, second.source_id, ParityStatus.MISMATCH, -0.5, 0.5, "rad", "source ranges disagree", second),
+            )
+            return ResolvedJointBound(
+                name,
+                None,
+                None,
+                status,
+                (first.source_id, second.source_id),
+                parity,
+                "source ranges disagree",
+                tolerance,
+            )
+        source = _source(f"{name}-source", source_status)
+        parity_status = {
+            LimitResolutionStatus.UNKNOWN: ParityStatus.UNKNOWN,
+            LimitResolutionStatus.UNAVAILABLE: ParityStatus.UNAVAILABLE,
+            LimitResolutionStatus.INVALID: ParityStatus.INVALID,
+        }[status]
+        parity = LimitParityRecord(
+            name,
+            source.source_id,
+            parity_status,
+            None,
+            None,
+            "rad",
+            status.value,
+            source,
+        )
+        return ResolvedJointBound(
+            name,
+            None,
+            None,
+            status,
+            (source.source_id,),
+            (parity,),
+            status.value,
+            tolerance,
+        )
+
+    bounds = tuple(_bound(name) for name in expected_joint_names)
+    return LimitResolutionResult(
+        1,
+        robot_id,
+        bounds,
+        (),
+        expected_joint_names,
+        tolerance,
+    )
 
 
 def _position_limit(
@@ -148,49 +228,125 @@ def _mixed_limit_result(
     return replace(result, bounds=(mixed_bound, result.bounds[1]))
 
 
-def _trajectory_dynamic() -> TrajectoryFeasibilityResult:
+def _trajectory_dynamic(
+    *,
+    authoritative: bool = True,
+    status: FeasibilityStatus = FeasibilityStatus.FEASIBLE,
+) -> TrajectoryFeasibilityResult:
+    sample_count = 3
+    source_ids = tuple(f"fixture-trajectory-{index}" for index in range(sample_count))
+    bound_status = EvidenceStatus.AUTHORITATIVE if authoritative else EvidenceStatus.PROVISIONAL
+    velocity_evidence = tuple(
+        [
+            VelocityEvidenceBinding(VelocityEvidenceKind.SAMPLE_QVEL, index, source_ids[index])
+            for index in range(sample_count)
+        ]
+        + [
+            VelocityEvidenceBinding(VelocityEvidenceKind.FINITE_DIFFERENCE, index, source_ids[index])
+            for index in range(1, sample_count)
+        ]
+    ) if status is FeasibilityStatus.FEASIBLE else ()
+    diagnostics = (
+        (FeasibilityDiagnostic("feasibility_clear", "fixture clear"),)
+        if status is FeasibilityStatus.FEASIBLE
+        else (FeasibilityDiagnostic(f"{status.value}_fixture", f"fixture {status.value}"),)
+    )
     return TrajectoryFeasibilityResult(
-        FeasibilityStatus.FEASIBLE,
-        "feasibility_clear",
-        3,
-        (),
-        ("fixture-trajectory",),
-        (EvidenceStatus.AUTHORITATIVE,),
+        status,
+        diagnostics[0].code,
+        sample_count,
+        diagnostics,
+        source_ids,
+        (bound_status,) * (2 * len(JOINTS)),
+        JOINTS,
+        POLICY_ID,
+        POLICY_REVISION,
+        tuple(f"fixture-limit-{index}" for index in range(2 * len(JOINTS))),
+        tuple(f"fixture-evidence-{index}" for index in range(2 * len(JOINTS))),
+        (True,) * sample_count,
+        (True,) * sample_count,
+        velocity_evidence,
     )
 
 
 def _collision(status: CollisionStatus) -> CollisionCheckResult:
-    evaluation = CollisionEvaluation(
-        pair_id="arm|floor",
-        kind=CollisionKind.ENVIRONMENT_COLLISION,
-        status=status,
-        distance_m=0.1 if status is CollisionStatus.CLEAR else 0.0,
-        clearance_m=0.01,
-        reason_code="pair_clear" if status is CollisionStatus.CLEAR else f"fixture_{status.value}",
-        provenance="fixture-collision",
+    pair_id = "arm|target" if status is CollisionStatus.CONTACT else "arm|floor"
+    context = CollisionContext(
+        robot_id="fixture-robot",
+        model_id="fixture-model",
+        policy_id="fixture-collision-policy",
+        policy_revision="rev-1",
+        inventory_id="fixture-inventory",
+        inventory_revision="rev-1",
+        expected_pair_ids=(pair_id,),
     )
-    reason_code = "collision_clear" if status is CollisionStatus.CLEAR else f"fixture_{status.value}"
-    return CollisionCheckResult(status, (evaluation,), reason_code)
+    kind = CollisionKind.TASK_OBJECT_CONTACT if status is CollisionStatus.CONTACT else CollisionKind.ENVIRONMENT_COLLISION
+    reason_code = {
+        CollisionStatus.CLEAR: "pair_clear",
+        CollisionStatus.NEAR_COLLISION: "near_collision_clearance",
+        CollisionStatus.COLLISION: "environment_penetration",
+        CollisionStatus.CONTACT: "task_object_contact",
+        CollisionStatus.UNAVAILABLE: "collision_observation_unavailable",
+        CollisionStatus.UNKNOWN: "collision_distance_unknown",
+        CollisionStatus.INVALID: "invalid_collision_evidence",
+    }.get(status, "pair_clear")
+    distance = {
+        CollisionStatus.CLEAR: 0.1,
+        CollisionStatus.NEAR_COLLISION: 0.015,
+        CollisionStatus.COLLISION: -0.001,
+        CollisionStatus.CONTACT: 0.0,
+    }.get(status)
+    evaluation = CollisionEvaluation(
+        pair_id=pair_id,
+        kind=kind,
+        status=status,
+        distance_m=distance,
+        clearance_m=0.01,
+        reason_code=reason_code,
+        provenance="fixture-collision" if status not in {CollisionStatus.UNAVAILABLE, CollisionStatus.UNKNOWN} else None,
+        near_collision_margin_m=0.02,
+    )
+    aggregate_reason = "collision_clear" if status is CollisionStatus.CLEAR else reason_code
+    return CollisionCheckResult(context, status, (evaluation,), aggregate_reason)
 
 
 def _dynamic(
     status: FeasibilityStatus,
     *,
     authoritative: bool = True,
+    expected_joint_names: tuple[str, ...] = JOINTS,
 ) -> ConfigurationFeasibilityResult:
-    evidence = (EvidenceStatus.AUTHORITATIVE, EvidenceStatus.AUTHORITATIVE) if authoritative else (
-        EvidenceStatus.PROVISIONAL,
-        EvidenceStatus.PROVISIONAL,
+    evidence_status = EvidenceStatus.AUTHORITATIVE if authoritative else EvidenceStatus.PROVISIONAL
+    diagnostics = (
+        (FeasibilityDiagnostic("feasibility_clear", "fixture clear"),)
+        if status is FeasibilityStatus.FEASIBLE
+        else (FeasibilityDiagnostic(f"{status.value}_fixture", f"fixture {status.value}"),)
     )
-    diagnostics = () if status is FeasibilityStatus.FEASIBLE else (
-        FeasibilityDiagnostic(f"{status.value}_fixture", f"fixture {status.value}"),
-    )
+    if status is FeasibilityStatus.UNKNOWN:
+        evidence_status = EvidenceStatus.UNKNOWN
+    elif status is FeasibilityStatus.UNAVAILABLE:
+        diagnostics = (
+            FeasibilityDiagnostic(
+                "unavailable_qvel",
+                "fixture qvel evidence is unavailable",
+            ),
+        )
+    elif status is FeasibilityStatus.INVALID:
+        diagnostics = (FeasibilityDiagnostic("invalid_limit_source", "fixture invalid"),)
+        evidence_status = EvidenceStatus.INVALID
     return ConfigurationFeasibilityResult(
         status,
-        "feasibility_clear" if not diagnostics else diagnostics[0].code,
+        diagnostics[0].code,
         diagnostics,
         "fixture-dynamic",
-        evidence,
+        (evidence_status,) * len(expected_joint_names),
+        expected_joint_names,
+        POLICY_ID,
+        POLICY_REVISION,
+        tuple(f"fixture-limit-{index}" for index in range(len(expected_joint_names))),
+        tuple(f"fixture-evidence-{index}" for index in range(len(expected_joint_names))),
+        True if status is not FeasibilityStatus.UNAVAILABLE else None,
+        True if status is not FeasibilityStatus.UNAVAILABLE else None,
     )
 
 
@@ -256,23 +412,28 @@ def test_unknown_unavailable_and_invalid_never_allow() -> None:
     assert invalid.action is SafetyDecisionAction.INVALID
     assert invalid.reason.component is SafetyComponent.DYNAMIC
 
+    empty_collision = copy(_collision(CollisionStatus.CLEAR))
+    object.__setattr__(empty_collision, "evaluations", ())
     empty_clear = evaluate_physical_safety(
-        SafetyInput("empty-clear", _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE), CollisionCheckResult(CollisionStatus.CLEAR, (), "fixture_clear"), _dynamic(FeasibilityStatus.FEASIBLE))
+        SafetyInput("empty-clear", _limits(), empty_collision, _dynamic(FeasibilityStatus.FEASIBLE))
     )
     assert empty_clear.action is SafetyDecisionAction.INVALID
     assert empty_clear.reason.reason_code == "collision_result_inconsistent"
 
     collision = _collision(CollisionStatus.COLLISION)
-    inconsistent_clear = evaluate_physical_safety(
+    inconsistent_clear = copy(collision)
+    object.__setattr__(inconsistent_clear, "status", CollisionStatus.CLEAR)
+    object.__setattr__(inconsistent_clear, "reason_code", "collision_clear")
+    inconsistent_decision = evaluate_physical_safety(
         SafetyInput(
             "inconsistent-clear",
-            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
-            CollisionCheckResult(CollisionStatus.CLEAR, collision.evaluations, "fixture_clear"),
+            _limits(),
+            inconsistent_clear,
             _dynamic(FeasibilityStatus.FEASIBLE),
         )
     )
-    assert inconsistent_clear.action is SafetyDecisionAction.INVALID
-    assert inconsistent_clear.reason.reason_code == "collision_result_inconsistent"
+    assert inconsistent_decision.action is SafetyDecisionAction.INVALID
+    assert inconsistent_decision.reason.reason_code == "collision_result_inconsistent"
 
 
 def test_provisional_evidence_holds_and_mismatch_rejects() -> None:
@@ -325,7 +486,7 @@ def test_matching_non_rad_resolver_result_is_unavailable_at_p5(
             for index, unit in enumerate(source_units)
         ),
         expected_joint_names=("joint_a",),
-        robot_id="fixture",
+        robot_id="fixture-robot",
     )
 
     bound = result.bound_for("joint_a")
@@ -337,7 +498,7 @@ def test_matching_non_rad_resolver_result_is_unavailable_at_p5(
             "matching-non-rad-limit",
             result,
             _collision(CollisionStatus.CLEAR),
-            _dynamic(FeasibilityStatus.FEASIBLE),
+            _dynamic(FeasibilityStatus.FEASIBLE, expected_joint_names=("joint_a",)),
         )
     )
 
@@ -353,7 +514,7 @@ def test_mixed_rad_and_non_rad_resolver_result_remains_mismatch_at_p5() -> None:
             _position_limit("deg", "degree-source"),
         ),
         expected_joint_names=("joint_a",),
-        robot_id="fixture",
+        robot_id="fixture-robot",
     )
 
     bound = result.bound_for("joint_a")
@@ -364,7 +525,7 @@ def test_mixed_rad_and_non_rad_resolver_result_remains_mismatch_at_p5() -> None:
             "mixed-rad-non-rad-limit",
             result,
             _collision(CollisionStatus.CLEAR),
-            _dynamic(FeasibilityStatus.FEASIBLE),
+            _dynamic(FeasibilityStatus.FEASIBLE, expected_joint_names=("joint_a",)),
         )
     )
 
@@ -377,7 +538,7 @@ def test_matching_rad_resolver_result_remains_authoritative_at_p5() -> None:
     result = resolve_joint_space_bounds(
         (_position_limit("rad", "authoritative-rad", status=EvidenceStatus.AUTHORITATIVE),),
         expected_joint_names=("joint_a",),
-        robot_id="fixture",
+        robot_id="fixture-robot",
     )
 
     assert result.bound_for("joint_a").status is LimitResolutionStatus.RESOLVED_AUTHORITATIVE
@@ -386,7 +547,7 @@ def test_matching_rad_resolver_result_remains_authoritative_at_p5() -> None:
             "matching-rad-limit",
             result,
             _collision(CollisionStatus.CLEAR),
-            _dynamic(FeasibilityStatus.FEASIBLE),
+            _dynamic(FeasibilityStatus.FEASIBLE, expected_joint_names=("joint_a",)),
         )
     )
 
@@ -660,11 +821,13 @@ def test_duplicate_limit_result_bounds_are_invalid_at_p5_boundary() -> None:
 
 def test_collision_aggregate_reason_must_match_pair_diagnostic() -> None:
     collision = _collision(CollisionStatus.CLEAR)
+    malformed = copy(collision)
+    object.__setattr__(malformed, "reason_code", "wrong-clear-reason")
     decision = evaluate_physical_safety(
         SafetyInput(
             "inconsistent-collision",
-            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
-            replace(collision, reason_code="wrong-clear-reason"),
+            _limits(),
+            malformed,
             _dynamic(FeasibilityStatus.FEASIBLE),
         )
     )
@@ -682,11 +845,13 @@ def test_malformed_clear_pair_is_invalid_at_p5_boundary() -> None:
     object.__setattr__(malformed, "clearance_m", 0.01)
     object.__setattr__(malformed, "reason_code", "collision_clear")
     object.__setattr__(malformed, "provenance", None)
+    malformed_result = copy(_collision(CollisionStatus.CLEAR))
+    object.__setattr__(malformed_result, "evaluations", (malformed,))
     decision = evaluate_physical_safety(
         SafetyInput(
             "malformed-clear",
-            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
-            CollisionCheckResult(CollisionStatus.CLEAR, (malformed,), "collision_clear"),
+            _limits(),
+            malformed_result,
             _dynamic(FeasibilityStatus.FEASIBLE),
         )
     )
@@ -704,11 +869,13 @@ def test_unknown_collision_kind_clear_is_invalid_at_p5_boundary() -> None:
     object.__setattr__(malformed, "clearance_m", 0.01)
     object.__setattr__(malformed, "reason_code", "pair_clear")
     object.__setattr__(malformed, "provenance", "fixture-collision")
+    malformed_result = copy(_collision(CollisionStatus.CLEAR))
+    object.__setattr__(malformed_result, "evaluations", (malformed,))
     decision = evaluate_physical_safety(
         SafetyInput(
             "unknown-kind-clear",
-            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
-            CollisionCheckResult(CollisionStatus.CLEAR, (malformed,), "collision_clear"),
+            _limits(),
+            malformed_result,
             _dynamic(FeasibilityStatus.FEASIBLE),
         )
     )
@@ -726,11 +893,13 @@ def test_wildcard_collision_pair_is_invalid_at_p5_boundary() -> None:
     object.__setattr__(malformed, "clearance_m", 0.01)
     object.__setattr__(malformed, "reason_code", "pair_clear")
     object.__setattr__(malformed, "provenance", "fixture-collision")
+    malformed_result = copy(_collision(CollisionStatus.CLEAR))
+    object.__setattr__(malformed_result, "evaluations", (malformed,))
     decision = evaluate_physical_safety(
         SafetyInput(
             "wildcard-pair",
-            _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE),
-            CollisionCheckResult(CollisionStatus.CLEAR, (malformed,), "collision_clear"),
+            _limits(),
+            malformed_result,
             _dynamic(FeasibilityStatus.FEASIBLE),
         )
     )
@@ -823,13 +992,10 @@ def test_dynamic_aggregate_status_and_diagnostics_must_match(
     diagnostics: tuple[FeasibilityDiagnostic, ...],
     reason_code: str,
 ) -> None:
-    dynamic = ConfigurationFeasibilityResult(
-        status,
-        reason_code,
-        diagnostics,
-        "fixture-dynamic",
-        (EvidenceStatus.AUTHORITATIVE,),
-    )
+    dynamic = copy(_dynamic(FeasibilityStatus.FEASIBLE))
+    object.__setattr__(dynamic, "status", status)
+    object.__setattr__(dynamic, "reason_code", reason_code)
+    object.__setattr__(dynamic, "diagnostics", diagnostics)
     decision = evaluate_physical_safety(
         SafetyInput(
             "inconsistent-dynamic",
@@ -844,13 +1010,10 @@ def test_dynamic_aggregate_status_and_diagnostics_must_match(
 
 
 def test_dynamic_limit_diagnostic_must_match_bound_evidence() -> None:
-    dynamic = ConfigurationFeasibilityResult(
-        FeasibilityStatus.UNKNOWN,
-        "unknown_limit_source",
-        (FeasibilityDiagnostic("unknown_limit_source", "source is unknown"),),
-        "fixture-dynamic",
-        (EvidenceStatus.AUTHORITATIVE,),
-    )
+    dynamic = copy(_dynamic(FeasibilityStatus.UNKNOWN))
+    object.__setattr__(dynamic, "reason_code", "unknown_limit_source")
+    object.__setattr__(dynamic, "diagnostics", (FeasibilityDiagnostic("unknown_limit_source", "source is unknown"),))
+    object.__setattr__(dynamic, "bound_statuses", (EvidenceStatus.AUTHORITATIVE,) * len(JOINTS))
     decision = evaluate_physical_safety(
         SafetyInput(
             "inconsistent-dynamic-evidence",
@@ -889,8 +1052,16 @@ def test_two_sample_unavailable_acceleration_result_remains_unavailable_at_p5() 
                 "at least three valid samples are required for finite-difference acceleration",
             ),
         ),
-        ("fixture-trajectory",),
-        (EvidenceStatus.AUTHORITATIVE,),
+        ("fixture-trajectory-0", "fixture-trajectory-1"),
+        (EvidenceStatus.AUTHORITATIVE,) * (2 * len(JOINTS)),
+        JOINTS,
+        POLICY_ID,
+        POLICY_REVISION,
+        tuple(f"fixture-limit-{index}" for index in range(2 * len(JOINTS))),
+        tuple(f"fixture-evidence-{index}" for index in range(2 * len(JOINTS))),
+        (False, False),
+        (True, True),
+        (),
     )
     decision = evaluate_physical_safety(
         SafetyInput(
@@ -906,14 +1077,9 @@ def test_two_sample_unavailable_acceleration_result_remains_unavailable_at_p5() 
 
 
 def test_two_sample_feasible_without_unavailable_acceleration_is_invalid_at_p5() -> None:
-    dynamic = TrajectoryFeasibilityResult(
-        FeasibilityStatus.FEASIBLE,
-        "feasibility_clear",
-        2,
-        (),
-        ("fixture-trajectory",),
-        (EvidenceStatus.AUTHORITATIVE,),
-    )
+    dynamic = copy(_trajectory_dynamic())
+    object.__setattr__(dynamic, "sample_count", 2)
+    object.__setattr__(dynamic, "source_ids", ("fixture-trajectory-0", "fixture-trajectory-1"))
     decision = evaluate_physical_safety(
         SafetyInput(
             "malformed-two-sample-trajectory",
@@ -1036,6 +1202,205 @@ def test_near_collision_and_task_contact_are_hold_not_allow() -> None:
     contact = evaluate_physical_safety(_input(collision=CollisionStatus.CONTACT))
     assert contact.action is SafetyDecisionAction.HOLD
     assert contact.reason.reason_code == "task_object_contact"
+
+
+def test_limit_expected_joint_deletion_never_allows() -> None:
+    result = copy(_limits())
+    object.__setattr__(result, "expected_joint_names", ("joint_a",))
+
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "deleted-joint",
+            result,
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE, expected_joint_names=("joint_a",)),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "limit:limit_resolution_inconsistent"
+
+
+def test_synthetic_authoritative_parity_never_allows() -> None:
+    result = _limits()
+    bound = copy(result.bounds[0])
+    parity = copy(bound.parity[0])
+    synthetic_source = copy(parity.source)
+    object.__setattr__(synthetic_source, "source_kind", "software_config")
+    object.__setattr__(parity, "source", synthetic_source)
+    object.__setattr__(bound, "parity", (parity,))
+    malformed = copy(result)
+    object.__setattr__(malformed, "bounds", (bound, result.bounds[1]))
+
+    decision = evaluate_physical_safety(
+        SafetyInput("synthetic-authority", malformed, _collision(CollisionStatus.CLEAR), _dynamic(FeasibilityStatus.FEASIBLE))
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+
+
+def test_limit_source_value_disagreement_within_p2_tolerance_is_not_invalid() -> None:
+    result = _limits(parity_delta=LIMIT_TOLERANCE_RAD / 2.0, tolerance=LIMIT_TOLERANCE_RAD)
+    decision = evaluate_physical_safety(
+        SafetyInput("within-tolerance", result, _collision(CollisionStatus.CLEAR), _dynamic(FeasibilityStatus.FEASIBLE))
+    )
+
+    assert decision.action is SafetyDecisionAction.ALLOW
+    assert decision.reason.identity == "limit:limit_resolution_authoritative"
+
+
+def test_collision_expected_pair_deletion_never_allows() -> None:
+    result = copy(_collision(CollisionStatus.CLEAR))
+    object.__setattr__(result, "evaluations", ())
+
+    decision = evaluate_physical_safety(
+        SafetyInput("deleted-collision-pair", _limits(), result, _dynamic(FeasibilityStatus.FEASIBLE))
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "collision:collision_result_inconsistent"
+
+
+def test_collision_identity_tamper_is_invalid_without_exception() -> None:
+    for field_name in ("robot_id", "model_id", "policy_id", "inventory_id"):
+        result = _collision(CollisionStatus.CLEAR)
+        context = copy(result.context)
+        object.__setattr__(context, field_name, f"tampered-{field_name}")
+        object.__setattr__(result, "context", context)
+
+        decision = evaluate_physical_safety(
+            SafetyInput("collision-identity-tamper", _limits(), result, _dynamic(FeasibilityStatus.FEASIBLE))
+        )
+
+        assert decision.action is SafetyDecisionAction.INVALID
+        assert not decision.allowed
+        if field_name == "robot_id":
+            assert decision.candidate_id == "invalid-input"
+            assert decision.reason.identity == "input:invalid_safety_input"
+        else:
+            assert decision.candidate_id == "collision-identity-tamper"
+            assert decision.reason.identity == "collision:collision_result_inconsistent"
+
+
+def test_dynamic_synthetic_feasible_never_allows() -> None:
+    dynamic = copy(_dynamic(FeasibilityStatus.FEASIBLE))
+    object.__setattr__(dynamic, "bound_evidence_ids", ())
+
+    decision = evaluate_physical_safety(
+        SafetyInput("synthetic-feasible", _limits(), _collision(CollisionStatus.CLEAR), dynamic)
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
+
+
+def test_complete_provisional_dynamic_evidence_maps_to_hold() -> None:
+    decision = evaluate_physical_safety(
+        _input(dynamic_authoritative=False)
+    )
+
+    assert decision.action is SafetyDecisionAction.HOLD
+    assert decision.reason.identity == "dynamic:dynamic_result_provisional"
+
+
+def test_configuration_unavailable_qvel_remains_unavailable() -> None:
+    decision = evaluate_physical_safety(
+        _input(dynamic=FeasibilityStatus.UNAVAILABLE)
+    )
+
+    assert decision.action is SafetyDecisionAction.UNAVAILABLE
+    assert decision.reason.identity == "dynamic:dynamic_result_unavailable"
+
+
+def test_non_feasible_dynamic_result_may_omit_unavailable_limit_inventory() -> None:
+    dynamic = ConfigurationFeasibilityResult(
+        FeasibilityStatus.UNKNOWN,
+        "unknown_limit_source",
+        (FeasibilityDiagnostic("unknown_limit_source", "dynamic limit source is unavailable"),),
+        "fixture-dynamic",
+        (EvidenceStatus.UNKNOWN,),
+        JOINTS,
+        POLICY_ID,
+        POLICY_REVISION,
+        ("missing-limit-source",),
+        ("missing-limit-evidence",),
+        None,
+        None,
+    )
+
+    decision = evaluate_physical_safety(
+        SafetyInput("partial-dynamic-evidence", _limits(), _collision(CollisionStatus.CLEAR), dynamic)
+    )
+
+    assert decision.action is SafetyDecisionAction.UNAVAILABLE
+    assert decision.reason.identity == "dynamic:dynamic_result_unknown"
+
+
+def test_limit_collision_robot_identity_mismatch_is_invalid() -> None:
+    decision = evaluate_physical_safety(
+        SafetyInput(
+            "robot-binding-mismatch",
+            _limits(robot_id="limit-robot"),
+            _collision(CollisionStatus.CLEAR),
+            _dynamic(FeasibilityStatus.FEASIBLE),
+        )
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.candidate_id == "invalid-input"
+    assert decision.reason.identity == "input:invalid_safety_input"
+
+
+def test_limit_dynamic_joint_inventory_mismatch_is_invalid() -> None:
+    dynamic = copy(_dynamic(FeasibilityStatus.FEASIBLE))
+    object.__setattr__(dynamic, "expected_joint_names", ("joint_a",))
+
+    decision = evaluate_physical_safety(
+        SafetyInput("joint-binding-mismatch", _limits(), _collision(CollisionStatus.CLEAR), dynamic)
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.candidate_id == "invalid-input"
+    assert decision.reason.identity == "input:invalid_safety_input"
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    (
+        ("candidate_id", ""),
+        ("candidate_id", object()),
+        ("provenance", object()),
+        ("provenance", ("duplicate", "duplicate")),
+    ),
+)
+def test_malformed_safety_input_fields_return_invalid_without_exception(
+    field_name: str,
+    value: object,
+) -> None:
+    malformed = _input()
+    object.__setattr__(malformed, field_name, value)
+
+    decision = evaluate_physical_safety(malformed)
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.candidate_id == "invalid-input"
+    assert decision.reason.identity == "input:invalid_safety_input"
+
+
+def test_constructor_bypassed_nested_dynamic_dto_returns_invalid_without_exception() -> None:
+    malformed_dynamic = object.__new__(ConfigurationFeasibilityResult)
+    malformed = _input()
+    object.__setattr__(malformed, "dynamic", malformed_dynamic)
+
+    decision = evaluate_physical_safety(malformed)
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.candidate_id == "invalid-input"
+    assert decision.reason.identity == "input:invalid_safety_input"
 
 
 def test_bounded_sampling_stops_at_first_non_allow() -> None:

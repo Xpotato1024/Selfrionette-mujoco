@@ -7,17 +7,17 @@ allowへfallbackしないphysical-output前のruntime boundaryである。
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
+from copy import copy
 from dataclasses import dataclass
 from enum import Enum
 
 from selfrionette.runtime.safety.collision_policy import (
+    CollisionContext,
     CollisionCheckResult,
     CollisionEvaluation,
     CollisionKind,
     CollisionStatus,
-    _pair_id_parts,
 )
 from selfrionette.runtime.safety.limit_resolution import (
     JointSpaceConversion,
@@ -32,8 +32,16 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
     FeasibilityDiagnostic,
     FeasibilityStatus,
     TrajectoryFeasibilityResult,
+    VelocityEvidenceBinding,
+    VelocityEvidenceKind,
+    validate_configuration_feasibility_result,
+    validate_trajectory_feasibility_result,
 )
-from selfrionette.runtime.safety.physical_limits import EvidenceStatus, LimitSpace
+from selfrionette.runtime.safety.physical_limits import (
+    EvidenceStatus,
+    LimitSourceProvenance,
+    LimitSpace,
+)
 
 
 class SafetyDecisionAction(str, Enum):
@@ -195,6 +203,15 @@ def _valid_text(value: object) -> bool:
         return False
 
 
+def _valid_identity(value: object) -> bool:
+    """P3/P4が要求するplaceholderでないidentityを安全に検査する。"""
+
+    try:
+        return _valid_text(value) and value.casefold() != "unknown"
+    except Exception:
+        return False
+
+
 def _safe_text_tuple(value: object) -> tuple[str, ...]:
     """tupleの内容を例外なく走査し、妥当な文字列だけを返す。"""
 
@@ -215,17 +232,13 @@ def _safe_limit_provenance(result: object) -> tuple[str, ...]:
         return ()
     if type(bounds) is not tuple:
         return ()
-    try:
-        bound_values = tuple(bounds)
-    except Exception:
-        return ()
     provenance: list[str] = []
-    for bound in bound_values:
-        try:
+    try:
+        for bound in bounds:
             source_names = bound.source_names
-        except Exception:
-            continue
-        provenance.extend(_safe_text_tuple(source_names))
+            provenance.extend(_safe_text_tuple(source_names))
+    except Exception:
+        return tuple(provenance)
     return tuple(provenance)
 
 
@@ -238,18 +251,14 @@ def _safe_collision_provenance(result: object) -> tuple[str, ...]:
         return ()
     if type(evaluations) is not tuple:
         return ()
-    try:
-        evaluation_values = tuple(evaluations)
-    except Exception:
-        return ()
     provenance: list[str] = []
-    for evaluation in evaluation_values:
-        try:
+    try:
+        for evaluation in evaluations:
             value = evaluation.provenance
-        except Exception:
-            continue
-        if _valid_text(value):
-            provenance.append(value)
+            if _valid_text(value):
+                provenance.append(value)
+    except Exception:
+        return tuple(provenance)
     return tuple(provenance)
 
 
@@ -257,9 +266,9 @@ def _safe_dynamic_provenance(result: object) -> tuple[str, ...]:
     """malformed dynamic resultからのprovenance参照をfail-closedにする。"""
 
     try:
-        if isinstance(result, TrajectoryFeasibilityResult):
+        if type(result) is TrajectoryFeasibilityResult:
             return _safe_text_tuple(result.source_ids)
-        if isinstance(result, ConfigurationFeasibilityResult):
+        if type(result) is ConfigurationFeasibilityResult:
             source_id = result.source_id
             return (source_id,) if _valid_text(source_id) else ()
     except Exception:
@@ -267,519 +276,370 @@ def _safe_dynamic_provenance(result: object) -> tuple[str, ...]:
     return ()
 
 
+def _invoke_post_init(
+    value: object,
+    post_init: object,
+    failure: str,
+) -> str | None:
+    """既存DTOのinvariantをcopy上で実行し、入力objectを変更しない。"""
+
+    try:
+        post_init(copy(value))  # type: ignore[operator]
+    except Exception:
+        return failure
+    return None
+
+
 def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
-    """P2 aggregateの構造・status・per-source parityをP5で再検証する。"""
+    """P2のDTO invariantを再利用し、P5固有のtyped boundaryだけを確認する。"""
 
-    valid_text = _valid_text
-
-    def finite_number(value: object) -> bool:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return False
-        try:
-            return math.isfinite(float(value))
-        except (OverflowError, TypeError, ValueError):
-            return False
-
-    def bounds_are_valid(lower: object, upper: object, label: str) -> str | None:
-        if (lower is None) != (upper is None):
-            return f"{label} must contain both lower and upper values"
-        if lower is None:
-            return None
-        if not finite_number(lower) or not finite_number(upper):
-            return f"{label} must contain finite values"
-        if float(lower) > float(upper):
-            return f"{label} lower must not exceed upper"
-        return None
-
-    if not isinstance(result, LimitResolutionResult):
+    if type(result) is not LimitResolutionResult:
         return "limit resolution result has an invalid type"
     try:
         schema_version = result.schema_version
         robot_id = result.robot_id
         bounds = result.bounds
         conversion_relations = result.conversion_relations
+        expected_joint_names = result.expected_joint_names
     except Exception:
         return "limit resolution result is structurally incomplete"
+
+    # P2 constructorの暗黙変換をP5で許可せず、typed status / identityだけを受け付ける。
     if type(schema_version) is not int or schema_version != 1:
         return "limit resolution schema version is invalid"
-    if not valid_text(robot_id):
+    if not _valid_text(robot_id):
         return "limit resolution robot identity is invalid"
+    if type(expected_joint_names) is not tuple or not expected_joint_names:
+        return "limit resolution expected joint inventory is invalid"
+    if any(not _valid_text(name) for name in expected_joint_names):
+        return "limit resolution expected joint identity is invalid"
+    if len(set(expected_joint_names)) != len(expected_joint_names):
+        return "limit resolution expected joint identities are duplicated"
     if type(bounds) is not tuple or not bounds:
         return "limit resolution bounds must be a non-empty tuple"
-    if any(not isinstance(bound, ResolvedJointBound) for bound in bounds):
+    if any(type(bound) is not ResolvedJointBound for bound in bounds):
         return "limit resolution contains an invalid bound"
     if type(conversion_relations) is not tuple:
         return "limit resolution conversion relations must be a tuple"
-    if any(not isinstance(relation, JointSpaceConversion) for relation in conversion_relations):
+    if any(type(relation) is not JointSpaceConversion for relation in conversion_relations):
         return "limit resolution contains an invalid conversion relation"
-    relation_ids: list[object] = []
+
     for relation in conversion_relations:
         try:
-            source_space = relation.source_space
-            joint_name = relation.joint_name
-            source_name = relation.source_name
-            gear_ratio = relation.gear_ratio
-            sign = relation.sign
-            offset = relation.offset
-            relation_id = relation.relation_id
-            unit = relation.unit
+            if type(relation.source_space) is not LimitSpace:
+                return "limit resolution conversion relation source space is invalid"
         except Exception:
             return "limit resolution conversion relation is structurally incomplete"
-        if not isinstance(source_space, LimitSpace):
-            return "limit resolution conversion relation source space is invalid"
-        if not valid_text(joint_name) or not valid_text(source_name):
-            return "limit resolution conversion relation identity is invalid"
-        if not valid_text(relation_id) or not valid_text(unit):
-            return "limit resolution conversion relation identity is invalid"
-        if not finite_number(gear_ratio) or float(gear_ratio) == 0.0:
-            return "limit resolution conversion relation gear ratio is invalid"
-        if not finite_number(sign) or float(sign) not in (-1.0, 1.0):
-            return "limit resolution conversion relation sign is invalid"
-        if not finite_number(offset):
-            return "limit resolution conversion relation offset is invalid"
-        relation_ids.append(relation_id)
-    if len(set(relation_ids)) != len(relation_ids):
-        return "limit resolution conversion relation identities are duplicated"
+        failure = _invoke_post_init(
+            relation,
+            JointSpaceConversion.__post_init__,
+            "limit resolution conversion relation is invalid",
+        )
+        if failure is not None:
+            return failure
 
-    joint_names_list: list[object] = []
-    for bound in bounds:
-        try:
-            joint_names_list.append(bound.joint_name)
-        except Exception:
-            return "limit resolution bound is structurally incomplete"
-    joint_names = tuple(joint_names_list)
-    if any(not valid_text(name) for name in joint_names):
-        return "limit resolution contains an invalid joint identity"
-    if len(set(joint_names)) != len(joint_names):
-        return "limit resolution joint identities are duplicated"
-
+    bound_names: list[str] = []
     for bound in bounds:
         try:
             joint_name = bound.joint_name
             status = bound.status
-            lower_rad = bound.lower_rad
-            upper_rad = bound.upper_rad
             source_names = bound.source_names
             parity = bound.parity
-            reason = bound.reason
         except Exception:
             return "limit resolution bound is structurally incomplete"
-        if not valid_text(joint_name):
+        if not _valid_text(joint_name):
             return "limit resolution contains an invalid joint identity"
-        if not isinstance(status, LimitResolutionStatus):
+        bound_names.append(joint_name)
+        if type(status) is not LimitResolutionStatus:
             return f"limit status is invalid for {joint_name}"
         if type(source_names) is not tuple or not source_names:
             return f"limit source identity is empty for {joint_name}"
-        if any(not valid_text(source_name) for source_name in source_names):
+        if any(not _valid_text(name) for name in source_names):
             return f"limit source identity is invalid for {joint_name}"
         if len(set(source_names)) != len(source_names):
             return f"limit source identity is duplicated for {joint_name}"
         if type(parity) is not tuple or not parity:
             return f"limit parity is empty for {joint_name}"
-        if any(not isinstance(item, LimitParityRecord) for item in parity):
+        if any(type(item) is not LimitParityRecord for item in parity):
             return f"limit parity contains an invalid record for {joint_name}"
-        bounds_error = bounds_are_valid(lower_rad, upper_rad, f"limit bound for {joint_name}")
-        if bounds_error is not None:
-            return bounds_error
-        if reason is not None and not valid_text(reason):
-            return f"limit reason is invalid for {joint_name}"
+        if len(source_names) != len(parity):
+            return f"limit source/parity coverage is incomplete for {joint_name}"
 
         for item in parity:
             try:
                 item_joint_name = item.joint_name
                 item_source_name = item.source_name
                 item_status = item.status
-                item_lower = item.lower
-                item_upper = item.upper
-                item_unit = item.unit
-                item_reason = item.reason
+                source = item.source
+                source_status = item.source_status
             except Exception:
                 return f"limit parity is structurally incomplete for {joint_name}"
-            if not valid_text(item_joint_name):
-                return f"limit parity joint identity is invalid for {joint_name}"
-            if not valid_text(item_source_name):
+            if not _valid_text(item_joint_name) or item_joint_name != joint_name:
+                return f"limit parity joint identity does not match {joint_name}"
+            if not _valid_text(item_source_name):
                 return f"limit parity source identity is invalid for {joint_name}"
-            if not isinstance(item_status, ParityStatus):
+            if type(item_status) is not ParityStatus:
                 return f"limit parity status is invalid for {joint_name}"
-            if not valid_text(item_unit):
-                return f"limit parity unit is invalid for {joint_name}"
-            parity_bounds_error = bounds_are_valid(
-                item_lower,
-                item_upper,
-                f"limit parity range for {joint_name}",
+            if source is None or type(source) is not LimitSourceProvenance:
+                return f"limit parity provenance is invalid for {joint_name}"
+            try:
+                if type(source.status) is not EvidenceStatus:
+                    return f"limit parity provenance status is invalid for {joint_name}"
+            except Exception:
+                return f"limit parity provenance is structurally incomplete for {joint_name}"
+            failure = _invoke_post_init(
+                source,
+                LimitSourceProvenance.__post_init__,
+                f"limit parity provenance is invalid for {joint_name}",
             )
-            if parity_bounds_error is not None:
-                return parity_bounds_error
-            if item_status is ParityStatus.MATCH:
-                if item_reason is not None:
-                    return f"matched limit parity has an unexpected reason for {joint_name}"
-            elif not valid_text(item_reason):
-                return f"limit parity status has no reason for {joint_name}"
-            if item_status in {
-                ParityStatus.UNKNOWN,
-                ParityStatus.UNAVAILABLE,
-                ParityStatus.INVALID,
-            } and (item_lower is not None or item_upper is not None):
-                return f"unresolved limit parity contains bounds for {joint_name}"
-
-        if tuple(item.source_name for item in parity) != source_names:
-            return f"limit parity source identity does not match {joint_name}"
-        if len({item.source_name for item in parity}) != len(parity):
-            return f"limit parity source identity is duplicated for {joint_name}"
-        if any(item.joint_name != joint_name for item in parity):
-            return f"limit parity joint identity does not match {joint_name}"
-
-        parity_statuses = tuple(item.status for item in parity)
-        signatures = {
-            (
-                None if item.lower is None else float(item.lower),
-                None if item.upper is None else float(item.upper),
-                item.unit,
+            if failure is not None:
+                return failure
+            if source_status is not None and type(source_status) is not EvidenceStatus:
+                return f"limit parity source status is invalid for {joint_name}"
+            failure = _invoke_post_init(
+                item,
+                LimitParityRecord.__post_init__,
+                f"limit parity is invalid for {joint_name}",
             )
-            for item in parity
-        }
-        # 未解決sourceのNone値やunit差は、P2のUNKNOWN/UNAVAILABLE優先順位を
-        # range mismatchへ変換しない。完全比較可能なall-MATCHだけを比較する。
-        all_match = all(status is ParityStatus.MATCH for status in parity_statuses)
-        matching_units = {item.unit for item in parity} if all_match else set()
-        mixed_units = all_match and len(matching_units) > 1
-        common_non_rad_unit = all_match and len(matching_units) == 1 and matching_units != {"rad"}
-        range_mismatch = all_match and matching_units == {"rad"} and len(signatures) > 1
-        if any(status is ParityStatus.INVALID for status in parity_statuses):
-            expected = LimitResolutionStatus.INVALID
-        elif any(status is ParityStatus.MISMATCH for status in parity_statuses) or mixed_units or range_mismatch:
-            expected = LimitResolutionStatus.MISMATCH
-        elif any(status is ParityStatus.UNAVAILABLE for status in parity_statuses):
-            expected = LimitResolutionStatus.UNAVAILABLE
-        elif any(status is ParityStatus.UNKNOWN for status in parity_statuses):
-            expected = LimitResolutionStatus.UNKNOWN
-        elif common_non_rad_unit:
-            expected = LimitResolutionStatus.UNKNOWN
-        elif all_match:
-            expected = None
-        else:
-            return f"limit parity contains an unsupported status for {joint_name}"
-
-        if expected is None:
-            if status not in {
-                LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
-                LimitResolutionStatus.RESOLVED_PROVISIONAL,
-            }:
-                return f"resolved limit status does not match parity for {joint_name}"
-            if lower_rad is None or upper_rad is None:
-                return f"resolved limit status is unbounded for {joint_name}"
-            if reason is not None:
-                return f"resolved limit status has an unexpected reason for {joint_name}"
-            if any(item.unit != "rad" for item in parity):
-                return f"resolved limit parity unit is not normalized to rad for {joint_name}"
-            if any(
-                (
-                    None if item.lower is None else float(item.lower),
-                    None if item.upper is None else float(item.upper),
-                )
-                != (float(lower_rad), float(upper_rad))
-                for item in parity
-            ):
-                return f"resolved limit range does not match parity for {joint_name}"
-            continue
-
-        if status is not expected:
-            return f"limit aggregate status does not match parity for {joint_name}"
-        if lower_rad is not None or upper_rad is not None:
-            return f"unresolved limit status contains bounds for {joint_name}"
-        if not valid_text(reason):
-            return f"unresolved limit status has no reason for {joint_name}"
-    return None
-
-
-def _collision_evaluation_inconsistency(evaluation: CollisionEvaluation) -> str | None:
-    """P3 evaluationのidentityとclear evidence semanticsを再検証する。"""
-
-    if not isinstance(evaluation, CollisionEvaluation):
-        return "collision evaluation has an invalid type"
-    try:
-        pair_id = evaluation.pair_id
-        kind = evaluation.kind
-        status = evaluation.status
-        distance_m = evaluation.distance_m
-        clearance_m = evaluation.clearance_m
-        reason_code = evaluation.reason_code
-        provenance = evaluation.provenance
-    except Exception:
-        return "collision evaluation is structurally incomplete"
-    if not _valid_text(pair_id):
-        return "collision evaluation pair identity is not canonical"
-    try:
-        _pair_id_parts(pair_id)
-    except Exception:
-        return "collision evaluation pair identity is not canonical"
-    if not isinstance(kind, CollisionKind):
-        return "collision evaluation kind is invalid"
-    if not isinstance(status, CollisionStatus):
-        return "collision evaluation status is invalid"
-    if isinstance(clearance_m, bool) or not isinstance(clearance_m, (int, float)):
-        return "collision evaluation clearance is invalid"
-    try:
-        clearance = float(clearance_m)
-    except (OverflowError, TypeError, ValueError):
-        return "collision evaluation clearance is invalid"
-    if not math.isfinite(clearance) or clearance < 0.0:
-        return "collision evaluation clearance is invalid"
-    distance: float | None = None
-    if distance_m is not None:
-        if isinstance(distance_m, bool) or not isinstance(distance_m, (int, float)):
-            return "collision evaluation distance is invalid"
+            if failure is not None:
+                return failure
         try:
-            distance = float(distance_m)
-        except (OverflowError, TypeError, ValueError):
-            return "collision evaluation distance is invalid"
-        if not math.isfinite(distance):
-            return "collision evaluation distance is invalid"
-    if not _valid_text(reason_code):
-        return "collision evaluation reason is invalid"
-    if provenance is not None and not _valid_text(provenance):
-        return "collision evaluation provenance is invalid"
+            if tuple(item.source_name for item in parity) != source_names:
+                return f"limit parity source identity does not match {joint_name}"
+        except Exception:
+            return f"limit parity is structurally incomplete for {joint_name}"
+        failure = _invoke_post_init(
+            bound,
+            ResolvedJointBound.__post_init__,
+            f"limit bound is invalid for {joint_name}",
+        )
+        if failure is not None:
+            return failure
 
-    if status is CollisionStatus.CLEAR:
-        if kind is CollisionKind.UNKNOWN:
-            return "unknown collision kind cannot produce clear evidence"
-        if reason_code == "explicit_structural_exclusion":
-            if kind is not CollisionKind.STRUCTURAL_PROXIMITY:
-                return "structural exclusion clear evidence has the wrong kind"
-            if distance is not None or provenance is None:
-                return "structural exclusion clear evidence is incomplete"
-        elif reason_code == "pair_clear":
-            if distance is None or distance <= clearance:
-                return "pair_clear evidence is not beyond clearance"
-            if provenance is None:
-                return "pair_clear evidence has no provenance"
-        else:
-            return "clear collision evidence has an unsupported reason"
-    return None
+    if len(bound_names) != len(expected_joint_names) or set(bound_names) != set(expected_joint_names):
+        return "limit resolution bounds must exactly cover expected_joint_names"
+
+    # Aggregate invariantはP2のcanonical methodへ委譲し、range/parity formulaを複製しない。
+    return _invoke_post_init(
+        result,
+        LimitResolutionResult.__post_init__,
+        "limit resolution aggregate is invalid",
+    )
 
 
 def _collision_result_inconsistency(result: CollisionCheckResult) -> str | None:
-    """P3 aggregate statusとpair evaluation / diagnosticの整合性を検証する。"""
+    """P3のcontext/evaluation/aggregate canonical invariantを再利用する。"""
 
-    if not isinstance(result, CollisionCheckResult):
+    if type(result) is not CollisionCheckResult:
         return "collision result has an invalid type"
     try:
-        result_status = result.status
+        context = result.context
+        status = result.status
         evaluations = result.evaluations
         reason_code = result.reason_code
     except Exception:
         return "collision result is structurally incomplete"
-    if not isinstance(result_status, CollisionStatus):
+    if type(context) is not CollisionContext:
+        return "collision result context is invalid"
+    if type(status) is not CollisionStatus:
         return "collision result status is invalid"
     if type(evaluations) is not tuple:
         return "collision result evaluations must be a tuple"
+    if any(type(item) is not CollisionEvaluation for item in evaluations):
+        return "collision result contains an invalid evaluation"
     if not _valid_text(reason_code):
         return "collision result reason is invalid"
     try:
-        evaluation_values = tuple(evaluations)
-    except Exception:
-        return "collision result evaluations are not readable"
-    for item in evaluation_values:
-        if not isinstance(item, CollisionEvaluation):
-            return "collision result contains an invalid pair evaluation"
-        evaluation_inconsistency = _collision_evaluation_inconsistency(item)
-        if evaluation_inconsistency is not None:
-            return evaluation_inconsistency
-    pair_ids: list[str] = []
-    for item in evaluation_values:
-        try:
-            pair_id = item.pair_id
-        except Exception:
-            return "collision result pair identity is structurally incomplete"
-        if not _valid_text(pair_id):
-            return "collision result pair identity is invalid"
-        pair_ids.append(pair_id)
-    try:
-        duplicate_pairs = len(set(pair_ids)) != len(pair_ids)
-    except Exception:
-        return "collision result pair identities are unreadable"
-    if duplicate_pairs:
-        return "collision result contains duplicate pair identities"
-
-    if not evaluation_values:
-        # P3 uses an empty INVALID aggregate for inventory/policy/input failures.
-        if result_status is CollisionStatus.INVALID:
-            return None
-        expected_status, expected_reason = CollisionStatus.UNKNOWN, "no_collision_pair_evidence"
-    else:
-        precedence = (
-            CollisionStatus.INVALID,
-            CollisionStatus.COLLISION,
-            CollisionStatus.NEAR_COLLISION,
-            CollisionStatus.CONTACT,
-            CollisionStatus.UNAVAILABLE,
-            CollisionStatus.UNKNOWN,
+        identities = (
+            context.robot_id,
+            context.model_id,
+            context.policy_id,
+            context.policy_revision,
+            context.inventory_id,
+            context.inventory_revision,
         )
-        expected_status = CollisionStatus.CLEAR
-        expected_reason = "collision_clear"
-        for status in precedence:
-            found = next((item for item in evaluation_values if item.status is status), None)
-            if found is not None:
-                expected_status, expected_reason = status, found.reason_code
-                break
-    if result_status is not expected_status:
-        return "collision aggregate status does not match pair evidence"
-    if reason_code != expected_reason:
-        return "collision aggregate reason does not match pair evidence"
-    return None
-
-
-def _diagnostic_status(diagnostic: FeasibilityDiagnostic) -> FeasibilityStatus | None:
-    for status in (
-        FeasibilityStatus.INVALID,
-        FeasibilityStatus.REJECTED,
-        FeasibilityStatus.UNAVAILABLE,
-        FeasibilityStatus.UNKNOWN,
-    ):
-        if diagnostic.code.startswith(status.value):
-            return status
-    return None
-
-
-def _dynamic_result_structure_inconsistency(
-    result: ConfigurationFeasibilityResult | TrajectoryFeasibilityResult,
-) -> str | None:
-    """P4 result constructor invariantをP5で再検証する。"""
-
-    def finite_number(value: object) -> bool:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return False
-        try:
-            return math.isfinite(float(value))
-        except (OverflowError, TypeError, ValueError):
-            return False
-
-    if not isinstance(result, (ConfigurationFeasibilityResult, TrajectoryFeasibilityResult)):
-        return "dynamic result has an invalid type"
-    try:
-        status = result.status
-        reason_code = result.reason_code
-        diagnostics = result.diagnostics
-        bound_statuses = result.bound_statuses
-        if isinstance(result, TrajectoryFeasibilityResult):
-            sample_count = result.sample_count
-            source_ids = result.source_ids
-        else:
-            source_id = result.source_id
+        expected_pair_ids = context.expected_pair_ids
+        context._binding_fingerprint
     except Exception:
-        return "dynamic result is structurally incomplete"
+        return "collision result context is structurally incomplete"
+    if any(not _valid_identity(identity) for identity in identities):
+        return "collision result context identity is invalid"
+    if type(expected_pair_ids) is not tuple or not expected_pair_ids:
+        return "collision result expected pair inventory is invalid"
+    if any(not _valid_text(pair_id) for pair_id in expected_pair_ids):
+        return "collision result expected pair identity is invalid"
 
-    if not isinstance(status, FeasibilityStatus):
-        return "dynamic result status is invalid"
-    if not _valid_text(reason_code):
-        return "dynamic result reason identity is invalid"
-    if type(diagnostics) is not tuple:
-        return "dynamic diagnostics must be a tuple"
-    if type(bound_statuses) is not tuple or any(
-        not isinstance(item, EvidenceStatus) for item in bound_statuses
-    ):
-        return "dynamic bound evidence statuses are invalid"
-    if isinstance(result, TrajectoryFeasibilityResult):
-        if isinstance(sample_count, bool) or not isinstance(sample_count, int) or sample_count < 0:
-            return "dynamic trajectory sample count is invalid"
-        if type(source_ids) is not tuple or not source_ids or any(
-            not _valid_text(source_id) for source_id in source_ids
-        ):
-            return "dynamic trajectory source identities are invalid"
-    elif not _valid_text(source_id):
-        return "dynamic source identity is invalid"
-
-    for diagnostic in diagnostics:
-        if not isinstance(diagnostic, FeasibilityDiagnostic):
-            return "dynamic diagnostics contain an invalid member"
+    for evaluation in evaluations:
         try:
-            code = diagnostic.code
-            detail = diagnostic.detail
-            joint_name = diagnostic.joint_name
-            sample_index = diagnostic.sample_index
-            observed = diagnostic.observed
-            threshold = diagnostic.threshold
-            provenance = diagnostic.provenance
+            if type(evaluation.kind) is not CollisionKind:
+                return "collision evaluation kind is invalid"
+            if type(evaluation.status) is not CollisionStatus:
+                return "collision evaluation status is invalid"
         except Exception:
-            return "dynamic diagnostic is structurally incomplete"
-        if not _valid_text(code) or not _valid_text(detail):
-            return "dynamic diagnostic identity or detail is invalid"
-        if joint_name is not None and not _valid_text(joint_name):
-            return "dynamic diagnostic joint identity is invalid"
-        if sample_index is not None and (
-            isinstance(sample_index, bool) or not isinstance(sample_index, int) or sample_index < 0
-        ):
-            return "dynamic diagnostic sample index is invalid"
-        if observed is not None and not finite_number(observed):
-            return "dynamic diagnostic observed value is invalid"
-        if threshold is not None and not finite_number(threshold):
-            return "dynamic diagnostic threshold is invalid"
-        if provenance is not None and not _valid_text(provenance):
-            return "dynamic diagnostic provenance is invalid"
-    return None
+            return "collision evaluation is structurally incomplete"
+        failure = _invoke_post_init(
+            evaluation,
+            CollisionEvaluation.__post_init__,
+            "collision evaluation is invalid",
+        )
+        if failure is not None:
+            return failure
+
+    # P3の__post_init__はcontext binding fingerprint、exact pair coverage、aggregate
+    # status/reason、およびevaluation evidenceを同一canonical pathで検証する。
+    return _invoke_post_init(
+        result,
+        CollisionCheckResult.__post_init__,
+        "collision result aggregate is invalid",
+    )
 
 
 def _dynamic_result_inconsistency(
     result: ConfigurationFeasibilityResult | TrajectoryFeasibilityResult,
 ) -> str | None:
-    """P4 aggregate status / diagnostic / evidenceの整合性を検証する。"""
+    """P4公開validatorへbinding/evidence検証を委譲し、DTOだけ補強検査する。"""
 
-    structure_error = _dynamic_result_structure_inconsistency(result)
-    if structure_error is not None:
-        return structure_error
+    if type(result) is ConfigurationFeasibilityResult:
+        validator = validate_configuration_feasibility_result
+    elif type(result) is TrajectoryFeasibilityResult:
+        validator = validate_trajectory_feasibility_result
+    else:
+        return "dynamic result has an invalid type"
 
     try:
-        result_status = result.status
+        status = result.status
         reason_code = result.reason_code
-        diagnostics = tuple(result.diagnostics)
-        bound_statuses = tuple(result.bound_statuses)
-        sample_count = result.sample_count if isinstance(result, TrajectoryFeasibilityResult) else None
+        diagnostics = result.diagnostics
     except Exception:
-        return "dynamic result became unreadable during validation"
-
-    diagnostic_statuses: list[FeasibilityStatus] = []
+        return "dynamic result is structurally incomplete"
+    if type(status) is not FeasibilityStatus:
+        return "dynamic result status is invalid"
+    if not _valid_text(reason_code):
+        return "dynamic result reason is invalid"
+    if type(diagnostics) is not tuple:
+        return "dynamic diagnostics must be a tuple"
+    if any(type(item) is not FeasibilityDiagnostic for item in diagnostics):
+        return "dynamic diagnostics contain an invalid member"
     for diagnostic in diagnostics:
-        status = _diagnostic_status(diagnostic)
-        if status is None:
-            return "dynamic diagnostic code has no closed status prefix"
-        diagnostic_statuses.append(status)
+        failure = _invoke_post_init(
+            diagnostic,
+            FeasibilityDiagnostic.__post_init__,
+            "dynamic diagnostic is invalid",
+        )
+        if failure is not None:
+            return failure
 
-    if not diagnostic_statuses:
-        expected_status = FeasibilityStatus.FEASIBLE
-        expected_reason = "feasibility_clear"
-    else:
-        expected_status = next(
-            status
-            for status in (
-                FeasibilityStatus.INVALID,
-                FeasibilityStatus.REJECTED,
-                FeasibilityStatus.UNAVAILABLE,
-                FeasibilityStatus.UNKNOWN,
+    if type(result) is TrajectoryFeasibilityResult:
+        try:
+            velocity_evidence = result.velocity_evidence
+        except Exception:
+            return "dynamic velocity evidence is structurally incomplete"
+        if type(velocity_evidence) is not tuple:
+            return "dynamic velocity evidence must be a tuple"
+        if any(type(item) is not VelocityEvidenceBinding for item in velocity_evidence):
+            return "dynamic velocity evidence contains an invalid member"
+        for item in velocity_evidence:
+            try:
+                if type(item.kind) is not VelocityEvidenceKind:
+                    return "dynamic velocity evidence kind is invalid"
+            except Exception:
+                return "dynamic velocity evidence is structurally incomplete"
+            failure = _invoke_post_init(
+                item,
+                VelocityEvidenceBinding.__post_init__,
+                "dynamic velocity evidence is invalid",
             )
-            if status in diagnostic_statuses
-        )
-        expected_reason = next(
-            diagnostic.code
-            for diagnostic in diagnostics
-            if diagnostic.code.startswith(expected_status.value)
-        )
-    if result_status is not expected_status:
-        return "dynamic aggregate status does not match diagnostics"
-    if reason_code != expected_reason:
-        return "dynamic aggregate reason does not match diagnostics"
+            if failure is not None:
+                return failure
 
-    if isinstance(result, TrajectoryFeasibilityResult) and sample_count == 2:
-        if not any(item.code == "unavailable_acceleration" for item in diagnostics):
-            return "two-sample trajectory has no unavailable acceleration diagnostic"
-
-    if isinstance(result, TrajectoryFeasibilityResult) and sample_count is not None and sample_count < 2:
-        if not (
-            result_status is FeasibilityStatus.INVALID
-            and reason_code == "invalid_trajectory_length"
-            and any(item.code == "invalid_trajectory_length" for item in diagnostics)
+    try:
+        expected_joint_names = result.expected_joint_names
+        policy_id = result.policy_id
+        policy_revision = result.policy_revision
+        limit_source_ids = result.limit_source_ids
+        bound_statuses = result.bound_statuses
+        bound_evidence_ids = result.bound_evidence_ids
+        qvel_available = result.qvel_available
+        jacobian_available = result.jacobian_available
+    except Exception:
+        return "dynamic result binding is structurally incomplete"
+    if type(expected_joint_names) is not tuple or not expected_joint_names:
+        return "dynamic expected joint inventory is invalid"
+    if any(not _valid_identity(name) for name in expected_joint_names):
+        return "dynamic expected joint identity is invalid"
+    if len(set(expected_joint_names)) != len(expected_joint_names):
+        return "dynamic expected joint identities are duplicated"
+    if not _valid_identity(policy_id) or not _valid_identity(policy_revision):
+        return "dynamic policy identity is invalid"
+    if type(limit_source_ids) is not tuple or any(
+        not _valid_identity(item) for item in limit_source_ids
+    ):
+        return "dynamic limit source binding is invalid"
+    if type(bound_evidence_ids) is not tuple or any(
+        not _valid_identity(item) for item in bound_evidence_ids
+    ):
+        return "dynamic bound evidence binding is invalid"
+    if type(bound_statuses) is not tuple or any(
+        type(item) is not EvidenceStatus for item in bound_statuses
+    ):
+        return "dynamic bound evidence statuses are invalid"
+    required_limit_count = len(expected_joint_names) * (
+        1 if type(result) is ConfigurationFeasibilityResult else 2
+    )
+    if status is FeasibilityStatus.FEASIBLE:
+        if (
+            len(limit_source_ids) != required_limit_count
+            or len(bound_statuses) != required_limit_count
+            or len(bound_evidence_ids) != required_limit_count
         ):
-            return "trajectory aggregate does not explain its insufficient sample count"
+            return "dynamic limit and evidence bindings are incomplete"
+    elif not (
+        len(limit_source_ids) == len(bound_statuses)
+        and len(bound_statuses) == len(bound_evidence_ids)
+    ):
+        return "dynamic limit and evidence bindings are length-inconsistent"
+    if type(result) is ConfigurationFeasibilityResult:
+        try:
+            source_id = result.source_id
+        except Exception:
+            return "dynamic source identity is structurally incomplete"
+        if not _valid_identity(source_id):
+            return "dynamic source identity is invalid"
+        if qvel_available is not None and type(qvel_available) is not bool:
+            return "dynamic qvel availability is invalid"
+        if jacobian_available is not None and type(jacobian_available) is not bool:
+            return "dynamic Jacobian availability is invalid"
+    else:
+        try:
+            sample_count = result.sample_count
+            source_ids = result.source_ids
+        except Exception:
+            return "dynamic trajectory binding is structurally incomplete"
+        if (
+            type(sample_count) is not int
+            or sample_count < 0
+            or type(source_ids) is not tuple
+            or len(source_ids) != sample_count
+            or any(not _valid_identity(item) for item in source_ids)
+        ):
+            return "dynamic trajectory sample/source binding is invalid"
+        for name, availability in (
+            ("qvel", qvel_available),
+            ("Jacobian", jacobian_available),
+        ):
+            if availability is not None and (
+                type(availability) is not tuple
+                or len(availability) != sample_count
+                or any(type(item) is not bool for item in availability)
+            ):
+                return f"dynamic trajectory {name} availability is invalid"
 
+    try:
+        validated = validator(result)
+    except Exception:
+        return "dynamic feasibility result failed canonical validation"
+    if validated is not result:
+        return "dynamic feasibility validator returned a different result"
     evidence_prefix = {
         EvidenceStatus.INVALID: "invalid_limit_",
         EvidenceStatus.UNAVAILABLE: "unavailable_limit_",
@@ -799,16 +659,72 @@ def _dynamic_result_inconsistency(
     for diagnostic in diagnostics:
         required_evidence = diagnostic_evidence.get(diagnostic.code)
         if required_evidence is not None and not any(
-            status in required_evidence for status in bound_statuses
+            item in required_evidence for item in bound_statuses
         ):
             return "dynamic limit diagnostic has no matching evidence status"
-    if result_status is FeasibilityStatus.FEASIBLE:
-        if not bound_statuses:
-            return "dynamic feasible result has no bound evidence"
-        if any(
-            status not in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL} for status in bound_statuses
-        ):
-            return "dynamic feasible result contains unresolved bound evidence"
+    try:
+        authoritative = result.authoritative
+    except Exception:
+        return "dynamic result authority is unreadable"
+    if type(authoritative) is not bool:
+        return "dynamic result authority is invalid"
+    if status is not FeasibilityStatus.FEASIBLE and authoritative:
+        return "non-feasible dynamic result is spuriously authoritative"
+    return None
+
+
+def _safety_input_inconsistency(value: SafetyInput) -> str | None:
+    """top-level SafetyInput fieldsを評価前にfail-closedで検証する。"""
+
+    try:
+        candidate_id = value.candidate_id
+        provenance = value.provenance
+        limit_resolution = value.limit_resolution
+        collision = value.collision
+        dynamic = value.dynamic
+    except Exception:
+        return "safety input is structurally incomplete"
+    if not _valid_text(candidate_id):
+        return "safety input candidate identity is invalid"
+    if type(provenance) is not tuple:
+        return "safety input provenance must be a tuple"
+    if any(not _valid_text(item) for item in provenance):
+        return "safety input provenance is invalid"
+    if len(set(provenance)) != len(provenance):
+        return "safety input provenance is duplicated"
+    if limit_resolution is not None and type(limit_resolution) is not LimitResolutionResult:
+        return "safety input limit result is invalid"
+    if collision is not None and type(collision) is not CollisionCheckResult:
+        return "safety input collision result is invalid"
+    if dynamic is not None and type(dynamic) not in {
+        ConfigurationFeasibilityResult,
+        TrajectoryFeasibilityResult,
+    }:
+        return "safety input dynamic result is invalid"
+    return None
+
+
+def _cross_component_inconsistency(value: SafetyInput) -> str | None:
+    """P2/P3/P4の共有identityをcompose時に突き合わせる。"""
+
+    try:
+        limit_resolution = value.limit_resolution
+        collision = value.collision
+        dynamic = value.dynamic
+    except Exception:
+        return "cross-component binding is structurally incomplete"
+    if limit_resolution is not None and collision is not None:
+        try:
+            if limit_resolution.robot_id != collision.context.robot_id:
+                return "limit and collision robot identities do not match"
+        except Exception:
+            return "limit and collision robot identities are unreadable"
+    if limit_resolution is not None and dynamic is not None:
+        try:
+            if limit_resolution.expected_joint_names != dynamic.expected_joint_names:
+                return "limit and dynamic joint inventories do not match"
+        except Exception:
+            return "limit and dynamic joint inventories are unreadable"
     return None
 
 
@@ -1008,22 +924,53 @@ _ACTION_PRIORITY = {
 def evaluate_physical_safety(safety_input: SafetyInput) -> SafetyDecision:
     """P2/P3/P4 resultを一意のphysical safety decisionへcomposeする。"""
 
-    if not isinstance(safety_input, SafetyInput):
-        reason = _reason(SafetyComponent.INPUT, "invalid_safety_input", "physical safety input is invalid")
-        return SafetyDecision("invalid-input", SafetyDecisionAction.INVALID, reason, (), reason.provenance)
-    assessments = (
-        _limit_assessment(safety_input.limit_resolution),
-        _collision_assessment(safety_input.collision),
-        _dynamic_assessment(safety_input.dynamic),
-    )
-    selected = max(assessments, key=lambda item: _ACTION_PRIORITY[item.action])
-    provenance = tuple(
-        sorted(
-            set(safety_input.provenance)
-            | {item for assessment in assessments for item in assessment.reason.provenance}
+    def invalid_input() -> SafetyDecision:
+        reason = _reason(
+            SafetyComponent.INPUT,
+            "invalid_safety_input",
+            "physical safety input is invalid",
         )
-    )
-    return SafetyDecision(safety_input.candidate_id, selected.action, selected.reason, assessments, provenance)
+        return SafetyDecision(
+            "invalid-input",
+            SafetyDecisionAction.INVALID,
+            reason,
+            (),
+            (),
+        )
+
+    if not isinstance(safety_input, SafetyInput):
+        return invalid_input()
+    try:
+        if _safety_input_inconsistency(safety_input) is not None:
+            return invalid_input()
+        if _cross_component_inconsistency(safety_input) is not None:
+            return invalid_input()
+        assessments = (
+            _limit_assessment(safety_input.limit_resolution),
+            _collision_assessment(safety_input.collision),
+            _dynamic_assessment(safety_input.dynamic),
+        )
+        selected = max(assessments, key=lambda item: _ACTION_PRIORITY[item.action])
+        provenance = tuple(
+            sorted(
+                set(safety_input.provenance)
+                | {
+                    item
+                    for assessment in assessments
+                    for item in assessment.reason.provenance
+                }
+            )
+        )
+        return SafetyDecision(
+            safety_input.candidate_id,
+            selected.action,
+            selected.reason,
+            assessments,
+            provenance,
+        )
+    except Exception:
+        # user/data-derived malformed fields must never escape the safety boundary.
+        return invalid_input()
 
 
 def evaluate_bounded_safety_samples(samples: Sequence[SafetyInput]) -> BoundedSafetySamplingResult:
