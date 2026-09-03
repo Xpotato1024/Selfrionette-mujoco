@@ -13,6 +13,7 @@ from selfrionette.runtime.safety.physical_limits import (
     PhysicalLimit,
     PhysicalSafetyEnvelope,
     classify_source_status,
+    effective_limit_status,
     make_unknown_limit,
     validate_envelope,
 )
@@ -146,6 +147,79 @@ def test_invalid_and_conflicting_values_do_not_become_authoritative() -> None:
         reason="two revisions disagree",
     )
     assert not conflict.is_authoritative
+
+
+def test_authoritative_limit_requires_authoritative_typed_source() -> None:
+    with pytest.raises(ValueError, match="authoritative limit requires authoritative source"):
+        _joint_limit(
+            status=EvidenceStatus.AUTHORITATIVE,
+            source=_source(
+                kind="lab_document",
+                status=EvidenceStatus.UNKNOWN,
+                evidence_reference=None,
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    ("limit_status", "source_status", "expected"),
+    (
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.PROVISIONAL, EvidenceStatus.PROVISIONAL),
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.UNKNOWN, EvidenceStatus.UNKNOWN),
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.UNAVAILABLE, EvidenceStatus.UNAVAILABLE),
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.CONFLICT, EvidenceStatus.CONFLICT),
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.INVALID, EvidenceStatus.INVALID),
+        (EvidenceStatus.UNKNOWN, EvidenceStatus.CONFLICT, EvidenceStatus.CONFLICT),
+        (EvidenceStatus.CONFLICT, EvidenceStatus.INVALID, EvidenceStatus.INVALID),
+    ),
+)
+def test_effective_status_has_typed_value_source_precedence(
+    limit_status: EvidenceStatus,
+    source_status: EvidenceStatus,
+    expected: EvidenceStatus,
+) -> None:
+    limit = PhysicalLimit(
+        name="joint_1",
+        quantity=LimitQuantity.POSITION,
+        lower=None
+        if limit_status
+        in {
+            EvidenceStatus.UNKNOWN,
+            EvidenceStatus.UNAVAILABLE,
+            EvidenceStatus.CONFLICT,
+            EvidenceStatus.INVALID,
+        }
+        else -1.0,
+        upper=None
+        if limit_status
+        in {
+            EvidenceStatus.UNKNOWN,
+            EvidenceStatus.UNAVAILABLE,
+            EvidenceStatus.CONFLICT,
+            EvidenceStatus.INVALID,
+        }
+        else 1.0,
+        unit="rad",
+        space=LimitSpace.JOINT,
+        frame="fast_arm joint space",
+        status=limit_status,
+        source=_source(
+            kind="fixture",
+            status=source_status,
+            evidence_reference=None,
+        ),
+        reason=f"{limit_status.value} fixture"
+        if limit_status
+        in {
+            EvidenceStatus.UNKNOWN,
+            EvidenceStatus.UNAVAILABLE,
+            EvidenceStatus.CONFLICT,
+            EvidenceStatus.INVALID,
+        }
+        else None,
+    )
+
+    assert effective_limit_status(limit) is expected
 
 
 @pytest.mark.parametrize(

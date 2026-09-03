@@ -9,6 +9,7 @@ from selfrionette.runtime.safety.physical_limits import (
     LimitSpace,
     PhysicalLimit,
     PhysicalSafetyEnvelope,
+    effective_limit_status,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "LimitSpace",
     "PhysicalLimit",
     "PhysicalSafetyEnvelope",
+    "effective_limit_status",
 ]

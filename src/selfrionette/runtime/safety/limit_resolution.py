@@ -21,6 +21,7 @@ from selfrionette.runtime.safety.physical_limits import (
     LimitSpace,
     PhysicalLimit,
     PhysicalSafetyEnvelope,
+    effective_limit_status,
     make_unknown_limit,
 )
 
@@ -44,6 +45,9 @@ class ParityStatus(str, Enum):
     UNKNOWN = "unknown"
     UNAVAILABLE = "unavailable"
     INVALID = "invalid"
+
+
+DEFAULT_COMPARISON_TOLERANCE_RAD = 1e-9
 
 
 def _text(name: str, value: object) -> str:
@@ -88,7 +92,9 @@ class JointSpaceConversion:
             try:
                 object.__setattr__(self, "source_space", LimitSpace(self.source_space))
             except (TypeError, ValueError) as exc:
-                raise ValueError("source_space must be joint, motor, or actuator") from exc
+                raise ValueError("source_space must be motor or actuator") from exc
+        if self.source_space is LimitSpace.JOINT:
+            raise ValueError("source_space must be motor or actuator")
         _text("joint_name", self.joint_name)
         _text("source_name", self.source_name)
         ratio = _finite("gear_ratio", self.gear_ratio)
@@ -139,6 +145,8 @@ class LimitParityRecord:
     upper: float | None
     unit: str
     reason: str | None = None
+    source: LimitSourceProvenance | None = None
+    source_status: EvidenceStatus | None = None
 
     def __post_init__(self) -> None:
         _text("joint_name", self.joint_name)
@@ -146,14 +154,52 @@ class LimitParityRecord:
         if not isinstance(self.status, ParityStatus):
             object.__setattr__(self, "status", ParityStatus(self.status))
         _text("unit", self.unit)
-        if self.lower is not None:
-            _finite("lower", self.lower)
-        if self.upper is not None:
-            _finite("upper", self.upper)
-        if self.lower is not None and self.upper is not None and self.lower > self.upper:
+        lower = _finite("lower", self.lower) if self.lower is not None else None
+        upper = _finite("upper", self.upper) if self.upper is not None else None
+        if (lower is None) != (upper is None):
+            raise ValueError("parity lower and upper must be provided together")
+        if lower is not None and upper is not None and lower > upper:
             raise ValueError("parity lower must not exceed upper")
         if self.reason is not None:
             _text("reason", self.reason)
+        if self.source is not None and not isinstance(self.source, LimitSourceProvenance):
+            raise TypeError("source must be LimitSourceProvenance or None")
+        source_status = self.source_status
+        if source_status is not None:
+            if not isinstance(source_status, EvidenceStatus):
+                try:
+                    source_status = EvidenceStatus(source_status)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("source_status must be a valid EvidenceStatus") from exc
+            if self.source is not None and source_status is not self.source.status:
+                raise ValueError("source_status must match typed source status")
+        elif self.source is not None:
+            source_status = self.source.status
+        if self.status is ParityStatus.MATCH:
+            if lower is None or upper is None:
+                raise ValueError("matched parity requires both lower and upper")
+            if self.reason is not None:
+                raise ValueError("matched parity must not have a reason")
+            if self.source is None:
+                raise ValueError("matched parity requires typed source provenance")
+            if source_status in {
+                EvidenceStatus.UNKNOWN,
+                EvidenceStatus.UNAVAILABLE,
+                EvidenceStatus.CONFLICT,
+                EvidenceStatus.INVALID,
+            }:
+                raise ValueError("matched parity requires a usable typed source status")
+        elif self.reason is None:
+            raise ValueError(f"{self.status.value} parity requires a reason")
+        if self.status in {
+            ParityStatus.UNKNOWN,
+            ParityStatus.UNAVAILABLE,
+            ParityStatus.INVALID,
+        } and (lower is not None or upper is not None):
+            raise ValueError(f"{self.status.value} parity must not contain bounds")
+        object.__setattr__(self, "lower", lower)
+        object.__setattr__(self, "upper", upper)
+        object.__setattr__(self, "source_status", source_status)
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
@@ -166,8 +212,11 @@ class LimitParityRecord:
         }
         if self.reason is not None:
             result["reason"] = self.reason
+        if self.source is not None:
+            result["source"] = self.source.to_dict()
+        if self.source_status is not None and self.source is None:
+            result["source_status"] = self.source_status.value
         return result
-
 
 @dataclass(frozen=True, slots=True)
 class ResolvedJointBound:
@@ -180,6 +229,7 @@ class ResolvedJointBound:
     source_names: tuple[str, ...]
     parity: tuple[LimitParityRecord, ...]
     reason: str | None = None
+    comparison_tolerance_rad: float = DEFAULT_COMPARISON_TOLERANCE_RAD
 
     def __post_init__(self) -> None:
         _text("joint_name", self.joint_name)
@@ -193,31 +243,63 @@ class ResolvedJointBound:
             raise ValueError("resolved bound source names must be unique")
         for source_name in self.source_names:
             _text("source_name", source_name)
-        if self.lower_rad is not None:
-            _finite("lower_rad", self.lower_rad)
-        if self.upper_rad is not None:
-            _finite("upper_rad", self.upper_rad)
-        if self.lower_rad is not None and self.upper_rad is not None and self.lower_rad > self.upper_rad:
+        lower_rad = _finite("lower_rad", self.lower_rad) if self.lower_rad is not None else None
+        upper_rad = _finite("upper_rad", self.upper_rad) if self.upper_rad is not None else None
+        if (lower_rad is None) != (upper_rad is None):
+            raise ValueError("resolved bound lower_rad and upper_rad must be provided together")
+        if lower_rad is not None and upper_rad is not None and lower_rad > upper_rad:
             raise ValueError("resolved bound lower_rad must not exceed upper_rad")
         if not isinstance(self.parity, tuple) or not all(isinstance(item, LimitParityRecord) for item in self.parity):
             raise TypeError("parity must contain LimitParityRecord values")
+        if not self.parity:
+            raise ValueError("resolved bound parity must be non-empty")
+        if len(self.source_names) != len(self.parity):
+            raise ValueError("resolved bound source_names and parity must have equal length")
+        if tuple(item.source_name for item in self.parity) != self.source_names:
+            raise ValueError("resolved bound source_names must exactly match parity identities")
+        if any(item.joint_name != self.joint_name for item in self.parity):
+            raise ValueError("resolved bound parity joint identity must match bound joint")
+        tolerance = _finite("comparison_tolerance_rad", self.comparison_tolerance_rad)
+        if tolerance < 0.0:
+            raise ValueError("comparison_tolerance_rad must be non-negative")
         if self.reason is not None:
             _text("reason", self.reason)
         if self.status in {
             LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
             LimitResolutionStatus.RESOLVED_PROVISIONAL,
         }:
-            if self.lower_rad is None or self.upper_rad is None:
+            if lower_rad is None or upper_rad is None:
                 raise ValueError("resolved bound requires both lower_rad and upper_rad")
+            if any(item.status is not ParityStatus.MATCH for item in self.parity):
+                raise ValueError("resolved bound parity statuses must all be match")
             if any(item.unit != "rad" for item in self.parity):
                 raise ValueError("resolved bound parity units must be rad")
+            for item in self.parity:
+                if item.lower is None or item.upper is None:
+                    raise ValueError("resolved bound parity requires finite ranges")
+                if (
+                    abs(item.lower - lower_rad) > tolerance
+                    or abs(item.upper - upper_rad) > tolerance
+                ):
+                    raise ValueError("resolved bound parity ranges must match normalized bounds")
             if self.reason is not None:
                 raise ValueError("resolved bound must not have a reason")
+            if self.status is LimitResolutionStatus.RESOLVED_AUTHORITATIVE and not any(
+                item.source is not None
+                and item.source.status is EvidenceStatus.AUTHORITATIVE
+                for item in self.parity
+            ):
+                raise ValueError(
+                    "resolved authoritative bound requires typed authoritative source provenance"
+                )
         else:
-            if self.lower_rad is not None or self.upper_rad is not None:
+            if lower_rad is not None or upper_rad is not None:
                 raise ValueError(f"{self.status.value} bound must not contain bounds")
             if not self.reason:
                 raise ValueError(f"{self.status.value} bound requires a reason")
+        object.__setattr__(self, "lower_rad", lower_rad)
+        object.__setattr__(self, "upper_rad", upper_rad)
+        object.__setattr__(self, "comparison_tolerance_rad", tolerance)
 
     @property
     def authoritative(self) -> bool:
@@ -235,6 +317,7 @@ class ResolvedJointBound:
             "status": self.status.value,
             "source_names": list(self.source_names),
             "parity": [item.to_dict() for item in self.parity],
+            "comparison_tolerance_rad": self.comparison_tolerance_rad,
         }
         if self.reason is not None:
             result["reason"] = self.reason
@@ -249,6 +332,8 @@ class LimitResolutionResult:
     robot_id: str
     bounds: tuple[ResolvedJointBound, ...]
     conversion_relations: tuple[JointSpaceConversion, ...]
+    expected_joint_names: tuple[str, ...]
+    comparison_tolerance_rad: float = DEFAULT_COMPARISON_TOLERANCE_RAD
 
     def __post_init__(self) -> None:
         if self.schema_version != 1:
@@ -256,11 +341,57 @@ class LimitResolutionResult:
         _text("robot_id", self.robot_id)
         if not isinstance(self.bounds, tuple) or not self.bounds:
             raise ValueError("limit resolution requires at least one bound")
+        if any(not isinstance(item, ResolvedJointBound) for item in self.bounds):
+            raise TypeError("bounds must contain ResolvedJointBound values")
         names = tuple(item.joint_name for item in self.bounds)
         if len(set(names)) != len(names):
             raise ValueError("limit resolution joint names must be unique")
+        if not isinstance(self.expected_joint_names, tuple):
+            raise TypeError("expected_joint_names must be a tuple")
+        expected_names = tuple(
+            _text("expected_joint_name", name)
+            for name in self.expected_joint_names
+        )
+        if not expected_names:
+            raise ValueError("expected_joint_names must be non-empty")
+        if len(set(expected_names)) != len(expected_names):
+            raise ValueError("expected_joint_names must be unique")
+        if set(expected_names) != set(names):
+            raise ValueError("bounds must exactly cover expected_joint_names")
         if not isinstance(self.conversion_relations, tuple):
             raise TypeError("conversion_relations must be a tuple")
+        relation_sources: set[str] = set()
+        relation_ids: set[str] = set()
+        for relation in self.conversion_relations:
+            if not isinstance(relation, JointSpaceConversion):
+                raise TypeError(
+                    "conversion_relations must contain JointSpaceConversion values"
+                )
+            if relation.joint_name not in expected_names:
+                raise ValueError(
+                    "conversion relation target joint is not expected: "
+                    f"{relation.joint_name}"
+                )
+            if relation.source_name in relation_sources:
+                raise ValueError(
+                    f"duplicate conversion relation for source: {relation.source_name}"
+                )
+            if relation.relation_id in relation_ids:
+                raise ValueError(
+                    f"duplicate conversion relation id: {relation.relation_id}"
+                )
+            relation_sources.add(relation.source_name)
+            relation_ids.add(relation.relation_id)
+        tolerance = _finite("comparison_tolerance_rad", self.comparison_tolerance_rad)
+        if tolerance < 0.0:
+            raise ValueError("comparison_tolerance_rad must be non-negative")
+        if any(
+            bound.comparison_tolerance_rad != tolerance
+            for bound in self.bounds
+        ):
+            raise ValueError("bound comparison tolerance must match result tolerance")
+        object.__setattr__(self, "expected_joint_names", expected_names)
+        object.__setattr__(self, "comparison_tolerance_rad", tolerance)
 
     @property
     def all_resolved(self) -> bool:
@@ -280,6 +411,8 @@ class LimitResolutionResult:
         return {
             "schema_version": self.schema_version,
             "robot_id": self.robot_id,
+            "expected_joint_names": list(self.expected_joint_names),
+            "comparison_tolerance_rad": self.comparison_tolerance_rad,
             "bounds": [item.to_dict() for item in self.bounds],
             "conversion_relations": [
                 {
@@ -349,15 +482,39 @@ def project_limit_to_joint_space(
     )
 
 
+def _unknown_projected_limit(
+    limit: PhysicalLimit,
+    *,
+    name: str,
+    reason: str,
+) -> PhysicalLimit:
+    """conversion不能時も元source provenanceを失わずunknownへ閉じる。"""
+
+    return PhysicalLimit(
+        name=name,
+        quantity=limit.quantity,
+        lower=None,
+        upper=None,
+        unit=limit.unit,
+        space=LimitSpace.JOINT,
+        frame="fast_arm joint space",
+        status=EvidenceStatus.UNKNOWN,
+        source=limit.source,
+        conversion=LimitConversionProvenance.identity(LimitSpace.JOINT),
+        reason=reason,
+    )
+
+
 def _status_for_limit(limit: PhysicalLimit) -> tuple[ParityStatus, str | None]:
-    if limit.status is EvidenceStatus.INVALID:
-        return ParityStatus.INVALID, limit.reason or "invalid source"
-    if limit.status is EvidenceStatus.CONFLICT:
-        return ParityStatus.MISMATCH, limit.reason or "conflicting source"
-    if limit.status is EvidenceStatus.UNAVAILABLE:
-        return ParityStatus.UNAVAILABLE, limit.reason or "source unavailable"
-    if limit.status is EvidenceStatus.UNKNOWN:
-        return ParityStatus.UNKNOWN, limit.reason or "source unknown"
+    status = effective_limit_status(limit)
+    if status is EvidenceStatus.INVALID:
+        return ParityStatus.INVALID, limit.reason or "invalid limit/source status"
+    if status is EvidenceStatus.CONFLICT:
+        return ParityStatus.MISMATCH, limit.reason or "conflicting limit/source status"
+    if status is EvidenceStatus.UNAVAILABLE:
+        return ParityStatus.UNAVAILABLE, limit.reason or "limit source unavailable"
+    if status is EvidenceStatus.UNKNOWN:
+        return ParityStatus.UNKNOWN, limit.reason or "limit source unknown"
     return ParityStatus.MATCH, None
 
 
@@ -377,8 +534,8 @@ def resolve_joint_space_bounds(
     if not names or len(set(names)) != len(names):
         raise ValueError("expected_joint_names must be unique and non-empty")
     _text("robot_id", robot_id)
-    relation_map: dict[str, JointSpaceConversion] = {}
     source_relation_map: dict[str, JointSpaceConversion] = {}
+    relation_ids: set[str] = set()
     for relation in conversion_relations:
         if not isinstance(relation, JointSpaceConversion):
             raise TypeError("conversion_relations must contain JointSpaceConversion values")
@@ -387,15 +544,15 @@ def resolve_joint_space_bounds(
                 "conversion relation target joint is not expected: "
                 f"{relation.joint_name}"
             )
-        if relation.joint_name in relation_map:
-            raise ValueError(f"duplicate conversion relation for joint: {relation.joint_name}")
         if relation.source_name in source_relation_map:
             raise ValueError(
                 "duplicate conversion relation for source: "
                 f"{relation.source_name}"
             )
-        relation_map[relation.joint_name] = relation
+        if relation.relation_id in relation_ids:
+            raise ValueError(f"duplicate conversion relation id: {relation.relation_id}")
         source_relation_map[relation.source_name] = relation
+        relation_ids.add(relation.relation_id)
     projected: list[PhysicalLimit] = []
     for limit in limits:
         if not isinstance(limit, PhysicalLimit):
@@ -413,16 +570,10 @@ def resolve_joint_space_bounds(
         relation = source_relation_map.get(limit.name)
         if relation is None:
             projected.append(
-                make_unknown_limit(
+                _unknown_projected_limit(
+                    limit,
                     name=limit.name,
-                    quantity=limit.quantity,
-                    space=LimitSpace.JOINT,
-                    unit=limit.unit,
-                    frame="fast_arm joint space",
                     reason=f"conversion relation missing for {limit.space.value} source",
-                    source_kind=limit.source.source_kind,
-                    source_id=limit.source.source_id,
-                    revision=limit.source.revision,
                 )
             )
             continue
@@ -430,16 +581,10 @@ def resolve_joint_space_bounds(
             projected.append(project_limit_to_joint_space(limit, relation))
         except (TypeError, ValueError) as exc:
             projected.append(
-                make_unknown_limit(
+                _unknown_projected_limit(
+                    limit,
                     name=relation.joint_name,
-                    quantity=limit.quantity,
-                    space=LimitSpace.JOINT,
-                    unit=limit.unit,
-                    frame="fast_arm joint space",
                     reason=f"conversion failed: {exc}",
-                    source_kind=limit.source.source_kind,
-                    source_id=limit.source.source_id,
-                    revision=limit.source.revision,
                 )
             )
     by_joint: dict[str, list[PhysicalLimit]] = {name: [] for name in names}
@@ -468,38 +613,48 @@ def resolve_joint_space_bounds(
             )
             source_names.append(source_name)
             parity_status, reason = _status_for_limit(limit)
+            parity_lower = limit.lower
+            parity_upper = limit.upper
+            if parity_status in {
+                ParityStatus.UNKNOWN,
+                ParityStatus.UNAVAILABLE,
+                ParityStatus.INVALID,
+            }:
+                parity_lower = None
+                parity_upper = None
             parity.append(
                 LimitParityRecord(
                     joint_name=joint_name,
                     source_name=source_name,
                     status=parity_status,
-                    lower=limit.lower,
-                    upper=limit.upper,
+                    lower=parity_lower,
+                    upper=parity_upper,
                     unit=limit.unit,
                     reason=reason,
+                    source=limit.source,
                 )
             )
-        unresolved = [limit for limit in candidates if limit.status in {EvidenceStatus.INVALID, EvidenceStatus.CONFLICT, EvidenceStatus.UNKNOWN, EvidenceStatus.UNAVAILABLE}]
-        if any(limit.status is EvidenceStatus.INVALID for limit in unresolved):
-            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.INVALID, tuple(source_names), tuple(parity), "invalid limit source"))
+        effective_statuses = tuple(effective_limit_status(limit) for limit in candidates)
+        if EvidenceStatus.INVALID in effective_statuses:
+            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.INVALID, tuple(source_names), tuple(parity), "invalid limit/source status", comparison_tolerance_rad=tolerance_rad))
             continue
-        if any(limit.status is EvidenceStatus.CONFLICT for limit in unresolved):
-            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "conflicting limit source"))
+        if EvidenceStatus.CONFLICT in effective_statuses:
+            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "conflicting limit/source status", comparison_tolerance_rad=tolerance_rad))
             continue
-        if any(limit.status is EvidenceStatus.UNAVAILABLE for limit in unresolved):
-            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.UNAVAILABLE, tuple(source_names), tuple(parity), "limit source unavailable"))
+        if EvidenceStatus.UNAVAILABLE in effective_statuses:
+            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.UNAVAILABLE, tuple(source_names), tuple(parity), "limit source unavailable", comparison_tolerance_rad=tolerance_rad))
             continue
-        if any(limit.status is EvidenceStatus.UNKNOWN for limit in unresolved):
-            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.UNKNOWN, tuple(source_names), tuple(parity), "limit source unknown"))
+        if EvidenceStatus.UNKNOWN in effective_statuses:
+            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.UNKNOWN, tuple(source_names), tuple(parity), "limit/source status unknown", comparison_tolerance_rad=tolerance_rad))
             continue
         known = [limit for limit in candidates if limit.lower is not None and limit.upper is not None]
         if len(known) != len(candidates):
-            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.UNKNOWN, tuple(source_names), tuple(parity), "limit source is not bounded"))
+            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.UNKNOWN, tuple(source_names), tuple(parity), "limit source is not bounded", comparison_tolerance_rad=tolerance_rad))
             continue
         first = known[0]
         assert first.lower is not None and first.upper is not None
         if any(limit.unit != first.unit for limit in known[1:]):
-            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "limit units disagree"))
+            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "limit units disagree", comparison_tolerance_rad=tolerance_rad))
             continue
         if first.unit != "rad":
             bounds.append(
@@ -511,20 +666,26 @@ def resolve_joint_space_bounds(
                     tuple(source_names),
                     tuple(parity),
                     "non-rad joint limit unit cannot be normalized; implicit unit conversion is disabled",
+                    tolerance_rad,
                 )
             )
             continue
         if any(abs(limit.lower - first.lower) > tolerance_rad or abs(limit.upper - first.upper) > tolerance_rad for limit in known[1:]):
-            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "limit ranges disagree"))
+            bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.MISMATCH, tuple(source_names), tuple(parity), "limit ranges disagree", comparison_tolerance_rad=tolerance_rad))
             continue
-        authoritative = any(limit.status is EvidenceStatus.AUTHORITATIVE for limit in known)
+        authoritative = any(
+            status is EvidenceStatus.AUTHORITATIVE
+            for status in effective_statuses
+        )
         status = LimitResolutionStatus.RESOLVED_AUTHORITATIVE if authoritative else LimitResolutionStatus.RESOLVED_PROVISIONAL
-        bounds.append(ResolvedJointBound(joint_name, first.lower, first.upper, status, tuple(source_names), tuple(parity)))
+        bounds.append(ResolvedJointBound(joint_name, first.lower, first.upper, status, tuple(source_names), tuple(parity), comparison_tolerance_rad=tolerance_rad))
     return LimitResolutionResult(
         schema_version=1,
         robot_id=robot_id,
         bounds=tuple(bounds),
         conversion_relations=tuple(conversion_relations),
+        expected_joint_names=names,
+        comparison_tolerance_rad=tolerance_rad,
     )
 
 
@@ -663,6 +824,7 @@ def build_fast_arm_resolved_bounds_provider(
 
 
 __all__ = [
+    "DEFAULT_COMPARISON_TOLERANCE_RAD",
     "FastArmResolvedBoundsProvider",
     "JointSpaceConversion",
     "LimitParityRecord",
