@@ -522,45 +522,10 @@ class ValidationCheckEvidence:
     reason: str
 
     def __post_init__(self) -> None:
-        _text("check_id", self.check_id)
-        if not isinstance(self.kind, ValidationCheckKind):
-            object.__setattr__(self, "kind", ValidationCheckKind(self.kind))
-        if not isinstance(self.status, ValidationCheckStatus):
-            object.__setattr__(self, "status", ValidationCheckStatus(self.status))
-        expected = _json_value("expected", self.expected)
-        if not isinstance(expected, dict) or not expected:
-            raise ValueError("expected must be a non-empty object")
-        observed = None if self.observed is None else _json_value("observed", self.observed)
-        if observed is not None and not isinstance(observed, dict):
-            raise ValueError("observed must be an object or None")
-        if self.status in {ValidationCheckStatus.PASS, ValidationCheckStatus.FAIL} and observed is None:
-            raise ValueError("pass/fail check requires observed evidence")
-        if not isinstance(self.measurement_source, MeasurementSource):
-            raise TypeError("measurement_source must be MeasurementSource")
-        if self.observed_at is not None:
-            _timestamp("observed_at", self.observed_at)
-        if self.status in {ValidationCheckStatus.PASS, ValidationCheckStatus.FAIL} and self.observed_at is None:
-            raise ValueError("pass/fail check requires observed_at")
-        _text("software_revision", self.software_revision)
-        if not isinstance(self.safety_decision, SafetyDecisionEvidence):
-            raise TypeError("safety_decision must be SafetyDecisionEvidence")
-        _text("reason", self.reason)
-        if self.status is ValidationCheckStatus.PASS and self.safety_decision.action is not SafetyDecisionAction.ALLOW:
-            raise ValueError("pass check requires allow safety decision")
-        if self.status is ValidationCheckStatus.UNAVAILABLE and self.safety_decision.action is not SafetyDecisionAction.UNAVAILABLE:
-            raise ValueError("unavailable check requires unavailable safety decision")
-        if self.status is ValidationCheckStatus.TECHNICAL_INVALID and self.safety_decision.action is not SafetyDecisionAction.INVALID:
-            raise ValueError("technical-invalid check requires invalid safety decision")
-        if self.status is ValidationCheckStatus.FAIL and self.safety_decision.action in {
-            SafetyDecisionAction.ALLOW,
-            SafetyDecisionAction.UNAVAILABLE,
-            SafetyDecisionAction.INVALID,
-        }:
-            raise ValueError("fail check requires reject, hold, or stop safety decision")
-        object.__setattr__(self, "expected", expected)
-        object.__setattr__(self, "observed", observed)
+        validate_validation_check_evidence(self)
 
     def to_dict(self) -> dict[str, object]:
+        validate_validation_check_evidence(self)
         return {
             "check_id": self.check_id,
             "kind": self.kind.value,
@@ -575,9 +540,103 @@ class ValidationCheckEvidence:
         }
 
 
+def _nested_field(value: object, name: str) -> object:
+    """constructor bypassで欠落したnested fieldをValueErrorへ閉じる。"""
+
+    try:
+        return getattr(value, name)
+    except Exception as exc:
+        raise ValueError(f"{name} is structurally incomplete") from exc
+
+
+def _reconstruct_measurement_source(value: object) -> MeasurementSource:
+    if not isinstance(value, MeasurementSource):
+        raise TypeError("measurement_source must be MeasurementSource")
+    return MeasurementSource(
+        _nested_field(value, "kind"),  # type: ignore[arg-type]
+        _nested_field(value, "source_id"),  # type: ignore[arg-type]
+        _nested_field(value, "revision"),  # type: ignore[arg-type]
+        _nested_field(value, "evidence_reference"),  # type: ignore[arg-type]
+    )
+
+
+def _reconstruct_safety_decision(value: object) -> SafetyDecisionEvidence:
+    if not isinstance(value, SafetyDecisionEvidence):
+        raise TypeError("safety_decision must be SafetyDecisionEvidence")
+    provenance = _nested_field(value, "provenance")
+    return SafetyDecisionEvidence(
+        _nested_field(value, "action"),  # type: ignore[arg-type]
+        _nested_field(value, "reason_identity"),  # type: ignore[arg-type]
+        provenance,  # type: ignore[arg-type]
+    )
+
+
+def validate_validation_check_evidence(check: ValidationCheckEvidence) -> ValidationCheckEvidence:
+    """checkとnested source / decisionを再構築してcanonicalに検証する。"""
+
+    if not isinstance(check, ValidationCheckEvidence):
+        raise TypeError("check must be ValidationCheckEvidence")
+    check_id = _text("check_id", _nested_field(check, "check_id"))
+    kind_value = _nested_field(check, "kind")
+    kind = kind_value if isinstance(kind_value, ValidationCheckKind) else ValidationCheckKind(kind_value)
+    status_value = _nested_field(check, "status")
+    status = status_value if isinstance(status_value, ValidationCheckStatus) else ValidationCheckStatus(status_value)
+    expected = _json_value("expected", _nested_field(check, "expected"))
+    if not isinstance(expected, dict) or not expected:
+        raise ValueError("expected must be a non-empty object")
+    observed_value = _nested_field(check, "observed")
+    observed = None if observed_value is None else _json_value("observed", observed_value)
+    if observed is not None and not isinstance(observed, dict):
+        raise ValueError("observed must be an object or None")
+    if status is ValidationCheckStatus.PASS and (observed is None or not observed):
+        raise ValueError("pass check requires non-empty observed evidence")
+    if status is ValidationCheckStatus.FAIL and (observed is None or not observed):
+        raise ValueError("fail check requires non-empty observed evidence")
+    source = _reconstruct_measurement_source(_nested_field(check, "measurement_source"))
+    observed_at_value = _nested_field(check, "observed_at")
+    observed_at = None if observed_at_value is None else _timestamp("observed_at", observed_at_value)
+    if status in {ValidationCheckStatus.PASS, ValidationCheckStatus.FAIL} and observed_at is None:
+        raise ValueError("pass/fail check requires observed_at")
+    software_revision = _text("software_revision", _nested_field(check, "software_revision"))
+    safety_decision = _reconstruct_safety_decision(_nested_field(check, "safety_decision"))
+    reason = _text("reason", _nested_field(check, "reason"))
+    if source.kind is MeasurementSourceKind.UNKNOWN and (
+        status is ValidationCheckStatus.PASS or safety_decision.action is SafetyDecisionAction.ALLOW
+    ):
+        raise ValueError("unknown measurement source cannot pass or allow")
+    if status is ValidationCheckStatus.PASS and safety_decision.action is not SafetyDecisionAction.ALLOW:
+        raise ValueError("pass check requires allow safety decision")
+    if status is ValidationCheckStatus.UNAVAILABLE and safety_decision.action is not SafetyDecisionAction.UNAVAILABLE:
+        raise ValueError("unavailable check requires unavailable safety decision")
+    if status is ValidationCheckStatus.TECHNICAL_INVALID and safety_decision.action is not SafetyDecisionAction.INVALID:
+        raise ValueError("technical-invalid check requires invalid safety decision")
+    if status is ValidationCheckStatus.FAIL and safety_decision.action not in {
+        SafetyDecisionAction.REJECT,
+        SafetyDecisionAction.HOLD,
+        SafetyDecisionAction.STOP,
+    }:
+        raise ValueError("fail check requires reject, hold, or stop safety decision")
+    object.__setattr__(check, "check_id", check_id)
+    object.__setattr__(check, "kind", kind)
+    object.__setattr__(check, "status", status)
+    object.__setattr__(check, "expected", expected)
+    object.__setattr__(check, "observed", observed)
+    object.__setattr__(check, "measurement_source", source)
+    object.__setattr__(check, "observed_at", observed_at)
+    object.__setattr__(check, "software_revision", software_revision)
+    object.__setattr__(check, "safety_decision", safety_decision)
+    object.__setattr__(check, "reason", reason)
+    return check
+
+
 def _derive_evidence_class(checks: Sequence[ValidationCheckEvidence]) -> EvidenceClass:
     if not checks:
         return EvidenceClass.NONE
+    for item in checks:
+        try:
+            validate_validation_check_evidence(item)
+        except Exception:
+            return EvidenceClass.UNKNOWN
     if any(item.measurement_source.kind is MeasurementSourceKind.UNKNOWN for item in checks):
         return EvidenceClass.UNKNOWN
     physical = any(item.measurement_source.kind.is_physical for item in checks)
@@ -587,6 +646,16 @@ def _derive_evidence_class(checks: Sequence[ValidationCheckEvidence]) -> Evidenc
     if physical:
         return EvidenceClass.PHYSICAL_ONLY
     return EvidenceClass.SOFTWARE_ONLY
+
+
+def _check_has_physical_source(check: ValidationCheckEvidence) -> bool:
+    """dry-run builderのsource判定をmalformed checkから隔離する。"""
+
+    try:
+        validate_validation_check_evidence(check)
+        return check.measurement_source.kind.is_physical
+    except Exception:
+        return False
 
 
 def validate_operator_gate(procedure: ValidationProcedure) -> ProcedureGateResult:
@@ -625,6 +694,11 @@ def _classify(
         return ValidationClassification.ABORTED, "operator_aborted"
     if _missing_mandatory_check_kinds(procedure.required_checks):
         return ValidationClassification.TECHNICAL_INVALID, "required_check_kind_coverage_incomplete"
+    for check in checks:
+        try:
+            validate_validation_check_evidence(check)
+        except Exception:
+            return ValidationClassification.TECHNICAL_INVALID, "check_evidence_invalid"
     required = {item.check_id: item for item in procedure.required_checks}
     actual_ids = tuple(item.check_id for item in checks)
     if len(actual_ids) != len(set(actual_ids)) or any(item.check_id not in required for item in checks):
@@ -711,7 +785,18 @@ class ValidationEvidenceArtifact:
 
     @property
     def complete(self) -> bool:
-        return self.classification is ValidationClassification.PASS
+        if self.classification is not ValidationClassification.PASS:
+            return False
+        try:
+            derived, reason = _classify(
+                self.procedure,
+                self.checks,
+                completed_at=self.completed_at,
+                operator_aborted=self.operator_aborted,
+            )
+        except Exception:
+            return False
+        return derived is self.classification and reason == self.classification_reason
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -793,7 +878,7 @@ def build_dry_run_validation_artifact(
     typed_checks = tuple(checks)
     if not all(isinstance(item, ValidationCheckEvidence) for item in typed_checks):
         raise TypeError("checks must contain ValidationCheckEvidence values")
-    if any(item.measurement_source.kind.is_physical for item in typed_checks):
+    if any(_check_has_physical_source(item) for item in typed_checks):
         raise ValueError("dry-run builder rejects physical measurement sources; physical validation belongs to #509")
     return build_validation_artifact(
         procedure,
@@ -1083,5 +1168,6 @@ __all__ = [
     "build_validation_artifact",
     "decode_validation_artifact",
     "validate_operator_gate",
+    "validate_validation_check_evidence",
     "validate_validation_artifact",
 ]

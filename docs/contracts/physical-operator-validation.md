@@ -44,7 +44,8 @@ procedureは次のidentityと安全情報を必須とする。
 `trajectory_feasibility`、`stop_procedure`、`rollback_procedure`）をすべて含まなければならない。
 各axisに複数の異なるcheck IDを割り当てることは許可するが、procedureが宣言したsubsetだけを
 coverageの完了とは扱わない。artifactのclassificationは、procedureに宣言されたすべてのcheck IDの
-observationが揃った場合だけ`pass`へ進む。
+observationが揃った場合だけ`pass`へ進む。従って、5軸すべての宣言済みcheck IDが揃わない
+artifactは`pass`にならず、同じkindの追加check IDは許可されるが重複IDは拒否する。
 
 `validate_operator_gate()`はoperator confirmation、preflightの完了と本人一致、clearanceの
 finiteなverification値・timestamp・sourceを順番に検査する。clearanceがrequired値未満なら
@@ -76,6 +77,23 @@ strict validationで拒否する。
 `manufacturer_document`や`physical_measurement`を含む入力を#509 boundaryへ戻す。#508のdry-run
 fixtureはsoftware-onlyで検証し、physical sourceの実測は取得しない。software dry-runの`pass`を
 physical evidenceの成立へ読み替えない。
+
+### Check evidenceのcanonical validation
+
+各checkは次のstatus / action / source bindingを満たさなければならない。`unknown` sourceは
+`pass`や`allow`へ進まず、観測不能なcheckとして扱う。
+
+| status | safety action | source / evidence contract |
+| --- | --- | --- |
+| `pass` | `allow` | `expected`と`observed`が非空、`observed_at`・`software_revision`・`reason`・provenanceが必須、sourceは`unknown`不可 |
+| `fail` | `reject` / `hold` / `stop` | `expected`と`observed`・`reason`が非空、観測timestampとrevisionを保持 |
+| `unavailable` | `unavailable` | observationは省略可能だが、source・reason・decision identityを保持 |
+| `technical_invalid` | `invalid` | reasonを必須とし、malformed schemaやnested evidenceをsuccessへ昇格しない |
+
+`ValidationCheckEvidence`のconstructor、artifact classifier / serialization、strict decoderの
+constructionは、`validate_validation_check_evidence()`という一つのcanonical nested validatorを
+共有する。このvalidatorは`MeasurementSource`と`SafetyDecisionEvidence`を再構築してから検証するため、
+`object.__new__`や`object.__setattr__`でconstructor invariantを迂回したnested objectも拒否する。
 
 ## Closed lifecycle classification
 
