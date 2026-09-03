@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-08-28
+last_verified: 2026-09-04
 canonical_for:
   - self-interference collision policy
   - environment clearance policy
@@ -41,10 +41,12 @@ explicit pair boundaryへ後続接続できる。
 ## Clearance semantics
 
 distanceのunitはgeom surface間のmeterである。`distance < 0`はpenetration、
-`0 <= distance <= clearance_m`はcollision（task-objectはcontact）、
-`clearance_m < distance <= clearance_m + near_collision_margin_m`はnear-collision、
-それより大きい値はclearとなる。distance欠落は`unknown`、contact observation欠落は
-`unavailable`であり、clearへfallbackしない。
+`0 <= distance <= clearance_m + near_collision_margin_m`はnear-collision、
+それより大きい値はclearとなる。task-object pairの明示contact observationだけは
+`contact`となる。distance欠落は`unknown`、contact observation欠落は`unavailable`であり、
+clearへfallbackしない。`CollisionEvaluation`は`near_collision_margin_m`も保持し、
+near evidenceの上限を同じthresholdから検証する。`collision` evidenceは負のdistance、
+`pair_clear` evidenceは`clearance_m`を超えるdistanceを必須とする。
 
 ## Exclusion provenance
 
@@ -55,11 +57,24 @@ exclusionは拒否する。exclusionの存在は全geomのcollision filterを変
 
 ## Configuration / trajectory result
 
-`CollisionCheckResult`はpairごとの`CollisionEvaluation`とaggregate statusを返す。
-statusは`clear`、`near_collision`、`collision`、`contact`、`unknown`、`unavailable`、`invalid`
-である。aggregateはinvalid、collision、near-collision、contact、unavailable、unknownの順で
-fail-closedに優先する。`evaluate_bounded_collision_trajectory`は有限sampleを順番に検査し、
-最初のnon-clear sample indexを返す。
+`CollisionContext`はfrozenなtyped bindingであり、robot/model、policy ID/revision、inventory
+ID/revision、non-emptyかつuniqueな具体的`expected_pair_ids`を保持する。identityは空値や
+placeholderの`"unknown"`を許可しない。factoryはtyped context、またはcontextを組み立てる
+明示的なidentity値を要求し、暗黙の`"unknown"`へfallbackしない。
+
+`CollisionCheckResult`はpairごとの`CollisionEvaluation`とaggregate statusを返す。statusは
+`clear`、`near_collision`、`collision`、`contact`、`unknown`、`unavailable`、`invalid`である。
+constructorは空、duplicate、subset、extraのevaluation coverageを拒否し、aggregate status/reason
+は一つのcanonical derivationと完全一致しなければならない。明示structural exclusionも一つの
+evaluationとしてexpected pair coverageへ含める。`clear`はexpected inventoryを完全に覆う、
+各pairのvalid clear evidenceだけで成立し、unknown・unavailable・invalidや欠落をclearへ変換しない。
+aggregateはinvalid、collision、near-collision、contact、unavailable、unknownの順でfail-closedに
+優先する。
+
+`BoundedCollisionTrajectoryResult`は空でない`sample_results`、それと同じ順序・長さのfrozenな
+`sample_indices`（factoryでは`(0, ..., n - 1)`）を保持する。全sampleは同一のCollisionContext
+bindingを共有し、trajectoryは最初のnon-clear sampleで停止する。aggregate statusと
+`failed_sample_index`はそのfirst non-clearから導出し、non-clear列にsynthetic `clear`を許可しない。
 
 MuJoCo inventory / contact projectionはadapter helperとして利用できるが、viewerに第二の
 collision判定を追加しない。serial、OSC、robot output、hardware validationはこのcontractの
