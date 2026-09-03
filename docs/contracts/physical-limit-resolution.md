@@ -45,6 +45,20 @@ normalizedなjoint boundの単位は`rad`だけである。同じnon-rad unitの
 複数一致していても`unknown`として扱い、mixed unitは`mismatch`とする。resolverはnon-radの
 値を`rad`へ暗黙変換しない。
 
+## Source provenanceとauthority
+
+`LimitSourceProvenance.source_kind`はcanonicalなASCII lowercase underscore identityでなければ
+ならず、`joint_limit_toml`、`mujoco_jnt_range`、`robot_profile`などのsoftware sourceは常に
+`provisional`として扱う。大文字・空白・hyphenによるcase variantはphysical sourceへ昇格
+できない。
+
+`classify_source_status()`の`authority_asserted`はexactな`bool`だけを受け付ける。authorityを
+`authoritative`へ分類するには、software-onlyまたはsynthetic source kindでないことに加え、
+具体的な`source_id`、`revision`、`evidence_reference`が必要である。`unknown`、`unavailable`、
+`none`、`n-a`などのplaceholder identity、空・whitespaceだけのreferenceは拒否する。
+`manufacturer_document`や`physical_measurement`などcallerが提示する具体的なphysical evidenceは
+typed authorityとして保持できるが、このmoduleはphysical numeric authorityを取得・生成しない。
+
 ## Parity and resolution
 
 同一jointのsourceを比較し、次のstatusを返す。resolverは`PhysicalLimit.status`だけを

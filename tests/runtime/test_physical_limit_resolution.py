@@ -427,7 +427,7 @@ def test_effective_status_uses_typed_value_and_source_precedence(
 def test_unknown_source_status_with_matching_authority_cannot_resolve() -> None:
     result = resolve_joint_space_bounds(
         (
-            _limit(source_kind="unknown-source", source_status=EvidenceStatus.UNKNOWN),
+            _limit(source_kind="unknown_source", source_status=EvidenceStatus.UNKNOWN),
             _limit(
                 status=EvidenceStatus.AUTHORITATIVE,
                 source_kind="lab_document",

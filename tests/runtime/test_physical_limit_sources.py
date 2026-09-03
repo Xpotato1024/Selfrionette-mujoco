@@ -24,11 +24,13 @@ def _source(
     kind: str = "lab_document",
     status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
     evidence_reference: str | None = "lab-record-001",
+    source_id: str = "fast-arm-limit-sheet",
+    revision: str = "rev-1",
 ) -> LimitSourceProvenance:
     return LimitSourceProvenance(
         source_kind=kind,
-        source_id="fast-arm-limit-sheet",
-        revision="rev-1",
+        source_id=source_id,
+        revision=revision,
         status=status,
         evidence_reference=evidence_reference,
     )
@@ -67,6 +69,81 @@ def test_authoritative_limit_requires_explicit_physical_provenance() -> None:
 def test_software_sources_cannot_be_marked_authoritative() -> None:
     with pytest.raises(ValueError, match="software-only"):
         _source(kind="joint_limit_toml")
+
+
+@pytest.mark.parametrize("authority_asserted", ("false", 1))
+def test_source_classification_requires_exact_bool_authority_assertion(
+    authority_asserted: object,
+) -> None:
+    with pytest.raises(TypeError, match="authority_asserted must be bool"):
+        classify_source_status(
+            source_kind="manufacturer_document",
+            evidence_reference="record-1",
+            authority_asserted=authority_asserted,  # type: ignore[arg-type]
+        )
+
+
+def test_source_classification_rejects_placeholder_authority_reference() -> None:
+    with pytest.raises(ValueError, match="concrete identities"):
+        classify_source_status(
+            source_kind="manufacturer_document",
+            evidence_reference="unknown",
+            authority_asserted=True,
+        )
+
+
+def test_source_classification_rejects_synthetic_authority_kind() -> None:
+    with pytest.raises(ValueError, match="synthetic"):
+        classify_source_status(
+            source_kind="fixture",
+            evidence_reference="record-1",
+            authority_asserted=True,
+        )
+
+
+def test_source_classification_rejects_whitespace_reference() -> None:
+    with pytest.raises(ValueError, match="evidence_reference"):
+        classify_source_status(
+            source_kind="manufacturer_document",
+            evidence_reference=" record-1 ",
+            authority_asserted=True,
+        )
+
+
+def test_source_kind_must_use_canonical_lowercase_underscore_identity() -> None:
+    with pytest.raises(ValueError, match="canonical lowercase underscore"):
+        _source(kind="JOINT_LIMIT_TOML")
+
+
+def test_authoritative_source_rejects_synthetic_source_kind() -> None:
+    with pytest.raises(ValueError, match="synthetic"):
+        _source(kind="fixture")
+
+
+def test_authoritative_source_rejects_whitespace_evidence_reference() -> None:
+    with pytest.raises(ValueError, match="evidence_reference"):
+        _source(evidence_reference=" record-1 ")
+
+
+@pytest.mark.parametrize("field_name", ("source_id", "revision", "evidence_reference"))
+def test_authoritative_source_rejects_placeholder_identity(field_name: str) -> None:
+    values: dict[str, object] = {
+        "source_id": "fast-arm-limit-sheet",
+        "revision": "rev-1",
+        "evidence_reference": "lab-record-001",
+    }
+    values[field_name] = "unknown"
+
+    with pytest.raises(ValueError, match="concrete identities"):
+        _source(**values)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("source_kind", ("manufacturer_document", "physical_measurement"))
+def test_concrete_physical_authority_remains_valid(source_kind: str) -> None:
+    source = _source(kind=source_kind)
+
+    assert source.status is EvidenceStatus.AUTHORITATIVE
+    assert source.is_physical_evidence
 
 
 def test_missing_physical_source_is_typed_unknown_and_not_bounded() -> None:

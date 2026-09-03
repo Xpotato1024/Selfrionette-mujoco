@@ -60,11 +60,54 @@ _SOFTWARE_ONLY_SOURCE_KINDS = frozenset(
     }
 )
 
+_SYNTHETIC_SOURCE_KINDS = frozenset(
+    {
+        "example",
+        "fake",
+        "fixture",
+        "placeholder",
+        "sample",
+        "synthetic",
+        "test",
+    }
+)
+
+_PLACEHOLDER_IDENTITIES = frozenset(
+    {
+        "n-a",
+        "n/a",
+        "na",
+        "n_a",
+        "nil",
+        "none",
+        "not-applicable",
+        "not_available",
+        "null",
+        "placeholder",
+        "unknown",
+        "unavailable",
+    }
+)
+
 
 def _text(name: str, value: object) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise ValueError(f"{name} must be a non-empty string")
     return value
+
+
+def _source_kind(value: object) -> str:
+    kind = _text("source_kind", value)
+    if not kind.isascii() or not kind[0].islower() or any(
+        not (character.islower() or character.isdigit() or character == "_")
+        for character in kind
+    ):
+        raise ValueError("source_kind must use canonical lowercase underscore notation")
+    return kind
+
+
+def _is_placeholder_identity(value: str) -> bool:
+    return value.casefold() in _PLACEHOLDER_IDENTITIES
 
 
 def _finite_or_none(name: str, value: object) -> float | None:
@@ -108,15 +151,17 @@ class LimitSourceProvenance:
     notes: str | None = None
 
     def __post_init__(self) -> None:
-        source_kind = _text("source_kind", self.source_kind)
-        _text("source_id", self.source_id)
-        _text("revision", self.revision)
+        source_kind = _source_kind(self.source_kind)
+        source_id = _text("source_id", self.source_id)
+        revision = _text("revision", self.revision)
         status = _enum_value(EvidenceStatus, "status", self.status)
         if source_kind in _SOFTWARE_ONLY_SOURCE_KINDS and status is EvidenceStatus.AUTHORITATIVE:
             raise ValueError(
                 "software-only limit source cannot be authoritative: "
                 f"{source_kind}"
             )
+        if status is EvidenceStatus.AUTHORITATIVE and source_kind in _SYNTHETIC_SOURCE_KINDS:
+            raise ValueError("synthetic limit source cannot be authoritative")
         for name, value in (
             ("evidence_reference", self.evidence_reference),
             ("observed_at", self.observed_at),
@@ -126,7 +171,15 @@ class LimitSourceProvenance:
                 _text(name, value)
         if status is EvidenceStatus.AUTHORITATIVE and not self.evidence_reference:
             raise ValueError("authoritative source requires evidence_reference")
+        if status is EvidenceStatus.AUTHORITATIVE and (
+            _is_placeholder_identity(source_id)
+            or _is_placeholder_identity(revision)
+            or _is_placeholder_identity(self.evidence_reference)
+        ):
+            raise ValueError("authoritative source requires concrete identities")
         object.__setattr__(self, "source_kind", source_kind)
+        object.__setattr__(self, "source_id", source_id)
+        object.__setattr__(self, "revision", revision)
         object.__setattr__(self, "status", status)
 
     @property
@@ -550,12 +603,19 @@ def classify_source_status(
     evidence referenceとassertionの両方がある場合だけ返す。
     """
 
-    kind = _text("source_kind", source_kind)
+    kind = _source_kind(source_kind)
+    if type(authority_asserted) is not bool:
+        raise TypeError("authority_asserted must be bool")
+    reference = None if evidence_reference is None else _text("evidence_reference", evidence_reference)
+    if authority_asserted and kind in _SYNTHETIC_SOURCE_KINDS:
+        raise ValueError("synthetic limit source cannot be authoritative")
+    if authority_asserted and reference is not None and _is_placeholder_identity(reference):
+        raise ValueError("authoritative source requires concrete identities")
     if kind in _SOFTWARE_ONLY_SOURCE_KINDS:
         return EvidenceStatus.PROVISIONAL
-    if authority_asserted and evidence_reference:
+    if authority_asserted and reference:
         return EvidenceStatus.AUTHORITATIVE
-    if evidence_reference:
+    if reference:
         return EvidenceStatus.PROVISIONAL
     return EvidenceStatus.UNKNOWN
 
