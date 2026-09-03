@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-08-28
+last_verified: 2026-09-04
 canonical_for:
   - configuration feasibility
   - trajectory dynamic feasibility
@@ -74,7 +74,24 @@ minimum singular valueがthreshold以下、condition numberがthreshold超過は
 thresholdはfiniteかつ正でなければならず、diagnosticの非有限または非妥当なsummaryは
 `invalid`として保持する。state vectorのnon-finite診断は`joint_names[index]`のcanonical identity
 を使用する。diagnostic欠落、dimension不整合は`unavailable`または`invalid`であり、clearへ
-fallbackしない。
+fallbackしない。`JacobianDiagnostic`のconstructorと公開evaluatorは同じdeep validatorを通り、
+source / evidence identity、rank、dimension、singular-value、condition numberを再検証する。
+configuration / trajectory resultは、利用したJacobianの`jacobian_source_ids`と
+`jacobian_evidence_ids`を保持するため、callerが後からsourceだけを差し替えてclearへ昇格できない。
+
+## Policyとresult binding
+
+`TrajectoryFeasibilityPolicy`のconstructor、公開`validate_trajectory_feasibility_policy()`、
+両evaluatorは単一のcanonical validatorを共有する。validatorはjoint inventory、各P2
+`PhysicalLimit`のtyped provenance / effective status、unit、space、canonical frame、cadence、
+Jacobian threshold、qvel tolerance、policy identityをdeep revalidateし、値・units・framesを含む
+`policy_fingerprint`へ固定する。両resultはこのfingerprintを保持し、`policy_id` / `revision`の
+自己申告だけでは`feasible`を構成できない。fingerprint内の各dynamic limitはP2 typed DTOへ復元して
+limit source identity、effective status、evidence identityとresult fieldsをexact照合する。
+constructor bypassやnested mutation、source / sample /
+expected-joint inventoryの矛盾は`invalid`またはconstruction rejectionとなり、syntheticな
+physical authorityを作らない。resultの`feasible` / `authoritative` propertyもcanonical result
+validatorを経由し、statusやbindingを後から変更したobjectでは`False`を返す。
 
 ## Resultと後続compose
 
