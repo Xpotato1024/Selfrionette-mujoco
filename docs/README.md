@@ -61,6 +61,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | physical limit resolution / parity | `docs/contracts/physical-limit-resolution.md` | joint / motor / actuator projectionとread-only parity |
 | physical collision safety / clearance | `docs/contracts/physical-collision-safety.md` | self-interference・environment clearanceのtyped policy |
 | physical trajectory feasibility / dynamics | `docs/contracts/physical-trajectory-feasibility.md` | velocity・acceleration・cadence・Jacobian gate |
+| physical safety core decision | `docs/contracts/physical-safety-core.md` | limit・collision・dynamicのclosed action compose |
 | world/tool control-frame評価 | `docs/evaluation/world-tool-frame-comparison-design.md` | limited exploratory pilot design |
 | Git / PR workflow | `docs/operations/git-pr-workflow.md` | branch、diff、PR、head一致のgate |
 | Codex workflow | `docs/operations/codex-workflow.md` | repository-local ruleとtask-specific deltaの適用 |
