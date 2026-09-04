@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import itertools
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -28,6 +30,7 @@ from selfrionette.runtime.safety.collision_policy import (
     GeometryRole,
     evaluate_bounded_collision_trajectory,
     evaluate_collision_configuration,
+    read_mujoco_contact_observations,
 )
 
 
@@ -49,6 +52,25 @@ def _policy(*exclusions: CollisionExclusion) -> CollisionPolicy:
         near_collision_margin_m=0.02,
         exclusions=exclusions,
     )
+
+
+def _mujoco_contact_fixture(
+    monkeypatch: pytest.MonkeyPatch,
+    geom_names: tuple[str, ...],
+    *,
+    distance: float,
+) -> tuple[object, object]:
+    fake_mujoco = SimpleNamespace(
+        mjtObj=SimpleNamespace(mjOBJ_GEOM="geom"),
+        mj_id2name=lambda model, _object_type, geom_id: model.geom_names[geom_id],
+    )
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+    model = SimpleNamespace(geom_names=geom_names)
+    data = SimpleNamespace(
+        ncon=1,
+        contact=(SimpleNamespace(geom1=0, geom2=1, dist=distance),),
+    )
+    return model, data
 
 
 def _context(
@@ -664,6 +686,155 @@ def test_geometry_inventory_builder_rejects_overlapping_body_role_sets() -> None
             robot_body_names=("arm",),
             environment_body_names=("arm",),
         )
+
+
+def test_mujoco_adapter_marks_only_task_object_contact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("arm", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("target", "target_body", GeometryRole.TASK_OBJECT),
+        )
+    )
+    model, data = _mujoco_contact_fixture(
+        monkeypatch,
+        ("arm", "target"),
+        distance=1.0,
+    )
+
+    observations = read_mujoco_contact_observations(model, data, inventory)
+
+    assert len(observations) == 1
+    assert observations[0].pair_id == "arm|target"
+    assert observations[0].distance_m == 1.0
+    assert observations[0].contact is True
+    result = _evaluate(inventory, observations, _policy())
+    assert result.status is CollisionStatus.CONTACT
+    assert result.reason_code == "task_object_contact"
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "expected_kind", "expected_reason"),
+    (
+        (
+            GeometryIdentity("upper", "upper_body", GeometryRole.ROBOT),
+            GeometryIdentity("fore", "fore_body", GeometryRole.ROBOT),
+            CollisionKind.SELF_INTERFERENCE,
+            "self_interference_penetration",
+        ),
+        (
+            GeometryIdentity("upper_shell", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("fore_shell", "arm_body", GeometryRole.ROBOT),
+            CollisionKind.STRUCTURAL_PROXIMITY,
+            "structural_proximity_penetration",
+        ),
+        (
+            GeometryIdentity("arm", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("floor", "floor_body", GeometryRole.ENVIRONMENT),
+            CollisionKind.ENVIRONMENT_COLLISION,
+            "environment_penetration",
+        ),
+    ),
+)
+def test_mujoco_adapter_preserves_non_task_penetration_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+    first: GeometryIdentity,
+    second: GeometryIdentity,
+    expected_kind: CollisionKind,
+    expected_reason: str,
+) -> None:
+    inventory = GeometryInventory((first, second))
+    model, data = _mujoco_contact_fixture(
+        monkeypatch,
+        (first.geom_name, second.geom_name),
+        distance=-0.001,
+    )
+
+    observations = read_mujoco_contact_observations(model, data, inventory)
+    assert observations[0].contact is False
+    assert observations[0].distance_m == -0.001
+
+    result = _evaluate(inventory, observations, _policy())
+
+    assert result.status is CollisionStatus.COLLISION
+    assert result.reason_code == expected_reason
+    assert result.evaluations[0].kind is expected_kind
+    assert result.evaluations[0].reason_code == expected_reason
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    (
+        (
+            GeometryIdentity("upper", "upper_body", GeometryRole.ROBOT),
+            GeometryIdentity("fore", "fore_body", GeometryRole.ROBOT),
+        ),
+        (
+            GeometryIdentity("upper_shell", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("fore_shell", "arm_body", GeometryRole.ROBOT),
+        ),
+        (
+            GeometryIdentity("arm", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("floor", "floor_body", GeometryRole.ENVIRONMENT),
+        ),
+    ),
+)
+def test_mujoco_adapter_preserves_non_task_far_clearance(
+    monkeypatch: pytest.MonkeyPatch,
+    first: GeometryIdentity,
+    second: GeometryIdentity,
+) -> None:
+    inventory = GeometryInventory((first, second))
+    model, data = _mujoco_contact_fixture(
+        monkeypatch,
+        (first.geom_name, second.geom_name),
+        distance=1.0,
+    )
+
+    observations = read_mujoco_contact_observations(model, data, inventory)
+    assert observations[0].contact is False
+    assert observations[0].distance_m == 1.0
+
+    result = _evaluate(inventory, observations, _policy())
+
+    assert result.status is CollisionStatus.CLEAR
+    assert result.reason_code == "collision_clear"
+    assert result.evaluations[0].reason_code == "pair_clear"
+
+
+def test_mujoco_adapter_rejects_unknown_role_or_unbound_contact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unknown_inventory = GeometryInventory(
+        (
+            GeometryIdentity("arm", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("mystery", "mystery_body", GeometryRole.UNKNOWN),
+        )
+    )
+    model, data = _mujoco_contact_fixture(
+        monkeypatch,
+        ("arm", "mystery"),
+        distance=-0.001,
+    )
+
+    with pytest.raises(ValueError, match="unknown geometry role"):
+        read_mujoco_contact_observations(model, data, unknown_inventory)
+
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("arm", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("floor", "floor_body", GeometryRole.ENVIRONMENT),
+        )
+    )
+    model, data = _mujoco_contact_fixture(
+        monkeypatch,
+        ("arm", "ghost"),
+        distance=-0.001,
+    )
+
+    with pytest.raises(ValueError, match="not represented"):
+        read_mujoco_contact_observations(model, data, inventory)
 
 
 def test_task_object_contact_is_not_self_interference() -> None:

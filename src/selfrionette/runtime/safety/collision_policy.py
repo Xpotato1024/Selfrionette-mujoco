@@ -2102,13 +2102,26 @@ def build_mujoco_geometry_inventory(
     return GeometryInventory(tuple(geometries))
 
 
-def read_mujoco_contact_observations(model: object, data: object) -> tuple[CollisionObservation, ...]:
-    """現在のMuJoCo contact listをdistance evidenceへ投影する。"""
+def read_mujoco_contact_observations(
+    model: object,
+    data: object,
+    inventory: GeometryInventory,
+) -> tuple[CollisionObservation, ...]:
+    """現在のMuJoCo contact listをrole-awareなdistance evidenceへ投影する。"""
 
     if model is None or data is None:
         raise ValueError("MuJoCo model and data are required")
+    if type(inventory) is not GeometryInventory:
+        raise TypeError("inventory must use the typed GeometryInventory contract")
     try:
-        contacts_by_pair: dict[str, tuple[float, bool]] = {}
+        _validate_geometry_inventory(inventory)
+        if any(
+            geometry.role is GeometryRole.UNKNOWN
+            for geometry in inventory.geometries
+        ):
+            raise ValueError("MuJoCo contact inventory contains an unknown geometry role")
+        pair_by_id = {pair.pair_id: pair for pair in inventory.pairs()}
+        contacts_by_pair: dict[str, float] = {}
         import mujoco
 
         for index in range(int(data.ncon)):
@@ -2118,13 +2131,22 @@ def read_mujoco_contact_observations(model: object, data: object) -> tuple[Colli
             if not first or not second:
                 raise ValueError("MuJoCo contact references unknown geom")
             pair_id = "|".join(sorted((first, second)))
+            if pair_id not in pair_by_id:
+                raise ValueError(
+                    "MuJoCo contact pair is not represented by the geometry inventory"
+                )
             distance = _finite("contact distance", contact.dist)
             previous = contacts_by_pair.get(pair_id)
-            if previous is None or distance < previous[0]:
-                contacts_by_pair[pair_id] = (distance, True)
+            if previous is None or distance < previous:
+                contacts_by_pair[pair_id] = distance
         return tuple(
-            CollisionObservation(pair_id, distance, "mujoco-contact", contact=contact)
-            for pair_id, (distance, contact) in sorted(contacts_by_pair.items())
+            CollisionObservation(
+                pair_id,
+                distance,
+                "mujoco-contact",
+                contact=pair_by_id[pair_id].kind is CollisionKind.TASK_OBJECT_CONTACT,
+            )
+            for pair_id, distance in sorted(contacts_by_pair.items())
         )
     except (ImportError, AttributeError, TypeError, ValueError) as exc:
         raise ValueError(f"MuJoCo contact observation failed: {exc}") from exc

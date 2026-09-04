@@ -42,6 +42,13 @@ pairは二つの異なる具体的geom nameから決まり、wildcardは使わ�
 task-object contactはself-interferenceへ変換しない。R7-H #413のcontact identityは、同じ
 explicit pair boundaryへ後続接続できる。
 
+`read_mujoco_contact_observations(model, data, inventory)`は同じtyped inventoryを受け取り、
+pairのroleを参照して`task_object_contact`だけに`contact=True`を設定する。それ以外の
+`self_interference`、`structural_proximity`、`environment_collision`は`contact=False`のまま
+MuJoCoのsigned distanceを保持するため、負のdistanceはそれぞれのpenetration reasonへ到達する。
+inventory外のpair、unknown role、missing geom、malformed distanceはadapterでfail-closedに停止し、
+`invalid_collision_observation`へ変換してclearへ昇格させない。
+
 ## Clearance semantics
 
 distanceのunitはgeom surface間のmeterである。`distance < 0`はpenetration、
