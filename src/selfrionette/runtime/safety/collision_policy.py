@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import itertools
 import math
+import weakref
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from threading import RLock
 
 
 class GeometryRole(str, Enum):
@@ -57,6 +59,47 @@ _PLACEHOLDER_IDENTITIES = frozenset(
 )
 
 
+# Collision DTOのauthorityは、object.__setattr__でprivate fingerprintまで更新される
+# Pythonのdataclass fieldだけに依存しない。ownerが正規化semantic snapshotをobject
+# identityへ外部sealとして登録し、weak reference回収時に解放する。
+_COLLISION_SEALS: dict[
+    int, tuple[weakref.ReferenceType[object], tuple[object, ...]]
+] = {}
+_COLLISION_SEALS_LOCK = RLock()
+
+
+def _release_collision_seal(
+    key: int,
+    reference: weakref.ReferenceType[object],
+) -> None:
+    with _COLLISION_SEALS_LOCK:
+        entry = _COLLISION_SEALS.get(key)
+        if entry is not None and entry[0] is reference:
+            _COLLISION_SEALS.pop(key, None)
+
+
+def _register_collision_seal(
+    value: object,
+    snapshot: tuple[object, ...],
+) -> None:
+    key = id(value)
+    reference = weakref.ref(
+        value,
+        lambda ref, key=key: _release_collision_seal(key, ref),
+    )
+    with _COLLISION_SEALS_LOCK:
+        _COLLISION_SEALS[key] = (reference, snapshot)
+
+
+def _sealed_collision_snapshot(value: object) -> tuple[object, ...]:
+    key = id(value)
+    with _COLLISION_SEALS_LOCK:
+        entry = _COLLISION_SEALS.get(key)
+        if entry is None or entry[0]() is not value:
+            raise ValueError("collision DTO is not constructor-sealed")
+        return entry[1]
+
+
 def _text(name: str, value: object) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise ValueError(f"{name} must be a non-empty string")
@@ -95,7 +138,7 @@ def _pair_id(name: str, value: object) -> str:
     return pair_id
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class CollisionContext:
     """collision resultを同じrobot/model・policy・inventoryへbindするidentity。"""
 
@@ -268,6 +311,7 @@ def _validate_collision_context(
         inventory_fingerprint = _canonical_inventory_fingerprint(
             context.inventory_fingerprint
         )
+        _validate_context_inventory_semantics(inventory_fingerprint)
         policy_fingerprint = _canonical_policy_fingerprint(context.policy_fingerprint)
         canonical_pair_ids = _pair_ids_from_inventory_fingerprint(inventory_fingerprint)
     except AttributeError as exc:
@@ -278,22 +322,14 @@ def _validate_collision_context(
         raise ValueError(
             "expected_pair_ids must exactly match inventory fingerprint pairs"
         )
-    fingerprint = (
-        context.robot_id,
-        context.model_id,
-        context.policy_id,
-        context.policy_revision,
-        context.inventory_id,
-        context.inventory_revision,
-        expected_pair_ids,
-        inventory_fingerprint,
-        policy_fingerprint,
-    )
+    fingerprint = _collision_context_snapshot(context)
     if initialize:
         object.__setattr__(context, "expected_pair_ids", expected_pair_ids)
         object.__setattr__(context, "inventory_fingerprint", inventory_fingerprint)
         object.__setattr__(context, "policy_fingerprint", policy_fingerprint)
+        fingerprint = _collision_context_snapshot(context)
         object.__setattr__(context, "_binding_fingerprint", fingerprint)
+        _register_collision_seal(context, fingerprint)
         return
     try:
         original_fingerprint = context._binding_fingerprint
@@ -305,6 +341,7 @@ def _validate_collision_context(
         raise ValueError(
             "expected_pair_ids must exactly match inventory fingerprint pairs"
         )
+    _validate_collision_seal(context, fingerprint)
 
 
 @dataclass(frozen=True, slots=True)
@@ -472,6 +509,86 @@ def _policy_fingerprint(
     )
 
 
+def _collision_context_snapshot(
+    context: CollisionContext,
+) -> tuple[object, ...]:
+    return (
+        context.robot_id,
+        context.model_id,
+        context.policy_id,
+        context.policy_revision,
+        context.inventory_id,
+        context.inventory_revision,
+        context.expected_pair_ids,
+        context.inventory_fingerprint,
+        context.policy_fingerprint,
+    )
+
+
+def _collision_evaluation_snapshot(
+    evaluation: CollisionEvaluation,
+) -> tuple[object, ...]:
+    return (
+        evaluation.pair_id,
+        evaluation.kind,
+        evaluation.status,
+        evaluation.distance_m,
+        evaluation.clearance_m,
+        evaluation.reason_code,
+        evaluation.provenance,
+        evaluation.near_collision_margin_m,
+    )
+
+
+def _collision_check_result_snapshot(
+    result: CollisionCheckResult,
+) -> tuple[object, ...]:
+    try:
+        return (
+            _collision_context_snapshot(result.context),
+            result.status,
+            tuple(
+                _collision_evaluation_snapshot(item) for item in result.evaluations
+            ),
+            result.reason_code,
+        )
+    except (AttributeError, TypeError):
+        raise ValueError("collision result binding is incomplete") from None
+
+
+def _bounded_collision_trajectory_snapshot(
+    result: BoundedCollisionTrajectoryResult,
+) -> tuple[object, ...]:
+    return (
+        result.status,
+        tuple(_collision_check_result_snapshot(item) for item in result.sample_results),
+        result.sample_indices,
+        result.failed_sample_index,
+    )
+
+
+def _validate_collision_seal(
+    value: object,
+    snapshot: tuple[object, ...],
+) -> None:
+    if _sealed_collision_snapshot(value) != snapshot:
+        raise ValueError("collision DTO has been mutated or bypassed")
+
+
+def _validate_context_inventory_semantics(
+    fingerprint: tuple[tuple[str, str, str, str], ...],
+) -> None:
+    roles_by_body: dict[str, set[str]] = {}
+    for _, body_name, role, _ in fingerprint:
+        if role == GeometryRole.UNKNOWN.value:
+            raise ValueError("inventory geometry role must be known")
+        roles_by_body.setdefault(body_name, set()).add(role)
+    if any(len(roles) > 1 for roles in roles_by_body.values()):
+        raise ValueError("body role sets must be disjoint")
+    if not any(role == GeometryRole.ROBOT.value for _, _, role, _ in fingerprint):
+        raise ValueError("inventory must contain required robot geometry")
+
+
 @dataclass(frozen=True, slots=True)
 class CollisionObservation:
     """1 pairのdistance evidence。distanceはgeom surface間のmeter。"""
@@ -491,7 +608,7 @@ class CollisionObservation:
             raise TypeError("contact must be bool")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class CollisionEvaluation:
     """pairごとのoperator / machine-readable result。"""
 
@@ -503,6 +620,11 @@ class CollisionEvaluation:
     reason_code: str
     provenance: str | None = None
     near_collision_margin_m: float = 0.0
+    _canonical_snapshot: tuple[object, ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         pair_id = _pair_id("pair_id", self.pair_id)
@@ -526,12 +648,18 @@ class CollisionEvaluation:
         _text("reason_code", self.reason_code)
         if self.provenance is not None:
             _identity_text("provenance", self.provenance)
-        inconsistency = _collision_evaluation_inconsistency(self)
+        inconsistency = _collision_evaluation_inconsistency(
+            self,
+            require_seal=False,
+        )
         if inconsistency is not None:
             raise ValueError(inconsistency)
+        snapshot = _collision_evaluation_snapshot(self)
+        object.__setattr__(self, "_canonical_snapshot", snapshot)
+        _register_collision_seal(self, snapshot)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class CollisionCheckResult:
     """configuration collision checkのaggregate。"""
 
@@ -539,6 +667,11 @@ class CollisionCheckResult:
     status: CollisionStatus
     evaluations: tuple[CollisionEvaluation, ...]
     reason_code: str
+    _canonical_snapshot: tuple[object, ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         _validate_collision_context(self.context)
@@ -554,6 +687,9 @@ class CollisionCheckResult:
             raise ValueError(
                 "collision aggregate status/reason must match canonical derivation"
             )
+        snapshot = _collision_check_result_snapshot(self)
+        object.__setattr__(self, "_canonical_snapshot", snapshot)
+        _register_collision_seal(self, snapshot)
 
     @property
     def clear(self) -> bool:
@@ -580,10 +716,13 @@ def _validate_collision_check_result(result: CollisionCheckResult) -> None:
     )
     if result.status is not status or result.reason_code != reason_code:
         raise ValueError("collision aggregate status/reason is inconsistent")
+    _validate_collision_seal(result, _collision_check_result_snapshot(result))
 
 
 def _collision_evaluation_inconsistency(
     evaluation: CollisionEvaluation,
+    *,
+    require_seal: bool = True,
 ) -> str | None:
     """1 pairのstatusとevidenceの整合性をcanonicalに検証する。"""
 
@@ -670,6 +809,14 @@ def _collision_evaluation_inconsistency(
     elif status in {CollisionStatus.UNKNOWN, CollisionStatus.UNAVAILABLE}:
         if distance is not None:
             return "unknown or unavailable evidence must omit distance"
+    if require_seal:
+        try:
+            _validate_collision_seal(
+                evaluation,
+                _collision_evaluation_snapshot(evaluation),
+            )
+        except (AttributeError, TypeError, ValueError):
+            return "collision evaluation has been mutated or bypassed"
     return None
 
 
@@ -688,7 +835,12 @@ def _derive_collision_status_reason(
     for evaluation in evaluations:
         if not isinstance(evaluation, CollisionEvaluation):
             raise TypeError("evaluations must contain CollisionEvaluation values")
-        pair_ids.append(evaluation.pair_id)
+        try:
+            pair_ids.append(evaluation.pair_id)
+        except (AttributeError, TypeError):
+            raise ValueError(
+                "evaluations must contain complete CollisionEvaluation values"
+            ) from None
     if len(pair_ids) != len(set(pair_ids)):
         raise ValueError("collision evaluations must have unique pair IDs")
     if set(pair_ids) != set(context.expected_pair_ids):
@@ -771,7 +923,7 @@ def _validate_inventory(inventory: GeometryInventory) -> str | None:
         roles_by_body.setdefault(geometry.body_name, set()).add(geometry.role)
     if any(len(roles) > 1 for roles in roles_by_body.values()):
         return "body_role_overlap"
-    if not any(geom.role in {GeometryRole.ROBOT, GeometryRole.TOOL} for geom in names.values()):
+    if not any(geom.role is GeometryRole.ROBOT for geom in names.values()):
         return "robot_geometry_missing"
     return None
 
@@ -802,6 +954,37 @@ def _context_expected_pair_ids(inventory: GeometryInventory) -> tuple[str, ...]:
     return ("__invalid_geometry__|__missing_geometry__",)
 
 
+def _invalid_inventory_context(
+    inventory: GeometryInventory,
+    policy: CollisionPolicy,
+    *,
+    robot_id: str,
+    model_id: str,
+    policy_revision: str,
+    inventory_revision: str,
+) -> CollisionContext:
+    """invalid inventoryをtyped INVALID resultへ閉じるための安全なbinding。"""
+
+    # context contract自体はsemanticにvalidとし、実inventoryは呼び出し元の
+    # INVALID reasonを決める前段で検査する。unknown identityを発明せずpairを
+    # dropもしないため、全geometryを一時的にrobot roleとしてbindingする。
+    fingerprint = tuple(
+        (geom.geom_name, geom.body_name, GeometryRole.ROBOT.value, geom.source_id)
+        for geom in inventory.geometries
+    )
+    return CollisionContext(
+        robot_id=robot_id,
+        model_id=model_id,
+        policy_id=policy.policy_id,
+        policy_revision=policy_revision,
+        inventory_id=inventory.inventory_id,
+        inventory_revision=inventory_revision,
+        expected_pair_ids=_pair_ids_from_inventory_fingerprint(fingerprint),
+        inventory_fingerprint=fingerprint,
+        policy_fingerprint=_policy_fingerprint(policy),
+    )
+
+
 def _resolve_collision_context(
     inventory: GeometryInventory,
     policy: CollisionPolicy,
@@ -823,17 +1006,29 @@ def _resolve_collision_context(
         raise TypeError(
             "typed context or explicit collision identity values are required"
         )
-    return CollisionContext(
-        robot_id=robot_id,
-        model_id=model_id,
-        policy_id=policy.policy_id,
-        policy_revision=policy_revision,
-        inventory_id=inventory.inventory_id,
-        inventory_revision=inventory_revision,
-        expected_pair_ids=_context_expected_pair_ids(inventory),
-        inventory_fingerprint=_inventory_fingerprint(inventory),
-        policy_fingerprint=_policy_fingerprint(policy),
-    )
+    try:
+        return CollisionContext(
+            robot_id=robot_id,
+            model_id=model_id,
+            policy_id=policy.policy_id,
+            policy_revision=policy_revision,
+            inventory_id=inventory.inventory_id,
+            inventory_revision=inventory_revision,
+            expected_pair_ids=_context_expected_pair_ids(inventory),
+            inventory_fingerprint=_inventory_fingerprint(inventory),
+            policy_fingerprint=_policy_fingerprint(policy),
+        )
+    except ValueError:
+        if _validate_inventory(inventory) is None:
+            raise
+        return _invalid_inventory_context(
+            inventory,
+            policy,
+            robot_id=robot_id,
+            model_id=model_id,
+            policy_revision=policy_revision,
+            inventory_revision=inventory_revision,
+        )
 
 
 def _invalid_collision_result(
@@ -1083,7 +1278,7 @@ def evaluate_collision_configuration(
     return CollisionCheckResult(context, status, tuple(evaluations), reason)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class BoundedCollisionTrajectoryResult:
     """bounded trajectory各sampleの結果。"""
 
@@ -1091,6 +1286,11 @@ class BoundedCollisionTrajectoryResult:
     sample_results: tuple[CollisionCheckResult, ...]
     sample_indices: tuple[int, ...]
     failed_sample_index: int | None
+    _canonical_snapshot: tuple[object, ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, CollisionStatus):
@@ -1102,8 +1302,11 @@ class BoundedCollisionTrajectoryResult:
         if not all(isinstance(item, CollisionCheckResult) for item in self.sample_results):
             raise TypeError("sample_results must contain CollisionCheckResult values")
         for item in self.sample_results:
-            _validate_collision_context(item.context)
-            _validate_collision_check_result(item)
+            try:
+                _validate_collision_context(item.context)
+                _validate_collision_check_result(item)
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise ValueError("trajectory sample result is invalid") from exc
         if not isinstance(self.sample_indices, tuple):
             raise TypeError("sample_indices must be a tuple")
         if any(
@@ -1142,6 +1345,9 @@ class BoundedCollisionTrajectoryResult:
                 )
             if self.failed_sample_index is not None:
                 raise ValueError("CLEAR trajectory must not have a failed sample index")
+            snapshot = _bounded_collision_trajectory_snapshot(self)
+            object.__setattr__(self, "_canonical_snapshot", snapshot)
+            _register_collision_seal(self, snapshot)
             return
         if self.failed_sample_index != self.sample_indices[first_non_clear]:
             raise ValueError(
@@ -1155,6 +1361,9 @@ class BoundedCollisionTrajectoryResult:
             raise ValueError(
                 "trajectory aggregate status must match the first non-clear sample"
             )
+        snapshot = _bounded_collision_trajectory_snapshot(self)
+        object.__setattr__(self, "_canonical_snapshot", snapshot)
+        _register_collision_seal(self, snapshot)
 
     @property
     def clear(self) -> bool:
@@ -1166,6 +1375,10 @@ class BoundedCollisionTrajectoryResult:
 
     @property
     def context(self) -> CollisionContext:
+        try:
+            _validate_bounded_collision_trajectory_result(self)
+        except Exception as exc:
+            raise ValueError("trajectory result binding is invalid") from exc
         return self.sample_results[0].context
 
 
@@ -1224,6 +1437,10 @@ def _validate_bounded_collision_trajectory_result(
             )
         if result.failed_sample_index is not None:
             raise ValueError("CLEAR trajectory must not have a failed sample index")
+        _validate_collision_seal(
+            result,
+            _bounded_collision_trajectory_snapshot(result),
+        )
         return
     if result.failed_sample_index != result.sample_indices[first_non_clear]:
         raise ValueError(
@@ -1237,6 +1454,46 @@ def _validate_bounded_collision_trajectory_result(
         raise ValueError(
             "trajectory aggregate status must match the first non-clear sample"
         )
+    _validate_collision_seal(
+        result,
+        _bounded_collision_trajectory_snapshot(result),
+    )
+
+
+def validate_collision_context(context: CollisionContext) -> CollisionContext:
+    """Public canonical revalidation route for a collision context."""
+
+    _validate_collision_context(context)
+    return context
+
+
+def validate_collision_evaluation(
+    evaluation: CollisionEvaluation,
+) -> CollisionEvaluation:
+    """Public canonical revalidation route for one pair evaluation."""
+
+    inconsistency = _collision_evaluation_inconsistency(evaluation)
+    if inconsistency is not None:
+        raise ValueError(inconsistency)
+    return evaluation
+
+
+def validate_collision_check_result(
+    result: CollisionCheckResult,
+) -> CollisionCheckResult:
+    """Public canonical revalidation route for an aggregate collision result."""
+
+    _validate_collision_check_result(result)
+    return result
+
+
+def validate_bounded_collision_trajectory_result(
+    result: BoundedCollisionTrajectoryResult,
+) -> BoundedCollisionTrajectoryResult:
+    """Public canonical revalidation route for a bounded collision trajectory."""
+
+    _validate_bounded_collision_trajectory_result(result)
+    return result
 
 
 def evaluate_bounded_collision_trajectory(
@@ -1397,4 +1654,8 @@ __all__ = [
     "evaluate_bounded_collision_trajectory",
     "evaluate_collision_configuration",
     "read_mujoco_contact_observations",
+    "validate_bounded_collision_trajectory_result",
+    "validate_collision_check_result",
+    "validate_collision_context",
+    "validate_collision_evaluation",
 ]

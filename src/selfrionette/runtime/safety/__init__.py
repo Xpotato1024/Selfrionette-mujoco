@@ -24,6 +24,12 @@ from selfrionette.runtime.safety.limit_resolution import (
     validate_limit_resolution_result,
     validate_resolved_joint_bound,
 )
+from selfrionette.runtime.safety.collision_policy import (
+    validate_bounded_collision_trajectory_result,
+    validate_collision_check_result,
+    validate_collision_context,
+    validate_collision_evaluation,
+)
 
 __all__ = [
     "EvidenceStatus",
@@ -46,4 +52,8 @@ __all__ = [
     "validate_limit_resolution_identity",
     "validate_limit_resolution_result",
     "validate_resolved_joint_bound",
+    "validate_bounded_collision_trajectory_result",
+    "validate_collision_check_result",
+    "validate_collision_context",
+    "validate_collision_evaluation",
 ]

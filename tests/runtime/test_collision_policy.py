@@ -4,6 +4,13 @@ import itertools
 
 import pytest
 
+import selfrionette.runtime.safety.collision_policy as _collision_module
+from selfrionette.runtime.safety import (
+    validate_bounded_collision_trajectory_result as package_validate_bounded,
+    validate_collision_check_result as package_validate_check,
+    validate_collision_context as package_validate_context,
+    validate_collision_evaluation as package_validate_evaluation,
+)
 from selfrionette.runtime.safety.collision_policy import (
     BoundedCollisionTrajectoryResult,
     build_mujoco_geometry_inventory,
@@ -103,11 +110,20 @@ def _evaluate(
     observations: tuple[CollisionObservation, ...],
     policy: CollisionPolicy,
 ) -> CollisionCheckResult:
+    try:
+        context = _context(inventory, policy)
+    except ValueError:
+        # invalid inventoryはdirect context構築では拒否するが、evaluatorはtyped INVALIDを返す。
+        context = None
     return evaluate_collision_configuration(
         inventory,
         observations,
         policy,
-        _context(inventory, policy),
+        context,
+        robot_id="fast-arm",
+        model_id="fast-arm-mujoco-v1",
+        policy_revision="policy-revision-1",
+        inventory_revision="inventory-revision-1",
     )
 
 
@@ -499,6 +515,30 @@ def test_context_requires_explicit_immutable_identity_and_pair_inventory() -> No
     with pytest.raises(AttributeError):
         explicit.context.robot_id = "tampered"  # type: ignore[misc]
 
+    overlapping = GeometryInventory(
+        (
+            GeometryIdentity("robot_geom", "shared", GeometryRole.ROBOT),
+            GeometryIdentity("environment_geom", "shared", GeometryRole.ENVIRONMENT),
+        )
+    )
+    with pytest.raises(ValueError, match="body role sets must be disjoint"):
+        _context(overlapping, policy)
+
+    unknown = GeometryInventory(
+        (
+            GeometryIdentity("robot_geom", "robot", GeometryRole.ROBOT),
+            GeometryIdentity("unknown_geom", "unknown_body", GeometryRole.UNKNOWN),
+        )
+    )
+    with pytest.raises(ValueError, match="role must be known"):
+        _context(unknown, policy)
+
+    no_robot = GeometryInventory(
+        (GeometryIdentity("environment_geom", "environment", GeometryRole.ENVIRONMENT),)
+    )
+    with pytest.raises(ValueError, match="required robot geometry"):
+        _context(no_robot, policy)
+
 
 def test_collision_check_result_revalidates_bypassed_context_binding() -> None:
     inventory = _inventory()
@@ -535,6 +575,149 @@ def test_collision_check_result_revalidates_bypassed_context_binding() -> None:
             _clear_evaluations(inventory, policy, context),
             "collision_clear",
         )
+
+
+def test_external_seal_rejects_coherent_private_fingerprint_rewrites() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    result = _clear_result(inventory, policy, context)
+
+    # Rewriting both public content and the dataclass fingerprint must not
+    # recreate owner authority; the external identity seal remains unchanged.
+    object.__setattr__(context, "robot_id", "tampered-robot")
+    object.__setattr__(
+        context,
+        "_binding_fingerprint",
+        _collision_module._collision_context_snapshot(context),
+    )
+    assert not result.clear
+
+    context = _context(inventory, policy)
+    result = _clear_result(inventory, policy, context)
+    evaluation = result.evaluations[0]
+    object.__setattr__(evaluation, "distance_m", 0.2)
+    object.__setattr__(
+        evaluation,
+        "_canonical_snapshot",
+        _collision_module._collision_evaluation_snapshot(evaluation),
+    )
+    assert not result.clear
+
+    replacement_context = _context(
+        inventory,
+        policy,
+        robot_id="replacement-robot",
+    )
+    result = _clear_result(inventory, policy)
+    object.__setattr__(result, "context", replacement_context)
+    object.__setattr__(
+        result,
+        "_canonical_snapshot",
+        _collision_module._collision_check_result_snapshot(result),
+    )
+    assert not result.clear
+
+    first = _clear_result(inventory, policy)
+    extra = _clear_result(inventory, policy, first.context)
+    trajectory = BoundedCollisionTrajectoryResult(
+        CollisionStatus.CLEAR,
+        (first,),
+        (0,),
+        None,
+    )
+    object.__setattr__(trajectory, "sample_results", (first, extra))
+    object.__setattr__(trajectory, "sample_indices", (0, 1))
+    object.__setattr__(
+        trajectory,
+        "_canonical_snapshot",
+        _collision_module._bounded_collision_trajectory_snapshot(trajectory),
+    )
+    assert not trajectory.clear
+
+
+def test_constructor_bypass_is_not_a_clear_collision_result() -> None:
+    assert not object.__new__(CollisionCheckResult).clear
+    assert not object.__new__(BoundedCollisionTrajectoryResult).clear
+
+    malformed_context = object.__new__(CollisionContext)
+    with pytest.raises(ValueError, match="context binding is incomplete"):
+        CollisionCheckResult(
+            malformed_context,
+            CollisionStatus.CLEAR,
+            (),
+            "collision_clear",
+        )
+
+    malformed_evaluation = object.__new__(CollisionEvaluation)
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    evaluations = _clear_evaluations(inventory, policy, context)
+    with pytest.raises(ValueError, match="complete CollisionEvaluation"):
+        CollisionCheckResult(
+            context,
+            CollisionStatus.INVALID,
+            (malformed_evaluation,) + evaluations[1:],
+            "collision_result_inconsistent",
+        )
+
+
+def test_bounded_context_accessor_revalidates_nested_binding() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    trajectory = BoundedCollisionTrajectoryResult(
+        CollisionStatus.CLEAR,
+        (_clear_result(inventory, policy, context),),
+        (0,),
+        None,
+    )
+    object.__setattr__(trajectory.sample_results[0].context, "model_id", "tampered-model")
+    with pytest.raises(ValueError, match="trajectory result binding"):
+        _ = trajectory.context
+
+
+def test_public_collision_validators_revalidate_and_return_typed_values() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    evaluation = _clear_evaluations(inventory, policy, context)[0]
+    result = _clear_result(inventory, policy, context)
+    trajectory = BoundedCollisionTrajectoryResult(
+        CollisionStatus.CLEAR,
+        (result,),
+        (0,),
+        None,
+    )
+
+    assert package_validate_context(context) is context
+    assert package_validate_evaluation(evaluation) is evaluation
+    assert package_validate_check(result) is result
+    assert package_validate_bounded(trajectory) is trajectory
+    assert package_validate_context is _collision_module.validate_collision_context
+    assert package_validate_evaluation is _collision_module.validate_collision_evaluation
+    assert package_validate_check is _collision_module.validate_collision_check_result
+    assert (
+        package_validate_bounded
+        is _collision_module.validate_bounded_collision_trajectory_result
+    )
+
+    object.__setattr__(evaluation, "distance_m", 0.2)
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        package_validate_evaluation(evaluation)
+
+    object.__setattr__(trajectory, "sample_indices", (1,))
+    with pytest.raises(ValueError, match="order and length"):
+        package_validate_bounded(trajectory)
+
+    object.__setattr__(result, "reason_code", "tampered-reason")
+    with pytest.raises(ValueError, match="aggregate status/reason"):
+        package_validate_check(result)
+
+    object.__setattr__(context, "robot_id", "tampered-robot")
+    with pytest.raises(ValueError, match="context binding"):
+        package_validate_context(context)
 
 
 def test_collision_evaluation_rejects_contradictory_success_on_construction() -> None:
@@ -698,6 +881,25 @@ def test_collision_evaluation_distance_ranges_are_fail_closed() -> None:
     object.__setattr__(evaluations[0], "status", CollisionStatus.NEAR_COLLISION)
     object.__setattr__(evaluations[0], "distance_m", 0.0)
     object.__setattr__(evaluations[0], "reason_code", "near_collision_clearance")
+    invalid = CollisionCheckResult(
+        context,
+        CollisionStatus.INVALID,
+        tuple(evaluations),
+        "collision_result_inconsistent",
+    )
+    assert not invalid.clear
+
+    evaluations = list(_clear_evaluations(inventory, policy, context))
+    evaluations[0] = CollisionEvaluation(
+        evaluations[0].pair_id,
+        evaluations[0].kind,
+        CollisionStatus.NEAR_COLLISION,
+        0.0,
+        policy.clearance_m,
+        "near_collision_clearance",
+        "fixture",
+        policy.near_collision_margin_m,
+    )
     near = CollisionCheckResult(
         context,
         CollisionStatus.NEAR_COLLISION,
@@ -707,9 +909,16 @@ def test_collision_evaluation_distance_ranges_are_fail_closed() -> None:
     assert near.status is CollisionStatus.NEAR_COLLISION
 
     evaluations = list(_clear_evaluations(inventory, policy, context))
-    object.__setattr__(evaluations[0], "status", CollisionStatus.COLLISION)
-    object.__setattr__(evaluations[0], "distance_m", -0.001)
-    object.__setattr__(evaluations[0], "reason_code", "self_interference_penetration")
+    evaluations[0] = CollisionEvaluation(
+        evaluations[0].pair_id,
+        evaluations[0].kind,
+        CollisionStatus.COLLISION,
+        -0.001,
+        policy.clearance_m,
+        "self_interference_penetration",
+        "fixture",
+        policy.near_collision_margin_m,
+    )
     collision = CollisionCheckResult(
         context,
         CollisionStatus.COLLISION,
@@ -718,24 +927,17 @@ def test_collision_evaluation_distance_ranges_are_fail_closed() -> None:
     )
     assert collision.status is CollisionStatus.COLLISION
 
-    evaluations = list(_clear_evaluations(inventory, policy, context))
-    object.__setattr__(evaluations[0], "status", CollisionStatus.COLLISION)
-    object.__setattr__(evaluations[0], "distance_m", 0.0)
-    object.__setattr__(evaluations[0], "reason_code", "self_interference_penetration")
-    with pytest.raises(ValueError, match="aggregate status/reason"):
-        CollisionCheckResult(
-            context,
+    with pytest.raises(ValueError, match="collision evidence requires negative distance"):
+        CollisionEvaluation(
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
             CollisionStatus.COLLISION,
-            tuple(evaluations),
+            0.0,
+            policy.clearance_m,
             "self_interference_penetration",
+            "fixture",
+            policy.near_collision_margin_m,
         )
-    invalid = CollisionCheckResult(
-        context,
-        CollisionStatus.INVALID,
-        tuple(evaluations),
-        "collision_result_inconsistent",
-    )
-    assert not invalid.clear
 
 
 def test_unknown_clear_nested_evaluation_is_invalid_not_clear() -> None:
@@ -987,9 +1189,16 @@ def test_bounded_trajectory_rejects_synthetic_clear_and_first_failure_mismatch()
     context = _context(inventory, policy)
     clear = _clear_result(inventory, policy, context)
     evaluations = list(_clear_evaluations(inventory, policy, context))
-    object.__setattr__(evaluations[0], "status", CollisionStatus.COLLISION)
-    object.__setattr__(evaluations[0], "distance_m", -0.001)
-    object.__setattr__(evaluations[0], "reason_code", "self_interference_penetration")
+    evaluations[0] = CollisionEvaluation(
+        evaluations[0].pair_id,
+        evaluations[0].kind,
+        CollisionStatus.COLLISION,
+        -0.001,
+        policy.clearance_m,
+        "self_interference_penetration",
+        "fixture",
+        policy.near_collision_margin_m,
+    )
     collision = CollisionCheckResult(
         context,
         CollisionStatus.COLLISION,
