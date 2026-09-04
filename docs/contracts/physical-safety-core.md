@@ -37,6 +37,14 @@ authority evidenceが明示された場合だけ成立する。completeなprovis
 `UNAVAILABLE/unavailable_qvel`、`UNAVAILABLE/unavailable_acceleration`など正規の未取得証拠は
 `unavailable`へ保持する。P5は新しいphysical authorityや実機測定値を生成しない。
 
+P5自身にも公開canonical validatorを持つ。`validate_safety_input`はcandidate identityとtop-level
+provenanceを検証し、`validate_safety_reason`と`validate_safety_decision`はconstructorと同じ
+binding fingerprintを使ってreason、component assessment、action、aggregate provenanceを再検証する。
+通常の`SafetyDecision`は`limit`、`collision`、`dynamic`の3 assessmentを必須とし、actionとreasonは
+このcanonical順序からのみ受け付け、最高優先度assessmentからのみ導出できる。入力エラー用の`input:invalid_safety_input`だけが空assessmentを
+許容する。`allowed`は呼出し時にもvalidatorを通るため、constructor後のaction、reason、nested assessment
+改変は`False`となる。
+
 ## Closed decision vocabulary
 
 | action | 意味 |
@@ -57,7 +65,10 @@ authority evidenceが明示された場合だけ成立する。completeなprovis
 `SafetyReason`はmachine-readable `reason_code`、owner `component`、operator-visible message、
 provenanceを一体で保持する。`reason.identity`（`component:reason_code`）を両表示面で共有し、
 limit source name、collision evidence source、dynamic source identity、candidate provenanceを
-重複なくsorted tupleへ束ねる。個別`SafetyComponentAssessment`も同じreason contractを持つ。
+重複なくsorted tupleへ束ねる。個別`SafetyComponentAssessment`はcomponent別のcanonical
+reason/action mappingと完全一致しなければならず、unknown reasonや`unavailable`理由の
+自己申告`allow`を構成できない。canonicalなallow reasonは空でないconcrete provenanceを
+必須とする。
 
 ## Upstream aggregate integrity
 
@@ -85,6 +96,14 @@ P4のconfiguration / trajectory resultも同じ防御境界で、status・reason
 mismatchとし、`match`と`unknown` / `unavailable`の未解決値はそれぞれP2の`unknown` / `unavailable`
 優先順位を維持する。`sample_count == 2` のtrajectoryは有限差分accelerationを生成できないため、
 `unavailable_acceleration` diagnosticを必須とし、これを欠くFEASIBLE aggregateは`invalid`へ閉じる。
+
+`evaluate_bounded_safety_samples`の戻り値も`validate_bounded_safety_sampling_result`で再検証する。
+decisionsは空でないtupleで、`first_non_allow_index`は実際の最初のnon-allowと完全一致しなければならない。
+non-allowが存在する場合、sequenceはそのdecisionで停止し、後続のtrailing decisionを許可しない。
+aggregateのaction、reason、provenanceは、そのindexのdecision（全件allowの場合は最後のdecision）からcanonicalに
+導出され、`(ALLOW, REJECT)`を`first_non_allow_index = 0`やaggregate `ALLOW`として保持することはできない。
+`action`と`allowed`は改変時にfail-closedとなる。これらはP5のcomposition contractであり、upstream checkerの
+formulaやphysical authorityを追加するものではない。
 
 ## Component mapping
 

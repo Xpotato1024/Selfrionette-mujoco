@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from selfrionette.runtime.safety.collision_policy import (
@@ -78,6 +78,11 @@ class SafetyReason:
     component: SafetyComponent
     operator_message: str
     provenance: tuple[str, ...] = ()
+    _binding_fingerprint: tuple[object, ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         _text("reason_code", self.reason_code)
@@ -90,6 +95,7 @@ class SafetyReason:
             raise TypeError("provenance must contain non-empty strings")
         if len(set(self.provenance)) != len(self.provenance):
             raise ValueError("provenance must be unique")
+        _validate_safety_reason(self, initialize=True)
 
     @property
     def identity(self) -> str:
@@ -105,6 +111,11 @@ class SafetyInput:
     collision: CollisionCheckResult | None
     dynamic: ConfigurationFeasibilityResult | TrajectoryFeasibilityResult | None
     provenance: tuple[str, ...] = ()
+    _binding_fingerprint: tuple[object, ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         _text("candidate_id", self.candidate_id)
@@ -122,6 +133,7 @@ class SafetyInput:
             raise TypeError("provenance must contain non-empty strings")
         if len(set(self.provenance)) != len(self.provenance):
             raise ValueError("provenance must be unique")
+        _validate_safety_input_contract(self, initialize=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +143,11 @@ class SafetyComponentAssessment:
     component: SafetyComponent
     action: SafetyDecisionAction
     reason: SafetyReason
+    _binding_fingerprint: tuple[object, ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.component, SafetyComponent):
@@ -139,6 +156,7 @@ class SafetyComponentAssessment:
             object.__setattr__(self, "action", SafetyDecisionAction(self.action))
         if not isinstance(self.reason, SafetyReason):
             raise TypeError("reason must be SafetyReason")
+        _validate_safety_component_assessment(self, initialize=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +168,11 @@ class SafetyDecision:
     reason: SafetyReason
     assessments: tuple[SafetyComponentAssessment, ...]
     provenance: tuple[str, ...]
+    _binding_fingerprint: tuple[object, ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         _text("candidate_id", self.candidate_id)
@@ -165,9 +188,14 @@ class SafetyDecision:
             isinstance(item, str) and item for item in self.provenance
         ):
             raise TypeError("provenance must contain non-empty strings")
+        _validate_safety_decision(self, initialize=True)
 
     @property
     def allowed(self) -> bool:
+        try:
+            _validate_safety_decision(self)
+        except Exception:
+            return False
         return self.action is SafetyDecisionAction.ALLOW
 
 
@@ -177,12 +205,33 @@ class BoundedSafetySamplingResult:
 
     decisions: tuple[SafetyDecision, ...]
     first_non_allow_index: int | None
+    reason: SafetyReason | None = None
+    provenance: tuple[str, ...] = ()
+    _binding_fingerprint: tuple[object, ...] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def __post_init__(self) -> None:
+        _validate_bounded_safety_result(self, initialize=True)
 
     @property
     def action(self) -> SafetyDecisionAction:
-        if not self.decisions:
+        try:
+            _validate_bounded_safety_result(self)
+        except Exception:
             return SafetyDecisionAction.INVALID
-        return self.decisions[-1].action if self.first_non_allow_index is None else self.decisions[self.first_non_allow_index].action
+        selected = (
+            self.decisions[-1]
+            if self.first_non_allow_index is None
+            else self.decisions[self.first_non_allow_index]
+        )
+        return selected.action
+
+    @property
+    def allowed(self) -> bool:
+        return self.action is SafetyDecisionAction.ALLOW
 
 
 def _reason(
@@ -206,8 +255,22 @@ def _valid_text(value: object) -> bool:
 def _valid_identity(value: object) -> bool:
     """P3/P4が要求するplaceholderでないidentityを安全に検査する。"""
 
+    placeholders = {
+        "n-a",
+        "n/a",
+        "na",
+        "n_a",
+        "nil",
+        "none",
+        "not-applicable",
+        "not_available",
+        "null",
+        "placeholder",
+        "unknown",
+        "unavailable",
+    }
     try:
-        return _valid_text(value) and value.casefold() != "unknown"
+        return _valid_text(value) and value.casefold() not in placeholders
     except Exception:
         return False
 
@@ -307,11 +370,11 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
     # P2 constructorの暗黙変換をP5で許可せず、typed status / identityだけを受け付ける。
     if type(schema_version) is not int or schema_version != 1:
         return "limit resolution schema version is invalid"
-    if not _valid_text(robot_id):
+    if not _valid_identity(robot_id):
         return "limit resolution robot identity is invalid"
     if type(expected_joint_names) is not tuple or not expected_joint_names:
         return "limit resolution expected joint inventory is invalid"
-    if any(not _valid_text(name) for name in expected_joint_names):
+    if any(not _valid_identity(name) for name in expected_joint_names):
         return "limit resolution expected joint identity is invalid"
     if len(set(expected_joint_names)) != len(expected_joint_names):
         return "limit resolution expected joint identities are duplicated"
@@ -347,14 +410,14 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
             parity = bound.parity
         except Exception:
             return "limit resolution bound is structurally incomplete"
-        if not _valid_text(joint_name):
+        if not _valid_identity(joint_name):
             return "limit resolution contains an invalid joint identity"
         bound_names.append(joint_name)
         if type(status) is not LimitResolutionStatus:
             return f"limit status is invalid for {joint_name}"
         if type(source_names) is not tuple or not source_names:
             return f"limit source identity is empty for {joint_name}"
-        if any(not _valid_text(name) for name in source_names):
+        if any(not _valid_identity(name) for name in source_names):
             return f"limit source identity is invalid for {joint_name}"
         if len(set(source_names)) != len(source_names):
             return f"limit source identity is duplicated for {joint_name}"
@@ -374,9 +437,9 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
                 source_status = item.source_status
             except Exception:
                 return f"limit parity is structurally incomplete for {joint_name}"
-            if not _valid_text(item_joint_name) or item_joint_name != joint_name:
+            if not _valid_identity(item_joint_name) or item_joint_name != joint_name:
                 return f"limit parity joint identity does not match {joint_name}"
-            if not _valid_text(item_source_name):
+            if not _valid_identity(item_source_name):
                 return f"limit parity source identity is invalid for {joint_name}"
             if type(item_status) is not ParityStatus:
                 return f"limit parity status is invalid for {joint_name}"
@@ -396,6 +459,8 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
                 return failure
             if source_status is not None and type(source_status) is not EvidenceStatus:
                 return f"limit parity source status is invalid for {joint_name}"
+            if source_status is not None and source_status is not source.status:
+                return f"limit parity source status does not match provenance for {joint_name}"
             failure = _invoke_post_init(
                 item,
                 LimitParityRecord.__post_init__,
@@ -684,11 +749,11 @@ def _safety_input_inconsistency(value: SafetyInput) -> str | None:
         dynamic = value.dynamic
     except Exception:
         return "safety input is structurally incomplete"
-    if not _valid_text(candidate_id):
+    if not _valid_identity(candidate_id):
         return "safety input candidate identity is invalid"
     if type(provenance) is not tuple:
         return "safety input provenance must be a tuple"
-    if any(not _valid_text(item) for item in provenance):
+    if any(not _valid_identity(item) for item in provenance):
         return "safety input provenance is invalid"
     if len(set(provenance)) != len(provenance):
         return "safety input provenance is duplicated"
@@ -701,6 +766,10 @@ def _safety_input_inconsistency(value: SafetyInput) -> str | None:
         TrajectoryFeasibilityResult,
     }:
         return "safety input dynamic result is invalid"
+    try:
+        _validate_safety_input_contract(value)
+    except Exception:
+        return "safety input binding is invalid"
     return None
 
 
@@ -731,22 +800,18 @@ def _cross_component_inconsistency(value: SafetyInput) -> str | None:
 def _limit_assessment(result: LimitResolutionResult | None) -> SafetyComponentAssessment:
     component = SafetyComponent.LIMIT
     if result is None:
-        return SafetyComponentAssessment(
+        return _assessment_from_reason(
             component,
-            SafetyDecisionAction.UNAVAILABLE,
-            _reason(component, "limit_resolution_unavailable", "physical limit resolution is unavailable"),
+            "limit_resolution_unavailable",
+            "physical limit resolution is unavailable",
         )
     inconsistency = _limit_result_inconsistency(result)
     if inconsistency is not None:
-        return SafetyComponentAssessment(
+        return _assessment_from_reason(
             component,
-            SafetyDecisionAction.INVALID,
-            _reason(
-                component,
-                "limit_resolution_inconsistent",
-                inconsistency,
-                _safe_limit_provenance(result),
-            ),
+            "limit_resolution_inconsistent",
+            inconsistency,
+            _safe_limit_provenance(result),
         )
     try:
         bounds = result.bounds
@@ -756,15 +821,11 @@ def _limit_assessment(result: LimitResolutionResult | None) -> SafetyComponentAs
             for bound in bounds
         )
     except Exception:
-        return SafetyComponentAssessment(
+        return _assessment_from_reason(
             component,
-            SafetyDecisionAction.INVALID,
-            _reason(
-                component,
-                "limit_resolution_inconsistent",
-                "limit resolution result became unreadable after validation",
-                _safe_limit_provenance(result),
-            ),
+            "limit_resolution_inconsistent",
+            "limit resolution result became unreadable after validation",
+            _safe_limit_provenance(result),
         )
     provenance = _safe_limit_provenance(result)
     if any(
@@ -802,43 +863,35 @@ def _limit_assessment(result: LimitResolutionResult | None) -> SafetyComponentAs
         action = SafetyDecisionAction.UNAVAILABLE
         code = "limit_resolution_unavailable"
         message = "physical limit resolution has no complete evidence"
-    return SafetyComponentAssessment(component, action, _reason(component, code, message, provenance))
+    return _assessment_from_reason(component, code, message, provenance)
 
 
 def _collision_assessment(result: CollisionCheckResult | None) -> SafetyComponentAssessment:
     component = SafetyComponent.COLLISION
     if result is None:
-        return SafetyComponentAssessment(
+        return _assessment_from_reason(
             component,
-            SafetyDecisionAction.UNAVAILABLE,
-            _reason(component, "collision_result_unavailable", "collision result is unavailable"),
+            "collision_result_unavailable",
+            "collision result is unavailable",
         )
     inconsistency = _collision_result_inconsistency(result)
     if inconsistency is not None:
-        return SafetyComponentAssessment(
+        return _assessment_from_reason(
             component,
-            SafetyDecisionAction.INVALID,
-            _reason(
-                component,
-                "collision_result_inconsistent",
-                inconsistency,
-                _safe_collision_provenance(result),
-            ),
+            "collision_result_inconsistent",
+            inconsistency,
+            _safe_collision_provenance(result),
         )
     try:
         result_status = result.status
         evaluations = tuple(result.evaluations)
         evaluation_statuses = tuple(evaluation.status for evaluation in evaluations)
     except Exception:
-        return SafetyComponentAssessment(
+        return _assessment_from_reason(
             component,
-            SafetyDecisionAction.INVALID,
-            _reason(
-                component,
-                "collision_result_inconsistent",
-                "collision result became unreadable after validation",
-                _safe_collision_provenance(result),
-            ),
+            "collision_result_inconsistent",
+            "collision result became unreadable after validation",
+            _safe_collision_provenance(result),
         )
     if result_status is CollisionStatus.CLEAR and not evaluations:
         action, code, message = SafetyDecisionAction.UNAVAILABLE, "collision_result_unavailable", "collision result has no pair evidence"
@@ -861,7 +914,7 @@ def _collision_assessment(result: CollisionCheckResult | None) -> SafetyComponen
     else:
         action, code, message = SafetyDecisionAction.ALLOW, "collision_clear", "collision evidence is clear"
     provenance = _safe_collision_provenance(result)
-    return SafetyComponentAssessment(component, action, _reason(component, code, message, provenance))
+    return _assessment_from_reason(component, code, message, provenance)
 
 
 def _dynamic_assessment(
@@ -869,32 +922,29 @@ def _dynamic_assessment(
 ) -> SafetyComponentAssessment:
     component = SafetyComponent.DYNAMIC
     if result is None:
-        return SafetyComponentAssessment(
+        return _assessment_from_reason(
             component,
-            SafetyDecisionAction.UNAVAILABLE,
-            _reason(component, "dynamic_result_unavailable", "dynamic feasibility result is unavailable"),
+            "dynamic_result_unavailable",
+            "dynamic feasibility result is unavailable",
         )
     inconsistency = _dynamic_result_inconsistency(result)
     if inconsistency is not None:
-        return SafetyComponentAssessment(
+        return _assessment_from_reason(
             component,
-            SafetyDecisionAction.INVALID,
-            _reason(component, "dynamic_result_inconsistent", inconsistency, _safe_dynamic_provenance(result)),
+            "dynamic_result_inconsistent",
+            inconsistency,
+            _safe_dynamic_provenance(result),
         )
     provenance = _safe_dynamic_provenance(result)
     try:
         result_status = result.status
         authoritative = result.authoritative
     except Exception:
-        return SafetyComponentAssessment(
+        return _assessment_from_reason(
             component,
-            SafetyDecisionAction.INVALID,
-            _reason(
-                component,
-                "dynamic_result_inconsistent",
-                "dynamic result became unreadable after validation",
-                provenance,
-            ),
+            "dynamic_result_inconsistent",
+            "dynamic result became unreadable after validation",
+            provenance,
         )
     if result_status is FeasibilityStatus.INVALID:
         action, code, message = SafetyDecisionAction.INVALID, "dynamic_result_invalid", "dynamic feasibility result is invalid"
@@ -908,7 +958,7 @@ def _dynamic_assessment(
         action, code, message = SafetyDecisionAction.HOLD, "dynamic_result_provisional", "dynamic result relies on provisional evidence"
     else:
         action, code, message = SafetyDecisionAction.ALLOW, "dynamic_feasibility_clear", "dynamic feasibility is clear"
-    return SafetyComponentAssessment(component, action, _reason(component, code, message, provenance))
+    return _assessment_from_reason(component, code, message, provenance)
 
 
 _ACTION_PRIORITY = {
@@ -919,6 +969,356 @@ _ACTION_PRIORITY = {
     SafetyDecisionAction.STOP: 4,
     SafetyDecisionAction.INVALID: 5,
 }
+
+
+# componentごとのreason/actionは、factoryとpublic DTO validatorが共有する
+# 単一のcanonical mappingとする。unknown reason codeはcomposition authorityに
+# 到達する前に拒否し、callerがALLOWを自己申告する経路を残さない。
+_COMPONENT_REASON_ACTIONS = {
+    SafetyComponent.LIMIT: {
+        "limit_resolution_unavailable": SafetyDecisionAction.UNAVAILABLE,
+        "limit_resolution_inconsistent": SafetyDecisionAction.INVALID,
+        "limit_resolution_unbounded": SafetyDecisionAction.INVALID,
+        "limit_resolution_invalid": SafetyDecisionAction.INVALID,
+        "limit_resolution_mismatch": SafetyDecisionAction.REJECT,
+        "limit_resolution_provisional": SafetyDecisionAction.HOLD,
+        "limit_resolution_authoritative": SafetyDecisionAction.ALLOW,
+    },
+    SafetyComponent.COLLISION: {
+        "collision_result_unavailable": SafetyDecisionAction.UNAVAILABLE,
+        "collision_result_inconsistent": SafetyDecisionAction.INVALID,
+        "collision_result_invalid": SafetyDecisionAction.INVALID,
+        "collision_result_unknown": SafetyDecisionAction.UNAVAILABLE,
+        "collision_detected": SafetyDecisionAction.STOP,
+        "near_collision_detected": SafetyDecisionAction.HOLD,
+        "task_object_contact": SafetyDecisionAction.HOLD,
+        "collision_clear": SafetyDecisionAction.ALLOW,
+    },
+    SafetyComponent.DYNAMIC: {
+        "dynamic_result_unavailable": SafetyDecisionAction.UNAVAILABLE,
+        "dynamic_result_inconsistent": SafetyDecisionAction.INVALID,
+        "dynamic_result_invalid": SafetyDecisionAction.INVALID,
+        "dynamic_result_unknown": SafetyDecisionAction.UNAVAILABLE,
+        "dynamic_feasibility_rejected": SafetyDecisionAction.REJECT,
+        "dynamic_result_provisional": SafetyDecisionAction.HOLD,
+        "dynamic_feasibility_clear": SafetyDecisionAction.ALLOW,
+    },
+}
+
+_CANONICAL_ALLOW_REASON_CODES = frozenset({
+    "limit_resolution_authoritative",
+    "collision_clear",
+    "dynamic_feasibility_clear",
+})
+_CANONICAL_ASSESSMENT_ORDER = (
+    SafetyComponent.LIMIT,
+    SafetyComponent.COLLISION,
+    SafetyComponent.DYNAMIC,
+)
+
+
+def _assessment_from_reason(
+    component: SafetyComponent,
+    reason_code: str,
+    message: str,
+    provenance: Sequence[str] = (),
+) -> SafetyComponentAssessment:
+    """factoryがcanonical reason/action mappingからassessmentを生成する。"""
+
+    try:
+        action = _COMPONENT_REASON_ACTIONS[component][reason_code]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("unknown component reason code") from exc
+    return SafetyComponentAssessment(
+        component,
+        action,
+        _reason(component, reason_code, message, provenance),
+    )
+
+
+_INVALID_INPUT_REASON_CODES = frozenset({
+    "invalid_safety_input",
+    "invalid_safety_samples",
+})
+_COMPONENTS = frozenset({
+    SafetyComponent.LIMIT,
+    SafetyComponent.COLLISION,
+    SafetyComponent.DYNAMIC,
+})
+
+
+def _canonical_provenance(value: object, name: str) -> tuple[str, ...]:
+    """provenanceをtyped identityとして正規化する。"""
+
+    if type(value) is not tuple:
+        raise TypeError(f"{name} must be a tuple")
+    values = tuple(value)
+    if any(not _valid_identity(item) for item in values):
+        raise ValueError(f"{name} must contain concrete identities")
+    if len(values) != len(set(values)):
+        raise ValueError(f"{name} must be unique")
+    return tuple(sorted(values))
+
+
+def _validate_safety_reason(
+    reason: SafetyReason,
+    *,
+    initialize: bool = False,
+) -> None:
+    """SafetyReasonのconstructor/bypass後に同一canonical invariantを適用する。"""
+
+    if type(reason) is not SafetyReason:
+        raise TypeError("reason must be SafetyReason")
+    reason_code = getattr(reason, "reason_code", None)
+    component = getattr(reason, "component", None)
+    operator_message = getattr(reason, "operator_message", None)
+    provenance = getattr(reason, "provenance", None)
+    if not _valid_identity(reason_code):
+        raise ValueError("reason_code must be a concrete identity")
+    if type(component) is not SafetyComponent:
+        raise TypeError("reason component must be SafetyComponent")
+    if not _valid_text(operator_message):
+        raise ValueError("operator_message must be a non-empty string")
+    canonical_provenance = _canonical_provenance(provenance, "reason provenance")
+    fingerprint = (reason_code, component, operator_message, canonical_provenance)
+    if initialize:
+        object.__setattr__(reason, "provenance", canonical_provenance)
+        object.__setattr__(reason, "_binding_fingerprint", fingerprint)
+        return
+    try:
+        bound = reason._binding_fingerprint
+    except AttributeError as exc:
+        raise ValueError("reason binding fingerprint is missing") from exc
+    if bound != fingerprint:
+        raise ValueError("reason binding was mutated")
+
+
+def _validate_safety_input_contract(
+    value: SafetyInput,
+    *,
+    initialize: bool = False,
+) -> None:
+    """candidate/provenanceのpublic DTO invariantをconstructorとconsumerで共有する。"""
+
+    if type(value) is not SafetyInput:
+        raise TypeError("value must be SafetyInput")
+    candidate_id = getattr(value, "candidate_id", None)
+    provenance = getattr(value, "provenance", None)
+    if not _valid_identity(candidate_id):
+        raise ValueError("candidate_id must be a concrete identity")
+    canonical_provenance = _canonical_provenance(provenance, "safety input provenance")
+    nested_values = tuple(
+        getattr(value, name, None)
+        for name in ("limit_resolution", "collision", "dynamic")
+    )
+    for (name, expected_type), nested in zip(
+        (
+            ("limit_resolution", LimitResolutionResult),
+            ("collision", CollisionCheckResult),
+            ("dynamic", (ConfigurationFeasibilityResult, TrajectoryFeasibilityResult)),
+        ),
+        nested_values,
+        strict=True,
+    ):
+        if nested is not None and type(nested) not in (
+            expected_type if isinstance(expected_type, tuple) else (expected_type,)
+        ):
+            raise TypeError(f"{name} has an invalid type")
+    # DTO差替えもconstructor時のbindingから外れた入力として扱う。同一DTO内の
+    # field mutationは各upstream public validatorがdeep revalidateする。
+    nested_fingerprint = tuple(
+        id(nested) if nested is not None else None
+        for nested in nested_values
+    )
+    fingerprint = (candidate_id, canonical_provenance, nested_fingerprint)
+    if initialize:
+        object.__setattr__(value, "provenance", canonical_provenance)
+        object.__setattr__(value, "_binding_fingerprint", fingerprint)
+        return
+    try:
+        bound = value._binding_fingerprint
+    except AttributeError as exc:
+        raise ValueError("safety input binding fingerprint is missing") from exc
+    if bound != fingerprint:
+        raise ValueError("safety input binding was mutated")
+
+
+def _validate_safety_component_assessment(
+    assessment: SafetyComponentAssessment,
+    *,
+    initialize: bool = False,
+) -> None:
+    """component action/reason bindingをdeep revalidateする。"""
+
+    if type(assessment) is not SafetyComponentAssessment:
+        raise TypeError("assessment must be SafetyComponentAssessment")
+    component = getattr(assessment, "component", None)
+    action = getattr(assessment, "action", None)
+    reason = getattr(assessment, "reason", None)
+    if type(component) is not SafetyComponent:
+        raise TypeError("assessment component must be SafetyComponent")
+    if type(action) is not SafetyDecisionAction:
+        raise TypeError("assessment action must be SafetyDecisionAction")
+    if type(reason) is not SafetyReason:
+        raise TypeError("assessment reason must be SafetyReason")
+    _validate_safety_reason(reason)
+    if reason.component is not component:
+        raise ValueError("assessment reason component must match assessment component")
+    expected_action = _COMPONENT_REASON_ACTIONS.get(component, {}).get(reason.reason_code)
+    if expected_action is None:
+        raise ValueError("assessment reason code is unknown for component")
+    if action is not expected_action:
+        raise ValueError("assessment action does not match canonical reason mapping")
+    if reason.reason_code in _CANONICAL_ALLOW_REASON_CODES and not reason.provenance:
+        raise ValueError("canonical allow assessment requires concrete provenance")
+    fingerprint = (component, action, reason._binding_fingerprint)
+    if initialize:
+        object.__setattr__(assessment, "_binding_fingerprint", fingerprint)
+        return
+    try:
+        bound = assessment._binding_fingerprint
+    except AttributeError as exc:
+        raise ValueError("assessment binding fingerprint is missing") from exc
+    if bound != fingerprint:
+        raise ValueError("assessment binding was mutated")
+
+
+def _validate_safety_decision(
+    decision: SafetyDecision,
+    *,
+    initialize: bool = False,
+) -> None:
+    """SafetyDecisionのaggregate/action/provenance invariantを一つの経路で検証する。"""
+
+    if type(decision) is not SafetyDecision:
+        raise TypeError("decision must be SafetyDecision")
+    candidate_id = getattr(decision, "candidate_id", None)
+    action = getattr(decision, "action", None)
+    reason = getattr(decision, "reason", None)
+    assessments = getattr(decision, "assessments", None)
+    provenance = getattr(decision, "provenance", None)
+    if not _valid_identity(candidate_id):
+        raise ValueError("decision candidate_id is invalid")
+    if type(action) is not SafetyDecisionAction:
+        raise TypeError("decision action must be SafetyDecisionAction")
+    if type(reason) is not SafetyReason:
+        raise TypeError("decision reason must be SafetyReason")
+    _validate_safety_reason(reason)
+    if type(assessments) is not tuple or any(
+        type(item) is not SafetyComponentAssessment for item in assessments
+    ):
+        raise TypeError("decision assessments must contain SafetyComponentAssessment values")
+    if not assessments:
+        if not (
+            action is SafetyDecisionAction.INVALID
+            and reason.component is SafetyComponent.INPUT
+            and reason.reason_code in _INVALID_INPUT_REASON_CODES
+        ):
+            raise ValueError("decision without component assessments must be invalid input")
+        expected_provenance = reason.provenance
+    else:
+        if len(assessments) != len(_COMPONENTS) or {
+            item.component for item in assessments
+        } != _COMPONENTS:
+            raise ValueError("decision assessments must cover limit, collision, and dynamic exactly")
+        if tuple(item.component for item in assessments) != _CANONICAL_ASSESSMENT_ORDER:
+            raise ValueError("decision assessments must use canonical component order")
+        for item in assessments:
+            _validate_safety_component_assessment(item)
+        selected = max(assessments, key=lambda item: _ACTION_PRIORITY[item.action])
+        if action is not selected.action or reason != selected.reason:
+            raise ValueError("decision aggregate must match the highest-priority assessment")
+        expected_provenance = tuple(
+            sorted(
+                {
+                    item
+                    for assessment in assessments
+                    for item in assessment.reason.provenance
+                }
+                | set(reason.provenance)
+            )
+        )
+    canonical_provenance = _canonical_provenance(provenance, "decision provenance")
+    if not set(expected_provenance).issubset(canonical_provenance):
+        raise ValueError("decision provenance must include all assessment evidence")
+    fingerprint = (
+        candidate_id,
+        action,
+        reason._binding_fingerprint,
+        tuple(item._binding_fingerprint for item in assessments),
+        canonical_provenance,
+    )
+    if initialize:
+        object.__setattr__(decision, "provenance", canonical_provenance)
+        object.__setattr__(decision, "_binding_fingerprint", fingerprint)
+        return
+    try:
+        bound = decision._binding_fingerprint
+    except AttributeError as exc:
+        raise ValueError("decision binding fingerprint is missing") from exc
+    if bound != fingerprint:
+        raise ValueError("decision binding was mutated")
+
+
+def _validate_bounded_safety_result(
+    result: BoundedSafetySamplingResult,
+    *,
+    initialize: bool = False,
+) -> None:
+    """bounded samplingのcoverage/first-stop/aggregateをcanonicalに検証する。"""
+
+    if type(result) is not BoundedSafetySamplingResult:
+        raise TypeError("result must be BoundedSafetySamplingResult")
+    decisions = getattr(result, "decisions", None)
+    first_non_allow_index = getattr(result, "first_non_allow_index", None)
+    if type(decisions) is not tuple or not decisions:
+        raise ValueError("bounded decisions must be a non-empty tuple")
+    if any(type(item) is not SafetyDecision for item in decisions):
+        raise TypeError("bounded decisions must contain SafetyDecision values")
+    for decision in decisions:
+        _validate_safety_decision(decision)
+    non_allow_indices = tuple(
+        index
+        for index, decision in enumerate(decisions)
+        if decision.action is not SafetyDecisionAction.ALLOW
+    )
+    expected_index = non_allow_indices[0] if non_allow_indices else None
+    if first_non_allow_index != expected_index:
+        raise ValueError("first_non_allow_index must identify the first non-allow decision")
+    if expected_index is not None and len(decisions) != expected_index + 1:
+        raise ValueError("bounded decisions must stop at first non-allow decision")
+    selected = decisions[-1] if expected_index is None else decisions[expected_index]
+    reason = getattr(result, "reason", None)
+    provenance = getattr(result, "provenance", None)
+    if initialize and reason is None:
+        reason = selected.reason
+        object.__setattr__(result, "reason", reason)
+    if type(reason) is not SafetyReason:
+        raise TypeError("bounded aggregate reason must be SafetyReason")
+    _validate_safety_reason(reason)
+    if reason != selected.reason:
+        raise ValueError("bounded aggregate reason must match the selected decision")
+    canonical_provenance = _canonical_provenance(provenance, "bounded provenance")
+    if initialize and not canonical_provenance and selected.provenance:
+        canonical_provenance = selected.provenance
+        object.__setattr__(result, "provenance", canonical_provenance)
+    if canonical_provenance != selected.provenance:
+        raise ValueError("bounded aggregate provenance must match the selected decision")
+    fingerprint = (
+        tuple(item._binding_fingerprint for item in decisions),
+        expected_index,
+        reason._binding_fingerprint,
+        canonical_provenance,
+    )
+    if initialize:
+        object.__setattr__(result, "_binding_fingerprint", fingerprint)
+        return
+    try:
+        bound = result._binding_fingerprint
+    except AttributeError as exc:
+        raise ValueError("bounded sampling binding fingerprint is missing") from exc
+    if bound != fingerprint:
+        raise ValueError("bounded sampling binding was mutated")
 
 
 def evaluate_physical_safety(safety_input: SafetyInput) -> SafetyDecision:
@@ -976,17 +1376,56 @@ def evaluate_physical_safety(safety_input: SafetyInput) -> SafetyDecision:
 def evaluate_bounded_safety_samples(samples: Sequence[SafetyInput]) -> BoundedSafetySamplingResult:
     """有限candidate列を順に検査し、最初のnon-allowでbounded stopする。"""
 
-    if not isinstance(samples, Sequence) or isinstance(samples, (str, bytes)) or not samples:
+    def invalid_samples() -> BoundedSafetySamplingResult:
         reason = _reason(SafetyComponent.INPUT, "invalid_safety_samples", "bounded safety samples are invalid")
         decision = SafetyDecision("invalid-samples", SafetyDecisionAction.INVALID, reason, (), reason.provenance)
         return BoundedSafetySamplingResult((decision,), 0)
+
+    try:
+        if not isinstance(samples, Sequence) or isinstance(samples, (str, bytes)) or not samples:
+            return invalid_samples()
+    except Exception:
+        return invalid_samples()
     decisions: list[SafetyDecision] = []
-    for index, sample in enumerate(samples):
-        decision = evaluate_physical_safety(sample)
-        decisions.append(decision)
-        if decision.action is not SafetyDecisionAction.ALLOW:
-            return BoundedSafetySamplingResult(tuple(decisions), index)
-    return BoundedSafetySamplingResult(tuple(decisions), None)
+    try:
+        for index, sample in enumerate(samples):
+            decision = evaluate_physical_safety(sample)
+            decisions.append(decision)
+            if decision.action is not SafetyDecisionAction.ALLOW:
+                return BoundedSafetySamplingResult(tuple(decisions), index)
+        return BoundedSafetySamplingResult(tuple(decisions), None)
+    except Exception:
+        return invalid_samples()
+
+
+def validate_safety_reason(reason: SafetyReason) -> SafetyReason:
+    """SafetyReasonのpublic canonical validator。"""
+
+    _validate_safety_reason(reason)
+    return reason
+
+
+def validate_safety_input(value: SafetyInput) -> SafetyInput:
+    """SafetyInputのpublic top-level validator（nested resultはconsumerで再検証）。"""
+
+    _validate_safety_input_contract(value)
+    return value
+
+
+def validate_safety_decision(decision: SafetyDecision) -> SafetyDecision:
+    """SafetyDecisionのpublic aggregate validator。"""
+
+    _validate_safety_decision(decision)
+    return decision
+
+
+def validate_bounded_safety_sampling_result(
+    result: BoundedSafetySamplingResult,
+) -> BoundedSafetySamplingResult:
+    """bounded sampling結果のpublic canonical validator。"""
+
+    _validate_bounded_safety_result(result)
+    return result
 
 
 __all__ = [
@@ -999,4 +1438,8 @@ __all__ = [
     "SafetyReason",
     "evaluate_bounded_safety_samples",
     "evaluate_physical_safety",
+    "validate_bounded_safety_sampling_result",
+    "validate_safety_decision",
+    "validate_safety_input",
+    "validate_safety_reason",
 ]
