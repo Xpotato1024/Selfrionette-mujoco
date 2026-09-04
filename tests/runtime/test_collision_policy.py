@@ -15,6 +15,7 @@ from selfrionette.runtime.safety.collision_policy import (
     BoundedCollisionTrajectoryResult,
     build_mujoco_geometry_inventory,
     CollisionCheckResult,
+    CollisionContractViolation,
     CollisionContext,
     CollisionExclusion,
     CollisionEvaluation,
@@ -1255,3 +1256,115 @@ def test_bounded_trajectory_factory_returns_bound_sample_indices() -> None:
     assert result.sample_indices == (0, 1)
     assert result.failed_sample_index == result.sample_indices[-1]
     assert len(result.sample_results) == len(result.sample_indices)
+
+
+def test_nested_inventory_policy_and_result_replacement_is_not_authority() -> None:
+    inventory = _inventory()
+    replacement_geometry = GeometryIdentity(
+        "upper", "upper_arm", GeometryRole.ROBOT
+    )
+    object.__setattr__(
+        inventory,
+        "geometries",
+        (replacement_geometry,) + inventory.geometries[1:],
+    )
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        inventory.pairs()
+
+    exclusion = CollisionExclusion(
+        "fore|upper", "known structural overlap", "geometry-review-002"
+    )
+    policy = _policy(exclusion)
+    replacement_exclusion = CollisionExclusion(
+        "fore|upper", "known structural overlap", "geometry-review-002"
+    )
+    object.__setattr__(policy, "exclusions", (replacement_exclusion,))
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        policy.exclusion_for("fore|upper")
+
+    inventory = _inventory()
+    policy = _policy()
+    result = _clear_result(inventory, policy)
+    replacement_context = _context(inventory, policy)
+    object.__setattr__(result, "context", replacement_context)
+    assert not result.clear
+
+
+def test_constructor_bypass_and_exact_type_nested_values_fail_closed() -> None:
+    malformed_geometry = object.__new__(GeometryIdentity)
+    with pytest.raises(ValueError, match="geometry identity"):
+        GeometryInventory((malformed_geometry,))
+
+    malformed_inventory = object.__new__(GeometryInventory)
+    with pytest.raises(ValueError, match="geometry inventory"):
+        malformed_inventory.pairs()
+
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    clear = _clear_result(inventory, policy, context)
+
+    class EvaluationSubclass(CollisionEvaluation):
+        pass
+
+    with pytest.raises(TypeError, match="exact"):
+        EvaluationSubclass(
+            clear.evaluations[0].pair_id,
+            clear.evaluations[0].kind,
+            clear.evaluations[0].status,
+            clear.evaluations[0].distance_m,
+            clear.evaluations[0].clearance_m,
+            clear.evaluations[0].reason_code,
+            clear.evaluations[0].provenance,
+            clear.evaluations[0].near_collision_margin_m,
+        )
+
+    malformed_context = object.__new__(CollisionContext)
+    with pytest.raises(CollisionContractViolation, match="unavailable"):
+        evaluate_collision_configuration(
+            inventory,
+            (),
+            policy,
+            malformed_context,
+        )
+
+    invalid = evaluate_collision_configuration(
+        inventory,
+        (),
+        policy,
+        malformed_context,
+        robot_id="fast-arm",
+        model_id="fast-arm-mujoco-v1",
+        policy_revision="policy-revision-1",
+        inventory_revision="inventory-revision-1",
+    )
+    assert invalid.status is CollisionStatus.INVALID
+
+
+def test_malformed_nested_observation_and_empty_inventory_fail_closed() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    observation = CollisionObservation("fore|upper", 0.1, "fixture")
+    object.__setattr__(observation, "source_id", "unknown")
+    result = evaluate_collision_configuration(
+        inventory,
+        (observation,),
+        policy,
+        context,
+    )
+    assert result.status is CollisionStatus.INVALID
+
+    empty = object.__new__(GeometryInventory)
+    object.__setattr__(empty, "geometries", ())
+    object.__setattr__(empty, "inventory_id", "geometry-inventory/v1")
+    with pytest.raises(CollisionContractViolation, match="identity is unavailable"):
+        evaluate_collision_configuration(
+            empty,
+            (),
+            policy,
+            robot_id="fast-arm",
+            model_id="fast-arm-mujoco-v1",
+            policy_revision="policy-revision-1",
+            inventory_revision="inventory-revision-1",
+        )

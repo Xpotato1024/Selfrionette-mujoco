@@ -41,6 +41,10 @@ class CollisionStatus(str, Enum):
     INVALID = "invalid"
 
 
+class CollisionContractViolation(ValueError):
+    """collision contextから安全なtyped bindingを復元できない契約違反。"""
+
+
 _PLACEHOLDER_IDENTITIES = frozenset(
     {
         "n-a",
@@ -101,7 +105,7 @@ def _sealed_collision_snapshot(value: object) -> tuple[object, ...]:
 
 
 def _text(name: str, value: object) -> str:
-    if not isinstance(value, str) or not value or value != value.strip():
+    if type(value) is not str or not value or value != value.strip():
         raise ValueError(f"{name} must be a non-empty string")
     return value
 
@@ -114,9 +118,12 @@ def _identity_text(name: str, value: object) -> str:
 
 
 def _finite(name: str, value: object) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if type(value) not in {int, float}:
         raise TypeError(f"{name} must be a finite number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{name} must be finite") from exc
     if not math.isfinite(number):
         raise ValueError(f"{name} must be finite")
     return 0.0 if number == 0.0 else number
@@ -136,6 +143,28 @@ def _pair_id(name: str, value: object) -> str:
     if pair_id != "|".join(sorted(parts)):
         raise ValueError(f"{name} must be name-ordered")
     return pair_id
+
+
+def _exact_type(value: object, expected: type, name: str) -> None:
+    if type(value) is not expected:
+        raise TypeError(f"{name} must be an exact {expected.__name__} value")
+
+
+def _geometry_identity_snapshot(value: GeometryIdentity) -> tuple[object, ...]:
+    return (value.geom_name, value.body_name, value.role, value.source_id)
+
+
+def _collision_exclusion_snapshot(value: CollisionExclusion) -> tuple[object, ...]:
+    return (
+        value.pair_id,
+        value.reason,
+        value.evidence_reference,
+        value.classification,
+    )
+
+
+def _collision_observation_snapshot(value: CollisionObservation) -> tuple[object, ...]:
+    return (value.pair_id, value.distance_m, value.source_id, value.contact)
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
@@ -169,19 +198,19 @@ class CollisionContext:
 def _canonical_inventory_fingerprint(
     value: object,
 ) -> tuple[tuple[str, str, str, str], ...]:
-    if not isinstance(value, tuple) or not value:
+    if type(value) is not tuple or not value:
         raise ValueError("inventory_fingerprint must be a non-empty tuple")
     roles = {role.value for role in GeometryRole}
     normalized: list[tuple[str, str, str, str]] = []
     for item in value:
-        if not isinstance(item, tuple) or len(item) != 4:
+        if type(item) is not tuple or len(item) != 4:
             raise TypeError(
                 "inventory_fingerprint must contain geometry identity tuples"
             )
         geom_name = _identity_text("inventory geometry name", item[0])
         body_name = _identity_text("inventory body name", item[1])
         role = item[2]
-        if not isinstance(role, str) or role not in roles:
+        if type(role) is not str or role not in roles:
             raise ValueError("inventory geometry role is invalid")
         source_id = _identity_text("inventory source identity", item[3])
         normalized.append((geom_name, body_name, role, source_id))
@@ -245,7 +274,7 @@ def _kind_from_inventory_fingerprint(
 def _canonical_policy_fingerprint(
     value: object,
 ) -> tuple[str, float, float, tuple[tuple[str, str, str, str], ...]]:
-    if not isinstance(value, tuple) or len(value) != 4:
+    if type(value) is not tuple or len(value) != 4:
         raise TypeError(
             "policy_fingerprint must contain policy identity, thresholds, and exclusions"
         )
@@ -257,11 +286,11 @@ def _canonical_policy_fingerprint(
     if clearance < 0.0 or margin < 0.0:
         raise ValueError("policy fingerprint thresholds must be non-negative")
     exclusions_value = value[3]
-    if not isinstance(exclusions_value, tuple):
+    if type(exclusions_value) is not tuple:
         raise TypeError("policy fingerprint exclusions must be a tuple")
     exclusions: list[tuple[str, str, str, str]] = []
     for item in exclusions_value:
-        if not isinstance(item, tuple) or len(item) != 4:
+        if type(item) is not tuple or len(item) != 4:
             raise TypeError(
                 "policy fingerprint exclusions must contain identity tuples"
             )
@@ -286,8 +315,7 @@ def _validate_collision_context(
 ) -> None:
     """contextのidentityと、constructor後の変更を一つの規則で検証する。"""
 
-    if not isinstance(context, CollisionContext):
-        raise TypeError("context must be CollisionContext")
+    _exact_type(context, CollisionContext, "context")
     try:
         for name, value in (
             ("robot_id", context.robot_id),
@@ -298,7 +326,7 @@ def _validate_collision_context(
             ("inventory_revision", context.inventory_revision),
         ):
             _identity_text(name, value)
-        if not isinstance(context.expected_pair_ids, tuple):
+        if type(context.expected_pair_ids) is not tuple:
             raise TypeError("expected_pair_ids must be a tuple")
         expected_pair_ids = tuple(
             _pair_id("expected_pair_id", pair_id)
@@ -344,7 +372,7 @@ def _validate_collision_context(
     _validate_collision_seal(context, fingerprint)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class GeometryIdentity:
     """MuJoCo geomのlogical identityとsemantic role。"""
 
@@ -354,14 +382,16 @@ class GeometryIdentity:
     source_id: str = "mujoco-model"
 
     def __post_init__(self) -> None:
+        _exact_type(self, GeometryIdentity, "geometry identity")
         _identity_text("geom_name", self.geom_name)
         _identity_text("body_name", self.body_name)
-        if not isinstance(self.role, GeometryRole):
+        if type(self.role) is not GeometryRole:
             object.__setattr__(self, "role", GeometryRole(self.role))
         _identity_text("source_id", self.source_id)
+        _register_collision_seal(self, _geometry_identity_snapshot(self))
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class GeometryInventory:
     """policyで検査するexplicit geom集合。"""
 
@@ -369,21 +399,27 @@ class GeometryInventory:
     inventory_id: str = "geometry-inventory/v1"
 
     def __post_init__(self) -> None:
-        if not isinstance(self.geometries, tuple):
+        _exact_type(self, GeometryInventory, "geometry inventory")
+        if type(self.geometries) is not tuple:
             raise TypeError("geometries must be a tuple")
-        _text("inventory_id", self.inventory_id)
+        _identity_text("inventory_id", self.inventory_id)
+        if not self.geometries:
+            raise ValueError("geometry inventory must not be empty")
+        if not all(type(geom) is GeometryIdentity for geom in self.geometries):
+            raise TypeError("geometries must contain GeometryIdentity values")
+        for geom in self.geometries:
+            _validate_geometry_identity(geom)
         names = tuple(geom.geom_name for geom in self.geometries)
         if len(names) != len(set(names)):
             raise ValueError("geometry names must be unique")
-        if not names:
-            raise ValueError("geometry inventory must not be empty")
-        if not all(isinstance(geom, GeometryIdentity) for geom in self.geometries):
-            raise TypeError("geometries must contain GeometryIdentity values")
+        _register_collision_seal(self, _geometry_inventory_snapshot(self))
 
     def by_name(self) -> dict[str, GeometryIdentity]:
+        _validate_geometry_inventory(self)
         return {geom.geom_name: geom for geom in self.geometries}
 
     def pairs(self) -> tuple["CollisionPair", ...]:
+        _validate_geometry_inventory(self)
         return tuple(
             CollisionPair(first, second)
             for first, second in itertools.combinations(self.geometries, 2)
@@ -406,7 +442,7 @@ def _inventory_fingerprint(
     )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class CollisionPair:
     """wildcardを許さないordered-by-name geom pair。"""
 
@@ -414,17 +450,21 @@ class CollisionPair:
     second: GeometryIdentity
 
     def __post_init__(self) -> None:
-        if not isinstance(self.first, GeometryIdentity) or not isinstance(self.second, GeometryIdentity):
+        _exact_type(self, CollisionPair, "collision pair")
+        if type(self.first) is not GeometryIdentity or type(self.second) is not GeometryIdentity:
             raise TypeError("collision pair members must be GeometryIdentity")
         if self.first.geom_name == self.second.geom_name:
             raise ValueError("collision pair cannot contain the same geometry")
+        _register_collision_seal(self, _collision_pair_snapshot(self))
 
     @property
     def pair_id(self) -> str:
+        _validate_collision_pair(self)
         return "|".join(sorted((self.first.geom_name, self.second.geom_name)))
 
     @property
     def kind(self) -> CollisionKind:
+        _validate_collision_pair(self)
         roles = {self.first.role, self.second.role}
         if GeometryRole.UNKNOWN in roles:
             return CollisionKind.UNKNOWN
@@ -437,7 +477,7 @@ class CollisionPair:
         return CollisionKind.SELF_INTERFERENCE
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class CollisionExclusion:
     """根拠付きのsingle-pair structural exclusion。"""
 
@@ -447,16 +487,19 @@ class CollisionExclusion:
     classification: CollisionKind = CollisionKind.STRUCTURAL_PROXIMITY
 
     def __post_init__(self) -> None:
+        _exact_type(self, CollisionExclusion, "collision exclusion")
         pair_id = _pair_id("pair_id", self.pair_id)
         _text("reason", self.reason)
         _identity_text("evidence_reference", self.evidence_reference)
-        if not isinstance(self.classification, CollisionKind):
+        if type(self.classification) is not CollisionKind:
             object.__setattr__(self, "classification", CollisionKind(self.classification))
         if self.classification is not CollisionKind.STRUCTURAL_PROXIMITY:
             raise ValueError("only structural_proximity pairs may be excluded")
+        object.__setattr__(self, "pair_id", pair_id)
+        _register_collision_seal(self, _collision_exclusion_snapshot(self))
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class CollisionPolicy:
     """clearance / near-collision thresholdsとexplicit exclusions。"""
 
@@ -466,22 +509,27 @@ class CollisionPolicy:
     exclusions: tuple[CollisionExclusion, ...] = ()
 
     def __post_init__(self) -> None:
-        _text("policy_id", self.policy_id)
+        _exact_type(self, CollisionPolicy, "collision policy")
+        _identity_text("policy_id", self.policy_id)
         clearance = _finite("clearance_m", self.clearance_m)
         margin = _finite("near_collision_margin_m", self.near_collision_margin_m)
         if clearance < 0.0 or margin < 0.0:
             raise ValueError("clearance and near-collision margin must be non-negative")
-        if not isinstance(self.exclusions, tuple):
+        if type(self.exclusions) is not tuple:
             raise TypeError("exclusions must be a tuple")
+        if not all(type(item) is CollisionExclusion for item in self.exclusions):
+            raise TypeError("exclusions must contain CollisionExclusion values")
+        for item in self.exclusions:
+            _validate_collision_exclusion(item)
         pair_ids = tuple(item.pair_id for item in self.exclusions)
         if len(pair_ids) != len(set(pair_ids)):
             raise ValueError("collision exclusion pair IDs must be unique")
-        if not all(isinstance(item, CollisionExclusion) for item in self.exclusions):
-            raise TypeError("exclusions must contain CollisionExclusion values")
         object.__setattr__(self, "clearance_m", clearance)
         object.__setattr__(self, "near_collision_margin_m", margin)
+        _register_collision_seal(self, _collision_policy_snapshot(self))
 
     def exclusion_for(self, pair_id: str) -> CollisionExclusion | None:
+        _validate_collision_policy(self)
         for exclusion in self.exclusions:
             if exclusion.pair_id == pair_id:
                 return exclusion
@@ -507,6 +555,152 @@ def _policy_fingerprint(
             ),
         )
     )
+
+
+def _collision_pair_snapshot(value: CollisionPair) -> tuple[object, ...]:
+    return (
+        id(value.first),
+        _geometry_identity_snapshot(value.first),
+        id(value.second),
+        _geometry_identity_snapshot(value.second),
+    )
+
+
+def _geometry_inventory_snapshot(value: GeometryInventory) -> tuple[object, ...]:
+    return (
+        value.inventory_id,
+        tuple(
+            (id(geometry), _geometry_identity_snapshot(geometry))
+            for geometry in value.geometries
+        ),
+    )
+
+
+def _collision_policy_snapshot(value: CollisionPolicy) -> tuple[object, ...]:
+    return (
+        value.policy_id,
+        value.clearance_m,
+        value.near_collision_margin_m,
+        tuple(
+            (id(exclusion), _collision_exclusion_snapshot(exclusion))
+            for exclusion in value.exclusions
+        ),
+    )
+
+
+def _validate_geometry_identity(
+    value: GeometryIdentity,
+    *,
+    require_seal: bool = True,
+) -> None:
+    _exact_type(value, GeometryIdentity, "geometry identity")
+    try:
+        _identity_text("geom_name", value.geom_name)
+        _identity_text("body_name", value.body_name)
+        if type(value.role) is not GeometryRole:
+            raise TypeError("geometry role must be GeometryRole")
+        _identity_text("source_id", value.source_id)
+        snapshot = _geometry_identity_snapshot(value)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("geometry identity is invalid") from exc
+    if require_seal:
+        _validate_collision_seal(value, snapshot)
+
+
+def _validate_geometry_inventory(
+    value: GeometryInventory,
+    *,
+    require_seal: bool = True,
+) -> None:
+    _exact_type(value, GeometryInventory, "geometry inventory")
+    try:
+        if type(value.geometries) is not tuple or not value.geometries:
+            raise ValueError("geometry inventory must not be empty")
+        _identity_text("inventory_id", value.inventory_id)
+        for geometry in value.geometries:
+            _validate_geometry_identity(geometry)
+        names = tuple(geometry.geom_name for geometry in value.geometries)
+        if len(names) != len(set(names)):
+            raise ValueError("geometry names must be unique")
+        snapshot = _geometry_inventory_snapshot(value)
+    except (AttributeError, TypeError, ValueError) as exc:
+        if isinstance(exc, ValueError) and str(exc) in {
+            "geometry names must be unique",
+            "geometry inventory must not be empty",
+        }:
+            raise
+        raise ValueError("geometry inventory is invalid") from exc
+    if require_seal:
+        _validate_collision_seal(value, snapshot)
+
+
+def _validate_collision_pair(value: CollisionPair) -> None:
+    _exact_type(value, CollisionPair, "collision pair")
+    try:
+        _validate_geometry_identity(value.first)
+        _validate_geometry_identity(value.second)
+        if value.first.geom_name == value.second.geom_name:
+            raise ValueError("collision pair cannot contain the same geometry")
+        snapshot = _collision_pair_snapshot(value)
+    except (AttributeError, TypeError, ValueError) as exc:
+        if isinstance(exc, ValueError) and str(exc).endswith(
+            "same geometry"
+        ):
+            raise
+        raise ValueError("collision pair is invalid") from exc
+    _validate_collision_seal(value, snapshot)
+
+
+def _validate_collision_exclusion(value: CollisionExclusion) -> None:
+    _exact_type(value, CollisionExclusion, "collision exclusion")
+    try:
+        _pair_id("pair_id", value.pair_id)
+        _text("reason", value.reason)
+        _identity_text("evidence_reference", value.evidence_reference)
+        if type(value.classification) is not CollisionKind:
+            raise TypeError("exclusion classification must be CollisionKind")
+        if value.classification is not CollisionKind.STRUCTURAL_PROXIMITY:
+            raise ValueError("only structural_proximity pairs may be excluded")
+        snapshot = _collision_exclusion_snapshot(value)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("collision exclusion is invalid") from exc
+    _validate_collision_seal(value, snapshot)
+
+
+def _validate_collision_policy(value: CollisionPolicy) -> None:
+    _exact_type(value, CollisionPolicy, "collision policy")
+    try:
+        _identity_text("policy_id", value.policy_id)
+        clearance = _finite("clearance_m", value.clearance_m)
+        margin = _finite("near_collision_margin_m", value.near_collision_margin_m)
+        if clearance < 0.0 or margin < 0.0:
+            raise ValueError("collision thresholds must be non-negative")
+        if type(value.exclusions) is not tuple:
+            raise TypeError("exclusions must be a tuple")
+        for exclusion in value.exclusions:
+            _validate_collision_exclusion(exclusion)
+        pair_ids = tuple(exclusion.pair_id for exclusion in value.exclusions)
+        if len(pair_ids) != len(set(pair_ids)):
+            raise ValueError("collision exclusion pair IDs must be unique")
+        snapshot = _collision_policy_snapshot(value)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("collision policy is invalid") from exc
+    _validate_collision_seal(value, snapshot)
+
+
+def _validate_collision_observation(value: CollisionObservation) -> None:
+    _exact_type(value, CollisionObservation, "collision observation")
+    try:
+        _pair_id("pair_id", value.pair_id)
+        _identity_text("source_id", value.source_id)
+        if value.distance_m is not None:
+            _finite("distance_m", value.distance_m)
+        if type(value.contact) is not bool:
+            raise TypeError("contact must be bool")
+        snapshot = _collision_observation_snapshot(value)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("collision observation is invalid") from exc
+    _validate_collision_seal(value, snapshot)
 
 
 def _collision_context_snapshot(
@@ -545,10 +739,12 @@ def _collision_check_result_snapshot(
 ) -> tuple[object, ...]:
     try:
         return (
+            id(result.context),
             _collision_context_snapshot(result.context),
             result.status,
             tuple(
-                _collision_evaluation_snapshot(item) for item in result.evaluations
+                (id(item), _collision_evaluation_snapshot(item))
+                for item in result.evaluations
             ),
             result.reason_code,
         )
@@ -561,7 +757,10 @@ def _bounded_collision_trajectory_snapshot(
 ) -> tuple[object, ...]:
     return (
         result.status,
-        tuple(_collision_check_result_snapshot(item) for item in result.sample_results),
+        tuple(
+            (id(item), _collision_check_result_snapshot(item))
+            for item in result.sample_results
+        ),
         result.sample_indices,
         result.failed_sample_index,
     )
@@ -589,7 +788,7 @@ def _validate_context_inventory_semantics(
         raise ValueError("inventory must contain required robot geometry")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class CollisionObservation:
     """1 pairのdistance evidence。distanceはgeom surface間のmeter。"""
 
@@ -599,6 +798,7 @@ class CollisionObservation:
     contact: bool = False
 
     def __post_init__(self) -> None:
+        _exact_type(self, CollisionObservation, "collision observation")
         pair_id = _pair_id("pair_id", self.pair_id)
         _identity_text("source_id", self.source_id)
         object.__setattr__(self, "pair_id", pair_id)
@@ -606,6 +806,7 @@ class CollisionObservation:
             object.__setattr__(self, "distance_m", _finite("distance_m", self.distance_m))
         if not isinstance(self.contact, bool):
             raise TypeError("contact must be bool")
+        _register_collision_seal(self, _collision_observation_snapshot(self))
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
@@ -627,10 +828,11 @@ class CollisionEvaluation:
     )
 
     def __post_init__(self) -> None:
+        _exact_type(self, CollisionEvaluation, "collision evaluation")
         pair_id = _pair_id("pair_id", self.pair_id)
-        if not isinstance(self.kind, CollisionKind):
+        if type(self.kind) is not CollisionKind:
             object.__setattr__(self, "kind", CollisionKind(self.kind))
-        if not isinstance(self.status, CollisionStatus):
+        if type(self.status) is not CollisionStatus:
             object.__setattr__(self, "status", CollisionStatus(self.status))
         if self.distance_m is not None:
             object.__setattr__(self, "distance_m", _finite("distance_m", self.distance_m))
@@ -674,10 +876,11 @@ class CollisionCheckResult:
     )
 
     def __post_init__(self) -> None:
+        _exact_type(self, CollisionCheckResult, "collision result")
         _validate_collision_context(self.context)
-        if not isinstance(self.status, CollisionStatus):
+        if type(self.status) is not CollisionStatus:
             object.__setattr__(self, "status", CollisionStatus(self.status))
-        if not isinstance(self.evaluations, tuple):
+        if type(self.evaluations) is not tuple:
             raise TypeError("evaluations must be a tuple")
         _text("reason_code", self.reason_code)
         status, reason_code = _derive_collision_status_reason(
@@ -703,12 +906,11 @@ class CollisionCheckResult:
 def _validate_collision_check_result(result: CollisionCheckResult) -> None:
     """aggregateとnested evaluationをpublic clear accessでも再検証する。"""
 
-    if not isinstance(result, CollisionCheckResult):
-        raise TypeError("result must be CollisionCheckResult")
+    _exact_type(result, CollisionCheckResult, "collision result")
     _validate_collision_context(result.context)
-    if not isinstance(result.status, CollisionStatus):
+    if type(result.status) is not CollisionStatus:
         raise TypeError("collision result status is invalid")
-    if not isinstance(result.evaluations, tuple):
+    if type(result.evaluations) is not tuple:
         raise TypeError("collision result evaluations must be a tuple")
     _text("reason_code", result.reason_code)
     status, reason_code = _derive_collision_status_reason(
@@ -726,7 +928,7 @@ def _collision_evaluation_inconsistency(
 ) -> str | None:
     """1 pairのstatusとevidenceの整合性をcanonicalに検証する。"""
 
-    if not isinstance(evaluation, CollisionEvaluation):
+    if type(evaluation) is not CollisionEvaluation:
         return "collision evaluation has an invalid type"
     try:
         pair_id = evaluation.pair_id
@@ -743,9 +945,9 @@ def _collision_evaluation_inconsistency(
         _pair_id("pair_id", pair_id)
     except (TypeError, ValueError):
         return "collision evaluation pair identity is invalid"
-    if not isinstance(kind, CollisionKind):
+    if type(kind) is not CollisionKind:
         return "collision evaluation kind is invalid"
-    if not isinstance(status, CollisionStatus):
+    if type(status) is not CollisionStatus:
         return "collision evaluation status is invalid"
     try:
         clearance = _finite("clearance_m", clearance)
@@ -764,10 +966,10 @@ def _collision_evaluation_inconsistency(
             distance = _finite("distance_m", distance)
         except (TypeError, ValueError):
             return "collision evaluation distance is invalid"
-    if not isinstance(reason_code, str) or not reason_code or reason_code != reason_code.strip():
+    if type(reason_code) is not str or not reason_code or reason_code != reason_code.strip():
         return "collision evaluation reason is invalid"
     if provenance is not None and (
-        not isinstance(provenance, str)
+        type(provenance) is not str
         or not provenance
         or provenance != provenance.strip()
         or provenance.casefold() in _PLACEHOLDER_IDENTITIES
@@ -827,13 +1029,13 @@ def _derive_collision_status_reason(
     """coverage、pair evidence、aggregateを一つのcanonical pathで導出する。"""
 
     _validate_collision_context(context)
-    if not isinstance(evaluations, tuple):
+    if type(evaluations) is not tuple:
         raise TypeError("evaluations must be a tuple")
     if not evaluations:
         raise ValueError("evaluations must exactly cover expected_pair_ids")
     pair_ids: list[str] = []
     for evaluation in evaluations:
-        if not isinstance(evaluation, CollisionEvaluation):
+        if type(evaluation) is not CollisionEvaluation:
             raise TypeError("evaluations must contain CollisionEvaluation values")
         try:
             pair_ids.append(evaluation.pair_id)
@@ -915,28 +1117,40 @@ def _derive_collision_status_reason(
 
 
 def _validate_inventory(inventory: GeometryInventory) -> str | None:
-    names = inventory.by_name()
-    if any(geom.role is GeometryRole.UNKNOWN for geom in names.values()):
-        return "unknown_geometry_role"
-    roles_by_body: dict[str, set[GeometryRole]] = {}
-    for geometry in names.values():
-        roles_by_body.setdefault(geometry.body_name, set()).add(geometry.role)
-    if any(len(roles) > 1 for roles in roles_by_body.values()):
-        return "body_role_overlap"
-    if not any(geom.role is GeometryRole.ROBOT for geom in names.values()):
-        return "robot_geometry_missing"
-    return None
+    try:
+        _validate_geometry_inventory(inventory)
+        names = {geom.geom_name: geom for geom in inventory.geometries}
+        if any(geom.role is GeometryRole.UNKNOWN for geom in names.values()):
+            return "unknown_geometry_role"
+        roles_by_body: dict[str, set[GeometryRole]] = {}
+        for geometry in names.values():
+            roles_by_body.setdefault(geometry.body_name, set()).add(geometry.role)
+        if any(len(roles) > 1 for roles in roles_by_body.values()):
+            return "body_role_overlap"
+        if not any(geom.role is GeometryRole.ROBOT for geom in names.values()):
+            return "robot_geometry_missing"
+        return None
+    except (AttributeError, TypeError, ValueError):
+        return "collision_inventory_binding_invalid"
 
 
 def _validate_policy(inventory: GeometryInventory, policy: CollisionPolicy) -> str | None:
-    pair_by_id = {pair.pair_id: pair for pair in inventory.pairs()}
-    for exclusion in policy.exclusions:
-        pair = pair_by_id.get(exclusion.pair_id)
-        if pair is None:
-            return "collision_exclusion_pair_not_in_inventory"
-        if pair.kind not in {CollisionKind.SELF_INTERFERENCE, CollisionKind.STRUCTURAL_PROXIMITY}:
-            return "environment_collision_exclusion_forbidden"
-    return None
+    try:
+        _validate_geometry_inventory(inventory)
+        _validate_collision_policy(policy)
+        pair_by_id = {pair.pair_id: pair for pair in inventory.pairs()}
+        for exclusion in policy.exclusions:
+            pair = pair_by_id.get(exclusion.pair_id)
+            if pair is None:
+                return "collision_exclusion_pair_not_in_inventory"
+            if pair.kind not in {
+                CollisionKind.SELF_INTERFERENCE,
+                CollisionKind.STRUCTURAL_PROXIMITY,
+            }:
+                return "environment_collision_exclusion_forbidden"
+        return None
+    except (AttributeError, TypeError, ValueError):
+        return "collision_policy_binding_invalid"
 
 
 def _context_expected_pair_ids(inventory: GeometryInventory) -> tuple[str, ...]:
@@ -968,21 +1182,36 @@ def _invalid_inventory_context(
     # context contract自体はsemanticにvalidとし、実inventoryは呼び出し元の
     # INVALID reasonを決める前段で検査する。unknown identityを発明せずpairを
     # dropもしないため、全geometryを一時的にrobot roleとしてbindingする。
-    fingerprint = tuple(
-        (geom.geom_name, geom.body_name, GeometryRole.ROBOT.value, geom.source_id)
-        for geom in inventory.geometries
-    )
-    return CollisionContext(
-        robot_id=robot_id,
-        model_id=model_id,
-        policy_id=policy.policy_id,
-        policy_revision=policy_revision,
-        inventory_id=inventory.inventory_id,
-        inventory_revision=inventory_revision,
-        expected_pair_ids=_pair_ids_from_inventory_fingerprint(fingerprint),
-        inventory_fingerprint=fingerprint,
-        policy_fingerprint=_policy_fingerprint(policy),
-    )
+    try:
+        geometries = inventory.geometries
+        if type(geometries) is not tuple or not geometries:
+            raise CollisionContractViolation(
+                "collision inventory identity is unavailable"
+            )
+    except AttributeError as exc:
+        raise CollisionContractViolation(
+            "collision inventory identity is unavailable"
+        ) from exc
+    try:
+        fingerprint = tuple(
+            (geom.geom_name, geom.body_name, GeometryRole.ROBOT.value, geom.source_id)
+            for geom in geometries
+        )
+        return CollisionContext(
+            robot_id=robot_id,
+            model_id=model_id,
+            policy_id=policy.policy_id,
+            policy_revision=policy_revision,
+            inventory_id=inventory.inventory_id,
+            inventory_revision=inventory_revision,
+            expected_pair_ids=_pair_ids_from_inventory_fingerprint(fingerprint),
+            inventory_fingerprint=fingerprint,
+            policy_fingerprint=_policy_fingerprint(policy),
+        )
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise CollisionContractViolation(
+            "collision inventory identity is unavailable"
+        ) from exc
 
 
 def _resolve_collision_context(
@@ -996,9 +1225,59 @@ def _resolve_collision_context(
     inventory_revision: str | None,
 ) -> CollisionContext:
     if context is not None:
-        if not isinstance(context, CollisionContext):
+        if type(context) is not CollisionContext:
             raise TypeError("context must be CollisionContext")
-        return context
+        try:
+            _validate_collision_context(context)
+            return context
+        except (AttributeError, TypeError, ValueError) as exc:
+            # A tampered but previously sealed context can be reconstructed from
+            # the owner snapshot; never trust its current fields for authority.
+            try:
+                snapshot = _sealed_collision_snapshot(context)
+                if len(snapshot) != 9:
+                    raise ValueError("collision context seal is malformed")
+                recovered = CollisionContext(
+                    snapshot[0],
+                    snapshot[1],
+                    snapshot[2],
+                    snapshot[3],
+                    snapshot[4],
+                    snapshot[5],
+                    snapshot[6],
+                    snapshot[7],
+                    snapshot[8],
+                )
+                return recovered
+            except (AttributeError, TypeError, ValueError) as recovery_error:
+                if all(
+                    value is not None
+                    for value in (
+                        robot_id,
+                        model_id,
+                        policy_revision,
+                        inventory_revision,
+                    )
+                ):
+                    try:
+                        return CollisionContext(
+                            robot_id=robot_id,
+                            model_id=model_id,
+                            policy_id=policy.policy_id,
+                            policy_revision=policy_revision,
+                            inventory_id=inventory.inventory_id,
+                            inventory_revision=inventory_revision,
+                            expected_pair_ids=_context_expected_pair_ids(inventory),
+                            inventory_fingerprint=_inventory_fingerprint(inventory),
+                            policy_fingerprint=_policy_fingerprint(policy),
+                        )
+                    except (AttributeError, TypeError, ValueError) as explicit_error:
+                        raise CollisionContractViolation(
+                            "collision context binding is unavailable"
+                        ) from explicit_error
+                raise CollisionContractViolation(
+                    "collision context binding is unavailable"
+                ) from recovery_error
     if any(
         value is None
         for value in (robot_id, model_id, policy_revision, inventory_revision)
@@ -1031,6 +1310,15 @@ def _resolve_collision_context(
         )
 
 
+def _safe_pair_mapping(
+    inventory: GeometryInventory,
+) -> dict[str, CollisionPair]:
+    try:
+        return {pair.pair_id: pair for pair in inventory.pairs()}
+    except (AttributeError, TypeError, ValueError):
+        return {}
+
+
 def _invalid_collision_result(
     context: CollisionContext,
     policy: CollisionPolicy,
@@ -1040,9 +1328,9 @@ def _invalid_collision_result(
     clearance_m = context.policy_fingerprint[1]
     near_collision_margin_m = context.policy_fingerprint[2]
     pair_by_id = (
-        {pair.pair_id: pair for pair in inventory.pairs()}
-        if inventory is not None
-        else {}
+        {}
+        if inventory is None
+        else _safe_pair_mapping(inventory)
     )
     evaluations = tuple(
         CollisionEvaluation(
@@ -1082,8 +1370,14 @@ def evaluate_collision_configuration(
 ) -> CollisionCheckResult:
     """1 configurationのcollision evidenceを決定的に評価する。"""
 
-    if not isinstance(inventory, GeometryInventory) or not isinstance(policy, CollisionPolicy):
+    if type(inventory) is not GeometryInventory or type(policy) is not CollisionPolicy:
         raise TypeError("inventory and policy must use typed contracts")
+    context_was_invalid = False
+    if context is not None:
+        try:
+            _validate_collision_context(context)
+        except (AttributeError, TypeError, ValueError):
+            context_was_invalid = True
     context = _resolve_collision_context(
         inventory,
         policy,
@@ -1093,6 +1387,13 @@ def evaluate_collision_configuration(
         policy_revision=policy_revision,
         inventory_revision=inventory_revision,
     )
+    if context_was_invalid:
+        return _invalid_collision_result(
+            context,
+            policy,
+            "collision_context_binding_invalid",
+            inventory,
+        )
     invalid_reason = _validate_inventory(inventory)
     if invalid_reason is not None:
         return _invalid_collision_result(context, policy, invalid_reason, inventory)
@@ -1155,7 +1456,16 @@ def evaluate_collision_configuration(
     by_pair: dict[str, CollisionObservation] = {}
     try:
         for observation in observations:
-            if not isinstance(observation, CollisionObservation):
+            if type(observation) is not CollisionObservation:
+                return _invalid_collision_result(
+                    context,
+                    policy,
+                    "invalid_collision_observation",
+                    inventory,
+                )
+            try:
+                _validate_collision_observation(observation)
+            except (AttributeError, TypeError, ValueError):
                 return _invalid_collision_result(
                     context,
                     policy,
@@ -1170,7 +1480,7 @@ def evaluate_collision_configuration(
                     inventory,
                 )
             by_pair[observation.pair_id] = observation
-    except TypeError:
+    except Exception:
         return _invalid_collision_result(
             context,
             policy,
@@ -1293,13 +1603,14 @@ class BoundedCollisionTrajectoryResult:
     )
 
     def __post_init__(self) -> None:
-        if not isinstance(self.status, CollisionStatus):
+        _exact_type(self, BoundedCollisionTrajectoryResult, "trajectory result")
+        if type(self.status) is not CollisionStatus:
             object.__setattr__(self, "status", CollisionStatus(self.status))
-        if not isinstance(self.sample_results, tuple):
+        if type(self.sample_results) is not tuple:
             raise TypeError("sample_results must be a tuple")
         if not self.sample_results:
             raise ValueError("sample_results must be non-empty")
-        if not all(isinstance(item, CollisionCheckResult) for item in self.sample_results):
+        if not all(type(item) is CollisionCheckResult for item in self.sample_results):
             raise TypeError("sample_results must contain CollisionCheckResult values")
         for item in self.sample_results:
             try:
@@ -1307,7 +1618,7 @@ class BoundedCollisionTrajectoryResult:
                 _validate_collision_check_result(item)
             except (AttributeError, TypeError, ValueError) as exc:
                 raise ValueError("trajectory sample result is invalid") from exc
-        if not isinstance(self.sample_indices, tuple):
+        if type(self.sample_indices) is not tuple:
             raise TypeError("sample_indices must be a tuple")
         if any(
             isinstance(index, bool) or not isinstance(index, int)
@@ -1320,7 +1631,7 @@ class BoundedCollisionTrajectoryResult:
                 "sample_indices must exactly match sample_results order and length"
             )
         first_context = self.sample_results[0].context
-        if any(item.context != first_context for item in self.sample_results[1:]):
+        if any(item.context is not first_context for item in self.sample_results[1:]):
             raise ValueError(
                 "trajectory samples must share identical collision context binding"
             )
@@ -1387,19 +1698,18 @@ def _validate_bounded_collision_trajectory_result(
 ) -> None:
     """trajectoryとnested configuration resultをpublic accessでも再検証する。"""
 
-    if not isinstance(result, BoundedCollisionTrajectoryResult):
-        raise TypeError("result must be BoundedCollisionTrajectoryResult")
-    if not isinstance(result.status, CollisionStatus):
+    _exact_type(result, BoundedCollisionTrajectoryResult, "trajectory result")
+    if type(result.status) is not CollisionStatus:
         raise TypeError("trajectory status is invalid")
-    if not isinstance(result.sample_results, tuple):
+    if type(result.sample_results) is not tuple:
         raise TypeError("sample_results must be a tuple")
     if not result.sample_results:
         raise ValueError("sample_results must be non-empty")
-    if not all(isinstance(item, CollisionCheckResult) for item in result.sample_results):
+    if not all(type(item) is CollisionCheckResult for item in result.sample_results):
         raise TypeError("sample_results must contain CollisionCheckResult values")
     for item in result.sample_results:
         _validate_collision_check_result(item)
-    if not isinstance(result.sample_indices, tuple):
+    if type(result.sample_indices) is not tuple:
         raise TypeError("sample_indices must be a tuple")
     if any(
         isinstance(index, bool) or not isinstance(index, int)
@@ -1412,7 +1722,7 @@ def _validate_bounded_collision_trajectory_result(
             "sample_indices must exactly match sample_results order and length"
         )
     first_context = result.sample_results[0].context
-    if any(item.context != first_context for item in result.sample_results[1:]):
+    if any(item.context is not first_context for item in result.sample_results[1:]):
         raise ValueError(
             "trajectory samples must share identical collision context binding"
         )
@@ -1509,8 +1819,14 @@ def evaluate_bounded_collision_trajectory(
 ) -> BoundedCollisionTrajectoryResult:
     """有限sampleを順序通り検査し、first failureを保持する。"""
 
-    if not isinstance(inventory, GeometryInventory) or not isinstance(policy, CollisionPolicy):
+    if type(inventory) is not GeometryInventory or type(policy) is not CollisionPolicy:
         raise TypeError("inventory and policy must use typed contracts")
+    context_was_invalid = False
+    if context is not None:
+        try:
+            _validate_collision_context(context)
+        except (AttributeError, TypeError, ValueError):
+            context_was_invalid = True
     context = _resolve_collision_context(
         inventory,
         policy,
@@ -1520,6 +1836,19 @@ def evaluate_bounded_collision_trajectory(
         policy_revision=policy_revision,
         inventory_revision=inventory_revision,
     )
+    if context_was_invalid:
+        invalid = _invalid_collision_result(
+            context,
+            policy,
+            "collision_context_binding_invalid",
+            inventory,
+        )
+        return BoundedCollisionTrajectoryResult(
+            CollisionStatus.INVALID,
+            (invalid,),
+            (0,),
+            0,
+        )
     if not isinstance(trajectory_observations, Sequence) or not trajectory_observations:
         invalid = _invalid_collision_result(
             context,
@@ -1638,6 +1967,7 @@ def read_mujoco_contact_observations(model: object, data: object) -> tuple[Colli
 
 __all__ = [
     "BoundedCollisionTrajectoryResult",
+    "CollisionContractViolation",
     "CollisionContext",
     "CollisionCheckResult",
     "CollisionEvaluation",
