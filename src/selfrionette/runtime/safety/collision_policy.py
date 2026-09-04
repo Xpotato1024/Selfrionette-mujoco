@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import itertools
 import math
+import operator
 import weakref
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -163,6 +164,31 @@ def _finite(name: str, value: object) -> float:
     if not math.isfinite(number):
         raise ValueError(f"{name} must be finite")
     return 0.0 if number == 0.0 else number
+
+
+def _mujoco_index(
+    name: str,
+    value: object,
+    *,
+    upper_bound: int | None = None,
+) -> int:
+    """MuJoCo count/indexを暗黙変換せず、厳密な整数protocolで正規化する。"""
+
+    value_type = type(value)
+    if isinstance(value, bool) or (
+        value_type.__module__ == "numpy"
+        and value_type.__name__ in {"bool", "bool_"}
+    ):
+        raise TypeError(f"{name} must be an integer-like scalar")
+    try:
+        normalized = operator.index(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise TypeError(f"{name} must be an integer-like scalar") from exc
+    if normalized < 0:
+        raise ValueError(f"{name} must be non-negative")
+    if upper_bound is not None and normalized >= upper_bound:
+        raise IndexError(f"{name} is out of range")
+    return normalized
 
 
 def _pair_id(name: str, value: object) -> str:
@@ -2071,10 +2097,20 @@ def build_mujoco_geometry_inventory(
     try:
         import mujoco
 
+        ngeom = _mujoco_index("MuJoCo model.ngeom", model.ngeom)
+        body_count: int | None = None
+        if hasattr(model, "nbody"):
+            body_count = _mujoco_index("MuJoCo model.nbody", model.nbody)
+        elif hasattr(model, "body_names"):
+            body_count = len(model.body_names)
         geometries: list[GeometryIdentity] = []
-        for geom_id in range(int(model.ngeom)):
+        for geom_id in range(ngeom):
             geom_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
-            body_id = int(model.geom_bodyid[geom_id])
+            body_id = _mujoco_index(
+                "MuJoCo geom body index",
+                model.geom_bodyid[geom_id],
+                upper_bound=body_count,
+            )
             body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
             if not geom_name or not body_name:
                 raise ValueError("MuJoCo geom/body name is missing")
@@ -2123,10 +2159,30 @@ def read_mujoco_contact_observations(
         contacts_by_pair: dict[str, float] = {}
         import mujoco
 
-        for index in range(int(data.ncon)):
+        ngeom = _mujoco_index("MuJoCo model.ngeom", model.ngeom)
+        ncon = _mujoco_index("MuJoCo data.ncon", data.ncon)
+        for index in range(ncon):
             contact = data.contact[index]
-            first = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, int(contact.geom1))
-            second = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, int(contact.geom2))
+            first_id = _mujoco_index(
+                "MuJoCo contact geom1 index",
+                contact.geom1,
+                upper_bound=ngeom,
+            )
+            second_id = _mujoco_index(
+                "MuJoCo contact geom2 index",
+                contact.geom2,
+                upper_bound=ngeom,
+            )
+            first = mujoco.mj_id2name(
+                model,
+                mujoco.mjtObj.mjOBJ_GEOM,
+                first_id,
+            )
+            second = mujoco.mj_id2name(
+                model,
+                mujoco.mjtObj.mjOBJ_GEOM,
+                second_id,
+            )
             if not first or not second:
                 raise ValueError("MuJoCo contact references unknown geom")
             pair_id = "|".join(sorted((first, second)))

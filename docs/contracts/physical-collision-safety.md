@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-09-04
+last_verified: 2026-09-05
 canonical_for:
   - self-interference collision policy
   - environment clearance policy
@@ -50,6 +50,12 @@ inventory外のpair、unknown role、missing geom、malformed distanceはadapter
 `invalid_collision_observation`へ変換してclearへ昇格させない。malformedなmodel/data配列の
 `IndexError`と数値範囲の`OverflowError`もadapter境界でtyped `ValueError`へ正規化するが、
 `SystemExit`、`KeyboardInterrupt`その他の`BaseException`は捕捉しない。
+MuJoCoの`ngeom`、`ncon`、geom/body/contact indexは、暗黙の`int`変換を行わず、
+`operator.index`を満たす整数like scalarとして検証した後にだけ使用する。Python / NumPyの
+`bool`、fractional値、string、その他の非整数値、負値、範囲外indexは変換前に拒否し、
+malformedなcountを空の観測へ縮約しない。したがって、malformedな`ncon`が全structural
+exclusionの正常`CLEAR`へ混入することはない。正常なNumPy integral scalarと`__index__`実装は
+受理する。
 
 ## Clearance semantics
 
