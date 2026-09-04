@@ -195,6 +195,7 @@ class SafetyReason:
 
     @property
     def identity(self) -> str:
+        _validate_safety_reason(self)
         return f"{self.component.value}:{self.reason_code}"
 
 

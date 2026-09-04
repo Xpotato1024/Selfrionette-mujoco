@@ -1793,6 +1793,40 @@ def test_component_assessment_rejects_unknown_reason_code() -> None:
         )
 
 
+def test_safety_reason_identity_revalidates_direct_tamper_and_bypass() -> None:
+    reason = SafetyReason("arbitrary_reason", SafetyComponent.COLLISION, "arbitrary")
+    original = {
+        "reason_code": reason.reason_code,
+        "component": reason.component,
+        "operator_message": reason.operator_message,
+        "provenance": reason.provenance,
+    }
+
+    for field_name, value in (
+        ("reason_code", "tampered_reason"),
+        ("component", SafetyComponent.LIMIT),
+        ("provenance", ("tampered-provenance",)),
+    ):
+        object.__setattr__(reason, field_name, value)
+        with pytest.raises((TypeError, ValueError)):
+            _ = reason.identity
+        object.__setattr__(reason, field_name, original[field_name])
+        assert reason.identity == "collision:arbitrary_reason"
+
+    object.__setattr__(reason, "reason_code", "tampered_reason")
+    object.__setattr__(
+        reason,
+        "_binding_fingerprint",
+        ("tampered_reason", reason.component, reason.operator_message, reason.provenance),
+    )
+    with pytest.raises(ValueError):
+        _ = reason.identity
+
+    bypassed = object.__new__(SafetyReason)
+    with pytest.raises((TypeError, ValueError)):
+        _ = bypassed.identity
+
+
 @pytest.mark.parametrize(
     ("component", "reason_code"),
     (
