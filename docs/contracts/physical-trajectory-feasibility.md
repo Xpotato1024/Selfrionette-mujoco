@@ -65,6 +65,13 @@ sampleが二つだけの場合はaccelerationを推定せず`unavailable`とす�
 source identityとqvel / Jacobian availabilityに加え、sample qvelまたは隣接sample segmentの
 finite-differenceを表すimmutableなtyped velocity evidence bindingを保持する。qvelが欠落していても、
 全segmentのfinite-difference evidenceが揃えばvelocity gateを評価できる。
+trajectory resultのshapeもstatus / reasonと一体のcanonical契約である。`sample_count < 2`は
+`INVALID/invalid_trajectory_length`と一つの同名diagnosticだけを許可し、`sample_count == 2`は
+accelerationの`UNAVAILABLE/unavailable_acceleration`を必ず保持する。二sampleでvelocityや
+cadenceなど上位の診断がある場合はそのstatus / reasonを維持できるが、accelerationのunavailable
+evidenceを省略したdirect DTO、`invalid_trajectory_length`への置換、または`FEASIBLE`への昇格は
+constructorと公開validatorの双方で拒否する。qvel欠落はfinite-differenceで補えるtrajectoryでは
+`INVALID`へ昇格せず、適用可能なsample数のcanonical statusを維持する。
 
 ## Jacobian diagnostic
 
@@ -110,7 +117,8 @@ coherent rewriteでも`feasible` / `authoritative`へ昇格しない。resultの
 `authoritative` propertyもcanonical result validatorを経由し、statusやbindingを後から変更した
 objectでは`False`を返す。FEASIBLEにはsourceへ一致する単一の`feasibility_clear` diagnosticと
 完全なlimit / Jacobian / velocity evidenceが必要である。一方、directまたはevaluator由来の非成功
-statusはこのorigin gateを要求せず、qvelが欠落したconfigurationはcanonicalな
+statusはこのorigin gateを要求せず、trajectoryのsample-count / acceleration shape契約と診断由来の
+status / reasonは引き続きcanonical validatorで検証する。qvelが欠落したconfigurationはcanonicalな
 `UNAVAILABLE/unavailable_qvel`、二つだけのtrajectory sampleは`UNAVAILABLE/unavailable_acceleration`
 として引き続き検証できる。qvel欠落trajectoryも、実sampleから導出した全segmentのfinite-difference
 evidenceが揃う限りFEASIBLEになり得る。

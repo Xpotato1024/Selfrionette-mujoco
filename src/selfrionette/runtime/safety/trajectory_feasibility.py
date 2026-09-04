@@ -1027,6 +1027,40 @@ def _canonical_result_status_reason(
     return _aggregate(diagnostics, statuses)
 
 
+def _canonical_trajectory_status_reason(
+    *,
+    sample_count: int,
+    diagnostics: tuple[FeasibilityDiagnostic, ...],
+) -> tuple[FeasibilityStatus, str]:
+    """sample countが許すtrajectory resultのstatus / reasonを導出する。"""
+
+    if sample_count < 2:
+        if len(diagnostics) != 1 or diagnostics[0].code != "invalid_trajectory_length":
+            raise ValueError(
+                "trajectory with fewer than two samples requires one invalid_trajectory_length diagnostic"
+            )
+        return FeasibilityStatus.INVALID, "invalid_trajectory_length"
+
+    canonical_status, canonical_reason = _canonical_result_status_reason(diagnostics)
+    if sample_count != 2:
+        return canonical_status, canonical_reason
+
+    diagnostic_codes = {item.code for item in diagnostics}
+    if canonical_status is FeasibilityStatus.FEASIBLE:
+        raise ValueError(
+            "two-sample trajectory cannot be feasible because acceleration is unavailable"
+        )
+    # evaluatorには、malformed inputとnon-TrajectorySampleの二つの早期invalid経路がある。
+    # これらはacceleration passへ到達しないため、typed invalid reasonを正本として維持する。
+    if diagnostic_codes.intersection({"invalid_trajectory_input", "invalid_trajectory_sample"}):
+        return canonical_status, canonical_reason
+    if "unavailable_acceleration" not in diagnostic_codes:
+        raise ValueError(
+            "two-sample trajectory requires unavailable_acceleration evidence"
+        )
+    return canonical_status, canonical_reason
+
+
 def _optional_bool(name: str, value: object) -> bool | None:
     if value is not None and not isinstance(value, bool):
         raise TypeError(f"{name} must be bool or None")
@@ -1496,7 +1530,13 @@ def _validate_result_success_contract(
     jacobian_evidence_ids: tuple[str, ...] = (),
     clear_provenance: str | None = None,
 ) -> None:
-    canonical_status, canonical_reason = _canonical_result_status_reason(diagnostics)
+    if sample_count is None:
+        canonical_status, canonical_reason = _canonical_result_status_reason(diagnostics)
+    else:
+        canonical_status, canonical_reason = _canonical_trajectory_status_reason(
+            sample_count=sample_count,
+            diagnostics=diagnostics,
+        )
     if status is not canonical_status or reason_code != canonical_reason:
         raise ValueError("feasibility status/reason must match canonical diagnostic derivation")
     if status is not FeasibilityStatus.FEASIBLE:
@@ -2521,11 +2561,12 @@ def _invalid_trajectory_result(
         trajectory=True,
     )
     count = sample_count if isinstance(sample_count, int) and not isinstance(sample_count, bool) and sample_count >= 0 else 0
+    canonical_code = "invalid_trajectory_length" if count < 2 else code
     return TrajectoryFeasibilityResult(
         status=FeasibilityStatus.INVALID,
-        reason_code=code,
+        reason_code=canonical_code,
         sample_count=count,
-        diagnostics=(FeasibilityDiagnostic(code, detail),),
+        diagnostics=(FeasibilityDiagnostic(canonical_code, detail),),
         source_ids=("invalid-trajectory",) * count,
         bound_statuses=bound_statuses,
         expected_joint_names=names,
