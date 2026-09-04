@@ -1092,6 +1092,27 @@ def _collision_evaluation_inconsistency(
     return None
 
 
+def _declared_exclusion_inconsistency(
+    evaluation: CollisionEvaluation,
+    declared: tuple[str, str] | None,
+) -> str | None:
+    """declared exclusion pairが唯一のcanonical clear evidenceか検証する。"""
+
+    if declared is None:
+        return None
+    evidence_reference, classification = declared
+    if (
+        evaluation.kind is not CollisionKind.STRUCTURAL_PROXIMITY
+        or evaluation.status is not CollisionStatus.CLEAR
+        or evaluation.distance_m is not None
+        or evaluation.reason_code != "explicit_structural_exclusion"
+        or evaluation.provenance != evidence_reference
+        or classification != CollisionKind.STRUCTURAL_PROXIMITY.value
+    ):
+        return "declared structural exclusion must be an exact clear evaluation"
+    return None
+
+
 def _derive_collision_status_reason(
     context: CollisionContext,
     evaluations: Sequence[CollisionEvaluation],
@@ -1120,8 +1141,24 @@ def _derive_collision_status_reason(
 
     by_pair_id = {evaluation.pair_id: evaluation for evaluation in evaluations}
     ordered = tuple(by_pair_id[pair_id] for pair_id in context.expected_pair_ids)
-    if any(_collision_evaluation_inconsistency(item) is not None for item in ordered):
-        return CollisionStatus.INVALID, "collision_result_inconsistent"
+    declared_exclusions = {
+        item[0]: (item[2], item[3])
+        for item in context.policy_fingerprint[3]
+    }
+    for evaluation in ordered:
+        inconsistency = _collision_evaluation_inconsistency(evaluation)
+        if inconsistency is not None:
+            if getattr(evaluation, "pair_id", None) in declared_exclusions:
+                raise ValueError(
+                    "declared structural exclusion evaluation is inconsistent"
+                )
+            return CollisionStatus.INVALID, "collision_result_inconsistent"
+        exclusion_inconsistency = _declared_exclusion_inconsistency(
+            evaluation,
+            declared_exclusions.get(evaluation.pair_id),
+        )
+        if exclusion_inconsistency is not None:
+            raise ValueError(exclusion_inconsistency)
     policy_clearance = context.policy_fingerprint[1]
     policy_near_margin = context.policy_fingerprint[2]
     if any(
@@ -1131,6 +1168,19 @@ def _derive_collision_status_reason(
         or item.near_collision_margin_m != policy_near_margin
         for item in ordered
     ):
+        if any(
+            evaluation.pair_id in declared_exclusions
+            for evaluation in ordered
+            if (
+                type(evaluation.clearance_m) is not float
+                or type(evaluation.near_collision_margin_m) is not float
+                or evaluation.clearance_m != policy_clearance
+                or evaluation.near_collision_margin_m != policy_near_margin
+            )
+        ):
+            raise ValueError(
+                "declared structural exclusion evaluation is inconsistent"
+            )
         return CollisionStatus.INVALID, "collision_result_inconsistent"
     inventory_fingerprint = context.inventory_fingerprint
     if not _inventory_has_evaluable_pairs(inventory_fingerprint) and any(
@@ -1152,10 +1202,6 @@ def _derive_collision_status_reason(
                 return CollisionStatus.INVALID, "collision_result_inconsistent"
         elif evaluation.kind is not inventory_kind:
             return CollisionStatus.INVALID, "collision_result_inconsistent"
-    declared_exclusions = {
-        item[0]: (item[2], item[3])
-        for item in context.policy_fingerprint[3]
-    }
     for evaluation in ordered:
         if evaluation.reason_code != "explicit_structural_exclusion":
             continue
@@ -1411,27 +1457,46 @@ def _invalid_collision_result(
         if inventory is None
         else _safe_pair_mapping(inventory)
     )
-    evaluations = tuple(
-        CollisionEvaluation(
-            pair_id,
-            (
-                pair_by_id[pair_id].kind
-                if pair_id in pair_by_id
-                and pair_by_id[pair_id].kind is not CollisionKind.UNKNOWN
-                else CollisionKind.SELF_INTERFERENCE
-            ),
-            CollisionStatus.INVALID,
-            None,
-            clearance_m,
-            reason_code,
+    declared_exclusions = {
+        item[0]: item[2] for item in context.policy_fingerprint[3]
+    }
+    evaluations: list[CollisionEvaluation] = []
+    for pair_id in context.expected_pair_ids:
+        exclusion_evidence = declared_exclusions.get(pair_id)
+        if exclusion_evidence is not None:
+            evaluations.append(
+                CollisionEvaluation(
+                    pair_id,
+                    CollisionKind.STRUCTURAL_PROXIMITY,
+                    CollisionStatus.CLEAR,
+                    None,
+                    clearance_m,
+                    "explicit_structural_exclusion",
+                    exclusion_evidence,
+                    near_collision_margin_m,
+                )
+            )
+            continue
+        evaluations.append(
+            CollisionEvaluation(
+                pair_id,
+                (
+                    pair_by_id[pair_id].kind
+                    if pair_id in pair_by_id
+                    and pair_by_id[pair_id].kind is not CollisionKind.UNKNOWN
+                    else CollisionKind.SELF_INTERFERENCE
+                ),
+                CollisionStatus.INVALID,
+                None,
+                clearance_m,
+                reason_code,
             near_collision_margin_m=near_collision_margin_m,
+            )
         )
-        for pair_id in context.expected_pair_ids
-    )
     return CollisionCheckResult(
         context,
         CollisionStatus.INVALID,
-        evaluations,
+        tuple(evaluations),
         reason_code,
     )
 
@@ -1578,6 +1643,18 @@ def evaluate_collision_configuration(
 
     evaluations: list[CollisionEvaluation] = []
     for pair in inventory.pairs():
+        observation = by_pair.get(pair.pair_id)
+        if observation is not None and observation.contact:
+            if (
+                pair.kind is not CollisionKind.TASK_OBJECT_CONTACT
+                or observation.distance_m is None
+            ):
+                return _invalid_collision_result(
+                    context,
+                    policy,
+                    "invalid_collision_observation",
+                    inventory,
+                )
         exclusion = policy.exclusion_for(pair.pair_id)
         if exclusion is not None:
             evaluations.append(
@@ -1593,7 +1670,6 @@ def evaluate_collision_configuration(
                 )
             )
             continue
-        observation = by_pair.get(pair.pair_id)
         if observation is None:
             evaluations.append(
                 CollisionEvaluation(
@@ -1639,7 +1715,7 @@ def evaluate_collision_configuration(
         if distance < 0.0:
             status = CollisionStatus.COLLISION
             reason = "self_interference_penetration" if pair.kind is CollisionKind.SELF_INTERFERENCE else "environment_penetration" if pair.kind is CollisionKind.ENVIRONMENT_COLLISION else "task_object_penetration"
-        elif observation.contact and pair.kind is CollisionKind.TASK_OBJECT_CONTACT:
+        elif observation.contact:
             status = CollisionStatus.CONTACT
             reason = "task_object_contact"
         elif distance <= policy.clearance_m:

@@ -267,6 +267,142 @@ def test_same_body_explicit_exclusion_is_complete_clear_evidence() -> None:
     assert result.status is CollisionStatus.CLEAR
 
 
+@pytest.mark.parametrize(
+    ("status", "kind", "distance", "reason_code", "provenance"),
+    (
+        (
+            CollisionStatus.COLLISION,
+            CollisionKind.STRUCTURAL_PROXIMITY,
+            -0.001,
+            "self_interference_penetration",
+            "fixture",
+        ),
+        (
+            CollisionStatus.NEAR_COLLISION,
+            CollisionKind.STRUCTURAL_PROXIMITY,
+            0.0,
+            "near_collision_clearance",
+            "fixture",
+        ),
+        (
+            CollisionStatus.CONTACT,
+            CollisionKind.TASK_OBJECT_CONTACT,
+            0.0,
+            "task_object_contact",
+            "fixture",
+        ),
+        (
+            CollisionStatus.UNKNOWN,
+            CollisionKind.STRUCTURAL_PROXIMITY,
+            None,
+            "collision_distance_unknown",
+            "fixture",
+        ),
+        (
+            CollisionStatus.UNAVAILABLE,
+            CollisionKind.STRUCTURAL_PROXIMITY,
+            None,
+            "collision_observation_unavailable",
+            None,
+        ),
+        (
+            CollisionStatus.INVALID,
+            CollisionKind.STRUCTURAL_PROXIMITY,
+            None,
+            "collision_context_binding_invalid",
+            None,
+        ),
+        (
+            CollisionStatus.CLEAR,
+            CollisionKind.STRUCTURAL_PROXIMITY,
+            0.1,
+            "pair_clear",
+            "fixture",
+        ),
+    ),
+)
+def test_declared_exclusion_pair_requires_exact_clear_evaluation(
+    status: CollisionStatus,
+    kind: CollisionKind,
+    distance: float | None,
+    reason_code: str,
+    provenance: str | None,
+) -> None:
+    inventory = _same_body_inventory()
+    policy = _policy(
+        CollisionExclusion(
+            "fore_shell|upper_shell",
+            "known structural overlap",
+            "geometry-review-exact-001",
+        )
+    )
+    context = _context(inventory, policy)
+    evaluations = list(_clear_evaluations(inventory, policy, context))
+    exclusion_index = next(
+        index
+        for index, evaluation in enumerate(evaluations)
+        if evaluation.pair_id == "fore_shell|upper_shell"
+    )
+    evaluations[exclusion_index] = CollisionEvaluation(
+        "fore_shell|upper_shell",
+        kind,
+        status,
+        distance,
+        policy.clearance_m,
+        reason_code,
+        provenance,
+        policy.near_collision_margin_m,
+    )
+
+    with pytest.raises(ValueError, match="declared structural exclusion"):
+        CollisionCheckResult(
+            context,
+            CollisionStatus.INVALID,
+            tuple(evaluations),
+            "collision_result_inconsistent",
+        )
+
+
+def test_declared_exclusion_tamper_and_constructor_bypass_fail_closed() -> None:
+    inventory = _same_body_inventory()
+    policy = _policy(
+        CollisionExclusion(
+            "fore_shell|upper_shell",
+            "known structural overlap",
+            "geometry-review-exact-002",
+        )
+    )
+    result = _evaluate(
+        inventory,
+        (
+            CollisionObservation("floor|upper_shell", 0.1, "fixture"),
+            CollisionObservation("floor|fore_shell", 0.1, "fixture"),
+        ),
+        policy,
+    )
+    exclusion = next(
+        item
+        for item in result.evaluations
+        if item.pair_id == "fore_shell|upper_shell"
+    )
+    object.__setattr__(exclusion, "distance_m", 0.1)
+
+    assert not result.clear
+    with pytest.raises(ValueError, match="declared structural exclusion"):
+        package_validate_check(result)
+
+    bypassed = object.__new__(CollisionEvaluation)
+    evaluations = list(result.evaluations)
+    evaluations[0] = bypassed
+    with pytest.raises(ValueError):
+        CollisionCheckResult(
+            result.context,
+            CollisionStatus.INVALID,
+            tuple(evaluations),
+            "collision_result_inconsistent",
+        )
+
+
 def test_same_body_pair_deletion_from_context_is_rejected() -> None:
     inventory = _same_body_inventory()
     policy = _policy()
@@ -518,6 +654,47 @@ def test_task_object_contact_is_not_self_interference() -> None:
     assert target.kind is CollisionKind.TASK_OBJECT_CONTACT
     assert target.status is CollisionStatus.CONTACT
     assert result.status is CollisionStatus.CONTACT
+
+
+def test_far_task_object_contact_precedes_clearance_classification() -> None:
+    inventory = _inventory(include_task_object=True)
+    observations = tuple(
+        CollisionObservation(
+            pair.pair_id,
+            1.0 if pair.pair_id == "fore|target" else 0.1,
+            "fixture-task-contact" if pair.pair_id == "fore|target" else "fixture",
+            contact=pair.pair_id == "fore|target",
+        )
+        for pair in inventory.pairs()
+    )
+
+    result = _evaluate(inventory, observations, _policy())
+
+    target = next(item for item in result.evaluations if item.pair_id == "fore|target")
+    assert target.kind is CollisionKind.TASK_OBJECT_CONTACT
+    assert target.status is CollisionStatus.CONTACT
+    assert target.reason_code == "task_object_contact"
+    assert target.provenance == "fixture-task-contact"
+    assert target.distance_m == 1.0
+    assert result.status is CollisionStatus.CONTACT
+
+
+def test_non_task_contact_observation_is_invalid() -> None:
+    inventory = _inventory()
+    observations = tuple(
+        CollisionObservation(
+            pair.pair_id,
+            0.1,
+            "fixture",
+            contact=pair.pair_id == "fore|upper",
+        )
+        for pair in inventory.pairs()
+    )
+
+    result = _evaluate(inventory, observations, _policy())
+
+    assert result.status is CollisionStatus.INVALID
+    assert result.reason_code == "invalid_collision_observation"
 
 
 def test_stale_context_rejects_inventory_role_change_with_same_pair_ids() -> None:
