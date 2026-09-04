@@ -103,6 +103,12 @@ def _text(name: str, value: object) -> str:
     return value
 
 
+def validate_limit_resolution_identity(name: str, value: object) -> str:
+    """P2のrobot / joint identityをplaceholderから保護する。"""
+
+    return validate_concrete_limit_identity(name, value)
+
+
 def _finite(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a finite number")
@@ -157,7 +163,7 @@ class JointSpaceConversion:
                 raise ValueError("source_space must be motor or actuator") from exc
         if self.source_space is LimitSpace.JOINT:
             raise ValueError("source_space must be motor or actuator")
-        _text("joint_name", self.joint_name)
+        validate_limit_resolution_identity("joint_name", self.joint_name)
         validate_concrete_limit_identity("source_name", self.source_name)
         ratio = _finite("gear_ratio", self.gear_ratio)
         sign = _finite("sign", self.sign)
@@ -220,7 +226,7 @@ class LimitParityRecord:
     )
 
     def __post_init__(self) -> None:
-        _text("joint_name", self.joint_name)
+        validate_limit_resolution_identity("joint_name", self.joint_name)
         _text("source_name", self.source_name)
         if not isinstance(self.status, ParityStatus):
             object.__setattr__(self, "status", ParityStatus(self.status))
@@ -326,7 +332,7 @@ class ResolvedJointBound:
     )
 
     def __post_init__(self) -> None:
-        _text("joint_name", self.joint_name)
+        validate_limit_resolution_identity("joint_name", self.joint_name)
         if not isinstance(self.status, LimitResolutionStatus):
             object.__setattr__(self, "status", LimitResolutionStatus(self.status))
         if not isinstance(self.source_names, tuple):
@@ -446,7 +452,7 @@ class LimitResolutionResult:
     def __post_init__(self) -> None:
         if type(self.schema_version) is not int or self.schema_version != 1:
             raise ValueError(f"unsupported limit resolution schema version: {self.schema_version!r}")
-        _text("robot_id", self.robot_id)
+        validate_limit_resolution_identity("robot_id", self.robot_id)
         if not isinstance(self.bounds, tuple) or not self.bounds:
             raise ValueError("limit resolution requires at least one bound")
         if any(type(item) is not ResolvedJointBound for item in self.bounds):
@@ -457,7 +463,7 @@ class LimitResolutionResult:
         if not isinstance(self.expected_joint_names, tuple):
             raise TypeError("expected_joint_names must be a tuple")
         expected_names = tuple(
-            _text("expected_joint_name", name)
+            validate_limit_resolution_identity("expected_joint_name", name)
             for name in self.expected_joint_names
         )
         if not expected_names:
@@ -642,7 +648,7 @@ def _validate_joint_conversion(
     source_space = relation.source_space
     if not isinstance(source_space, LimitSpace) or source_space is LimitSpace.JOINT:
         raise ValueError("source_space must be motor or actuator")
-    _text("joint_name", relation.joint_name)
+    validate_limit_resolution_identity("joint_name", relation.joint_name)
     validate_concrete_limit_identity("source_name", relation.source_name)
     ratio = _finite("gear_ratio", relation.gear_ratio)
     sign = _finite("sign", relation.sign)
@@ -673,7 +679,7 @@ def _validate_parity_record(
 ) -> LimitParityRecord:
     if type(parity) is not LimitParityRecord:
         raise TypeError("parity must contain LimitParityRecord values")
-    joint_name = _text("joint_name", parity.joint_name)
+    joint_name = validate_limit_resolution_identity("joint_name", parity.joint_name)
     source_name = _text("source_name", parity.source_name)
     status = parity.status
     if not isinstance(status, ParityStatus):
@@ -734,7 +740,7 @@ def _validate_resolved_bound(
 ) -> ResolvedJointBound:
     if type(bound) is not ResolvedJointBound:
         raise TypeError("bound must be ResolvedJointBound")
-    joint_name = _text("joint_name", bound.joint_name)
+    joint_name = validate_limit_resolution_identity("joint_name", bound.joint_name)
     status = bound.status
     if not isinstance(status, LimitResolutionStatus):
         raise ValueError("status must be a valid LimitResolutionStatus")
@@ -802,7 +808,7 @@ def _validate_limit_resolution_result(
         raise TypeError("result must be LimitResolutionResult")
     if type(result.schema_version) is not int or result.schema_version != 1:
         raise ValueError("unsupported limit resolution schema version")
-    _text("robot_id", result.robot_id)
+    validate_limit_resolution_identity("robot_id", result.robot_id)
     if not isinstance(result.bounds, tuple) or not result.bounds:
         raise ValueError("limit resolution requires at least one bound")
     for bound in result.bounds:
@@ -812,7 +818,10 @@ def _validate_limit_resolution_result(
         raise ValueError("limit resolution joint names must be unique")
     if not isinstance(result.expected_joint_names, tuple) or not result.expected_joint_names:
         raise ValueError("expected_joint_names must be a non-empty tuple")
-    expected_names = tuple(_text("expected_joint_name", name) for name in result.expected_joint_names)
+    expected_names = tuple(
+        validate_limit_resolution_identity("expected_joint_name", name)
+        for name in result.expected_joint_names
+    )
     if len(set(expected_names)) != len(expected_names) or bound_names != expected_names:
         raise ValueError("bounds must exactly cover expected_joint_names in canonical order")
     if not isinstance(result.conversion_relations, tuple):
@@ -894,7 +903,7 @@ def project_limit_to_joint_space(
             "limit/conversion unit mismatch: "
             f"{limit.unit} != {conversion.unit}"
         )
-    if joint_name is not None and _text("joint_name", joint_name) != conversion.joint_name:
+    if joint_name is not None and validate_limit_resolution_identity("joint_name", joint_name) != conversion.joint_name:
         raise ValueError(
             "conversion target joint identity mismatch: "
             f"{joint_name} != {conversion.joint_name}"
@@ -966,10 +975,13 @@ def resolve_joint_space_bounds(
     """同一jointの複数sourceを比較し、fail-closedなnormalized resultを作る。"""
 
     tolerance_rad = _comparison_tolerance(tolerance_rad)
-    names = tuple(_text("expected_joint_name", name) for name in expected_joint_names)
+    names = tuple(
+        validate_limit_resolution_identity("expected_joint_name", name)
+        for name in expected_joint_names
+    )
     if not names or len(set(names)) != len(names):
         raise ValueError("expected_joint_names must be unique and non-empty")
-    _text("robot_id", robot_id)
+    validate_limit_resolution_identity("robot_id", robot_id)
     source_relation_map: dict[str, JointSpaceConversion] = {}
     relation_ids: set[str] = set()
     for relation in conversion_relations:
@@ -1138,6 +1150,8 @@ def fast_arm_toml_limits_to_physical_limits(config: object, *, source_id: str = 
     joints = getattr(config, "joints", None)
     if not isinstance(joints, tuple):
         raise TypeError("config must provide tuple joints")
+    for joint in joints:
+        validate_limit_resolution_identity("joint_name", getattr(joint, "name", None))
     schema_version = getattr(config, "schema_version", None)
     source = LimitSourceProvenance(
         source_kind="joint_limit_toml",
@@ -1174,7 +1188,10 @@ def fast_arm_mujoco_limits_to_physical_limits(
     """
 
     result: list[PhysicalLimit] = []
-    names = tuple(joint_names)
+    names = tuple(
+        validate_limit_resolution_identity("joint_name", name)
+        for name in joint_names
+    )
     source = LimitSourceProvenance(
         source_kind="mujoco_jnt_range",
         source_id="loaded-model",
@@ -1224,11 +1241,17 @@ class FastArmResolvedBoundsProvider:
 
     result: LimitResolutionResult
 
+    def __post_init__(self) -> None:
+        if type(self.result) is not LimitResolutionResult:
+            raise TypeError("result must be LimitResolutionResult")
+        validate_limit_resolution_result(self.result)
+
     def resolve(self) -> LimitResolutionResult:
         validate_limit_resolution_result(self.result)
         return self.result
 
     def bound_for(self, joint_name: str) -> ResolvedJointBound:
+        validate_limit_resolution_identity("joint_name", joint_name)
         return self.result.bound_for(joint_name)
 
 
@@ -1242,7 +1265,10 @@ def build_fast_arm_resolved_bounds_provider(
 ) -> FastArmResolvedBoundsProvider:
     """fast_arm profile / TOML / modelを同一resolutionへ渡す。"""
 
-    names = tuple(profile_joint_names or tuple(joint.name for joint in getattr(config, "joints", ())))
+    names = tuple(
+        validate_limit_resolution_identity("joint_name", name)
+        for name in (profile_joint_names or tuple(joint.name for joint in getattr(config, "joints", ())))
+    )
     if not names:
         raise ValueError("fast_arm profile must declare canonical joint names")
     sources = list(fast_arm_toml_limits_to_physical_limits(config))
@@ -1255,6 +1281,7 @@ def build_fast_arm_resolved_bounds_provider(
             evidence_reference="software-profile-only",
         )
         for name, values in profile_bounds_rad.items():
+            validate_limit_resolution_identity("profile joint name", name)
             lower, upper = _range(values, f"profile bounds for {name}")
             sources.append(PhysicalLimit(name=name, quantity=LimitQuantity.POSITION, lower=lower, upper=upper, unit="rad", space=LimitSpace.JOINT, frame="fast_arm joint space", status=EvidenceStatus.PROVISIONAL, source=profile_source))
     sources.extend(fast_arm_mujoco_limits_to_physical_limits(model, joint_names=names))
@@ -1281,6 +1308,7 @@ __all__ = [
     "fast_arm_toml_limits_to_physical_limits",
     "project_limit_to_joint_space",
     "resolve_joint_space_bounds",
+    "validate_limit_resolution_identity",
     "validate_limit_parity_record",
     "validate_limit_resolution_result",
     "validate_resolved_joint_bound",

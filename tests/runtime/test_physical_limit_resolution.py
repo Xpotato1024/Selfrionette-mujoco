@@ -21,6 +21,7 @@ from selfrionette.runtime.safety.limit_resolution import (
     fast_arm_toml_limits_to_physical_limits,
     project_limit_to_joint_space,
     resolve_joint_space_bounds,
+    validate_limit_resolution_identity,
     validate_limit_parity_record,
     validate_limit_resolution_result,
     validate_resolved_joint_bound,
@@ -160,7 +161,7 @@ def test_duplicate_or_unexpected_conversion_identity_is_rejected() -> None:
         resolve_joint_space_bounds(
             (),
             expected_joint_names=("joint_1", "joint_2"),
-            robot_id="fixture",
+            robot_id="fast_arm-test",
             conversion_relations=(first, duplicate_source),
         )
 
@@ -178,7 +179,7 @@ def test_duplicate_or_unexpected_conversion_identity_is_rejected() -> None:
         resolve_joint_space_bounds(
             (),
             expected_joint_names=("joint_1",),
-            robot_id="fixture",
+            robot_id="fast_arm-test",
             conversion_relations=(unexpected_target,),
         )
 
@@ -196,7 +197,7 @@ def test_duplicate_or_unexpected_conversion_identity_is_rejected() -> None:
         resolve_joint_space_bounds(
             (),
             expected_joint_names=("joint_1", "joint_2"),
-            robot_id="fixture",
+            robot_id="fast_arm-test",
             conversion_relations=(first, duplicate_relation_id),
         )
 
@@ -237,7 +238,7 @@ def test_distinct_conversion_sources_may_target_one_joint() -> None:
             ),
         ),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
         conversion_relations=(motor_relation, actuator_relation),
     )
 
@@ -262,7 +263,7 @@ def test_parity_unit_is_part_of_identity_and_mismatch_fails_closed() -> None:
     result = resolve_joint_space_bounds(
         (_limit(source_kind="joint_limit_toml"), degree_source),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     bound = result.bound_for("joint_1")
@@ -278,7 +279,7 @@ def test_single_non_rad_provisional_source_is_unknown_and_unbounded() -> None:
     result = resolve_joint_space_bounds(
         (_limit(unit="deg"),),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     bound = result.bound_for("joint_1")
@@ -294,7 +295,7 @@ def test_matching_non_rad_provisional_sources_are_unknown_and_unbounded() -> Non
     result = resolve_joint_space_bounds(
         (_limit(unit="deg", source_kind="profile"), _limit(unit="deg", source_kind="model")),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     bound = result.bound_for("joint_1")
@@ -313,7 +314,7 @@ def test_missing_conversion_rejects_even_with_other_joint_source() -> None:
                 _limit(name="joint_1"),
             ),
             expected_joint_names=("joint_1",),
-            robot_id="fixture",
+            robot_id="fast_arm-test",
         )
 
 
@@ -321,7 +322,7 @@ def test_equal_provisional_sources_resolve_without_becoming_authoritative() -> N
     result = resolve_joint_space_bounds(
         (_limit(source_kind="joint_limit_toml"), _limit(source_kind="mujoco_jnt_range")),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     bound = result.bound_for("joint_1")
@@ -335,7 +336,7 @@ def test_single_rad_provisional_source_remains_resolved_provisional() -> None:
     result = resolve_joint_space_bounds(
         (_limit(),),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     bound = result.bound_for("joint_1")
@@ -354,7 +355,7 @@ def test_authoritative_and_matching_provisional_source_resolve_authoritatively()
             _limit(source_kind="joint_limit_toml"),
         ),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     bound = result.bound_for("joint_1")
@@ -369,7 +370,7 @@ def test_conflicting_sources_are_not_resolved() -> None:
     result = resolve_joint_space_bounds(
         (_limit(upper=1.0, source_kind="joint_limit_toml"), _limit(upper=1.1, source_kind="mujoco_jnt_range")),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     bound = result.bound_for("joint_1")
@@ -382,7 +383,7 @@ def test_unknown_source_prevents_authoritative_resolution() -> None:
     result = resolve_joint_space_bounds(
         (_limit(status=EvidenceStatus.UNKNOWN, lower=None, upper=None, source_kind="unknown"), _limit(status=EvidenceStatus.AUTHORITATIVE, source_kind="lab_document")),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     assert result.bound_for("joint_1").status is LimitResolutionStatus.UNKNOWN
@@ -439,7 +440,7 @@ def test_unknown_source_status_with_matching_authority_cannot_resolve() -> None:
             ),
         ),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     bound = result.bound_for("joint_1")
@@ -532,7 +533,7 @@ def test_actuator_projection_applies_one_explicit_conversion() -> None:
     result = resolve_joint_space_bounds(
         (source,),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
         conversion_relations=(relation,),
     )
 
@@ -587,7 +588,7 @@ def test_projected_provenance_must_match_typed_relation_parameters() -> None:
                 forged_projected,
             ),
             expected_joint_names=("joint_1",),
-            robot_id="fixture",
+            robot_id="fast_arm-test",
             conversion_relations=(relation,),
         )
 
@@ -598,7 +599,7 @@ def test_joint_values_keep_identity_provenance_without_reconversion() -> None:
     result = resolve_joint_space_bounds(
         (source,),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
 
     bound = result.bound_for("joint_1")
@@ -744,7 +745,7 @@ def test_limit_result_requires_unique_expected_joint_coverage() -> None:
     with pytest.raises(ValueError, match="expected_joint_names must be non-empty"):
         LimitResolutionResult(
             1,
-            "fixture",
+            "fast_arm-test",
             (bound,),
             (),
             expected_joint_names=(),
@@ -752,14 +753,14 @@ def test_limit_result_requires_unique_expected_joint_coverage() -> None:
     with pytest.raises(TypeError):
         LimitResolutionResult(
             1,
-            "fixture",
+            "fast_arm-test",
             (bound,),
             (),
         )
     with pytest.raises(TypeError, match="expected_joint_names"):
         LimitResolutionResult(
             1,
-            "fixture",
+            "fast_arm-test",
             (bound,),
             (),
             expected_joint_names=None,
@@ -767,7 +768,7 @@ def test_limit_result_requires_unique_expected_joint_coverage() -> None:
     with pytest.raises(ValueError, match="expected_joint_names must be unique"):
         LimitResolutionResult(
             1,
-            "fixture",
+            "fast_arm-test",
             (bound,),
             (),
             expected_joint_names=("joint_1", "joint_1"),
@@ -775,7 +776,7 @@ def test_limit_result_requires_unique_expected_joint_coverage() -> None:
     with pytest.raises(ValueError, match="exactly cover"):
         LimitResolutionResult(
             1,
-            "fixture",
+            "fast_arm-test",
             (bound,),
             (),
             expected_joint_names=("joint_2",),
@@ -826,7 +827,7 @@ def test_canonical_tolerance_rejects_caller_override(tolerance_rad: float) -> No
         resolve_joint_space_bounds(
             (_limit(),),
             expected_joint_names=("joint_1",),
-            robot_id="fixture",
+            robot_id="fast_arm-test",
             tolerance_rad=tolerance_rad,
         )
 
@@ -879,6 +880,109 @@ def test_conversion_relation_uses_canonical_concrete_identity_validator(
         JointSpaceConversion(**kwargs)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    "identity",
+    (
+        "unknown",
+        "UNKNOWN",
+        "unavailable",
+        "n/a",
+        "none",
+        "null",
+        "placeholder",
+        "sample",
+        "synthetic",
+        "fixture",
+        "test_fixture",
+        "fixture_data",
+        "not_available",
+    ),
+)
+def test_resolution_identity_validator_rejects_placeholders(identity: str) -> None:
+    with pytest.raises(ValueError, match="concrete identity"):
+        validate_limit_resolution_identity("robot_id", identity)
+    with pytest.raises(ValueError, match="concrete identity"):
+        validate_limit_resolution_identity("expected_joint_name", identity)
+
+
+@pytest.mark.parametrize("identity", ("", " ", "\t"))
+def test_resolution_identity_validator_rejects_empty_or_whitespace(
+    identity: str,
+) -> None:
+    with pytest.raises(ValueError, match="non-empty string"):
+        validate_limit_resolution_identity("robot_id", identity)
+
+
+def test_resolution_identity_validator_preserves_concrete_identity() -> None:
+    assert validate_limit_resolution_identity("robot_id", "fast_arm-test") == "fast_arm-test"
+    assert validate_limit_resolution_identity("expected_joint_name", "joint_1") == "joint_1"
+
+
+@pytest.mark.parametrize("field", ("robot_id", "expected_joint_names"))
+def test_result_constructor_rejects_placeholder_identity(field: str) -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    kwargs: dict[str, object] = {
+        "schema_version": result.schema_version,
+        "robot_id": result.robot_id,
+        "bounds": result.bounds,
+        "conversion_relations": result.conversion_relations,
+        "expected_joint_names": result.expected_joint_names,
+    }
+    kwargs[field] = "unknown" if field == "robot_id" else ("unknown",)
+    with pytest.raises(ValueError, match="concrete identity"):
+        LimitResolutionResult(**kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("identity", ("unknown", "UNKNOWN", "n/a", "placeholder"))
+def test_resolver_rejects_placeholder_robot_and_joint_identity(identity: str) -> None:
+    with pytest.raises(ValueError, match="concrete identity"):
+        resolve_joint_space_bounds(
+            (_limit(),),
+            expected_joint_names=("joint_1",),
+            robot_id=identity,
+        )
+    with pytest.raises(ValueError, match="concrete identity"):
+        resolve_joint_space_bounds(
+            (_limit(),),
+            expected_joint_names=(identity,),
+            robot_id="fast_arm-test",
+        )
+
+
+@pytest.mark.parametrize("identity", ("unknown", "UNKNOWN", "n/a", "placeholder"))
+def test_fast_arm_factory_rejects_placeholder_joint_identity(identity: str) -> None:
+    config = parse_fast_arm_joint_limit_config(FAST_ARM_JOINT_LIMIT_RESOURCE)
+    with pytest.raises(ValueError, match="concrete identity"):
+        build_fast_arm_resolved_bounds_provider(
+            config=config,
+            profile_joint_names=(identity,),
+        )
+
+
+def test_provider_constructor_and_accessor_revalidate_resolution_identity() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    object.__setattr__(result, "robot_id", "unknown")
+    with pytest.raises(ValueError, match="concrete identity"):
+        FastArmResolvedBoundsProvider(result)
+
+    valid_result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    provider = FastArmResolvedBoundsProvider(valid_result)
+    with pytest.raises(ValueError, match="concrete identity"):
+        provider.bound_for("unknown")
+
+
 def test_result_rejects_relation_source_name_mismatch_with_projected_provenance() -> None:
     source = _source(EvidenceStatus.PROVISIONAL, "fixture")
     source_identity_value = source_identity(source, unit="rad")
@@ -921,7 +1025,7 @@ def test_result_rejects_relation_source_name_mismatch_with_projected_provenance(
     with pytest.raises(ValueError, match="conversion relation binding"):
         LimitResolutionResult(
             1,
-            "fixture",
+            "fast_arm-test",
             (bound,),
             (relation,),
             expected_joint_names=("joint_1",),
@@ -967,7 +1071,7 @@ def test_extra_conversion_relation_is_not_silently_dropped() -> None:
         resolve_joint_space_bounds(
             (_limit(name="joint_1"),),
             expected_joint_names=("joint_1",),
-            robot_id="fixture",
+            robot_id="fast_arm-test",
             conversion_relations=(relation,),
         )
 
@@ -993,7 +1097,7 @@ def test_authoritative_result_detects_conversion_deletion_and_inventory_tamper()
     result = resolve_joint_space_bounds(
         (source,),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
         conversion_relations=(relation,),
     )
     assert result.authoritative
@@ -1003,7 +1107,7 @@ def test_authoritative_result_detects_conversion_deletion_and_inventory_tamper()
     result = resolve_joint_space_bounds(
         (source,),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
         conversion_relations=(relation,),
     )
     object.__setattr__(result, "expected_joint_names", ("deleted_joint",))
@@ -1012,7 +1116,7 @@ def test_authoritative_result_detects_conversion_deletion_and_inventory_tamper()
     result = resolve_joint_space_bounds(
         (source,),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
         conversion_relations=(relation,),
     )
     object.__setattr__(relation, "relation_id", "unknown")
@@ -1023,7 +1127,7 @@ def test_nested_provisional_source_mutation_is_not_authoritative() -> None:
     result = resolve_joint_space_bounds(
         (_limit(),),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
     source = result.bounds[0].parity[0].source
     assert source is not None
@@ -1035,7 +1139,7 @@ def test_result_rejects_same_semantic_nested_bound_or_relation_replacement() -> 
     result = resolve_joint_space_bounds(
         (_limit(),),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
     original_bound = result.bounds[0]
     replacement_bound = ResolvedJointBound(
@@ -1073,7 +1177,7 @@ def test_result_rejects_same_semantic_nested_bound_or_relation_replacement() -> 
     result = resolve_joint_space_bounds(
         (source,),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
         conversion_relations=(relation,),
     )
     replacement_relation = JointSpaceConversion(
@@ -1094,7 +1198,7 @@ def test_parity_and_bound_reject_same_semantic_nested_replacement() -> None:
     result = resolve_joint_space_bounds(
         (_limit(),),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
     bound = result.bounds[0]
     parity = bound.parity[0]
@@ -1127,7 +1231,7 @@ def test_external_result_seal_rejects_coherent_private_snapshot_rewrite() -> Non
     result = resolve_joint_space_bounds(
         (_limit(),),
         expected_joint_names=("joint_1",),
-        robot_id="fixture",
+        robot_id="fast_arm-test",
     )
     object.__setattr__(result, "robot_id", "tampered-robot")
     object.__setattr__(
