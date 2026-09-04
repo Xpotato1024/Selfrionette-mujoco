@@ -1262,18 +1262,28 @@ def validate_validation_check_evidence(
     return check
 
 
-def _derive_evidence_class(checks: Sequence[ValidationCheckEvidence]) -> EvidenceClass:
-    if not checks:
-        return EvidenceClass.NONE
-    for item in checks:
-        try:
-            validate_validation_check_evidence(item)
-        except Exception:
+def _derive_evidence_class(
+    procedure: ValidationProcedure,
+    checks: Sequence[ValidationCheckEvidence],
+) -> EvidenceClass:
+    try:
+        _validate_validation_procedure(procedure)
+        if not isinstance(checks, Sequence) or isinstance(checks, (str, bytes)):
             return EvidenceClass.UNKNOWN
-    if any(item.measurement_source.kind is MeasurementSourceKind.UNKNOWN for item in checks):
+        typed_checks = tuple(checks)
+        for item in typed_checks:
+            validate_validation_check_evidence(item)
+    except Exception:
         return EvidenceClass.UNKNOWN
-    physical = any(item.measurement_source.kind.is_physical for item in checks)
-    software = any(not item.measurement_source.kind.is_physical for item in checks)
+
+    source_kinds = (
+        procedure.clearance.source.kind,
+        *(item.measurement_source.kind for item in typed_checks),
+    )
+    if any(kind is MeasurementSourceKind.UNKNOWN for kind in source_kinds):
+        return EvidenceClass.UNKNOWN
+    physical = any(kind.is_physical for kind in source_kinds)
+    software = any(not kind.is_physical for kind in source_kinds)
     if physical and software:
         return EvidenceClass.MIXED
     if physical:
@@ -1476,7 +1486,7 @@ class ValidationEvidenceArtifact:
             _validate_validation_artifact(self)
         except Exception:
             return EvidenceClass.UNKNOWN
-        return _derive_evidence_class(self.checks)
+        return _derive_evidence_class(self.procedure, self.checks)
 
     @property
     def physical_evidence_present(self) -> bool:
@@ -1601,7 +1611,7 @@ def _artifact_to_dict_raw(artifact: ValidationEvidenceArtifact) -> dict[str, obj
         "completed_at": artifact.completed_at,
         "classification": artifact.classification.value,
         "classification_reason": artifact.classification_reason,
-        "evidence_class": _derive_evidence_class(artifact.checks).value,
+        "evidence_class": _derive_evidence_class(artifact.procedure, artifact.checks).value,
         "checks": [_check_to_dict_raw(item) for item in artifact.checks],
         "operator_aborted": artifact.operator_aborted,
     }
