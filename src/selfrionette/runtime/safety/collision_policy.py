@@ -226,8 +226,7 @@ def _pair_ids_from_inventory_fingerprint(
     pair_ids = tuple(
         "|".join(sorted((first[0], second[0])))
         for first, second in itertools.combinations(fingerprint, 2)
-        if first[1] != second[1]
-        and (first[2] in robot_roles or second[2] in robot_roles)
+        if first[2] in robot_roles or second[2] in robot_roles
     )
     if pair_ids:
         return pair_ids
@@ -243,8 +242,7 @@ def _inventory_has_evaluable_pairs(
 ) -> bool:
     robot_roles = {GeometryRole.ROBOT.value, GeometryRole.TOOL.value}
     return any(
-        first[1] != second[1]
-        and (first[2] in robot_roles or second[2] in robot_roles)
+        first[2] in robot_roles or second[2] in robot_roles
         for first, second in itertools.combinations(fingerprint, 2)
     )
 
@@ -423,8 +421,7 @@ class GeometryInventory:
         return tuple(
             CollisionPair(first, second)
             for first, second in itertools.combinations(self.geometries, 2)
-            if first.body_name != second.body_name
-            and (
+            if (
                 first.role in {GeometryRole.ROBOT, GeometryRole.TOOL}
                 or second.role in {GeometryRole.ROBOT, GeometryRole.TOOL}
             )

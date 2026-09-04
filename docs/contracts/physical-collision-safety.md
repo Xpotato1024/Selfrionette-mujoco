@@ -26,13 +26,17 @@ physical output前に検査できる境界を提供する。これはmesh非接�
 各geomは`robot`、`tool`、`environment`、`task_object`、`unknown`のexplicit roleを持つ。
 `unknown` role、missing geom/body name、robot geometry欠落は`invalid`であり、環境やself pairへ
 黙って分類しない。同じbodyへ複数の異なるroleを割り当てるrole集合の重複も`invalid`とする。
-pairは二つの具体的geom nameから決まり、wildcardは使わない。
+pairは二つの異なる具体的geom nameから決まり、wildcardは使わない。少なくとも一方が
+`robot`または`tool` roleであるpairは、bodyが同じでもinventoryへ含める。同一bodyの異なるgeomは
+`structural_proximity`として分類し、explicit exclusionがない限りproviderのclearance evidenceを
+要求する。
 
 | pair | classification |
 |---|---|
-| robot / robot（別body） | `self_interference` |
-| robot / environment | `environment_collision` |
-| robot / task_object | `task_object_contact` |
+| robot/tool roleを含むpair（別body） | `self_interference` |
+| robot/tool roleを含むpair（同一body） | `structural_proximity` |
+| robot/tool role / environment | `environment_collision` |
+| robot/tool role / task_object | `task_object_contact` |
 | 明示されたstructural proximity exclusion | `structural_proximity` |
 
 task-object contactはself-interferenceへ変換しない。R7-H #413のcontact identityは、同じ
@@ -75,7 +79,10 @@ factoryはtyped context、またはcontextを組み立てる明示的なidentity
 へfallbackしない。inventory role、body、source identity、policy threshold、exclusion内容が変わった
 stale contextは`invalid`として停止する。
 
-`CollisionCheckResult`はpairごとの`CollisionEvaluation`とaggregate statusを返す。statusは
+`CollisionCheckResult`はpairごとの`CollisionEvaluation`とaggregate statusを返す。same-bodyの
+`structural_proximity` pairも`expected_pair_ids`とevaluation coverageから削除されない。explicit
+exclusionがないsame-body pairはprovider evidenceが欠けると`unavailable`となり、暗黙のclearへ
+fallbackしない。statusは
 `clear`、`near_collision`、`collision`、`contact`、`unknown`、`unavailable`、`invalid`である。
 constructorは空、duplicate、subset、extraのevaluation coverageを拒否し、aggregate status/reason
 は一つのcanonical derivationと完全一致しなければならない。明示structural exclusionも一つの
