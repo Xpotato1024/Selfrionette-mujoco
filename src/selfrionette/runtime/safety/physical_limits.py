@@ -11,6 +11,8 @@ import json
 import math
 import weakref
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from threading import RLock
@@ -28,6 +30,14 @@ _PHYSICAL_SEALS: dict[
 ] = {}
 _PHYSICAL_SEALS_LOCK = RLock()
 _PHYSICAL_CONVERSION_ORIGINS: dict[
+    int, tuple[weakref.ReferenceType[object], str]
+] = {}
+_PHYSICAL_LIMIT_CONSTRUCTION_CONTEXT: ContextVar[object | None] = ContextVar(
+    "_PHYSICAL_LIMIT_CONSTRUCTION_CONTEXT",
+    default=None,
+)
+_PHYSICAL_LIMIT_CONSTRUCTION_TOKEN = object()
+_PHYSICAL_LIMIT_ORIGINS: dict[
     int, tuple[weakref.ReferenceType[object], str]
 ] = {}
 
@@ -91,6 +101,46 @@ def _conversion_origin(value: object) -> str:
         if entry is None or entry[0]() is not value:
             raise ValueError("conversion provenance has no canonical origin")
         return entry[1]
+
+
+def _release_limit_origin(
+    key: int,
+    reference: weakref.ReferenceType[object],
+) -> None:
+    with _PHYSICAL_SEALS_LOCK:
+        entry = _PHYSICAL_LIMIT_ORIGINS.get(key)
+        if entry is not None and entry[0] is reference:
+            _PHYSICAL_LIMIT_ORIGINS.pop(key, None)
+
+
+def _register_limit_origin(value: object, origin: str) -> None:
+    key = id(value)
+    reference = weakref.ref(
+        value,
+        lambda ref, key=key: _release_limit_origin(key, ref),
+    )
+    with _PHYSICAL_SEALS_LOCK:
+        _PHYSICAL_LIMIT_ORIGINS[key] = (reference, origin)
+
+
+def _limit_origin(value: object) -> str:
+    key = id(value)
+    with _PHYSICAL_SEALS_LOCK:
+        entry = _PHYSICAL_LIMIT_ORIGINS.get(key)
+        if entry is None or entry[0]() is not value:
+            raise ValueError("physical limit has no canonical construction origin")
+        return entry[1]
+
+
+@contextmanager
+def _canonical_projection_scope():
+    token = _PHYSICAL_LIMIT_CONSTRUCTION_CONTEXT.set(
+        _PHYSICAL_LIMIT_CONSTRUCTION_TOKEN
+    )
+    try:
+        yield
+    finally:
+        _PHYSICAL_LIMIT_CONSTRUCTION_CONTEXT.reset(token)
 
 
 class EvidenceStatus(str, Enum):
@@ -450,6 +500,10 @@ class PhysicalLimit:
         _text("name", self.name)
         quantity = _enum_value(LimitQuantity, "quantity", self.quantity)
         space = _enum_value(LimitSpace, "space", self.space)
+        canonical_projection = (
+            _PHYSICAL_LIMIT_CONSTRUCTION_CONTEXT.get()
+            is _PHYSICAL_LIMIT_CONSTRUCTION_TOKEN
+        )
         lower = _finite_or_none("lower", self.lower)
         upper = _finite_or_none("upper", self.upper)
         _text("unit", self.unit)
@@ -468,6 +522,21 @@ class PhysicalLimit:
         _validate_conversion_origin(conversion, source_space=space)
         if conversion.target_space is not space:
             raise ValueError("conversion target_space must match limit space")
+        if (
+            space is LimitSpace.JOINT
+            and conversion.source_space is not LimitSpace.JOINT
+            and not canonical_projection
+        ):
+            raise ValueError(
+                "joint-space projected limit requires canonical projection origin"
+            )
+        if canonical_projection and (
+            space is not LimitSpace.JOINT
+            or conversion.source_space is LimitSpace.JOINT
+        ):
+            raise ValueError(
+                "canonical projection must target joint space from motor or actuator"
+            )
         if status is EvidenceStatus.AUTHORITATIVE and self.source.status is not EvidenceStatus.AUTHORITATIVE:
             raise ValueError("authoritative limit requires authoritative source")
         if status is EvidenceStatus.AUTHORITATIVE and (lower is None or upper is None):
@@ -500,6 +569,10 @@ class PhysicalLimit:
         snapshot = _limit_snapshot(self)
         object.__setattr__(self, "_canonical_snapshot", snapshot)
         _register_physical_seal(self, snapshot)
+        _register_limit_origin(
+            self,
+            "projected" if canonical_projection else "direct",
+        )
 
     @property
     def is_bounded(self) -> bool:
@@ -534,6 +607,37 @@ class PhysicalLimit:
         if self.reason is not None:
             result["reason"] = self.reason
         return result
+
+
+def _construct_projected_limit(
+    *,
+    name: str,
+    quantity: LimitQuantity,
+    lower: float | None,
+    upper: float | None,
+    unit: str,
+    frame: str,
+    status: EvidenceStatus,
+    source: LimitSourceProvenance,
+    conversion: LimitConversionProvenance,
+    reason: str | None = None,
+) -> PhysicalLimit:
+    """canonical projection / decoderだけがnon-identity limitを生成する。"""
+
+    with _canonical_projection_scope():
+        return PhysicalLimit(
+            name=name,
+            quantity=quantity,
+            lower=lower,
+            upper=upper,
+            unit=unit,
+            space=LimitSpace.JOINT,
+            frame=frame,
+            status=status,
+            source=source,
+            conversion=conversion,
+            reason=reason,
+        )
 
 
 def _source_snapshot(source: LimitSourceProvenance) -> tuple[object, ...]:
@@ -716,6 +820,18 @@ def _validate_physical_limit(limit: object) -> PhysicalLimit:
     _validate_conversion_origin(conversion, source_space=space)
     if conversion.target_space is not space:
         raise ValueError("conversion target_space must match limit space")
+    origin = _limit_origin(limit)
+    if origin not in {"direct", "projected"}:
+        raise ValueError("physical limit has an unknown construction origin")
+    if space is LimitSpace.JOINT:
+        if conversion.source_space is LimitSpace.JOINT and origin != "direct":
+            raise ValueError("joint-space identity limit has an invalid origin")
+        if conversion.source_space is not LimitSpace.JOINT and origin != "projected":
+            raise ValueError(
+                "joint-space projected limit requires canonical projection origin"
+            )
+    elif origin != "direct":
+        raise ValueError("non-joint limit has an invalid construction origin")
     if space is not LimitSpace.JOINT and conversion.source_space is not space:
         raise ValueError("non-joint limit conversion source_space must match limit space")
     if status is EvidenceStatus.AUTHORITATIVE:
@@ -1036,18 +1152,42 @@ def _limit_from_mapping(value: object) -> PhysicalLimit:
     unknown = set(raw) - allowed
     if unknown:
         raise ValueError(f"limit contains unknown fields: {sorted(unknown)!r}")
+    name = _text("name", raw.get("name"))
+    quantity = _enum_value(LimitQuantity, "quantity", raw.get("quantity"))
+    lower = raw.get("lower")
+    upper = raw.get("upper")
+    unit = _text("unit", raw.get("unit"))
+    space = _enum_value(LimitSpace, "space", raw.get("space"))
+    frame = _text("frame", raw.get("frame"))
+    status = _enum_value(EvidenceStatus, "status", raw.get("status"))
+    source = _source_from_mapping(raw.get("source"))
+    conversion = _conversion_from_mapping(raw.get("conversion"))
+    reason = _optional_text(raw, "reason")
+    if space is LimitSpace.JOINT and conversion.source_space is not LimitSpace.JOINT:
+        return _construct_projected_limit(
+            name=name,
+            quantity=quantity,
+            lower=lower,
+            upper=upper,
+            unit=unit,
+            frame=frame,
+            status=status,
+            source=source,
+            conversion=conversion,
+            reason=reason,
+        )
     return PhysicalLimit(
-        name=_text("name", raw.get("name")),
-        quantity=_enum_value(LimitQuantity, "quantity", raw.get("quantity")),  # type: ignore[arg-type]
-        lower=raw.get("lower"),  # type: ignore[arg-type]
-        upper=raw.get("upper"),  # type: ignore[arg-type]
-        unit=_text("unit", raw.get("unit")),
-        space=_enum_value(LimitSpace, "space", raw.get("space")),  # type: ignore[arg-type]
-        frame=_text("frame", raw.get("frame")),
-        status=_enum_value(EvidenceStatus, "status", raw.get("status")),  # type: ignore[arg-type]
-        source=_source_from_mapping(raw.get("source")),
-        conversion=_conversion_from_mapping(raw.get("conversion")),
-        reason=_optional_text(raw, "reason"),
+        name=name,
+        quantity=quantity,
+        lower=lower,
+        upper=upper,
+        unit=unit,
+        space=space,
+        frame=frame,
+        status=status,
+        source=source,
+        conversion=conversion,
+        reason=reason,
     )
 
 

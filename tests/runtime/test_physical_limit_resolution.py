@@ -556,35 +556,35 @@ def test_projected_provenance_must_match_typed_relation_parameters() -> None:
         relation_id="motor_1-to-joint_1/v1",
         unit="rad",
     )
-    forged_projected = PhysicalLimit(
-        name="joint_1",
-        quantity=LimitQuantity.POSITION,
-        lower=-1.0,
-        upper=1.0,
-        unit="rad",
-        space=LimitSpace.JOINT,
-        frame="fast_arm joint space",
+    source = _limit(
+        name="motor_1",
+        space=LimitSpace.MOTOR,
         status=EvidenceStatus.AUTHORITATIVE,
-        source=_source(EvidenceStatus.AUTHORITATIVE, "manufacturer_document"),
-        conversion=LimitConversionProvenance.projected(
-            source_space=LimitSpace.MOTOR,
-            relation_id=relation.relation_id,
-            gear_ratio=2.0,
-            sign=1.0,
-            offset=0.0,
-            source_name="motor_1",
-        ),
+        source_status=EvidenceStatus.AUTHORITATIVE,
+        source_kind="manufacturer_document",
+    )
+    forged_relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=2.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id=relation.relation_id,
+        unit="rad",
+    )
+    forged_projected = project_limit_to_joint_space(source, forged_relation)
+    canonical_source = _limit(
+        name="motor_1",
+        space=LimitSpace.MOTOR,
+        status=EvidenceStatus.AUTHORITATIVE,
+        source_status=EvidenceStatus.AUTHORITATIVE,
+        source_kind="lab_document",
     )
     with pytest.raises(ValueError, match="conversion relation binding"):
         resolve_joint_space_bounds(
             (
-                _limit(
-                    name="motor_1",
-                    space=LimitSpace.MOTOR,
-                    status=EvidenceStatus.AUTHORITATIVE,
-                    source_status=EvidenceStatus.AUTHORITATIVE,
-                    source_kind="lab_document",
-                ),
+                canonical_source,
                 forged_projected,
             ),
             expected_joint_names=("joint_1",),
