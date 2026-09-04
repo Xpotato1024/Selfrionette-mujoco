@@ -24,16 +24,23 @@ from selfrionette.runtime.safety.limit_resolution import (
     resolve_joint_space_bounds,
 )
 from selfrionette.runtime.safety.physical_safety_core import (
+    BoundedSafetySamplingResult,
     SafetyComponent,
+    SafetyComponentAssessment,
+    SafetyDecision,
     SafetyDecisionAction,
     SafetyInput,
+    SafetyReason,
     evaluate_bounded_safety_samples,
     evaluate_physical_safety,
+    validate_bounded_safety_sampling_result,
+    validate_safety_decision,
 )
 from selfrionette.runtime.safety.trajectory_feasibility import (
     ConfigurationFeasibilityResult,
     FeasibilityDiagnostic,
     FeasibilityStatus,
+    TrajectoryFeasibilityPolicy,
     TrajectoryFeasibilityResult,
     VelocityEvidenceBinding,
     VelocityEvidenceKind,
@@ -169,7 +176,11 @@ def _position_limit(
     status: EvidenceStatus = EvidenceStatus.PROVISIONAL,
 ) -> PhysicalLimit:
     source = LimitSourceProvenance(
-        source_kind=source_kind,
+        source_kind=(
+            "manufacturer_manual"
+            if status is EvidenceStatus.AUTHORITATIVE
+            else "software_config"
+        ),
         source_id=f"{source_kind}-source",
         revision="rev-1",
         status=status,
@@ -186,6 +197,75 @@ def _position_limit(
         status=status,
         source=source,
     )
+
+
+def _dynamic_policy_fingerprint(
+    expected_joint_names: tuple[str, ...],
+    *,
+    status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
+) -> tuple[
+    tuple[object, ...],
+    tuple[str, ...],
+    tuple[EvidenceStatus, ...],
+    tuple[str, ...],
+]:
+    """P4のcanonical policy fingerprintをfixture側で再利用する。"""
+
+    limits: list[PhysicalLimit] = []
+    for quantity, unit, lower, upper in (
+        (LimitQuantity.VELOCITY, "rad/s", -2.0, 2.0),
+        (LimitQuantity.ACCELERATION, "rad/s^2", -10.0, 10.0),
+    ):
+        for name in expected_joint_names:
+            index = len(limits)
+            limits.append(
+                PhysicalLimit(
+                    name=name,
+                    quantity=quantity,
+                    lower=lower if status in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL} else None,
+                    upper=upper if status in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL} else None,
+                    unit=unit,
+                    space=LimitSpace.JOINT,
+                    frame="fast_arm joint space",
+                    status=status,
+                    source=LimitSourceProvenance(
+                        source_kind=(
+                            "manufacturer_manual"
+                            if status is EvidenceStatus.AUTHORITATIVE
+                            else "software_config"
+                        ),
+                        source_id=f"fixture-limit-{index}",
+                        revision="rev-1",
+                        status=status,
+                        evidence_reference=(
+                            f"fixture-evidence-{index}"
+                            if status is EvidenceStatus.AUTHORITATIVE
+                            else None
+                        ),
+                    ),
+                    reason=None if status in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL} else "fixture unavailable",
+                )
+            )
+    fingerprint = TrajectoryFeasibilityPolicy(
+        joint_names=expected_joint_names,
+        dynamic_limits=tuple(limits),
+        expected_cadence_s=0.1,
+        cadence_tolerance_s=1e-9,
+        maximum_gap_s=0.2,
+        required_jacobian_rank=3,
+        minimum_singular_value=0.1,
+        maximum_condition_number=100.0,
+        policy_id=POLICY_ID,
+        policy_revision=POLICY_REVISION,
+    ).canonical_fingerprint
+    source_ids: list[str] = []
+    statuses: list[EvidenceStatus] = []
+    evidence_ids: list[str] = []
+    for raw in fingerprint[2]:
+        source_ids.append("|".join((raw[0], raw[1], raw[2], raw[4], raw[10], raw[11], raw[12])))
+        statuses.append(EvidenceStatus(raw[7]))
+        evidence_ids.append(raw[13] or source_ids[-1])
+    return fingerprint, tuple(source_ids), tuple(statuses), tuple(evidence_ids)
 
 
 def _conversion(relation_id: str = "fixture-relation") -> JointSpaceConversion:
@@ -251,6 +331,16 @@ def _trajectory_dynamic(
         if status is FeasibilityStatus.FEASIBLE
         else (FeasibilityDiagnostic(f"{status.value}_fixture", f"fixture {status.value}"),)
     )
+    policy_binding = _dynamic_policy_fingerprint(
+        JOINTS,
+        status=bound_status,
+    ) if status is FeasibilityStatus.FEASIBLE else None
+    if policy_binding is None:
+        limit_source_ids = tuple(f"fixture-limit-{index}" for index in range(2 * len(JOINTS)))
+        bound_evidence_ids = tuple(f"fixture-evidence-{index}" for index in range(2 * len(JOINTS)))
+        policy_fingerprint = ()
+    else:
+        policy_fingerprint, limit_source_ids, _, bound_evidence_ids = policy_binding
     return TrajectoryFeasibilityResult(
         status,
         diagnostics[0].code,
@@ -261,16 +351,24 @@ def _trajectory_dynamic(
         JOINTS,
         POLICY_ID,
         POLICY_REVISION,
-        tuple(f"fixture-limit-{index}" for index in range(2 * len(JOINTS))),
-        tuple(f"fixture-evidence-{index}" for index in range(2 * len(JOINTS))),
+        limit_source_ids,
+        bound_evidence_ids,
         (True,) * sample_count,
         (True,) * sample_count,
         velocity_evidence,
+        policy_fingerprint,
+        ("fixture-jacobian",) * sample_count
+        if status is FeasibilityStatus.FEASIBLE
+        else (),
+        ("fixture-jacobian-evidence",) * sample_count
+        if status is FeasibilityStatus.FEASIBLE
+        else (),
     )
 
 
 def _collision(status: CollisionStatus) -> CollisionCheckResult:
     pair_id = "arm|target" if status is CollisionStatus.CONTACT else "arm|floor"
+    second_role = "task_object" if status is CollisionStatus.CONTACT else "environment"
     context = CollisionContext(
         robot_id="fixture-robot",
         model_id="fixture-model",
@@ -279,6 +377,11 @@ def _collision(status: CollisionStatus) -> CollisionCheckResult:
         inventory_id="fixture-inventory",
         inventory_revision="rev-1",
         expected_pair_ids=(pair_id,),
+        inventory_fingerprint=(
+            ("arm", "arm", "robot", "fixture-model"),
+            (pair_id.split("|")[1], pair_id.split("|")[1], second_role, "fixture-model"),
+        ),
+        policy_fingerprint=("fixture-collision-policy", 0.01, 0.02, ()),
     )
     kind = CollisionKind.TASK_OBJECT_CONTACT if status is CollisionStatus.CONTACT else CollisionKind.ENVIRONMENT_COLLISION
     reason_code = {
@@ -334,6 +437,17 @@ def _dynamic(
     elif status is FeasibilityStatus.INVALID:
         diagnostics = (FeasibilityDiagnostic("invalid_limit_source", "fixture invalid"),)
         evidence_status = EvidenceStatus.INVALID
+    policy_binding = _dynamic_policy_fingerprint(
+        expected_joint_names,
+        status=evidence_status,
+    ) if status is FeasibilityStatus.FEASIBLE else None
+    if policy_binding is None:
+        source_ids = tuple(f"fixture-limit-{index}" for index in range(len(expected_joint_names)))
+        evidence_ids = tuple(f"fixture-evidence-{index}" for index in range(len(expected_joint_names)))
+    else:
+        _, all_source_ids, _, all_evidence_ids = policy_binding
+        source_ids = all_source_ids[: len(expected_joint_names)]
+        evidence_ids = all_evidence_ids[: len(expected_joint_names)]
     return ConfigurationFeasibilityResult(
         status,
         diagnostics[0].code,
@@ -343,10 +457,13 @@ def _dynamic(
         expected_joint_names,
         POLICY_ID,
         POLICY_REVISION,
-        tuple(f"fixture-limit-{index}" for index in range(len(expected_joint_names))),
-        tuple(f"fixture-evidence-{index}" for index in range(len(expected_joint_names))),
+        source_ids,
+        evidence_ids,
         True if status is not FeasibilityStatus.UNAVAILABLE else None,
         True if status is not FeasibilityStatus.UNAVAILABLE else None,
+        policy_binding[0] if policy_binding is not None else (),
+        ("fixture-jacobian",),
+        ("fixture-jacobian-evidence",),
     )
 
 
@@ -1422,3 +1539,176 @@ def test_invalid_empty_sampling_input_is_explicit() -> None:
 
     assert result.first_non_allow_index == 0
     assert result.action is SafetyDecisionAction.INVALID
+
+
+def test_safety_decision_constructor_and_public_validator_bind_aggregate() -> None:
+    valid = evaluate_physical_safety(_input())
+    assert validate_safety_decision(valid) is valid
+
+    with pytest.raises(ValueError, match="highest-priority assessment"):
+        SafetyDecision(
+            valid.candidate_id,
+            SafetyDecisionAction.REJECT,
+            valid.reason,
+            valid.assessments,
+            valid.provenance,
+        )
+
+    tampered = copy(valid)
+    object.__setattr__(tampered, "action", SafetyDecisionAction.REJECT)
+    assert not tampered.allowed
+    with pytest.raises(ValueError):
+        validate_safety_decision(tampered)
+
+    nested_tampered = copy(valid)
+    reason = copy(nested_tampered.reason)
+    object.__setattr__(reason, "provenance", ("tampered-provenance",))
+    object.__setattr__(nested_tampered, "reason", reason)
+    assert not nested_tampered.allowed
+
+    assessment_tampered = copy(valid)
+    assessment = copy(assessment_tampered.assessments[0])
+    object.__setattr__(assessment, "action", SafetyDecisionAction.REJECT)
+    object.__setattr__(assessment_tampered, "assessments", (assessment, *assessment_tampered.assessments[1:]))
+    assert not assessment_tampered.allowed
+
+
+def test_bounded_sampling_constructor_and_properties_fail_closed_after_tamper() -> None:
+    valid = evaluate_bounded_safety_samples(
+        (_input(candidate_id="sample-0"), _input(candidate_id="sample-1", dynamic=FeasibilityStatus.REJECTED))
+    )
+    assert validate_bounded_safety_sampling_result(valid) is valid
+    assert valid.reason is valid.decisions[valid.first_non_allow_index].reason
+    assert valid.provenance == valid.decisions[valid.first_non_allow_index].provenance
+
+    with pytest.raises(ValueError, match="first non-allow"):
+        BoundedSafetySamplingResult(valid.decisions, None)
+
+    tampered = copy(valid)
+    object.__setattr__(tampered, "first_non_allow_index", 0)
+    assert tampered.action is SafetyDecisionAction.INVALID
+    with pytest.raises(ValueError):
+        validate_bounded_safety_sampling_result(tampered)
+
+    nested_tampered = copy(valid)
+    decision = copy(nested_tampered.decisions[1])
+    object.__setattr__(decision, "action", SafetyDecisionAction.ALLOW)
+    object.__setattr__(nested_tampered, "decisions", (nested_tampered.decisions[0], decision))
+    assert nested_tampered.action is SafetyDecisionAction.INVALID
+
+
+@pytest.mark.parametrize(
+    ("component", "reason_code"),
+    (
+        (SafetyComponent.LIMIT, "limit_resolution_unavailable"),
+        (SafetyComponent.COLLISION, "collision_result_unavailable"),
+        (SafetyComponent.DYNAMIC, "dynamic_result_unavailable"),
+    ),
+)
+def test_component_assessment_rejects_synthetic_allow_for_unavailable_reason(
+    component: SafetyComponent,
+    reason_code: str,
+) -> None:
+    reason = SafetyReason(reason_code, component, "evidence is unavailable")
+
+    with pytest.raises(ValueError, match="canonical reason mapping"):
+        SafetyComponentAssessment(component, SafetyDecisionAction.ALLOW, reason)
+
+
+def test_component_assessment_rejects_unknown_reason_code() -> None:
+    reason = SafetyReason("arbitrary_reason", SafetyComponent.COLLISION, "arbitrary")
+
+    with pytest.raises(ValueError, match="unknown for component"):
+        SafetyComponentAssessment(
+            SafetyComponent.COLLISION,
+            SafetyDecisionAction.ALLOW,
+            reason,
+        )
+
+
+@pytest.mark.parametrize(
+    ("component", "reason_code"),
+    (
+        (SafetyComponent.LIMIT, "limit_resolution_authoritative"),
+        (SafetyComponent.COLLISION, "collision_clear"),
+        (SafetyComponent.DYNAMIC, "dynamic_feasibility_clear"),
+    ),
+)
+def test_canonical_allow_assessment_requires_concrete_provenance(
+    component: SafetyComponent,
+    reason_code: str,
+) -> None:
+    reason = SafetyReason(reason_code, component, "evidence is clear")
+
+    with pytest.raises(ValueError, match="requires concrete provenance"):
+        SafetyComponentAssessment(component, SafetyDecisionAction.ALLOW, reason)
+
+
+def test_direct_all_allow_decision_rejects_bypassed_unavailable_assessments() -> None:
+    assessments = []
+    for component in (
+        SafetyComponent.LIMIT,
+        SafetyComponent.COLLISION,
+        SafetyComponent.DYNAMIC,
+    ):
+        reason = SafetyReason(
+            {
+                SafetyComponent.LIMIT: "limit_resolution_unavailable",
+                SafetyComponent.COLLISION: "collision_result_unavailable",
+                SafetyComponent.DYNAMIC: "dynamic_result_unavailable",
+            }[component],
+            component,
+            "evidence is unavailable",
+        )
+        assessment = object.__new__(SafetyComponentAssessment)
+        object.__setattr__(assessment, "component", component)
+        object.__setattr__(assessment, "action", SafetyDecisionAction.ALLOW)
+        object.__setattr__(assessment, "reason", reason)
+        assessments.append(assessment)
+
+    with pytest.raises(ValueError, match="canonical reason mapping"):
+        SafetyDecision(
+            "synthetic-all-allow",
+            SafetyDecisionAction.ALLOW,
+            SafetyReason(
+                "limit_resolution_unavailable",
+                SafetyComponent.LIMIT,
+                "evidence is unavailable",
+            ),
+            tuple(assessments),
+            (),
+        )
+
+
+def test_bounded_sampling_rejects_trailing_decisions_after_first_non_allow() -> None:
+    allow = evaluate_physical_safety(_input(candidate_id="sample-allow"))
+    reject = evaluate_physical_safety(
+        _input(candidate_id="sample-reject", dynamic=FeasibilityStatus.REJECTED)
+    )
+
+    with pytest.raises(ValueError, match="stop at first non-allow"):
+        BoundedSafetySamplingResult((allow, reject, allow), 1)
+
+
+def test_safety_input_rejects_nested_dto_replacement_after_construction() -> None:
+    malformed = _input()
+    object.__setattr__(malformed, "dynamic", _dynamic(FeasibilityStatus.FEASIBLE))
+
+    decision = evaluate_physical_safety(malformed)
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.candidate_id == "invalid-input"
+    assert decision.reason.identity == "input:invalid_safety_input"
+
+
+def test_safety_decision_rejects_reordered_assessments() -> None:
+    valid = evaluate_physical_safety(_input())
+
+    with pytest.raises(ValueError, match="canonical component order"):
+        SafetyDecision(
+            valid.candidate_id,
+            valid.action,
+            valid.reason,
+            tuple(reversed(valid.assessments)),
+            valid.provenance,
+        )
