@@ -93,16 +93,22 @@ canonical joint / quantity順を要求する。`maximum_gap_s`などのthreshold
 再検証され、zero、非有限値、単位・frame違いを受け付けない。P2の公開limit validatorと
 `effective_limit_status()`を再利用し、P4がsource authorityやconversion規則を複製しない。
 constructor bypassやnested mutation、source / sample / expected-joint inventoryの矛盾は
-`invalid`またはconstruction rejectionとなり、syntheticなphysical authorityを作らない。
-policy、Jacobian diagnostic、state、trajectory sample、evidence binding、両resultはconstructorで
-semantic snapshotをowner-localな外部weakref sealへ登録し、公開validator / evaluatorが現在の
-値とsealをdeep照合する。従って`object.__new__`、`object.__setattr__`、private fingerprintの
-同時書換えでも`feasible` / `authoritative`へ昇格しない。resultの`feasible` /
+`invalid`またはconstruction rejectionとなり、syntheticなphysical authorityを作らない。特に
+`FEASIBLE` resultは公開constructorから生成できず、owner evaluatorのprivate construction gateを
+通ったresultだけが、実際の`ConfigurationState`または`TrajectorySample`列、policy、dynamic limit、
+Jacobian、diagnostic、velocity evidenceのidentityとsemantic snapshotを外部weak origin sealへ
+登録する。policy、Jacobian diagnostic、state、trajectory sample、evidence binding、両resultは
+constructorでexact-typeとcanonical validatorを通り、公開validator / evaluator / accessorが現在の
+値とsealをdeep照合する。同じ値を持つ別nested objectへの差し替えもidentity不一致として拒否する。
+従って`object.__new__`、`object.__setattr__`、`dataclasses.replace`、deepcopy、private fingerprintの
+coherent rewriteでも`feasible` / `authoritative`へ昇格しない。resultの`feasible` /
 `authoritative` propertyもcanonical result validatorを経由し、statusやbindingを後から変更した
 objectでは`False`を返す。FEASIBLEにはsourceへ一致する単一の`feasibility_clear` diagnosticと
-完全なlimit / Jacobian / velocity evidenceが必要である。qvelが欠落したconfigurationはcanonicalな
+完全なlimit / Jacobian / velocity evidenceが必要である。一方、directまたはevaluator由来の非成功
+statusはこのorigin gateを要求せず、qvelが欠落したconfigurationはcanonicalな
 `UNAVAILABLE/unavailable_qvel`、二つだけのtrajectory sampleは`UNAVAILABLE/unavailable_acceleration`
-として検証できる。
+として引き続き検証できる。qvel欠落trajectoryも、実sampleから導出した全segmentのfinite-difference
+evidenceが揃う限りFEASIBLEになり得る。
 
 ## Resultと後続compose
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import fields, replace
 from types import SimpleNamespace
@@ -22,7 +23,9 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
     FeasibilityStatus,
     JacobianDiagnostic,
     TrajectoryFeasibilityPolicy,
+    TrajectoryFeasibilityResult,
     TrajectorySample,
+    VelocityEvidenceBinding,
     VelocityEvidenceKind,
     evaluate_configuration_feasibility,
     evaluate_trajectory_feasibility,
@@ -158,6 +161,14 @@ def _bypass_constructor(result: object) -> object:
     return bypassed
 
 
+def _init_fields(value: object) -> dict[str, object]:
+    return {
+        item.name: getattr(value, item.name)
+        for item in fields(value)
+        if item.init
+    }
+
+
 def test_configuration_and_trajectory_are_separate_and_feasible() -> None:
     policy = _policy()
     configuration = evaluate_configuration_feasibility(
@@ -202,6 +213,231 @@ def test_finite_difference_velocity_evidence_keeps_missing_qvel_trajectory_valid
     assert result.qvel_available == (False, False, False)
     assert len(result.velocity_evidence) == 2
     assert all(item.kind is VelocityEvidenceKind.FINITE_DIFFERENCE for item in result.velocity_evidence)
+
+
+def test_public_feasible_result_constructors_require_evaluator_origin() -> None:
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(),
+    )
+    with pytest.raises(ValueError, match="created by the evaluator"):
+        ConfigurationFeasibilityResult(**_init_fields(configuration))
+
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+    with pytest.raises(ValueError, match="created by the evaluator"):
+        TrajectoryFeasibilityResult(**_init_fields(trajectory))
+
+
+def test_feasible_result_clones_and_constructor_bypasses_cannot_gain_authority() -> None:
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(),
+    )
+    assert copy.deepcopy(configuration).feasible is False
+    assert copy.deepcopy(configuration).authoritative is False
+
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+    bypassed = _bypass_constructor(trajectory)
+    assert bypassed.feasible is False
+    assert bypassed.authoritative is False
+
+
+def test_same_semantic_nested_replacement_invalidates_state_and_sample_origin() -> None:
+    policy = _policy()
+    state = ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian())
+    object.__setattr__(state, "jacobian", _jacobian())
+    configuration = evaluate_configuration_feasibility(state, policy)
+    assert configuration.status is FeasibilityStatus.INVALID
+    assert configuration.reason_code == "invalid_state_binding"
+
+    samples = [
+        _sample(0.0, (0.0, 0.0, 0.0)),
+        _sample(0.1, (0.1, 0.0, 0.0)),
+        _sample(0.2, (0.2, 0.0, 0.0)),
+    ]
+    object.__setattr__(samples[1], "jacobian", _jacobian())
+    trajectory = evaluate_trajectory_feasibility(tuple(samples), policy)
+    assert trajectory.status is FeasibilityStatus.INVALID
+    assert trajectory.reason_code == "invalid_sample_binding"
+
+
+def test_same_semantic_nested_replacement_invalidates_result_origin() -> None:
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(),
+    )
+    diagnostic = configuration.diagnostics[0]
+    object.__setattr__(
+        configuration,
+        "diagnostics",
+        (
+            FeasibilityDiagnostic(
+                diagnostic.code,
+                diagnostic.detail,
+                diagnostic.joint_name,
+                diagnostic.sample_index,
+                diagnostic.observed,
+                diagnostic.threshold,
+                diagnostic.provenance,
+            ),
+        ),
+    )
+    assert configuration.feasible is False
+    assert configuration.authoritative is False
+
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+    evidence = trajectory.velocity_evidence[0]
+    replacement = VelocityEvidenceBinding(evidence.kind, evidence.sample_index, evidence.source_id)
+    object.__setattr__(trajectory, "velocity_evidence", (replacement, *trajectory.velocity_evidence[1:]))
+    assert trajectory.feasible is False
+    assert trajectory.authoritative is False
+
+
+def test_same_semantic_dynamic_limit_replacement_invalidates_result_origin() -> None:
+    policy = _policy()
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        policy,
+    )
+    replacement_limits = tuple(
+        replace(limit)
+        for limit in policy.dynamic_limits
+    )
+    object.__setattr__(policy, "dynamic_limits", replacement_limits)
+    assert configuration.feasible is False
+    assert configuration.authoritative is False
+
+
+def test_exact_type_validation_rejects_subclassed_trusted_dtos() -> None:
+    class SubclassedConfigurationState(ConfigurationState):
+        pass
+
+    class SubclassedTrajectorySample(TrajectorySample):
+        pass
+
+    class SubclassedVelocityEvidenceBinding(VelocityEvidenceBinding):
+        pass
+
+    policy = _policy()
+    state = SubclassedConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian())
+    with pytest.raises(TypeError, match="typed contracts"):
+        evaluate_configuration_feasibility(state, policy)
+
+    sample = SubclassedTrajectorySample(0.0, (0.0, 0.0, 0.0), None, _jacobian())
+    sample_result = evaluate_trajectory_feasibility(
+        (sample, _sample(0.1, (0.1, 0.0, 0.0))),
+        policy,
+    )
+    assert sample_result.status is FeasibilityStatus.INVALID
+    assert sample_result.reason_code == "invalid_trajectory_sample"
+
+    evidence = SubclassedVelocityEvidenceBinding(VelocityEvidenceKind.FINITE_DIFFERENCE, 1, "sample")
+    with pytest.raises(TypeError, match="VelocityEvidenceBinding"):
+        unavailable = evaluate_trajectory_feasibility(
+            (_sample(0.0, (0.0, 0.0, 0.0)), _sample(0.1, (0.1, 0.0, 0.0))),
+            policy,
+        )
+        validate_trajectory_feasibility_result(
+            replace(unavailable, velocity_evidence=(evidence,))
+        )
+
+
+def test_exact_type_public_validators_reject_subclass_bypasses() -> None:
+    policy = _policy()
+    state = ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian())
+    configuration = evaluate_configuration_feasibility(state, policy)
+    trajectory = evaluate_trajectory_feasibility(
+        (_sample(0.0, (0.0, 0.0, 0.0)), _sample(0.1, (0.1, 0.0, 0.0)), _sample(0.2, (0.2, 0.0, 0.0))),
+        policy,
+    )
+
+    class SubclassedJacobian(JacobianDiagnostic):
+        pass
+
+    bypassed_jacobian = object.__new__(SubclassedJacobian)
+    for item in fields(state.jacobian):
+        object.__setattr__(bypassed_jacobian, item.name, getattr(state.jacobian, item.name))
+    with pytest.raises(TypeError, match="JacobianDiagnostic"):
+        _trajectory_module.validate_jacobian_diagnostic(bypassed_jacobian)
+
+    class SubclassedPolicy(TrajectoryFeasibilityPolicy):
+        pass
+
+    bypassed_policy = object.__new__(SubclassedPolicy)
+    for item in fields(policy):
+        object.__setattr__(bypassed_policy, item.name, getattr(policy, item.name))
+    with pytest.raises(TypeError, match="TrajectoryFeasibilityPolicy"):
+        validate_trajectory_feasibility_policy(bypassed_policy)
+
+    class SubclassedDiagnostic(FeasibilityDiagnostic):
+        pass
+
+    diagnostic = configuration.diagnostics[0]
+    subclassed_diagnostic = SubclassedDiagnostic(
+        diagnostic.code,
+        diagnostic.detail,
+        diagnostic.joint_name,
+        diagnostic.sample_index,
+        diagnostic.observed,
+        diagnostic.threshold,
+        diagnostic.provenance,
+    )
+    with pytest.raises(TypeError, match="FeasibilityDiagnostic"):
+        replace(configuration, diagnostics=(subclassed_diagnostic,))
+
+    class SubclassedConfigurationResult(ConfigurationFeasibilityResult):
+        pass
+
+    bypassed_configuration = object.__new__(SubclassedConfigurationResult)
+    for item in fields(configuration):
+        object.__setattr__(bypassed_configuration, item.name, getattr(configuration, item.name))
+    with pytest.raises(TypeError, match="ConfigurationFeasibilityResult"):
+        validate_configuration_feasibility_result(bypassed_configuration)
+
+    class SubclassedTrajectoryResult(TrajectoryFeasibilityResult):
+        pass
+
+    bypassed_trajectory = object.__new__(SubclassedTrajectoryResult)
+    for item in fields(trajectory):
+        object.__setattr__(bypassed_trajectory, item.name, getattr(trajectory, item.name))
+    with pytest.raises(TypeError, match="TrajectoryFeasibilityResult"):
+        validate_trajectory_feasibility_result(bypassed_trajectory)
+
+
+def test_unavailable_statuses_remain_valid_without_evaluator_origin() -> None:
+    policy = _policy()
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), None, _jacobian()),
+        policy,
+    )
+    ConfigurationFeasibilityResult(**_init_fields(configuration))
+
+    trajectory = evaluate_trajectory_feasibility(
+        (_sample(0.0, (0.0, 0.0, 0.0)), _sample(0.1, (0.1, 0.0, 0.0))),
+        policy,
+    )
+    TrajectoryFeasibilityResult(**_init_fields(trajectory))
 
 
 def test_feasible_result_requires_complete_diagnostics_and_evidence() -> None:
