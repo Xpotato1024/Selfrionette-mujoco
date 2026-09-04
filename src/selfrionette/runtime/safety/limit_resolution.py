@@ -18,6 +18,7 @@ from threading import RLock
 from typing import Any
 
 from selfrionette.runtime.safety.physical_limits import (
+    FAST_ARM_JOINT_SPACE_FRAME,
     EvidenceStatus,
     LimitConversionProvenance,
     LimitQuantity,
@@ -26,6 +27,7 @@ from selfrionette.runtime.safety.physical_limits import (
     PhysicalLimit,
     PhysicalSafetyEnvelope,
     _construct_projected_limit,
+    canonical_fast_arm_joint_space_frame,
     effective_limit_status,
     make_unknown_limit,
     source_identity,
@@ -252,6 +254,7 @@ class LimitParityRecord:
     source: LimitSourceProvenance | None = None
     source_status: EvidenceStatus | None = None
     conversion: LimitConversionProvenance | None = None
+    frame: str = FAST_ARM_JOINT_SPACE_FRAME
     _canonical_snapshot: tuple[object, ...] = field(
         init=False, repr=False, compare=False
     )
@@ -262,6 +265,7 @@ class LimitParityRecord:
         if not isinstance(self.status, ParityStatus):
             object.__setattr__(self, "status", ParityStatus(self.status))
         _text("unit", self.unit)
+        _text("frame", self.frame)
         lower = _finite("lower", self.lower) if self.lower is not None else None
         upper = _finite("upper", self.upper) if self.upper is not None else None
         if (lower is None) != (upper is None):
@@ -335,6 +339,7 @@ class LimitParityRecord:
             "lower": self.lower,
             "upper": self.upper,
             "unit": self.unit,
+            "frame": self.frame,
         }
         if self.reason is not None:
             result["reason"] = self.reason
@@ -403,6 +408,14 @@ class ResolvedJointBound:
                 raise ValueError("resolved bound parity statuses must all be match")
             if any(item.unit != "rad" for item in self.parity):
                 raise ValueError("resolved bound parity units must be rad")
+            if any(
+                item.frame != canonical_fast_arm_joint_space_frame()
+                for item in self.parity
+            ):
+                raise ValueError(
+                    "resolved bound parity frames must use the canonical "
+                    "fast_arm joint-space frame"
+                )
             for item in self.parity:
                 if item.lower is None or item.upper is None:
                     raise ValueError("resolved bound parity requires finite ranges")
@@ -633,6 +646,7 @@ def _parity_snapshot(
         parity.lower,
         parity.upper,
         parity.unit,
+        parity.frame,
         parity.reason,
         source_snapshot,
         parity.source_status,
@@ -716,6 +730,7 @@ def _validate_parity_record(
     if not isinstance(status, ParityStatus):
         raise ValueError("status must be a valid ParityStatus")
     _text("unit", parity.unit)
+    _text("frame", parity.frame)
     lower = _finite("lower", parity.lower) if parity.lower is not None else None
     upper = _finite("upper", parity.upper) if parity.upper is not None else None
     if (lower is None) != (upper is None):
@@ -806,6 +821,14 @@ def _validate_resolved_bound(
             raise ValueError("resolved bound parity statuses must all be match")
         if any(item.unit != "rad" for item in bound.parity):
             raise ValueError("resolved bound parity units must be rad")
+        if any(
+            item.frame != canonical_fast_arm_joint_space_frame()
+            for item in bound.parity
+        ):
+            raise ValueError(
+                "resolved bound parity frames must use the canonical "
+                "fast_arm joint-space frame"
+            )
         for item in bound.parity:
             if item.lower is None or item.upper is None:
                 raise ValueError("resolved bound parity requires finite ranges")
@@ -950,7 +973,7 @@ def project_limit_to_joint_space(
         lower=lower,
         upper=upper,
         unit=limit.unit,
-        frame="fast_arm joint space",
+        frame=canonical_fast_arm_joint_space_frame(),
         status=status,
         source=limit.source,
         conversion=conversion.provenance(),
@@ -973,7 +996,7 @@ def _unknown_projected_limit(
         upper=None,
         unit=limit.unit,
         space=LimitSpace.JOINT,
-        frame="fast_arm joint space",
+        frame=canonical_fast_arm_joint_space_frame(),
         status=EvidenceStatus.UNKNOWN,
         source=limit.source,
         conversion=LimitConversionProvenance.identity(LimitSpace.JOINT),
@@ -992,6 +1015,20 @@ def _status_for_limit(limit: PhysicalLimit) -> tuple[ParityStatus, str | None]:
     if status is EvidenceStatus.UNKNOWN:
         return ParityStatus.UNKNOWN, limit.reason or "limit source unknown"
     return ParityStatus.MATCH, None
+
+
+def _joint_space_frame_reason(limit: PhysicalLimit) -> str | None:
+    """fast_arm joint-space frameのbindingを検証する。"""
+
+    if limit.space is not LimitSpace.JOINT:
+        return None
+    canonical_frame = canonical_fast_arm_joint_space_frame()
+    if limit.frame == canonical_frame:
+        return None
+    return (
+        "joint limit frame does not match the canonical fast_arm joint-space "
+        f"frame: {limit.frame!r} != {canonical_frame!r}"
+    )
 
 
 def resolve_joint_space_bounds(
@@ -1087,7 +1124,7 @@ def resolve_joint_space_bounds(
                 quantity=LimitQuantity.POSITION,
                 space=LimitSpace.JOINT,
                 unit="rad",
-                frame="fast_arm joint space",
+                frame=canonical_fast_arm_joint_space_frame(),
                 reason="no limit source was supplied",
             )
             candidates = [unknown]
@@ -1097,6 +1134,10 @@ def resolve_joint_space_bounds(
             source_name = source_identity(limit.source, unit=limit.unit)
             source_names.append(source_name)
             parity_status, reason = _status_for_limit(limit)
+            frame_reason = _joint_space_frame_reason(limit)
+            if frame_reason is not None and parity_status is ParityStatus.MATCH:
+                parity_status = ParityStatus.MISMATCH
+                reason = frame_reason
             parity_lower = limit.lower
             parity_upper = limit.upper
             if parity_status in {
@@ -1117,6 +1158,7 @@ def resolve_joint_space_bounds(
                     reason=reason,
                     source=limit.source,
                     conversion=limit.conversion,
+                    frame=limit.frame,
                 )
             )
         effective_statuses = tuple(effective_limit_status(limit) for limit in candidates)
@@ -1131,6 +1173,25 @@ def resolve_joint_space_bounds(
             continue
         if EvidenceStatus.UNKNOWN in effective_statuses:
             bounds.append(ResolvedJointBound(joint_name, None, None, LimitResolutionStatus.UNKNOWN, tuple(source_names), tuple(parity), "limit/source status unknown", comparison_tolerance_rad=tolerance_rad))
+            continue
+        frame_reasons = tuple(
+            reason
+            for reason in (_joint_space_frame_reason(limit) for limit in candidates)
+            if reason is not None
+        )
+        if frame_reasons:
+            bounds.append(
+                ResolvedJointBound(
+                    joint_name,
+                    None,
+                    None,
+                    LimitResolutionStatus.MISMATCH,
+                    tuple(source_names),
+                    tuple(parity),
+                    frame_reasons[0],
+                    comparison_tolerance_rad=tolerance_rad,
+                )
+            )
             continue
         known = [limit for limit in candidates if limit.lower is not None and limit.upper is not None]
         if len(known) != len(candidates):
@@ -1198,7 +1259,7 @@ def fast_arm_toml_limits_to_physical_limits(config: object, *, source_id: str = 
             upper=joint.upper_rad,
             unit="rad",
             space=LimitSpace.JOINT,
-            frame="fast_arm joint space",
+            frame=canonical_fast_arm_joint_space_frame(),
             status=EvidenceStatus.PROVISIONAL,
             source=source,
         )
@@ -1236,7 +1297,7 @@ def fast_arm_mujoco_limits_to_physical_limits(
                 quantity=LimitQuantity.POSITION,
                 space=LimitSpace.JOINT,
                 unit="rad",
-                frame="fast_arm joint space",
+                frame=canonical_fast_arm_joint_space_frame(),
                 reason="MuJoCo model is unavailable",
                 source_kind="mujoco_jnt_range",
                 source_id="unavailable-model",
@@ -1257,30 +1318,23 @@ def fast_arm_mujoco_limits_to_physical_limits(
                     raise ValueError(
                         f"MuJoCo joint id for {name} must be -1 or non-negative"
                     )
-                result.append(make_unknown_limit(name=name, quantity=LimitQuantity.POSITION, space=LimitSpace.JOINT, unit="rad", frame="fast_arm joint space", reason="joint is missing from MuJoCo model", source_kind="mujoco_jnt_range", source_id="model", revision="unknown"))
+                result.append(make_unknown_limit(name=name, quantity=LimitQuantity.POSITION, space=LimitSpace.JOINT, unit="rad", frame=canonical_fast_arm_joint_space_frame(), reason="joint is missing from MuJoCo model", source_kind="mujoco_jnt_range", source_id="model", revision="unknown"))
                 continue
             limited = _exact_binary(
                 f"MuJoCo jnt_limited for {name}",
                 model.jnt_limited[joint_id],
             )
             if limited == 0:
-                result.append(make_unknown_limit(name=name, quantity=LimitQuantity.POSITION, space=LimitSpace.JOINT, unit="rad", frame="fast_arm joint space", reason="MuJoCo joint has no limited range", source_kind="mujoco_jnt_range", source_id="model", revision="model-instance"))
+                result.append(make_unknown_limit(name=name, quantity=LimitQuantity.POSITION, space=LimitSpace.JOINT, unit="rad", frame=canonical_fast_arm_joint_space_frame(), reason="MuJoCo joint has no limited range", source_kind="mujoco_jnt_range", source_id="model", revision="model-instance"))
                 continue
             lower, upper = _range(
                 tuple(model.jnt_range[joint_id]),
                 f"MuJoCo range for {name}",
             )
-            result.append(PhysicalLimit(name=name, quantity=LimitQuantity.POSITION, lower=lower, upper=upper, unit="rad", space=LimitSpace.JOINT, frame="fast_arm joint space", status=EvidenceStatus.PROVISIONAL, source=source))
-    except (
-        ImportError,
-        AttributeError,
-        IndexError,
-        OverflowError,
-        TypeError,
-        ValueError,
-    ) as exc:
+            result.append(PhysicalLimit(name=name, quantity=LimitQuantity.POSITION, lower=lower, upper=upper, unit="rad", space=LimitSpace.JOINT, frame=canonical_fast_arm_joint_space_frame(), status=EvidenceStatus.PROVISIONAL, source=source))
+    except Exception as exc:
         return tuple(
-            make_unknown_limit(name=name, quantity=LimitQuantity.POSITION, space=LimitSpace.JOINT, unit="rad", frame="fast_arm joint space", reason=f"MuJoCo range inspection failed: {exc}", source_kind="mujoco_jnt_range", source_id="invalid-model", revision="unknown")
+            make_unknown_limit(name=name, quantity=LimitQuantity.POSITION, space=LimitSpace.JOINT, unit="rad", frame=canonical_fast_arm_joint_space_frame(), reason=f"MuJoCo range inspection failed: {exc}", source_kind="mujoco_jnt_range", source_id="invalid-model", revision="unknown")
             for name in names
         )
     return tuple(result)
@@ -1334,7 +1388,7 @@ def build_fast_arm_resolved_bounds_provider(
         for name, values in profile_bounds_rad.items():
             validate_limit_resolution_identity("profile joint name", name)
             lower, upper = _range(values, f"profile bounds for {name}")
-            sources.append(PhysicalLimit(name=name, quantity=LimitQuantity.POSITION, lower=lower, upper=upper, unit="rad", space=LimitSpace.JOINT, frame="fast_arm joint space", status=EvidenceStatus.PROVISIONAL, source=profile_source))
+            sources.append(PhysicalLimit(name=name, quantity=LimitQuantity.POSITION, lower=lower, upper=upper, unit="rad", space=LimitSpace.JOINT, frame=canonical_fast_arm_joint_space_frame(), status=EvidenceStatus.PROVISIONAL, source=profile_source))
     sources.extend(fast_arm_mujoco_limits_to_physical_limits(model, joint_names=names))
     result = resolve_joint_space_bounds(
         sources,
