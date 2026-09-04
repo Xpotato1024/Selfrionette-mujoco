@@ -65,12 +65,20 @@ def _mujoco_contact_fixture(
         mj_id2name=lambda model, _object_type, geom_id: model.geom_names[geom_id],
     )
     monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
-    model = SimpleNamespace(geom_names=geom_names)
+    model = SimpleNamespace(ngeom=len(geom_names), geom_names=geom_names)
     data = SimpleNamespace(
         ncon=1,
         contact=(SimpleNamespace(geom1=0, geom2=1, dist=distance),),
     )
     return model, data
+
+
+class _Indexable:
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __index__(self) -> int:
+        return self.value
 
 
 def _context(
@@ -832,6 +840,56 @@ def test_mujoco_geometry_inventory_adapter_normalizes_overflow(
         )
 
 
+@pytest.mark.parametrize("ngeom", (2.5, "2", True, -1))
+def test_mujoco_geometry_inventory_rejects_malformed_ngeom(
+    monkeypatch: pytest.MonkeyPatch,
+    ngeom: object,
+) -> None:
+    fake_mujoco = SimpleNamespace(
+        mjtObj=SimpleNamespace(mjOBJ_GEOM="geom", mjOBJ_BODY="body"),
+        mj_id2name=lambda model, object_type, item_id: (
+            model.geom_names[item_id]
+            if object_type == "geom"
+            else model.body_names[item_id]
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+    model = SimpleNamespace(
+        ngeom=ngeom,
+        geom_names=("upper", "fore"),
+        body_names=("arm_body",),
+        geom_bodyid=(0, 0),
+    )
+
+    with pytest.raises(ValueError, match="MuJoCo geometry inventory failed"):
+        build_mujoco_geometry_inventory(model, robot_body_names=("arm_body",))
+
+
+@pytest.mark.parametrize("body_id", (2.5, "0", True, -1, 1))
+def test_mujoco_geometry_inventory_rejects_malformed_geom_body_index(
+    monkeypatch: pytest.MonkeyPatch,
+    body_id: object,
+) -> None:
+    fake_mujoco = SimpleNamespace(
+        mjtObj=SimpleNamespace(mjOBJ_GEOM="geom", mjOBJ_BODY="body"),
+        mj_id2name=lambda model, object_type, item_id: (
+            model.geom_names[item_id]
+            if object_type == "geom"
+            else model.body_names[item_id]
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+    model = SimpleNamespace(
+        ngeom=1,
+        geom_names=("upper",),
+        body_names=("arm_body",),
+        geom_bodyid=(body_id,),
+    )
+
+    with pytest.raises(ValueError, match="MuJoCo geometry inventory failed"):
+        build_mujoco_geometry_inventory(model, robot_body_names=("arm_body",))
+
+
 def test_mujoco_contact_adapter_normalizes_short_array(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -870,6 +928,194 @@ def test_mujoco_contact_adapter_normalizes_overflow(
         distance=0.1,
     )
     data = SimpleNamespace(ncon=float("inf"), contact=())
+
+    with pytest.raises(ValueError, match="MuJoCo contact observation failed"):
+        read_mujoco_contact_observations(model, data, inventory)
+
+
+@pytest.mark.parametrize("ncon", (-1, 1.5, "1", True))
+def test_mujoco_contact_adapter_rejects_malformed_ncon(
+    monkeypatch: pytest.MonkeyPatch,
+    ncon: object,
+) -> None:
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("upper_shell", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("fore_shell", "arm_body", GeometryRole.ROBOT),
+        )
+    )
+    model, _ = _mujoco_contact_fixture(
+        monkeypatch,
+        ("upper_shell", "fore_shell"),
+        distance=0.1,
+    )
+    data = SimpleNamespace(
+        ncon=ncon,
+        contact=(),
+    )
+
+    with pytest.raises(ValueError, match="MuJoCo contact observation failed"):
+        read_mujoco_contact_observations(model, data, inventory)
+
+
+@pytest.mark.parametrize("field", ("geom1", "geom2"))
+@pytest.mark.parametrize("geom_id", (1.5, "0", True, -1, 2))
+def test_mujoco_contact_adapter_rejects_malformed_geom_indices(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    geom_id: object,
+) -> None:
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("upper", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("floor", "floor_body", GeometryRole.ENVIRONMENT),
+        )
+    )
+    model, _ = _mujoco_contact_fixture(
+        monkeypatch,
+        ("upper", "floor"),
+        distance=0.1,
+    )
+    contact = SimpleNamespace(geom1=0, geom2=1, dist=0.1)
+    setattr(contact, field, geom_id)
+    data = SimpleNamespace(ncon=1, contact=(contact,))
+
+    with pytest.raises(ValueError, match="MuJoCo contact observation failed"):
+        read_mujoco_contact_observations(model, data, inventory)
+
+
+def test_mujoco_contact_adapter_rejects_malformed_ncon_before_structural_clear(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("upper_shell", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("fore_shell", "arm_body", GeometryRole.ROBOT),
+        )
+    )
+    model, _ = _mujoco_contact_fixture(
+        monkeypatch,
+        ("upper_shell", "fore_shell"),
+        distance=0.1,
+    )
+    data = SimpleNamespace(ncon=-1, contact=())
+
+    with pytest.raises(ValueError, match="must be non-negative"):
+        read_mujoco_contact_observations(model, data, inventory)
+
+
+def test_mujoco_adapters_accept_operator_index_scalars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_mujoco = SimpleNamespace(
+        mjtObj=SimpleNamespace(mjOBJ_GEOM="geom", mjOBJ_BODY="body"),
+        mj_id2name=lambda model, object_type, item_id: (
+            model.geom_names[item_id]
+            if object_type == "geom"
+            else model.body_names[item_id]
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+    model = SimpleNamespace(
+        ngeom=_Indexable(2),
+        geom_names=("upper", "floor"),
+        body_names=("arm_body", "floor_body"),
+        geom_bodyid=(_Indexable(0), _Indexable(1)),
+    )
+
+    inventory = build_mujoco_geometry_inventory(
+        model,
+        robot_body_names=("arm_body",),
+        environment_body_names=("floor_body",),
+    )
+    data = SimpleNamespace(
+        ncon=_Indexable(1),
+        contact=(
+            SimpleNamespace(
+                geom1=_Indexable(0),
+                geom2=_Indexable(1),
+                dist=0.1,
+            ),
+        ),
+    )
+
+    observations = read_mujoco_contact_observations(model, data, inventory)
+
+    assert observations[0].pair_id == "floor|upper"
+
+
+def test_mujoco_adapters_accept_numpy_integral_scalars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    numpy = pytest.importorskip("numpy")
+    fake_mujoco = SimpleNamespace(
+        mjtObj=SimpleNamespace(mjOBJ_GEOM="geom", mjOBJ_BODY="body"),
+        mj_id2name=lambda model, object_type, item_id: (
+            model.geom_names[item_id]
+            if object_type == "geom"
+            else model.body_names[item_id]
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+    model = SimpleNamespace(
+        ngeom=numpy.int64(2),
+        geom_names=("upper", "floor"),
+        body_names=("arm_body", "floor_body"),
+        geom_bodyid=(numpy.int64(0), numpy.int64(1)),
+    )
+
+    inventory = build_mujoco_geometry_inventory(
+        model,
+        robot_body_names=("arm_body",),
+        environment_body_names=("floor_body",),
+    )
+    data = SimpleNamespace(
+        ncon=numpy.int64(1),
+        contact=(
+            SimpleNamespace(
+                geom1=numpy.int64(0),
+                geom2=numpy.int64(1),
+                dist=0.1,
+            ),
+        ),
+    )
+
+    observations = read_mujoco_contact_observations(model, data, inventory)
+
+    assert observations[0].pair_id == "floor|upper"
+
+
+def test_mujoco_adapters_reject_numpy_bool_scalars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    numpy = pytest.importorskip("numpy")
+    fake_mujoco = SimpleNamespace(
+        mjtObj=SimpleNamespace(mjOBJ_GEOM="geom", mjOBJ_BODY="body"),
+        mj_id2name=lambda model, object_type, item_id: (
+            model.geom_names[item_id]
+            if object_type == "geom"
+            else model.body_names[item_id]
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+    model = SimpleNamespace(
+        ngeom=numpy.bool_(True),
+        geom_names=("upper",),
+        body_names=("arm_body",),
+        geom_bodyid=(0,),
+    )
+
+    with pytest.raises(ValueError, match="MuJoCo geometry inventory failed"):
+        build_mujoco_geometry_inventory(model, robot_body_names=("arm_body",))
+
+    model.ngeom = 1
+    data = SimpleNamespace(
+        ncon=numpy.bool_(True),
+        contact=(SimpleNamespace(geom1=0, geom2=0, dist=0.1),),
+    )
+    inventory = GeometryInventory(
+        (GeometryIdentity("upper", "arm_body", GeometryRole.ROBOT),)
+    )
 
     with pytest.raises(ValueError, match="MuJoCo contact observation failed"):
         read_mujoco_contact_observations(model, data, inventory)
