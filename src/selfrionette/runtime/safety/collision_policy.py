@@ -63,6 +63,34 @@ _PLACEHOLDER_IDENTITIES = frozenset(
 )
 
 
+# provider観測を伴わない内部fail-closed resultだけが、INVALID evaluationの
+# provenance省略を許可される。新しいinternal reasonはこの集合へ明示追加する。
+_INTERNAL_INVALID_REASON_CODES = frozenset(
+    {
+        "body_role_overlap",
+        "collision_context_binding_invalid",
+        "collision_context_inventory_binding_mismatch",
+        "collision_context_inventory_mismatch",
+        "collision_context_pair_coverage_mismatch",
+        "collision_context_policy_binding_mismatch",
+        "collision_context_policy_mismatch",
+        "collision_exclusion_pair_not_in_inventory",
+        "collision_inventory_binding_invalid",
+        "collision_observation_pair_not_in_inventory",
+        "collision_pair_inventory_empty",
+        "collision_policy_binding_invalid",
+        "duplicate_collision_observation",
+        "environment_collision_exclusion_forbidden",
+        "invalid_collision_observation",
+        "observations_not_iterable",
+        "robot_geometry_missing",
+        "self_interference_exclusion_forbidden",
+        "trajectory_observations_must_be_non_empty",
+        "unknown_geometry_role",
+    }
+)
+
+
 # Collision DTOのauthorityは、object.__setattr__でprivate fingerprintまで更新される
 # Pythonのdataclass fieldだけに依存しない。ownerが正規化semantic snapshotをobject
 # identityへ外部sealとして登録し、weak reference回収時に解放する。
@@ -1050,7 +1078,7 @@ def _collision_evaluation_inconsistency(
             return "unknown or unavailable evidence must omit distance"
     elif status is CollisionStatus.INVALID:
         if provenance is None and (
-            distance is not None or reason_code == "unknown_collision_pair_role"
+            distance is not None or reason_code not in _INTERNAL_INVALID_REASON_CODES
         ):
             return "invalid collision evidence has no provenance"
     if require_seal:
@@ -1376,6 +1404,8 @@ def _invalid_collision_result(
 ) -> CollisionCheckResult:
     clearance_m = context.policy_fingerprint[1]
     near_collision_margin_m = context.policy_fingerprint[2]
+    if reason_code not in _INTERNAL_INVALID_REASON_CODES:
+        raise ValueError("unknown internal collision invalid reason")
     pair_by_id = (
         {}
         if inventory is None
