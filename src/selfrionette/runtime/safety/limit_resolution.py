@@ -1227,7 +1227,14 @@ def fast_arm_mujoco_limits_to_physical_limits(
                 continue
             lower, upper = _range(tuple(float(value) for value in model.jnt_range[joint_id]), f"MuJoCo range for {name}")
             result.append(PhysicalLimit(name=name, quantity=LimitQuantity.POSITION, lower=lower, upper=upper, unit="rad", space=LimitSpace.JOINT, frame="fast_arm joint space", status=EvidenceStatus.PROVISIONAL, source=source))
-    except (ImportError, AttributeError, TypeError, ValueError) as exc:
+    except (
+        ImportError,
+        AttributeError,
+        IndexError,
+        OverflowError,
+        TypeError,
+        ValueError,
+    ) as exc:
         return tuple(
             make_unknown_limit(name=name, quantity=LimitQuantity.POSITION, space=LimitSpace.JOINT, unit="rad", frame="fast_arm joint space", reason=f"MuJoCo range inspection failed: {exc}", source_kind="mujoco_jnt_range", source_id="invalid-model", revision="unknown")
             for name in names
