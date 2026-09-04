@@ -1436,6 +1436,12 @@ def _classify(
             return ValidationClassification.TECHNICAL_INVALID, "check_kind_mismatch"
         if check.software_revision != procedure.software_revision:
             return ValidationClassification.TECHNICAL_INVALID, "software_revision_mismatch"
+    statuses = tuple(item.status for item in checks)
+    # nestedのtechnical-invalidはprovenance / schema failureである。completion、abort、
+    # operator gateのlifecycle結果より先に扱い、同時に発生したstopやgateの
+    # failure / unavailableによって不正なevidenceを隠蔽しない。
+    if ValidationCheckStatus.TECHNICAL_INVALID in statuses:
+        return ValidationClassification.TECHNICAL_INVALID, "technical_invalid_check"
     if completed_at is None:
         return ValidationClassification.TECHNICAL_INVALID, "completion_timestamp_missing"
     if operator_aborted:
@@ -1446,9 +1452,6 @@ def _classify(
         return ValidationClassification.FAIL, gate.reason_code
     if gate.classification is ValidationClassification.UNAVAILABLE:
         return ValidationClassification.UNAVAILABLE, gate.reason_code
-    statuses = tuple(item.status for item in checks)
-    if ValidationCheckStatus.TECHNICAL_INVALID in statuses:
-        return ValidationClassification.TECHNICAL_INVALID, "technical_invalid_check"
     if any(item.measurement_source.kind is MeasurementSourceKind.UNKNOWN for item in checks):
         return ValidationClassification.UNAVAILABLE, "check_source_unknown"
     if ValidationCheckStatus.FAIL in statuses:

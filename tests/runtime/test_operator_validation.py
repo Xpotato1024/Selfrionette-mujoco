@@ -290,6 +290,40 @@ def test_failure_unavailable_aborted_and_technical_invalid_never_become_pass() -
     assert technical.classification is ValidationClassification.TECHNICAL_INVALID
 
 
+@pytest.mark.parametrize(
+    ("procedure_kwargs", "operator_aborted"),
+    (
+        pytest.param({}, True, id="operator-aborted"),
+        pytest.param({"verified_clearance_m": 0.1}, False, id="clearance-gate-fail"),
+        pytest.param({"preflight_complete": False}, False, id="gate-unavailable"),
+    ),
+)
+def test_technical_invalid_check_precedes_abort_and_gate_outcomes(
+    procedure_kwargs: dict[str, object],
+    operator_aborted: bool,
+) -> None:
+    artifact = build_dry_run_validation_artifact(
+        _procedure(**procedure_kwargs),
+        _all_checks(
+            status=ValidationCheckStatus.TECHNICAL_INVALID,
+            action=SafetyDecisionAction.INVALID,
+        ),
+        artifact_id="artifact-technical-invalid-precedence",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+        operator_aborted=operator_aborted,
+    )
+
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+    assert artifact.classification_reason == "technical_invalid_check"
+    assert not artifact.complete
+
+    decoded = decode_validation_artifact(artifact.to_json_bytes())
+    assert decoded.classification is ValidationClassification.TECHNICAL_INVALID
+    assert decoded.classification_reason == "technical_invalid_check"
+    assert not decoded.complete
+
+
 def test_source_revision_and_kind_identity_are_strict() -> None:
     revision_mismatch = build_dry_run_validation_artifact(
         _procedure(),
