@@ -75,6 +75,8 @@ typed primitiveを渡し、P5の単一mappingとallow時のconcrete provenance�
 
 `SafetyReason`はmachine-readable `reason_code`、owner `component`、operator-visible message、
 provenanceを一体で保持する。`reason.identity`（`component:reason_code`）を両表示面で共有し、
+`identity` accessorも返却前にcanonical validatorを実行するため、field直接改変、private sealの改変、
+constructor bypassされたreasonはidentityを公開せずfail-closedで拒否する。
 limit source name、collision evidence source、dynamic source identity、candidate provenanceを
 重複なくsorted tupleへ束ねる。個別`SafetyComponentAssessment`はcomponent別のcanonical
 reason/action mappingと完全一致しなければならず、unknown reasonや`unavailable`理由の
