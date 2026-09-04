@@ -183,6 +183,100 @@ def test_self_interference_and_environment_are_distinct() -> None:
     assert by_pair["floor|upper"].reason_code == "environment_penetration"
 
 
+def _same_body_inventory() -> GeometryInventory:
+    return GeometryInventory(
+        (
+            GeometryIdentity("upper_shell", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("fore_shell", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("floor", "floor", GeometryRole.ENVIRONMENT),
+        )
+    )
+
+
+def test_same_body_robot_geoms_reach_canonical_pair_inventory() -> None:
+    inventory = _same_body_inventory()
+    pair_by_id = {pair.pair_id: pair for pair in inventory.pairs()}
+
+    assert "fore_shell|upper_shell" in pair_by_id
+    assert pair_by_id["fore_shell|upper_shell"].kind is CollisionKind.STRUCTURAL_PROXIMITY
+    assert "fore_shell|upper_shell" in _context(inventory, _policy()).expected_pair_ids
+
+
+def test_same_body_pair_without_exclusion_requires_provider_evidence() -> None:
+    inventory = _same_body_inventory()
+    result = _evaluate(inventory, (), _policy())
+
+    same_body = next(
+        item for item in result.evaluations if item.pair_id == "fore_shell|upper_shell"
+    )
+    assert same_body.kind is CollisionKind.STRUCTURAL_PROXIMITY
+    assert same_body.status is CollisionStatus.UNAVAILABLE
+    assert result.status is CollisionStatus.UNAVAILABLE
+    assert not result.clear
+
+
+def test_same_body_pair_provider_evidence_can_complete_clear() -> None:
+    inventory = _same_body_inventory()
+    result = _evaluate(
+        inventory,
+        (
+            CollisionObservation("fore_shell|upper_shell", 0.1, "fixture-structural"),
+            CollisionObservation("floor|upper_shell", 0.1, "fixture-environment"),
+            CollisionObservation("floor|fore_shell", 0.1, "fixture-environment"),
+        ),
+        _policy(),
+    )
+
+    same_body = next(
+        item for item in result.evaluations if item.pair_id == "fore_shell|upper_shell"
+    )
+    assert same_body.kind is CollisionKind.STRUCTURAL_PROXIMITY
+    assert same_body.status is CollisionStatus.CLEAR
+    assert same_body.reason_code == "pair_clear"
+    assert result.status is CollisionStatus.CLEAR
+
+
+def test_same_body_explicit_exclusion_is_complete_clear_evidence() -> None:
+    inventory = _same_body_inventory()
+    exclusion = CollisionExclusion(
+        "fore_shell|upper_shell",
+        "known structural overlap",
+        "geometry-review-same-body-001",
+    )
+    result = _evaluate(
+        inventory,
+        (
+            CollisionObservation("floor|upper_shell", 0.1, "fixture-environment"),
+            CollisionObservation("floor|fore_shell", 0.1, "fixture-environment"),
+        ),
+        _policy(exclusion),
+    )
+
+    same_body = next(
+        item for item in result.evaluations if item.pair_id == "fore_shell|upper_shell"
+    )
+    assert same_body.kind is CollisionKind.STRUCTURAL_PROXIMITY
+    assert same_body.status is CollisionStatus.CLEAR
+    assert same_body.reason_code == "explicit_structural_exclusion"
+    assert same_body.provenance == exclusion.evidence_reference
+    assert result.status is CollisionStatus.CLEAR
+
+
+def test_same_body_pair_deletion_from_context_is_rejected() -> None:
+    inventory = _same_body_inventory()
+    policy = _policy()
+    pair_ids = tuple(pair.pair_id for pair in inventory.pairs())
+
+    with pytest.raises(ValueError, match="exactly match inventory fingerprint pairs"):
+        _context(
+            inventory,
+            policy,
+            expected_pair_ids=tuple(
+                pair_id for pair_id in pair_ids if pair_id != "fore_shell|upper_shell"
+            ),
+        )
+
+
 def test_near_collision_uses_explicit_clearance_threshold() -> None:
     result = _evaluate(
         _inventory(),
