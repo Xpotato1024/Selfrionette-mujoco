@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+from types import ModuleType, SimpleNamespace
+
 import pytest
 
 from selfrionette.runtime.safety import limit_resolution as _limit_resolution_module
@@ -18,6 +21,7 @@ from selfrionette.runtime.safety.limit_resolution import (
     ParityStatus,
     ResolvedJointBound,
     build_fast_arm_resolved_bounds_provider,
+    fast_arm_mujoco_limits_to_physical_limits,
     fast_arm_toml_limits_to_physical_limits,
     project_limit_to_joint_space,
     resolve_joint_space_bounds,
@@ -72,6 +76,81 @@ def _limit(
         source=_source(source_status, source_kind),
         reason="fixture source is not authoritative" if status is not EvidenceStatus.PROVISIONAL else None,
     )
+
+
+def _install_fake_mujoco(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_mujoco = ModuleType("mujoco")
+    fake_mujoco.mjtObj = SimpleNamespace(mjOBJ_JOINT=object())
+    fake_mujoco.mj_name2id = lambda _model, _object_type, _name: 0
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+
+
+def _assert_unknown_mujoco_limit(limits: tuple[PhysicalLimit, ...]) -> None:
+    assert len(limits) == 1
+    limit = limits[0]
+    assert limit.name == "joint_1"
+    assert limit.status is EvidenceStatus.UNKNOWN
+    assert effective_limit_status(limit) is EvidenceStatus.UNKNOWN
+    assert limit.lower is None
+    assert limit.upper is None
+    assert limit.unit == "rad"
+    assert limit.space is LimitSpace.JOINT
+    assert limit.source.source_kind == "mujoco_jnt_range"
+    assert limit.source.source_id == "invalid-model"
+    assert limit.source.status is EvidenceStatus.UNKNOWN
+    assert limit.reason is not None
+    assert limit.reason.startswith("MuJoCo range inspection failed:")
+    assert not limit.is_bounded
+    assert not limit.is_authoritative
+
+    result = resolve_joint_space_bounds(
+        limits,
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.UNKNOWN
+    assert bound.lower_rad is None
+    assert bound.upper_rad is None
+    assert not result.authoritative
+
+
+@pytest.mark.parametrize(
+    "model",
+    (
+        SimpleNamespace(jnt_limited=[True], jnt_range=[]),
+        SimpleNamespace(jnt_limited=[], jnt_range=[[-1.0, 1.0]]),
+    ),
+)
+def test_mujoco_short_arrays_fail_closed_to_typed_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    model: object,
+) -> None:
+    _install_fake_mujoco(monkeypatch)
+
+    limits = fast_arm_mujoco_limits_to_physical_limits(
+        model,
+        joint_names=("joint_1",),
+    )
+
+    _assert_unknown_mujoco_limit(limits)
+
+
+def test_mujoco_overflow_numeric_data_fails_closed_to_typed_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_mujoco(monkeypatch)
+
+    model = SimpleNamespace(
+        jnt_limited=[True],
+        jnt_range=[[10**10000, 1.0]],
+    )
+    limits = fast_arm_mujoco_limits_to_physical_limits(
+        model,
+        joint_names=("joint_1",),
+    )
+
+    _assert_unknown_mujoco_limit(limits)
 
 
 def test_negative_gear_sign_reverses_projected_range_and_retains_provenance() -> None:
