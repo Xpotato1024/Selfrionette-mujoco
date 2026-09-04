@@ -1106,9 +1106,15 @@ def _declared_exclusion_inconsistency(
     evaluation: CollisionEvaluation,
     declared: tuple[str, str] | None,
 ) -> str | None:
-    """declared exclusion pairが唯一のcanonical clear evidenceか検証する。"""
+    """declared exclusion pairのvalid-path clear evidenceを検証する。"""
 
     if declared is None:
+        return None
+    if evaluation.status is CollisionStatus.INVALID:
+        # An internal fail-closed result must be INVALID for every expected
+        # pair, including a pair that would be an explicit CLEAR exclusion on
+        # a valid path. The exclusion remains bound in the context policy
+        # fingerprint and is still emitted as clear evidence by valid paths.
         return None
     evidence_reference, classification = declared
     if (
@@ -1462,45 +1468,31 @@ def _invalid_collision_result(
     near_collision_margin_m = context.policy_fingerprint[2]
     if reason_code not in _INTERNAL_INVALID_REASON_CODES:
         raise ValueError("unknown internal collision invalid reason")
-    pair_by_id = (
-        {}
-        if inventory is None
-        else _safe_pair_mapping(inventory)
-    )
-    declared_exclusions = {
-        item[0]: item[2] for item in context.policy_fingerprint[3]
-    }
+    pair_by_id = {} if inventory is None else _safe_pair_mapping(inventory)
     evaluations: list[CollisionEvaluation] = []
     for pair_id in context.expected_pair_ids:
-        exclusion_evidence = declared_exclusions.get(pair_id)
-        if exclusion_evidence is not None:
-            evaluations.append(
-                CollisionEvaluation(
-                    pair_id,
-                    CollisionKind.STRUCTURAL_PROXIMITY,
-                    CollisionStatus.CLEAR,
-                    None,
-                    clearance_m,
-                    "explicit_structural_exclusion",
-                    exclusion_evidence,
-                    near_collision_margin_m,
-                )
+        try:
+            kind = _kind_from_inventory_fingerprint(
+                context.inventory_fingerprint,
+                pair_id,
             )
-            continue
+        except (AttributeError, KeyError, TypeError, ValueError):
+            # 正常なcontextではこの導出はtotalになる。既にinvalidなinventoryを
+            # bind済みfingerprintから投影できない場合だけ、利用可能なtyped kindを残す。
+            pair = pair_by_id.get(pair_id)
+            kind = pair.kind if pair is not None else CollisionKind.SELF_INTERFERENCE
+        if kind is CollisionKind.UNKNOWN:
+            pair = pair_by_id.get(pair_id)
+            kind = pair.kind if pair is not None else CollisionKind.SELF_INTERFERENCE
         evaluations.append(
             CollisionEvaluation(
                 pair_id,
-                (
-                    pair_by_id[pair_id].kind
-                    if pair_id in pair_by_id
-                    and pair_by_id[pair_id].kind is not CollisionKind.UNKNOWN
-                    else CollisionKind.SELF_INTERFERENCE
-                ),
+                kind,
                 CollisionStatus.INVALID,
                 None,
                 clearance_m,
                 reason_code,
-            near_collision_margin_m=near_collision_margin_m,
+                near_collision_margin_m=near_collision_margin_m,
             )
         )
     return CollisionCheckResult(
@@ -2097,7 +2089,14 @@ def build_mujoco_geometry_inventory(
             else:
                 role = GeometryRole.UNKNOWN
             geometries.append(GeometryIdentity(geom_name, body_name, role))
-    except (ImportError, AttributeError, TypeError, ValueError) as exc:
+    except (
+        ImportError,
+        AttributeError,
+        IndexError,
+        OverflowError,
+        TypeError,
+        ValueError,
+    ) as exc:
         raise ValueError(f"MuJoCo geometry inventory failed: {exc}") from exc
     return GeometryInventory(tuple(geometries))
 
@@ -2148,7 +2147,14 @@ def read_mujoco_contact_observations(
             )
             for pair_id, distance in sorted(contacts_by_pair.items())
         )
-    except (ImportError, AttributeError, TypeError, ValueError) as exc:
+    except (
+        ImportError,
+        AttributeError,
+        IndexError,
+        OverflowError,
+        TypeError,
+        ValueError,
+    ) as exc:
         raise ValueError(f"MuJoCo contact observation failed: {exc}") from exc
 
 
