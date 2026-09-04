@@ -13,6 +13,7 @@ from selfrionette.runtime.safety.physical_limits import (
     EvidenceStatus,
     LimitQuantity,
     LimitSpace,
+    LimitConversionProvenance,
     LimitSourceProvenance,
     PhysicalLimit,
 )
@@ -66,6 +67,7 @@ def _limit(
     status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
     source_status: EvidenceStatus | None = None,
     frame: str = "fast_arm joint space",
+    conversion: LimitConversionProvenance | None = None,
 ) -> PhysicalLimit:
     return PhysicalLimit(
         name=joint_name,
@@ -77,6 +79,7 @@ def _limit(
         frame=frame,
         status=status,
         source=_source(status, source_status=source_status),
+        conversion=conversion,
         reason=None if status in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL} else "fixture source unavailable",
     )
 
@@ -122,6 +125,37 @@ def _policy(
         required_jacobian_rank=3,
         minimum_singular_value=minimum_singular_value,
         maximum_condition_number=maximum_condition_number,
+    )
+
+
+def _projected_policy(source_space: LimitSpace) -> TrajectoryFeasibilityPolicy:
+    limits = tuple(
+        _limit(
+            joint_name,
+            quantity,
+            -2.0 if quantity is LimitQuantity.VELOCITY else -10.0,
+            2.0 if quantity is LimitQuantity.VELOCITY else 10.0,
+            conversion=LimitConversionProvenance.projected(
+                source_space=source_space,
+                relation_id=f"{source_space.value}-{joint_name}/v1",
+                gear_ratio=2.0,
+                sign=1.0,
+                offset=0.0,
+                source_name=f"{source_space.value}_{joint_name}",
+            ),
+        )
+        for joint_name in JOINTS
+        for quantity in (LimitQuantity.VELOCITY, LimitQuantity.ACCELERATION)
+    )
+    return TrajectoryFeasibilityPolicy(
+        joint_names=JOINTS,
+        dynamic_limits=limits,
+        expected_cadence_s=0.1,
+        cadence_tolerance_s=1e-9,
+        maximum_gap_s=0.2,
+        required_jacobian_rank=3,
+        minimum_singular_value=0.1,
+        maximum_condition_number=100.0,
     )
 
 
@@ -189,6 +223,41 @@ def test_configuration_and_trajectory_are_separate_and_feasible() -> None:
     assert trajectory.status is FeasibilityStatus.FEASIBLE
     assert trajectory.sample_count == 3
     assert trajectory.authoritative
+
+
+@pytest.mark.parametrize("source_space", (LimitSpace.MOTOR, LimitSpace.ACTUATOR))
+def test_projected_dynamic_limit_source_identity_round_trips_through_p4_revalidation(
+    source_space: LimitSpace,
+) -> None:
+    policy = _projected_policy(source_space)
+    first_limit = policy.dynamic_limits[0]
+    assert first_limit.conversion is not None
+    assert policy.canonical_fingerprint[2][0][15] == first_limit.conversion.source_name
+
+    configuration = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        policy,
+    )
+    assert configuration.status is FeasibilityStatus.FEASIBLE
+    assert validate_configuration_feasibility_result(configuration) is configuration
+
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        policy,
+    )
+    assert trajectory.status is FeasibilityStatus.FEASIBLE
+    assert validate_trajectory_feasibility_result(trajectory) is trajectory
+
+    fingerprint = configuration.policy_fingerprint
+    raw_limit = fingerprint[2][0]
+    missing_source_name = raw_limit[:15] + (None,) + raw_limit[16:]
+    forged = fingerprint[:2] + ((missing_source_name,) + fingerprint[2][1:],) + fingerprint[3:]
+    with pytest.raises(ValueError, match="source_name|reconstructed|malformed"):
+        replace(configuration, policy_fingerprint=forged)
 
 
 def test_dynamic_limits_require_the_canonical_fast_arm_joint_frame() -> None:

@@ -49,6 +49,7 @@ FAST_ARM_JOINT_SPACE_FRAME: Final[str] = "fast_arm joint space"
 DEFAULT_TRAJECTORY_FEASIBILITY_POLICY_ID: Final[str] = "trajectory-feasibility"
 DEFAULT_TRAJECTORY_FEASIBILITY_POLICY_REVISION: Final[str] = "v1"
 _POLICY_FINGERPRINT_VERSION: Final[str] = "trajectory-feasibility-policy-v1"
+_DYNAMIC_LIMIT_FINGERPRINT_WIDTH: Final[int] = 23
 _PLACEHOLDER_IDENTITIES: Final[frozenset[str]] = frozenset(
     {
         "n-a",
@@ -496,6 +497,7 @@ def _validate_dynamic_limit(limit: PhysicalLimit) -> tuple[object, ...]:
         revision,
         evidence_reference,
         conversion.source_space.value,
+        conversion.source_name,
         conversion.target_space.value,
         conversion.method,
         conversion.relation_id,
@@ -1243,7 +1245,7 @@ def _reconstruct_policy_fingerprint_limits(
         raise TypeError("policy_fingerprint dynamic limits must be a tuple")
     limits: list[PhysicalLimit] = []
     for index, raw in enumerate(raw_limits):
-        if not isinstance(raw, tuple) or len(raw) != 22:
+        if not isinstance(raw, tuple) or len(raw) != _DYNAMIC_LIMIT_FINGERPRINT_WIDTH:
             raise ValueError(f"policy_fingerprint limit[{index}] is malformed")
         try:
             (
@@ -1262,6 +1264,7 @@ def _reconstruct_policy_fingerprint_limits(
                 revision,
                 evidence_reference,
                 source_space_value,
+                conversion_source_name,
                 target_space_value,
                 method,
                 relation_id,
@@ -1293,6 +1296,7 @@ def _reconstruct_policy_fingerprint_limits(
                     gear_ratio=gear_ratio,
                     sign=sign,
                     offset=offset,
+                    source_name=conversion_source_name,
                 )
             limit = PhysicalLimit(
                 name=name,
@@ -1349,7 +1353,7 @@ def _normalize_policy_fingerprint(value: object) -> tuple[object, ...]:
     if not isinstance(value[2], tuple):
         raise ValueError("policy_fingerprint must contain canonical dynamic limits")
     for index, limit in enumerate(value[2]):
-        if not isinstance(limit, tuple) or len(limit) != 22:
+        if not isinstance(limit, tuple) or len(limit) != _DYNAMIC_LIMIT_FINGERPRINT_WIDTH:
             raise ValueError(f"policy_fingerprint limit[{index}] is malformed")
     expected_limit_keys = {
         (name, quantity.value)

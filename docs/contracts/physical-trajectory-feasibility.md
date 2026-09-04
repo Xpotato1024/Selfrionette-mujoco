@@ -88,6 +88,9 @@ Jacobian threshold、qvel tolerance、policy identityをdeep revalidateし、値
 `policy_fingerprint`へ固定する。両resultはこのfingerprintを保持し、`policy_id` / `revision`の
 自己申告だけでは`feasible`を構成できない。fingerprint内の各dynamic limitはP2 typed DTOへ復元して
 limit source identity、effective status、evidence identityとresult fieldsをexact照合する。
+cross-spaceのdynamic limitでは、conversionのtypedな`source_name`もfingerprintへ保持し、P2の
+canonical projection factoryへ同じidentityを渡して再構成する。identity conversionの`source_name`
+は`None`のまま固定し、欠落・不一致のsource identityはrevalidationでfail-closedに扱う。
 各jointのvelocity / acceleration limitは重複・欠落・余分な項目を許さず、fingerprintも同じ
 canonical joint / quantity順を要求する。`maximum_gap_s`などのthresholdはfingerprint内で
 再検証され、zero、非有限値、単位・frame違いを受け付けない。P2の公開limit validatorと
