@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from decimal import Decimal
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -85,6 +86,16 @@ def _install_fake_mujoco(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
 
 
+def _install_fake_mujoco_with_joint_id(
+    monkeypatch: pytest.MonkeyPatch,
+    joint_id: object,
+) -> None:
+    fake_mujoco = ModuleType("mujoco")
+    fake_mujoco.mjtObj = SimpleNamespace(mjOBJ_JOINT=object())
+    fake_mujoco.mj_name2id = lambda _model, _object_type, _name: joint_id
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+
+
 def _assert_unknown_mujoco_limit(limits: tuple[PhysicalLimit, ...]) -> None:
     assert len(limits) == 1
     limit = limits[0]
@@ -151,6 +162,94 @@ def test_mujoco_overflow_numeric_data_fails_closed_to_typed_unknown(
     )
 
     _assert_unknown_mujoco_limit(limits)
+
+
+@pytest.mark.parametrize("joint_id", (0.9, "0", True, -2))
+def test_mujoco_invalid_joint_id_scalars_fail_closed_to_typed_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    joint_id: object,
+) -> None:
+    _install_fake_mujoco_with_joint_id(monkeypatch, joint_id)
+
+    limits = fast_arm_mujoco_limits_to_physical_limits(
+        SimpleNamespace(jnt_limited=[1], jnt_range=[[-1.0, 1.0]]),
+        joint_names=("joint_1",),
+    )
+
+    _assert_unknown_mujoco_limit(limits)
+
+
+def test_mujoco_minus_one_joint_id_is_typed_missing_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_mujoco_with_joint_id(monkeypatch, -1)
+
+    limits = fast_arm_mujoco_limits_to_physical_limits(
+        SimpleNamespace(jnt_limited=[1], jnt_range=[[-1.0, 1.0]]),
+        joint_names=("joint_1",),
+    )
+
+    assert len(limits) == 1
+    limit = limits[0]
+    assert limit.status is EvidenceStatus.UNKNOWN
+    assert limit.source.source_id == "model"
+    assert limit.reason == "joint is missing from MuJoCo model"
+    assert limit.lower is None
+    assert limit.upper is None
+
+
+@pytest.mark.parametrize("limited", (0.5, "1", 2, -1))
+def test_mujoco_noncanonical_limited_scalars_fail_closed_to_typed_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    limited: object,
+) -> None:
+    _install_fake_mujoco(monkeypatch)
+
+    limits = fast_arm_mujoco_limits_to_physical_limits(
+        SimpleNamespace(jnt_limited=[limited], jnt_range=[[-1.0, 1.0]]),
+        joint_names=("joint_1",),
+    )
+
+    _assert_unknown_mujoco_limit(limits)
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    ("-1.0", True, Decimal("-1.0"), complex(-1.0, 0.0)),
+)
+def test_mujoco_nonreal_range_endpoint_fails_closed_to_typed_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    endpoint: object,
+) -> None:
+    _install_fake_mujoco(monkeypatch)
+
+    limits = fast_arm_mujoco_limits_to_physical_limits(
+        SimpleNamespace(jnt_limited=[1], jnt_range=[[endpoint, 1.0]]),
+        joint_names=("joint_1",),
+    )
+
+    _assert_unknown_mujoco_limit(limits)
+
+
+def test_mujoco_numpy_integer_boolean_and_real_scalars_preserve_valid_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    numpy = pytest.importorskip("numpy")
+    _install_fake_mujoco_with_joint_id(monkeypatch, numpy.int64(0))
+
+    limits = fast_arm_mujoco_limits_to_physical_limits(
+        SimpleNamespace(
+            jnt_limited=[numpy.bool_(True)],
+            jnt_range=[[numpy.float32(-1.25), numpy.float64(2.5)]],
+        ),
+        joint_names=("joint_1",),
+    )
+
+    assert len(limits) == 1
+    limit = limits[0]
+    assert limit.status is EvidenceStatus.PROVISIONAL
+    assert limit.lower == pytest.approx(-1.25)
+    assert limit.upper == pytest.approx(2.5)
 
 
 def test_negative_gear_sign_reverses_projected_range_and_retains_provenance() -> None:
