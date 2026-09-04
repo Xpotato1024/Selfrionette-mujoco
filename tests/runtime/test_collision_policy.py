@@ -241,6 +241,35 @@ def test_same_body_pair_provider_evidence_can_complete_clear() -> None:
     assert result.status is CollisionStatus.CLEAR
 
 
+def test_same_body_negative_distance_is_structural_penetration() -> None:
+    inventory = _same_body_inventory()
+    result = _evaluate(
+        inventory,
+        (
+            CollisionObservation(
+                "fore_shell|upper_shell", -0.001, "fixture-structural"
+            ),
+            CollisionObservation("floor|upper_shell", 0.1, "fixture-environment"),
+            CollisionObservation("floor|fore_shell", 0.1, "fixture-environment"),
+        ),
+        _policy(),
+    )
+
+    context = _context(inventory, _policy())
+    same_body = next(
+        item for item in result.evaluations if item.pair_id == "fore_shell|upper_shell"
+    )
+    assert (
+        tuple(item.pair_id for item in result.evaluations)
+        == context.expected_pair_ids
+    )
+    assert same_body.kind is CollisionKind.STRUCTURAL_PROXIMITY
+    assert same_body.status is CollisionStatus.COLLISION
+    assert same_body.reason_code == "structural_proximity_penetration"
+    assert result.status is CollisionStatus.COLLISION
+    assert result.reason_code == "structural_proximity_penetration"
+
+
 def test_same_body_explicit_exclusion_is_complete_clear_evidence() -> None:
     inventory = _same_body_inventory()
     exclusion = CollisionExclusion(
@@ -274,7 +303,7 @@ def test_same_body_explicit_exclusion_is_complete_clear_evidence() -> None:
             CollisionStatus.COLLISION,
             CollisionKind.STRUCTURAL_PROXIMITY,
             -0.001,
-            "self_interference_penetration",
+            "structural_proximity_penetration",
             "fixture",
         ),
         (
@@ -679,6 +708,29 @@ def test_far_task_object_contact_precedes_clearance_classification() -> None:
     assert result.status is CollisionStatus.CONTACT
 
 
+def test_negative_task_object_distance_keeps_task_object_penetration_reason() -> None:
+    inventory = _inventory(include_task_object=True)
+    observations = tuple(
+        CollisionObservation(
+            pair.pair_id,
+            -0.001 if pair.pair_id == "fore|target" else 0.1,
+            "fixture-task-object" if pair.pair_id == "fore|target" else "fixture",
+        )
+        for pair in inventory.pairs()
+    )
+
+    result = _evaluate(inventory, observations, _policy())
+    target = next(
+        item for item in result.evaluations if item.pair_id == "fore|target"
+    )
+
+    assert target.kind is CollisionKind.TASK_OBJECT_CONTACT
+    assert target.status is CollisionStatus.COLLISION
+    assert target.reason_code == "task_object_penetration"
+    assert result.status is CollisionStatus.COLLISION
+    assert result.reason_code == "task_object_penetration"
+
+
 def test_non_task_contact_observation_is_invalid() -> None:
     inventory = _inventory()
     observations = tuple(
@@ -1077,6 +1129,24 @@ def test_collision_evaluation_rejects_contradictory_success_on_construction() ->
             -0.001,
             policy.clearance_m,
             "arbitrary_reason",
+            "fixture",
+            policy.near_collision_margin_m,
+        )
+
+
+def test_collision_evaluation_requires_kind_specific_penetration_reason() -> None:
+    policy = _policy()
+
+    with pytest.raises(
+        ValueError, match="reason is inconsistent with collision kind"
+    ):
+        CollisionEvaluation(
+            "fore_shell|upper_shell",
+            CollisionKind.STRUCTURAL_PROXIMITY,
+            CollisionStatus.COLLISION,
+            -0.001,
+            policy.clearance_m,
+            "task_object_penetration",
             "fixture",
             policy.near_collision_margin_m,
         )

@@ -54,6 +54,11 @@ contact flagを付けた観測、またはcontact flagにdistanceがない観測
 `invalid_collision_observation`としてfail closedにする。`CollisionEvaluation`は`near_collision_margin_m`も保持し、
 near evidenceの上限を同じthresholdから検証する。`collision` evidenceは負のdistance、
 `pair_clear` evidenceは`clearance_m + near_collision_margin_m`を超えるdistanceを必須とする。
+負のdistanceによる`collision`のreasonはpair kindごとに固定し、
+`self_interference`は`self_interference_penetration`、同一bodyの`structural_proximity`は
+`structural_proximity_penetration`、`environment_collision`は`environment_penetration`、
+`task_object_contact`は`task_object_penetration`とする。same-body structural pairを
+task-objectのpenetration reasonへ読み替えず、kindと`COLLISION` statusを保持する。
 `contact` evidenceはnon-negative distanceとcanonicalな`task_object_contact` reasonを必須とし、
 負のdistanceはcollisionとして扱う。provider由来の非-excluded evaluationは`clear`だけでなく、
 `collision`、`near_collision`、`contact`などのnon-clear statusでもtyped provenanceを必須とする。
