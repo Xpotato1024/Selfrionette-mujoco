@@ -77,6 +77,7 @@ EXPECTED_MODULES = {
         "limit_resolution",
         "physical_limits",
         "qpos_feasibility",
+        "trajectory_feasibility",
     },
 }
 RETIRED_FLAT_MODULES = (frozenset().union(*EXPECTED_MODULES.values()) - set(EXPECTED_MODULES)) | {
