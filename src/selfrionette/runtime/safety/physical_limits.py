@@ -986,9 +986,12 @@ def _conversion_from_mapping(value: object) -> LimitConversionProvenance:
     method = _text("method", raw.get("method"))
     relation_id = _text("relation_id", raw.get("relation_id"))
     source_name = raw.get("source_name")
-    ratio = raw.get("gear_ratio")
-    sign = raw.get("sign")
-    offset = raw.get("offset")
+    # PythonではJSON booleanが``int``のsubclassとして扱われるため、identity判定より前に
+    # constructorと共有するstrict numeric validatorで全数値fieldを正規化する。
+    # これにより``true``/``false``が1/0と等値になる経路を閉じる。
+    ratio = _finite_or_none("gear_ratio", raw.get("gear_ratio"))
+    sign = _finite_or_none("sign", raw.get("sign"))
+    offset = _finite_or_none("offset", raw.get("offset"))
     if (
         source_space is target_space
         and method == "identity"
@@ -1010,9 +1013,9 @@ def _conversion_from_mapping(value: object) -> LimitConversionProvenance:
         return LimitConversionProvenance.projected(
             source_space=source_space,
             relation_id=relation_id,
-            gear_ratio=ratio,  # type: ignore[arg-type]
-            sign=sign,  # type: ignore[arg-type]
-            offset=offset,  # type: ignore[arg-type]
+            gear_ratio=ratio,
+            sign=sign,
+            offset=offset,
             source_name=validate_concrete_limit_identity("source_name", source_name),
         )
     return LimitConversionProvenance(
@@ -1020,9 +1023,9 @@ def _conversion_from_mapping(value: object) -> LimitConversionProvenance:
         target_space=target_space,
         method=method,
         relation_id=relation_id,
-        gear_ratio=ratio,  # type: ignore[arg-type]
-        sign=sign,  # type: ignore[arg-type]
-        offset=offset,  # type: ignore[arg-type]
+        gear_ratio=ratio,
+        sign=sign,
+        offset=offset,
         source_name=source_name,  # type: ignore[arg-type]
     )
 

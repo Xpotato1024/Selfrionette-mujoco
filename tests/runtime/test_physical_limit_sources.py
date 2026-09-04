@@ -272,6 +272,30 @@ def test_projected_limit_envelope_round_trips_through_canonical_decoder() -> Non
         )
 
 
+@pytest.mark.parametrize(
+    ("field_name", "malformed_value"),
+    (("gear_ratio", True), ("sign", True), ("offset", False)),
+)
+def test_envelope_decoder_rejects_json_booleans_in_conversion_numbers(
+    field_name: str,
+    malformed_value: bool,
+) -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fixture",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    raw = json.loads(envelope.to_json_bytes())
+    raw["limits"][0]["conversion"][field_name] = malformed_value
+
+    with pytest.raises(TypeError, match=field_name):
+        PhysicalSafetyEnvelope.from_json_bytes(
+            json.dumps(raw, separators=(",", ":")).encode("utf-8")
+        )
+
+
 def test_public_p2_validators_reject_subclass_bypasses() -> None:
     class SourceSubclass(LimitSourceProvenance):
         pass
