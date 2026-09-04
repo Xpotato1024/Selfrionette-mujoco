@@ -17,6 +17,10 @@ from selfrionette.runtime.safety.physical_limits import (
     LimitSourceProvenance,
     PhysicalLimit,
 )
+from selfrionette.runtime.safety.limit_resolution import (
+    JointSpaceConversion,
+    project_limit_to_joint_space,
+)
 from selfrionette.runtime.safety.trajectory_feasibility import (
     ConfigurationFeasibilityResult,
     ConfigurationState,
@@ -131,18 +135,27 @@ def _policy(
 
 def _projected_policy(source_space: LimitSpace) -> TrajectoryFeasibilityPolicy:
     limits = tuple(
-        _limit(
-            joint_name,
-            quantity,
-            -2.0 if quantity is LimitQuantity.VELOCITY else -10.0,
-            2.0 if quantity is LimitQuantity.VELOCITY else 10.0,
-            conversion=LimitConversionProvenance.projected(
+        project_limit_to_joint_space(
+            PhysicalLimit(
+                name=f"{source_space.value}_{joint_name}",
+                quantity=quantity,
+                lower=-2.0 if quantity is LimitQuantity.VELOCITY else -10.0,
+                upper=2.0 if quantity is LimitQuantity.VELOCITY else 10.0,
+                unit="rad/s" if quantity is LimitQuantity.VELOCITY else "rad/s^2",
+                space=source_space,
+                frame="fast_arm joint space",
+                status=EvidenceStatus.AUTHORITATIVE,
+                source=_source(),
+            ),
+            JointSpaceConversion(
                 source_space=source_space,
-                relation_id=f"{source_space.value}-{joint_name}/v1",
+                joint_name=joint_name,
+                source_name=f"{source_space.value}_{joint_name}",
                 gear_ratio=2.0,
                 sign=1.0,
                 offset=0.0,
-                source_name=f"{source_space.value}_{joint_name}",
+                relation_id=f"{source_space.value}-{joint_name}/v1",
+                unit="rad/s" if quantity is LimitQuantity.VELOCITY else "rad/s^2",
             ),
         )
         for joint_name in JOINTS
@@ -259,6 +272,27 @@ def test_projected_dynamic_limit_source_identity_round_trips_through_p4_revalida
     forged = fingerprint[:2] + ((missing_source_name,) + fingerprint[2][1:],) + fingerprint[3:]
     with pytest.raises(ValueError, match="source_name|reconstructed|malformed"):
         replace(configuration, policy_fingerprint=forged)
+
+
+def test_projected_dynamic_limit_public_constructor_remains_guarded() -> None:
+    with pytest.raises(
+        ValueError,
+        match="joint-space projected limit requires canonical projection origin",
+    ):
+        _limit(
+            "joint_a",
+            LimitQuantity.VELOCITY,
+            -2.0,
+            2.0,
+            conversion=LimitConversionProvenance.projected(
+                source_space=LimitSpace.MOTOR,
+                relation_id="motor-joint_a/v1",
+                gear_ratio=2.0,
+                sign=1.0,
+                offset=0.0,
+                source_name="motor_joint_a",
+            ),
+        )
 
 
 def test_dynamic_limits_require_the_canonical_fast_arm_joint_frame() -> None:
