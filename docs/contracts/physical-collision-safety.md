@@ -68,6 +68,9 @@ geom name/body/role/source identity tupleと、policyのID/clearance threshold/e
 evidence identity tupleをcanonical fingerprintとして保持する。`expected_pair_ids`はそのinventory
 fingerprintから導出したpair集合と順序まで一致しなければならず、factoryとconfiguration evaluatorは
 callerのrevision文字列だけを信頼しない。identityは空値やplaceholderの`"unknown"`を許可しない。
+`CollisionContext`のconstructor自体も、少なくとも一つの`robot` geometry、bodyごとのdisjointな
+role集合、inventory fingerprintから導出したcanonical pair集合を要求する。したがってdirect context
+constructionでも、role overlap、unknown role、robot geometry欠落、pairの削除・追加は受理しない。
 factoryはtyped context、またはcontextを組み立てる明示的なidentity値を要求し、暗黙の`"unknown"`
 へfallbackしない。inventory role、body、source identity、policy threshold、exclusion内容が変わった
 stale contextは`invalid`として停止する。
@@ -80,6 +83,11 @@ evaluationとしてexpected pair coverageへ含める。`clear`はexpected inven
 各pairのvalid clear evidenceだけで成立し、unknown・unavailable・invalidや欠落をclearへ変換しない。
 constructorとpublicな`.clear` accessはnested evaluation/resultを再導出・再検証し、constructor bypassや
 `object.__setattr__`によるkind、status、distance、provenanceの改変をclearとして残さない。
+この再検証を補強するため、ownerは`CollisionContext`、`CollisionEvaluation`、`CollisionCheckResult`、
+`BoundedCollisionTrajectoryResult`の正規化semantic snapshotをobject identityへexternal weakref seal
+として登録する。public fieldとprivate fingerprintを一緒に書き換えてもsealは更新されず、
+`object.__new__`で作った未登録DTOもclear/accessorを通過しない。これは新しいphysical authorityを
+生成する仕組みではなく、constructor後のbypassを検出するowner-local integrity boundaryである。
 aggregateはinvalid、collision、near-collision、contact、unavailable、unknownの順でfail-closedに
 優先する。
 
