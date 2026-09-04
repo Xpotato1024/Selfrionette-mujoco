@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from selfrionette.runtime.safety import limit_resolution as _limit_resolution_module
+
 from selfrionette.plugins.robots.fast_arm.adapter.feasibility import (
     parse_fast_arm_joint_limit_config,
 )
@@ -19,14 +21,18 @@ from selfrionette.runtime.safety.limit_resolution import (
     fast_arm_toml_limits_to_physical_limits,
     project_limit_to_joint_space,
     resolve_joint_space_bounds,
+    validate_limit_parity_record,
+    validate_limit_resolution_result,
 )
 from selfrionette.runtime.safety.physical_limits import (
     EvidenceStatus,
     effective_limit_status,
+    LimitConversionProvenance,
     LimitQuantity,
     LimitSourceProvenance,
     LimitSpace,
     PhysicalLimit,
+    source_identity,
 )
 
 
@@ -298,18 +304,16 @@ def test_matching_non_rad_provisional_sources_are_unknown_and_unbounded() -> Non
     assert "rad" in bound.reason
 
 
-def test_missing_conversion_is_unknown_not_a_zero_or_toml_fallback() -> None:
-    result = resolve_joint_space_bounds(
-        (_limit(name="motor_1", space=LimitSpace.MOTOR),),
-        expected_joint_names=("joint_1",),
-        robot_id="fixture",
-    )
-
-    bound = result.bound_for("joint_1")
-    assert bound.status is LimitResolutionStatus.UNKNOWN
-    assert bound.lower_rad is None
-    assert bound.upper_rad is None
-    assert bound.parity[0].status is ParityStatus.UNKNOWN
+def test_missing_conversion_rejects_even_with_other_joint_source() -> None:
+    with pytest.raises(ValueError, match="conversion relation missing"):
+        resolve_joint_space_bounds(
+            (
+                _limit(name="motor_1", space=LimitSpace.MOTOR),
+                _limit(name="joint_1"),
+            ),
+            expected_joint_names=("joint_1",),
+            robot_id="fixture",
+        )
 
 
 def test_equal_provisional_sources_resolve_without_becoming_authoritative() -> None:
@@ -539,6 +543,53 @@ def test_actuator_projection_applies_one_explicit_conversion() -> None:
     assert bound.to_dict()["parity"][0]["source"]["status"] == "provisional"
 
 
+def test_projected_provenance_must_match_typed_relation_parameters() -> None:
+    relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+    forged_projected = PhysicalLimit(
+        name="joint_1",
+        quantity=LimitQuantity.POSITION,
+        lower=-1.0,
+        upper=1.0,
+        unit="rad",
+        space=LimitSpace.JOINT,
+        frame="fast_arm joint space",
+        status=EvidenceStatus.AUTHORITATIVE,
+        source=_source(EvidenceStatus.AUTHORITATIVE, "manufacturer_document"),
+        conversion=LimitConversionProvenance.projected(
+            source_space=LimitSpace.MOTOR,
+            relation_id=relation.relation_id,
+            gear_ratio=2.0,
+            sign=1.0,
+            offset=0.0,
+        ),
+    )
+    with pytest.raises(ValueError, match="conversion relation binding"):
+        resolve_joint_space_bounds(
+            (
+                _limit(
+                    name="motor_1",
+                    space=LimitSpace.MOTOR,
+                    status=EvidenceStatus.AUTHORITATIVE,
+                    source_status=EvidenceStatus.AUTHORITATIVE,
+                    source_kind="lab_document",
+                ),
+                forged_projected,
+            ),
+            expected_joint_names=("joint_1",),
+            robot_id="fixture",
+            conversion_relations=(relation,),
+        )
+
+
 def test_joint_values_keep_identity_provenance_without_reconversion() -> None:
     source = _limit(name="joint_1", space=LimitSpace.JOINT)
 
@@ -566,9 +617,10 @@ def test_resolved_bound_requires_non_empty_matching_typed_parity() -> None:
         )
 
     provisional_source = _source(EvidenceStatus.PROVISIONAL, "fixture")
+    provisional_identity = source_identity(provisional_source, unit="rad")
     parity = LimitParityRecord(
         joint_name="joint_1",
-        source_name="fixture",
+        source_name=provisional_identity,
         status=ParityStatus.MATCH,
         lower=-1.0,
         upper=1.0,
@@ -582,7 +634,7 @@ def test_resolved_bound_requires_non_empty_matching_typed_parity() -> None:
             lower_rad=-1.0,
             upper_rad=1.0,
             status=LimitResolutionStatus.RESOLVED_PROVISIONAL,
-            source_names=("fixture",),
+            source_names=(provisional_identity,),
             parity=(),
         )
     with pytest.raises(ValueError, match="equal length"):
@@ -591,7 +643,7 @@ def test_resolved_bound_requires_non_empty_matching_typed_parity() -> None:
             lower_rad=-1.0,
             upper_rad=1.0,
             status=LimitResolutionStatus.RESOLVED_PROVISIONAL,
-            source_names=("fixture", "other"),
+            source_names=(provisional_identity, "other"),
             parity=(parity,),
         )
     with pytest.raises(ValueError, match="exactly match"):
@@ -605,7 +657,7 @@ def test_resolved_bound_requires_non_empty_matching_typed_parity() -> None:
         )
     mismatched_joint = LimitParityRecord(
         joint_name="joint_2",
-        source_name="fixture",
+        source_name=provisional_identity,
         status=ParityStatus.MATCH,
         lower=-1.0,
         upper=1.0,
@@ -618,16 +670,17 @@ def test_resolved_bound_requires_non_empty_matching_typed_parity() -> None:
             lower_rad=-1.0,
             upper_rad=1.0,
             status=LimitResolutionStatus.RESOLVED_PROVISIONAL,
-            source_names=("fixture",),
+            source_names=(provisional_identity,),
             parity=(mismatched_joint,),
         )
 
 
 def test_authoritative_bound_requires_typed_authoritative_source() -> None:
     provisional_source = _source(EvidenceStatus.PROVISIONAL, "fixture")
+    provisional_identity = source_identity(provisional_source, unit="rad")
     parity = LimitParityRecord(
         joint_name="joint_1",
-        source_name="fixture",
+        source_name=provisional_identity,
         status=ParityStatus.MATCH,
         lower=-1.0,
         upper=1.0,
@@ -641,13 +694,13 @@ def test_authoritative_bound_requires_typed_authoritative_source() -> None:
             lower_rad=-1.0,
             upper_rad=1.0,
             status=LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
-            source_names=("fixture",),
+            source_names=(provisional_identity,),
             parity=(parity,),
         )
 
     provisional_parity = LimitParityRecord(
         joint_name="joint_1",
-        source_name="fixture",
+        source_name=provisional_identity,
         status=ParityStatus.MATCH,
         lower=-1.0,
         upper=1.0,
@@ -660,16 +713,17 @@ def test_authoritative_bound_requires_typed_authoritative_source() -> None:
             lower_rad=-1.0,
             upper_rad=1.0,
             status=LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
-            source_names=("fixture",),
+            source_names=(provisional_identity,),
             parity=(provisional_parity,),
         )
 
 
 def test_limit_result_requires_unique_expected_joint_coverage() -> None:
     provisional_source = _source(EvidenceStatus.PROVISIONAL, "fixture")
+    provisional_identity = source_identity(provisional_source, unit="rad")
     parity = LimitParityRecord(
         joint_name="joint_1",
-        source_name="fixture",
+        source_name=provisional_identity,
         status=ParityStatus.MATCH,
         lower=-1.0,
         upper=1.0,
@@ -681,7 +735,7 @@ def test_limit_result_requires_unique_expected_joint_coverage() -> None:
         lower_rad=-1.0,
         upper_rad=1.0,
         status=LimitResolutionStatus.RESOLVED_PROVISIONAL,
-        source_names=("fixture",),
+        source_names=(provisional_identity,),
         parity=(parity,),
     )
 
@@ -728,9 +782,10 @@ def test_limit_result_requires_unique_expected_joint_coverage() -> None:
 
 def test_resolved_bound_rejects_non_rad_parity_units() -> None:
     provisional_source = _source(EvidenceStatus.PROVISIONAL, "fixture")
+    provisional_identity = source_identity(provisional_source, unit="deg")
     parity = LimitParityRecord(
         joint_name="joint_1",
-        source_name="fixture",
+        source_name=provisional_identity,
         status=ParityStatus.MATCH,
         lower=-1.0,
         upper=1.0,
@@ -744,6 +799,156 @@ def test_resolved_bound_rejects_non_rad_parity_units() -> None:
             lower_rad=-1.0,
             upper_rad=1.0,
             status=LimitResolutionStatus.RESOLVED_PROVISIONAL,
-            source_names=("fixture",),
+            source_names=(provisional_identity,),
             parity=(parity,),
         )
+
+
+def test_parity_source_name_must_be_derived_from_typed_source() -> None:
+    source = _source(EvidenceStatus.PROVISIONAL, "fixture")
+    with pytest.raises(ValueError, match="typed source identity"):
+        LimitParityRecord(
+            joint_name="joint_1",
+            source_name="forged-source-name",
+            status=ParityStatus.MATCH,
+            lower=-1.0,
+            upper=1.0,
+            unit="rad",
+            source=source,
+        )
+
+
+@pytest.mark.parametrize("tolerance_rad", (0.0, 1e-6, 1e9))
+def test_canonical_tolerance_rejects_caller_override(tolerance_rad: float) -> None:
+    with pytest.raises(ValueError, match="canonical default"):
+        resolve_joint_space_bounds(
+            (_limit(),),
+            expected_joint_names=("joint_1",),
+            robot_id="fixture",
+            tolerance_rad=tolerance_rad,
+        )
+
+
+def test_conversion_relation_must_have_concrete_identity() -> None:
+    with pytest.raises(ValueError, match="concrete identity"):
+        JointSpaceConversion(
+            source_space=LimitSpace.MOTOR,
+            joint_name="joint_1",
+            source_name="motor_1",
+            gear_ratio=1.0,
+            sign=1.0,
+            offset=0.0,
+            relation_id="unknown",
+            unit="rad",
+        )
+
+
+def test_extra_conversion_relation_is_not_silently_dropped() -> None:
+    relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+    with pytest.raises(ValueError, match="matching provided limit"):
+        resolve_joint_space_bounds(
+            (_limit(name="joint_1"),),
+            expected_joint_names=("joint_1",),
+            robot_id="fixture",
+            conversion_relations=(relation,),
+        )
+
+
+def test_authoritative_result_detects_conversion_deletion_and_inventory_tamper() -> None:
+    source = _limit(
+        name="motor_1",
+        space=LimitSpace.MOTOR,
+        status=EvidenceStatus.AUTHORITATIVE,
+        source_status=EvidenceStatus.AUTHORITATIVE,
+        source_kind="lab_document",
+    )
+    relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+    result = resolve_joint_space_bounds(
+        (source,),
+        expected_joint_names=("joint_1",),
+        robot_id="fixture",
+        conversion_relations=(relation,),
+    )
+    assert result.authoritative
+    object.__setattr__(result, "conversion_relations", ())
+    assert not result.authoritative
+
+    result = resolve_joint_space_bounds(
+        (source,),
+        expected_joint_names=("joint_1",),
+        robot_id="fixture",
+        conversion_relations=(relation,),
+    )
+    object.__setattr__(result, "expected_joint_names", ("deleted_joint",))
+    assert not result.authoritative
+
+    result = resolve_joint_space_bounds(
+        (source,),
+        expected_joint_names=("joint_1",),
+        robot_id="fixture",
+        conversion_relations=(relation,),
+    )
+    object.__setattr__(relation, "relation_id", "unknown")
+    assert not result.authoritative
+
+
+def test_nested_provisional_source_mutation_is_not_authoritative() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fixture",
+    )
+    source = result.bounds[0].parity[0].source
+    assert source is not None
+    object.__setattr__(source, "status", EvidenceStatus.AUTHORITATIVE)
+    assert not result.authoritative
+
+
+def test_external_result_seal_rejects_coherent_private_snapshot_rewrite() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fixture",
+    )
+    object.__setattr__(result, "robot_id", "tampered-robot")
+    object.__setattr__(
+        result,
+        "_canonical_snapshot",
+        _limit_resolution_module._result_snapshot(result),
+    )
+    assert not result.authoritative
+
+
+def test_constructor_bypassed_resolution_dtos_fail_closed() -> None:
+    relation = object.__new__(JointSpaceConversion)
+    assert relation.target_space is LimitSpace.JOINT
+    with pytest.raises((AttributeError, TypeError, ValueError)):
+        validate_limit_resolution_result(
+            object.__new__(LimitResolutionResult)
+        )
+
+    bound = object.__new__(ResolvedJointBound)
+    assert not bound.authoritative
+    assert not bound.bounded
+
+    parity = object.__new__(LimitParityRecord)
+    with pytest.raises((AttributeError, TypeError, ValueError)):
+        validate_limit_parity_record(parity)
