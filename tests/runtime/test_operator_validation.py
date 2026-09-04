@@ -92,16 +92,42 @@ def _check(
     source: MeasurementSource | None = None,
     software_revision: str = "revision-001",
 ) -> ValidationCheckEvidence:
+    evidence_source = source or MeasurementSource(
+        MeasurementSourceKind.SOFTWARE_DRY_RUN,
+        "fixture",
+        "revision-001",
+    )
+    reason_identity_by_action = {
+        SafetyDecisionAction.ALLOW: "limit:limit_resolution_authoritative",
+        SafetyDecisionAction.HOLD: "limit:limit_resolution_provisional",
+        SafetyDecisionAction.REJECT: "limit:limit_resolution_mismatch",
+        SafetyDecisionAction.STOP: "collision:collision_detected",
+        SafetyDecisionAction.UNAVAILABLE: "limit:limit_resolution_unavailable",
+        SafetyDecisionAction.INVALID: "limit:limit_resolution_invalid",
+    }
+    provenance_values = [
+        check_id,
+        evidence_source.source_id,
+        evidence_source.revision,
+        software_revision,
+    ]
+    if evidence_source.evidence_reference is not None:
+        provenance_values.append(evidence_source.evidence_reference)
+    provenance = tuple(dict.fromkeys(provenance_values))
     return ValidationCheckEvidence(
         check_id=check_id,
         kind=kind,
         status=status,
         expected={"expected": "fixture-value"},
         observed=None if status in {ValidationCheckStatus.UNAVAILABLE, ValidationCheckStatus.TECHNICAL_INVALID} else {"observed": "fixture-value"},
-        measurement_source=source or MeasurementSource(MeasurementSourceKind.SOFTWARE_DRY_RUN, "fixture", "revision-001"),
+        measurement_source=evidence_source,
         observed_at=None if status in {ValidationCheckStatus.UNAVAILABLE, ValidationCheckStatus.TECHNICAL_INVALID} else OBSERVED,
         software_revision=software_revision,
-        safety_decision=SafetyDecisionEvidence(action, f"input:fixture_{action.value}", ("fixture",)),
+        safety_decision=SafetyDecisionEvidence(
+            action,
+            reason_identity_by_action[action],
+            provenance,
+        ),
         reason="fixture check",
     )
 
@@ -285,7 +311,7 @@ def test_source_revision_and_kind_identity_are_strict() -> None:
     unknown_source = _all_checks(
         status=ValidationCheckStatus.UNAVAILABLE,
         action=SafetyDecisionAction.UNAVAILABLE,
-        source=MeasurementSource(MeasurementSourceKind.UNKNOWN, "unknown", "unknown"),
+        source=MeasurementSource(MeasurementSourceKind.UNKNOWN, "unknown-source", "unknown-revision"),
     )
     unavailable = build_dry_run_validation_artifact(
         _procedure(),
@@ -347,13 +373,63 @@ def test_physical_source_is_visible_and_not_collapsed_into_software() -> None:
         MeasurementSource(MeasurementSourceKind.MANUFACTURER_DOCUMENT, "manual-001", "rev-001")
 
 
+@pytest.mark.parametrize("location", ("clearance", "check"))
+def test_dry_run_raw_precheck_rejects_physical_source_before_malformed_procedure(
+    location: str,
+) -> None:
+    procedure = _bypassed_procedure()
+    checks: tuple[object, ...]
+    if location == "clearance":
+        object.__setattr__(
+            procedure,
+            "clearance",
+            {"source": {"kind": MeasurementSourceKind.PHYSICAL_MEASUREMENT.value}},
+        )
+        checks = _all_checks()
+    else:
+        object.__setattr__(procedure, "clearance", object())
+        checks = (
+            {"measurement_source": {"kind": MeasurementSourceKind.PHYSICAL_MEASUREMENT.value}},
+        )
+
+    with pytest.raises(ValueError, match="#509"):
+        build_dry_run_validation_artifact(
+            procedure,
+            checks,
+            artifact_id=f"artifact-raw-physical-{location}",
+            started_at=STARTED,
+            completed_at=COMPLETED,
+        )
+
+
+def test_dry_run_raw_precheck_rejects_mixed_source_before_lifecycle() -> None:
+    procedure = _bypassed_procedure()
+    physical = MeasurementSource(
+        MeasurementSourceKind.PHYSICAL_MEASUREMENT,
+        "sensor-raw",
+        "run-raw",
+        "observation-raw",
+    )
+    checks = list(_all_checks())
+    object.__setattr__(checks[0], "measurement_source", physical)
+
+    with pytest.raises(ValueError, match="#509"):
+        build_dry_run_validation_artifact(
+            procedure,
+            checks,
+            artifact_id="artifact-raw-mixed",
+            started_at=STARTED,
+            completed_at=None,
+        )
+
+
 def test_safety_decision_evidence_requires_component_reason_identity_and_provenance() -> None:
     with pytest.raises(ValueError, match="component:reason_code"):
         SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "allow", ("fixture",))
-    with pytest.raises(ValueError, match="component must"):
+    with pytest.raises(ValueError, match="projection component"):
         SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "fixture:allow", ("fixture",))
-    with pytest.raises(ValueError, match="non-empty tuple"):
-        SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "input:fixture_allow", ())
+    with pytest.raises(ValueError, match="allow projection requires concrete provenance"):
+        SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "limit:limit_resolution_authoritative", ())
 
 
 def test_strict_decoder_rejects_unknown_duplicate_bom_and_nonfinite_values() -> None:
@@ -418,7 +494,11 @@ def test_check_contract_requires_status_specific_safety_action_and_observation()
             source,
             None,
             "revision-001",
-            SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "input:fixture_allow", ("fixture",)),
+            SafetyDecisionEvidence(
+                SafetyDecisionAction.ALLOW,
+                "limit:limit_resolution_authoritative",
+                ("check", "fixture", "revision-001"),
+            ),
             "missing timestamp",
         )
 
@@ -438,15 +518,65 @@ def test_pass_check_requires_non_empty_observed_evidence() -> None:
             source,
             OBSERVED,
             "revision-001",
-            SafetyDecisionEvidence(SafetyDecisionAction.ALLOW, "input:fixture_allow", ("fixture",)),
+            SafetyDecisionEvidence(
+                SafetyDecisionAction.ALLOW,
+                "limit:limit_resolution_authoritative",
+                ("check", "fixture", "revision-001"),
+            ),
             "observed evidence is empty",
         )
 
 
 def test_unknown_source_cannot_be_pass_or_allow() -> None:
-    unknown = MeasurementSource(MeasurementSourceKind.UNKNOWN, "unknown", "unknown")
+    unknown = MeasurementSource(
+        MeasurementSourceKind.UNKNOWN,
+        "unknown-source",
+        "unknown-revision",
+    )
     with pytest.raises(ValueError, match="cannot pass or allow"):
         _check("check", ValidationCheckKind.LIMIT_RANGE, source=unknown)
+
+
+def test_unknown_pass_precedes_placeholder_projection_diagnostic() -> None:
+    unknown = MeasurementSource(MeasurementSourceKind.UNKNOWN, "unknown", "unknown")
+    decision = SafetyDecisionEvidence(
+        SafetyDecisionAction.ALLOW,
+        "limit:limit_resolution_authoritative",
+        ("check", "fixture", "revision-001", "revision-other"),
+    )
+
+    with pytest.raises(ValueError, match="unknown measurement source cannot pass or allow"):
+        ValidationCheckEvidence(
+            "check",
+            ValidationCheckKind.LIMIT_RANGE,
+            ValidationCheckStatus.PASS,
+            {"expected": 1},
+            {"observed": 1},
+            unknown,
+            OBSERVED,
+            "revision-001",
+            decision,
+            "unknown source",
+        )
+
+
+def test_safety_decision_provenance_rejects_placeholder_and_unrelated_evidence() -> None:
+    with pytest.raises(ValueError, match="concrete identities"):
+        SafetyDecisionEvidence(
+            SafetyDecisionAction.ALLOW,
+            "limit:limit_resolution_authoritative",
+            ("unknown",),
+        )
+
+    check = _check("check", ValidationCheckKind.LIMIT_RANGE)
+    unrelated = SafetyDecisionEvidence(
+        SafetyDecisionAction.ALLOW,
+        "limit:limit_resolution_authoritative",
+        ("unrelated-check", "unrelated-source", "unrelated-revision", "revision-001"),
+    )
+    object.__setattr__(check, "safety_decision", unrelated)
+    with pytest.raises(ValueError, match="bind to check and measurement evidence"):
+        validate_validation_check_evidence(check)
 
 
 def test_nested_measurement_source_bypass_is_revalidated() -> None:
@@ -463,6 +593,49 @@ def test_nested_semantically_valid_source_mutation_is_rejected_by_external_seal(
 
     with pytest.raises(ValueError, match="constructor-sealed"):
         validate_validation_check_evidence(check)
+
+
+@pytest.mark.parametrize("nested_kind", ("source", "decision", "expected"))
+def test_same_value_nested_replacement_is_rejected_by_check_seal(
+    nested_kind: str,
+) -> None:
+    check = _check("check", ValidationCheckKind.LIMIT_RANGE)
+    if nested_kind == "source":
+        original = check.measurement_source
+        replacement = MeasurementSource(
+            original.kind,
+            original.source_id,
+            original.revision,
+            original.evidence_reference,
+        )
+        object.__setattr__(check, "measurement_source", replacement)
+    elif nested_kind == "decision":
+        original = check.safety_decision
+        replacement = SafetyDecisionEvidence(
+            original.action,
+            original.reason_identity,
+            original.provenance,
+        )
+        object.__setattr__(check, "safety_decision", replacement)
+    else:
+        object.__setattr__(check, "expected", dict(check.expected))
+
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        validate_validation_check_evidence(check)
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        check.to_dict()
+
+
+def test_check_revalidation_preserves_original_nested_objects() -> None:
+    check = _check("check", ValidationCheckKind.LIMIT_RANGE)
+    source = check.measurement_source
+    decision = check.safety_decision
+
+    validated = validate_validation_check_evidence(check)
+
+    assert validated is check
+    assert validated.measurement_source is source
+    assert validated.safety_decision is decision
 
 
 def test_clearance_source_same_value_constructor_bypass_is_rejected() -> None:
@@ -493,8 +666,8 @@ def test_public_leaf_serializer_revalidates_its_external_seal() -> None:
 def test_decision_leaf_serializer_revalidates_its_external_seal() -> None:
     decision = SafetyDecisionEvidence(
         SafetyDecisionAction.ALLOW,
-        "input:fixture_allow",
-        ("fixture",),
+        "limit:limit_resolution_authoritative",
+        ("check", "fixture", "revision-001"),
     )
     object.__setattr__(decision, "provenance", ("rewritten-fixture",))
 
@@ -526,8 +699,8 @@ def test_valid_looking_nested_constructor_bypass_is_not_authority(
     else:
         nested = object.__new__(SafetyDecisionEvidence)
         object.__setattr__(nested, "action", SafetyDecisionAction.ALLOW)
-        object.__setattr__(nested, "reason_identity", "input:fixture_allow")
-        object.__setattr__(nested, "provenance", ("fixture",))
+        object.__setattr__(nested, "reason_identity", "limit:limit_resolution_authoritative")
+        object.__setattr__(nested, "provenance", ("check", "fixture", "revision-001"))
         object.__setattr__(check, "safety_decision", nested)
 
     with pytest.raises(ValueError, match="constructor-sealed"):
@@ -565,8 +738,8 @@ def test_public_check_and_nested_dtos_require_exact_types() -> None:
 
     derived_decision = DerivedDecision(
         SafetyDecisionAction.ALLOW,
-        "input:fixture_allow",
-        ("fixture",),
+        "limit:limit_resolution_authoritative",
+        ("check", "fixture", "revision-001"),
     )
     with pytest.raises(TypeError, match="safety_decision must be SafetyDecisionEvidence"):
         ValidationCheckEvidence(
@@ -772,6 +945,31 @@ def test_procedure_external_seal_rejects_semantically_valid_nested_mutation() ->
         validate_validation_procedure(procedure)
 
 
+@pytest.mark.parametrize("field_name", ("target", "required_checks"))
+def test_procedure_external_seal_rejects_same_value_nested_replacement(
+    field_name: str,
+) -> None:
+    procedure = _procedure()
+    if field_name == "target":
+        original = procedure.target
+        replacement = TargetIdentity(
+            original.target_id,
+            original.robot_id,
+            original.controller_id,
+            original.connection_id,
+            original.model_id,
+        )
+    else:
+        replacement = tuple(item for item in procedure.required_checks)
+        assert replacement is not procedure.required_checks
+    object.__setattr__(procedure, field_name, replacement)
+
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        validate_validation_procedure(procedure)
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        procedure.to_dict()
+
+
 def test_valid_looking_nested_procedure_bypass_is_not_authority() -> None:
     procedure = _procedure()
     nested_target = object.__new__(TargetIdentity)
@@ -835,6 +1033,43 @@ def test_artifact_external_seal_rejects_coherent_private_fingerprint_rewrite() -
         artifact.to_json_bytes()
 
 
+@pytest.mark.parametrize("replacement", ("checks_tuple", "check"))
+def test_artifact_external_seal_rejects_same_value_nested_replacement(
+    replacement: str,
+) -> None:
+    artifact = build_dry_run_validation_artifact(
+        _procedure(),
+        _all_checks(),
+        artifact_id=f"artifact-same-value-{replacement}",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    if replacement == "checks_tuple":
+        checks = tuple(item for item in artifact.checks)
+        assert checks is not artifact.checks
+    else:
+        original = artifact.checks[0]
+        replacement_check = ValidationCheckEvidence(
+            original.check_id,
+            original.kind,
+            original.status,
+            original.expected,
+            original.observed,
+            original.measurement_source,
+            original.observed_at,
+            original.software_revision,
+            original.safety_decision,
+            original.reason,
+        )
+        checks = (replacement_check, *artifact.checks[1:])
+    object.__setattr__(artifact, "checks", checks)
+
+    assert not artifact.complete
+    assert artifact.evidence_class is EvidenceClass.UNKNOWN
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        artifact.to_json_bytes()
+
+
 def test_classifier_validates_malformed_checks_before_abort_short_circuit() -> None:
     malformed = object.__new__(ValidationCheckEvidence)
     checks = list(_all_checks())
@@ -854,11 +1089,28 @@ def test_classifier_validates_malformed_checks_before_abort_short_circuit() -> N
 
 def test_classifier_validates_duplicate_ids_before_abort_short_circuit() -> None:
     checks = list(_all_checks())
-    checks[1] = replace(checks[1], check_id=checks[0].check_id)
+    object.__setattr__(checks[1], "check_id", checks[0].check_id)
     artifact = build_validation_artifact(
         _procedure(),
         tuple(checks),
         artifact_id="artifact-duplicate-before-abort",
+        started_at=STARTED,
+        completed_at=None,
+        operator_aborted=True,
+    )
+
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+    assert artifact.classification_reason == "check_identity_invalid"
+
+
+def test_classifier_rejects_unexpected_id_before_abort_and_missing_completion() -> None:
+    checks = list(_all_checks())
+    object.__setattr__(checks[0], "check_id", "unexpected-check")
+
+    artifact = build_validation_artifact(
+        _procedure(),
+        tuple(checks),
+        artifact_id="artifact-unexpected-before-lifecycle",
         started_at=STARTED,
         completed_at=None,
         operator_aborted=True,
@@ -875,7 +1127,7 @@ def test_duplicate_actual_check_ids_are_technical_invalid_even_when_checks_are_i
             action=SafetyDecisionAction.INVALID,
         )
     )
-    checks[1] = replace(checks[1], check_id=checks[0].check_id)
+    object.__setattr__(checks[1], "check_id", checks[0].check_id)
 
     artifact = build_validation_artifact(
         _procedure(),
@@ -890,6 +1142,30 @@ def test_duplicate_actual_check_ids_are_technical_invalid_even_when_checks_are_i
     assert not artifact.complete
 
 
+def test_classifier_keeps_technical_invalid_before_unknown_source() -> None:
+    checks = _all_checks(
+        status=ValidationCheckStatus.TECHNICAL_INVALID,
+        action=SafetyDecisionAction.INVALID,
+        source=MeasurementSource(
+            MeasurementSourceKind.UNKNOWN,
+            "unknown-technical-source",
+            "unknown-technical-revision",
+        ),
+    )
+
+    artifact = build_dry_run_validation_artifact(
+        _procedure(),
+        checks,
+        artifact_id="artifact-technical-before-unknown",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+    assert artifact.classification_reason == "technical_invalid_check"
+    assert artifact.evidence_class is EvidenceClass.UNKNOWN
+
+
 def test_strict_decode_rejects_duplicate_actual_check_ids_even_when_technical_invalid() -> None:
     checks = list(
         _all_checks(
@@ -897,7 +1173,7 @@ def test_strict_decode_rejects_duplicate_actual_check_ids_even_when_technical_in
             action=SafetyDecisionAction.INVALID,
         )
     )
-    checks[1] = replace(checks[1], check_id=checks[0].check_id)
+    object.__setattr__(checks[1], "check_id", checks[0].check_id)
     artifact = build_validation_artifact(
         _procedure(),
         tuple(checks),
