@@ -22,6 +22,7 @@ from selfrionette.runtime.safety.operator_validation import (
     ValidationCheckSpec,
     ValidationCheckStatus,
     ValidationClassification,
+    ValidationEvidenceArtifact,
     ValidationProcedure,
     build_dry_run_validation_artifact,
     build_validation_artifact,
@@ -29,6 +30,7 @@ from selfrionette.runtime.safety.operator_validation import (
     validate_operator_gate,
     validate_validation_check_evidence,
     validate_validation_artifact,
+    validate_validation_procedure,
 )
 from selfrionette.runtime.safety.physical_safety_core import SafetyDecisionAction
 
@@ -568,3 +570,143 @@ def test_artifact_lifecycle_rejects_reversed_timestamps_and_boolean_schema_versi
     malformed["schema_version"] = True
     with pytest.raises(ValueError, match="schema version"):
         decode_validation_artifact(malformed)
+
+
+def _bypassed_procedure() -> ValidationProcedure:
+    procedure = object.__new__(ValidationProcedure)
+    valid = _procedure()
+    for field_name in ValidationProcedure.__dataclass_fields__:
+        object.__setattr__(procedure, field_name, getattr(valid, field_name))
+    return procedure
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "target_type",
+        "target_field",
+        "required_type",
+        "missing_kind",
+        "duplicate_id",
+        "operator_confirmed_type",
+        "dry_run_only",
+        "metadata",
+        "nested_spec",
+    ),
+)
+def test_validation_procedure_canonical_validator_rejects_bypassed_fields(
+    mutation: str,
+) -> None:
+    procedure = _bypassed_procedure()
+    if mutation == "target_type":
+        object.__setattr__(procedure, "target", object())
+    elif mutation == "target_field":
+        object.__setattr__(procedure.target, "robot_id", "")
+    elif mutation == "required_type":
+        object.__setattr__(procedure, "required_checks", object())
+    elif mutation == "missing_kind":
+        object.__setattr__(
+            procedure,
+            "required_checks",
+            (ValidationCheckSpec("limits", ValidationCheckKind.LIMIT_RANGE, "range check"),),
+        )
+    elif mutation == "duplicate_id":
+        object.__setattr__(
+            procedure,
+            "required_checks",
+            procedure.required_checks + (procedure.required_checks[0],),
+        )
+    elif mutation == "operator_confirmed_type":
+        object.__setattr__(procedure, "operator_confirmed", 1)
+    elif mutation == "dry_run_only":
+        object.__setattr__(procedure, "dry_run_only", False)
+    elif mutation == "metadata":
+        object.__setattr__(procedure, "created_at", "")
+    else:
+        malformed_spec = object.__new__(ValidationCheckSpec)
+        object.__setattr__(malformed_spec, "check_id", "")
+        object.__setattr__(malformed_spec, "kind", ValidationCheckKind.LIMIT_RANGE)
+        object.__setattr__(malformed_spec, "description", "range check")
+        object.__setattr__(
+            procedure,
+            "required_checks",
+            (malformed_spec, *procedure.required_checks[1:]),
+        )
+
+    with pytest.raises((TypeError, ValueError)):
+        validate_validation_procedure(procedure)
+
+    artifact = build_dry_run_validation_artifact(
+        procedure,
+        _all_checks(),
+        artifact_id=f"artifact-malformed-procedure-{mutation}",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+    assert not artifact.complete
+
+
+def test_whole_artifact_bypass_cannot_complete_or_serialize_as_pass() -> None:
+    valid = build_dry_run_validation_artifact(
+        _procedure(),
+        _all_checks(),
+        artifact_id="artifact-whole-bypass",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    malformed = object.__new__(ValidationEvidenceArtifact)
+    for field_name in ValidationEvidenceArtifact.__dataclass_fields__:
+        object.__setattr__(malformed, field_name, getattr(valid, field_name))
+    malformed_procedure = _bypassed_procedure()
+    object.__setattr__(malformed_procedure, "operator_confirmed", 1)
+    object.__setattr__(malformed, "procedure", malformed_procedure)
+
+    assert not malformed.complete
+    with pytest.raises((TypeError, ValueError)):
+        malformed.to_json_bytes()
+    with pytest.raises((TypeError, ValueError)):
+        validate_validation_artifact(malformed)
+
+
+def test_duplicate_actual_check_ids_are_technical_invalid_even_when_checks_are_invalid() -> None:
+    checks = list(
+        _all_checks(
+            status=ValidationCheckStatus.TECHNICAL_INVALID,
+            action=SafetyDecisionAction.INVALID,
+        )
+    )
+    checks[1] = replace(checks[1], check_id=checks[0].check_id)
+
+    artifact = build_validation_artifact(
+        _procedure(),
+        tuple(checks),
+        artifact_id="artifact-duplicate-technical-checks",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+    assert artifact.classification_reason == "check_identity_invalid"
+    assert not artifact.complete
+
+
+def test_strict_decode_rejects_duplicate_actual_check_ids_even_when_technical_invalid() -> None:
+    checks = list(
+        _all_checks(
+            status=ValidationCheckStatus.TECHNICAL_INVALID,
+            action=SafetyDecisionAction.INVALID,
+        )
+    )
+    checks[1] = replace(checks[1], check_id=checks[0].check_id)
+    artifact = build_validation_artifact(
+        _procedure(),
+        tuple(checks),
+        artifact_id="artifact-duplicate-strict-decode",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+
+    with pytest.raises(ValueError, match="check IDs must be unique"):
+        decode_validation_artifact(artifact.to_json_bytes())

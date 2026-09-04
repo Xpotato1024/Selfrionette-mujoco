@@ -47,6 +47,13 @@ coverageの完了とは扱わない。artifactのclassificationは、procedure�
 observationが揃った場合だけ`pass`へ進む。従って、5軸すべての宣言済みcheck IDが揃わない
 artifactは`pass`にならず、同じkindの追加check IDは許可されるが重複IDは拒否する。
 
+`validate_validation_procedure()`はprocedureのsingle canonical deep validatorであり、constructor、
+operator gate、classifier / builder、strict decoderが同じ経路を共有する。target、operator、
+preflight、clearance、stop、rollback、metadata、boolean flag、全required check specを再構築して
+検証し、型不一致、nested field欠落、duplicate ID、mandatory 5-kind欠落を許可しない。
+`object.__new__`や`object.__setattr__`でprocedureまたはnested specを迂回しても、`pass`へ昇格せず
+`technical_invalid`へ閉じる。
+
 `validate_operator_gate()`はoperator confirmation、preflightの完了と本人一致、clearanceの
 finiteなverification値・timestamp・sourceを順番に検査する。clearanceがrequired値未満なら
 `fail`、確認値またはsourceが欠ける・unknownなら`unavailable`とし、値をzeroやnominal rangeで
@@ -94,6 +101,8 @@ physical evidenceの成立へ読み替えない。
 constructionは、`validate_validation_check_evidence()`という一つのcanonical nested validatorを
 共有する。このvalidatorは`MeasurementSource`と`SafetyDecisionEvidence`を再構築してから検証するため、
 `object.__new__`や`object.__setattr__`でconstructor invariantを迂回したnested objectも拒否する。
+実際のcheck ID重複はcheck statusに関係なく`technical_invalid`へ閉じ、宣言されたclassificationに
+関係なく重複をpassへ進めない。
 
 ## Closed lifecycle classification
 
@@ -113,6 +122,12 @@ pass checkはP5 `allow`、unavailable checkは`unavailable`、technical-invalid 
 
 ## Strict artifact
 
+`ValidationEvidenceArtifact`にもsingle canonical structural validatorを持たせ、constructor、
+`complete`、`to_dict()` / `to_json_bytes()`、builder / classifier、strict decoderで共有する。
+artifact全体またはnested procedure / checkをconstructor bypassしても、validatorは再検証し、
+`complete=True`や`pass`を返さない。serializationはvalidated object専用のraw internal helperを
+使ってpublic serializerの再帰を避け、malformed objectのsuccess serializationを許可しない。
+
 `ValidationEvidenceArtifact.to_json_bytes()`はsorted key、compact separator、UTF-8 without BOM、
 `allow_nan=False`で決定的にserializeする。`decode_validation_artifact()`は次を拒否する。
 
@@ -121,6 +136,10 @@ pass checkはP5 `allow`、unavailable checkは`unavailable`、technical-invalid 
 - checkの重複・欠落・kind mismatch・software revision mismatch
 - `completed_at`が`started_at`より前のartifact
 - evidence classまたはclassificationの導出結果との不一致
+
+builder / classifierがduplicate actual `check_id`を`technical_invalid`として記録したartifactは、
+診断用のtyped resultとして保持できるが、strict decoderではclassificationやstatusに関係なく
+再読込を拒否する。したがって重複IDを含むJSONをvalid round-tripや`pass`へ利用できない。
 
 `validate_validation_artifact()`はencode、strict decode、再encodeのbyte equalityを確認してから
 artifactを返す。artifactはimmutableで、MuJoCo state、viewer state、commandを変更しない。
