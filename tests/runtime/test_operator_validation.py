@@ -244,7 +244,10 @@ def test_dry_run_artifact_round_trips_and_marks_software_evidence() -> None:
     assert not artifact.physical_evidence_present
     assert not encoded.startswith(b"\xef\xbb\xbf")
     assert validate_validation_artifact(artifact).to_json_bytes() == encoded
-    assert decode_validation_artifact(encoded).to_json_bytes() == encoded
+    decoded = decode_validation_artifact(encoded)
+    assert decoded.evidence_class is EvidenceClass.SOFTWARE_ONLY
+    assert not decoded.physical_evidence_present
+    assert decoded.to_json_bytes() == encoded
 
 
 def test_failure_unavailable_aborted_and_technical_invalid_never_become_pass() -> None:
@@ -335,7 +338,7 @@ def test_physical_source_is_visible_and_not_collapsed_into_software() -> None:
     )
 
     assert artifact.classification is ValidationClassification.PASS
-    assert artifact.evidence_class is EvidenceClass.PHYSICAL_ONLY
+    assert artifact.evidence_class is EvidenceClass.MIXED
     assert artifact.physical_evidence_present
 
     with pytest.raises(ValueError, match="#509"):
@@ -351,6 +354,20 @@ def test_physical_source_is_visible_and_not_collapsed_into_software() -> None:
         _procedure(),
         clearance=replace(_procedure().clearance, source=source),
     )
+    mixed_artifact = build_validation_artifact(
+        physical_clearance_procedure,
+        _all_checks(),
+        artifact_id="artifact-mixed-clearance",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    mixed_encoded = mixed_artifact.to_json_bytes()
+    assert mixed_artifact.classification is ValidationClassification.PASS
+    assert mixed_artifact.evidence_class is EvidenceClass.MIXED
+    assert mixed_artifact.physical_evidence_present
+    assert validate_validation_artifact(mixed_artifact).to_json_bytes() == mixed_encoded
+    assert decode_validation_artifact(mixed_encoded).evidence_class is EvidenceClass.MIXED
+
     with pytest.raises(ValueError, match="#509"):
         build_dry_run_validation_artifact(
             physical_clearance_procedure,
@@ -368,7 +385,7 @@ def test_physical_source_is_visible_and_not_collapsed_into_software() -> None:
         started_at=STARTED,
         completed_at=COMPLETED,
     )
-    assert document_artifact.evidence_class is EvidenceClass.PHYSICAL_ONLY
+    assert document_artifact.evidence_class is EvidenceClass.MIXED
     with pytest.raises(ValueError, match="evidence_reference"):
         MeasurementSource(MeasurementSourceKind.MANUFACTURER_DOCUMENT, "manual-001", "rev-001")
 

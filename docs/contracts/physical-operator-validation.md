@@ -95,6 +95,13 @@ fixtureはsoftware-onlyで検証し、physical sourceの実測は取得しない
 別fieldがmalformedでも、raw source kindを先に確認してphysical / mixed inputを拒否するため、dry-run
 経路から`MIXED`を生成しない。software dry-runの`pass`をphysical evidenceの成立へ読み替えない。
 
+artifactのevidence classは、`procedure.clearance.source`と全checkの
+`measurement_source`を同じcanonical導出へ渡して決定する。各sourceをdeep validationした後、
+unknownが一件でもあれば`UNKNOWN`、physicalとsoftwareが混在すれば`MIXED`、physicalだけなら
+`PHYSICAL_ONLY`、softwareだけなら`SOFTWARE_ONLY`とする。したがってphysical clearanceと
+software-only checksの組合せは`MIXED`かつ`physical_evidence_present=True`となり、clearanceを
+checkだけの分類から欠落させない。malformed procedure / checkも`UNKNOWN`へfail-closedする。
+
 ### Check evidenceのcanonical validation
 
 各checkは次のstatus / action / source bindingを満たさなければならない。`unknown` sourceは
