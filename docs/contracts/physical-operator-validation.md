@@ -145,7 +145,11 @@ pass checkはP5 `allow`、unavailable checkは`unavailable`、technical-invalid 
 一致し、fail checkは`hold` / `reject` / `stop`のいずれかと一致しなければならない。
 classifierはlifecycle fieldを評価する前に、check schema、実際のcheck IDの重複・unexpected ID、
 required kind、software revisionを確認する。`technical_invalid` checkはunknown sourceより先に
-`technical_invalid`へ閉じる。
+`technical_invalid`へ閉じる。さらにnested checkの`technical_invalid`は、completion timestamp、
+`operator_aborted`、procedure gateの`fail` / `unavailable`より先に分類する。したがって、技術的に
+不正なcheckとabort、clearance不足、その他のgate未成立が同時に存在する場合も、artifactは
+`technical_invalid` / `technical_invalid_check`（check側のstatus/actionは`technical_invalid` / `invalid`）
+として保持し、`aborted`、`fail`、`unavailable`、`pass`へ隠蔽・昇格しない。
 
 ## Strict artifact
 
