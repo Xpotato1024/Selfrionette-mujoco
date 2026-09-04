@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 
 import selfrionette.runtime as runtime
+import selfrionette.runtime.safety.collision_policy as collision_policy
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,6 +72,7 @@ EXPECTED_MODULES = {
         "websocket_publisher",
     },
     "safety": {
+        "collision_policy",
         "input_safety",
         "limit_resolution",
         "physical_limits",
@@ -135,6 +137,12 @@ def test_runtime_package_root_is_a_minimal_lazy_facade() -> None:
         "resolve_robot_runtime_plugin",
     }
     assert set(runtime._PUBLIC_EXPORTS) == set(runtime.__all__)
+
+
+def test_collision_safety_exposes_one_canonical_context_type() -> None:
+    assert collision_policy.__all__.count("CollisionContext") == 1
+    assert "CollisionContextIdentity" not in collision_policy.__all__
+    assert not hasattr(collision_policy, "CollisionContextIdentity")
 
 
 def test_experiment_runner_has_one_owner_and_thin_entry_point() -> None:
