@@ -151,3 +151,12 @@ failureは`unknown`とする。現在のfast_arm modelはjoint rangeをphysical 
 この契約はjoint / motor / actuator parityと後続gate向けのnormalized read-only boundsを
 扱う。self-collision、environment clearance、velocity / acceleration、singularity、physical
 actuation、serial、OSC、viewer側判定はP3以降または専用Issueのownerであり、ここでは実装しない。
+
+## MuJoCo scalar入力のfail-closed境界
+
+fast_armのMuJoCo collectorは、`mj_name2id`の結果をboolやfloat等から暗黙変換せず、整数
+scalarとして検証する。`-1`はmissing joint、それ以外の負値は不正入力とする。
+`jnt_limited`は0または1の整数・bool scalarだけを受け付け、`jnt_range`の各endpointは
+bool・文字列・非実数を除くfiniteなreal scalarとして検証してからfloatへ正規化する。
+numpyの整数・bool・実数scalarはこの型境界で扱える。malformedなmodel/dataはtyped
+`UNKNOWN`（boundなし・authorityなし）へ閉じる。

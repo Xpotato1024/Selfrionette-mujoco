@@ -8,10 +8,12 @@ resultを返す。ここではMuJoCoや設定値をphysical authorityへ昇格�
 from __future__ import annotations
 
 import math
+import operator
 import weakref
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from numbers import Real
 from threading import RLock
 from typing import Any
 
@@ -111,7 +113,7 @@ def validate_limit_resolution_identity(name: str, value: object) -> str:
 
 
 def _finite(name: str, value: object) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, Real):
         raise TypeError(f"{name} must be a finite number")
     try:
         number = float(value)
@@ -120,6 +122,34 @@ def _finite(name: str, value: object) -> float:
     if not math.isfinite(number):
         raise ValueError(f"{name} must be finite")
     return 0.0 if number == 0.0 else number
+
+
+def _exact_integer(name: str, value: object) -> int:
+    """Python boolを除く整数プロトコルscalarだけを受け付ける。"""
+
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be an exact integer scalar")
+    try:
+        return operator.index(value)
+    except TypeError as exc:
+        raise TypeError(f"{name} must be an exact integer scalar") from exc
+
+
+def _exact_binary(name: str, value: object) -> int:
+    """numpy.bool_を含む0/1の整数・bool scalarだけを受け付ける。"""
+
+    if type(value) is bool:
+        return int(value)
+    value_type = type(value)
+    if value_type.__module__ == "numpy" and value_type.__name__ in {
+        "bool",
+        "bool_",
+    }:
+        return int(bool(value))
+    integer = _exact_integer(name, value)
+    if integer not in (0, 1):
+        raise ValueError(f"{name} must be exactly 0 or 1")
+    return integer
 
 
 def _range(value: object, name: str) -> tuple[float, float]:
@@ -1218,14 +1248,28 @@ def fast_arm_mujoco_limits_to_physical_limits(
         import mujoco
 
         for name in names:
-            joint_id = int(mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name))
+            joint_id = _exact_integer(
+                f"MuJoCo joint id for {name}",
+                mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name),
+            )
             if joint_id < 0:
+                if joint_id != -1:
+                    raise ValueError(
+                        f"MuJoCo joint id for {name} must be -1 or non-negative"
+                    )
                 result.append(make_unknown_limit(name=name, quantity=LimitQuantity.POSITION, space=LimitSpace.JOINT, unit="rad", frame="fast_arm joint space", reason="joint is missing from MuJoCo model", source_kind="mujoco_jnt_range", source_id="model", revision="unknown"))
                 continue
-            if not bool(model.jnt_limited[joint_id]):
+            limited = _exact_binary(
+                f"MuJoCo jnt_limited for {name}",
+                model.jnt_limited[joint_id],
+            )
+            if limited == 0:
                 result.append(make_unknown_limit(name=name, quantity=LimitQuantity.POSITION, space=LimitSpace.JOINT, unit="rad", frame="fast_arm joint space", reason="MuJoCo joint has no limited range", source_kind="mujoco_jnt_range", source_id="model", revision="model-instance"))
                 continue
-            lower, upper = _range(tuple(float(value) for value in model.jnt_range[joint_id]), f"MuJoCo range for {name}")
+            lower, upper = _range(
+                tuple(model.jnt_range[joint_id]),
+                f"MuJoCo range for {name}",
+            )
             result.append(PhysicalLimit(name=name, quantity=LimitQuantity.POSITION, lower=lower, upper=upper, unit="rad", space=LimitSpace.JOINT, frame="fast_arm joint space", status=EvidenceStatus.PROVISIONAL, source=source))
     except (
         ImportError,
