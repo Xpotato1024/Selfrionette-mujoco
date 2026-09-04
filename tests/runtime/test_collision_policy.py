@@ -988,6 +988,16 @@ def test_provider_derived_invalid_evaluation_requires_provenance() -> None:
             "unknown_collision_pair_role",
             near_collision_margin_m=policy.near_collision_margin_m,
         )
+    with pytest.raises(ValueError, match="no provenance"):
+        CollisionEvaluation(
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
+            CollisionStatus.INVALID,
+            -0.001,
+            policy.clearance_m,
+            "provider_invalid_collision",
+            near_collision_margin_m=policy.near_collision_margin_m,
+        )
 
     invalid = CollisionEvaluation(
         "fore|upper",
