@@ -88,10 +88,21 @@ Jacobian threshold、qvel tolerance、policy identityをdeep revalidateし、値
 `policy_fingerprint`へ固定する。両resultはこのfingerprintを保持し、`policy_id` / `revision`の
 自己申告だけでは`feasible`を構成できない。fingerprint内の各dynamic limitはP2 typed DTOへ復元して
 limit source identity、effective status、evidence identityとresult fieldsをexact照合する。
-constructor bypassやnested mutation、source / sample /
-expected-joint inventoryの矛盾は`invalid`またはconstruction rejectionとなり、syntheticな
-physical authorityを作らない。resultの`feasible` / `authoritative` propertyもcanonical result
-validatorを経由し、statusやbindingを後から変更したobjectでは`False`を返す。
+各jointのvelocity / acceleration limitは重複・欠落・余分な項目を許さず、fingerprintも同じ
+canonical joint / quantity順を要求する。`maximum_gap_s`などのthresholdはfingerprint内で
+再検証され、zero、非有限値、単位・frame違いを受け付けない。P2の公開limit validatorと
+`effective_limit_status()`を再利用し、P4がsource authorityやconversion規則を複製しない。
+constructor bypassやnested mutation、source / sample / expected-joint inventoryの矛盾は
+`invalid`またはconstruction rejectionとなり、syntheticなphysical authorityを作らない。
+policy、Jacobian diagnostic、state、trajectory sample、evidence binding、両resultはconstructorで
+semantic snapshotをowner-localな外部weakref sealへ登録し、公開validator / evaluatorが現在の
+値とsealをdeep照合する。従って`object.__new__`、`object.__setattr__`、private fingerprintの
+同時書換えでも`feasible` / `authoritative`へ昇格しない。resultの`feasible` /
+`authoritative` propertyもcanonical result validatorを経由し、statusやbindingを後から変更した
+objectでは`False`を返す。FEASIBLEにはsourceへ一致する単一の`feasibility_clear` diagnosticと
+完全なlimit / Jacobian / velocity evidenceが必要である。qvelが欠落したconfigurationはcanonicalな
+`UNAVAILABLE/unavailable_qvel`、二つだけのtrajectory sampleは`UNAVAILABLE/unavailable_acceleration`
+として検証できる。
 
 ## Resultと後続compose
 

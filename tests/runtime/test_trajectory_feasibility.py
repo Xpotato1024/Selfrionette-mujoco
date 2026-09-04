@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+import selfrionette.runtime.safety.trajectory_feasibility as _trajectory_module
+
 from selfrionette.runtime.safety.physical_limits import (
     EvidenceStatus,
     LimitQuantity,
@@ -40,7 +42,7 @@ def _source(
 ) -> LimitSourceProvenance:
     resolved_source_status = status if source_status is None else source_status
     return LimitSourceProvenance(
-        source_kind="manufacturer_manual"
+        source_kind="manufacturer_document"
         if resolved_source_status is EvidenceStatus.AUTHORITATIVE
         else "software_config",
         source_id="dynamic-fixture",
@@ -530,17 +532,17 @@ def test_public_policy_validator_rejects_tampered_thresholds_and_placeholders(
 def test_public_policy_validator_deep_rejects_tampered_limit_unit_and_source() -> None:
     policy = _policy()
     object.__setattr__(policy.dynamic_limits[0], "unit", "m/s")
-    with pytest.raises(ValueError, match="unit"):
+    with pytest.raises(ValueError, match="(unit|mutated)"):
         validate_trajectory_feasibility_policy(policy)
 
     policy = _policy()
     object.__setattr__(policy.dynamic_limits[0].source, "source_id", "unknown")
-    with pytest.raises(ValueError, match="non-placeholder"):
+    with pytest.raises(ValueError, match="(non-placeholder|concrete identities)"):
         validate_trajectory_feasibility_policy(policy)
 
     policy = _policy()
     object.__setattr__(policy.dynamic_limits[0].source, "source_kind", "fixture")
-    with pytest.raises(ValueError, match="synthetic source"):
+    with pytest.raises(ValueError, match="(synthetic source|approved for physical authority)"):
         validate_trajectory_feasibility_policy(policy)
 
 
@@ -749,3 +751,147 @@ def test_legitimate_unavailable_dynamic_inputs_remain_unavailable() -> None:
     )
     assert trajectory.status is FeasibilityStatus.UNAVAILABLE
     assert trajectory.reason_code == "unavailable_acceleration"
+
+
+def test_policy_fingerprint_rejects_zero_gap_and_incomplete_limit_inventory() -> None:
+    valid = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(),
+    )
+    fingerprint = valid.policy_fingerprint
+    zero_gap = fingerprint[:5] + (0.0,) + fingerprint[6:]
+    with pytest.raises(ValueError, match="maximum_gap_s must be positive"):
+        replace(valid, policy_fingerprint=zero_gap)
+
+    raw_limits = fingerprint[2]
+    duplicate_and_missing = raw_limits[:-1] + (raw_limits[0],)
+    incomplete = fingerprint[:2] + (duplicate_and_missing,) + fingerprint[3:]
+    with pytest.raises(ValueError, match="exactly cover"):
+        replace(valid, policy_fingerprint=incomplete)
+
+
+def test_policy_requires_canonical_joint_quantity_inventory_and_external_seal() -> None:
+    policy = _policy()
+    with pytest.raises(ValueError, match="exactly cover"):
+        replace(policy, dynamic_limits=policy.dynamic_limits[:-1])
+
+    fingerprint = policy.canonical_fingerprint
+    object.__setattr__(policy, "maximum_gap_s", 0.1)
+    forged_fingerprint = fingerprint[:5] + (0.1,) + fingerprint[6:]
+    object.__setattr__(policy, "_binding_fingerprint", forged_fingerprint)
+    with pytest.raises(ValueError, match="mutated"):
+        validate_trajectory_feasibility_policy(policy)
+
+    bypassed = object.__new__(TrajectoryFeasibilityPolicy)
+    for item in fields(policy):
+        if item.name != "_binding_fingerprint":
+            object.__setattr__(bypassed, item.name, getattr(_policy(), item.name))
+    with pytest.raises(ValueError, match="fingerprint"):
+        validate_trajectory_feasibility_policy(bypassed)
+
+
+def test_result_clear_diagnostic_must_bind_to_authoritative_source() -> None:
+    valid = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        _policy(),
+    )
+    unbound_clear = FeasibilityDiagnostic("feasibility_clear", "clear")
+    with pytest.raises(ValueError, match="bound to its source"):
+        replace(valid, diagnostics=(unbound_clear,))
+
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+    with pytest.raises(ValueError, match="bound to its source"):
+        replace(trajectory, diagnostics=(unbound_clear,))
+
+
+def test_nested_constructor_bypass_and_private_rewrite_never_become_success() -> None:
+    policy = _policy()
+    valid = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        policy,
+    )
+
+    bypassed_diagnostic = object.__new__(FeasibilityDiagnostic)
+    for name, value in (
+        ("code", "feasibility_clear"),
+        ("detail", "clear"),
+        ("joint_name", None),
+        ("sample_index", None),
+        ("observed", None),
+        ("threshold", None),
+        ("provenance", valid.source_id),
+    ):
+        object.__setattr__(bypassed_diagnostic, name, value)
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        replace(valid, diagnostics=(bypassed_diagnostic,))
+
+    object.__setattr__(valid.diagnostics[0], "provenance", "forged-source")
+    assert valid.feasible is False
+    assert valid.authoritative is False
+
+    trajectory = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        policy,
+    )
+    evidence = trajectory.velocity_evidence[0]
+    object.__setattr__(evidence, "source_id", "forged-source")
+    object.__setattr__(trajectory, "_binding_fingerprint", trajectory._binding_fingerprint)
+    assert trajectory.feasible is False
+    assert trajectory.authoritative is False
+
+    bypassed_policy = object.__new__(TrajectoryFeasibilityPolicy)
+    clean_policy = _policy()
+    for item in fields(clean_policy):
+        if item.name != "_binding_fingerprint":
+            object.__setattr__(bypassed_policy, item.name, getattr(clean_policy, item.name))
+    result = evaluate_configuration_feasibility(
+        ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
+        bypassed_policy,
+    )
+    assert result.status is FeasibilityStatus.INVALID
+
+
+def test_bypassed_valid_trajectory_sample_is_typed_invalid() -> None:
+    sample = object.__new__(TrajectorySample)
+    for name, value in (
+        ("timestamp_s", 0.0),
+        ("qpos_rad", (0.0, 0.0, 0.0)),
+        ("qvel_rad_s", (0.0, 0.0, 0.0)),
+        ("jacobian", _jacobian()),
+        ("source_id", "bypassed-sample"),
+    ):
+        object.__setattr__(sample, name, value)
+    result = evaluate_trajectory_feasibility(
+        (sample, _sample(0.1, (0.1, 0.0, 0.0)), _sample(0.2, (0.2, 0.0, 0.0))),
+        _policy(),
+    )
+    assert result.status is FeasibilityStatus.INVALID
+    assert result.reason_code == "invalid_sample_binding"
+
+
+def test_public_jacobian_validator_rejects_bypass() -> None:
+    diagnostic = object.__new__(JacobianDiagnostic)
+    for name, value in (
+        ("source_id", "bypassed-jacobian"),
+        ("row_count", 3),
+        ("column_count", 3),
+        ("numeric_rank", 3),
+        ("effective_rank", 3),
+        ("minimum_singular_value", 0.5),
+        ("condition_number", 2.0),
+        ("evidence_reference", "bypassed-jacobian"),
+    ):
+        object.__setattr__(diagnostic, name, value)
+    with pytest.raises(ValueError, match="fingerprint"):
+        _trajectory_module.validate_jacobian_diagnostic(diagnostic)

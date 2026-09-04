@@ -31,6 +31,13 @@ from selfrionette.runtime.safety.collision_policy import (
     validate_collision_context,
     validate_collision_evaluation,
 )
+from selfrionette.runtime.safety.trajectory_feasibility import (
+    canonical_fast_arm_joint_space_frame,
+    validate_configuration_feasibility_result,
+    validate_jacobian_diagnostic,
+    validate_trajectory_feasibility_policy,
+    validate_trajectory_feasibility_result,
+)
 
 __all__ = [
     "EvidenceStatus",
@@ -58,4 +65,9 @@ __all__ = [
     "validate_collision_check_result",
     "validate_collision_context",
     "validate_collision_evaluation",
+    "canonical_fast_arm_joint_space_frame",
+    "validate_configuration_feasibility_result",
+    "validate_jacobian_diagnostic",
+    "validate_trajectory_feasibility_policy",
+    "validate_trajectory_feasibility_result",
 ]
