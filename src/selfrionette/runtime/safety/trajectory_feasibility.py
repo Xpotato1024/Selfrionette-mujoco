@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import weakref
 from collections.abc import Sequence
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from threading import RLock
@@ -72,6 +73,46 @@ _FEASIBILITY_SEALS: dict[
     int, tuple[weakref.ReferenceType[object], tuple[object, ...]]
 ] = {}
 _FEASIBILITY_SEALS_LOCK = RLock()
+_EVALUATOR_RESULT_TOKEN: Final[object] = object()
+_EVALUATOR_RESULT_CONTEXT: ContextVar[object | None] = ContextVar(
+    "trajectory_feasibility_evaluator_result_context",
+    default=None,
+)
+
+
+class _IdentitySeal:
+    """Nested identity binding whose equality is based on object identity."""
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: object) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return type(other) is _IdentitySeal and self.value is other.value
+
+
+@dataclass(frozen=True, slots=True)
+class _OriginBinding:
+    identity: _IdentitySeal
+    semantic: tuple[object, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _EvaluatorResultOrigin:
+    kind: str
+    policy: _OriginBinding
+    dynamic_limits: tuple[_OriginBinding, ...]
+    source_state: _OriginBinding | None = None
+    samples: tuple[_OriginBinding, ...] = ()
+    jacobians: tuple[_OriginBinding | None, ...] = ()
+    diagnostics: tuple[_OriginBinding, ...] = ()
+    velocity_evidence: tuple[_OriginBinding, ...] = ()
+
+
+_FEASIBILITY_ORIGINS: dict[
+    int, tuple[weakref.ReferenceType[object], _EvaluatorResultOrigin]
+] = {}
 
 
 def _release_feasibility_seal(
@@ -112,6 +153,53 @@ def _validate_feasibility_seal(
 ) -> None:
     if _sealed_feasibility_snapshot(value) != snapshot:
         raise ValueError("feasibility DTO has been mutated or bypassed")
+
+
+def _release_feasibility_origin(
+    key: int,
+    reference: weakref.ReferenceType[object],
+) -> None:
+    with _FEASIBILITY_SEALS_LOCK:
+        entry = _FEASIBILITY_ORIGINS.get(key)
+        if entry is not None and entry[0] is reference:
+            _FEASIBILITY_ORIGINS.pop(key, None)
+
+
+def _register_feasibility_origin(
+    value: object,
+    origin: _EvaluatorResultOrigin,
+) -> None:
+    key = id(value)
+    reference = weakref.ref(
+        value,
+        lambda ref, key=key: _release_feasibility_origin(key, ref),
+    )
+    with _FEASIBILITY_SEALS_LOCK:
+        _FEASIBILITY_ORIGINS[key] = (reference, origin)
+
+
+def _sealed_feasibility_origin(value: object) -> _EvaluatorResultOrigin:
+    key = id(value)
+    with _FEASIBILITY_SEALS_LOCK:
+        entry = _FEASIBILITY_ORIGINS.get(key)
+        if entry is None or entry[0]() is not value:
+            raise ValueError("feasibility result has no evaluator origin seal")
+        return entry[1]
+
+
+def _origin_binding(
+    value: object,
+    semantic: tuple[object, ...],
+) -> _OriginBinding:
+    return _OriginBinding(_IdentitySeal(value), semantic)
+
+
+def _binding_matches(
+    binding: _OriginBinding,
+    value: object,
+    semantic: tuple[object, ...],
+) -> bool:
+    return binding.identity.value is value and binding.semantic == semantic
 
 
 def canonical_fast_arm_joint_space_frame() -> str:
@@ -186,7 +274,9 @@ def _state_snapshot(state: object) -> tuple[object, ...]:
     return (
         getattr(state, "qpos_rad"),
         getattr(state, "qvel_rad_s"),
-        None if jacobian is None else _jacobian_snapshot(jacobian),
+        None
+        if jacobian is None
+        else (_IdentitySeal(jacobian), _jacobian_snapshot(jacobian)),
         getattr(state, "source_id"),
     )
 
@@ -197,7 +287,9 @@ def _sample_snapshot(sample: object) -> tuple[object, ...]:
         getattr(sample, "timestamp_s"),
         getattr(sample, "qpos_rad"),
         getattr(sample, "qvel_rad_s"),
-        None if jacobian is None else _jacobian_snapshot(jacobian),
+        None
+        if jacobian is None
+        else (_IdentitySeal(jacobian), _jacobian_snapshot(jacobian)),
         getattr(sample, "source_id"),
     )
 
@@ -223,6 +315,18 @@ def _velocity_evidence_snapshot(evidence: object) -> tuple[object, ...]:
         getattr(evidence, "sample_index", None),
         getattr(evidence, "source_id", None),
     )
+
+
+def _diagnostic_identity_snapshot(
+    diagnostic: object,
+) -> tuple[object, ...]:
+    return (_IdentitySeal(diagnostic), _diagnostic_snapshot(diagnostic))
+
+
+def _velocity_evidence_identity_snapshot(
+    evidence: object,
+) -> tuple[object, ...]:
+    return (_IdentitySeal(evidence), _velocity_evidence_snapshot(evidence))
 
 
 def _dynamic_limit_contract_error(
@@ -285,7 +389,7 @@ def _validate_jacobian_diagnostic(
 ) -> tuple[object, ...]:
     """Jacobian summaryをconstructorとpublic evaluatorで同じ規則で再検証する。"""
 
-    if not isinstance(diagnostic, JacobianDiagnostic):
+    if type(diagnostic) is not JacobianDiagnostic:
         raise TypeError("jacobian must be JacobianDiagnostic")
     source_id = _identity_text("source_id", getattr(diagnostic, "source_id", None))
     evidence_reference = getattr(diagnostic, "evidence_reference", None)
@@ -344,7 +448,7 @@ def _validate_jacobian_diagnostic(
 def _validate_dynamic_limit(limit: PhysicalLimit) -> tuple[object, ...]:
     """P2のtyped limit validatorを通り、P4固有のdynamic契約だけを確認する。"""
 
-    if not isinstance(limit, PhysicalLimit):
+    if type(limit) is not PhysicalLimit:
         raise TypeError("dynamic_limits must contain PhysicalLimit values")
     # source status、conversion origin、bounds、external sealはP2が所有する。
     # P4は別のstatus / provenance validatorを複製せず、canonical resultを消費する。
@@ -409,7 +513,7 @@ def _validate_trajectory_feasibility_policy(
 ) -> tuple[object, ...]:
     """Trajectory policyの唯一のcanonical validator。"""
 
-    if not isinstance(policy, TrajectoryFeasibilityPolicy):
+    if type(policy) is not TrajectoryFeasibilityPolicy:
         raise TypeError("policy must be TrajectoryFeasibilityPolicy")
     names = _joint_inventory("joint_names", policy.joint_names)
     limits = policy.dynamic_limits
@@ -563,7 +667,7 @@ class ConfigurationState:
             raise TypeError("qpos_rad must be a tuple")
         if self.qvel_rad_s is not None and not isinstance(self.qvel_rad_s, tuple):
             raise TypeError("qvel_rad_s must be a tuple or None")
-        if self.jacobian is not None and not isinstance(self.jacobian, JacobianDiagnostic):
+        if self.jacobian is not None and type(self.jacobian) is not JacobianDiagnostic:
             raise TypeError("jacobian must be JacobianDiagnostic or None")
         try:
             _validate_configuration_state(self, initialize=True)
@@ -589,7 +693,7 @@ class TrajectorySample:
             raise TypeError("qpos_rad must be a tuple")
         if self.qvel_rad_s is not None and not isinstance(self.qvel_rad_s, tuple):
             raise TypeError("qvel_rad_s must be a tuple or None")
-        if self.jacobian is not None and not isinstance(self.jacobian, JacobianDiagnostic):
+        if self.jacobian is not None and type(self.jacobian) is not JacobianDiagnostic:
             raise TypeError("jacobian must be JacobianDiagnostic or None")
         _text("source_id", self.source_id)
         try:
@@ -607,7 +711,7 @@ def _validate_configuration_state(
     validate_jacobian: bool = True,
     check_seal: bool = True,
 ) -> None:
-    if not isinstance(state, ConfigurationState):
+    if type(state) is not ConfigurationState:
         raise TypeError("state must be ConfigurationState")
     qpos = getattr(state, "qpos_rad", None)
     if not isinstance(qpos, tuple) or not qpos:
@@ -636,7 +740,7 @@ def _validate_trajectory_sample(
     *,
     initialize: bool = False,
 ) -> None:
-    if not isinstance(sample, TrajectorySample):
+    if type(sample) is not TrajectorySample:
         raise TypeError("sample must be TrajectorySample")
     _finite("timestamp_s", getattr(sample, "timestamp_s", None))
     qpos = getattr(sample, "qpos_rad", None)
@@ -970,7 +1074,7 @@ def _normalize_velocity_evidence(
     if not isinstance(value, tuple):
         raise TypeError("velocity_evidence must be a tuple")
     evidence = tuple(value)
-    if not all(isinstance(item, VelocityEvidenceBinding) for item in evidence):
+    if not all(type(item) is VelocityEvidenceBinding for item in evidence):
         raise TypeError("velocity_evidence must contain VelocityEvidenceBinding values")
     for item in evidence:
         _validate_velocity_evidence_binding(item)
@@ -1079,7 +1183,7 @@ def _configuration_result_snapshot(result: object) -> tuple[object, ...]:
         status=getattr(result, "status"),
         reason_code=getattr(result, "reason_code"),
         diagnostics=tuple(
-            _diagnostic_snapshot(item) for item in getattr(result, "diagnostics")
+            _diagnostic_identity_snapshot(item) for item in getattr(result, "diagnostics")
         ),
         source_identity=getattr(result, "source_id"),
         sample_count=None,
@@ -1104,7 +1208,7 @@ def _trajectory_result_snapshot(result: object) -> tuple[object, ...]:
         status=getattr(result, "status"),
         reason_code=getattr(result, "reason_code"),
         diagnostics=tuple(
-            _diagnostic_snapshot(item) for item in getattr(result, "diagnostics")
+            _diagnostic_identity_snapshot(item) for item in getattr(result, "diagnostics")
         ),
         source_identity=None,
         sample_count=getattr(result, "sample_count"),
@@ -1118,7 +1222,7 @@ def _trajectory_result_snapshot(result: object) -> tuple[object, ...]:
         qvel_available=getattr(result, "qvel_available"),
         jacobian_available=getattr(result, "jacobian_available"),
         velocity_evidence=tuple(
-            _velocity_evidence_snapshot(item)
+            _velocity_evidence_identity_snapshot(item)
             for item in getattr(result, "velocity_evidence")
         ),
         policy_fingerprint=getattr(result, "policy_fingerprint"),
@@ -1315,7 +1419,7 @@ def _validate_feasibility_diagnostic(
 ) -> None:
     """Resultへ入るnested diagnosticもconstructor bypass後に再検証する。"""
 
-    if not isinstance(diagnostic, FeasibilityDiagnostic):
+    if type(diagnostic) is not FeasibilityDiagnostic:
         raise TypeError("diagnostic must be FeasibilityDiagnostic")
     _text("diagnostic.code", getattr(diagnostic, "code", None))
     _text("diagnostic.detail", getattr(diagnostic, "detail", None))
@@ -1346,7 +1450,7 @@ def _validate_velocity_evidence_binding(
     *,
     initialize: bool = False,
 ) -> None:
-    if not isinstance(evidence, VelocityEvidenceBinding):
+    if type(evidence) is not VelocityEvidenceBinding:
         raise TypeError("velocity evidence must be VelocityEvidenceBinding")
     kind = getattr(evidence, "kind", None)
     if not isinstance(kind, VelocityEvidenceKind):
@@ -1444,14 +1548,14 @@ def _validate_configuration_result(
     *,
     initialize: bool = False,
 ) -> None:
-    if not isinstance(result, ConfigurationFeasibilityResult):
+    if type(result) is not ConfigurationFeasibilityResult:
         raise TypeError("result must be ConfigurationFeasibilityResult")
     if not isinstance(result.status, FeasibilityStatus):
         raise TypeError("status must be FeasibilityStatus")
     reason_code = _text("reason_code", result.reason_code)
     source_id = _identity_text("source_id", result.source_id)
     if not isinstance(result.diagnostics, tuple) or not all(
-        isinstance(item, FeasibilityDiagnostic) for item in result.diagnostics
+        type(item) is FeasibilityDiagnostic for item in result.diagnostics
     ):
         raise TypeError("diagnostics must contain FeasibilityDiagnostic values")
     for item in result.diagnostics:
@@ -1503,6 +1607,9 @@ def _validate_configuration_result(
         )
         if (source_ids, bound_statuses, evidence_ids) != expected_bindings:
             raise ValueError("result dynamic limit binding does not match canonical policy fingerprint")
+    if result.status is FeasibilityStatus.FEASIBLE and initialize:
+        if _EVALUATOR_RESULT_CONTEXT.get() is not _EVALUATOR_RESULT_TOKEN:
+            raise ValueError("feasible result must be created by the evaluator")
     if result.status is FeasibilityStatus.UNAVAILABLE and reason_code == "unavailable_qvel":
         if qvel_available is True:
             raise ValueError("unavailable_qvel result cannot claim qvel availability")
@@ -1578,6 +1685,8 @@ def _validate_configuration_result(
         or policy_fingerprint[11] != policy_revision
     ):
         raise ValueError("result policy identity does not match canonical policy fingerprint")
+    if result.status is FeasibilityStatus.FEASIBLE:
+        _validate_feasibility_origin(result, kind="configuration")
 
 
 def _validate_trajectory_result(
@@ -1585,7 +1694,7 @@ def _validate_trajectory_result(
     *,
     initialize: bool = False,
 ) -> None:
-    if not isinstance(result, TrajectoryFeasibilityResult):
+    if type(result) is not TrajectoryFeasibilityResult:
         raise TypeError("result must be TrajectoryFeasibilityResult")
     if not isinstance(result.status, FeasibilityStatus):
         raise TypeError("status must be FeasibilityStatus")
@@ -1593,7 +1702,7 @@ def _validate_trajectory_result(
     if isinstance(result.sample_count, bool) or not isinstance(result.sample_count, int) or result.sample_count < 0:
         raise ValueError("sample_count must be a non-negative integer")
     if not isinstance(result.diagnostics, tuple) or not all(
-        isinstance(item, FeasibilityDiagnostic) for item in result.diagnostics
+        type(item) is FeasibilityDiagnostic for item in result.diagnostics
     ):
         raise TypeError("diagnostics must contain FeasibilityDiagnostic values")
     for item in result.diagnostics:
@@ -1672,6 +1781,9 @@ def _validate_trajectory_result(
         )
         if (source_limit_ids, bound_statuses, evidence_ids) != expected_bindings:
             raise ValueError("result dynamic limit binding does not match canonical policy fingerprint")
+    if result.status is FeasibilityStatus.FEASIBLE and initialize:
+        if _EVALUATOR_RESULT_CONTEXT.get() is not _EVALUATOR_RESULT_TOKEN:
+            raise ValueError("feasible result must be created by the evaluator")
     if initialize:
         object.__setattr__(result, "reason_code", reason_code)
         object.__setattr__(result, "source_ids", source_ids)
@@ -1745,6 +1857,290 @@ def _validate_trajectory_result(
         or policy_fingerprint[11] != policy_revision
     ):
         raise ValueError("result policy identity does not match canonical policy fingerprint")
+    if result.status is FeasibilityStatus.FEASIBLE:
+        _validate_feasibility_origin(result, kind="trajectory")
+
+
+def _origin_dynamic_limit_bindings(
+    policy: TrajectoryFeasibilityPolicy,
+    *,
+    trajectory: bool,
+) -> tuple[_OriginBinding, ...]:
+    quantities = (
+        {LimitQuantity.VELOCITY, LimitQuantity.ACCELERATION}
+        if trajectory
+        else {LimitQuantity.VELOCITY}
+    )
+    return tuple(
+        _origin_binding(limit, _validate_dynamic_limit(limit))
+        for limit in policy.dynamic_limits
+        if limit.quantity in quantities
+    )
+
+
+def _configuration_result_origin(
+    result: ConfigurationFeasibilityResult,
+    state: ConfigurationState,
+    policy: TrajectoryFeasibilityPolicy,
+) -> _EvaluatorResultOrigin:
+    if type(state) is not ConfigurationState:
+        raise TypeError("configuration origin state must be ConfigurationState")
+    if type(policy) is not TrajectoryFeasibilityPolicy:
+        raise TypeError("configuration origin policy must be TrajectoryFeasibilityPolicy")
+    _validate_configuration_state(state)
+    policy_fingerprint = _validate_trajectory_feasibility_policy(policy)
+    jacobian = (
+        (_origin_binding(state.jacobian, _jacobian_snapshot(state.jacobian)),)
+        if state.jacobian is not None
+        else (None,)
+    )
+    return _EvaluatorResultOrigin(
+        kind="configuration",
+        policy=_origin_binding(policy, policy_fingerprint),
+        dynamic_limits=_origin_dynamic_limit_bindings(policy, trajectory=False),
+        source_state=_origin_binding(state, _state_snapshot(state)),
+        jacobians=jacobian,
+        diagnostics=tuple(
+            _origin_binding(item, _diagnostic_snapshot(item))
+            for item in result.diagnostics
+        ),
+    )
+
+
+def _trajectory_result_origin(
+    result: TrajectoryFeasibilityResult,
+    samples: Sequence[TrajectorySample],
+    policy: TrajectoryFeasibilityPolicy,
+) -> _EvaluatorResultOrigin:
+    if type(policy) is not TrajectoryFeasibilityPolicy:
+        raise TypeError("trajectory origin policy must be TrajectoryFeasibilityPolicy")
+    normalized_samples = tuple(samples)
+    if not all(type(sample) is TrajectorySample for sample in normalized_samples):
+        raise TypeError("trajectory origin samples must contain TrajectorySample values")
+    for sample in normalized_samples:
+        _validate_trajectory_sample(sample)
+    policy_fingerprint = _validate_trajectory_feasibility_policy(policy)
+    return _EvaluatorResultOrigin(
+        kind="trajectory",
+        policy=_origin_binding(policy, policy_fingerprint),
+        dynamic_limits=_origin_dynamic_limit_bindings(policy, trajectory=True),
+        samples=tuple(
+            _origin_binding(sample, _sample_snapshot(sample))
+            for sample in normalized_samples
+        ),
+        jacobians=tuple(
+            None
+            if sample.jacobian is None
+            else _origin_binding(sample.jacobian, _jacobian_snapshot(sample.jacobian))
+            for sample in normalized_samples
+        ),
+        diagnostics=tuple(
+            _origin_binding(item, _diagnostic_snapshot(item))
+            for item in result.diagnostics
+        ),
+        velocity_evidence=tuple(
+            _origin_binding(item, _velocity_evidence_snapshot(item))
+            for item in result.velocity_evidence
+        ),
+    )
+
+
+def _validate_feasibility_origin(
+    result: ConfigurationFeasibilityResult | TrajectoryFeasibilityResult,
+    *,
+    kind: str,
+) -> None:
+    """FEASIBLE resultがowner evaluatorのtyped inputsから生成されたことを検証する。"""
+
+    origin = _sealed_feasibility_origin(result)
+    if origin.kind != kind:
+        raise ValueError("feasible result origin kind is invalid")
+    policy = origin.policy.identity.value
+    if type(policy) is not TrajectoryFeasibilityPolicy:
+        raise ValueError("feasible result origin policy is invalid")
+    policy_fingerprint = _validate_trajectory_feasibility_policy(policy)
+    if not _binding_matches(origin.policy, policy, policy_fingerprint):
+        raise ValueError("feasible result policy origin was mutated or replaced")
+    expected_limits = _origin_dynamic_limit_bindings(
+        policy,
+        trajectory=kind == "trajectory",
+    )
+    if len(origin.dynamic_limits) != len(expected_limits):
+        raise ValueError("feasible result dynamic limit origin is incomplete")
+    for bound, expected in zip(origin.dynamic_limits, expected_limits, strict=True):
+        limit = bound.identity.value
+        if not _binding_matches(bound, limit, _validate_dynamic_limit(limit)):
+            raise ValueError("feasible result dynamic limit origin was mutated")
+        if bound != expected:
+            raise ValueError("feasible result dynamic limit origin was replaced")
+
+    if kind == "configuration":
+        if type(result) is not ConfigurationFeasibilityResult:
+            raise TypeError("configuration origin requires ConfigurationFeasibilityResult")
+        if origin.source_state is None:
+            raise ValueError("feasible configuration result has no source state origin")
+        state = origin.source_state.identity.value
+        if type(state) is not ConfigurationState:
+            raise ValueError("feasible configuration result source state is invalid")
+        _validate_configuration_state(state)
+        if not _binding_matches(origin.source_state, state, _state_snapshot(state)):
+            raise ValueError("feasible configuration source state was mutated or replaced")
+        if result.source_id != state.source_id:
+            raise ValueError("feasible configuration source identity does not match origin")
+        if result.qvel_available is not (state.qvel_rad_s is not None):
+            raise ValueError("feasible configuration qvel evidence does not match origin")
+        if result.jacobian_available is not (state.jacobian is not None):
+            raise ValueError("feasible configuration Jacobian evidence does not match origin")
+        expected_jacobian_sources = (
+            (state.jacobian.source_id,) if state.jacobian is not None else ()
+        )
+        expected_jacobian_evidence = (
+            (state.jacobian.evidence_reference,)
+            if state.jacobian is not None
+            else ()
+        )
+        if (
+            result.jacobian_source_ids != expected_jacobian_sources
+            or result.jacobian_evidence_ids != expected_jacobian_evidence
+        ):
+            raise ValueError("feasible configuration Jacobian identity does not match origin")
+        expected_jacobian = (
+            _origin_binding(state.jacobian, _jacobian_snapshot(state.jacobian))
+            if state.jacobian is not None
+            else None
+        )
+        if len(origin.jacobians) != 1 or origin.jacobians[0] != expected_jacobian:
+            raise ValueError("feasible configuration Jacobian origin is invalid")
+    else:
+        if type(result) is not TrajectoryFeasibilityResult:
+            raise TypeError("trajectory origin requires TrajectoryFeasibilityResult")
+        if not origin.samples or len(origin.samples) != result.sample_count:
+            raise ValueError("feasible trajectory sample origin is incomplete")
+        samples = tuple(binding.identity.value for binding in origin.samples)
+        if not all(type(sample) is TrajectorySample for sample in samples):
+            raise ValueError("feasible trajectory source sample is invalid")
+        for binding, sample in zip(origin.samples, samples, strict=True):
+            _validate_trajectory_sample(sample)
+            if not _binding_matches(binding, sample, _sample_snapshot(sample)):
+                raise ValueError("feasible trajectory source sample was mutated or replaced")
+        expected_source_ids = tuple(sample.source_id for sample in samples)
+        expected_qvel = tuple(sample.qvel_rad_s is not None for sample in samples)
+        expected_jacobian_available = tuple(sample.jacobian is not None for sample in samples)
+        if (
+            result.source_ids != expected_source_ids
+            or result.qvel_available != expected_qvel
+            or result.jacobian_available != expected_jacobian_available
+        ):
+            raise ValueError("feasible trajectory source evidence does not match origin")
+        expected_jacobian_sources = (
+            tuple(sample.jacobian.source_id for sample in samples)
+            if all(sample.jacobian is not None for sample in samples)
+            else ()
+        )
+        expected_jacobian_evidence = (
+            tuple(sample.jacobian.evidence_reference for sample in samples)
+            if all(sample.jacobian is not None for sample in samples)
+            else ()
+        )
+        if (
+            result.jacobian_source_ids != expected_jacobian_sources
+            or result.jacobian_evidence_ids != expected_jacobian_evidence
+        ):
+            raise ValueError("feasible trajectory Jacobian identity does not match origin")
+        expected_jacobians = tuple(
+            None
+            if sample.jacobian is None
+            else _origin_binding(sample.jacobian, _jacobian_snapshot(sample.jacobian))
+            for sample in samples
+        )
+        if origin.jacobians != expected_jacobians:
+            raise ValueError("feasible trajectory Jacobian origin is invalid")
+
+    if len(origin.diagnostics) != len(result.diagnostics):
+        raise ValueError("feasible result diagnostic origin is incomplete")
+    for binding, diagnostic in zip(origin.diagnostics, result.diagnostics, strict=True):
+        _validate_feasibility_diagnostic(diagnostic)
+        if not _binding_matches(binding, diagnostic, _diagnostic_snapshot(diagnostic)):
+            raise ValueError("feasible result diagnostic was mutated or replaced")
+    if kind == "trajectory":
+        trajectory_result = result
+        assert type(trajectory_result) is TrajectoryFeasibilityResult
+        if len(origin.velocity_evidence) != len(trajectory_result.velocity_evidence):
+            raise ValueError("feasible trajectory velocity evidence origin is incomplete")
+        for binding, evidence in zip(
+            origin.velocity_evidence,
+            trajectory_result.velocity_evidence,
+            strict=True,
+        ):
+            _validate_velocity_evidence_binding(evidence)
+            if not _binding_matches(
+                binding,
+                evidence,
+                _velocity_evidence_snapshot(evidence),
+            ):
+                raise ValueError("feasible trajectory velocity evidence was mutated or replaced")
+
+
+def _evaluator_configuration_result(
+    *,
+    state: ConfigurationState | None,
+    policy: TrajectoryFeasibilityPolicy | None,
+    **kwargs: object,
+) -> ConfigurationFeasibilityResult:
+    status = kwargs.get("status")
+    is_feasible = status is FeasibilityStatus.FEASIBLE or status == FeasibilityStatus.FEASIBLE.value
+    context_token = (
+        _EVALUATOR_RESULT_CONTEXT.set(_EVALUATOR_RESULT_TOKEN)
+        if is_feasible
+        else None
+    )
+    try:
+        result = ConfigurationFeasibilityResult(**kwargs)
+    finally:
+        if context_token is not None:
+            _EVALUATOR_RESULT_CONTEXT.reset(context_token)
+    if state is not None and policy is not None:
+        try:
+            origin = _configuration_result_origin(result, state, policy)
+        except Exception:
+            if result.status is FeasibilityStatus.FEASIBLE:
+                raise
+        else:
+            _register_feasibility_origin(result, origin)
+    if result.status is FeasibilityStatus.FEASIBLE:
+        _validate_feasibility_origin(result, kind="configuration")
+    return result
+
+
+def _evaluator_trajectory_result(
+    *,
+    samples: Sequence[TrajectorySample] | None,
+    policy: TrajectoryFeasibilityPolicy | None,
+    **kwargs: object,
+) -> TrajectoryFeasibilityResult:
+    status = kwargs.get("status")
+    is_feasible = status is FeasibilityStatus.FEASIBLE or status == FeasibilityStatus.FEASIBLE.value
+    context_token = (
+        _EVALUATOR_RESULT_CONTEXT.set(_EVALUATOR_RESULT_TOKEN)
+        if is_feasible
+        else None
+    )
+    try:
+        result = TrajectoryFeasibilityResult(**kwargs)
+    finally:
+        if context_token is not None:
+            _EVALUATOR_RESULT_CONTEXT.reset(context_token)
+    if samples is not None and policy is not None:
+        try:
+            origin = _trajectory_result_origin(result, samples, policy)
+        except Exception:
+            if result.status is FeasibilityStatus.FEASIBLE:
+                raise
+        else:
+            _register_feasibility_origin(result, origin)
+    if result.status is FeasibilityStatus.FEASIBLE:
+        _validate_feasibility_origin(result, kind="trajectory")
+    return result
 
 
 def validate_configuration_feasibility_result(
@@ -2148,7 +2544,7 @@ def _evaluate_configuration_feasibility_checked(
     このgeneric moduleでは第二のposition-limit SoTを作らない。
     """
 
-    if not isinstance(state, ConfigurationState) or not isinstance(policy, TrajectoryFeasibilityPolicy):
+    if type(state) is not ConfigurationState or type(policy) is not TrajectoryFeasibilityPolicy:
         raise TypeError("state and policy must use typed contracts")
     policy_fingerprint = _validate_trajectory_feasibility_policy(policy)
     _identity_text("state.source_id", state.source_id)
@@ -2224,7 +2620,9 @@ def _evaluate_configuration_feasibility_checked(
                 provenance=state.source_id,
             )
         )
-    return ConfigurationFeasibilityResult(
+    return _evaluator_configuration_result(
+        state=state,
+        policy=policy,
         status=status,
         reason_code=reason,
         diagnostics=tuple(diagnostics),
@@ -2253,7 +2651,7 @@ def evaluate_configuration_feasibility(
 ) -> ConfigurationFeasibilityResult:
     """configuration評価の公開boundary。malformed typed inputはINVALIDへ閉じる。"""
 
-    if not isinstance(state, ConfigurationState) or not isinstance(policy, TrajectoryFeasibilityPolicy):
+    if type(state) is not ConfigurationState or type(policy) is not TrajectoryFeasibilityPolicy:
         raise TypeError("state and policy must use typed contracts")
     try:
         return _evaluate_configuration_feasibility_checked(state, policy)
@@ -2271,7 +2669,7 @@ def _evaluate_trajectory_feasibility_checked(
 ) -> TrajectoryFeasibilityResult:
     """finite candidate trajectoryのcadence / velocity / acceleration / Jacobianを評価する。"""
 
-    if not isinstance(policy, TrajectoryFeasibilityPolicy):
+    if type(policy) is not TrajectoryFeasibilityPolicy:
         raise TypeError("policy must use TrajectoryFeasibilityPolicy")
     policy_fingerprint = _validate_trajectory_feasibility_policy(policy)
     if not isinstance(samples, Sequence) or isinstance(samples, (str, bytes)):
@@ -2282,40 +2680,44 @@ def _evaluate_trajectory_feasibility_checked(
     )
     if len(samples) < 2:
         source_ids = tuple(
-            sample.source_id if isinstance(sample, TrajectorySample) else "trajectory"
+            sample.source_id if type(sample) is TrajectorySample else "trajectory"
             for sample in samples
         )
-        return TrajectoryFeasibilityResult(
-            FeasibilityStatus.INVALID,
-            "invalid_trajectory_length",
-            len(samples),
-            (FeasibilityDiagnostic("invalid_trajectory_length", "at least two trajectory samples are required"),),
-            source_ids,
-            bound_statuses,
-            policy.joint_names,
-            policy.policy_id,
-            policy.policy_revision,
-            limit_source_ids,
-            bound_evidence_ids,
-            tuple(sample.qvel_rad_s is not None for sample in samples if isinstance(sample, TrajectorySample)),
-            tuple(sample.jacobian is not None for sample in samples if isinstance(sample, TrajectorySample)),
+        return _evaluator_trajectory_result(
+            samples=samples,
+            policy=policy,
+            status=FeasibilityStatus.INVALID,
+            reason_code="invalid_trajectory_length",
+            sample_count=len(samples),
+            diagnostics=(FeasibilityDiagnostic("invalid_trajectory_length", "at least two trajectory samples are required"),),
+            source_ids=source_ids,
+            bound_statuses=bound_statuses,
+            expected_joint_names=policy.joint_names,
+            policy_id=policy.policy_id,
+            policy_revision=policy.policy_revision,
+            limit_source_ids=limit_source_ids,
+            bound_evidence_ids=bound_evidence_ids,
+            qvel_available=tuple(sample.qvel_rad_s is not None for sample in samples if type(sample) is TrajectorySample),
+            jacobian_available=tuple(sample.jacobian is not None for sample in samples if type(sample) is TrajectorySample),
             policy_fingerprint=policy_fingerprint,
         )
-    if not all(isinstance(sample, TrajectorySample) for sample in samples):
-        return TrajectoryFeasibilityResult(
-            FeasibilityStatus.INVALID,
-            "invalid_trajectory_sample",
-            len(samples),
-            (FeasibilityDiagnostic("invalid_trajectory_sample", "all samples must be TrajectorySample values"),),
-            ("trajectory",) * len(samples),
-            bound_statuses,
-            policy.joint_names,
-            policy.policy_id,
-            policy.policy_revision,
-            limit_source_ids,
-            bound_evidence_ids,
-            (False,) * len(samples),
-            (False,) * len(samples),
+    if not all(type(sample) is TrajectorySample for sample in samples):
+        return _evaluator_trajectory_result(
+            samples=samples,
+            policy=policy,
+            status=FeasibilityStatus.INVALID,
+            reason_code="invalid_trajectory_sample",
+            sample_count=len(samples),
+            diagnostics=(FeasibilityDiagnostic("invalid_trajectory_sample", "all samples must be TrajectorySample values"),),
+            source_ids=("trajectory",) * len(samples),
+            bound_statuses=bound_statuses,
+            expected_joint_names=policy.joint_names,
+            policy_id=policy.policy_id,
+            policy_revision=policy.policy_revision,
+            limit_source_ids=limit_source_ids,
+            bound_evidence_ids=bound_evidence_ids,
+            qvel_available=(False,) * len(samples),
+            jacobian_available=(False,) * len(samples),
             policy_fingerprint=policy_fingerprint,
         )
     diagnostics: list[FeasibilityDiagnostic] = []
@@ -2542,7 +2944,9 @@ def _evaluate_trajectory_feasibility_checked(
                 provenance=source_ids[0],
             )
         )
-    return TrajectoryFeasibilityResult(
+    return _evaluator_trajectory_result(
+        samples=samples,
+        policy=policy,
         status=status,
         reason_code=reason,
         sample_count=len(samples),
@@ -2575,7 +2979,7 @@ def evaluate_trajectory_feasibility(
 ) -> TrajectoryFeasibilityResult:
     """trajectory評価の公開boundary。malformed typed inputはINVALIDへ閉じる。"""
 
-    if not isinstance(policy, TrajectoryFeasibilityPolicy):
+    if type(policy) is not TrajectoryFeasibilityPolicy:
         raise TypeError("policy must use TrajectoryFeasibilityPolicy")
     try:
         return _evaluate_trajectory_feasibility_checked(samples, policy)
