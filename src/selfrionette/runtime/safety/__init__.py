@@ -41,7 +41,9 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
 from selfrionette.runtime.safety.physical_safety_core import (
     validate_bounded_safety_sampling_result,
     validate_safety_decision,
+    validate_safety_decision_projection,
     validate_safety_input,
+    validate_safety_projection,
     validate_safety_reason,
 )
 
@@ -78,6 +80,8 @@ __all__ = [
     "validate_trajectory_feasibility_result",
     "validate_bounded_safety_sampling_result",
     "validate_safety_decision",
+    "validate_safety_decision_projection",
     "validate_safety_input",
+    "validate_safety_projection",
     "validate_safety_reason",
 ]

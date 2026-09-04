@@ -44,6 +44,13 @@ invariantを再検証する。P5のauthority/completenessはprivate binding fing
 constructor時に登録したowner-local weak identity sealとpublic fieldsの再導出値を照合するため、
 objectを迂回生成したりpublic fieldsとprivate hintを同時に書き換えたりしてもvalidにはならない。
 reason、component assessment、action、aggregate provenanceを再検証する。
+canonicalなallow `SafetyReason` / `SafetyComponentAssessment` / `SafetyDecision`は、P5 composition
+factoryのprivate construction contextから生成されたものだけを受け付け、生成時にexternal origin
+sealも登録する。したがってdirect constructor、subclass、`object.__new__`、`copy` / `deepcopy`、
+同値nested DTO差替え、private fingerprintのcoherent rewriteではallowへ昇格できない。
+下流artifactがDTO全体を再構築できない場合は、公開`validate_safety_projection`（別名
+`validate_safety_decision_projection`）へaction、`component:reason_code` identity、provenanceの
+typed primitiveを渡し、P5の単一mappingとallow時のconcrete provenanceを再利用する。
 通常の`SafetyDecision`は`limit`、`collision`、`dynamic`の3 assessmentを必須とし、actionとreasonは
 このcanonical順序からのみ受け付け、最高優先度assessmentからのみ導出できる。入力エラー用の`input:invalid_safety_input`だけが空assessmentを
 許容する。`allowed`は呼出し時にもvalidatorを通るため、constructor後のaction、reason、nested assessment
