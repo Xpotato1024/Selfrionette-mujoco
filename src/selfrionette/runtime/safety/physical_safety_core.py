@@ -8,6 +8,8 @@ allowへfallbackしないphysical-output前のruntime boundaryである。
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import copy
 from dataclasses import dataclass, field
 from enum import Enum
@@ -15,6 +17,7 @@ import weakref
 from threading import RLock
 
 from selfrionette.runtime.safety.collision_policy import (
+    CollisionContractViolation,
     CollisionContext,
     CollisionCheckResult,
     CollisionEvaluation,
@@ -79,6 +82,18 @@ _P5_SEALS: dict[
 ] = {}
 _P5_SEALS_LOCK = RLock()
 
+# canonical allow DTOはpublic constructorを直接authority sourceにしない。
+# composition factoryだけがこのprivate tokenを短時間設定し、生成物は別の
+# weak identity registryへ登録する。tokenやprivate fingerprintをcallerが
+# 書き換えても、origin registryは更新されない。
+_P5_CONSTRUCTION_CONTEXT: ContextVar[object | None] = ContextVar(
+    "_P5_CONSTRUCTION_CONTEXT",
+    default=None,
+)
+_P5_CONSTRUCTION_TOKEN = object()
+_P5_ORIGINS: dict[int, tuple[weakref.ReferenceType[object], str]] = {}
+_P5_ORIGINS_LOCK = RLock()
+
 
 def _release_p5_seal(
     key: int,
@@ -106,6 +121,43 @@ def _validate_p5_seal(value: object, snapshot: tuple[object, ...]) -> None:
         entry = _P5_SEALS.get(key)
         if entry is None or entry[0]() is not value or entry[1] != snapshot:
             raise ValueError("physical safety DTO is not constructor-sealed")
+
+
+def _release_p5_origin(
+    key: int,
+    reference: weakref.ReferenceType[object],
+) -> None:
+    with _P5_ORIGINS_LOCK:
+        entry = _P5_ORIGINS.get(key)
+        if entry is not None and entry[0] is reference:
+            _P5_ORIGINS.pop(key, None)
+
+
+def _register_p5_origin(value: object, kind: str) -> None:
+    key = id(value)
+    reference = weakref.ref(
+        value,
+        lambda ref, key=key: _release_p5_origin(key, ref),
+    )
+    with _P5_ORIGINS_LOCK:
+        _P5_ORIGINS[key] = (reference, kind)
+
+
+def _validate_p5_origin(value: object, kind: str) -> None:
+    key = id(value)
+    with _P5_ORIGINS_LOCK:
+        entry = _P5_ORIGINS.get(key)
+        if entry is None or entry[0]() is not value or entry[1] != kind:
+            raise ValueError(f"{kind} canonical allow value lacks composition origin")
+
+
+@contextmanager
+def _p5_construction_scope():
+    token = _P5_CONSTRUCTION_CONTEXT.set(_P5_CONSTRUCTION_TOKEN)
+    try:
+        yield
+    finally:
+        _P5_CONSTRUCTION_CONTEXT.reset(token)
 
 
 def _text(name: str, value: object) -> str:
@@ -394,6 +446,97 @@ def _reason_semantic_snapshot(reason: SafetyReason) -> tuple[object, ...]:
     )
 
 
+def _nested_result_semantic_snapshot(value: object) -> tuple[object, ...]:
+    """P2/P3/P4 nested DTOのidentityに依存しない最小semantic seal。"""
+
+    try:
+        if type(value) is LimitResolutionResult:
+            return (
+                "limit",
+                value.robot_id,
+                value.expected_joint_names,
+                tuple(
+                    (
+                        id(bound),
+                        bound.joint_name,
+                        bound.status,
+                        bound.lower_rad,
+                        bound.upper_rad,
+                        bound.source_names,
+                    )
+                    for bound in value.bounds
+                ),
+                tuple(
+                    (
+                        id(relation),
+                        relation.source_space,
+                        relation.joint_name,
+                        relation.source_name,
+                        relation.relation_id,
+                    )
+                    for relation in value.conversion_relations
+                ),
+            )
+        if type(value) is CollisionCheckResult:
+            context = value.context
+            return (
+                "collision",
+                id(context),
+                context.robot_id,
+                context.model_id,
+                context.policy_id,
+                context.inventory_id,
+                context.expected_pair_ids,
+                value.status,
+                tuple(
+                    (
+                        id(evaluation),
+                        evaluation.pair_id,
+                        evaluation.kind,
+                        evaluation.status,
+                        evaluation.distance_m,
+                        evaluation.reason_code,
+                        evaluation.provenance,
+                    )
+                    for evaluation in value.evaluations
+                ),
+            )
+        if type(value) is ConfigurationFeasibilityResult:
+            return (
+                "configuration",
+                value.status,
+                value.reason_code,
+                value.source_id,
+                value.expected_joint_names,
+                value.policy_id,
+                value.policy_revision,
+                value.limit_source_ids,
+                value.bound_statuses,
+                value.bound_evidence_ids,
+            )
+        if type(value) is TrajectoryFeasibilityResult:
+            return (
+                "trajectory",
+                value.status,
+                value.reason_code,
+                value.sample_count,
+                value.source_ids,
+                value.expected_joint_names,
+                value.policy_id,
+                value.policy_revision,
+                value.limit_source_ids,
+                value.bound_statuses,
+                value.bound_evidence_ids,
+                tuple(
+                    (id(evidence), evidence.kind, evidence.sample_index, evidence.source_id)
+                    for evidence in value.velocity_evidence
+                ),
+            )
+    except Exception:
+        return ("unreadable", type(value))
+    return ("unsupported", type(value))
+
+
 def _input_semantic_snapshot(value: SafetyInput) -> tuple[object, ...]:
     """SafetyInputの候補/provenance/nested object identityを外部sealする。"""
 
@@ -401,12 +544,13 @@ def _input_semantic_snapshot(value: SafetyInput) -> tuple[object, ...]:
         value.candidate_id,
         value.provenance,
         tuple(
-            id(nested) if nested is not None else None
-            for nested in (
-                value.limit_resolution,
-                value.collision,
-                value.dynamic,
+            (
+                id(nested),
+                _nested_result_semantic_snapshot(nested),
             )
+            if nested is not None
+            else None
+            for nested in (value.limit_resolution, value.collision, value.dynamic)
         ),
     )
 
@@ -417,7 +561,7 @@ def _assessment_semantic_snapshot(
     return (
         assessment.component,
         assessment.action,
-        _reason_semantic_snapshot(assessment.reason),
+        (id(assessment.reason), _reason_semantic_snapshot(assessment.reason)),
     )
 
 
@@ -425,8 +569,11 @@ def _decision_semantic_snapshot(decision: SafetyDecision) -> tuple[object, ...]:
     return (
         decision.candidate_id,
         decision.action,
-        _reason_semantic_snapshot(decision.reason),
-        tuple(_assessment_semantic_snapshot(item) for item in decision.assessments),
+        (id(decision.reason), _reason_semantic_snapshot(decision.reason)),
+        tuple(
+            (id(item), _assessment_semantic_snapshot(item))
+            for item in decision.assessments
+        ),
         decision.provenance,
     )
 
@@ -435,9 +582,16 @@ def _bounded_semantic_snapshot(
     result: BoundedSafetySamplingResult,
 ) -> tuple[object, ...]:
     return (
-        tuple(_decision_semantic_snapshot(item) for item in result.decisions),
+        tuple(
+            (id(item), _decision_semantic_snapshot(item))
+            for item in result.decisions
+        ),
         result.first_non_allow_index,
-        _reason_semantic_snapshot(result.reason) if result.reason is not None else None,
+        (
+            (id(result.reason), _reason_semantic_snapshot(result.reason))
+            if result.reason is not None
+            else None
+        ),
         result.provenance,
     )
 
@@ -1147,11 +1301,12 @@ def _assessment_from_reason(
         action = _COMPONENT_REASON_ACTIONS[component][reason_code]
     except (KeyError, TypeError) as exc:
         raise ValueError("unknown component reason code") from exc
-    return SafetyComponentAssessment(
-        component,
-        action,
-        _reason(component, reason_code, message, provenance),
-    )
+    with _p5_construction_scope():
+        return SafetyComponentAssessment(
+            component,
+            action,
+            _reason(component, reason_code, message, provenance),
+        )
 
 
 _INVALID_INPUT_REASON_CODES = frozenset({
@@ -1199,10 +1354,15 @@ def _validate_safety_reason(
         raise ValueError("operator_message must be a non-empty string")
     canonical_provenance = _canonical_provenance(provenance, "reason provenance")
     fingerprint = (reason_code, component, operator_message, canonical_provenance)
+    canonical_allow = reason_code in _CANONICAL_ALLOW_REASON_CODES
     if initialize:
+        if canonical_allow and _P5_CONSTRUCTION_CONTEXT.get() is not _P5_CONSTRUCTION_TOKEN:
+            raise ValueError("canonical allow reason requires composition origin")
         object.__setattr__(reason, "provenance", canonical_provenance)
         object.__setattr__(reason, "_binding_fingerprint", fingerprint)
         _register_p5_seal(reason, _reason_semantic_snapshot(reason))
+        if canonical_allow:
+            _register_p5_origin(reason, "reason")
         return
     try:
         bound = reason._binding_fingerprint
@@ -1211,6 +1371,8 @@ def _validate_safety_reason(
     if bound != fingerprint:
         raise ValueError("reason binding was mutated")
     _validate_p5_seal(reason, _reason_semantic_snapshot(reason))
+    if canonical_allow:
+        _validate_p5_origin(reason, "reason")
 
 
 def _validate_safety_input_contract(
@@ -1294,9 +1456,14 @@ def _validate_safety_component_assessment(
     if reason.reason_code in _CANONICAL_ALLOW_REASON_CODES and not reason.provenance:
         raise ValueError("canonical allow assessment requires concrete provenance")
     fingerprint = (component, action, reason._binding_fingerprint)
+    canonical_allow = action is SafetyDecisionAction.ALLOW
     if initialize:
+        if canonical_allow and _P5_CONSTRUCTION_CONTEXT.get() is not _P5_CONSTRUCTION_TOKEN:
+            raise ValueError("canonical allow assessment requires composition origin")
         object.__setattr__(assessment, "_binding_fingerprint", fingerprint)
         _register_p5_seal(assessment, _assessment_semantic_snapshot(assessment))
+        if canonical_allow:
+            _register_p5_origin(assessment, "assessment")
         return
     try:
         bound = assessment._binding_fingerprint
@@ -1305,6 +1472,8 @@ def _validate_safety_component_assessment(
     if bound != fingerprint:
         raise ValueError("assessment binding was mutated")
     _validate_p5_seal(assessment, _assessment_semantic_snapshot(assessment))
+    if canonical_allow:
+        _validate_p5_origin(assessment, "assessment")
 
 
 def _validate_safety_decision(
@@ -1372,10 +1541,15 @@ def _validate_safety_decision(
         tuple(item._binding_fingerprint for item in assessments),
         canonical_provenance,
     )
+    canonical_allow = action is SafetyDecisionAction.ALLOW
     if initialize:
+        if canonical_allow and _P5_CONSTRUCTION_CONTEXT.get() is not _P5_CONSTRUCTION_TOKEN:
+            raise ValueError("canonical allow decision requires composition origin")
         object.__setattr__(decision, "provenance", canonical_provenance)
         object.__setattr__(decision, "_binding_fingerprint", fingerprint)
         _register_p5_seal(decision, _decision_semantic_snapshot(decision))
+        if canonical_allow:
+            _register_p5_origin(decision, "decision")
         return
     try:
         bound = decision._binding_fingerprint
@@ -1384,6 +1558,8 @@ def _validate_safety_decision(
     if bound != fingerprint:
         raise ValueError("decision binding was mutated")
     _validate_p5_seal(decision, _decision_semantic_snapshot(decision))
+    if canonical_allow:
+        _validate_p5_origin(decision, "decision")
 
 
 def _validate_bounded_safety_result(
@@ -1491,13 +1667,17 @@ def evaluate_physical_safety(safety_input: SafetyInput) -> SafetyDecision:
                 }
             )
         )
-        return SafetyDecision(
-            safety_input.candidate_id,
-            selected.action,
-            selected.reason,
-            assessments,
-            provenance,
-        )
+        with _p5_construction_scope():
+            return SafetyDecision(
+                safety_input.candidate_id,
+                selected.action,
+                selected.reason,
+                assessments,
+                provenance,
+            )
+    except CollisionContractViolation:
+        # malformed P3 context/evaluation is user data at this boundary.
+        return invalid_input()
     except Exception:
         # user/data-derived malformed fields must never escape the safety boundary.
         return invalid_input()
@@ -1533,6 +1713,54 @@ def validate_safety_reason(reason: SafetyReason) -> SafetyReason:
 
     _validate_safety_reason(reason)
     return reason
+
+
+def validate_safety_projection(
+    action: SafetyDecisionAction | str,
+    reason_identity: str,
+    provenance: tuple[str, ...],
+) -> tuple[SafetyDecisionAction, str, tuple[str, ...]]:
+    """P5 assessmentのaction / reason identity / provenanceを公開検証する。"""
+
+    try:
+        canonical_action = (
+            action
+            if type(action) is SafetyDecisionAction
+            else SafetyDecisionAction(action)
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("projection action is invalid") from exc
+    if type(reason_identity) is not str or not reason_identity or reason_identity != reason_identity.strip():
+        raise ValueError("projection reason identity is invalid")
+    parts = reason_identity.split(":")
+    if len(parts) != 2 or not all(parts):
+        raise ValueError("projection reason identity must be component:reason_code")
+    try:
+        component = SafetyComponent(parts[0])
+    except ValueError as exc:
+        raise ValueError("projection component is invalid") from exc
+    if component is SafetyComponent.INPUT:
+        raise ValueError("projection must identify a component assessment")
+    reason_code = parts[1]
+    if not all(
+        character.isascii()
+        and (character.islower() or character.isdigit() or character == "_")
+        for character in reason_code
+    ) or not reason_code[0].islower():
+        raise ValueError("projection reason code must use lowercase underscore notation")
+    expected_action = _COMPONENT_REASON_ACTIONS.get(component, {}).get(reason_code)
+    if expected_action is None:
+        raise ValueError("projection reason code is unknown for component")
+    if canonical_action is not expected_action:
+        raise ValueError("projection action does not match canonical reason mapping")
+    canonical_provenance = _canonical_provenance(provenance, "projection provenance")
+    if canonical_action is SafetyDecisionAction.ALLOW and not canonical_provenance:
+        raise ValueError("allow projection requires concrete provenance")
+    return canonical_action, reason_identity, canonical_provenance
+
+
+# downstream operator-validationが名称を明示する場合も同じvalidatorを使う。
+validate_safety_decision_projection = validate_safety_projection
 
 
 def validate_safety_input(value: SafetyInput) -> SafetyInput:
@@ -1585,6 +1813,8 @@ __all__ = [
     "evaluate_physical_safety",
     "validate_bounded_safety_sampling_result",
     "validate_safety_decision",
+    "validate_safety_decision_projection",
     "validate_safety_input",
+    "validate_safety_projection",
     "validate_safety_reason",
 ]
