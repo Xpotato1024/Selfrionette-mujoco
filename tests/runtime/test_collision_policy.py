@@ -220,6 +220,15 @@ def _same_body_inventory() -> GeometryInventory:
     )
 
 
+def _all_structural_inventory() -> GeometryInventory:
+    return GeometryInventory(
+        (
+            GeometryIdentity("upper_shell", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("fore_shell", "arm_body", GeometryRole.ROBOT),
+        )
+    )
+
+
 def test_same_body_robot_geoms_reach_canonical_pair_inventory() -> None:
     inventory = _same_body_inventory()
     pair_by_id = {pair.pair_id: pair for pair in inventory.pairs()}
@@ -318,6 +327,105 @@ def test_same_body_explicit_exclusion_is_complete_clear_evidence() -> None:
     assert result.status is CollisionStatus.CLEAR
 
 
+def test_all_structural_exclusions_remain_canonical_clear() -> None:
+    inventory = _all_structural_inventory()
+    exclusion = CollisionExclusion(
+        "fore_shell|upper_shell",
+        "known structural overlap",
+        "geometry-review-all-structural-001",
+    )
+
+    result = _evaluate(inventory, (), _policy(exclusion))
+
+    assert result.status is CollisionStatus.CLEAR
+    assert result.reason_code == "collision_clear"
+    assert result.clear
+    assert len(result.evaluations) == 1
+    evaluation = result.evaluations[0]
+    assert evaluation.status is CollisionStatus.CLEAR
+    assert evaluation.reason_code == "explicit_structural_exclusion"
+    assert evaluation.provenance == exclusion.evidence_reference
+
+
+def test_tampered_all_structural_inventory_returns_invalid_for_every_expected_pair() -> None:
+    inventory = _all_structural_inventory()
+    policy = _policy(
+        CollisionExclusion(
+            "fore_shell|upper_shell",
+            "known structural overlap",
+            "geometry-review-all-structural-002",
+        )
+    )
+    context = _context(inventory, policy)
+    replacement = GeometryIdentity("fore_shell", "arm_body", GeometryRole.ROBOT)
+    object.__setattr__(inventory, "geometries", (inventory.geometries[0], replacement))
+
+    result = evaluate_collision_configuration(
+        inventory,
+        (),
+        policy,
+        context,
+    )
+
+    assert result.status is CollisionStatus.INVALID
+    assert result.reason_code == "collision_inventory_binding_invalid"
+    assert tuple(item.pair_id for item in result.evaluations) == context.expected_pair_ids
+    assert all(item.status is CollisionStatus.INVALID for item in result.evaluations)
+    assert all(
+        item.reason_code == "collision_inventory_binding_invalid"
+        for item in result.evaluations
+    )
+
+
+def test_stale_all_structural_context_returns_invalid_for_every_expected_pair() -> None:
+    inventory = _all_structural_inventory()
+    policy = _policy(
+        CollisionExclusion(
+            "fore_shell|upper_shell",
+            "known structural overlap",
+            "geometry-review-all-structural-004",
+        )
+    )
+    context = _context(inventory, policy)
+    object.__setattr__(context, "inventory_revision", "stale-inventory-revision")
+
+    result = evaluate_collision_configuration(
+        inventory,
+        (),
+        policy,
+        context,
+    )
+
+    assert result.status is CollisionStatus.INVALID
+    assert result.reason_code == "collision_context_binding_invalid"
+    assert tuple(item.pair_id for item in result.evaluations) == context.expected_pair_ids
+    assert all(item.status is CollisionStatus.INVALID for item in result.evaluations)
+
+
+def test_unexpected_observation_with_all_structural_exclusions_returns_invalid() -> None:
+    inventory = _all_structural_inventory()
+    policy = _policy(
+        CollisionExclusion(
+            "fore_shell|upper_shell",
+            "known structural overlap",
+            "geometry-review-all-structural-003",
+        )
+    )
+    context = _context(inventory, policy)
+
+    result = evaluate_collision_configuration(
+        inventory,
+        (CollisionObservation("ghost|upper_shell", 1.0, "fixture"),),
+        policy,
+        context,
+    )
+
+    assert result.status is CollisionStatus.INVALID
+    assert result.reason_code == "collision_observation_pair_not_in_inventory"
+    assert tuple(item.pair_id for item in result.evaluations) == context.expected_pair_ids
+    assert all(item.status is CollisionStatus.INVALID for item in result.evaluations)
+
+
 @pytest.mark.parametrize(
     ("status", "kind", "distance", "reason_code", "provenance"),
     (
@@ -354,13 +462,6 @@ def test_same_body_explicit_exclusion_is_complete_clear_evidence() -> None:
             CollisionKind.STRUCTURAL_PROXIMITY,
             None,
             "collision_observation_unavailable",
-            None,
-        ),
-        (
-            CollisionStatus.INVALID,
-            CollisionKind.STRUCTURAL_PROXIMITY,
-            None,
-            "collision_context_binding_invalid",
             None,
         ),
         (
@@ -686,6 +787,92 @@ def test_geometry_inventory_builder_rejects_overlapping_body_role_sets() -> None
             robot_body_names=("arm",),
             environment_body_names=("arm",),
         )
+
+
+def test_mujoco_geometry_inventory_adapter_normalizes_short_array(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_mujoco = SimpleNamespace(
+        mjtObj=SimpleNamespace(mjOBJ_GEOM="geom", mjOBJ_BODY="body"),
+        mj_id2name=lambda model, object_type, item_id: (
+            model.geom_names[item_id]
+            if object_type == "geom"
+            else model.body_names[item_id]
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+    model = SimpleNamespace(
+        ngeom=2,
+        geom_names=("upper", "fore"),
+        body_names=("arm_body",),
+        geom_bodyid=(0,),
+    )
+
+    with pytest.raises(ValueError, match="MuJoCo geometry inventory failed"):
+        build_mujoco_geometry_inventory(
+            model,
+            robot_body_names=("arm_body",),
+        )
+
+
+def test_mujoco_geometry_inventory_adapter_normalizes_overflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_mujoco = SimpleNamespace(
+        mjtObj=SimpleNamespace(mjOBJ_GEOM="geom", mjOBJ_BODY="body"),
+        mj_id2name=lambda _model, _object_type, _item_id: "unused",
+    )
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+    model = SimpleNamespace(ngeom=float("inf"))
+
+    with pytest.raises(ValueError, match="MuJoCo geometry inventory failed"):
+        build_mujoco_geometry_inventory(
+            model,
+            robot_body_names=("arm_body",),
+        )
+
+
+def test_mujoco_contact_adapter_normalizes_short_array(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("arm", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("floor", "floor_body", GeometryRole.ENVIRONMENT),
+        )
+    )
+    model, _ = _mujoco_contact_fixture(
+        monkeypatch,
+        ("arm", "floor"),
+        distance=0.1,
+    )
+    data = SimpleNamespace(
+        ncon=2,
+        contact=(SimpleNamespace(geom1=0, geom2=1, dist=0.1),),
+    )
+
+    with pytest.raises(ValueError, match="MuJoCo contact observation failed"):
+        read_mujoco_contact_observations(model, data, inventory)
+
+
+def test_mujoco_contact_adapter_normalizes_overflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("arm", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("floor", "floor_body", GeometryRole.ENVIRONMENT),
+        )
+    )
+    model, _ = _mujoco_contact_fixture(
+        monkeypatch,
+        ("arm", "floor"),
+        distance=0.1,
+    )
+    data = SimpleNamespace(ncon=float("inf"), contact=())
+
+    with pytest.raises(ValueError, match="MuJoCo contact observation failed"):
+        read_mujoco_contact_observations(model, data, inventory)
 
 
 def test_mujoco_adapter_marks_only_task_object_contact(

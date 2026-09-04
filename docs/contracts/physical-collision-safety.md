@@ -47,7 +47,9 @@ pairのroleを参照して`task_object_contact`だけに`contact=True`を設定�
 `self_interference`、`structural_proximity`、`environment_collision`は`contact=False`のまま
 MuJoCoのsigned distanceを保持するため、負のdistanceはそれぞれのpenetration reasonへ到達する。
 inventory外のpair、unknown role、missing geom、malformed distanceはadapterでfail-closedに停止し、
-`invalid_collision_observation`へ変換してclearへ昇格させない。
+`invalid_collision_observation`へ変換してclearへ昇格させない。malformedなmodel/data配列の
+`IndexError`と数値範囲の`OverflowError`もadapter境界でtyped `ValueError`へ正規化するが、
+`SystemExit`、`KeyboardInterrupt`その他の`BaseException`は捕捉しない。
 
 ## Clearance semantics
 
@@ -135,6 +137,12 @@ malformedなcontextは既存sealから復元できる場合だけtyped `invalid`
 `CollisionContractViolation`で停止する。空inventoryもclearへ推測せず、identity不足としてfail-closedに停止する。
 aggregateはinvalid、collision、near-collision、contact、unavailable、unknownの順でfail-closedに
 優先する。
+
+invalid、stale、inventory / policy binding mismatch、unexpected observationなどの内部fail-closed
+経路は、`expected_pair_ids`の全pairに`INVALID` evaluationを構成し、aggregateのcanonical derivationと
+一致させる。すべてのpairがstructural exclusionとして宣言されていても、invalid経路でsyntheticな
+`CLEAR` evaluationを混在させない。一方、正常なcomplete evaluationでは、宣言済みexclusionを
+`CLEAR + explicit_structural_exclusion`として保持し、valid-pathのexclusion provenanceを消去しない。
 
 `BoundedCollisionTrajectoryResult`は空でない`sample_results`、それと同じ順序・長さのfrozenな
 `sample_indices`（factoryでは`(0, ..., n - 1)`）を保持する。全sampleは同一のCollisionContext
