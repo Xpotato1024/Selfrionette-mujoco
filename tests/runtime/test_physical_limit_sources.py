@@ -15,6 +15,9 @@ from selfrionette.runtime.safety.physical_limits import (
     classify_source_status,
     effective_limit_status,
     make_unknown_limit,
+    validate_limit_conversion,
+    validate_limit_source,
+    validate_physical_limit,
     validate_envelope,
 )
 
@@ -199,6 +202,37 @@ def test_envelope_serialization_is_deterministic_and_round_trips() -> None:
     assert validate_envelope(envelope) is envelope
 
 
+def test_envelope_requires_non_empty_limits() -> None:
+    with pytest.raises(ValueError, match="limits must be non-empty"):
+        PhysicalSafetyEnvelope(
+            envelope_id="empty",
+            envelope_version=1,
+            robot_id="fast_arm",
+            model_id="fast_arm",
+            limits=(),
+        )
+
+
+def test_envelope_boundary_rejects_nested_replacement_and_bypass() -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    replacement = _joint_limit()
+    object.__setattr__(envelope, "limits", (replacement,))
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        envelope.to_dict()
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        validate_envelope(envelope)
+
+    bypassed = object.__new__(PhysicalSafetyEnvelope)
+    with pytest.raises((AttributeError, TypeError, ValueError)):
+        bypassed.to_json_bytes()
+
+
 def test_projected_limit_envelope_round_trips_through_canonical_decoder() -> None:
     projected = PhysicalLimit(
         name="joint_1",
@@ -216,6 +250,7 @@ def test_projected_limit_envelope_round_trips_through_canonical_decoder() -> Non
             gear_ratio=2.0,
             sign=-1.0,
             offset=0.25,
+            source_name="motor_1",
         ),
     )
     envelope = PhysicalSafetyEnvelope(
@@ -226,7 +261,38 @@ def test_projected_limit_envelope_round_trips_through_canonical_decoder() -> Non
         limits=(projected,),
     )
 
-    assert PhysicalSafetyEnvelope.from_json_bytes(envelope.to_json_bytes()) == envelope
+    encoded = envelope.to_json_bytes()
+    raw = json.loads(encoded)
+    assert raw["limits"][0]["conversion"]["source_name"] == "motor_1"
+    assert PhysicalSafetyEnvelope.from_json_bytes(encoded) == envelope
+    del raw["limits"][0]["conversion"]["source_name"]
+    with pytest.raises(ValueError, match="source_name"):
+        PhysicalSafetyEnvelope.from_json_bytes(
+            json.dumps(raw, separators=(",", ":")).encode("utf-8")
+        )
+
+
+def test_public_p2_validators_reject_subclass_bypasses() -> None:
+    class SourceSubclass(LimitSourceProvenance):
+        pass
+
+    class ConversionSubclass(LimitConversionProvenance):
+        pass
+
+    class LimitSubclass(PhysicalLimit):
+        pass
+
+    class EnvelopeSubclass(PhysicalSafetyEnvelope):
+        pass
+
+    for dto_type, validator in (
+        (SourceSubclass, validate_limit_source),
+        (ConversionSubclass, validate_limit_conversion),
+        (LimitSubclass, validate_physical_limit),
+        (EnvelopeSubclass, validate_envelope),
+    ):
+        with pytest.raises(TypeError):
+            validator(object.__new__(dto_type))
 
 
 def test_envelope_rejects_unknown_fields_and_bom() -> None:
@@ -305,6 +371,29 @@ def test_constructor_bypassed_source_or_limit_cannot_become_authoritative() -> N
     object.__setattr__(limit, "status", EvidenceStatus.AUTHORITATIVE)
     assert not limit.is_authoritative
     assert effective_limit_status(limit) is EvidenceStatus.INVALID
+
+
+def test_limit_rejects_same_semantic_nested_source_or_conversion_replacement() -> None:
+    limit = _joint_limit()
+    replacement_source = _source()
+    object.__setattr__(limit, "source", replacement_source)
+    assert not limit.is_authoritative
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        limit.to_dict()
+
+    limit = _joint_limit()
+    bypassed_source = object.__new__(LimitSourceProvenance)
+    object.__setattr__(limit, "source", bypassed_source)
+    assert not limit.is_authoritative
+    with pytest.raises((AttributeError, TypeError, ValueError)):
+        limit.to_dict()
+
+    limit = _joint_limit()
+    replacement_conversion = LimitConversionProvenance.identity(LimitSpace.JOINT)
+    object.__setattr__(limit, "conversion", replacement_conversion)
+    assert not limit.is_authoritative
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        limit.to_dict()
 
 
 def test_external_source_seal_rejects_coherent_private_snapshot_rewrite() -> None:

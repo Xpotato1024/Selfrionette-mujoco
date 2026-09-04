@@ -38,6 +38,9 @@ gear ratioはnon-zero、signは`-1`または`1`、すべての数値はfiniteで
 `source_name`は入力`PhysicalLimit.name`と、`joint_name`は期待するcanonical joint identityと
 必ず一致しなければならない。source identityまたはrelation identityの重複・曖昧なfallbackは
 拒否する。同一jointへ複数の異なるsourceを投影することはparity比較のために許可する。
+projection provenanceにも入力sourceの`source_name`をtypedに保持し、
+`LimitResolutionResult`はrelationとparity conversionのsource nameを完全一致させる。
+relation IDだけが一致する投影や、別source名を持つconversionは解決されない。
 limitとrelationの`unit`は完全一致を必須とし、暗黙のdegree / radianなどのunit変換は行わない。
 明示的なunit変換relationがない不一致は`unknown`へ移行し、zero、TOML値、identity relationを
 暗黙適用しない。
@@ -111,14 +114,18 @@ authorityを推測しない。unresolved statusは両boundを`None`とし、reas
 `LimitResolutionResult`には各ownerのcanonical deep validatorがあり、constructorと公開の
 authority / serialization / lookup accessorがnested valueを再検証する。通常のfrozen dataclass
 変更はできないうえ、`object.__new__` / `object.__setattr__`でconstructorを迂回した値や、
-constructor後にnested source・limit・relation・parity・expected inventoryを差し替えた値は、
+constructor後にnested source・conversion・limit・relation・parity・bound・expected inventoryを差し替えた値は、
 保存したcanonical snapshotとの不一致としてauthorityから除外する。これはPythonの実行時に
 完全な敵対的メモリ改変を防ぐ仕組みではないが、公開DTOのbypass経路では`authoritative`へ
 昇格しない。なおsnapshotはDTO内のhintに過ぎず、authorityを決める唯一の値ではない。
 ownerはconstructor時に正規化内容をDTO object identityへ外部sealとして登録し、validatorは
-現在内容と外部sealの一致も要求する。このためpublic fieldとprivate hintの両方を差し替えても
+現在内容とnested object identityを含む外部sealの一致も要求する。このためpublic fieldとprivate
+hintの両方を差し替えても
 sealを更新できず、`object.__new__`で未登録にしたDTOもauthorityにならない。source nameはtyped
 sourceから`kind:id@revision[unit=...]`として導出し、自由文字列でstatusやauthorityを申告できない。
+`PhysicalSafetyEnvelope`も空でないlimits、各nested `PhysicalLimit`のdeep validity、重複のない
+inventoryを要求し、`to_dict` / `to_json_bytes` / lookupは外部sealを再検証する。JSON decodeは
+復元した各objectへ新しいsealを登録するため、validなprojected envelopeのround-tripは保持される。
 
 ## fast_arm projection
 

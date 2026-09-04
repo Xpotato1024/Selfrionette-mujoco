@@ -205,6 +205,15 @@ def _is_placeholder_identity(value: str) -> bool:
     return value.casefold() in _PLACEHOLDER_IDENTITIES
 
 
+def validate_concrete_limit_identity(name: str, value: object) -> str:
+    """具体的なlimit relationをbindするidentityを検証する。"""
+
+    result = _text(name, value)
+    if _is_placeholder_identity(result):
+        raise ValueError(f"{name} must be a concrete identity")
+    return result
+
+
 def _finite_or_none(name: str, value: object) -> float | None:
     if value is None:
         return None
@@ -330,6 +339,7 @@ class LimitConversionProvenance:
     gear_ratio: float | None = None
     sign: float | None = None
     offset: float | None = None
+    source_name: str | None = None
     _canonical_snapshot: tuple[object, ...] = field(
         init=False, repr=False, compare=False
     )
@@ -339,6 +349,8 @@ class LimitConversionProvenance:
         target_space = _enum_value(LimitSpace, "target_space", self.target_space)
         _text("method", self.method)
         _text("relation_id", self.relation_id)
+        if self.source_name is not None:
+            validate_concrete_limit_identity("source_name", self.source_name)
         ratio = _finite_or_none("gear_ratio", self.gear_ratio)
         sign = _finite_or_none("sign", self.sign)
         offset = _finite_or_none("offset", self.offset)
@@ -381,6 +393,7 @@ class LimitConversionProvenance:
         gear_ratio: float,
         sign: float,
         offset: float,
+        source_name: str,
     ) -> "LimitConversionProvenance":
         """JointSpaceConversionが生成するcanonical projection provenance。"""
 
@@ -393,13 +406,14 @@ class LimitConversionProvenance:
             gear_ratio,
             sign,
             offset,
+            source_name,
         )
         _register_conversion_origin(conversion, "projected")
         return conversion
 
     def to_dict(self) -> dict[str, object]:
         validate_limit_conversion(self)
-        return {
+        result: dict[str, object] = {
             "source_space": self.source_space.value,
             "target_space": self.target_space.value,
             "method": self.method,
@@ -408,6 +422,9 @@ class LimitConversionProvenance:
             "sign": self.sign,
             "offset": self.offset,
         }
+        if self.source_name is not None:
+            result["source_name"] = self.source_name
+        return result
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
@@ -438,11 +455,11 @@ class PhysicalLimit:
         _text("unit", self.unit)
         _text("frame", self.frame)
         status = _enum_value(EvidenceStatus, "status", self.status)
-        if not isinstance(self.source, LimitSourceProvenance):
+        if type(self.source) is not LimitSourceProvenance:
             raise TypeError("source must be LimitSourceProvenance")
         if self.conversion is None:
             conversion = LimitConversionProvenance.identity(space)
-        elif not isinstance(self.conversion, LimitConversionProvenance):
+        elif type(self.conversion) is not LimitConversionProvenance:
             raise TypeError("conversion must be LimitConversionProvenance or None")
         else:
             conversion = self.conversion
@@ -544,6 +561,7 @@ def _conversion_snapshot(
         conversion.gear_ratio,
         conversion.sign,
         conversion.offset,
+        conversion.source_name,
     )
 
 
@@ -557,8 +575,8 @@ def _limit_snapshot(limit: PhysicalLimit) -> tuple[object, ...]:
         limit.space,
         limit.frame,
         limit.status,
-        _source_snapshot(limit.source),
-        _conversion_snapshot(limit.conversion),
+        (id(limit.source), _source_snapshot(limit.source)),
+        (id(limit.conversion), _conversion_snapshot(limit.conversion)),
         limit.reason,
     )
 
@@ -566,7 +584,7 @@ def _limit_snapshot(limit: PhysicalLimit) -> tuple[object, ...]:
 def _validate_limit_source(source: object) -> LimitSourceProvenance:
     """bypass経路も検査するsource provenanceのcanonical deep validator。"""
 
-    if not isinstance(source, LimitSourceProvenance):
+    if type(source) is not LimitSourceProvenance:
         raise TypeError("source must be LimitSourceProvenance")
     source_kind = _source_kind(source.source_kind)
     source_id = _text("source_id", source.source_id)
@@ -609,12 +627,17 @@ def _validate_conversion_provenance(
 ) -> LimitConversionProvenance:
     """conversion metadataのcanonical deep validator。"""
 
-    if not isinstance(conversion, LimitConversionProvenance):
+    if type(conversion) is not LimitConversionProvenance:
         raise TypeError("conversion must be LimitConversionProvenance")
     source_space = _enum_value(LimitSpace, "source_space", conversion.source_space)
     target_space = _enum_value(LimitSpace, "target_space", conversion.target_space)
     method = _text("method", conversion.method)
     relation_id = _text("relation_id", conversion.relation_id)
+    source_name = (
+        None
+        if conversion.source_name is None
+        else validate_concrete_limit_identity("source_name", conversion.source_name)
+    )
     ratio = _finite_or_none("gear_ratio", conversion.gear_ratio)
     sign = _finite_or_none("sign", conversion.sign)
     offset = _finite_or_none("offset", conversion.offset)
@@ -630,6 +653,7 @@ def _validate_conversion_provenance(
             or ratio != 1.0
             or sign != 1.0
             or offset != 0.0
+            or source_name is not None
         ):
             raise ValueError("same-space conversion must be canonical identity")
     else:
@@ -639,8 +663,7 @@ def _validate_conversion_provenance(
             raise ValueError("non-identity conversion method is not canonical")
         if ratio is None or sign is None or offset is None:
             raise ValueError("non-identity conversion requires concrete parameters")
-        if _is_placeholder_identity(relation_id):
-            raise ValueError("non-identity conversion requires concrete relation_id")
+        validate_concrete_limit_identity("relation_id", relation_id)
     expected = (
         source_space,
         target_space,
@@ -649,6 +672,7 @@ def _validate_conversion_provenance(
         ratio,
         sign,
         offset,
+        source_name,
     )
     if _sealed_physical_snapshot(conversion) != expected:
         raise ValueError("conversion provenance has been mutated or bypassed")
@@ -670,12 +694,14 @@ def _validate_conversion_origin(
             raise ValueError("same-space conversion must use canonical identity origin")
     elif origin != "projected":
         raise ValueError("cross-space conversion must use canonical projection origin")
+    elif conversion.source_name is None:
+        raise ValueError("non-identity conversion requires concrete source_name")
 
 
 def _validate_physical_limit(limit: object) -> PhysicalLimit:
     """limitとnested provenanceを検査するcanonical deep validator。"""
 
-    if not isinstance(limit, PhysicalLimit):
+    if type(limit) is not PhysicalLimit:
         raise TypeError("limit must be PhysicalLimit")
     name = _text("name", limit.name)
     quantity = _enum_value(LimitQuantity, "quantity", limit.quantity)
@@ -723,8 +749,8 @@ def _validate_physical_limit(limit: object) -> PhysicalLimit:
         space,
         limit.frame,
         status,
-        _source_snapshot(source),
-        _conversion_snapshot(conversion),
+        (id(source), _source_snapshot(source)),
+        (id(conversion), _conversion_snapshot(conversion)),
         limit.reason,
     )
     if _sealed_physical_snapshot(limit) != expected:
@@ -784,7 +810,7 @@ def effective_limit_status(limit: PhysicalLimit) -> EvidenceStatus:
     の両方が明示的に``AUTHORITATIVE``の場合だけ成立する。
     """
 
-    if not isinstance(limit, PhysicalLimit):
+    if type(limit) is not PhysicalLimit:
         raise TypeError("limit must be PhysicalLimit")
     try:
         _validate_physical_limit(limit)
@@ -804,7 +830,7 @@ def effective_limit_status(limit: PhysicalLimit) -> EvidenceStatus:
     return EvidenceStatus.PROVISIONAL
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class PhysicalSafetyEnvelope:
     """後続のphysical-safety gateが参照するversioned envelope。"""
 
@@ -815,34 +841,21 @@ class PhysicalSafetyEnvelope:
     limits: tuple[PhysicalLimit, ...]
     source_summary: str | None = None
     schema_version: int = PHYSICAL_SAFETY_ENVELOPE_SCHEMA_VERSION
+    _canonical_snapshot: tuple[object, ...] = field(
+        init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
-        _text("envelope_id", self.envelope_id)
-        if isinstance(self.envelope_version, bool) or not isinstance(self.envelope_version, int) or self.envelope_version < 1:
-            raise ValueError("envelope_version must be a positive integer")
-        _text("robot_id", self.robot_id)
-        _text("model_id", self.model_id)
-        if isinstance(self.schema_version, bool) or self.schema_version != PHYSICAL_SAFETY_ENVELOPE_SCHEMA_VERSION:
-            raise ValueError(f"unsupported physical safety envelope schema version: {self.schema_version!r}")
-        if not isinstance(self.limits, tuple):
-            raise TypeError("limits must be a tuple")
-        names: set[tuple[str, LimitQuantity, LimitSpace]] = set()
-        for limit in self.limits:
-            if not isinstance(limit, PhysicalLimit):
-                raise TypeError("limits must contain PhysicalLimit values")
-            key = (limit.name, limit.quantity, limit.space)
-            if key in names:
-                raise ValueError(f"duplicate physical limit: {key!r}")
-            names.add(key)
-        if self.source_summary is not None:
-            _text("source_summary", self.source_summary)
+        _validate_physical_safety_envelope(self, initialize=True)
 
     @property
     def statuses(self) -> frozenset[EvidenceStatus]:
+        _validate_physical_safety_envelope(self)
         return frozenset(effective_limit_status(limit) for limit in self.limits)
 
     @property
     def has_unresolved_evidence(self) -> bool:
+        _validate_physical_safety_envelope(self)
         return any(
             effective_limit_status(limit)
             in {
@@ -861,6 +874,7 @@ class PhysicalSafetyEnvelope:
         quantity: LimitQuantity = LimitQuantity.POSITION,
         space: LimitSpace = LimitSpace.JOINT,
     ) -> PhysicalLimit:
+        _validate_physical_safety_envelope(self)
         quantity = _enum_value(LimitQuantity, "quantity", quantity)  # type: ignore[assignment]
         space = _enum_value(LimitSpace, "space", space)  # type: ignore[assignment]
         for limit in self.limits:
@@ -869,6 +883,7 @@ class PhysicalSafetyEnvelope:
         raise KeyError((name, quantity.value, space.value))
 
     def to_dict(self) -> dict[str, object]:
+        _validate_physical_safety_envelope(self)
         result: dict[str, object] = {
             "schema_version": self.schema_version,
             "envelope_id": self.envelope_id,
@@ -953,7 +968,16 @@ def _source_from_mapping(value: object) -> LimitSourceProvenance:
 
 def _conversion_from_mapping(value: object) -> LimitConversionProvenance:
     raw = _mapping(value, "conversion")
-    allowed = {"source_space", "target_space", "method", "relation_id", "gear_ratio", "sign", "offset"}
+    allowed = {
+        "source_space",
+        "target_space",
+        "method",
+        "relation_id",
+        "gear_ratio",
+        "sign",
+        "offset",
+        "source_name",
+    }
     unknown = set(raw) - allowed
     if unknown:
         raise ValueError(f"conversion contains unknown fields: {sorted(unknown)!r}")
@@ -961,6 +985,7 @@ def _conversion_from_mapping(value: object) -> LimitConversionProvenance:
     target_space = _enum_value(LimitSpace, "target_space", raw.get("target_space"))
     method = _text("method", raw.get("method"))
     relation_id = _text("relation_id", raw.get("relation_id"))
+    source_name = raw.get("source_name")
     ratio = raw.get("gear_ratio")
     sign = raw.get("sign")
     offset = raw.get("offset")
@@ -972,6 +997,8 @@ def _conversion_from_mapping(value: object) -> LimitConversionProvenance:
         and sign == 1.0
         and offset == 0.0
     ):
+        if source_name is not None:
+            raise ValueError("identity conversion must not declare source_name")
         return LimitConversionProvenance.identity(source_space)
     if (
         target_space is LimitSpace.JOINT
@@ -986,6 +1013,7 @@ def _conversion_from_mapping(value: object) -> LimitConversionProvenance:
             gear_ratio=ratio,  # type: ignore[arg-type]
             sign=sign,  # type: ignore[arg-type]
             offset=offset,  # type: ignore[arg-type]
+            source_name=validate_concrete_limit_identity("source_name", source_name),
         )
     return LimitConversionProvenance(
         source_space=source_space,
@@ -995,6 +1023,7 @@ def _conversion_from_mapping(value: object) -> LimitConversionProvenance:
         gear_ratio=ratio,  # type: ignore[arg-type]
         sign=sign,  # type: ignore[arg-type]
         offset=offset,  # type: ignore[arg-type]
+        source_name=source_name,  # type: ignore[arg-type]
     )
 
 
@@ -1039,14 +1068,72 @@ def _envelope_from_mapping(value: object) -> PhysicalSafetyEnvelope:
     )
 
 
+def _envelope_snapshot(envelope: PhysicalSafetyEnvelope) -> tuple[object, ...]:
+    """Envelope内容とnested limit identityをowner外部sealへ固定する。"""
+
+    return (
+        envelope.envelope_id,
+        envelope.envelope_version,
+        envelope.robot_id,
+        envelope.model_id,
+        tuple((id(limit), _limit_snapshot(limit)) for limit in envelope.limits),
+        envelope.source_summary,
+        envelope.schema_version,
+    )
+
+
+def _validate_physical_safety_envelope(
+    envelope: object,
+    *,
+    initialize: bool = False,
+) -> PhysicalSafetyEnvelope:
+    """Envelope constructor/accessors/decoderで共有するdeep validator。"""
+
+    if type(envelope) is not PhysicalSafetyEnvelope:
+        raise TypeError("envelope must be PhysicalSafetyEnvelope")
+    _text("envelope_id", envelope.envelope_id)
+    if (
+        type(envelope.envelope_version) is not int
+        or envelope.envelope_version < 1
+    ):
+        raise ValueError("envelope_version must be a positive integer")
+    _text("robot_id", envelope.robot_id)
+    _text("model_id", envelope.model_id)
+    if (
+        type(envelope.schema_version) is not int
+        or envelope.schema_version != PHYSICAL_SAFETY_ENVELOPE_SCHEMA_VERSION
+    ):
+        raise ValueError(
+            f"unsupported physical safety envelope schema version: {envelope.schema_version!r}"
+        )
+    if not isinstance(envelope.limits, tuple):
+        raise TypeError("limits must be a tuple")
+    if not envelope.limits:
+        raise ValueError("limits must be non-empty")
+    names: set[tuple[str, LimitQuantity, LimitSpace]] = set()
+    for limit in envelope.limits:
+        if type(limit) is not PhysicalLimit:
+            raise TypeError("limits must contain PhysicalLimit values")
+        _validate_physical_limit(limit)
+        key = (limit.name, limit.quantity, limit.space)
+        if key in names:
+            raise ValueError(f"duplicate physical limit: {key!r}")
+        names.add(key)
+    if envelope.source_summary is not None:
+        _text("source_summary", envelope.source_summary)
+    expected = _envelope_snapshot(envelope)
+    if initialize:
+        object.__setattr__(envelope, "_canonical_snapshot", expected)
+        _register_physical_seal(envelope, expected)
+    elif _sealed_physical_snapshot(envelope) != expected:
+        raise ValueError("physical safety envelope has been mutated or bypassed")
+    return envelope
+
+
 def validate_envelope(envelope: PhysicalSafetyEnvelope) -> PhysicalSafetyEnvelope:
     """既にtypedなenvelopeを再検証し、同じobjectを返す。"""
 
-    if not isinstance(envelope, PhysicalSafetyEnvelope):
-        raise TypeError("envelope must be PhysicalSafetyEnvelope")
-    # Constructor validation is intentionally the single structural validator.
-    _envelope_from_mapping(envelope.to_dict())
-    return envelope
+    return _validate_physical_safety_envelope(envelope)
 
 
 def classify_source_status(
@@ -1133,6 +1220,7 @@ __all__ = [
     "effective_limit_status",
     "make_unknown_limit",
     "source_identity",
+    "validate_concrete_limit_identity",
     "validate_limit_conversion",
     "validate_limit_source",
     "validate_physical_limit",
