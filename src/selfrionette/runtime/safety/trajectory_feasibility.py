@@ -1041,6 +1041,11 @@ def _canonical_trajectory_status_reason(
             )
         return FeasibilityStatus.INVALID, "invalid_trajectory_length"
 
+    if any(item.code == "invalid_trajectory_length" for item in diagnostics):
+        raise ValueError(
+            "invalid_trajectory_length requires fewer than two trajectory samples"
+        )
+
     canonical_status, canonical_reason = _canonical_result_status_reason(diagnostics)
     if sample_count != 2:
         return canonical_status, canonical_reason
