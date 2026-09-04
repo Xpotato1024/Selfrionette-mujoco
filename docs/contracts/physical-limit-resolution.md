@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-08-28
+last_verified: 2026-09-04
 canonical_for:
   - physical limit resolution
   - fast_arm joint motor actuator parity
@@ -45,6 +45,12 @@ normalizedなjoint boundの単位は`rad`だけである。同じnon-rad unitの
 複数一致していても`unknown`として扱い、mixed unitは`mismatch`とする。resolverはnon-radの
 値を`rad`へ暗黙変換しない。
 
+P2は、positionの`MOTOR` / `ACTUATOR` limitごとに、期待jointへ到達する具体的な
+`JointSpaceConversion`を一つ保持する。入力にないsourceを指す余分なrelation、relationの
+欠落、placeholderのsource / relation identityは拒否する。`JOINT` limitのconversion metadataは
+canonical identity（`identity:joint`、ratio/sign/offset=`1/1/0`）だけを許可し、明示relationを
+保持するprojection結果だけがnon-identity provenanceを持つ。
+
 ## Source provenanceとauthority
 
 `LimitSourceProvenance.source_kind`はcanonicalなASCII lowercase underscore identityでなければ
@@ -58,6 +64,10 @@ normalizedなjoint boundの単位は`rad`だけである。同じnon-rad unitの
 `none`、`n-a`などのplaceholder identity、空・whitespaceだけのreferenceは拒否する。
 `manufacturer_document`や`physical_measurement`などcallerが提示する具体的なphysical evidenceは
 typed authorityとして保持できるが、このmoduleはphysical numeric authorityを取得・生成しない。
+
+P2のphysical authority kindはdenylistではなく、`lab_document`、`manufacturer_document`、
+`physical_measurement`だけの狭いallowlistである。`test_fixture`、`fixture_data`、
+`simulation_snapshot`などの未承認kindは、具体的な文字列を伴っていてもauthorityにならない。
 
 ## Parity and resolution
 
@@ -92,8 +102,23 @@ boundと一致し、reasonを持たない場合だけ成立する。`resolved_au
 authorityを推測しない。unresolved statusは両boundを`None`とし、reasonを必須とする。
 `LimitResolutionResult`はimmutableなnon-empty `expected_joint_names`と
 `comparison_tolerance_rad`を保持し、boundsのjoint setが期待集合と完全一致することを
-検証する。`ResolvedJointBound`と`LimitResolutionResult`はtuple / frozen dataclassの
-read-only valueで、callerがProfile、TOML、MJCF、model stateを書き換える機能を持たない。
+検証する。toleranceは`DEFAULT_COMPARISON_TOLERANCE_RAD`（`1e-9`）との完全一致だけを
+許可し、callerが大きな値を指定してparity差を隠す経路を持たない。この値はboundとresultへ
+同じ値で保存され、parity比較の単一の定義として使われる。
+
+`LimitSourceProvenance`、`LimitConversionProvenance`、`PhysicalLimit`、
+`JointSpaceConversion`、`LimitParityRecord`、`ResolvedJointBound`、
+`LimitResolutionResult`には各ownerのcanonical deep validatorがあり、constructorと公開の
+authority / serialization / lookup accessorがnested valueを再検証する。通常のfrozen dataclass
+変更はできないうえ、`object.__new__` / `object.__setattr__`でconstructorを迂回した値や、
+constructor後にnested source・limit・relation・parity・expected inventoryを差し替えた値は、
+保存したcanonical snapshotとの不一致としてauthorityから除外する。これはPythonの実行時に
+完全な敵対的メモリ改変を防ぐ仕組みではないが、公開DTOのbypass経路では`authoritative`へ
+昇格しない。なおsnapshotはDTO内のhintに過ぎず、authorityを決める唯一の値ではない。
+ownerはconstructor時に正規化内容をDTO object identityへ外部sealとして登録し、validatorは
+現在内容と外部sealの一致も要求する。このためpublic fieldとprivate hintの両方を差し替えても
+sealを更新できず、`object.__new__`で未登録にしたDTOもauthorityにならない。source nameはtyped
+sourceから`kind:id@revision[unit=...]`として導出し、自由文字列でstatusやauthorityを申告できない。
 
 ## fast_arm projection
 

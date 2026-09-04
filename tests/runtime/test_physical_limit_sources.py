@@ -42,6 +42,7 @@ def _joint_limit(
     source: LimitSourceProvenance | None = None,
     lower: float | None = -1.0,
     upper: float | None = 1.0,
+    conversion: LimitConversionProvenance | None = None,
 ) -> PhysicalLimit:
     return PhysicalLimit(
         name="joint_1",
@@ -53,7 +54,7 @@ def _joint_limit(
         frame="fast_arm joint space",
         status=status,
         source=source or _source(status=status),
-        conversion=LimitConversionProvenance.identity(LimitSpace.JOINT),
+        conversion=conversion or LimitConversionProvenance.identity(LimitSpace.JOINT),
     )
 
 
@@ -101,6 +102,15 @@ def test_source_classification_rejects_synthetic_authority_kind() -> None:
         )
 
 
+def test_source_classification_rejects_synthetic_authority_without_reference() -> None:
+    with pytest.raises(ValueError, match="synthetic"):
+        classify_source_status(
+            source_kind="fixture",
+            evidence_reference=None,
+            authority_asserted=True,
+        )
+
+
 def test_source_classification_rejects_whitespace_reference() -> None:
     with pytest.raises(ValueError, match="evidence_reference"):
         classify_source_status(
@@ -118,6 +128,17 @@ def test_source_kind_must_use_canonical_lowercase_underscore_identity() -> None:
 def test_authoritative_source_rejects_synthetic_source_kind() -> None:
     with pytest.raises(ValueError, match="synthetic"):
         _source(kind="fixture")
+
+
+@pytest.mark.parametrize(
+    "source_kind",
+    ("test_fixture", "fixture_data", "simulation_snapshot", "unknown_source"),
+)
+def test_authoritative_source_kind_uses_narrow_allowlist(
+    source_kind: str,
+) -> None:
+    with pytest.raises(ValueError, match="approved|authoritative"):
+        _source(kind=source_kind)
 
 
 def test_authoritative_source_rejects_whitespace_evidence_reference() -> None:
@@ -178,6 +199,36 @@ def test_envelope_serialization_is_deterministic_and_round_trips() -> None:
     assert validate_envelope(envelope) is envelope
 
 
+def test_projected_limit_envelope_round_trips_through_canonical_decoder() -> None:
+    projected = PhysicalLimit(
+        name="joint_1",
+        quantity=LimitQuantity.POSITION,
+        lower=-1.0,
+        upper=1.0,
+        unit="rad",
+        space=LimitSpace.JOINT,
+        frame="fast_arm joint space",
+        status=EvidenceStatus.AUTHORITATIVE,
+        source=_source(),
+        conversion=LimitConversionProvenance.projected(
+            source_space=LimitSpace.MOTOR,
+            relation_id="motor_1-to-joint_1/v1",
+            gear_ratio=2.0,
+            sign=-1.0,
+            offset=0.25,
+        ),
+    )
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_projected_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(projected,),
+    )
+
+    assert PhysicalSafetyEnvelope.from_json_bytes(envelope.to_json_bytes()) == envelope
+
+
 def test_envelope_rejects_unknown_fields_and_bom() -> None:
     envelope = PhysicalSafetyEnvelope(
         envelope_id="fixture",
@@ -236,6 +287,74 @@ def test_authoritative_limit_requires_authoritative_typed_source() -> None:
                 evidence_reference=None,
             ),
         )
+
+
+def test_constructor_bypassed_source_or_limit_cannot_become_authoritative() -> None:
+    provisional_source = _source(
+        kind="fixture",
+        status=EvidenceStatus.PROVISIONAL,
+        evidence_reference=None,
+    )
+    object.__setattr__(provisional_source, "status", EvidenceStatus.AUTHORITATIVE)
+    assert not provisional_source.is_physical_evidence
+
+    with pytest.raises(ValueError, match="source kind|provenance"):
+        _joint_limit(status=EvidenceStatus.AUTHORITATIVE, source=provisional_source)
+
+    limit = _joint_limit(status=EvidenceStatus.PROVISIONAL)
+    object.__setattr__(limit, "status", EvidenceStatus.AUTHORITATIVE)
+    assert not limit.is_authoritative
+    assert effective_limit_status(limit) is EvidenceStatus.INVALID
+
+
+def test_external_source_seal_rejects_coherent_private_snapshot_rewrite() -> None:
+    source = _source(
+        kind="lab_document",
+        status=EvidenceStatus.PROVISIONAL,
+    )
+    object.__setattr__(source, "status", EvidenceStatus.AUTHORITATIVE)
+    object.__setattr__(
+        source,
+        "_canonical_snapshot",
+        (
+            source.source_kind,
+            source.source_id,
+            source.revision,
+            source.status,
+            source.evidence_reference,
+            source.observed_at,
+            source.notes,
+        ),
+    )
+    assert not source.is_physical_evidence
+
+
+def test_joint_limit_rejects_non_identity_conversion_metadata() -> None:
+    conversion = LimitConversionProvenance(
+        source_space=LimitSpace.JOINT,
+        target_space=LimitSpace.JOINT,
+        method="forged",
+        relation_id="forged-relation",
+        gear_ratio=2.0,
+        sign=1.0,
+        offset=0.0,
+    )
+    with pytest.raises(ValueError, match="identity"):
+        _joint_limit(conversion=conversion)
+
+
+def test_joint_limit_rejects_forged_cross_space_conversion_origin() -> None:
+    conversion = LimitConversionProvenance(
+        source_space=LimitSpace.MOTOR,
+        target_space=LimitSpace.JOINT,
+        method="joint = sign * source / gear_ratio + offset",
+        relation_id="motor-1-to-joint-1/v1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+    )
+    with pytest.raises(ValueError, match="canonical origin"):
+        _joint_limit(conversion=conversion)
 
 
 @pytest.mark.parametrize(
