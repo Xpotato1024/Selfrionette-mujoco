@@ -83,11 +83,16 @@ evaluationとしてexpected pair coverageへ含める。`clear`はexpected inven
 各pairのvalid clear evidenceだけで成立し、unknown・unavailable・invalidや欠落をclearへ変換しない。
 constructorとpublicな`.clear` accessはnested evaluation/resultを再導出・再検証し、constructor bypassや
 `object.__setattr__`によるkind、status、distance、provenanceの改変をclearとして残さない。
-この再検証を補強するため、ownerは`CollisionContext`、`CollisionEvaluation`、`CollisionCheckResult`、
-`BoundedCollisionTrajectoryResult`の正規化semantic snapshotをobject identityへexternal weakref seal
-として登録する。public fieldとprivate fingerprintを一緒に書き換えてもsealは更新されず、
-`object.__new__`で作った未登録DTOもclear/accessorを通過しない。これは新しいphysical authorityを
-生成する仕組みではなく、constructor後のbypassを検出するowner-local integrity boundaryである。
+この再検証を補強するため、ownerは`GeometryIdentity`、`GeometryInventory`、`CollisionPair`、
+`CollisionExclusion`、`CollisionPolicy`、`CollisionObservation`、`CollisionContext`、
+`CollisionEvaluation`、`CollisionCheckResult`、`BoundedCollisionTrajectoryResult`の正規化semantic
+snapshotを、nested objectのidentityとともにobject identityへexternal weakref sealとして登録する。
+public fieldとprivate fingerprintを一緒に書き換えてもsealは更新されず、同じ値のnested objectへの差し替え、
+subclass、`object.__new__`で作った未登録DTOもclear/accessorを通過しない。constructorとpublic validator、
+inventory/policy accessor、aggregate/trajectory accessorは同じdeep validatorを通る。これは新しいphysical
+authorityを生成する仕組みではなく、constructor後のbypassを検出するowner-local integrity boundaryである。
+malformedなcontextは既存sealから復元できる場合だけtyped `invalid`へ閉じ、復元も明示identityもできない場合は
+`CollisionContractViolation`で停止する。空inventoryもclearへ推測せず、identity不足としてfail-closedに停止する。
 aggregateはinvalid、collision、near-collision、contact、unavailable、unknownの順でfail-closedに
 優先する。
 
