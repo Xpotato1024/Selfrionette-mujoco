@@ -8,9 +8,11 @@ MuJoCo stateはcaller側のsource of truthとして扱い、ここではstateを
 from __future__ import annotations
 
 import math
+import weakref
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from threading import RLock
 from typing import Final
 
 from selfrionette.runtime.safety.physical_limits import (
@@ -21,6 +23,7 @@ from selfrionette.runtime.safety.physical_limits import (
     LimitSpace,
     LimitSourceProvenance,
     PhysicalLimit,
+    validate_physical_limit,
 )
 
 
@@ -61,19 +64,54 @@ _PLACEHOLDER_IDENTITIES: Final[frozenset[str]] = frozenset(
         "unavailable",
     }
 )
-_SOFTWARE_ONLY_SOURCE_KINDS: Final[frozenset[str]] = frozenset(
-    {
-        "controller_setting",
-        "joint_limit_toml",
-        "mujoco_jnt_range",
-        "robot_profile",
-        "simulation",
-        "software_config",
-    }
-)
-_SYNTHETIC_SOURCE_KINDS: Final[frozenset[str]] = frozenset(
-    {"example", "fake", "fixture", "placeholder", "sample", "synthetic", "test"}
-)
+# Pythonのfrozen dataclass fieldだけではobject.__setattr__でprivate fingerprintも
+# 書き換えられるため、authority/completenessを信頼するDTOはowner-localな外部sealへ
+# semantic snapshotを登録する。registryはobject identityをid+weakrefで保持し、
+# weakref callbackで不要になったentryを回収する。
+_FEASIBILITY_SEALS: dict[
+    int, tuple[weakref.ReferenceType[object], tuple[object, ...]]
+] = {}
+_FEASIBILITY_SEALS_LOCK = RLock()
+
+
+def _release_feasibility_seal(
+    key: int,
+    reference: weakref.ReferenceType[object],
+) -> None:
+    with _FEASIBILITY_SEALS_LOCK:
+        entry = _FEASIBILITY_SEALS.get(key)
+        if entry is not None and entry[0] is reference:
+            _FEASIBILITY_SEALS.pop(key, None)
+
+
+def _register_feasibility_seal(
+    value: object,
+    snapshot: tuple[object, ...],
+) -> None:
+    key = id(value)
+    reference = weakref.ref(
+        value,
+        lambda ref, key=key: _release_feasibility_seal(key, ref),
+    )
+    with _FEASIBILITY_SEALS_LOCK:
+        _FEASIBILITY_SEALS[key] = (reference, snapshot)
+
+
+def _sealed_feasibility_snapshot(value: object) -> tuple[object, ...]:
+    key = id(value)
+    with _FEASIBILITY_SEALS_LOCK:
+        entry = _FEASIBILITY_SEALS.get(key)
+        if entry is None or entry[0]() is not value:
+            raise ValueError("feasibility DTO is not constructor-sealed")
+        return entry[1]
+
+
+def _validate_feasibility_seal(
+    value: object,
+    snapshot: tuple[object, ...],
+) -> None:
+    if _sealed_feasibility_snapshot(value) != snapshot:
+        raise ValueError("feasibility DTO has been mutated or bypassed")
 
 
 def canonical_fast_arm_joint_space_frame() -> str:
@@ -98,7 +136,10 @@ def _identity_text(name: str, value: object) -> str:
 def _finite(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a number")
-    number = float(value)
+    try:
+        number = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be finite") from exc
     if not math.isfinite(number):
         raise ValueError(f"{name} must be finite")
     return 0.0 if number == 0.0 else number
@@ -122,6 +163,66 @@ def _joint_inventory(name: str, value: object, *, required: bool = True) -> tupl
     if len(names) != len(set(names)):
         raise ValueError(f"{name} must be unique")
     return names
+
+
+def _jacobian_snapshot(diagnostic: object) -> tuple[object, ...]:
+    return tuple(
+        getattr(diagnostic, name, None)
+        for name in (
+            "source_id",
+            "evidence_reference",
+            "row_count",
+            "column_count",
+            "numeric_rank",
+            "effective_rank",
+            "minimum_singular_value",
+            "condition_number",
+        )
+    )
+
+
+def _state_snapshot(state: object) -> tuple[object, ...]:
+    jacobian = getattr(state, "jacobian")
+    return (
+        getattr(state, "qpos_rad"),
+        getattr(state, "qvel_rad_s"),
+        None if jacobian is None else _jacobian_snapshot(jacobian),
+        getattr(state, "source_id"),
+    )
+
+
+def _sample_snapshot(sample: object) -> tuple[object, ...]:
+    jacobian = getattr(sample, "jacobian")
+    return (
+        getattr(sample, "timestamp_s"),
+        getattr(sample, "qpos_rad"),
+        getattr(sample, "qvel_rad_s"),
+        None if jacobian is None else _jacobian_snapshot(jacobian),
+        getattr(sample, "source_id"),
+    )
+
+
+def _diagnostic_snapshot(diagnostic: object) -> tuple[object, ...]:
+    return tuple(
+        getattr(diagnostic, name, None)
+        for name in (
+            "code",
+            "detail",
+            "joint_name",
+            "sample_index",
+            "observed",
+            "threshold",
+            "provenance",
+        )
+    )
+
+
+def _velocity_evidence_snapshot(evidence: object) -> tuple[object, ...]:
+    return (
+        getattr(evidence, "kind", None),
+        getattr(evidence, "sample_index", None),
+        getattr(evidence, "source_id", None),
+    )
 
 
 def _dynamic_limit_contract_error(
@@ -186,8 +287,8 @@ def _validate_jacobian_diagnostic(
 
     if not isinstance(diagnostic, JacobianDiagnostic):
         raise TypeError("jacobian must be JacobianDiagnostic")
-    source_id = _identity_text("source_id", diagnostic.source_id)
-    evidence_reference = diagnostic.evidence_reference
+    source_id = _identity_text("source_id", getattr(diagnostic, "source_id", None))
+    evidence_reference = getattr(diagnostic, "evidence_reference", None)
     if evidence_reference is None:
         evidence_reference = source_id
     evidence_reference = _identity_text("evidence_reference", evidence_reference)
@@ -204,8 +305,12 @@ def _validate_jacobian_diagnostic(
         raise ValueError("numeric_rank exceeds Jacobian dimensions")
     if effective_rank > numeric_rank:
         raise ValueError("effective_rank exceeds numeric_rank")
-    minimum = _finite("minimum_singular_value", diagnostic.minimum_singular_value)
-    condition = _finite("condition_number", diagnostic.condition_number)
+    minimum = _finite(
+        "minimum_singular_value", getattr(diagnostic, "minimum_singular_value", None)
+    )
+    condition = _finite(
+        "condition_number", getattr(diagnostic, "condition_number", None)
+    )
     if minimum < 0.0 or condition <= 0.0:
         raise ValueError("Jacobian singular-value and condition diagnostics are invalid")
     fingerprint = (
@@ -224,6 +329,7 @@ def _validate_jacobian_diagnostic(
         object.__setattr__(diagnostic, "minimum_singular_value", minimum)
         object.__setattr__(diagnostic, "condition_number", condition)
         object.__setattr__(diagnostic, "_binding_fingerprint", fingerprint)
+        _register_feasibility_seal(diagnostic, fingerprint)
         return fingerprint
     try:
         bound = diagnostic._binding_fingerprint
@@ -231,99 +337,42 @@ def _validate_jacobian_diagnostic(
         raise ValueError("Jacobian diagnostic binding fingerprint is missing") from exc
     if bound != fingerprint:
         raise ValueError("Jacobian diagnostic binding was mutated")
+    _validate_feasibility_seal(diagnostic, fingerprint)
     return fingerprint
 
 
 def _validate_dynamic_limit(limit: PhysicalLimit) -> tuple[object, ...]:
-    """P2 PhysicalLimitのconstructor bypassをP4境界でdeep revalidateする。"""
+    """P2のtyped limit validatorを通り、P4固有のdynamic契約だけを確認する。"""
 
     if not isinstance(limit, PhysicalLimit):
         raise TypeError("dynamic_limits must contain PhysicalLimit values")
-    name = _identity_text("limit.name", getattr(limit, "name", None))
-    quantity = getattr(limit, "quantity", None)
-    if not isinstance(quantity, LimitQuantity):
-        raise TypeError("limit.quantity must be LimitQuantity")
-    space = getattr(limit, "space", None)
-    if not isinstance(space, LimitSpace):
-        raise TypeError("limit.space must be LimitSpace")
-    unit = _text("limit.unit", getattr(limit, "unit", None))
-    frame = _text("limit.frame", getattr(limit, "frame", None))
-    status = getattr(limit, "status", None)
-    if not isinstance(status, EvidenceStatus):
-        raise TypeError("limit.status must be EvidenceStatus")
-    source = getattr(limit, "source", None)
-    if not isinstance(source, LimitSourceProvenance):
-        raise TypeError("limit.source must be LimitSourceProvenance")
-    source_kind = _text("limit.source.source_kind", getattr(source, "source_kind", None))
-    if not source_kind.isascii() or not source_kind[0].islower() or any(
-        not (character.islower() or character.isdigit() or character == "_")
-        for character in source_kind
-    ):
-        raise ValueError("limit.source.source_kind must use canonical lowercase underscore notation")
-    source_id = _identity_text("limit.source.source_id", getattr(source, "source_id", None))
-    revision = _identity_text("limit.source.revision", getattr(source, "revision", None))
-    source_status = getattr(source, "status", None)
-    if not isinstance(source_status, EvidenceStatus):
-        raise TypeError("limit.source.status must be EvidenceStatus")
-    for source_name in ("observed_at", "notes"):
-        source_value = getattr(source, source_name, None)
-        if source_value is not None:
-            _text(f"limit.source.{source_name}", source_value)
-    evidence_reference = getattr(source, "evidence_reference", None)
+    # source status、conversion origin、bounds、external sealはP2が所有する。
+    # P4は別のstatus / provenance validatorを複製せず、canonical resultを消費する。
+    try:
+        validate_physical_limit(limit)
+    except AttributeError as exc:
+        raise ValueError("dynamic limit is malformed or bypassed") from exc
+    name = _identity_text("limit.name", limit.name)
+    quantity = limit.quantity
+    space = limit.space
+    unit = _text("limit.unit", limit.unit)
+    frame = _text("limit.frame", limit.frame)
+    status = limit.status
+    source = limit.source
+    source_kind = _text("limit.source.source_kind", source.source_kind)
+    source_id = _identity_text("limit.source.source_id", source.source_id)
+    revision = _identity_text("limit.source.revision", source.revision)
+    source_status = source.status
+    evidence_reference = source.evidence_reference
     if evidence_reference is not None:
-        evidence_reference = _identity_text("limit.source.evidence_reference", evidence_reference)
-    if source_status is EvidenceStatus.AUTHORITATIVE and evidence_reference is None:
-        raise ValueError("authoritative source requires evidence_reference")
-    if source_status is EvidenceStatus.AUTHORITATIVE and source_kind in (
-        _SOFTWARE_ONLY_SOURCE_KINDS | _SYNTHETIC_SOURCE_KINDS
-    ):
-        raise ValueError("software or synthetic source cannot be authoritative")
-    if source_status is EvidenceStatus.AUTHORITATIVE and (
-        source_id.casefold() in _PLACEHOLDER_IDENTITIES
-        or revision.casefold() in _PLACEHOLDER_IDENTITIES
-        or evidence_reference is None
-        or evidence_reference.casefold() in _PLACEHOLDER_IDENTITIES
-    ):
-        raise ValueError("authoritative source requires concrete identities")
+        evidence_reference = _identity_text(
+            "limit.source.evidence_reference", evidence_reference
+        )
     effective = effective_limit_status(limit)
-    lower = getattr(limit, "lower", None)
-    upper = getattr(limit, "upper", None)
-    lower = None if lower is None else _finite("limit.lower", lower)
-    upper = None if upper is None else _finite("limit.upper", upper)
-    if status in {EvidenceStatus.AUTHORITATIVE, EvidenceStatus.PROVISIONAL}:
-        if lower is None or upper is None or lower > upper:
-            raise ValueError("bounded dynamic limit requires ordered finite bounds")
-        if status is EvidenceStatus.AUTHORITATIVE and source_status is not EvidenceStatus.AUTHORITATIVE:
-            raise ValueError("authoritative dynamic limit requires authoritative source")
-    elif lower is not None or upper is not None:
-        raise ValueError("unresolved dynamic limit must not contain bounds")
-    reason = getattr(limit, "reason", None)
-    if reason is not None:
-        reason = _text("limit.reason", reason)
-    if status in {
-        EvidenceStatus.UNKNOWN,
-        EvidenceStatus.UNAVAILABLE,
-        EvidenceStatus.CONFLICT,
-        EvidenceStatus.INVALID,
-    } and not reason:
-        raise ValueError("unresolved dynamic limit requires reason")
-    conversion = getattr(limit, "conversion", None)
-    if not isinstance(conversion, LimitConversionProvenance):
-        raise TypeError("limit.conversion must be LimitConversionProvenance")
-    if not isinstance(conversion.source_space, LimitSpace) or not isinstance(conversion.target_space, LimitSpace):
-        raise TypeError("limit conversion spaces must be LimitSpace")
-    _text("limit.conversion.method", conversion.method)
-    _identity_text("limit.conversion.relation_id", conversion.relation_id)
-    for conversion_name in ("gear_ratio", "sign", "offset"):
-        conversion_value = getattr(conversion, conversion_name, None)
-        if conversion_value is not None:
-            _finite(f"limit.conversion.{conversion_name}", conversion_value)
-    if conversion.gear_ratio is not None and conversion.gear_ratio == 0.0:
-        raise ValueError("limit conversion gear_ratio must be non-zero")
-    if conversion.sign is not None and conversion.sign not in (-1.0, 1.0):
-        raise ValueError("limit conversion sign must be either -1 or 1")
-    if conversion.target_space is not space:
-        raise ValueError("limit conversion target_space must match limit space")
+    lower = limit.lower
+    upper = limit.upper
+    conversion = limit.conversion
+    reason = limit.reason
     contract_error = _dynamic_limit_contract_error(limit, quantity)
     if contract_error is not None:
         raise ValueError(contract_error)
@@ -381,6 +430,22 @@ def _validate_trajectory_feasibility_policy(
             raise ValueError(f"duplicate dynamic limit: {name}/{quantity.value}")
         seen_limits.add(identity)
         limit_fingerprints.append(limit_fp)
+    expected_limit_keys = {
+        (name, quantity)
+        for name in names
+        for quantity in (LimitQuantity.VELOCITY, LimitQuantity.ACCELERATION)
+    }
+    expected_limit_order = tuple(
+        (name, quantity)
+        for name in names
+        for quantity in (LimitQuantity.VELOCITY, LimitQuantity.ACCELERATION)
+    )
+    if seen_limits != expected_limit_keys:
+        raise ValueError(
+            "dynamic_limits must exactly cover every joint velocity and acceleration"
+        )
+    if tuple((limit.name, limit.quantity) for limit in limits) != expected_limit_order:
+        raise ValueError("dynamic_limits must use canonical joint/quantity order")
     expected_cadence = policy.expected_cadence_s
     if expected_cadence is not None:
         expected_cadence = _finite("expected_cadence_s", expected_cadence)
@@ -426,6 +491,7 @@ def _validate_trajectory_feasibility_policy(
         object.__setattr__(policy, "policy_id", policy_id)
         object.__setattr__(policy, "policy_revision", policy_revision)
         object.__setattr__(policy, "_binding_fingerprint", fingerprint)
+        _register_feasibility_seal(policy, fingerprint)
     else:
         try:
             bound = policy._binding_fingerprint
@@ -433,10 +499,11 @@ def _validate_trajectory_feasibility_policy(
             raise ValueError("trajectory policy binding fingerprint is missing") from exc
         if bound != fingerprint:
             raise ValueError("trajectory policy binding was mutated")
+        _validate_feasibility_seal(policy, fingerprint)
     return fingerprint
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class JacobianDiagnostic:
     """既存solver / diagnosticから受け取るbounded Jacobian summary。"""
 
@@ -481,7 +548,7 @@ class JacobianDiagnostic:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class ConfigurationState:
     """1 configurationのMuJoCo/qpos-like state。"""
 
@@ -498,9 +565,15 @@ class ConfigurationState:
             raise TypeError("qvel_rad_s must be a tuple or None")
         if self.jacobian is not None and not isinstance(self.jacobian, JacobianDiagnostic):
             raise TypeError("jacobian must be JacobianDiagnostic or None")
+        try:
+            _validate_configuration_state(self, initialize=True)
+        except (TypeError, ValueError):
+            # The evaluator owns the typed INVALID boundary for malformed
+            # caller data; valid states alone receive an integrity seal.
+            pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class TrajectorySample:
     """candidate trajectoryの1 finite sample。"""
 
@@ -519,9 +592,76 @@ class TrajectorySample:
         if self.jacobian is not None and not isinstance(self.jacobian, JacobianDiagnostic):
             raise TypeError("jacobian must be JacobianDiagnostic or None")
         _text("source_id", self.source_id)
+        try:
+            _validate_trajectory_sample(self, initialize=True)
+        except (TypeError, ValueError):
+            # The evaluator owns the typed INVALID boundary for malformed
+            # caller data; valid samples alone receive an integrity seal.
+            pass
 
 
-@dataclass(frozen=True, slots=True)
+def _validate_configuration_state(
+    state: ConfigurationState,
+    *,
+    initialize: bool = False,
+    validate_jacobian: bool = True,
+    check_seal: bool = True,
+) -> None:
+    if not isinstance(state, ConfigurationState):
+        raise TypeError("state must be ConfigurationState")
+    qpos = getattr(state, "qpos_rad", None)
+    if not isinstance(qpos, tuple) or not qpos:
+        raise ValueError("qpos_rad must be a non-empty tuple")
+    for index, value in enumerate(qpos):
+        _finite(f"qpos_rad[{index}]", value)
+    qvel = getattr(state, "qvel_rad_s", None)
+    if qvel is not None:
+        if not isinstance(qvel, tuple) or not qvel:
+            raise ValueError("qvel_rad_s must be a non-empty tuple or None")
+        for index, value in enumerate(qvel):
+            _finite(f"qvel_rad_s[{index}]", value)
+    source_id = _identity_text("source_id", getattr(state, "source_id", None))
+    jacobian = getattr(state, "jacobian", None)
+    if validate_jacobian and jacobian is not None:
+        _validate_jacobian_diagnostic(jacobian)
+    snapshot = _state_snapshot(state)
+    if initialize:
+        _register_feasibility_seal(state, snapshot)
+    elif check_seal:
+        _validate_feasibility_seal(state, snapshot)
+
+
+def _validate_trajectory_sample(
+    sample: TrajectorySample,
+    *,
+    initialize: bool = False,
+) -> None:
+    if not isinstance(sample, TrajectorySample):
+        raise TypeError("sample must be TrajectorySample")
+    _finite("timestamp_s", getattr(sample, "timestamp_s", None))
+    qpos = getattr(sample, "qpos_rad", None)
+    if not isinstance(qpos, tuple) or not qpos:
+        raise ValueError("qpos_rad must be a non-empty tuple")
+    for index, value in enumerate(qpos):
+        _finite(f"qpos_rad[{index}]", value)
+    qvel = getattr(sample, "qvel_rad_s", None)
+    if qvel is not None:
+        if not isinstance(qvel, tuple) or not qvel:
+            raise ValueError("qvel_rad_s must be a non-empty tuple or None")
+        for index, value in enumerate(qvel):
+            _finite(f"qvel_rad_s[{index}]", value)
+    _identity_text("source_id", getattr(sample, "source_id", None))
+    jacobian = getattr(sample, "jacobian", None)
+    if jacobian is not None:
+        _validate_jacobian_diagnostic(jacobian)
+    snapshot = _sample_snapshot(sample)
+    if initialize:
+        _register_feasibility_seal(sample, snapshot)
+    else:
+        _validate_feasibility_seal(sample, snapshot)
+
+
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class TrajectoryFeasibilityPolicy:
     """dynamic bounds、cadence、Jacobian thresholdを固定するpolicy。"""
 
@@ -562,7 +702,7 @@ class TrajectoryFeasibilityPolicy:
         }
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class FeasibilityDiagnostic:
     """machine/operator-visibleなfailure evidence。"""
 
@@ -589,6 +729,11 @@ class FeasibilityDiagnostic:
             _finite("threshold", self.threshold)
         if self.provenance is not None:
             _text("provenance", self.provenance)
+        try:
+            _validate_feasibility_diagnostic(self, initialize=True)
+        except (TypeError, ValueError):
+            # Malformed nested evidence is rejected again at the result boundary.
+            pass
 
 
 class VelocityEvidenceKind(str, Enum):
@@ -598,7 +743,7 @@ class VelocityEvidenceKind(str, Enum):
     FINITE_DIFFERENCE = "finite_difference"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class VelocityEvidenceBinding:
     """1 sampleまたは隣接sample segmentへのimmutable velocity binding。"""
 
@@ -619,9 +764,10 @@ class VelocityEvidenceBinding:
         source_id = _identity_text("source_id", self.source_id)
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "source_id", source_id)
+        _register_feasibility_seal(self, _velocity_evidence_snapshot(self))
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class ConfigurationFeasibilityResult:
     """configuration-only dynamic/Jacobian result。"""
 
@@ -675,7 +821,7 @@ class ConfigurationFeasibilityResult:
             return False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class TrajectoryFeasibilityResult:
     """finite trajectoryのdynamic/Jacobian result。"""
 
@@ -826,6 +972,8 @@ def _normalize_velocity_evidence(
     evidence = tuple(value)
     if not all(isinstance(item, VelocityEvidenceBinding) for item in evidence):
         raise TypeError("velocity_evidence must contain VelocityEvidenceBinding values")
+    for item in evidence:
+        _validate_velocity_evidence_binding(item)
     identities = tuple((item.kind, item.sample_index) for item in evidence)
     if len(identities) != len(set(identities)):
         raise ValueError("velocity_evidence must not duplicate a kind/sample binding")
@@ -926,6 +1074,59 @@ def _result_fingerprint(
     )
 
 
+def _configuration_result_snapshot(result: object) -> tuple[object, ...]:
+    return _result_fingerprint(
+        status=getattr(result, "status"),
+        reason_code=getattr(result, "reason_code"),
+        diagnostics=tuple(
+            _diagnostic_snapshot(item) for item in getattr(result, "diagnostics")
+        ),
+        source_identity=getattr(result, "source_id"),
+        sample_count=None,
+        source_ids=(),
+        bound_statuses=getattr(result, "bound_statuses"),
+        expected_joint_names=getattr(result, "expected_joint_names"),
+        policy_id=getattr(result, "policy_id"),
+        policy_revision=getattr(result, "policy_revision"),
+        limit_source_ids=getattr(result, "limit_source_ids"),
+        bound_evidence_ids=getattr(result, "bound_evidence_ids"),
+        qvel_available=getattr(result, "qvel_available"),
+        jacobian_available=getattr(result, "jacobian_available"),
+        velocity_evidence=(),
+        policy_fingerprint=getattr(result, "policy_fingerprint"),
+        jacobian_source_ids=getattr(result, "jacobian_source_ids"),
+        jacobian_evidence_ids=getattr(result, "jacobian_evidence_ids"),
+    )
+
+
+def _trajectory_result_snapshot(result: object) -> tuple[object, ...]:
+    return _result_fingerprint(
+        status=getattr(result, "status"),
+        reason_code=getattr(result, "reason_code"),
+        diagnostics=tuple(
+            _diagnostic_snapshot(item) for item in getattr(result, "diagnostics")
+        ),
+        source_identity=None,
+        sample_count=getattr(result, "sample_count"),
+        source_ids=getattr(result, "source_ids"),
+        bound_statuses=getattr(result, "bound_statuses"),
+        expected_joint_names=getattr(result, "expected_joint_names"),
+        policy_id=getattr(result, "policy_id"),
+        policy_revision=getattr(result, "policy_revision"),
+        limit_source_ids=getattr(result, "limit_source_ids"),
+        bound_evidence_ids=getattr(result, "bound_evidence_ids"),
+        qvel_available=getattr(result, "qvel_available"),
+        jacobian_available=getattr(result, "jacobian_available"),
+        velocity_evidence=tuple(
+            _velocity_evidence_snapshot(item)
+            for item in getattr(result, "velocity_evidence")
+        ),
+        policy_fingerprint=getattr(result, "policy_fingerprint"),
+        jacobian_source_ids=getattr(result, "jacobian_source_ids"),
+        jacobian_evidence_ids=getattr(result, "jacobian_evidence_ids"),
+    )
+
+
 def _reconstruct_policy_fingerprint_limits(
     fingerprint: tuple[object, ...],
 ) -> tuple[PhysicalLimit, ...]:
@@ -976,15 +1177,19 @@ def _reconstruct_policy_fingerprint_limits(
                 status=source_status,
                 evidence_reference=evidence_reference,
             )
-            conversion = LimitConversionProvenance(
-                source_space=LimitSpace(source_space_value),
-                target_space=LimitSpace(target_space_value),
-                method=method,
-                relation_id=relation_id,
-                gear_ratio=gear_ratio,
-                sign=sign,
-                offset=offset,
-            )
+            source_space = LimitSpace(source_space_value)
+            target_space = LimitSpace(target_space_value)
+            if source_space is target_space:
+                # P2 identity provenanceはcanonical factoryで復元し、owner origin sealを保持する。
+                conversion = LimitConversionProvenance.identity(source_space)
+            else:
+                conversion = LimitConversionProvenance.projected(
+                    source_space=source_space,
+                    relation_id=relation_id,
+                    gear_ratio=gear_ratio,
+                    sign=sign,
+                    offset=offset,
+                )
             limit = PhysicalLimit(
                 name=name,
                 quantity=quantity,
@@ -1042,9 +1247,28 @@ def _normalize_policy_fingerprint(value: object) -> tuple[object, ...]:
     for index, limit in enumerate(value[2]):
         if not isinstance(limit, tuple) or len(limit) != 22:
             raise ValueError(f"policy_fingerprint limit[{index}] is malformed")
+    expected_limit_keys = {
+        (name, quantity.value)
+        for name in value[1]
+        for quantity in (LimitQuantity.VELOCITY, LimitQuantity.ACCELERATION)
+    }
+    expected_limit_order = tuple(
+        (name, quantity.value)
+        for name in value[1]
+        for quantity in (LimitQuantity.VELOCITY, LimitQuantity.ACCELERATION)
+    )
+    actual_limit_order = tuple((limit[0], limit[1]) for limit in value[2])
+    actual_limit_keys = {(limit[0], limit[1]) for limit in value[2]}
+    if actual_limit_keys != expected_limit_keys:
+        raise ValueError(
+            "policy_fingerprint limits must exactly cover every joint velocity and acceleration"
+        )
+    if actual_limit_order != expected_limit_order:
+        raise ValueError("policy_fingerprint limits must use canonical joint/quantity order")
     _reconstruct_policy_fingerprint_limits(value)
     if value[3] is not None:
-        _finite("policy_fingerprint.expected_cadence_s", value[3])
+        if _finite("policy_fingerprint.expected_cadence_s", value[3]) <= 0.0:
+            raise ValueError("policy_fingerprint.expected_cadence_s must be positive")
     for name, index in (
         ("cadence_tolerance_s", 4),
         ("maximum_gap_s", 5),
@@ -1052,7 +1276,14 @@ def _normalize_policy_fingerprint(value: object) -> tuple[object, ...]:
         ("maximum_condition_number", 8),
         ("qvel_consistency_tolerance_rad_s", 9),
     ):
-        _finite(f"policy_fingerprint.{name}", value[index])
+        threshold = _finite(f"policy_fingerprint.{name}", value[index])
+        if name == "cadence_tolerance_s" or name == "qvel_consistency_tolerance_rad_s":
+            if threshold < 0.0:
+                raise ValueError(f"policy_fingerprint.{name} must be non-negative")
+        elif name == "maximum_gap_s" and threshold <= 0.0:
+            raise ValueError("policy_fingerprint.maximum_gap_s must be positive")
+        elif name in {"minimum_singular_value", "maximum_condition_number"} and threshold <= 0.0:
+            raise ValueError(f"policy_fingerprint.{name} must be positive")
     rank = value[6]
     if isinstance(rank, bool) or not isinstance(rank, int) or rank <= 0:
         raise ValueError("policy_fingerprint.required_jacobian_rank is invalid")
@@ -1077,7 +1308,11 @@ def _normalize_jacobian_bindings(
     return normalized_sources, normalized_evidence
 
 
-def _validate_feasibility_diagnostic(diagnostic: FeasibilityDiagnostic) -> None:
+def _validate_feasibility_diagnostic(
+    diagnostic: FeasibilityDiagnostic,
+    *,
+    initialize: bool = False,
+) -> None:
     """Resultへ入るnested diagnosticもconstructor bypass後に再検証する。"""
 
     if not isinstance(diagnostic, FeasibilityDiagnostic):
@@ -1099,6 +1334,36 @@ def _validate_feasibility_diagnostic(diagnostic: FeasibilityDiagnostic) -> None:
     provenance = getattr(diagnostic, "provenance", None)
     if provenance is not None:
         _identity_text("diagnostic.provenance", provenance)
+    snapshot = _diagnostic_snapshot(diagnostic)
+    if initialize:
+        _register_feasibility_seal(diagnostic, snapshot)
+    else:
+        _validate_feasibility_seal(diagnostic, snapshot)
+
+
+def _validate_velocity_evidence_binding(
+    evidence: VelocityEvidenceBinding,
+    *,
+    initialize: bool = False,
+) -> None:
+    if not isinstance(evidence, VelocityEvidenceBinding):
+        raise TypeError("velocity evidence must be VelocityEvidenceBinding")
+    kind = getattr(evidence, "kind", None)
+    if not isinstance(kind, VelocityEvidenceKind):
+        raise TypeError("velocity evidence kind is invalid")
+    sample_index = getattr(evidence, "sample_index", None)
+    if (
+        isinstance(sample_index, bool)
+        or not isinstance(sample_index, int)
+        or sample_index < 0
+    ):
+        raise ValueError("velocity evidence sample index must be a non-negative integer")
+    source_id = _identity_text("velocity evidence source_id", getattr(evidence, "source_id", None))
+    snapshot = _velocity_evidence_snapshot(evidence)
+    if initialize:
+        _register_feasibility_seal(evidence, snapshot)
+    else:
+        _validate_feasibility_seal(evidence, snapshot)
 
 
 def _validate_result_success_contract(
@@ -1120,6 +1385,7 @@ def _validate_result_success_contract(
     policy_fingerprint: tuple[object, ...] = (),
     jacobian_source_ids: tuple[str, ...] = (),
     jacobian_evidence_ids: tuple[str, ...] = (),
+    clear_provenance: str | None = None,
 ) -> None:
     canonical_status, canonical_reason = _canonical_result_status_reason(diagnostics)
     if status is not canonical_status or reason_code != canonical_reason:
@@ -1142,6 +1408,15 @@ def _validate_result_success_contract(
         for status in bound_statuses
     ):
         raise ValueError("feasible result must not contain unresolved dynamic evidence")
+    if (
+        len(diagnostics) != 1
+        or diagnostics[0].code != "feasibility_clear"
+        or clear_provenance is None
+        or diagnostics[0].provenance != clear_provenance
+    ):
+        raise ValueError(
+            "feasible result requires one clear diagnostic bound to its source"
+        )
     if sample_count is not None and sample_count < 3:
         raise ValueError("feasible trajectory result requires at least three samples")
     if sample_count is not None:
@@ -1219,6 +1494,7 @@ def _validate_configuration_result(
         policy_fingerprint=policy_fingerprint,
         jacobian_source_ids=jacobian_source_ids,
         jacobian_evidence_ids=jacobian_evidence_ids,
+        clear_provenance=source_id,
     )
     if policy_fingerprint:
         expected_bindings = _fingerprint_limit_bindings(
@@ -1268,6 +1544,7 @@ def _validate_configuration_result(
                 jacobian_evidence_ids=jacobian_evidence_ids,
             ),
         )
+        _register_feasibility_seal(result, _configuration_result_snapshot(result))
         return
     try:
         fingerprint = result._binding_fingerprint
@@ -1294,6 +1571,7 @@ def _validate_configuration_result(
         jacobian_evidence_ids=jacobian_evidence_ids,
     ):
         raise ValueError("configuration result binding was mutated")
+    _validate_feasibility_seal(result, _configuration_result_snapshot(result))
     if policy_fingerprint and (
         policy_fingerprint[1] != expected_joint_names
         or policy_fingerprint[10] != policy_id
@@ -1385,6 +1663,7 @@ def _validate_trajectory_result(
         policy_fingerprint=policy_fingerprint,
         jacobian_source_ids=jacobian_source_ids,
         jacobian_evidence_ids=jacobian_evidence_ids,
+        clear_provenance=source_ids[0] if source_ids else None,
     )
     if policy_fingerprint:
         expected_bindings = _fingerprint_limit_bindings(
@@ -1432,6 +1711,7 @@ def _validate_trajectory_result(
                 jacobian_evidence_ids=jacobian_evidence_ids,
             ),
         )
+        _register_feasibility_seal(result, _trajectory_result_snapshot(result))
         return
     try:
         fingerprint = result._binding_fingerprint
@@ -1458,6 +1738,7 @@ def _validate_trajectory_result(
         jacobian_evidence_ids=jacobian_evidence_ids,
     ):
         raise ValueError("trajectory result binding was mutated")
+    _validate_feasibility_seal(result, _trajectory_result_snapshot(result))
     if policy_fingerprint and (
         policy_fingerprint[1] != expected_joint_names
         or policy_fingerprint[10] != policy_id
@@ -1471,8 +1752,23 @@ def validate_configuration_feasibility_result(
 ) -> ConfigurationFeasibilityResult:
     """configuration resultのidentity/completenessをcanonicalに再検証する。"""
 
-    _validate_configuration_result(result)
+    try:
+        _validate_configuration_result(result)
+    except AttributeError as exc:
+        raise ValueError("configuration result is malformed or bypassed") from exc
     return result
+
+
+def validate_jacobian_diagnostic(
+    diagnostic: JacobianDiagnostic,
+) -> JacobianDiagnostic:
+    """Jacobian diagnosticのpublic canonical revalidation route。"""
+
+    try:
+        _validate_jacobian_diagnostic(diagnostic)
+    except AttributeError as exc:
+        raise ValueError("Jacobian diagnostic is malformed or bypassed") from exc
+    return diagnostic
 
 
 def validate_trajectory_feasibility_policy(
@@ -1480,7 +1776,10 @@ def validate_trajectory_feasibility_policy(
 ) -> TrajectoryFeasibilityPolicy:
     """Public canonical policy validator used by evaluators and result composition."""
 
-    _validate_trajectory_feasibility_policy(policy)
+    try:
+        _validate_trajectory_feasibility_policy(policy)
+    except AttributeError as exc:
+        raise ValueError("trajectory policy is malformed or bypassed") from exc
     return policy
 
 
@@ -1489,7 +1788,10 @@ def validate_trajectory_feasibility_result(
 ) -> TrajectoryFeasibilityResult:
     """trajectory resultのidentity/completenessをcanonicalに再検証する。"""
 
-    _validate_trajectory_result(result)
+    try:
+        _validate_trajectory_result(result)
+    except AttributeError as exc:
+        raise ValueError("trajectory result is malformed or bypassed") from exc
     return result
 
 
@@ -1514,7 +1816,11 @@ def _validate_state_vector(
             sample_index=sample_index,
         )
     for index, value in enumerate(values):
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        try:
+            finite = math.isfinite(float(value))
+        except (OverflowError, TypeError, ValueError):
+            finite = False
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not finite:
             return FeasibilityDiagnostic(
                 "invalid_non_finite",
                 f"{name}[{index}] is not finite",
@@ -1846,6 +2152,11 @@ def _evaluate_configuration_feasibility_checked(
         raise TypeError("state and policy must use typed contracts")
     policy_fingerprint = _validate_trajectory_feasibility_policy(policy)
     _identity_text("state.source_id", state.source_id)
+    state_binding_valid = True
+    try:
+        _validate_feasibility_seal(state, _state_snapshot(state))
+    except (AttributeError, TypeError, ValueError):
+        state_binding_valid = False
     jacobian_binding_valid = state.jacobian is None
     if state.jacobian is not None:
         try:
@@ -1892,6 +2203,14 @@ def _evaluate_configuration_feasibility_checked(
     jacobian, jacobian_statuses = _jacobian_diagnostics(state.jacobian, policy)
     diagnostics.extend(jacobian)
     statuses.extend(jacobian_statuses)
+    if not state_binding_valid:
+        diagnostics.append(
+            FeasibilityDiagnostic(
+                "invalid_state_binding",
+                "configuration state has been mutated or bypassed",
+            )
+        )
+        statuses.append(FeasibilityStatus.INVALID)
     limit_source_ids, bound_statuses, bound_evidence_ids = _limit_bindings(
         policy,
         (DynamicQuantity.VELOCITY,),
@@ -1999,10 +2318,17 @@ def _evaluate_trajectory_feasibility_checked(
             (False,) * len(samples),
             policy_fingerprint=policy_fingerprint,
         )
-
     diagnostics: list[FeasibilityDiagnostic] = []
     statuses: list[FeasibilityStatus] = []
     source_ids = tuple(_identity_text(f"source_ids[{index}]", sample.source_id) for index, sample in enumerate(samples))
+    sample_binding_valid: list[bool] = []
+    for sample in samples:
+        try:
+            _validate_feasibility_seal(sample, _sample_snapshot(sample))
+        except (AttributeError, TypeError, ValueError):
+            sample_binding_valid.append(False)
+        else:
+            sample_binding_valid.append(True)
     qvel_available: list[bool] = []
     jacobian_available: list[bool] = []
     velocity_evidence: list[VelocityEvidenceBinding] = []
@@ -2051,6 +2377,15 @@ def _evaluate_trajectory_feasibility_checked(
         jacobian, jacobian_statuses = _jacobian_diagnostics(sample.jacobian, policy, sample_index=index)
         diagnostics.extend(jacobian)
         statuses.extend(jacobian_statuses)
+        if not sample_binding_valid[index]:
+            diagnostics.append(
+                FeasibilityDiagnostic(
+                    "invalid_sample_binding",
+                    "trajectory sample has been mutated or bypassed",
+                    sample_index=index,
+                )
+            )
+            statuses.append(FeasibilityStatus.INVALID)
 
     intervals_by_index: list[float | None] = []
     finite_difference_velocities_by_index: list[tuple[float, ...] | None] = []
@@ -2277,6 +2612,7 @@ __all__ = [
     "evaluate_configuration_feasibility",
     "evaluate_trajectory_feasibility",
     "validate_configuration_feasibility_result",
+    "validate_jacobian_diagnostic",
     "validate_trajectory_feasibility_policy",
     "validate_trajectory_feasibility_result",
 ]
