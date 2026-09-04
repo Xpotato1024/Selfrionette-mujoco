@@ -340,6 +340,20 @@ def _validate_collision_context(
         _validate_context_inventory_semantics(inventory_fingerprint)
         policy_fingerprint = _canonical_policy_fingerprint(context.policy_fingerprint)
         canonical_pair_ids = _pair_ids_from_inventory_fingerprint(inventory_fingerprint)
+        expected_pair_id_set = set(canonical_pair_ids)
+        for pair_id, _, _, classification in policy_fingerprint[3]:
+            if pair_id not in expected_pair_id_set:
+                raise ValueError(
+                    "policy fingerprint exclusion pair must be in inventory expected pairs"
+                )
+            if (
+                _kind_from_inventory_fingerprint(inventory_fingerprint, pair_id)
+                is not CollisionKind.STRUCTURAL_PROXIMITY
+                or classification != CollisionKind.STRUCTURAL_PROXIMITY.value
+            ):
+                raise ValueError(
+                    "policy fingerprint exclusion must target inventory-derived structural proximity"
+                )
     except AttributeError as exc:
         raise ValueError("collision context binding is incomplete") from exc
     if context.policy_id != policy_fingerprint[0]:
@@ -550,6 +564,21 @@ def _policy_fingerprint(
                 )
                 for exclusion in policy.exclusions
             ),
+        )
+    )
+
+
+def _policy_fingerprint_without_exclusions(
+    policy: CollisionPolicy,
+) -> tuple[str, float, float, tuple[tuple[str, str, str, str], ...]]:
+    """invalid policyをtyped INVALID bindingへ閉じるための最小fingerprint。"""
+
+    return _canonical_policy_fingerprint(
+        (
+            policy.policy_id,
+            _finite("clearance_m", policy.clearance_m),
+            _finite("near_collision_margin_m", policy.near_collision_margin_m),
+            (),
         )
     )
 
@@ -1011,9 +1040,17 @@ def _collision_evaluation_inconsistency(
             return "collision evidence has no provenance"
         if distance is None or distance >= 0.0:
             return "collision evidence requires negative distance"
-    elif status in {CollisionStatus.UNKNOWN, CollisionStatus.UNAVAILABLE}:
+    elif status is CollisionStatus.UNKNOWN:
         if distance is not None:
             return "unknown or unavailable evidence must omit distance"
+        if provenance is None:
+            return "unknown collision evidence has no provenance"
+    elif status is CollisionStatus.UNAVAILABLE:
+        if distance is not None:
+            return "unknown or unavailable evidence must omit distance"
+    elif status is CollisionStatus.INVALID:
+        if reason_code == "unknown_collision_pair_role" and provenance is None:
+            return "invalid collision evidence has no provenance"
     if require_seal:
         try:
             _validate_collision_seal(
@@ -1204,7 +1241,7 @@ def _invalid_inventory_context(
             inventory_revision=inventory_revision,
             expected_pair_ids=_pair_ids_from_inventory_fingerprint(fingerprint),
             inventory_fingerprint=fingerprint,
-            policy_fingerprint=_policy_fingerprint(policy),
+            policy_fingerprint=_policy_fingerprint_without_exclusions(policy),
         )
     except (AttributeError, TypeError, ValueError) as exc:
         raise CollisionContractViolation(
@@ -1297,7 +1334,19 @@ def _resolve_collision_context(
         )
     except ValueError:
         if _validate_inventory(inventory) is None:
-            raise
+            if _validate_policy(inventory, policy) is None:
+                raise
+            return CollisionContext(
+                robot_id=robot_id,
+                model_id=model_id,
+                policy_id=policy.policy_id,
+                policy_revision=policy_revision,
+                inventory_id=inventory.inventory_id,
+                inventory_revision=inventory_revision,
+                expected_pair_ids=_context_expected_pair_ids(inventory),
+                inventory_fingerprint=_inventory_fingerprint(inventory),
+                policy_fingerprint=_policy_fingerprint_without_exclusions(policy),
+            )
         return _invalid_inventory_context(
             inventory,
             policy,
