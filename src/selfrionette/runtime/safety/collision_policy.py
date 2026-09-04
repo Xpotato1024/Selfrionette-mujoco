@@ -2125,14 +2125,11 @@ def build_mujoco_geometry_inventory(
             else:
                 role = GeometryRole.UNKNOWN
             geometries.append(GeometryIdentity(geom_name, body_name, role))
-    except (
-        ImportError,
-        AttributeError,
-        IndexError,
-        OverflowError,
-        TypeError,
-        ValueError,
-    ) as exc:
+    except Exception as exc:
+        # MuJoCoのmodel accessor / library callは、実装やproviderによって
+        # RuntimeError等の通常例外を返し得る。ここは明示的なadapter境界
+        # なので、Exceptionだけをtyped ValueErrorへ正規化する。KeyboardInterrupt
+        # 等のBaseExceptionはプロセス制御として伝播させる。
         raise ValueError(f"MuJoCo geometry inventory failed: {exc}") from exc
     return GeometryInventory(tuple(geometries))
 
@@ -2203,14 +2200,10 @@ def read_mujoco_contact_observations(
             )
             for pair_id, distance in sorted(contacts_by_pair.items())
         )
-    except (
-        ImportError,
-        AttributeError,
-        IndexError,
-        OverflowError,
-        TypeError,
-        ValueError,
-    ) as exc:
+    except Exception as exc:
+        # contact count/index/arrayとmj_id2nameを同じ明示的adapter境界で
+        # fail-closedにする。通常のExceptionだけを捕捉し、BaseExceptionは
+        # 捕捉しない。
         raise ValueError(f"MuJoCo contact observation failed: {exc}") from exc
 
 
