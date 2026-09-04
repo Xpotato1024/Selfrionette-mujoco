@@ -26,6 +26,7 @@ from selfrionette.runtime.safety.physical_limits import (
     effective_limit_status,
     make_unknown_limit,
     source_identity,
+    validate_concrete_limit_identity,
     validate_limit_conversion,
     validate_limit_source,
     validate_physical_limit,
@@ -132,22 +133,6 @@ def _comparison_tolerance(value: object) -> float:
     return tolerance
 
 
-def _concrete_identity(name: str, value: object) -> str:
-    result = _text(name, value)
-    if result.casefold() in {
-        "n-a",
-        "n/a",
-        "na",
-        "none",
-        "null",
-        "unknown",
-        "unavailable",
-        "placeholder",
-    }:
-        raise ValueError(f"{name} must be a concrete identity")
-    return result
-
-
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class JointSpaceConversion:
     """motor / actuator値をjoint値へ射影する一意な関係。"""
@@ -173,11 +158,11 @@ class JointSpaceConversion:
         if self.source_space is LimitSpace.JOINT:
             raise ValueError("source_space must be motor or actuator")
         _text("joint_name", self.joint_name)
-        _concrete_identity("source_name", self.source_name)
+        validate_concrete_limit_identity("source_name", self.source_name)
         ratio = _finite("gear_ratio", self.gear_ratio)
         sign = _finite("sign", self.sign)
         offset = _finite("offset", self.offset)
-        _concrete_identity("relation_id", self.relation_id)
+        validate_concrete_limit_identity("relation_id", self.relation_id)
         _text("unit", self.unit)
         if ratio == 0.0:
             raise ValueError("gear_ratio must be non-zero")
@@ -202,6 +187,7 @@ class JointSpaceConversion:
             gear_ratio=self.gear_ratio,
             sign=self.sign,
             offset=self.offset,
+            source_name=self.source_name,
         )
 
     def source_to_joint(self, value: float) -> float:
@@ -247,7 +233,7 @@ class LimitParityRecord:
             raise ValueError("parity lower must not exceed upper")
         if self.reason is not None:
             _text("reason", self.reason)
-        if self.source is not None and not isinstance(self.source, LimitSourceProvenance):
+        if self.source is not None and type(self.source) is not LimitSourceProvenance:
             raise TypeError("source must be LimitSourceProvenance or None")
         if self.source is not None:
             # 自由文字列からauthorityを推測せず、P2 source validatorを再利用する。
@@ -357,7 +343,7 @@ class ResolvedJointBound:
             raise ValueError("resolved bound lower_rad and upper_rad must be provided together")
         if lower_rad is not None and upper_rad is not None and lower_rad > upper_rad:
             raise ValueError("resolved bound lower_rad must not exceed upper_rad")
-        if not isinstance(self.parity, tuple) or not all(isinstance(item, LimitParityRecord) for item in self.parity):
+        if not isinstance(self.parity, tuple) or not all(type(item) is LimitParityRecord for item in self.parity):
             raise TypeError("parity must contain LimitParityRecord values")
         if not self.parity:
             raise ValueError("resolved bound parity must be non-empty")
@@ -463,7 +449,7 @@ class LimitResolutionResult:
         _text("robot_id", self.robot_id)
         if not isinstance(self.bounds, tuple) or not self.bounds:
             raise ValueError("limit resolution requires at least one bound")
-        if any(not isinstance(item, ResolvedJointBound) for item in self.bounds):
+        if any(type(item) is not ResolvedJointBound for item in self.bounds):
             raise TypeError("bounds must contain ResolvedJointBound values")
         names = tuple(item.joint_name for item in self.bounds)
         if len(set(names)) != len(names):
@@ -582,6 +568,7 @@ def _parity_snapshot(
     source_snapshot = None
     if parity.source is not None:
         source_snapshot = (
+            id(parity.source),
             parity.source.source_kind,
             parity.source.source_id,
             parity.source.revision,
@@ -593,6 +580,7 @@ def _parity_snapshot(
     conversion_snapshot = None
     if parity.conversion is not None:
         conversion_snapshot = (
+            id(parity.conversion),
             parity.conversion.source_space,
             parity.conversion.target_space,
             parity.conversion.method,
@@ -624,7 +612,7 @@ def _bound_snapshot(
         bound.upper_rad,
         bound.status,
         bound.source_names,
-        tuple(_parity_snapshot(item) for item in bound.parity),
+        tuple((id(item), _parity_snapshot(item)) for item in bound.parity),
         bound.reason,
         bound.comparison_tolerance_rad,
     )
@@ -636,8 +624,11 @@ def _result_snapshot(
     return (
         result.schema_version,
         result.robot_id,
-        tuple(_bound_snapshot(item) for item in result.bounds),
-        tuple(_conversion_snapshot(item) for item in result.conversion_relations),
+        tuple((id(item), _bound_snapshot(item)) for item in result.bounds),
+        tuple(
+            (id(item), _conversion_snapshot(item))
+            for item in result.conversion_relations
+        ),
         result.expected_joint_names,
         result.comparison_tolerance_rad,
     )
@@ -646,17 +637,17 @@ def _result_snapshot(
 def _validate_joint_conversion(
     relation: object,
 ) -> JointSpaceConversion:
-    if not isinstance(relation, JointSpaceConversion):
+    if type(relation) is not JointSpaceConversion:
         raise TypeError("conversion relation must be JointSpaceConversion")
     source_space = relation.source_space
     if not isinstance(source_space, LimitSpace) or source_space is LimitSpace.JOINT:
         raise ValueError("source_space must be motor or actuator")
     _text("joint_name", relation.joint_name)
-    _concrete_identity("source_name", relation.source_name)
+    validate_concrete_limit_identity("source_name", relation.source_name)
     ratio = _finite("gear_ratio", relation.gear_ratio)
     sign = _finite("sign", relation.sign)
     offset = _finite("offset", relation.offset)
-    _concrete_identity("relation_id", relation.relation_id)
+    validate_concrete_limit_identity("relation_id", relation.relation_id)
     _text("unit", relation.unit)
     if ratio == 0.0:
         raise ValueError("gear_ratio must be non-zero")
@@ -680,7 +671,7 @@ def _validate_joint_conversion(
 def _validate_parity_record(
     parity: object,
 ) -> LimitParityRecord:
-    if not isinstance(parity, LimitParityRecord):
+    if type(parity) is not LimitParityRecord:
         raise TypeError("parity must contain LimitParityRecord values")
     joint_name = _text("joint_name", parity.joint_name)
     source_name = _text("source_name", parity.source_name)
@@ -741,7 +732,7 @@ def _validate_parity_record(
 def _validate_resolved_bound(
     bound: object,
 ) -> ResolvedJointBound:
-    if not isinstance(bound, ResolvedJointBound):
+    if type(bound) is not ResolvedJointBound:
         raise TypeError("bound must be ResolvedJointBound")
     joint_name = _text("joint_name", bound.joint_name)
     status = bound.status
@@ -807,7 +798,7 @@ def _validate_resolved_bound(
 def _validate_limit_resolution_result(
     result: object,
 ) -> LimitResolutionResult:
-    if not isinstance(result, LimitResolutionResult):
+    if type(result) is not LimitResolutionResult:
         raise TypeError("result must be LimitResolutionResult")
     if type(result.schema_version) is not int or result.schema_version != 1:
         raise ValueError("unsupported limit resolution schema version")
@@ -844,6 +835,7 @@ def _validate_limit_resolution_result(
             if (
                 relation.source_space is not conversion.source_space
                 or relation.joint_name != bound.joint_name
+                or relation.source_name != conversion.source_name
                 or relation.unit != parity.unit
                 or relation.gear_ratio != conversion.gear_ratio
                 or relation.sign != conversion.sign
