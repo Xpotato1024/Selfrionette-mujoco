@@ -18,6 +18,7 @@ from selfrionette.runtime.safety.physical_limits import (
 )
 from selfrionette.runtime.safety.limit_resolution import (
     validate_limit_parity_record,
+    validate_limit_resolution_identity,
     validate_limit_resolution_result,
     validate_resolved_joint_bound,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "validate_limit_source",
     "validate_physical_limit",
     "validate_limit_parity_record",
+    "validate_limit_resolution_identity",
     "validate_limit_resolution_result",
     "validate_resolved_joint_bound",
 ]
