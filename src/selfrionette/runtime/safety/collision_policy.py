@@ -1049,7 +1049,9 @@ def _collision_evaluation_inconsistency(
         if distance is not None:
             return "unknown or unavailable evidence must omit distance"
     elif status is CollisionStatus.INVALID:
-        if reason_code == "unknown_collision_pair_role" and provenance is None:
+        if provenance is None and (
+            distance is not None or reason_code == "unknown_collision_pair_role"
+        ):
             return "invalid collision evidence has no provenance"
     if require_seal:
         try:
