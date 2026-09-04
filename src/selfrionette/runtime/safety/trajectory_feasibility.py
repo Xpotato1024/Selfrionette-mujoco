@@ -17,6 +17,7 @@ from threading import RLock
 from typing import Final
 
 from selfrionette.runtime.safety.physical_limits import (
+    _construct_projected_limit,
     EvidenceStatus,
     effective_limit_status,
     LimitQuantity,
@@ -1338,19 +1339,33 @@ def _reconstruct_policy_fingerprint_limits(
                     offset=offset,
                     source_name=conversion_source_name,
                 )
-            limit = PhysicalLimit(
-                name=name,
-                quantity=quantity,
-                lower=lower,
-                upper=upper,
-                unit=unit,
-                space=space,
-                frame=frame,
-                status=status,
-                source=source,
-                conversion=conversion,
-                reason=reason,
-            )
+            if source_space is target_space:
+                limit = PhysicalLimit(
+                    name=name,
+                    quantity=quantity,
+                    lower=lower,
+                    upper=upper,
+                    unit=unit,
+                    space=space,
+                    frame=frame,
+                    status=status,
+                    source=source,
+                    conversion=conversion,
+                    reason=reason,
+                )
+            else:
+                limit = _construct_projected_limit(
+                    name=name,
+                    quantity=quantity,
+                    lower=lower,
+                    upper=upper,
+                    unit=unit,
+                    frame=frame,
+                    status=status,
+                    source=source,
+                    conversion=conversion,
+                    reason=reason,
+                )
         except (TypeError, ValueError, AttributeError) as exc:
             raise ValueError(f"policy_fingerprint limit[{index}] cannot be reconstructed") from exc
         validated = _validate_dynamic_limit(limit)
