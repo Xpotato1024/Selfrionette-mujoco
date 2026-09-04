@@ -62,6 +62,7 @@ def _context(
     inventory_revision: str = "inventory-revision-1",
     policy_fingerprint_id: str | None = None,
     policy_fingerprint_thresholds: tuple[float, float] | None = None,
+    policy_fingerprint_exclusions: tuple[tuple[str, str, str, str], ...] | None = None,
 ) -> CollisionContext:
     pair_ids = tuple(pair.pair_id for pair in inventory.pairs())
     if not pair_ids:
@@ -93,14 +94,18 @@ def _context(
             policy.near_collision_margin_m
             if policy_fingerprint_thresholds is None
             else policy_fingerprint_thresholds[1],
-            tuple(
-                (
-                    exclusion.pair_id,
-                    exclusion.reason,
-                    exclusion.evidence_reference,
-                    exclusion.classification.value,
+            (
+                tuple(
+                    (
+                        exclusion.pair_id,
+                        exclusion.reason,
+                        exclusion.evidence_reference,
+                        exclusion.classification.value,
+                    )
+                    for exclusion in policy.exclusions
                 )
-                for exclusion in policy.exclusions
+                if policy_fingerprint_exclusions is None
+                else policy_fingerprint_exclusions
             ),
         ),
     )
@@ -277,6 +282,34 @@ def test_same_body_pair_deletion_from_context_is_rejected() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("exclusion_pair_id", "message"),
+    (
+        ("ghost|upper", "inventory expected pairs"),
+        ("fore|upper", "inventory-derived structural proximity"),
+    ),
+)
+def test_context_rejects_policy_fingerprint_exclusions_outside_structural_inventory(
+    exclusion_pair_id: str,
+    message: str,
+) -> None:
+    inventory = _inventory()
+    policy = _policy()
+    with pytest.raises(ValueError, match=message):
+        _context(
+            inventory,
+            policy,
+            policy_fingerprint_exclusions=(
+                (
+                    exclusion_pair_id,
+                    "direct context exclusion",
+                    "geometry-review-direct-001",
+                    CollisionKind.STRUCTURAL_PROXIMITY.value,
+                ),
+            ),
+        )
+
+
 def test_near_collision_uses_explicit_clearance_threshold() -> None:
     result = _evaluate(
         _inventory(),
@@ -356,8 +389,8 @@ def test_exclusion_clear_cannot_override_environment_pair_kind() -> None:
         "geometry-review-environment",
     )
     policy = _policy(exclusion)
-    context = _context(inventory, policy)
-    evaluations = list(_clear_evaluations(inventory, policy, context))
+    context = _context(inventory, _policy())
+    evaluations = list(_clear_evaluations(inventory, _policy(), context))
     index = next(
         index
         for index, evaluation in enumerate(evaluations)
@@ -914,6 +947,83 @@ def test_provider_non_clear_evaluation_requires_typed_provenance(
             0.01,
             reason_code,
         )
+
+
+def test_provider_unknown_evaluation_requires_provenance_but_unavailable_does_not() -> None:
+    policy = _policy()
+
+    with pytest.raises(ValueError, match="no provenance"):
+        CollisionEvaluation(
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
+            CollisionStatus.UNKNOWN,
+            None,
+            policy.clearance_m,
+            "collision_distance_unknown",
+            near_collision_margin_m=policy.near_collision_margin_m,
+        )
+
+    unavailable = CollisionEvaluation(
+        "fore|upper",
+        CollisionKind.SELF_INTERFERENCE,
+        CollisionStatus.UNAVAILABLE,
+        None,
+        policy.clearance_m,
+        "collision_observation_unavailable",
+        near_collision_margin_m=policy.near_collision_margin_m,
+    )
+    assert unavailable.provenance is None
+
+
+def test_provider_derived_invalid_evaluation_requires_provenance() -> None:
+    policy = _policy()
+
+    with pytest.raises(ValueError, match="no provenance"):
+        CollisionEvaluation(
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
+            CollisionStatus.INVALID,
+            None,
+            policy.clearance_m,
+            "unknown_collision_pair_role",
+            near_collision_margin_m=policy.near_collision_margin_m,
+        )
+
+    invalid = CollisionEvaluation(
+        "fore|upper",
+        CollisionKind.SELF_INTERFERENCE,
+        CollisionStatus.INVALID,
+        None,
+        policy.clearance_m,
+        "unknown_collision_pair_role",
+        "provider-role-check",
+        policy.near_collision_margin_m,
+    )
+    object.__setattr__(invalid, "provenance", None)
+    with pytest.raises(ValueError, match="no provenance"):
+        package_validate_evaluation(invalid)
+
+
+def test_unknown_missing_provenance_is_rejected_by_aggregate_after_tamper() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    result = _clear_result(inventory, policy, context)
+    evaluation = result.evaluations[0]
+    object.__setattr__(evaluation, "status", CollisionStatus.UNKNOWN)
+    object.__setattr__(evaluation, "distance_m", None)
+    object.__setattr__(evaluation, "reason_code", "collision_distance_unknown")
+    object.__setattr__(evaluation, "provenance", None)
+
+    invalid = CollisionCheckResult(
+        context,
+        CollisionStatus.INVALID,
+        result.evaluations,
+        "collision_result_inconsistent",
+    )
+    assert invalid.status is CollisionStatus.INVALID
+    assert not invalid.clear
+    assert package_validate_check(invalid) is invalid
 
 
 def test_collision_provenance_and_pair_id_reject_reserved_placeholders() -> None:

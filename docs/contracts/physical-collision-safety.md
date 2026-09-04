@@ -54,7 +54,9 @@ near evidenceの上限を同じthresholdから検証する。`collision` evidenc
 `contact` evidenceはnon-negative distanceとcanonicalな`task_object_contact` reasonを必須とし、
 負のdistanceはcollisionとして扱う。provider由来の非-excluded evaluationは`clear`だけでなく、
 `collision`、`near_collision`、`contact`などのnon-clear statusでもtyped provenanceを必須とする。
-`unknown` kindはどのstatusでもevidenceを構成できない。
+providerが観測したdistance欠落による`unknown`もtyped provenanceを必須とする一方、観測自体が
+存在しない`unavailable`はprovenanceなしで表現できる。provider evidenceを伴う`invalid`も
+provenanceを失ってはならない。`unknown` kindはどのstatusでもevidenceを構成できない。
 
 ## Exclusion provenance
 
@@ -66,7 +68,10 @@ explicit exclusionは実際に同一bodyで`structural_proximity`へ分類され
 exclusionの存在は全geomのcollision filterを変更せず、そのpairだけを
 `explicit_structural_exclusion`として追跡可能にする。clear evaluationのpairとevidence referenceは
 contextへbindされたpolicy exclusionと一致しなければならず、callerが直接作ったarbitrary exclusion
-をclearへ昇格させない。
+をclearへ昇格させない。`CollisionContext`のpolicy fingerprintに含める全exclusionは、同じ
+contextのinventory fingerprintから導出した`expected_pair_ids`集合に含まれ、かつ導出kindが
+`structural_proximity`でなければならない。したがってinventory外のpairや異なるbodyの
+`self_interference` pairをfingerprintへ直接注入して保持・無視することもできない。
 
 ## Configuration / trajectory result
 
@@ -79,6 +84,7 @@ callerのrevision文字列だけを信頼しない。identityは空値やplaceho
 `CollisionContext`のconstructor自体も、少なくとも一つの`robot` geometry、bodyごとのdisjointな
 role集合、inventory fingerprintから導出したcanonical pair集合を要求する。したがってdirect context
 constructionでも、role overlap、unknown role、robot geometry欠落、pairの削除・追加は受理しない。
+また、inventory外または非structuralなpolicy fingerprint exclusionも受理しない。
 factoryはtyped context、またはcontextを組み立てる明示的なidentity値を要求し、暗黙の`"unknown"`
 へfallbackしない。inventory role、body、source identity、policy threshold、exclusion内容が変わった
 stale contextは`invalid`として停止する。
