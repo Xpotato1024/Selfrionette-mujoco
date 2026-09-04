@@ -75,6 +75,7 @@ EXPECTED_MODULES = {
         "collision_policy",
         "input_safety",
         "limit_resolution",
+        "operator_validation",
         "physical_limits",
         "physical_safety_core",
         "qpos_feasibility",
