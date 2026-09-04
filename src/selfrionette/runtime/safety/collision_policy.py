@@ -991,6 +991,8 @@ def _collision_evaluation_inconsistency(
         else:
             return "clear collision evidence has an unsupported reason"
     elif status is CollisionStatus.CONTACT:
+        if provenance is None:
+            return "contact evidence has no provenance"
         if kind is not CollisionKind.TASK_OBJECT_CONTACT:
             return "only task-object pairs may produce contact evidence"
         if distance is None:
@@ -1000,9 +1002,13 @@ def _collision_evaluation_inconsistency(
         if reason_code != "task_object_contact":
             return "contact evidence has an unsupported reason"
     elif status is CollisionStatus.NEAR_COLLISION:
+        if provenance is None:
+            return "near-collision evidence has no provenance"
         if distance is None or distance < 0.0 or distance > clearance + near_margin:
             return "near-collision evidence is outside the clearance margin"
     elif status is CollisionStatus.COLLISION:
+        if provenance is None:
+            return "collision evidence has no provenance"
         if distance is None or distance >= 0.0:
             return "collision evidence requires negative distance"
     elif status in {CollisionStatus.UNKNOWN, CollisionStatus.UNAVAILABLE}:
@@ -1073,11 +1079,7 @@ def _derive_collision_status_reason(
         )
         if evaluation.reason_code == "explicit_structural_exclusion":
             if (
-                inventory_kind
-                not in {
-                    CollisionKind.SELF_INTERFERENCE,
-                    CollisionKind.STRUCTURAL_PROXIMITY,
-                }
+                inventory_kind is not CollisionKind.STRUCTURAL_PROXIMITY
                 or evaluation.kind is not CollisionKind.STRUCTURAL_PROXIMITY
             ):
                 return CollisionStatus.INVALID, "collision_result_inconsistent"
@@ -1140,10 +1142,9 @@ def _validate_policy(inventory: GeometryInventory, policy: CollisionPolicy) -> s
             pair = pair_by_id.get(exclusion.pair_id)
             if pair is None:
                 return "collision_exclusion_pair_not_in_inventory"
-            if pair.kind not in {
-                CollisionKind.SELF_INTERFERENCE,
-                CollisionKind.STRUCTURAL_PROXIMITY,
-            }:
+            if pair.kind is CollisionKind.SELF_INTERFERENCE:
+                return "self_interference_exclusion_forbidden"
+            if pair.kind is not CollisionKind.STRUCTURAL_PROXIMITY:
                 return "environment_collision_exclusion_forbidden"
         return None
     except (AttributeError, TypeError, ValueError):

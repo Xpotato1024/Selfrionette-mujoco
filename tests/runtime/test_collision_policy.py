@@ -304,7 +304,7 @@ def test_missing_observation_is_unavailable_not_clear() -> None:
     assert all(item.status is CollisionStatus.UNAVAILABLE for item in result.evaluations)
 
 
-def test_exclusion_requires_explicit_pair_and_provenance() -> None:
+def test_different_body_self_interference_exclusion_is_rejected() -> None:
     exclusion = CollisionExclusion(
         pair_id="fore|upper",
         reason="manufacturer structural overlap is expected",
@@ -319,11 +319,8 @@ def test_exclusion_requires_explicit_pair_and_provenance() -> None:
         _policy(exclusion),
     )
 
-    excluded = next(item for item in result.evaluations if item.pair_id == "fore|upper")
-    assert result.status is CollisionStatus.CLEAR
-    assert excluded.kind is CollisionKind.STRUCTURAL_PROXIMITY
-    assert excluded.reason_code == "explicit_structural_exclusion"
-    assert excluded.provenance == "geometry-review-001"
+    assert result.status is CollisionStatus.INVALID
+    assert result.reason_code == "self_interference_exclusion_forbidden"
 
 
 def test_direct_clear_exclusion_must_match_context_policy_declaration() -> None:
@@ -875,6 +872,50 @@ def test_collision_evaluation_rejects_contradictory_success_on_construction() ->
         )
 
 
+@pytest.mark.parametrize(
+    ("pair_id", "kind", "status", "distance", "reason_code"),
+    (
+        (
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
+            CollisionStatus.COLLISION,
+            -0.001,
+            "self_interference_penetration",
+        ),
+        (
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
+            CollisionStatus.NEAR_COLLISION,
+            0.02,
+            "near_collision_clearance",
+        ),
+        (
+            "fore|target",
+            CollisionKind.TASK_OBJECT_CONTACT,
+            CollisionStatus.CONTACT,
+            0.0,
+            "task_object_contact",
+        ),
+    ),
+)
+def test_provider_non_clear_evaluation_requires_typed_provenance(
+    pair_id: str,
+    kind: CollisionKind,
+    status: CollisionStatus,
+    distance: float,
+    reason_code: str,
+) -> None:
+    with pytest.raises(ValueError, match="no provenance"):
+        CollisionEvaluation(
+            pair_id,
+            kind,
+            status,
+            distance,
+            0.01,
+            reason_code,
+        )
+
+
 def test_collision_provenance_and_pair_id_reject_reserved_placeholders() -> None:
     with pytest.raises(ValueError, match="non-placeholder identity"):
         CollisionObservation("fore|upper", 0.1, "unknown")
@@ -1100,6 +1141,25 @@ def test_public_clear_revalidates_nested_evaluation_after_mutation() -> None:
 
     assert not bypassed.clear
 
+    missing_non_clear_provenance = _evaluate(
+        inventory,
+        (
+            CollisionObservation("fore|upper", -0.001, "provider-self"),
+            CollisionObservation("floor|upper", 0.1, "provider-environment"),
+            CollisionObservation("floor|fore", 0.1, "provider-environment"),
+        ),
+        policy,
+    )
+    assert missing_non_clear_provenance.status is CollisionStatus.COLLISION
+    object.__setattr__(
+        missing_non_clear_provenance.evaluations[0],
+        "provenance",
+        None,
+    )
+    assert not missing_non_clear_provenance.clear
+    with pytest.raises(ValueError, match="aggregate status/reason"):
+        package_validate_check(missing_non_clear_provenance)
+
 
 def test_clear_rejects_nested_thresholds_not_bound_to_context_policy() -> None:
     inventory = _inventory()
@@ -1180,10 +1240,10 @@ def test_deleted_or_extra_dangerous_pair_in_context_fails_closed() -> None:
 
 
 def test_explicit_exclusion_remains_a_complete_result_evaluation() -> None:
-    inventory = _inventory()
+    inventory = _same_body_inventory()
     policy = _policy(
         CollisionExclusion(
-            "fore|upper",
+            "fore_shell|upper_shell",
             "known structural overlap",
             "geometry-review-002",
         )
@@ -1192,14 +1252,14 @@ def test_explicit_exclusion_remains_a_complete_result_evaluation() -> None:
     result = _evaluate(
         inventory,
         (
-            CollisionObservation("floor|upper", 0.1, "fixture"),
-            CollisionObservation("floor|fore", 0.1, "fixture"),
+            CollisionObservation("floor|upper_shell", 0.1, "fixture"),
+            CollisionObservation("floor|fore_shell", 0.1, "fixture"),
         ),
         policy,
     )
     by_pair = {item.pair_id: item for item in result.evaluations}
     assert set(by_pair) == set(context.expected_pair_ids)
-    assert by_pair["fore|upper"].reason_code == "explicit_structural_exclusion"
+    assert by_pair["fore_shell|upper_shell"].reason_code == "explicit_structural_exclusion"
     assert result.status is CollisionStatus.CLEAR
 
 
@@ -1366,15 +1426,15 @@ def test_nested_inventory_policy_and_result_replacement_is_not_authority() -> No
         inventory.pairs()
 
     exclusion = CollisionExclusion(
-        "fore|upper", "known structural overlap", "geometry-review-002"
+        "fore_shell|upper_shell", "known structural overlap", "geometry-review-002"
     )
     policy = _policy(exclusion)
     replacement_exclusion = CollisionExclusion(
-        "fore|upper", "known structural overlap", "geometry-review-002"
+        "fore_shell|upper_shell", "known structural overlap", "geometry-review-002"
     )
     object.__setattr__(policy, "exclusions", (replacement_exclusion,))
     with pytest.raises(ValueError, match="mutated or bypassed"):
-        policy.exclusion_for("fore|upper")
+        policy.exclusion_for("fore_shell|upper_shell")
 
     inventory = _inventory()
     policy = _policy()
