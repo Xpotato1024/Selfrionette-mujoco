@@ -47,9 +47,11 @@ pairのroleを参照して`task_object_contact`だけに`contact=True`を設定�
 `self_interference`、`structural_proximity`、`environment_collision`は`contact=False`のまま
 MuJoCoのsigned distanceを保持するため、負のdistanceはそれぞれのpenetration reasonへ到達する。
 inventory外のpair、unknown role、missing geom、malformed distanceはadapterでfail-closedに停止し、
-`invalid_collision_observation`へ変換してclearへ昇格させない。malformedなmodel/data配列の
-`IndexError`と数値範囲の`OverflowError`もadapter境界でtyped `ValueError`へ正規化するが、
-`SystemExit`、`KeyboardInterrupt`その他の`BaseException`は捕捉しない。
+`invalid_collision_observation`へ変換してclearへ昇格させない。`mj_id2name`、model/dataのcount、
+`__index__`、geom/contact配列・field accessorから発生する通常の`Exception`（`RuntimeError`を
+含む）は、inventoryや観測を部分生成せず、明示的なadapter境界でtyped `ValueError`へ正規化する。
+これによりadapter異常が正常な`CLEAR`へ到達する経路を持たない。一方、`SystemExit`、
+`KeyboardInterrupt`、`GeneratorExit`その他の`BaseException`はプロセス制御として捕捉しない。
 MuJoCoの`ngeom`、`ncon`、geom/body/contact indexは、暗黙の`int`変換を行わず、
 `operator.index`を満たす整数like scalarとして検証した後にだけ使用する。Python / NumPyの
 `bool`、fractional値、string、その他の非整数値、負値、範囲外indexは変換前に拒否し、

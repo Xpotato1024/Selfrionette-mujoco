@@ -81,6 +81,16 @@ class _Indexable:
         return self.value
 
 
+class _RuntimeErrorIndex:
+    def __index__(self) -> int:
+        raise RuntimeError("MuJoCo index accessor failed")
+
+
+class _RuntimeErrorSequence:
+    def __getitem__(self, _index: object) -> object:
+        raise RuntimeError("MuJoCo array accessor failed")
+
+
 def _context(
     inventory: GeometryInventory,
     policy: CollisionPolicy,
@@ -1118,6 +1128,220 @@ def test_mujoco_adapters_reject_numpy_bool_scalars(
     )
 
     with pytest.raises(ValueError, match="MuJoCo contact observation failed"):
+        read_mujoco_contact_observations(model, data, inventory)
+
+
+@pytest.mark.parametrize(
+    "failure_point",
+    (
+        "mj_id2name",
+        "ngeom",
+        "ngeom_index",
+        "geom_body_array",
+        "geom_body_index",
+    ),
+)
+def test_mujoco_geometry_inventory_runtime_errors_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+) -> None:
+    class Model:
+        geom_names = ("upper",)
+        body_names = ("arm_body",)
+
+        @property
+        def ngeom(self) -> object:
+            if failure_point == "ngeom":
+                raise RuntimeError("ngeom accessor failed")
+            if failure_point == "ngeom_index":
+                return _RuntimeErrorIndex()
+            return 1
+
+        @property
+        def geom_bodyid(self) -> object:
+            if failure_point == "geom_body_array":
+                raise RuntimeError("geom body array accessor failed")
+            if failure_point == "geom_body_index":
+                return (_RuntimeErrorIndex(),)
+            return (0,)
+
+    def mj_id2name(
+        model: Model,
+        object_type: str,
+        item_id: int,
+    ) -> str:
+        if failure_point == "mj_id2name":
+            raise RuntimeError("mj_id2name accessor failed")
+        return (
+            model.geom_names[item_id]
+            if object_type == "geom"
+            else model.body_names[item_id]
+        )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "mujoco",
+        SimpleNamespace(
+            mjtObj=SimpleNamespace(mjOBJ_GEOM="geom", mjOBJ_BODY="body"),
+            mj_id2name=mj_id2name,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="MuJoCo geometry inventory failed"):
+        build_mujoco_geometry_inventory(Model(), robot_body_names=("arm_body",))
+
+
+@pytest.mark.parametrize("error_type", (KeyboardInterrupt, SystemExit, GeneratorExit))
+def test_mujoco_geometry_inventory_does_not_catch_base_exception_types(
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[BaseException],
+) -> None:
+    def mj_id2name(_model: object, _object_type: str, _item_id: int) -> str:
+        raise error_type("adapter boundary interruption")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "mujoco",
+        SimpleNamespace(
+            mjtObj=SimpleNamespace(mjOBJ_GEOM="geom", mjOBJ_BODY="body"),
+            mj_id2name=mj_id2name,
+        ),
+    )
+    model = SimpleNamespace(ngeom=1, geom_bodyid=(0,))
+
+    with pytest.raises(error_type, match="adapter boundary interruption"):
+        build_mujoco_geometry_inventory(model, robot_body_names=("arm_body",))
+
+
+@pytest.mark.parametrize(
+    "failure_point",
+    (
+        "mj_id2name",
+        "ngeom",
+        "ngeom_index",
+        "ncon",
+        "ncon_index",
+        "contact_array",
+        "contact_index",
+        "geom1_index",
+        "geom2_index",
+        "dist",
+    ),
+)
+def test_mujoco_contact_runtime_errors_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+) -> None:
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("arm", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("floor", "floor_body", GeometryRole.ENVIRONMENT),
+        )
+    )
+
+    class Model:
+        geom_names = ("arm", "floor")
+
+        @property
+        def ngeom(self) -> object:
+            if failure_point == "ngeom":
+                raise RuntimeError("ngeom accessor failed")
+            if failure_point == "ngeom_index":
+                return _RuntimeErrorIndex()
+            return 2
+
+    class Contact:
+        @property
+        def geom1(self) -> object:
+            if failure_point == "geom1_index":
+                return _RuntimeErrorIndex()
+            return 0
+
+        @property
+        def geom2(self) -> object:
+            if failure_point == "geom2_index":
+                return _RuntimeErrorIndex()
+            return 1
+
+        @property
+        def dist(self) -> object:
+            if failure_point == "dist":
+                raise RuntimeError("contact distance accessor failed")
+            return 0.1
+
+    class ContactArray:
+        def __getitem__(self, _index: object) -> object:
+            raise RuntimeError("contact array index accessor failed")
+
+    class Data:
+        @property
+        def ncon(self) -> object:
+            if failure_point == "ncon":
+                raise RuntimeError("ncon accessor failed")
+            if failure_point == "ncon_index":
+                return _RuntimeErrorIndex()
+            return 1
+
+        @property
+        def contact(self) -> object:
+            if failure_point == "contact_array":
+                raise RuntimeError("contact array accessor failed")
+            if failure_point == "contact_index":
+                return ContactArray()
+            return (Contact(),)
+
+    def mj_id2name(
+        model: Model,
+        _object_type: str,
+        geom_id: int,
+    ) -> str:
+        if failure_point == "mj_id2name":
+            raise RuntimeError("mj_id2name accessor failed")
+        return model.geom_names[geom_id]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "mujoco",
+        SimpleNamespace(
+            mjtObj=SimpleNamespace(mjOBJ_GEOM="geom"),
+            mj_id2name=mj_id2name,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="MuJoCo contact observation failed"):
+        read_mujoco_contact_observations(Model(), Data(), inventory)
+
+
+@pytest.mark.parametrize("error_type", (KeyboardInterrupt, SystemExit, GeneratorExit))
+def test_mujoco_contact_does_not_catch_base_exception_types(
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[BaseException],
+) -> None:
+    inventory = GeometryInventory(
+        (
+            GeometryIdentity("arm", "arm_body", GeometryRole.ROBOT),
+            GeometryIdentity("floor", "floor_body", GeometryRole.ENVIRONMENT),
+        )
+    )
+
+    def mj_id2name(_model: object, _object_type: str, _geom_id: int) -> str:
+        raise error_type("adapter boundary interruption")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "mujoco",
+        SimpleNamespace(
+            mjtObj=SimpleNamespace(mjOBJ_GEOM="geom"),
+            mj_id2name=mj_id2name,
+        ),
+    )
+    model = SimpleNamespace(ngeom=2)
+    data = SimpleNamespace(
+        ncon=1,
+        contact=(SimpleNamespace(geom1=0, geom2=1, dist=0.1),),
+    )
+
+    with pytest.raises(error_type, match="adapter boundary interruption"):
         read_mujoco_contact_observations(model, data, inventory)
 
 
