@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-08-28
+last_verified: 2026-09-04
 canonical_for:
   - operator-gated physical validation procedure
   - physical validation evidence artifact
@@ -53,6 +53,10 @@ preflight、clearance、stop、rollback、metadata、boolean flag、全required 
 検証し、型不一致、nested field欠落、duplicate ID、mandatory 5-kind欠落を許可しない。
 `object.__new__`や`object.__setattr__`でprocedureまたはnested specを迂回しても、`pass`へ昇格せず
 `technical_invalid`へ閉じる。
+constructor完了時にはowner-localのweak identity semantic sealも登録する。public field、nested
+DTO、private hintを同時に書き換えても、validatorはconstructor時の意味内容と一致しないものを
+受理しない。sealは通常のpublic registryやcallerが書き換えられるfingerprintをauthorityとして
+扱わず、object identityの解放時にcleanupされる内部状態である。
 
 `validate_operator_gate()`はoperator confirmation、preflightの完了と本人一致、clearanceの
 finiteなverification値・timestamp・sourceを順番に検査する。clearanceがrequired値未満なら
@@ -103,6 +107,12 @@ constructionは、`validate_validation_check_evidence()`という一つのcanoni
 `object.__new__`や`object.__setattr__`でconstructor invariantを迂回したnested objectも拒否する。
 実際のcheck ID重複はcheck statusに関係なく`technical_invalid`へ閉じ、宣言されたclassificationに
 関係なく重複をpassへ進めない。
+さらにcheck生成時の意味内容をowner-local weak identity sealへ束ねるため、nested source / decision
+をvalidな別値へ差し替えたり、constructor bypassしたcheckを用いたりしても、artifact境界でPASSへ
+昇格できない。これはsourceやdecisionの物理authorityを新規作成する仕組みではない。
+public leaf DTOの`to_dict()`も同じsealを再検証するため、aggregateを経由しないsource、target、
+preflight、clearance、stop、rollback、check spec、decisionの単独serializationも、constructor後の
+semantic mutationやbypassを受理しない。
 
 ## Closed lifecycle classification
 
@@ -127,6 +137,11 @@ pass checkはP5 `allow`、unavailable checkは`unavailable`、technical-invalid 
 artifact全体またはnested procedure / checkをconstructor bypassしても、validatorは再検証し、
 `complete=True`や`pass`を返さない。serializationはvalidated object専用のraw internal helperを
 使ってpublic serializerの再帰を避け、malformed objectのsuccess serializationを許可しない。
+constructor時のartifact意味内容は、procedure・checks・status・classification・metadataを含む
+owner-local weak identity semantic sealにも保存する。従来のprivate `_binding_fingerprint`は補助的な
+整合性診断にすぎず、public fieldとprivate fingerprintをcoherentlyに再計算してもsealを更新できない。
+そのため`complete`、serialization、strict round-tripはいずれもnested mutationとwhole-object
+`object.__new__` bypassをfail-closedに扱う。
 
 `ValidationEvidenceArtifact.to_json_bytes()`はsorted key、compact separator、UTF-8 without BOM、
 `allow_nan=False`で決定的にserializeする。`decode_validation_artifact()`は次を拒否する。

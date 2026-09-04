@@ -9,16 +9,55 @@ from __future__ import annotations
 
 import json
 import math
+import weakref
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from threading import RLock
 from typing import Any
 
 from selfrionette.runtime.safety.physical_safety_core import SafetyComponent, SafetyDecisionAction
 
 
 VALIDATION_ARTIFACT_SCHEMA_VERSION = 1
+
+
+# operator-validation DTOのauthorityはprivate fieldだけに依存しない。constructor時の
+# semantic snapshotをowner-local weak identity sealへ保存し、public nested fieldsと
+# private hintを同時に書き換えるcallerやobject.__new__ bypassを再利用不能にする。
+_OPERATOR_SEALS: dict[
+    int, tuple[weakref.ReferenceType[object], object]
+] = {}
+_OPERATOR_SEALS_LOCK = RLock()
+
+
+def _release_operator_seal(
+    key: int,
+    reference: weakref.ReferenceType[object],
+) -> None:
+    with _OPERATOR_SEALS_LOCK:
+        entry = _OPERATOR_SEALS.get(key)
+        if entry is not None and entry[0] is reference:
+            _OPERATOR_SEALS.pop(key, None)
+
+
+def _register_operator_seal(value: object, snapshot: object) -> None:
+    key = id(value)
+    reference = weakref.ref(
+        value,
+        lambda ref, key=key: _release_operator_seal(key, ref),
+    )
+    with _OPERATOR_SEALS_LOCK:
+        _OPERATOR_SEALS[key] = (reference, snapshot)
+
+
+def _validate_operator_seal(value: object, snapshot: object) -> None:
+    key = id(value)
+    with _OPERATOR_SEALS_LOCK:
+        entry = _OPERATOR_SEALS.get(key)
+        if entry is None or entry[0]() is not value or entry[1] != snapshot:
+            raise ValueError("operator validation DTO is not constructor-sealed")
 
 
 class ValidationClassification(str, Enum):
@@ -195,7 +234,7 @@ def _reason_identity(value: object) -> str:
     return identity
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class TargetIdentity:
     """検証対象robot/controller/connection/model identity。"""
 
@@ -208,8 +247,10 @@ class TargetIdentity:
     def __post_init__(self) -> None:
         for name in ("target_id", "robot_id", "controller_id", "connection_id", "model_id"):
             _text(name, getattr(self, name))
+        _register_operator_seal(self, _target_snapshot(self))
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _target_snapshot(self))
         return {
             "target_id": self.target_id,
             "robot_id": self.robot_id,
@@ -219,7 +260,7 @@ class TargetIdentity:
         }
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class OperatorIdentity:
     """operator identity。"""
 
@@ -229,12 +270,14 @@ class OperatorIdentity:
     def __post_init__(self) -> None:
         _text("operator_id", self.operator_id)
         _text("role", self.role)
+        _register_operator_seal(self, _operator_snapshot(self))
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _operator_snapshot(self))
         return {"operator_id": self.operator_id, "role": self.role}
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class MeasurementSource:
     """expected / observed valueのsourceとevidence reference。"""
 
@@ -252,8 +295,10 @@ class MeasurementSource:
             _text("evidence_reference", self.evidence_reference)
         if self.kind.is_physical and not self.evidence_reference:
             raise ValueError("physical source requires evidence_reference")
+        _register_operator_seal(self, _measurement_source_snapshot(self))
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _measurement_source_snapshot(self))
         result: dict[str, object] = {
             "kind": self.kind.value,
             "source_id": self.source_id,
@@ -263,7 +308,7 @@ class MeasurementSource:
         return result
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class PreflightItem:
     """operatorが確認する一項目。"""
 
@@ -276,12 +321,14 @@ class PreflightItem:
         _text("description", self.description)
         if not isinstance(self.checked, bool):
             raise TypeError("checked must be bool")
+        _register_operator_seal(self, _preflight_item_snapshot(self))
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _preflight_item_snapshot(self))
         return {"item_id": self.item_id, "description": self.description, "checked": self.checked}
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class PreflightChecklist:
     """preflight項目とoperator acknowledgment。"""
 
@@ -299,12 +346,14 @@ class PreflightChecklist:
             raise ValueError("preflight item IDs must be unique")
         _text("acknowledged_by", self.acknowledged_by)
         _timestamp("acknowledged_at", self.acknowledged_at)
+        _register_operator_seal(self, _preflight_snapshot(self))
 
     @property
     def complete(self) -> bool:
         return all(item.checked for item in self.items)
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _preflight_snapshot(self))
         return {
             "items": [item.to_dict() for item in self.items],
             "acknowledged_by": self.acknowledged_by,
@@ -312,7 +361,7 @@ class PreflightChecklist:
         }
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class ClearanceDeclaration:
     """required physical clearanceとverification evidence。"""
 
@@ -328,18 +377,21 @@ class ClearanceDeclaration:
         verified = None if self.verified_clearance_m is None else _finite_value("verified_clearance_m", self.verified_clearance_m)
         if verified is not None and verified < 0.0:
             raise ValueError("verified_clearance_m must be non-negative")
-        if not isinstance(self.source, MeasurementSource):
+        if type(self.source) is not MeasurementSource:
             raise TypeError("source must be MeasurementSource")
         if self.verified_at is not None:
             _timestamp("verified_at", self.verified_at)
         object.__setattr__(self, "required_clearance_m", required)
         object.__setattr__(self, "verified_clearance_m", verified)
+        _register_operator_seal(self, _clearance_snapshot(self))
 
     @property
     def verified(self) -> bool:
         return self.verified_clearance_m is not None and self.verified_clearance_m >= self.required_clearance_m
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _clearance_snapshot(self))
+        _validate_operator_seal(self.source, _measurement_source_snapshot(self.source))
         return {
             "required_clearance_m": self.required_clearance_m,
             "verified_clearance_m": self.verified_clearance_m,
@@ -348,7 +400,7 @@ class ClearanceDeclaration:
         }
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class StopProcedure:
     """normal stop / emergency stop procedure。"""
 
@@ -359,12 +411,14 @@ class StopProcedure:
         for name, steps in (("normal_stop_steps", self.normal_stop_steps), ("emergency_stop_steps", self.emergency_stop_steps)):
             if not isinstance(steps, tuple) or not steps or not all(isinstance(step, str) and step.strip() for step in steps):
                 raise ValueError(f"{name} must contain non-empty steps")
+        _register_operator_seal(self, _stop_snapshot(self))
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _stop_snapshot(self))
         return {"normal_stop_steps": list(self.normal_stop_steps), "emergency_stop_steps": list(self.emergency_stop_steps)}
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class RollbackProcedure:
     """失敗 / abort後のrollback procedure。"""
 
@@ -375,12 +429,14 @@ class RollbackProcedure:
         if not isinstance(self.steps, tuple) or not self.steps or not all(isinstance(step, str) and step.strip() for step in self.steps):
             raise ValueError("rollback steps must contain non-empty steps")
         _text("target_state", self.target_state)
+        _register_operator_seal(self, _rollback_snapshot(self))
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _rollback_snapshot(self))
         return {"steps": list(self.steps), "target_state": self.target_state}
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class ValidationCheckSpec:
     """procedureが要求するcheck identity。"""
 
@@ -393,8 +449,10 @@ class ValidationCheckSpec:
         if not isinstance(self.kind, ValidationCheckKind):
             object.__setattr__(self, "kind", ValidationCheckKind(self.kind))
         _text("description", self.description)
+        _register_operator_seal(self, _check_spec_snapshot(self))
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _check_spec_snapshot(self))
         return {"check_id": self.check_id, "kind": self.kind.value, "description": self.description}
 
 
@@ -489,20 +547,38 @@ def _reconstruct_validation_check_spec(value: object) -> ValidationCheckSpec:
     )
 
 
-def _validate_validation_procedure(procedure: ValidationProcedure) -> ValidationProcedure:
+def _validate_validation_procedure(
+    procedure: ValidationProcedure,
+    *,
+    initialize: bool = False,
+) -> ValidationProcedure:
     """ValidationProcedureの全nested DTOを一つのcanonical経路で再検証する。"""
 
     if type(procedure) is not ValidationProcedure:
         raise TypeError("procedure must be ValidationProcedure")
+    observed_snapshot: object | None = None
+    if not initialize:
+        try:
+            observed_snapshot = _procedure_snapshot(procedure)
+        except Exception:
+            # canonical reconstruction below retains the established structural
+            # diagnostic for incomplete constructor-bypassed DTOs.
+            observed_snapshot = None
     _text("procedure_id", _nested_field(procedure, "procedure_id"))
-    _reconstruct_target_identity(_nested_field(procedure, "target"))
-    _reconstruct_operator_identity(_nested_field(procedure, "operator"))
+    target_value = _nested_field(procedure, "target")
+    _reconstruct_target_identity(target_value)
+    operator_value = _nested_field(procedure, "operator")
+    _reconstruct_operator_identity(operator_value)
     _text("software_revision", _nested_field(procedure, "software_revision"))
     _timestamp("created_at", _nested_field(procedure, "created_at"))
-    _reconstruct_preflight(_nested_field(procedure, "preflight"))
-    _reconstruct_clearance(_nested_field(procedure, "clearance"))
-    _reconstruct_stop(_nested_field(procedure, "stop"))
-    _reconstruct_rollback(_nested_field(procedure, "rollback"))
+    preflight_value = _nested_field(procedure, "preflight")
+    _reconstruct_preflight(preflight_value)
+    clearance_value = _nested_field(procedure, "clearance")
+    _reconstruct_clearance(clearance_value)
+    stop_value = _nested_field(procedure, "stop")
+    _reconstruct_stop(stop_value)
+    rollback_value = _nested_field(procedure, "rollback")
+    _reconstruct_rollback(rollback_value)
     required_checks = _nested_field(procedure, "required_checks")
     if type(required_checks) is not tuple or not required_checks:
         raise ValueError("required_checks must be a non-empty tuple")
@@ -519,6 +595,20 @@ def _validate_validation_procedure(procedure: ValidationProcedure) -> Validation
             "required_checks must include all mandatory validation check kinds: "
             f"{missing}"
         )
+    _validate_operator_seal(target_value, _target_snapshot(target_value))
+    _validate_operator_seal(operator_value, _operator_snapshot(operator_value))
+    _validate_operator_seal(preflight_value, _preflight_snapshot(preflight_value))
+    for item in preflight_value.items:  # type: ignore[union-attr]
+        _validate_operator_seal(item, _preflight_item_snapshot(item))
+    _validate_operator_seal(clearance_value, _clearance_snapshot(clearance_value))
+    _validate_operator_seal(
+        clearance_value.source,
+        _measurement_source_snapshot(clearance_value.source),
+    )
+    _validate_operator_seal(stop_value, _stop_snapshot(stop_value))
+    _validate_operator_seal(rollback_value, _rollback_snapshot(rollback_value))
+    for item in required_checks:
+        _validate_operator_seal(item, _check_spec_snapshot(item))
     operator_confirmed = _nested_field(procedure, "operator_confirmed")
     if type(operator_confirmed) is not bool:
         raise TypeError("operator_confirmed must be bool")
@@ -527,10 +617,22 @@ def _validate_validation_procedure(procedure: ValidationProcedure) -> Validation
         raise ValueError(
             "R7-J operator procedure is dry-run-only; actual hardware belongs to #509"
         )
+    if initialize:
+        _register_operator_seal(procedure, _procedure_snapshot(procedure))
+    else:
+        try:
+            _validate_operator_seal(
+                procedure,
+                _procedure_snapshot(procedure)
+                if observed_snapshot is None
+                else observed_snapshot,
+            )
+        except (AttributeError, TypeError) as exc:
+            raise ValueError("procedure binding is structurally invalid") from exc
     return procedure
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class ValidationProcedure:
     """operator gateを満たしたsoftware-only validation plan。"""
 
@@ -548,14 +650,14 @@ class ValidationProcedure:
     dry_run_only: bool = True
 
     def __post_init__(self) -> None:
-        _validate_validation_procedure(self)
+        _validate_validation_procedure(self, initialize=True)
 
     def to_dict(self) -> dict[str, object]:
         _validate_validation_procedure(self)
         return _procedure_to_dict_raw(self)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class ProcedureGateResult:
     """operator gateのreadiness。"""
 
@@ -568,7 +670,7 @@ class ProcedureGateResult:
         _text("reason_code", self.reason_code)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class SafetyDecisionEvidence:
     """P5 decision identityのartifact projection。"""
 
@@ -586,12 +688,14 @@ class SafetyDecisionEvidence:
             raise ValueError("provenance must be a non-empty tuple of non-empty strings")
         if len(set(self.provenance)) != len(self.provenance):
             raise ValueError("provenance must be unique")
+        _register_operator_seal(self, _decision_evidence_snapshot(self))
 
     def to_dict(self) -> dict[str, object]:
+        _validate_operator_seal(self, _decision_evidence_snapshot(self))
         return {"action": self.action.value, "reason_identity": self.reason_identity, "provenance": list(self.provenance)}
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class ValidationCheckEvidence:
     """expected / observed / source / decision付きcheck result。"""
 
@@ -607,7 +711,7 @@ class ValidationCheckEvidence:
     reason: str
 
     def __post_init__(self) -> None:
-        validate_validation_check_evidence(self)
+        validate_validation_check_evidence(self, initialize=True)
 
     def to_dict(self) -> dict[str, object]:
         validate_validation_check_evidence(self)
@@ -742,8 +846,175 @@ def _nested_field(value: object, name: str) -> object:
         raise ValueError(f"{name} is structurally incomplete") from exc
 
 
+def _semantic_snapshot(value: object) -> object:
+    """DTOの値を、object identityに依存しない比較可能な値へ凍結する。"""
+
+    if isinstance(value, Enum):
+        return ("enum", type(value).__qualname__, value.value)
+    if isinstance(value, Mapping):
+        items = tuple(
+            sorted(
+                (
+                    _semantic_snapshot(key),
+                    _semantic_snapshot(child),
+                )
+                for key, child in value.items()
+            )
+        )
+        return ("mapping", items)
+    if isinstance(value, (tuple, list)):
+        return ("sequence", tuple(_semantic_snapshot(child) for child in value))
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return (type(value).__qualname__, value)
+    return (type(value).__qualname__, repr(value))
+
+
+def _safe_attr(value: object, name: str) -> object:
+    try:
+        return _semantic_snapshot(getattr(value, name))
+    except Exception:
+        return ("invalid", name)
+
+
+def _safe_nested_snapshot(
+    label: str,
+    value: object,
+    snapshotter: object,
+) -> object:
+    try:
+        return snapshotter(value)  # type: ignore[operator]
+    except Exception:
+        return ("invalid", label)
+
+
+def _target_snapshot(value: TargetIdentity) -> object:
+    return _semantic_snapshot(
+        (
+            value.target_id,
+            value.robot_id,
+            value.controller_id,
+            value.connection_id,
+            value.model_id,
+        )
+    )
+
+
+def _operator_snapshot(value: OperatorIdentity) -> object:
+    return _semantic_snapshot((value.operator_id, value.role))
+
+
+def _measurement_source_snapshot(value: MeasurementSource) -> object:
+    return _semantic_snapshot(
+        (value.kind, value.source_id, value.revision, value.evidence_reference)
+    )
+
+
+def _preflight_item_snapshot(value: PreflightItem) -> object:
+    return _semantic_snapshot((value.item_id, value.description, value.checked))
+
+
+def _preflight_snapshot(value: PreflightChecklist) -> object:
+    return _semantic_snapshot(
+        (
+            tuple(_preflight_item_snapshot(item) for item in value.items),
+            value.acknowledged_by,
+            value.acknowledged_at,
+        )
+    )
+
+
+def _clearance_snapshot(value: ClearanceDeclaration) -> object:
+    return _semantic_snapshot(
+        (
+            value.required_clearance_m,
+            value.verified_clearance_m,
+            _measurement_source_snapshot(value.source),
+            value.verified_at,
+        )
+    )
+
+
+def _stop_snapshot(value: StopProcedure) -> object:
+    return _semantic_snapshot((value.normal_stop_steps, value.emergency_stop_steps))
+
+
+def _rollback_snapshot(value: RollbackProcedure) -> object:
+    return _semantic_snapshot((value.steps, value.target_state))
+
+
+def _check_spec_snapshot(value: ValidationCheckSpec) -> object:
+    return _semantic_snapshot((value.check_id, value.kind, value.description))
+
+
+def _procedure_snapshot(value: ValidationProcedure) -> object:
+    return _semantic_snapshot(
+        (
+            value.procedure_id,
+            _target_snapshot(value.target),
+            _operator_snapshot(value.operator),
+            value.software_revision,
+            value.created_at,
+            _preflight_snapshot(value.preflight),
+            _clearance_snapshot(value.clearance),
+            _stop_snapshot(value.stop),
+            _rollback_snapshot(value.rollback),
+            tuple(_check_spec_snapshot(item) for item in value.required_checks),
+            value.operator_confirmed,
+            value.dry_run_only,
+        )
+    )
+
+
+def _decision_evidence_snapshot(value: SafetyDecisionEvidence) -> object:
+    return _semantic_snapshot((value.action, value.reason_identity, value.provenance))
+
+
+def _check_snapshot(value: ValidationCheckEvidence) -> object:
+    return _semantic_snapshot(
+        (
+            value.check_id,
+            value.kind,
+            value.status,
+            value.expected,
+            value.observed,
+            _measurement_source_snapshot(value.measurement_source),
+            value.observed_at,
+            value.software_revision,
+            _decision_evidence_snapshot(value.safety_decision),
+            value.reason,
+        )
+    )
+
+
+def _artifact_snapshot(value: ValidationEvidenceArtifact) -> object:
+    return _semantic_snapshot(
+        (
+            _safe_attr(value, "artifact_id"),
+            _safe_nested_snapshot(
+                "procedure",
+                getattr(value, "procedure", None),
+                _procedure_snapshot,
+            ),
+            _safe_attr(value, "started_at"),
+            _safe_attr(value, "completed_at"),
+            _safe_attr(value, "classification"),
+            _safe_attr(value, "classification_reason"),
+            _safe_nested_snapshot(
+                "checks",
+                getattr(value, "checks", None),
+                lambda checks: tuple(
+                    _safe_nested_snapshot("check", item, _check_snapshot)
+                    for item in checks
+                ),
+            ),
+            _safe_attr(value, "operator_aborted"),
+            _safe_attr(value, "schema_version"),
+        )
+    )
+
+
 def _reconstruct_measurement_source(value: object) -> MeasurementSource:
-    if not isinstance(value, MeasurementSource):
+    if type(value) is not MeasurementSource:
         raise TypeError("measurement_source must be MeasurementSource")
     return MeasurementSource(
         _nested_field(value, "kind"),  # type: ignore[arg-type]
@@ -754,7 +1025,7 @@ def _reconstruct_measurement_source(value: object) -> MeasurementSource:
 
 
 def _reconstruct_safety_decision(value: object) -> SafetyDecisionEvidence:
-    if not isinstance(value, SafetyDecisionEvidence):
+    if type(value) is not SafetyDecisionEvidence:
         raise TypeError("safety_decision must be SafetyDecisionEvidence")
     provenance = _nested_field(value, "provenance")
     return SafetyDecisionEvidence(
@@ -764,11 +1035,21 @@ def _reconstruct_safety_decision(value: object) -> SafetyDecisionEvidence:
     )
 
 
-def validate_validation_check_evidence(check: ValidationCheckEvidence) -> ValidationCheckEvidence:
+def validate_validation_check_evidence(
+    check: ValidationCheckEvidence,
+    *,
+    initialize: bool = False,
+) -> ValidationCheckEvidence:
     """checkとnested source / decisionを再構築してcanonicalに検証する。"""
 
-    if not isinstance(check, ValidationCheckEvidence):
+    if type(check) is not ValidationCheckEvidence:
         raise TypeError("check must be ValidationCheckEvidence")
+    observed_snapshot: object | None = None
+    if not initialize:
+        try:
+            observed_snapshot = _check_snapshot(check)
+        except Exception:
+            observed_snapshot = None
     check_id = _text("check_id", _nested_field(check, "check_id"))
     kind_value = _nested_field(check, "kind")
     kind = kind_value if isinstance(kind_value, ValidationCheckKind) else ValidationCheckKind(kind_value)
@@ -785,13 +1066,15 @@ def validate_validation_check_evidence(check: ValidationCheckEvidence) -> Valida
         raise ValueError("pass check requires non-empty observed evidence")
     if status is ValidationCheckStatus.FAIL and (observed is None or not observed):
         raise ValueError("fail check requires non-empty observed evidence")
-    source = _reconstruct_measurement_source(_nested_field(check, "measurement_source"))
+    source_value = _nested_field(check, "measurement_source")
+    source = _reconstruct_measurement_source(source_value)
     observed_at_value = _nested_field(check, "observed_at")
     observed_at = None if observed_at_value is None else _timestamp("observed_at", observed_at_value)
     if status in {ValidationCheckStatus.PASS, ValidationCheckStatus.FAIL} and observed_at is None:
         raise ValueError("pass/fail check requires observed_at")
     software_revision = _text("software_revision", _nested_field(check, "software_revision"))
-    safety_decision = _reconstruct_safety_decision(_nested_field(check, "safety_decision"))
+    safety_decision_value = _nested_field(check, "safety_decision")
+    safety_decision = _reconstruct_safety_decision(safety_decision_value)
     reason = _text("reason", _nested_field(check, "reason"))
     if source.kind is MeasurementSourceKind.UNKNOWN and (
         status is ValidationCheckStatus.PASS or safety_decision.action is SafetyDecisionAction.ALLOW
@@ -809,6 +1092,11 @@ def validate_validation_check_evidence(check: ValidationCheckEvidence) -> Valida
         SafetyDecisionAction.STOP,
     }:
         raise ValueError("fail check requires reject, hold, or stop safety decision")
+    _validate_operator_seal(source_value, _measurement_source_snapshot(source_value))
+    _validate_operator_seal(
+        safety_decision_value,
+        _decision_evidence_snapshot(safety_decision_value),
+    )
     object.__setattr__(check, "check_id", check_id)
     object.__setattr__(check, "kind", kind)
     object.__setattr__(check, "status", status)
@@ -819,6 +1107,16 @@ def validate_validation_check_evidence(check: ValidationCheckEvidence) -> Valida
     object.__setattr__(check, "software_revision", software_revision)
     object.__setattr__(check, "safety_decision", safety_decision)
     object.__setattr__(check, "reason", reason)
+    if initialize:
+        _register_operator_seal(check, _check_snapshot(check))
+    else:
+        try:
+            _validate_operator_seal(
+                check,
+                _check_snapshot(check) if observed_snapshot is None else observed_snapshot,
+            )
+        except (AttributeError, TypeError) as exc:
+            raise ValueError("check binding is structurally invalid") from exc
     return check
 
 
@@ -902,24 +1200,24 @@ def _classify(
     gate = validate_operator_gate(procedure)
     if gate.classification is ValidationClassification.TECHNICAL_INVALID:
         return gate.classification, gate.reason_code
-    if completed_at is None:
-        return ValidationClassification.TECHNICAL_INVALID, "completion_timestamp_missing"
-    if operator_aborted:
-        return ValidationClassification.ABORTED, "operator_aborted"
-    if _missing_mandatory_check_kinds(procedure.required_checks):
-        return ValidationClassification.TECHNICAL_INVALID, "required_check_kind_coverage_incomplete"
+    # check schema and actual identity are validated before lifecycle short-circuit
+    # fields. An abort or missing completion timestamp must not hide malformed data.
     for check in checks:
         try:
             validate_validation_check_evidence(check)
         except Exception:
             return ValidationClassification.TECHNICAL_INVALID, "check_evidence_invalid"
-    required = {item.check_id: item for item in procedure.required_checks}
     try:
         actual_ids = _validate_actual_check_ids(checks)
     except Exception:
         return ValidationClassification.TECHNICAL_INVALID, "check_identity_invalid"
+    required = {item.check_id: item for item in procedure.required_checks}
     if any(item.check_id not in required for item in checks):
         return ValidationClassification.TECHNICAL_INVALID, "check_identity_invalid"
+    if completed_at is None:
+        return ValidationClassification.TECHNICAL_INVALID, "completion_timestamp_missing"
+    if operator_aborted:
+        return ValidationClassification.ABORTED, "operator_aborted"
     if set(actual_ids) != set(required):
         return ValidationClassification.UNAVAILABLE, "required_check_observation_incomplete"
     for check in checks:
@@ -943,7 +1241,7 @@ def _classify(
     return ValidationClassification.PASS, "all_validation_checks_passed"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class ValidationEvidenceArtifact:
     """strict round-trip可能なoperator validation evidence artifact。"""
 
@@ -1008,6 +1306,12 @@ def _validate_validation_artifact(
 
     if type(artifact) is not ValidationEvidenceArtifact:
         raise TypeError("artifact must be ValidationEvidenceArtifact")
+    observed_snapshot: object | None = None
+    if not initialize:
+        try:
+            observed_snapshot = _artifact_snapshot(artifact)
+        except Exception:
+            observed_snapshot = None
     artifact_id = _text("artifact_id", _nested_field(artifact, "artifact_id"))
     procedure = _nested_field(artifact, "procedure")
     if type(procedure) is not ValidationProcedure:
@@ -1057,6 +1361,16 @@ def _validate_validation_artifact(
             f"declared={classification.value}/{classification_reason}, "
             f"derived={derived.value}/{reason}"
         )
+    if not initialize:
+        try:
+            _validate_operator_seal(
+                artifact,
+                _artifact_snapshot(artifact)
+                if observed_snapshot is None
+                else observed_snapshot,
+            )
+        except (AttributeError, TypeError) as exc:
+            raise ValueError("validation artifact binding is structurally invalid") from exc
     fingerprint = (
         artifact_id,
         id(procedure),
@@ -1070,6 +1384,7 @@ def _validate_validation_artifact(
     )
     if initialize:
         object.__setattr__(artifact, "_binding_fingerprint", fingerprint)
+        _register_operator_seal(artifact, _artifact_snapshot(artifact))
         return artifact
     try:
         bound = artifact._binding_fingerprint
@@ -1108,12 +1423,12 @@ def build_validation_artifact(
 ) -> ValidationEvidenceArtifact:
     """typed evidenceからclassificationを導出してartifactを構築する。"""
 
-    if not isinstance(procedure, ValidationProcedure):
+    if type(procedure) is not ValidationProcedure:
         raise TypeError("procedure must be ValidationProcedure")
     if not isinstance(checks, Sequence) or isinstance(checks, (str, bytes)):
         raise TypeError("checks must be a sequence")
     typed_checks = tuple(checks)
-    if not all(isinstance(item, ValidationCheckEvidence) for item in typed_checks):
+    if not all(type(item) is ValidationCheckEvidence for item in typed_checks):
         raise TypeError("checks must contain ValidationCheckEvidence values")
     classification, reason = _classify(
         procedure,
@@ -1165,7 +1480,7 @@ def build_dry_run_validation_artifact(
     if not isinstance(checks, Sequence) or isinstance(checks, (str, bytes)):
         raise TypeError("checks must be a sequence")
     typed_checks = tuple(checks)
-    if not all(isinstance(item, ValidationCheckEvidence) for item in typed_checks):
+    if not all(type(item) is ValidationCheckEvidence for item in typed_checks):
         raise TypeError("checks must contain ValidationCheckEvidence values")
     if any(_check_has_physical_source(item) for item in typed_checks):
         raise ValueError("dry-run builder rejects physical measurement sources; physical validation belongs to #509")

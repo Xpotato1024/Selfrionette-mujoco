@@ -457,6 +457,51 @@ def test_nested_measurement_source_bypass_is_revalidated() -> None:
         validate_validation_check_evidence(check)
 
 
+def test_nested_semantically_valid_source_mutation_is_rejected_by_external_seal() -> None:
+    check = _check("check", ValidationCheckKind.LIMIT_RANGE)
+    object.__setattr__(check.measurement_source, "source_id", "rewritten-fixture")
+
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        validate_validation_check_evidence(check)
+
+
+def test_clearance_source_same_value_constructor_bypass_is_rejected() -> None:
+    procedure = _procedure()
+    nested_source = object.__new__(MeasurementSource)
+    object.__setattr__(nested_source, "kind", MeasurementSourceKind.SOFTWARE_DRY_RUN)
+    object.__setattr__(nested_source, "source_id", "fixture")
+    object.__setattr__(nested_source, "revision", "revision-001")
+    object.__setattr__(nested_source, "evidence_reference", None)
+    object.__setattr__(procedure.clearance, "source", nested_source)
+
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        validate_validation_procedure(procedure)
+
+
+def test_public_leaf_serializer_revalidates_its_external_seal() -> None:
+    source = MeasurementSource(
+        MeasurementSourceKind.SOFTWARE_DRY_RUN,
+        "fixture",
+        "revision-001",
+    )
+    object.__setattr__(source, "source_id", "rewritten-fixture")
+
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        source.to_dict()
+
+
+def test_decision_leaf_serializer_revalidates_its_external_seal() -> None:
+    decision = SafetyDecisionEvidence(
+        SafetyDecisionAction.ALLOW,
+        "input:fixture_allow",
+        ("fixture",),
+    )
+    object.__setattr__(decision, "provenance", ("rewritten-fixture",))
+
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        decision.to_dict()
+
+
 def test_nested_constructor_bypass_is_revalidated() -> None:
     check = _check("check", ValidationCheckKind.LIMIT_RANGE)
     malformed_source = object.__new__(MeasurementSource)
@@ -464,6 +509,78 @@ def test_nested_constructor_bypass_is_revalidated() -> None:
 
     with pytest.raises(ValueError, match="structurally incomplete"):
         validate_validation_check_evidence(check)
+
+
+@pytest.mark.parametrize("nested_kind", ("source", "decision"))
+def test_valid_looking_nested_constructor_bypass_is_not_authority(
+    nested_kind: str,
+) -> None:
+    check = _check("check", ValidationCheckKind.LIMIT_RANGE)
+    if nested_kind == "source":
+        nested = object.__new__(MeasurementSource)
+        object.__setattr__(nested, "kind", MeasurementSourceKind.SOFTWARE_DRY_RUN)
+        object.__setattr__(nested, "source_id", "fixture")
+        object.__setattr__(nested, "revision", "revision-001")
+        object.__setattr__(nested, "evidence_reference", None)
+        object.__setattr__(check, "measurement_source", nested)
+    else:
+        nested = object.__new__(SafetyDecisionEvidence)
+        object.__setattr__(nested, "action", SafetyDecisionAction.ALLOW)
+        object.__setattr__(nested, "reason_identity", "input:fixture_allow")
+        object.__setattr__(nested, "provenance", ("fixture",))
+        object.__setattr__(check, "safety_decision", nested)
+
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        validate_validation_check_evidence(check)
+
+
+def test_public_check_and_nested_dtos_require_exact_types() -> None:
+    base_check = _check("check", ValidationCheckKind.LIMIT_RANGE)
+
+    class DerivedCheck(ValidationCheckEvidence):
+        pass
+
+    derived_check = object.__new__(DerivedCheck)
+    for field_name in ValidationCheckEvidence.__dataclass_fields__:
+        object.__setattr__(derived_check, field_name, getattr(base_check, field_name))
+    with pytest.raises(TypeError, match="check must be ValidationCheckEvidence"):
+        validate_validation_check_evidence(derived_check)
+
+    class DerivedSource(MeasurementSource):
+        pass
+
+    with pytest.raises(TypeError, match="measurement_source must be MeasurementSource"):
+        _check(
+            "derived-source",
+            ValidationCheckKind.LIMIT_RANGE,
+            source=DerivedSource(
+                MeasurementSourceKind.SOFTWARE_DRY_RUN,
+                "fixture",
+                "revision-001",
+            ),
+        )
+
+    class DerivedDecision(SafetyDecisionEvidence):
+        pass
+
+    derived_decision = DerivedDecision(
+        SafetyDecisionAction.ALLOW,
+        "input:fixture_allow",
+        ("fixture",),
+    )
+    with pytest.raises(TypeError, match="safety_decision must be SafetyDecisionEvidence"):
+        ValidationCheckEvidence(
+            check_id=base_check.check_id,
+            kind=base_check.kind,
+            status=base_check.status,
+            expected=base_check.expected,
+            observed=base_check.observed,
+            measurement_source=base_check.measurement_source,
+            observed_at=base_check.observed_at,
+            software_revision=base_check.software_revision,
+            safety_decision=derived_decision,
+            reason=base_check.reason,
+        )
 
 
 def test_nested_safety_decision_bypass_is_revalidated() -> None:
@@ -647,6 +764,25 @@ def test_validation_procedure_canonical_validator_rejects_bypassed_fields(
     assert not artifact.complete
 
 
+def test_procedure_external_seal_rejects_semantically_valid_nested_mutation() -> None:
+    procedure = _procedure()
+    object.__setattr__(procedure.target, "robot_id", "rewritten-robot")
+
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        validate_validation_procedure(procedure)
+
+
+def test_valid_looking_nested_procedure_bypass_is_not_authority() -> None:
+    procedure = _procedure()
+    nested_target = object.__new__(TargetIdentity)
+    for field_name in TargetIdentity.__dataclass_fields__:
+        object.__setattr__(nested_target, field_name, getattr(procedure.target, field_name))
+    object.__setattr__(procedure, "target", nested_target)
+
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        validate_validation_procedure(procedure)
+
+
 def test_whole_artifact_bypass_cannot_complete_or_serialize_as_pass() -> None:
     valid = build_dry_run_validation_artifact(
         _procedure(),
@@ -667,6 +803,69 @@ def test_whole_artifact_bypass_cannot_complete_or_serialize_as_pass() -> None:
         malformed.to_json_bytes()
     with pytest.raises((TypeError, ValueError)):
         validate_validation_artifact(malformed)
+
+
+def test_artifact_external_seal_rejects_coherent_private_fingerprint_rewrite() -> None:
+    artifact = build_dry_run_validation_artifact(
+        _procedure(),
+        _all_checks(),
+        artifact_id="artifact-external-seal",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    object.__setattr__(artifact, "artifact_id", "artifact-rewritten")
+    object.__setattr__(
+        artifact,
+        "_binding_fingerprint",
+        (
+            artifact.artifact_id,
+            id(artifact.procedure),
+            artifact.started_at,
+            artifact.completed_at,
+            artifact.classification,
+            artifact.classification_reason,
+            tuple(id(item) for item in artifact.checks),
+            artifact.operator_aborted,
+            artifact.schema_version,
+        ),
+    )
+
+    assert not artifact.complete
+    with pytest.raises(ValueError, match="constructor-sealed"):
+        artifact.to_json_bytes()
+
+
+def test_classifier_validates_malformed_checks_before_abort_short_circuit() -> None:
+    malformed = object.__new__(ValidationCheckEvidence)
+    checks = list(_all_checks())
+    checks[0] = malformed
+    artifact = build_validation_artifact(
+        _procedure(),
+        tuple(checks),
+        artifact_id="artifact-malformed-before-abort",
+        started_at=STARTED,
+        completed_at=None,
+        operator_aborted=True,
+    )
+
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+    assert artifact.classification_reason == "check_evidence_invalid"
+
+
+def test_classifier_validates_duplicate_ids_before_abort_short_circuit() -> None:
+    checks = list(_all_checks())
+    checks[1] = replace(checks[1], check_id=checks[0].check_id)
+    artifact = build_validation_artifact(
+        _procedure(),
+        tuple(checks),
+        artifact_id="artifact-duplicate-before-abort",
+        started_at=STARTED,
+        completed_at=None,
+        operator_aborted=True,
+    )
+
+    assert artifact.classification is ValidationClassification.TECHNICAL_INVALID
+    assert artifact.classification_reason == "check_identity_invalid"
 
 
 def test_duplicate_actual_check_ids_are_technical_invalid_even_when_checks_are_invalid() -> None:
