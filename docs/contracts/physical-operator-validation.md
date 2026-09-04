@@ -49,8 +49,9 @@ artifactは`pass`にならず、同じkindの追加check IDは許可されるが
 
 `validate_validation_procedure()`はprocedureのsingle canonical deep validatorであり、constructor、
 operator gate、classifier / builder、strict decoderが同じ経路を共有する。target、operator、
-preflight、clearance、stop、rollback、metadata、boolean flag、全required check specを再構築して
-検証し、型不一致、nested field欠落、duplicate ID、mandatory 5-kind欠落を許可しない。
+preflight、clearance、stop、rollback、metadata、boolean flag、全required check specを元のobjectの
+まま検証し、再検証時にnested DTOを再構築したり`object.__setattr__`で差し戻したりしない。型不一致、
+nested field欠落、duplicate ID、mandatory 5-kind欠落を許可しない。
 `object.__new__`や`object.__setattr__`でprocedureまたはnested specを迂回しても、`pass`へ昇格せず
 `technical_invalid`へ閉じる。
 constructor完了時にはowner-localのweak identity semantic sealも登録する。public field、nested
@@ -71,10 +72,14 @@ software revision、P5 safety decision（action、reason identity、provenance�
 推測しない。巨大整数などfloatへ正規化できない数値もstrict validationで`ValueError`へ閉じ、
 conversion exceptionをartifactの外へ漏らさない。
 
-`SafetyDecisionEvidence.provenance`は空を許さず、`reason_identity`はP5のcomponent enum
-（`limit`、`collision`、`dynamic`、`input`）とlowercase underscore形式のreason codeを
-`component:reason_code`として保持する。未知のcomponent、区切りのないidentity、空のoriginは
-strict validationで拒否する。
+`SafetyDecisionEvidence.provenance`は空を許さず、P5公開関数
+`validate_safety_decision_projection()`でaction、reason mapping、provenanceを検証する。
+`reason_identity`はartifact projectionで許可されたP5 component（`limit`、`collision`、
+`dynamic`）とlowercase underscore形式のreason codeを`component:reason_code`として保持する。
+`input` component、未知のcomponent / reason code、区切りのないidentity、placeholderや空のoriginは
+strict validationで拒否する。checkのprovenanceはdecisionが当該`check_id`、measurement sourceの
+`source_id` / `revision`、checkの`software_revision`、およびsourceの`evidence_reference`（存在時）を
+含むことを要求し、無関係なdecisionをcheckへ結び付けない。
 
 | source kind | evidence class | 扱い |
 | --- | --- | --- |
@@ -86,8 +91,9 @@ strict validationで拒否する。
 資料ID・測定記録ID等の`evidence_reference`が必要であり、generic artifactへの記録は観測を実施した
 ことの証明ではない。`build_dry_run_validation_artifact()`はphysical sourceを受け付けず、
 `manufacturer_document`や`physical_measurement`を含む入力を#509 boundaryへ戻す。#508のdry-run
-fixtureはsoftware-onlyで検証し、physical sourceの実測は取得しない。software dry-runの`pass`を
-physical evidenceの成立へ読み替えない。
+fixtureはsoftware-onlyで検証し、physical sourceの実測は取得しない。builderはprocedureやcheckの
+別fieldがmalformedでも、raw source kindを先に確認してphysical / mixed inputを拒否するため、dry-run
+経路から`MIXED`を生成しない。software dry-runの`pass`をphysical evidenceの成立へ読み替えない。
 
 ### Check evidenceのcanonical validation
 
@@ -103,13 +109,14 @@ physical evidenceの成立へ読み替えない。
 
 `ValidationCheckEvidence`のconstructor、artifact classifier / serialization、strict decoderの
 constructionは、`validate_validation_check_evidence()`という一つのcanonical nested validatorを
-共有する。このvalidatorは`MeasurementSource`と`SafetyDecisionEvidence`を再構築してから検証するため、
-`object.__new__`や`object.__setattr__`でconstructor invariantを迂回したnested objectも拒否する。
+共有する。このvalidatorは`MeasurementSource`と`SafetyDecisionEvidence`を元のobjectのまま直接検証し、
+再検証時にnested DTOを再構築したり`object.__setattr__`で正規化したりしない。constructor完了時の
+source、decision、check、procedure、artifact、およびnested tuple containerは、型・object identity・
+semantic contentをowner-local weak identity sealへ保存する。そのため、同値のnested差し替え、
+subclass、`object.__new__` bypass、private fingerprintのcoherent rewriteも、public property、
+serialization、artifact classificationでPASSへ昇格できない。
 実際のcheck ID重複はcheck statusに関係なく`technical_invalid`へ閉じ、宣言されたclassificationに
-関係なく重複をpassへ進めない。
-さらにcheck生成時の意味内容をowner-local weak identity sealへ束ねるため、nested source / decision
-をvalidな別値へ差し替えたり、constructor bypassしたcheckを用いたりしても、artifact境界でPASSへ
-昇格できない。これはsourceやdecisionの物理authorityを新規作成する仕組みではない。
+関係なく重複をpassへ進めない。これはsourceやdecisionの物理authorityを新規作成する仕組みではない。
 public leaf DTOの`to_dict()`も同じsealを再検証するため、aggregateを経由しないsource、target、
 preflight、clearance、stop、rollback、check spec、decisionの単独serializationも、constructor後の
 semantic mutationやbypassを受理しない。
@@ -129,6 +136,9 @@ artifactのclassificationはcallerが自由に選ばず、procedure gateとcheck
 partial run、missing check、unknown source、unavailable、technical-invalidを`pass`へ昇格しない。
 pass checkはP5 `allow`、unavailable checkは`unavailable`、technical-invalid checkは`invalid`と
 一致し、fail checkは`hold` / `reject` / `stop`のいずれかと一致しなければならない。
+classifierはlifecycle fieldを評価する前に、check schema、実際のcheck IDの重複・unexpected ID、
+required kind、software revisionを確認する。`technical_invalid` checkはunknown sourceより先に
+`technical_invalid`へ閉じる。
 
 ## Strict artifact
 
