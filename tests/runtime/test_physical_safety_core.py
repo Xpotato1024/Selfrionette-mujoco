@@ -35,6 +35,7 @@ from selfrionette.runtime.safety.physical_safety_core import (
     evaluate_physical_safety,
     validate_bounded_safety_sampling_result,
     validate_safety_decision,
+    validate_safety_input,
 )
 from selfrionette.runtime.safety.trajectory_feasibility import (
     ConfigurationFeasibilityResult,
@@ -50,6 +51,7 @@ from selfrionette.runtime.safety.physical_limits import (
     LimitQuantity,
     LimitSourceProvenance,
     PhysicalLimit,
+    source_identity,
 )
 
 
@@ -61,7 +63,7 @@ POLICY_REVISION = "rev-1"
 
 def _source(name: str, status: EvidenceStatus) -> LimitSourceProvenance:
     return LimitSourceProvenance(
-        source_kind="manufacturer_manual"
+        source_kind="manufacturer_document"
         if status is EvidenceStatus.AUTHORITATIVE
         else "software_config",
         source_id=name,
@@ -92,7 +94,7 @@ def _limits(
             source = _source(f"{name}-source", source_status)
             parity = LimitParityRecord(
                 joint_name=name,
-                source_name=source.source_id,
+                source_name=source_identity(source, unit="rad"),
                 status=ParityStatus.MATCH,
                 lower=-1.0 + parity_delta,
                 upper=1.0 + parity_delta,
@@ -104,7 +106,7 @@ def _limits(
                 lower_rad=-1.0,
                 upper_rad=1.0,
                 status=status,
-                source_names=(source.source_id,),
+                source_names=(source_identity(source, unit="rad"),),
                 parity=(parity,),
                 comparison_tolerance_rad=tolerance,
             )
@@ -118,15 +120,15 @@ def _limits(
             first = _source(f"{name}-source", source_status)
             second = _source(f"{name}-second-source", source_status)
             parity = (
-                LimitParityRecord(name, first.source_id, ParityStatus.MISMATCH, -1.0, 1.0, "rad", "source ranges disagree", first),
-                LimitParityRecord(name, second.source_id, ParityStatus.MISMATCH, -0.5, 0.5, "rad", "source ranges disagree", second),
+                LimitParityRecord(name, source_identity(first, unit="rad"), ParityStatus.MISMATCH, -1.0, 1.0, "rad", "source ranges disagree", first),
+                LimitParityRecord(name, source_identity(second, unit="rad"), ParityStatus.MISMATCH, -0.5, 0.5, "rad", "source ranges disagree", second),
             )
             return ResolvedJointBound(
                 name,
                 None,
                 None,
                 status,
-                (first.source_id, second.source_id),
+                (source_identity(first, unit="rad"), source_identity(second, unit="rad")),
                 parity,
                 "source ranges disagree",
                 tolerance,
@@ -139,7 +141,7 @@ def _limits(
         }[status]
         parity = LimitParityRecord(
             name,
-            source.source_id,
+            source_identity(source, unit="rad"),
             parity_status,
             None,
             None,
@@ -152,7 +154,7 @@ def _limits(
             None,
             None,
             status,
-            (source.source_id,),
+            (source_identity(source, unit="rad"),),
             (parity,),
             status.value,
             tolerance,
@@ -177,7 +179,7 @@ def _position_limit(
 ) -> PhysicalLimit:
     source = LimitSourceProvenance(
         source_kind=(
-            "manufacturer_manual"
+            "manufacturer_document"
             if status is EvidenceStatus.AUTHORITATIVE
             else "software_config"
         ),
@@ -212,11 +214,11 @@ def _dynamic_policy_fingerprint(
     """P4のcanonical policy fingerprintをfixture側で再利用する。"""
 
     limits: list[PhysicalLimit] = []
-    for quantity, unit, lower, upper in (
-        (LimitQuantity.VELOCITY, "rad/s", -2.0, 2.0),
-        (LimitQuantity.ACCELERATION, "rad/s^2", -10.0, 10.0),
-    ):
-        for name in expected_joint_names:
+    for name in expected_joint_names:
+        for quantity, unit, lower, upper in (
+            (LimitQuantity.VELOCITY, "rad/s", -2.0, 2.0),
+            (LimitQuantity.ACCELERATION, "rad/s^2", -10.0, 10.0),
+        ):
             index = len(limits)
             limits.append(
                 PhysicalLimit(
@@ -230,7 +232,7 @@ def _dynamic_policy_fingerprint(
                     status=status,
                     source=LimitSourceProvenance(
                         source_kind=(
-                            "manufacturer_manual"
+                            "manufacturer_document"
                             if status is EvidenceStatus.AUTHORITATIVE
                             else "software_config"
                         ),
@@ -288,13 +290,21 @@ def _mixed_limit_result(
     result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
     bound = result.bounds[0]
     matched = bound.parity[0]
-    unresolved = replace(
-        matched,
-        source_name="joint_a-unresolved",
+    unresolved_source = _source(
+        "joint_a-unresolved-source",
+        EvidenceStatus.UNKNOWN
+        if parity_status is ParityStatus.UNKNOWN
+        else EvidenceStatus.UNAVAILABLE,
+    )
+    unresolved = LimitParityRecord(
+        joint_name=matched.joint_name,
+        source_name=source_identity(unresolved_source, unit="rad"),
         status=parity_status,
         lower=None,
         upper=None,
+        unit="rad",
         reason=f"source {parity_status.value}",
+        source=unresolved_source,
     )
     mixed_bound = ResolvedJointBound(
         joint_name=bound.joint_name,
@@ -327,7 +337,7 @@ def _trajectory_dynamic(
         ]
     ) if status is FeasibilityStatus.FEASIBLE else ()
     diagnostics = (
-        (FeasibilityDiagnostic("feasibility_clear", "fixture clear"),)
+        (FeasibilityDiagnostic("feasibility_clear", "fixture clear", provenance=source_ids[0]),)
         if status is FeasibilityStatus.FEASIBLE
         else (FeasibilityDiagnostic(f"{status.value}_fixture", f"fixture {status.value}"),)
     )
@@ -421,7 +431,7 @@ def _dynamic(
 ) -> ConfigurationFeasibilityResult:
     evidence_status = EvidenceStatus.AUTHORITATIVE if authoritative else EvidenceStatus.PROVISIONAL
     diagnostics = (
-        (FeasibilityDiagnostic("feasibility_clear", "fixture clear"),)
+        (FeasibilityDiagnostic("feasibility_clear", "fixture clear", provenance="fixture-dynamic"),)
         if status is FeasibilityStatus.FEASIBLE
         else (FeasibilityDiagnostic(f"{status.value}_fixture", f"fixture {status.value}"),)
     )
@@ -446,8 +456,8 @@ def _dynamic(
         evidence_ids = tuple(f"fixture-evidence-{index}" for index in range(len(expected_joint_names)))
     else:
         _, all_source_ids, _, all_evidence_ids = policy_binding
-        source_ids = all_source_ids[: len(expected_joint_names)]
-        evidence_ids = all_evidence_ids[: len(expected_joint_names)]
+        source_ids = all_source_ids[0::2]
+        evidence_ids = all_evidence_ids[0::2]
     return ConfigurationFeasibilityResult(
         status,
         diagnostics[0].code,
@@ -501,8 +511,8 @@ def test_all_authoritative_clear_components_allow_with_shared_reason_identity() 
         "candidate-fixture",
         "fixture-collision",
         "fixture-dynamic",
-        "joint_a-source",
-        "joint_b-source",
+        "manufacturer_document:joint_a-source@rev-1[unit=rad]",
+        "manufacturer_document:joint_b-source@rev-1[unit=rad]",
     )
 
 
@@ -688,12 +698,16 @@ def test_fully_comparable_matching_parity_mismatch_remains_rejected(
     result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
     bound = result.bounds[0]
     first = bound.parity[0]
-    second = replace(
-        first,
-        source_name="joint_a-second-source",
+    second_source = _source("joint_a-second-source", EvidenceStatus.AUTHORITATIVE)
+    second = LimitParityRecord(
+        joint_name=first.joint_name,
+        source_name=source_identity(second_source, unit=second_unit),
+        status=ParityStatus.MATCH,
         lower=second_lower,
         upper=second_upper,
         unit=second_unit,
+        reason=None,
+        source=second_source,
     )
     mismatch_bound = ResolvedJointBound(
         joint_name=bound.joint_name,
@@ -743,22 +757,22 @@ def test_resolved_bound_constructor_rejects_inconsistent_aggregate_shape() -> No
 def test_limit_aggregate_status_must_match_parity() -> None:
     result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
     bound = result.bounds[0]
-    inconsistent_parity = replace(
-        bound.parity[0],
-        status=ParityStatus.UNKNOWN,
-        lower=None,
-        upper=None,
-        reason="source unknown",
-    )
+    inconsistent_parity = copy(bound.parity[0])
+    object.__setattr__(inconsistent_parity, "status", ParityStatus.UNKNOWN)
+    object.__setattr__(inconsistent_parity, "lower", None)
+    object.__setattr__(inconsistent_parity, "upper", None)
+    object.__setattr__(inconsistent_parity, "reason", "source unknown")
     # test専用: validなimmutable boundをcopyし、P5の防御境界だけへ不整合を注入する。
     inconsistent_bound = copy(bound)
     object.__setattr__(inconsistent_bound, "parity", (inconsistent_parity,))
     object.__setattr__(inconsistent_bound, "lower_rad", None)
     object.__setattr__(inconsistent_bound, "upper_rad", None)
+    inconsistent_result = copy(result)
+    object.__setattr__(inconsistent_result, "bounds", (inconsistent_bound, result.bounds[1]))
     decision = evaluate_physical_safety(
         SafetyInput(
             "inconsistent-limit",
-            replace(result, bounds=(inconsistent_bound, result.bounds[1])),
+            inconsistent_result,
             _collision(CollisionStatus.CLEAR),
             _dynamic(FeasibilityStatus.FEASIBLE),
         )
@@ -771,14 +785,17 @@ def test_limit_aggregate_status_must_match_parity() -> None:
 def test_resolved_degree_parity_never_allows_without_conversion() -> None:
     result = _limits(LimitResolutionStatus.RESOLVED_AUTHORITATIVE)
     bound = result.bounds[0]
-    degree_parity = replace(bound.parity[0], unit="deg")
+    degree_parity = copy(bound.parity[0])
+    object.__setattr__(degree_parity, "unit", "deg")
     # test専用: validなimmutable boundのcopyへnon-rad parityを注入し、変換やauthority補完を許さない。
     malformed_bound = copy(bound)
     object.__setattr__(malformed_bound, "parity", (degree_parity,))
+    malformed_result = copy(result)
+    object.__setattr__(malformed_result, "bounds", (malformed_bound, result.bounds[1]))
     decision = evaluate_physical_safety(
         SafetyInput(
             "degree-limit",
-            replace(result, bounds=(malformed_bound, result.bounds[1])),
+            malformed_result,
             _collision(CollisionStatus.CLEAR),
             _dynamic(FeasibilityStatus.FEASIBLE),
         )
@@ -1415,6 +1432,19 @@ def test_dynamic_synthetic_feasible_never_allows() -> None:
     assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
 
 
+def test_dynamic_policy_fingerprint_tamper_never_allows() -> None:
+    dynamic = copy(_dynamic(FeasibilityStatus.FEASIBLE))
+    object.__setattr__(dynamic, "policy_fingerprint", ("forged-policy",))
+
+    decision = evaluate_physical_safety(
+        SafetyInput("synthetic-policy-fingerprint", _limits(), _collision(CollisionStatus.CLEAR), dynamic)
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "dynamic:dynamic_result_inconsistent"
+
+
 def test_complete_provisional_dynamic_evidence_maps_to_hold() -> None:
     decision = evaluate_physical_safety(
         _input(dynamic_authoritative=False)
@@ -1712,3 +1742,103 @@ def test_safety_decision_rejects_reordered_assessments() -> None:
             tuple(reversed(valid.assessments)),
             valid.provenance,
         )
+
+
+def test_bounded_sampling_rejects_non_exact_first_index_type() -> None:
+    allow = evaluate_physical_safety(_input(candidate_id="first-index-allow"))
+    reject = evaluate_physical_safety(
+        _input(candidate_id="first-index-reject", dynamic=FeasibilityStatus.REJECTED)
+    )
+
+    for malformed_index in (True, 1.0):
+        with pytest.raises((TypeError, ValueError), match="first_non_allow_index"):
+            BoundedSafetySamplingResult((allow, reject), malformed_index)
+
+
+def test_safety_input_external_seal_rejects_coherent_private_rewrite() -> None:
+    malformed = _input()
+    object.__setattr__(malformed, "candidate_id", "rewritten-candidate")
+    nested_ids = tuple(
+        id(nested) if nested is not None else None
+        for nested in (malformed.limit_resolution, malformed.collision, malformed.dynamic)
+    )
+    object.__setattr__(
+        malformed,
+        "_binding_fingerprint",
+        (malformed.candidate_id, malformed.provenance, nested_ids),
+    )
+
+    decision = evaluate_physical_safety(malformed)
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "input:invalid_safety_input"
+
+
+def test_constructor_bypassed_safety_input_is_invalid_without_exception() -> None:
+    malformed = object.__new__(SafetyInput)
+
+    decision = evaluate_physical_safety(malformed)
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert decision.reason.identity == "input:invalid_safety_input"
+
+
+def test_public_safety_input_validator_deep_revalidates_nested_result() -> None:
+    malformed = _input()
+    limit_result = copy(malformed.limit_resolution)
+    object.__setattr__(limit_result, "expected_joint_names", ("joint_a",))
+    object.__setattr__(malformed, "limit_resolution", limit_result)
+
+    with pytest.raises(ValueError):
+        validate_safety_input(malformed)
+
+
+def test_safety_decision_external_seal_rejects_coherent_private_rewrite() -> None:
+    valid = evaluate_physical_safety(_input())
+    malformed = copy(valid)
+    object.__setattr__(malformed, "candidate_id", "rewritten-decision")
+    object.__setattr__(
+        malformed,
+        "_binding_fingerprint",
+        (
+            malformed.candidate_id,
+            malformed.action,
+            malformed.reason._binding_fingerprint,
+            tuple(item._binding_fingerprint for item in malformed.assessments),
+            malformed.provenance,
+        ),
+    )
+
+    assert not malformed.allowed
+    with pytest.raises(ValueError):
+        validate_safety_decision(malformed)
+
+
+def test_constructor_bypassed_safety_decision_and_bounded_result_fail_closed() -> None:
+    malformed_decision = object.__new__(SafetyDecision)
+    assert not malformed_decision.allowed
+    with pytest.raises(Exception):
+        validate_safety_decision(malformed_decision)
+
+    malformed_bounded = object.__new__(BoundedSafetySamplingResult)
+    assert malformed_bounded.action is SafetyDecisionAction.INVALID
+    with pytest.raises(Exception):
+        validate_bounded_safety_sampling_result(malformed_bounded)
+
+
+def test_collision_near_to_clear_nested_tamper_is_invalid_at_p5_boundary() -> None:
+    collision = _collision(CollisionStatus.NEAR_COLLISION)
+    malformed_evaluation = copy(collision.evaluations[0])
+    object.__setattr__(malformed_evaluation, "status", CollisionStatus.CLEAR)
+    object.__setattr__(malformed_evaluation, "distance_m", 0.1)
+    object.__setattr__(malformed_evaluation, "reason_code", "pair_clear")
+    malformed = copy(collision)
+    object.__setattr__(malformed, "evaluations", (malformed_evaluation,))
+
+    decision = evaluate_physical_safety(
+        SafetyInput("nested-collision-tamper", _limits(), malformed, _dynamic(FeasibilityStatus.FEASIBLE))
+    )
+
+    assert decision.action is SafetyDecisionAction.INVALID
+    assert not decision.allowed
+    assert decision.reason.identity == "collision:collision_result_inconsistent"

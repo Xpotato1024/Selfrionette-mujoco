@@ -38,8 +38,12 @@ authority evidenceが明示された場合だけ成立する。completeなprovis
 `unavailable`へ保持する。P5は新しいphysical authorityや実機測定値を生成しない。
 
 P5自身にも公開canonical validatorを持つ。`validate_safety_input`はcandidate identityとtop-level
-provenanceを検証し、`validate_safety_reason`と`validate_safety_decision`はconstructorと同じ
-binding fingerprintを使ってreason、component assessment、action、aggregate provenanceを再検証する。
+provenanceを検証した後、nested P2 / P3 / P4の公開validatorも呼び出す。`validate_safety_reason`、
+`validate_safety_decision`、`validate_bounded_safety_sampling_result`はconstructorと同じsemantic
+invariantを再検証する。P5のauthority/completenessはprivate binding fingerprintだけに依存せず、
+constructor時に登録したowner-local weak identity sealとpublic fieldsの再導出値を照合するため、
+objectを迂回生成したりpublic fieldsとprivate hintを同時に書き換えたりしてもvalidにはならない。
+reason、component assessment、action、aggregate provenanceを再検証する。
 通常の`SafetyDecision`は`limit`、`collision`、`dynamic`の3 assessmentを必須とし、actionとreasonは
 このcanonical順序からのみ受け付け、最高優先度assessmentからのみ導出できる。入力エラー用の`input:invalid_safety_input`だけが空assessmentを
 許容する。`allowed`は呼出し時にもvalidatorを通るため、constructor後のaction、reason、nested assessment
@@ -72,7 +76,10 @@ reason/action mappingと完全一致しなければならず、unknown reasonや
 
 ## Upstream aggregate integrity
 
-P5 boundaryはP2〜P4のtyped aggregateを盲目的に信頼しない。P2では各boundのstatus、source
+P5 boundaryはP2〜P4のtyped aggregateを盲目的に信頼しない。まずP2の
+`validate_limit_resolution_result`、P3のcontext / evaluation / aggregate公開validator、P4の
+configuration / trajectory公開validatorを呼び、各ownerのcanonical sealとnested DTOを再検証する。
+そのうえでP5はdecision compositionに必要なidentityだけを照合する。P2では各boundのstatus、source
 identity、parity record、rangeの対応を検証し、resolved statusはboundedな`rad` parityと一致する
 場合だけ受け入れる。P3ではpair evaluationから導出されるaggregate status / reasonと入力結果を
 照合し、typed `CollisionContext`のrobot / model / policy / inventory identityとexpected pair coverageも
@@ -98,7 +105,7 @@ mismatchとし、`match`と`unknown` / `unavailable`の未解決値はそれぞ�
 `unavailable_acceleration` diagnosticを必須とし、これを欠くFEASIBLE aggregateは`invalid`へ閉じる。
 
 `evaluate_bounded_safety_samples`の戻り値も`validate_bounded_safety_sampling_result`で再検証する。
-decisionsは空でないtupleで、`first_non_allow_index`は実際の最初のnon-allowと完全一致しなければならない。
+decisionsは空でないtupleで、`first_non_allow_index`は`bool`を含まないexact `int`または`None`で、実際の最初のnon-allowと完全一致しなければならない。
 non-allowが存在する場合、sequenceはそのdecisionで停止し、後続のtrailing decisionを許可しない。
 aggregateのaction、reason、provenanceは、そのindexのdecision（全件allowの場合は最後のdecision）からcanonicalに
 導出され、`(ALLOW, REJECT)`を`first_non_allow_index = 0`やaggregate `ALLOW`として保持することはできない。

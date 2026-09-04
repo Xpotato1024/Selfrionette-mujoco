@@ -11,6 +11,8 @@ from collections.abc import Sequence
 from copy import copy
 from dataclasses import dataclass, field
 from enum import Enum
+import weakref
+from threading import RLock
 
 from selfrionette.runtime.safety.collision_policy import (
     CollisionContext,
@@ -18,6 +20,9 @@ from selfrionette.runtime.safety.collision_policy import (
     CollisionEvaluation,
     CollisionKind,
     CollisionStatus,
+    validate_collision_check_result,
+    validate_collision_context,
+    validate_collision_evaluation,
 )
 from selfrionette.runtime.safety.limit_resolution import (
     JointSpaceConversion,
@@ -26,6 +31,7 @@ from selfrionette.runtime.safety.limit_resolution import (
     LimitResolutionStatus,
     ParityStatus,
     ResolvedJointBound,
+    validate_limit_resolution_result,
 )
 from selfrionette.runtime.safety.trajectory_feasibility import (
     ConfigurationFeasibilityResult,
@@ -64,13 +70,51 @@ class SafetyComponent(str, Enum):
     INPUT = "input"
 
 
+# P5のauthorityはDTOのprivate fingerprintだけに依存しない。Pythonのpublic
+# dataclass fieldsとprivate hintを同時に改変するcallerでも更新できない、owner-local
+# weak identity sealを保持する。registryはweakref callbackで掃除し、id再利用時は
+# 必ずreference identityも照合する。
+_P5_SEALS: dict[
+    int, tuple[weakref.ReferenceType[object], tuple[object, ...]]
+] = {}
+_P5_SEALS_LOCK = RLock()
+
+
+def _release_p5_seal(
+    key: int,
+    reference: weakref.ReferenceType[object],
+) -> None:
+    with _P5_SEALS_LOCK:
+        entry = _P5_SEALS.get(key)
+        if entry is not None and entry[0] is reference:
+            _P5_SEALS.pop(key, None)
+
+
+def _register_p5_seal(value: object, snapshot: tuple[object, ...]) -> None:
+    key = id(value)
+    reference = weakref.ref(
+        value,
+        lambda ref, key=key: _release_p5_seal(key, ref),
+    )
+    with _P5_SEALS_LOCK:
+        _P5_SEALS[key] = (reference, snapshot)
+
+
+def _validate_p5_seal(value: object, snapshot: tuple[object, ...]) -> None:
+    key = id(value)
+    with _P5_SEALS_LOCK:
+        entry = _P5_SEALS.get(key)
+        if entry is None or entry[0]() is not value or entry[1] != snapshot:
+            raise ValueError("physical safety DTO is not constructor-sealed")
+
+
 def _text(name: str, value: object) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise ValueError(f"{name} must be a non-empty string")
     return value
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class SafetyReason:
     """machine reasonとoperator messageを同一identityへ束ねる。"""
 
@@ -102,7 +146,7 @@ class SafetyReason:
         return f"{self.component.value}:{self.reason_code}"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class SafetyInput:
     """1 candidate state / bounded trajectoryのchecker outputs。"""
 
@@ -136,7 +180,7 @@ class SafetyInput:
         _validate_safety_input_contract(self, initialize=True)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class SafetyComponentAssessment:
     """各ownerのstatus/actionとreason。"""
 
@@ -159,7 +203,7 @@ class SafetyComponentAssessment:
         _validate_safety_component_assessment(self, initialize=True)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class SafetyDecision:
     """P2 / P3 / P4をcomposeしたimmutable machine/operator decision。"""
 
@@ -199,7 +243,7 @@ class SafetyDecision:
         return self.action is SafetyDecisionAction.ALLOW
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class BoundedSafetySamplingResult:
     """有限candidate sequenceのfirst non-allow decision。"""
 
@@ -339,6 +383,65 @@ def _safe_dynamic_provenance(result: object) -> tuple[str, ...]:
     return ()
 
 
+def _reason_semantic_snapshot(reason: SafetyReason) -> tuple[object, ...]:
+    """SafetyReasonのpublic semantic contentを外部seal用に固定する。"""
+
+    return (
+        reason.reason_code,
+        reason.component,
+        reason.operator_message,
+        reason.provenance,
+    )
+
+
+def _input_semantic_snapshot(value: SafetyInput) -> tuple[object, ...]:
+    """SafetyInputの候補/provenance/nested object identityを外部sealする。"""
+
+    return (
+        value.candidate_id,
+        value.provenance,
+        tuple(
+            id(nested) if nested is not None else None
+            for nested in (
+                value.limit_resolution,
+                value.collision,
+                value.dynamic,
+            )
+        ),
+    )
+
+
+def _assessment_semantic_snapshot(
+    assessment: SafetyComponentAssessment,
+) -> tuple[object, ...]:
+    return (
+        assessment.component,
+        assessment.action,
+        _reason_semantic_snapshot(assessment.reason),
+    )
+
+
+def _decision_semantic_snapshot(decision: SafetyDecision) -> tuple[object, ...]:
+    return (
+        decision.candidate_id,
+        decision.action,
+        _reason_semantic_snapshot(decision.reason),
+        tuple(_assessment_semantic_snapshot(item) for item in decision.assessments),
+        decision.provenance,
+    )
+
+
+def _bounded_semantic_snapshot(
+    result: BoundedSafetySamplingResult,
+) -> tuple[object, ...]:
+    return (
+        tuple(_decision_semantic_snapshot(item) for item in result.decisions),
+        result.first_non_allow_index,
+        _reason_semantic_snapshot(result.reason) if result.reason is not None else None,
+        result.provenance,
+    )
+
+
 def _invoke_post_init(
     value: object,
     post_init: object,
@@ -358,6 +461,12 @@ def _limit_result_inconsistency(result: LimitResolutionResult) -> str | None:
 
     if type(result) is not LimitResolutionResult:
         return "limit resolution result has an invalid type"
+    try:
+        validated = validate_limit_resolution_result(result)
+    except Exception:
+        return "limit resolution result failed canonical validation"
+    if validated is not result:
+        return "limit resolution validator returned a different result"
     try:
         schema_version = result.schema_version
         robot_id = result.robot_id
@@ -497,6 +606,15 @@ def _collision_result_inconsistency(result: CollisionCheckResult) -> str | None:
 
     if type(result) is not CollisionCheckResult:
         return "collision result has an invalid type"
+    try:
+        validate_collision_context(result.context)
+        for evaluation in result.evaluations:
+            validate_collision_evaluation(evaluation)
+        validated = validate_collision_check_result(result)
+    except Exception:
+        return "collision result failed canonical validation"
+    if validated is not result:
+        return "collision validator returned a different result"
     try:
         context = result.context
         status = result.status
@@ -1084,6 +1202,7 @@ def _validate_safety_reason(
     if initialize:
         object.__setattr__(reason, "provenance", canonical_provenance)
         object.__setattr__(reason, "_binding_fingerprint", fingerprint)
+        _register_p5_seal(reason, _reason_semantic_snapshot(reason))
         return
     try:
         bound = reason._binding_fingerprint
@@ -1091,6 +1210,7 @@ def _validate_safety_reason(
         raise ValueError("reason binding fingerprint is missing") from exc
     if bound != fingerprint:
         raise ValueError("reason binding was mutated")
+    _validate_p5_seal(reason, _reason_semantic_snapshot(reason))
 
 
 def _validate_safety_input_contract(
@@ -1134,6 +1254,7 @@ def _validate_safety_input_contract(
     if initialize:
         object.__setattr__(value, "provenance", canonical_provenance)
         object.__setattr__(value, "_binding_fingerprint", fingerprint)
+        _register_p5_seal(value, _input_semantic_snapshot(value))
         return
     try:
         bound = value._binding_fingerprint
@@ -1141,6 +1262,7 @@ def _validate_safety_input_contract(
         raise ValueError("safety input binding fingerprint is missing") from exc
     if bound != fingerprint:
         raise ValueError("safety input binding was mutated")
+    _validate_p5_seal(value, _input_semantic_snapshot(value))
 
 
 def _validate_safety_component_assessment(
@@ -1174,6 +1296,7 @@ def _validate_safety_component_assessment(
     fingerprint = (component, action, reason._binding_fingerprint)
     if initialize:
         object.__setattr__(assessment, "_binding_fingerprint", fingerprint)
+        _register_p5_seal(assessment, _assessment_semantic_snapshot(assessment))
         return
     try:
         bound = assessment._binding_fingerprint
@@ -1181,6 +1304,7 @@ def _validate_safety_component_assessment(
         raise ValueError("assessment binding fingerprint is missing") from exc
     if bound != fingerprint:
         raise ValueError("assessment binding was mutated")
+    _validate_p5_seal(assessment, _assessment_semantic_snapshot(assessment))
 
 
 def _validate_safety_decision(
@@ -1251,6 +1375,7 @@ def _validate_safety_decision(
     if initialize:
         object.__setattr__(decision, "provenance", canonical_provenance)
         object.__setattr__(decision, "_binding_fingerprint", fingerprint)
+        _register_p5_seal(decision, _decision_semantic_snapshot(decision))
         return
     try:
         bound = decision._binding_fingerprint
@@ -1258,6 +1383,7 @@ def _validate_safety_decision(
         raise ValueError("decision binding fingerprint is missing") from exc
     if bound != fingerprint:
         raise ValueError("decision binding was mutated")
+    _validate_p5_seal(decision, _decision_semantic_snapshot(decision))
 
 
 def _validate_bounded_safety_result(
@@ -1283,6 +1409,8 @@ def _validate_bounded_safety_result(
         if decision.action is not SafetyDecisionAction.ALLOW
     )
     expected_index = non_allow_indices[0] if non_allow_indices else None
+    if first_non_allow_index is not None and type(first_non_allow_index) is not int:
+        raise TypeError("first_non_allow_index must be an integer or None")
     if first_non_allow_index != expected_index:
         raise ValueError("first_non_allow_index must identify the first non-allow decision")
     if expected_index is not None and len(decisions) != expected_index + 1:
@@ -1312,6 +1440,7 @@ def _validate_bounded_safety_result(
     )
     if initialize:
         object.__setattr__(result, "_binding_fingerprint", fingerprint)
+        _register_p5_seal(result, _bounded_semantic_snapshot(result))
         return
     try:
         bound = result._binding_fingerprint
@@ -1319,6 +1448,7 @@ def _validate_bounded_safety_result(
         raise ValueError("bounded sampling binding fingerprint is missing") from exc
     if bound != fingerprint:
         raise ValueError("bounded sampling binding was mutated")
+    _validate_p5_seal(result, _bounded_semantic_snapshot(result))
 
 
 def evaluate_physical_safety(safety_input: SafetyInput) -> SafetyDecision:
@@ -1406,9 +1536,24 @@ def validate_safety_reason(reason: SafetyReason) -> SafetyReason:
 
 
 def validate_safety_input(value: SafetyInput) -> SafetyInput:
-    """SafetyInputのpublic top-level validator（nested resultはconsumerで再検証）。"""
+    """SafetyInputとnested upstream resultを再検証するpublic boundary。"""
 
     _validate_safety_input_contract(value)
+    if value.limit_resolution is not None:
+        validate_limit_resolution_result(value.limit_resolution)
+    if value.collision is not None:
+        validate_collision_context(value.collision.context)
+        for evaluation in value.collision.evaluations:
+            validate_collision_evaluation(evaluation)
+        validate_collision_check_result(value.collision)
+    if value.dynamic is not None:
+        if type(value.dynamic) is ConfigurationFeasibilityResult:
+            validate_configuration_feasibility_result(value.dynamic)
+        else:
+            validate_trajectory_feasibility_result(value.dynamic)
+    cross_component_error = _cross_component_inconsistency(value)
+    if cross_component_error is not None:
+        raise ValueError(cross_component_error)
     return value
 
 
