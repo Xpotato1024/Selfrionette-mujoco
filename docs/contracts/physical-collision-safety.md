@@ -46,9 +46,12 @@ explicit pair boundaryへ後続接続できる。
 
 distanceのunitはgeom surface間のmeterである。`distance < 0`はpenetration、
 `0 <= distance <= clearance_m + near_collision_margin_m`はnear-collision、
-それより大きい値はclearとなる。task-object pairの明示contact observationだけは
-`contact`となる。distance欠落は`unknown`、contact observation欠落は`unavailable`であり、
-clearへfallbackしない。`CollisionEvaluation`は`near_collision_margin_m`も保持し、
+それより大きい値はclearとなる。task-object pairの明示contact observationだけは距離thresholdより
+先に評価し、有限かつnon-negativeなdistanceであればthresholdを超えても`contact`となる。
+負のdistanceは既存のpenetration規則を優先してcollisionとし、distance欠落は`unknown`、
+contact observation欠落は`unavailable`であり、clearへfallbackしない。task-object以外のpairに
+contact flagを付けた観測、またはcontact flagにdistanceがない観測は
+`invalid_collision_observation`としてfail closedにする。`CollisionEvaluation`は`near_collision_margin_m`も保持し、
 near evidenceの上限を同じthresholdから検証する。`collision` evidenceは負のdistance、
 `pair_clear` evidenceは`clearance_m + near_collision_margin_m`を超えるdistanceを必須とする。
 `contact` evidenceはnon-negative distanceとcanonicalな`task_object_contact` reasonを必須とし、
@@ -76,6 +79,10 @@ contextへbindされたpolicy exclusionと一致しなければならず、calle
 contextのinventory fingerprintから導出した`expected_pair_ids`集合に含まれ、かつ導出kindが
 `structural_proximity`でなければならない。したがってinventory外のpairや異なるbodyの
 `self_interference` pairをfingerprintへ直接注入して保持・無視することもできない。
+宣言済みexclusion pairのaggregate evaluationも、必ず`CLEAR`、
+`explicit_structural_exclusion`、`STRUCTURAL_PROXIMITY`、宣言済みprovenance、
+`distance=None`の完全一致でなければならず、collision、near-collision、contact、unknown、
+unavailable、invalid、`pair_clear`を同じpairへ結合しない。
 
 ## Configuration / trajectory result
 
