@@ -1059,6 +1059,106 @@ def test_legitimate_unavailable_dynamic_inputs_remain_unavailable() -> None:
     assert trajectory.reason_code == "unavailable_acceleration"
 
 
+@pytest.mark.parametrize(
+    ("status", "reason_code", "diagnostic_code"),
+    (
+        (FeasibilityStatus.FEASIBLE, "feasibility_clear", "feasibility_clear"),
+        (FeasibilityStatus.UNAVAILABLE, "unavailable_qvel", "unavailable_qvel"),
+        (FeasibilityStatus.INVALID, "invalid_trajectory_input", "invalid_trajectory_input"),
+    ),
+)
+def test_trajectory_result_rejects_contradictory_short_shape_status(
+    status: FeasibilityStatus,
+    reason_code: str,
+    diagnostic_code: str,
+) -> None:
+    short = evaluate_trajectory_feasibility((_sample(0.0, (0.0, 0.0, 0.0)),), _policy())
+    with pytest.raises(ValueError, match="fewer than two|invalid_trajectory_length"):
+        TrajectoryFeasibilityResult(
+            **{
+                **_init_fields(short),
+                "status": status,
+                "reason_code": reason_code,
+                "diagnostics": (FeasibilityDiagnostic(diagnostic_code, "contradictory shape"),),
+            }
+        )
+
+
+def test_trajectory_result_rejects_two_sample_success_like_or_wrong_shape_reason() -> None:
+    two_samples = evaluate_trajectory_feasibility(
+        (_sample(0.0, (0.0, 0.0, 0.0)), _sample(0.1, (0.1, 0.0, 0.0))),
+        _policy(),
+    )
+    assert two_samples.status is FeasibilityStatus.UNAVAILABLE
+    assert two_samples.reason_code == "unavailable_acceleration"
+
+    clear = FeasibilityDiagnostic("feasibility_clear", "contradictory clear")
+    with pytest.raises(ValueError, match="two-sample|acceleration"):
+        TrajectoryFeasibilityResult(
+            **{
+                **_init_fields(two_samples),
+                "status": FeasibilityStatus.FEASIBLE,
+                "reason_code": "feasibility_clear",
+                "diagnostics": (clear,),
+            }
+        )
+
+    invalid_length = FeasibilityDiagnostic("invalid_trajectory_length", "two samples are valid input")
+    with pytest.raises(ValueError, match="unavailable_acceleration|two-sample"):
+        TrajectoryFeasibilityResult(
+            **{
+                **_init_fields(two_samples),
+                "status": FeasibilityStatus.INVALID,
+                "reason_code": "invalid_trajectory_length",
+                "diagnostics": (invalid_length,),
+            }
+        )
+
+
+def test_trajectory_result_accepts_canonical_short_and_two_sample_non_success_results() -> None:
+    short = evaluate_trajectory_feasibility((_sample(0.0, (0.0, 0.0, 0.0)),), _policy())
+    short_copy = TrajectoryFeasibilityResult(**_init_fields(short))
+    assert short_copy.status is FeasibilityStatus.INVALID
+    assert short_copy.reason_code == "invalid_trajectory_length"
+    assert validate_trajectory_feasibility_result(short_copy) is short_copy
+
+    two_samples = evaluate_trajectory_feasibility(
+        (_sample(0.0, (0.0, 0.0, 0.0)), _sample(0.1, (0.1, 0.0, 0.0))),
+        _policy(),
+    )
+    two_copy = TrajectoryFeasibilityResult(**_init_fields(two_samples))
+    assert two_copy.status is FeasibilityStatus.UNAVAILABLE
+    assert two_copy.reason_code == "unavailable_acceleration"
+    assert validate_trajectory_feasibility_result(two_copy) is two_copy
+
+
+def test_trajectory_result_shape_tamper_and_constructor_bypass_fail_closed() -> None:
+    valid = evaluate_trajectory_feasibility(
+        (
+            _sample(0.0, (0.0, 0.0, 0.0)),
+            _sample(0.1, (0.1, 0.0, 0.0)),
+            _sample(0.2, (0.2, 0.0, 0.0)),
+        ),
+        _policy(),
+    )
+    bypassed = _bypass_constructor(valid)
+    object.__setattr__(bypassed, "sample_count", 2)
+    object.__setattr__(bypassed, "source_ids", bypassed.source_ids[:2])
+    object.__setattr__(bypassed, "qvel_available", bypassed.qvel_available[:2])
+    object.__setattr__(bypassed, "jacobian_available", bypassed.jacobian_available[:2])
+    object.__setattr__(bypassed, "jacobian_source_ids", bypassed.jacobian_source_ids[:2])
+    object.__setattr__(bypassed, "jacobian_evidence_ids", bypassed.jacobian_evidence_ids[:2])
+    object.__setattr__(
+        bypassed,
+        "velocity_evidence",
+        tuple(item for item in bypassed.velocity_evidence if item.sample_index < 2),
+    )
+    with pytest.raises(ValueError, match="two-sample|acceleration"):
+        validate_trajectory_feasibility_result(bypassed)
+    assert bypassed.feasible is False
+    assert bypassed.authoritative is False
+
+
 def test_policy_fingerprint_rejects_zero_gap_and_incomplete_limit_inventory() -> None:
     valid = evaluate_configuration_feasibility(
         ConfigurationState((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), _jacobian()),
