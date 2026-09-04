@@ -41,6 +41,14 @@ class CollisionStatus(str, Enum):
     INVALID = "invalid"
 
 
+_PENETRATION_REASON_BY_KIND = {
+    CollisionKind.SELF_INTERFERENCE: "self_interference_penetration",
+    CollisionKind.STRUCTURAL_PROXIMITY: "structural_proximity_penetration",
+    CollisionKind.ENVIRONMENT_COLLISION: "environment_penetration",
+    CollisionKind.TASK_OBJECT_CONTACT: "task_object_penetration",
+}
+
+
 class CollisionContractViolation(ValueError):
     """collision contextから安全なtyped bindingを復元できない契約違反。"""
 
@@ -1068,6 +1076,8 @@ def _collision_evaluation_inconsistency(
             return "collision evidence has no provenance"
         if distance is None or distance >= 0.0:
             return "collision evidence requires negative distance"
+        if reason_code != _PENETRATION_REASON_BY_KIND.get(kind):
+            return "collision evidence reason is inconsistent with collision kind"
     elif status is CollisionStatus.UNKNOWN:
         if distance is not None:
             return "unknown or unavailable evidence must omit distance"
@@ -1714,7 +1724,7 @@ def evaluate_collision_configuration(
             continue
         if distance < 0.0:
             status = CollisionStatus.COLLISION
-            reason = "self_interference_penetration" if pair.kind is CollisionKind.SELF_INTERFERENCE else "environment_penetration" if pair.kind is CollisionKind.ENVIRONMENT_COLLISION else "task_object_penetration"
+            reason = _PENETRATION_REASON_BY_KIND[pair.kind]
         elif observation.contact:
             status = CollisionStatus.CONTACT
             reason = "task_object_contact"
