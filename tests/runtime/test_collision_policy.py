@@ -999,6 +999,51 @@ def test_provider_derived_invalid_evaluation_requires_provenance() -> None:
             near_collision_margin_m=policy.near_collision_margin_m,
         )
 
+    with pytest.raises(ValueError, match="no provenance"):
+        CollisionEvaluation(
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
+            CollisionStatus.INVALID,
+            None,
+            policy.clearance_m,
+            "provider_invalid_collision",
+            near_collision_margin_m=policy.near_collision_margin_m,
+        )
+
+    internal = CollisionEvaluation(
+        "fore|upper",
+        CollisionKind.SELF_INTERFERENCE,
+        CollisionStatus.INVALID,
+        None,
+        policy.clearance_m,
+        "collision_context_binding_invalid",
+        near_collision_margin_m=policy.near_collision_margin_m,
+    )
+    assert package_validate_evaluation(internal) is internal
+
+    with pytest.raises(ValueError, match="no provenance"):
+        CollisionEvaluation(
+            "fore|upper",
+            CollisionKind.SELF_INTERFERENCE,
+            CollisionStatus.INVALID,
+            0.0,
+            policy.clearance_m,
+            "collision_context_binding_invalid",
+            near_collision_margin_m=policy.near_collision_margin_m,
+        )
+
+    provider = CollisionEvaluation(
+        "fore|upper",
+        CollisionKind.SELF_INTERFERENCE,
+        CollisionStatus.INVALID,
+        None,
+        policy.clearance_m,
+        "provider_invalid_collision",
+        "provider-role-check",
+        policy.near_collision_margin_m,
+    )
+    assert package_validate_evaluation(provider) is provider
+
     invalid = CollisionEvaluation(
         "fore|upper",
         CollisionKind.SELF_INTERFERENCE,
@@ -1032,6 +1077,29 @@ def test_unknown_missing_provenance_is_rejected_by_aggregate_after_tamper() -> N
         "collision_result_inconsistent",
     )
     assert invalid.status is CollisionStatus.INVALID
+    assert not invalid.clear
+    assert package_validate_check(invalid) is invalid
+
+
+def test_arbitrary_invalid_missing_provenance_is_invalid_at_aggregate_boundary() -> None:
+    inventory = _inventory()
+    policy = _policy()
+    context = _context(inventory, policy)
+    result = _clear_result(inventory, policy, context)
+    evaluation = result.evaluations[0]
+    object.__setattr__(evaluation, "status", CollisionStatus.INVALID)
+    object.__setattr__(evaluation, "distance_m", None)
+    object.__setattr__(evaluation, "reason_code", "provider_invalid_collision")
+    object.__setattr__(evaluation, "provenance", None)
+
+    invalid = CollisionCheckResult(
+        context,
+        CollisionStatus.INVALID,
+        result.evaluations,
+        "collision_result_inconsistent",
+    )
+    assert invalid.status is CollisionStatus.INVALID
+    assert invalid.reason_code == "collision_result_inconsistent"
     assert not invalid.clear
     assert package_validate_check(invalid) is invalid
 

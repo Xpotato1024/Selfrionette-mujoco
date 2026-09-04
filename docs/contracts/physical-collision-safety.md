@@ -56,7 +56,11 @@ near evidenceの上限を同じthresholdから検証する。`collision` evidenc
 `collision`、`near_collision`、`contact`などのnon-clear statusでもtyped provenanceを必須とする。
 providerが観測したdistance欠落による`unknown`もtyped provenanceを必須とする一方、観測自体が
 存在しない`unavailable`はprovenanceなしで表現できる。provider evidenceを伴う`invalid`も
-provenanceを失ってはならない。`unknown` kindはどのstatusでもevidenceを構成できない。
+provenanceを失ってはならない。`invalid`でprovenanceを省略できるのは、provider観測が存在せず
+内部validatorが生成するcanonicalなinternal reason code allowlistに含まれるfail-closed reason
+だけであり、allowlist外のunknown / unrecognized reasonはprovenanceなしでは拒否する。reason
+messageの部分一致やheuristicでinternal扱いへ昇格させない。`unknown` kindはどのstatusでも
+evidenceを構成できない。
 
 ## Exclusion provenance
 
