@@ -48,6 +48,12 @@ normalizedなjoint boundの単位は`rad`だけである。同じnon-rad unitの
 複数一致していても`unknown`として扱い、mixed unitは`mismatch`とする。resolverはnon-radの
 値を`rad`へ暗黙変換しない。
 
+fast_armのjoint-space resolutionは、`LimitSpace.JOINT`、`unit=rad`に加えて、
+`canonical_fast_arm_joint_space_frame()`が返す唯一のframe identityを要求する。frameが異なる
+joint limitはrangeが同じでも`mismatch`としてtyped parityへ保持し、normalized boundを生成せず、
+`resolved_authoritative`または`resolved_provisional`へ昇格させない。`LimitParityRecord`はsourceの
+frameを保持するため、後続のP5 validatorはsource identity、unit、frameのcompletenessを再検証できる。
+
 P2は、positionの`MOTOR` / `ACTUATOR` limitごとに、期待jointへ到達する具体的な
 `JointSpaceConversion`を一つ保持する。入力にないsourceを指す余分なrelation、relationの
 欠落、placeholderのsource / relation identityは拒否する。`JOINT` limitのconversion metadataは
@@ -158,5 +164,7 @@ fast_armのMuJoCo collectorは、`mj_name2id`の結果をboolやfloat等から�
 scalarとして検証する。`-1`はmissing joint、それ以外の負値は不正入力とする。
 `jnt_limited`は0または1の整数・bool scalarだけを受け付け、`jnt_range`の各endpointは
 bool・文字列・非実数を除くfiniteなreal scalarとして検証してからfloatへ正規化する。
-numpyの整数・bool・実数scalarはこの型境界で扱える。malformedなmodel/dataはtyped
-`UNKNOWN`（boundなし・authorityなし）へ閉じる。
+numpyの整数・bool・実数scalarはこの型境界で扱える。各MuJoCo / model accessorで発生する
+通常の`Exception`（`RuntimeError`を含む）はこの明示的adapter boundaryでtyped `UNKNOWN`
+（boundなし・authorityなし）へ閉じる。`KeyboardInterrupt`、`SystemExit`、`GeneratorExit`などの
+`BaseException`系は捕捉しない。

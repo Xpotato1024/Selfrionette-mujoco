@@ -16,7 +16,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from threading import RLock
-from typing import Any
+from typing import Any, Final
 
 
 PHYSICAL_SAFETY_ENVELOPE_SCHEMA_VERSION = 1
@@ -172,6 +172,15 @@ class LimitQuantity(str, Enum):
     POSITION = "position"
     VELOCITY = "velocity"
     ACCELERATION = "acceleration"
+
+
+FAST_ARM_JOINT_SPACE_FRAME: Final[str] = "fast_arm joint space"
+
+
+def canonical_fast_arm_joint_space_frame() -> str:
+    """fast_armのjoint-space limitへ要求する唯一のframe identityを返す。"""
+
+    return FAST_ARM_JOINT_SPACE_FRAME
 
 
 _SOFTWARE_ONLY_SOURCE_KINDS = frozenset(
@@ -1351,6 +1360,7 @@ def make_unknown_limit(
 
 __all__ = [
     "EvidenceStatus",
+    "FAST_ARM_JOINT_SPACE_FRAME",
     "LimitEvidenceStatus",
     "LimitQuantity",
     "LimitSpace",
@@ -1360,6 +1370,7 @@ __all__ = [
     "PhysicalSafetyEnvelope",
     "PHYSICAL_SAFETY_ENVELOPE_SCHEMA_VERSION",
     "classify_source_status",
+    "canonical_fast_arm_joint_space_frame",
     "effective_limit_status",
     "make_unknown_limit",
     "source_identity",

@@ -39,6 +39,7 @@ from selfrionette.runtime.safety.physical_limits import (
     LimitSourceProvenance,
     LimitSpace,
     PhysicalLimit,
+    canonical_fast_arm_joint_space_frame,
     source_identity,
 )
 
@@ -63,6 +64,7 @@ def _limit(
     source_status: EvidenceStatus | None = None,
     source_kind: str = "software_config",
     unit: str = "rad",
+    frame: str | None = None,
 ) -> PhysicalLimit:
     source_status = status if source_status is None else source_status
     return PhysicalLimit(
@@ -72,7 +74,11 @@ def _limit(
         upper=upper,
         unit=unit,
         space=space,
-        frame="fast_arm joint space",
+        frame=(
+            canonical_fast_arm_joint_space_frame()
+            if frame is None
+            else frame
+        ),
         status=status,
         source=_source(source_status, source_kind),
         reason="fixture source is not authoritative" if status is not EvidenceStatus.PROVISIONAL else None,
@@ -211,6 +217,79 @@ def test_mujoco_noncanonical_limited_scalars_fail_closed_to_typed_unknown(
     )
 
     _assert_unknown_mujoco_limit(limits)
+
+
+@pytest.mark.parametrize(
+    "failure_point",
+    ("mj_name2id", "joint_id_index", "jnt_limited", "jnt_range"),
+)
+def test_mujoco_runtime_errors_at_adapter_boundaries_fail_closed_to_typed_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+) -> None:
+    fake_mujoco = ModuleType("mujoco")
+    fake_mujoco.mjtObj = SimpleNamespace(mjOBJ_JOINT=object())
+
+    class RuntimeErrorIndex:
+        def __index__(self) -> int:
+            raise RuntimeError("joint id index failed")
+
+    class RuntimeErrorArray:
+        def __getitem__(self, _index: object) -> object:
+            raise RuntimeError(f"{failure_point} accessor failed")
+
+    if failure_point == "mj_name2id":
+        def mj_name2id(_model: object, _object_type: object, _name: str) -> int:
+            raise RuntimeError("mj_name2id failed")
+
+        fake_mujoco.mj_name2id = mj_name2id
+        model = SimpleNamespace(jnt_limited=[1], jnt_range=[[-1.0, 1.0]])
+    elif failure_point == "joint_id_index":
+        fake_mujoco.mj_name2id = (
+            lambda _model, _object_type, _name: RuntimeErrorIndex()
+        )
+        model = SimpleNamespace(jnt_limited=[1], jnt_range=[[-1.0, 1.0]])
+    elif failure_point == "jnt_limited":
+        fake_mujoco.mj_name2id = lambda _model, _object_type, _name: 0
+        model = SimpleNamespace(
+            jnt_limited=RuntimeErrorArray(),
+            jnt_range=[[-1.0, 1.0]],
+        )
+    else:
+        fake_mujoco.mj_name2id = lambda _model, _object_type, _name: 0
+        model = SimpleNamespace(
+            jnt_limited=[1],
+            jnt_range=RuntimeErrorArray(),
+        )
+
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+    limits = fast_arm_mujoco_limits_to_physical_limits(
+        model,
+        joint_names=("joint_1",),
+    )
+
+    _assert_unknown_mujoco_limit(limits)
+
+
+@pytest.mark.parametrize("error_type", (KeyboardInterrupt, SystemExit, GeneratorExit))
+def test_mujoco_adapter_does_not_catch_base_exception_types(
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[BaseException],
+) -> None:
+    fake_mujoco = ModuleType("mujoco")
+    fake_mujoco.mjtObj = SimpleNamespace(mjOBJ_JOINT=object())
+
+    def mj_name2id(_model: object, _object_type: object, _name: str) -> int:
+        raise error_type("adapter boundary interruption")
+
+    fake_mujoco.mj_name2id = mj_name2id
+    monkeypatch.setitem(sys.modules, "mujoco", fake_mujoco)
+
+    with pytest.raises(error_type):
+        fast_arm_mujoco_limits_to_physical_limits(
+            SimpleNamespace(jnt_limited=[1], jnt_range=[[-1.0, 1.0]]),
+            joint_names=("joint_1",),
+        )
 
 
 @pytest.mark.parametrize(
@@ -784,6 +863,105 @@ def test_joint_values_keep_identity_provenance_without_reconversion() -> None:
     assert bound.lower_rad == pytest.approx(source.lower)
     assert bound.upper_rad == pytest.approx(source.upper)
     assert bound.parity[0].source is source.source
+
+
+def test_identical_rad_ranges_with_different_joint_space_frames_are_mismatched() -> None:
+    result = resolve_joint_space_bounds(
+        (
+            _limit(name="joint_1", source_kind="frame_a", frame="frame-A"),
+            _limit(name="joint_1", source_kind="frame_b", frame="frame-B"),
+        ),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.MISMATCH
+    assert bound.lower_rad is None
+    assert bound.upper_rad is None
+    assert not result.authoritative
+    assert [item.frame for item in bound.parity] == ["frame-A", "frame-B"]
+    assert all(item.status is ParityStatus.MISMATCH for item in bound.parity)
+    assert all(item.reason is not None and "canonical" in item.reason for item in bound.parity)
+
+
+def test_single_wrong_joint_space_frame_is_typed_mismatch_and_unbounded() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(frame="wrong-joint-frame"),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.MISMATCH
+    assert bound.lower_rad is None
+    assert bound.upper_rad is None
+    assert not bound.authoritative
+    assert not bound.bounded
+    assert bound.parity[0].frame == "wrong-joint-frame"
+    assert bound.reason is not None and "canonical" in bound.reason
+
+
+def test_canonical_joint_space_frame_resolves_and_is_retained_in_parity() -> None:
+    frame = canonical_fast_arm_joint_space_frame()
+    result = resolve_joint_space_bounds(
+        (_limit(frame=frame),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.RESOLVED_PROVISIONAL
+    assert bound.lower_rad == pytest.approx(-1.0)
+    assert bound.upper_rad == pytest.approx(1.0)
+    assert bound.parity[0].frame == frame
+    assert bound.to_dict()["parity"][0]["frame"] == frame
+
+
+def test_authoritative_joint_limit_with_wrong_frame_cannot_resolve_authoritatively() -> None:
+    source = _limit(
+        status=EvidenceStatus.AUTHORITATIVE,
+        source_status=EvidenceStatus.AUTHORITATIVE,
+        source_kind="lab_document",
+        frame="wrong-joint-frame",
+    )
+
+    result = resolve_joint_space_bounds(
+        (source,),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+
+    bound = result.bound_for("joint_1")
+    assert bound.status is LimitResolutionStatus.MISMATCH
+    assert bound.lower_rad is None
+    assert bound.upper_rad is None
+    assert not result.authoritative
+
+
+def test_resolved_bound_constructor_rejects_noncanonical_parity_frame() -> None:
+    source = _source(EvidenceStatus.PROVISIONAL, "frame_b")
+    identity = source_identity(source, unit="rad")
+    parity = LimitParityRecord(
+        joint_name="joint_1",
+        source_name=identity,
+        status=ParityStatus.MATCH,
+        lower=-1.0,
+        upper=1.0,
+        unit="rad",
+        source=source,
+        frame="frame-B",
+    )
+
+    with pytest.raises(ValueError, match="parity frames"):
+        ResolvedJointBound(
+            joint_name="joint_1",
+            lower_rad=-1.0,
+            upper_rad=1.0,
+            status=LimitResolutionStatus.RESOLVED_PROVISIONAL,
+            source_names=(identity,),
+            parity=(parity,),
+        )
 
 
 def test_resolved_bound_requires_non_empty_matching_typed_parity() -> None:
@@ -1434,4 +1612,18 @@ def test_constructor_bypassed_resolution_dtos_fail_closed() -> None:
 
     parity = object.__new__(LimitParityRecord)
     with pytest.raises((AttributeError, TypeError, ValueError)):
+        validate_limit_parity_record(parity)
+
+
+def test_bypassed_parity_frame_cannot_remain_authoritative() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    parity = result.bounds[0].parity[0]
+    object.__setattr__(parity, "frame", "frame-B")
+
+    assert not result.authoritative
+    with pytest.raises(ValueError, match="mutated or bypassed"):
         validate_limit_parity_record(parity)
