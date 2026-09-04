@@ -234,37 +234,43 @@ def test_envelope_boundary_rejects_nested_replacement_and_bypass() -> None:
 
 
 def test_projected_limit_envelope_round_trips_through_canonical_decoder() -> None:
-    projected = PhysicalLimit(
-        name="joint_1",
-        quantity=LimitQuantity.POSITION,
-        lower=-1.0,
-        upper=1.0,
-        unit="rad",
-        space=LimitSpace.JOINT,
-        frame="fast_arm joint space",
-        status=EvidenceStatus.AUTHORITATIVE,
-        source=_source(),
-        conversion=LimitConversionProvenance.projected(
-            source_space=LimitSpace.MOTOR,
-            relation_id="motor_1-to-joint_1/v1",
-            gear_ratio=2.0,
-            sign=-1.0,
-            offset=0.25,
-            source_name="motor_1",
-        ),
-    )
-    envelope = PhysicalSafetyEnvelope(
-        envelope_id="fast_arm_projected_limits",
-        envelope_version=1,
-        robot_id="fast_arm",
-        model_id="fast_arm",
-        limits=(projected,),
-    )
-
-    encoded = envelope.to_json_bytes()
-    raw = json.loads(encoded)
+    raw = {
+        "schema_version": 1,
+        "envelope_id": "fast_arm_projected_limits",
+        "envelope_version": 1,
+        "robot_id": "fast_arm",
+        "model_id": "fast_arm",
+        "limits": [
+            {
+                "name": "joint_1",
+                "quantity": "position",
+                "lower": -1.0,
+                "upper": 1.0,
+                "unit": "rad",
+                "space": "joint",
+                "frame": "fast_arm joint space",
+                "status": "authoritative",
+                "source": _source().to_dict(),
+                "conversion": {
+                    "source_space": "motor",
+                    "target_space": "joint",
+                    "method": "joint = sign * source / gear_ratio + offset",
+                    "relation_id": "motor_1-to-joint_1/v1",
+                    "gear_ratio": 2.0,
+                    "sign": -1.0,
+                    "offset": 0.25,
+                    "source_name": "motor_1",
+                },
+            }
+        ],
+    }
+    encoded = json.dumps(raw, separators=(",", ":")).encode("utf-8")
+    envelope = PhysicalSafetyEnvelope.from_json_bytes(encoded)
+    projected = envelope.limits[0]
     assert raw["limits"][0]["conversion"]["source_name"] == "motor_1"
-    assert PhysicalSafetyEnvelope.from_json_bytes(encoded) == envelope
+    assert projected.conversion is not None
+    assert projected.conversion.source_space is LimitSpace.MOTOR
+    assert PhysicalSafetyEnvelope.from_json_bytes(envelope.to_json_bytes()) == envelope
     del raw["limits"][0]["conversion"]["source_name"]
     with pytest.raises(ValueError, match="source_name"):
         PhysicalSafetyEnvelope.from_json_bytes(
@@ -456,6 +462,20 @@ def test_joint_limit_rejects_non_identity_conversion_metadata() -> None:
         _joint_limit(conversion=conversion)
 
 
+def test_joint_limit_rejects_public_projected_conversion_attachment() -> None:
+    conversion = LimitConversionProvenance.projected(
+        source_space=LimitSpace.MOTOR,
+        relation_id="motor-1-to-joint-1/v1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        source_name="motor_1",
+    )
+
+    with pytest.raises(ValueError, match="canonical projection origin"):
+        _joint_limit(conversion=conversion)
+
+
 def test_joint_limit_rejects_forged_cross_space_conversion_origin() -> None:
     conversion = LimitConversionProvenance(
         source_space=LimitSpace.MOTOR,
@@ -468,6 +488,43 @@ def test_joint_limit_rejects_forged_cross_space_conversion_origin() -> None:
     )
     with pytest.raises(ValueError, match="canonical origin"):
         _joint_limit(conversion=conversion)
+
+
+def test_projected_limit_validator_rejects_constructor_bypass() -> None:
+    limit = _joint_limit()
+    conversion = LimitConversionProvenance.projected(
+        source_space=LimitSpace.MOTOR,
+        relation_id="motor-1-to-joint-1/v1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        source_name="motor_1",
+    )
+    object.__setattr__(limit, "conversion", conversion)
+
+    assert not limit.is_authoritative
+    with pytest.raises(ValueError, match="canonical projection origin"):
+        validate_physical_limit(limit)
+    with pytest.raises(ValueError, match="canonical projection origin"):
+        limit.to_dict()
+
+    bypassed = object.__new__(PhysicalLimit)
+    for field_name in (
+        "name",
+        "quantity",
+        "lower",
+        "upper",
+        "unit",
+        "space",
+        "frame",
+        "status",
+        "source",
+        "conversion",
+        "reason",
+    ):
+        object.__setattr__(bypassed, field_name, getattr(limit, field_name))
+    with pytest.raises(ValueError, match="construction origin"):
+        validate_physical_limit(bypassed)
 
 
 @pytest.mark.parametrize(

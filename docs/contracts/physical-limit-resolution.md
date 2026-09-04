@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-09-04
+last_verified: 2026-09-05
 canonical_for:
   - physical limit resolution
   - fast_arm joint motor actuator parity
@@ -51,8 +51,13 @@ normalizedなjoint boundの単位は`rad`だけである。同じnon-rad unitの
 P2は、positionの`MOTOR` / `ACTUATOR` limitごとに、期待jointへ到達する具体的な
 `JointSpaceConversion`を一つ保持する。入力にないsourceを指す余分なrelation、relationの
 欠落、placeholderのsource / relation identityは拒否する。`JOINT` limitのconversion metadataは
-canonical identity（`identity:joint`、ratio/sign/offset=`1/1/0`）だけを許可し、明示relationを
-保持するprojection結果だけがnon-identity provenanceを持つ。
+canonical identity（`identity:joint`、ratio/sign/offset=`1/1/0`）だけを許可する。公開の
+`PhysicalLimit` constructorへ`LimitConversionProvenance.projected()`を直接渡す経路は拒否し、
+motor / actuatorからの明示projectionとJSON decoderだけがprivate canonical factoryを介して
+non-identity provenance付きの`JOINT` limitを生成する。constructor後の
+`object.__new__` / `object.__setattr__` bypassも、limitのconstruction-origin sealを含むdeep
+validatorで拒否する。既存の`JOINT` valueはidentity provenanceを保持して直接比較し、conversionを
+再適用しない。
 
 ## Source provenanceとauthority
 

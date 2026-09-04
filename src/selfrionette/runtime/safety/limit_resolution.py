@@ -23,6 +23,7 @@ from selfrionette.runtime.safety.physical_limits import (
     LimitSpace,
     PhysicalLimit,
     PhysicalSafetyEnvelope,
+    _construct_projected_limit,
     effective_limit_status,
     make_unknown_limit,
     source_identity,
@@ -913,13 +914,12 @@ def project_limit_to_joint_space(
     if limit.lower is not None and limit.upper is not None:
         lower, upper = conversion.project_range(limit.lower, limit.upper)
     status = limit.status
-    return PhysicalLimit(
+    return _construct_projected_limit(
         name=target_name,
         quantity=limit.quantity,
         lower=lower,
         upper=upper,
         unit=limit.unit,
-        space=LimitSpace.JOINT,
         frame="fast_arm joint space",
         status=status,
         source=limit.source,
