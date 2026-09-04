@@ -52,13 +52,17 @@ clearへfallbackしない。`CollisionEvaluation`は`near_collision_margin_m`も
 near evidenceの上限を同じthresholdから検証する。`collision` evidenceは負のdistance、
 `pair_clear` evidenceは`clearance_m + near_collision_margin_m`を超えるdistanceを必須とする。
 `contact` evidenceはnon-negative distanceとcanonicalな`task_object_contact` reasonを必須とし、
-負のdistanceはcollisionとして扱う。`unknown` kindはどのstatusでもevidenceを構成できない。
+負のdistanceはcollisionとして扱う。provider由来の非-excluded evaluationは`clear`だけでなく、
+`collision`、`near_collision`、`contact`などのnon-clear statusでもtyped provenanceを必須とする。
+`unknown` kindはどのstatusでもevidenceを構成できない。
 
 ## Exclusion provenance
 
 collision exclusionは具体的な`pair_id`、理由、evidence referenceを持つsingle-pair declaration
-だけを許可する。`*|*`等のglobal ignore、environment collisionの除外、根拠なしのstructural
-exclusionは拒否する。`unknown`等のplaceholder pair/source/provenanceは拒否する。
+だけを許可する。異なるbodyの`self_interference` pairは、evidence referenceがあっても除外できない。
+explicit exclusionは実際に同一bodyで`structural_proximity`へ分類されるpairだけを許可する。
+`*|*`等のglobal ignore、environment collisionの除外、根拠なしのstructural exclusionは拒否する。
+`unknown`等のplaceholder pair/source/provenanceは拒否する。
 exclusionの存在は全geomのcollision filterを変更せず、そのpairだけを
 `explicit_structural_exclusion`として追跡可能にする。clear evaluationのpairとevidence referenceは
 contextへbindされたpolicy exclusionと一致しなければならず、callerが直接作ったarbitrary exclusion
