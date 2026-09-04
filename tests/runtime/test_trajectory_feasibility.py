@@ -20,6 +20,7 @@ from selfrionette.runtime.safety.physical_limits import (
 from selfrionette.runtime.safety.trajectory_feasibility import (
     ConfigurationFeasibilityResult,
     ConfigurationState,
+    DynamicQuantity,
     FeasibilityDiagnostic,
     FeasibilityStatus,
     JacobianDiagnostic,
@@ -1093,6 +1094,19 @@ def test_policy_requires_canonical_joint_quantity_inventory_and_external_seal() 
             object.__setattr__(bypassed, item.name, getattr(_policy(), item.name))
     with pytest.raises(ValueError, match="fingerprint"):
         validate_trajectory_feasibility_policy(bypassed)
+
+
+def test_limits_for_revalidates_tampered_dynamic_limits_before_returning() -> None:
+    policy = _policy()
+    object.__setattr__(policy.dynamic_limits[0], "upper", 0.0)
+
+    with pytest.raises(ValueError, match="(mutated|dynamic limit)"):
+        policy.limits_for(DynamicQuantity.VELOCITY)
+
+    policy = _policy()
+    object.__setattr__(policy, "dynamic_limits", policy.dynamic_limits[:-1])
+    with pytest.raises(ValueError, match="exactly cover"):
+        policy.limits_for(DynamicQuantity.ACCELERATION)
 
 
 def test_result_clear_diagnostic_must_bind_to_authoritative_source() -> None:

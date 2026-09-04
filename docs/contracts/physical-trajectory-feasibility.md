@@ -87,7 +87,9 @@ configuration / trajectory resultは、利用したJacobianの`jacobian_source_i
 Jacobian threshold、qvel tolerance、policy identityをdeep revalidateし、値・units・framesを含む
 `policy_fingerprint`へ固定する。両resultはこのfingerprintを保持し、`policy_id` / `revision`の
 自己申告だけでは`feasible`を構成できない。fingerprint内の各dynamic limitはP2 typed DTOへ復元して
-limit source identity、effective status、evidence identityとresult fieldsをexact照合する。
+limit source identity、effective status、evidence identityとresult fieldsをexact照合する。公開
+`limits_for()` accessorもmapを返す前に同じcanonical validatorを実行し、nested mutation、
+`object.__setattr__`、constructor bypassによるtampered `dynamic_limits`をcallerへ返さない。
 cross-spaceのdynamic limitでは、conversionのtypedな`source_name`もfingerprintへ保持し、P2の
 canonical projection factoryへ同じidentityを渡して再構成する。identity conversionの`source_name`
 は`None`のまま固定し、欠落・不一致のsource identityはrevalidationでfail-closedに扱う。

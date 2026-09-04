@@ -801,6 +801,7 @@ class TrajectoryFeasibilityPolicy:
     def limits_for(self, quantity: DynamicQuantity) -> dict[str, PhysicalLimit]:
         """quantityごとのlimit mapを返す。重複はcaller側でinvalid扱いにする。"""
 
+        _validate_trajectory_feasibility_policy(self)
         return {
             limit.name: limit
             for limit in self.dynamic_limits
