@@ -1104,13 +1104,13 @@ def test_trajectory_result_rejects_two_sample_success_like_or_wrong_shape_reason
         )
 
     invalid_length = FeasibilityDiagnostic("invalid_trajectory_length", "two samples are valid input")
-    with pytest.raises(ValueError, match="unavailable_acceleration|two-sample"):
+    with pytest.raises(ValueError, match="invalid_trajectory_length|unavailable_acceleration|two-sample"):
         TrajectoryFeasibilityResult(
             **{
                 **_init_fields(two_samples),
                 "status": FeasibilityStatus.INVALID,
                 "reason_code": "invalid_trajectory_length",
-                "diagnostics": (invalid_length,),
+                "diagnostics": (invalid_length, two_samples.diagnostics[0]),
             }
         )
 
