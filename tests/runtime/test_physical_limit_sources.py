@@ -13,7 +13,11 @@ from selfrionette.runtime.safety.physical_limits import (
     PhysicalLimit,
     PhysicalSafetyEnvelope,
     classify_source_status,
+    effective_limit_status,
     make_unknown_limit,
+    validate_limit_conversion,
+    validate_limit_source,
+    validate_physical_limit,
     validate_envelope,
 )
 
@@ -23,11 +27,13 @@ def _source(
     kind: str = "lab_document",
     status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
     evidence_reference: str | None = "lab-record-001",
+    source_id: str = "fast-arm-limit-sheet",
+    revision: str = "rev-1",
 ) -> LimitSourceProvenance:
     return LimitSourceProvenance(
         source_kind=kind,
-        source_id="fast-arm-limit-sheet",
-        revision="rev-1",
+        source_id=source_id,
+        revision=revision,
         status=status,
         evidence_reference=evidence_reference,
     )
@@ -35,13 +41,15 @@ def _source(
 
 def _joint_limit(
     *,
+    name: str = "joint_1",
     status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
     source: LimitSourceProvenance | None = None,
     lower: float | None = -1.0,
     upper: float | None = 1.0,
+    conversion: LimitConversionProvenance | None = None,
 ) -> PhysicalLimit:
     return PhysicalLimit(
-        name="joint_1",
+        name=name,
         quantity=LimitQuantity.POSITION,
         lower=lower,
         upper=upper,
@@ -50,8 +58,154 @@ def _joint_limit(
         frame="fast_arm joint space",
         status=status,
         source=source or _source(status=status),
-        conversion=LimitConversionProvenance.identity(LimitSpace.JOINT),
+        conversion=conversion or LimitConversionProvenance.identity(LimitSpace.JOINT),
     )
+
+
+class _OverridingIdentity(str):
+    """casefold/stripをoverrideしてvalidatorの型境界を検証する。"""
+
+    def strip(self, chars: str | None = None) -> str:
+        raise AssertionError("identity validator must reject before strip")
+
+    def casefold(self) -> str:
+        raise AssertionError("identity validator must reject before casefold")
+
+
+@pytest.mark.parametrize(
+    "identity",
+    (
+        "unknown",
+        "UNKNOWN",
+        "unavailable",
+        "UNAVAILABLE",
+        "n/a",
+        "N/A",
+        "none",
+        "null",
+        "placeholder",
+        "sample",
+        "synthetic",
+        "fixture",
+        "test_fixture",
+        "fixture_data",
+        "n_a",
+        "not_available",
+        "not-applicable",
+    ),
+)
+def test_physical_limit_name_requires_concrete_identity(identity: str) -> None:
+    with pytest.raises(ValueError, match="concrete identity"):
+        _joint_limit(name=identity)
+
+
+def test_physical_limit_identity_requires_builtin_str_before_overrides() -> None:
+    identity = _OverridingIdentity("unknown")
+
+    with pytest.raises(ValueError, match="built-in string"):
+        _joint_limit(name=identity)
+
+    limit = _joint_limit()
+    object.__setattr__(limit, "name", identity)
+    with pytest.raises(ValueError, match="built-in string"):
+        validate_physical_limit(limit)
+
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    with pytest.raises(ValueError, match="built-in string"):
+        envelope.limit_for(identity)
+
+
+@pytest.mark.parametrize("field", ("source_id", "revision", "evidence_reference"))
+def test_authoritative_source_identity_fields_reject_str_subclass(
+    field: str,
+) -> None:
+    identity = _OverridingIdentity("unknown")
+
+    with pytest.raises(ValueError, match="non-empty string"):
+        _source(**{field: identity})
+
+
+def test_authority_classification_rejects_str_subclass_reference() -> None:
+    identity = _OverridingIdentity("unknown")
+
+    with pytest.raises(ValueError, match="non-empty string"):
+        classify_source_status(
+            source_kind="manufacturer_document",
+            evidence_reference=identity,
+            authority_asserted=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "identity",
+    ("unknown", "UNKNOWN", "unavailable", "N/A", "none", "fixture_data"),
+)
+def test_bypassed_limit_name_cannot_reach_validation_or_nested_envelope(
+    identity: str,
+) -> None:
+    limit = _joint_limit()
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(limit,),
+    )
+    object.__setattr__(limit, "name", identity)
+
+    assert not limit.is_authoritative
+    with pytest.raises(ValueError, match="concrete identity"):
+        validate_physical_limit(limit)
+    with pytest.raises(ValueError, match="concrete identity"):
+        envelope.to_json_bytes()
+    with pytest.raises(ValueError, match="concrete identity"):
+        validate_envelope(envelope)
+
+
+@pytest.mark.parametrize(
+    "identity",
+    ("unknown", "UNKNOWN", "unavailable", "n/a", "placeholder", "test_fixture"),
+)
+def test_envelope_decoder_rejects_placeholder_nested_limit_name(
+    identity: str,
+) -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    raw = json.loads(envelope.to_json_bytes())
+    raw["limits"][0]["name"] = identity
+
+    with pytest.raises(ValueError, match="concrete identity"):
+        PhysicalSafetyEnvelope.from_json_bytes(
+            json.dumps(raw, separators=(",", ":")).encode("utf-8")
+        )
+
+
+@pytest.mark.parametrize(
+    "identity",
+    ("unknown", "UNKNOWN", "unavailable", "N/A", "none", "fixture_data"),
+)
+def test_envelope_lookup_rejects_placeholder_query(identity: str) -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+
+    with pytest.raises(ValueError, match="concrete identity"):
+        envelope.limit_for(identity)
 
 
 def test_authoritative_limit_requires_explicit_physical_provenance() -> None:
@@ -66,6 +220,101 @@ def test_authoritative_limit_requires_explicit_physical_provenance() -> None:
 def test_software_sources_cannot_be_marked_authoritative() -> None:
     with pytest.raises(ValueError, match="software-only"):
         _source(kind="joint_limit_toml")
+
+
+@pytest.mark.parametrize("authority_asserted", ("false", 1))
+def test_source_classification_requires_exact_bool_authority_assertion(
+    authority_asserted: object,
+) -> None:
+    with pytest.raises(TypeError, match="authority_asserted must be bool"):
+        classify_source_status(
+            source_kind="manufacturer_document",
+            evidence_reference="record-1",
+            authority_asserted=authority_asserted,  # type: ignore[arg-type]
+        )
+
+
+def test_source_classification_rejects_placeholder_authority_reference() -> None:
+    with pytest.raises(ValueError, match="concrete identities"):
+        classify_source_status(
+            source_kind="manufacturer_document",
+            evidence_reference="unknown",
+            authority_asserted=True,
+        )
+
+
+def test_source_classification_rejects_synthetic_authority_kind() -> None:
+    with pytest.raises(ValueError, match="synthetic"):
+        classify_source_status(
+            source_kind="fixture",
+            evidence_reference="record-1",
+            authority_asserted=True,
+        )
+
+
+def test_source_classification_rejects_synthetic_authority_without_reference() -> None:
+    with pytest.raises(ValueError, match="synthetic"):
+        classify_source_status(
+            source_kind="fixture",
+            evidence_reference=None,
+            authority_asserted=True,
+        )
+
+
+def test_source_classification_rejects_whitespace_reference() -> None:
+    with pytest.raises(ValueError, match="evidence_reference"):
+        classify_source_status(
+            source_kind="manufacturer_document",
+            evidence_reference=" record-1 ",
+            authority_asserted=True,
+        )
+
+
+def test_source_kind_must_use_canonical_lowercase_underscore_identity() -> None:
+    with pytest.raises(ValueError, match="canonical lowercase underscore"):
+        _source(kind="JOINT_LIMIT_TOML")
+
+
+def test_authoritative_source_rejects_synthetic_source_kind() -> None:
+    with pytest.raises(ValueError, match="synthetic"):
+        _source(kind="fixture")
+
+
+@pytest.mark.parametrize(
+    "source_kind",
+    ("test_fixture", "fixture_data", "simulation_snapshot", "unknown_source"),
+)
+def test_authoritative_source_kind_uses_narrow_allowlist(
+    source_kind: str,
+) -> None:
+    with pytest.raises(ValueError, match="approved|authoritative"):
+        _source(kind=source_kind)
+
+
+def test_authoritative_source_rejects_whitespace_evidence_reference() -> None:
+    with pytest.raises(ValueError, match="evidence_reference"):
+        _source(evidence_reference=" record-1 ")
+
+
+@pytest.mark.parametrize("field_name", ("source_id", "revision", "evidence_reference"))
+def test_authoritative_source_rejects_placeholder_identity(field_name: str) -> None:
+    values: dict[str, object] = {
+        "source_id": "fast-arm-limit-sheet",
+        "revision": "rev-1",
+        "evidence_reference": "lab-record-001",
+    }
+    values[field_name] = "unknown"
+
+    with pytest.raises(ValueError, match="concrete identities"):
+        _source(**values)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("source_kind", ("manufacturer_document", "physical_measurement"))
+def test_concrete_physical_authority_remains_valid(source_kind: str) -> None:
+    source = _source(kind=source_kind)
+
+    assert source.status is EvidenceStatus.AUTHORITATIVE
+    assert source.is_physical_evidence
 
 
 def test_missing_physical_source_is_typed_unknown_and_not_bounded() -> None:
@@ -98,6 +347,129 @@ def test_envelope_serialization_is_deterministic_and_round_trips() -> None:
     assert not encoded.startswith(b"\xef\xbb\xbf")
     assert PhysicalSafetyEnvelope.from_json_bytes(encoded) == envelope
     assert validate_envelope(envelope) is envelope
+
+
+def test_envelope_requires_non_empty_limits() -> None:
+    with pytest.raises(ValueError, match="limits must be non-empty"):
+        PhysicalSafetyEnvelope(
+            envelope_id="empty",
+            envelope_version=1,
+            robot_id="fast_arm",
+            model_id="fast_arm",
+            limits=(),
+        )
+
+
+def test_envelope_boundary_rejects_nested_replacement_and_bypass() -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    replacement = _joint_limit()
+    object.__setattr__(envelope, "limits", (replacement,))
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        envelope.to_dict()
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        validate_envelope(envelope)
+
+    bypassed = object.__new__(PhysicalSafetyEnvelope)
+    with pytest.raises((AttributeError, TypeError, ValueError)):
+        bypassed.to_json_bytes()
+
+
+def test_projected_limit_envelope_round_trips_through_canonical_decoder() -> None:
+    raw = {
+        "schema_version": 1,
+        "envelope_id": "fast_arm_projected_limits",
+        "envelope_version": 1,
+        "robot_id": "fast_arm",
+        "model_id": "fast_arm",
+        "limits": [
+            {
+                "name": "joint_1",
+                "quantity": "position",
+                "lower": -1.0,
+                "upper": 1.0,
+                "unit": "rad",
+                "space": "joint",
+                "frame": "fast_arm joint space",
+                "status": "authoritative",
+                "source": _source().to_dict(),
+                "conversion": {
+                    "source_space": "motor",
+                    "target_space": "joint",
+                    "method": "joint = sign * source / gear_ratio + offset",
+                    "relation_id": "motor_1-to-joint_1/v1",
+                    "gear_ratio": 2.0,
+                    "sign": -1.0,
+                    "offset": 0.25,
+                    "source_name": "motor_1",
+                },
+            }
+        ],
+    }
+    encoded = json.dumps(raw, separators=(",", ":")).encode("utf-8")
+    envelope = PhysicalSafetyEnvelope.from_json_bytes(encoded)
+    projected = envelope.limits[0]
+    assert raw["limits"][0]["conversion"]["source_name"] == "motor_1"
+    assert projected.conversion is not None
+    assert projected.conversion.source_space is LimitSpace.MOTOR
+    assert PhysicalSafetyEnvelope.from_json_bytes(envelope.to_json_bytes()) == envelope
+    del raw["limits"][0]["conversion"]["source_name"]
+    with pytest.raises(ValueError, match="source_name"):
+        PhysicalSafetyEnvelope.from_json_bytes(
+            json.dumps(raw, separators=(",", ":")).encode("utf-8")
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "malformed_value"),
+    (("gear_ratio", True), ("sign", True), ("offset", False)),
+)
+def test_envelope_decoder_rejects_json_booleans_in_conversion_numbers(
+    field_name: str,
+    malformed_value: bool,
+) -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fixture",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    raw = json.loads(envelope.to_json_bytes())
+    raw["limits"][0]["conversion"][field_name] = malformed_value
+
+    with pytest.raises(TypeError, match=field_name):
+        PhysicalSafetyEnvelope.from_json_bytes(
+            json.dumps(raw, separators=(",", ":")).encode("utf-8")
+        )
+
+
+def test_public_p2_validators_reject_subclass_bypasses() -> None:
+    class SourceSubclass(LimitSourceProvenance):
+        pass
+
+    class ConversionSubclass(LimitConversionProvenance):
+        pass
+
+    class LimitSubclass(PhysicalLimit):
+        pass
+
+    class EnvelopeSubclass(PhysicalSafetyEnvelope):
+        pass
+
+    for dto_type, validator in (
+        (SourceSubclass, validate_limit_source),
+        (ConversionSubclass, validate_limit_conversion),
+        (LimitSubclass, validate_physical_limit),
+        (EnvelopeSubclass, validate_envelope),
+    ):
+        with pytest.raises(TypeError):
+            validator(object.__new__(dto_type))
 
 
 def test_envelope_rejects_unknown_fields_and_bom() -> None:
@@ -146,6 +518,221 @@ def test_invalid_and_conflicting_values_do_not_become_authoritative() -> None:
         reason="two revisions disagree",
     )
     assert not conflict.is_authoritative
+
+
+def test_authoritative_limit_requires_authoritative_typed_source() -> None:
+    with pytest.raises(ValueError, match="authoritative limit requires authoritative source"):
+        _joint_limit(
+            status=EvidenceStatus.AUTHORITATIVE,
+            source=_source(
+                kind="lab_document",
+                status=EvidenceStatus.UNKNOWN,
+                evidence_reference=None,
+            ),
+        )
+
+
+def test_constructor_bypassed_source_or_limit_cannot_become_authoritative() -> None:
+    provisional_source = _source(
+        kind="fixture",
+        status=EvidenceStatus.PROVISIONAL,
+        evidence_reference=None,
+    )
+    object.__setattr__(provisional_source, "status", EvidenceStatus.AUTHORITATIVE)
+    assert not provisional_source.is_physical_evidence
+
+    with pytest.raises(ValueError, match="source kind|provenance"):
+        _joint_limit(status=EvidenceStatus.AUTHORITATIVE, source=provisional_source)
+
+    limit = _joint_limit(status=EvidenceStatus.PROVISIONAL)
+    object.__setattr__(limit, "status", EvidenceStatus.AUTHORITATIVE)
+    assert not limit.is_authoritative
+    assert effective_limit_status(limit) is EvidenceStatus.INVALID
+
+
+def test_limit_rejects_same_semantic_nested_source_or_conversion_replacement() -> None:
+    limit = _joint_limit()
+    replacement_source = _source()
+    object.__setattr__(limit, "source", replacement_source)
+    assert not limit.is_authoritative
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        limit.to_dict()
+
+    limit = _joint_limit()
+    bypassed_source = object.__new__(LimitSourceProvenance)
+    object.__setattr__(limit, "source", bypassed_source)
+    assert not limit.is_authoritative
+    with pytest.raises((AttributeError, TypeError, ValueError)):
+        limit.to_dict()
+
+    limit = _joint_limit()
+    replacement_conversion = LimitConversionProvenance.identity(LimitSpace.JOINT)
+    object.__setattr__(limit, "conversion", replacement_conversion)
+    assert not limit.is_authoritative
+    with pytest.raises(ValueError, match="mutated or bypassed"):
+        limit.to_dict()
+
+
+def test_external_source_seal_rejects_coherent_private_snapshot_rewrite() -> None:
+    source = _source(
+        kind="lab_document",
+        status=EvidenceStatus.PROVISIONAL,
+    )
+    object.__setattr__(source, "status", EvidenceStatus.AUTHORITATIVE)
+    object.__setattr__(
+        source,
+        "_canonical_snapshot",
+        (
+            source.source_kind,
+            source.source_id,
+            source.revision,
+            source.status,
+            source.evidence_reference,
+            source.observed_at,
+            source.notes,
+        ),
+    )
+    assert not source.is_physical_evidence
+
+
+def test_joint_limit_rejects_non_identity_conversion_metadata() -> None:
+    conversion = LimitConversionProvenance(
+        source_space=LimitSpace.JOINT,
+        target_space=LimitSpace.JOINT,
+        method="forged",
+        relation_id="forged-relation",
+        gear_ratio=2.0,
+        sign=1.0,
+        offset=0.0,
+    )
+    with pytest.raises(ValueError, match="identity"):
+        _joint_limit(conversion=conversion)
+
+
+def test_joint_limit_rejects_public_projected_conversion_attachment() -> None:
+    conversion = LimitConversionProvenance.projected(
+        source_space=LimitSpace.MOTOR,
+        relation_id="motor-1-to-joint-1/v1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        source_name="motor_1",
+    )
+
+    with pytest.raises(ValueError, match="canonical projection origin"):
+        _joint_limit(conversion=conversion)
+
+
+def test_joint_limit_rejects_forged_cross_space_conversion_origin() -> None:
+    conversion = LimitConversionProvenance(
+        source_space=LimitSpace.MOTOR,
+        target_space=LimitSpace.JOINT,
+        method="joint = sign * source / gear_ratio + offset",
+        relation_id="motor-1-to-joint-1/v1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+    )
+    with pytest.raises(ValueError, match="canonical origin"):
+        _joint_limit(conversion=conversion)
+
+
+def test_projected_limit_validator_rejects_constructor_bypass() -> None:
+    limit = _joint_limit()
+    conversion = LimitConversionProvenance.projected(
+        source_space=LimitSpace.MOTOR,
+        relation_id="motor-1-to-joint-1/v1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        source_name="motor_1",
+    )
+    object.__setattr__(limit, "conversion", conversion)
+
+    assert not limit.is_authoritative
+    with pytest.raises(ValueError, match="canonical projection origin"):
+        validate_physical_limit(limit)
+    with pytest.raises(ValueError, match="canonical projection origin"):
+        limit.to_dict()
+
+    bypassed = object.__new__(PhysicalLimit)
+    for field_name in (
+        "name",
+        "quantity",
+        "lower",
+        "upper",
+        "unit",
+        "space",
+        "frame",
+        "status",
+        "source",
+        "conversion",
+        "reason",
+    ):
+        object.__setattr__(bypassed, field_name, getattr(limit, field_name))
+    with pytest.raises(ValueError, match="construction origin"):
+        validate_physical_limit(bypassed)
+
+
+@pytest.mark.parametrize(
+    ("limit_status", "source_status", "expected"),
+    (
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.PROVISIONAL, EvidenceStatus.PROVISIONAL),
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.UNKNOWN, EvidenceStatus.UNKNOWN),
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.UNAVAILABLE, EvidenceStatus.UNAVAILABLE),
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.CONFLICT, EvidenceStatus.CONFLICT),
+        (EvidenceStatus.PROVISIONAL, EvidenceStatus.INVALID, EvidenceStatus.INVALID),
+        (EvidenceStatus.UNKNOWN, EvidenceStatus.CONFLICT, EvidenceStatus.CONFLICT),
+        (EvidenceStatus.CONFLICT, EvidenceStatus.INVALID, EvidenceStatus.INVALID),
+    ),
+)
+def test_effective_status_has_typed_value_source_precedence(
+    limit_status: EvidenceStatus,
+    source_status: EvidenceStatus,
+    expected: EvidenceStatus,
+) -> None:
+    limit = PhysicalLimit(
+        name="joint_1",
+        quantity=LimitQuantity.POSITION,
+        lower=None
+        if limit_status
+        in {
+            EvidenceStatus.UNKNOWN,
+            EvidenceStatus.UNAVAILABLE,
+            EvidenceStatus.CONFLICT,
+            EvidenceStatus.INVALID,
+        }
+        else -1.0,
+        upper=None
+        if limit_status
+        in {
+            EvidenceStatus.UNKNOWN,
+            EvidenceStatus.UNAVAILABLE,
+            EvidenceStatus.CONFLICT,
+            EvidenceStatus.INVALID,
+        }
+        else 1.0,
+        unit="rad",
+        space=LimitSpace.JOINT,
+        frame="fast_arm joint space",
+        status=limit_status,
+        source=_source(
+            kind="fixture",
+            status=source_status,
+            evidence_reference=None,
+        ),
+        reason=f"{limit_status.value} fixture"
+        if limit_status
+        in {
+            EvidenceStatus.UNKNOWN,
+            EvidenceStatus.UNAVAILABLE,
+            EvidenceStatus.CONFLICT,
+            EvidenceStatus.INVALID,
+        }
+        else None,
+    )
+
+    assert effective_limit_status(limit) is expected
 
 
 @pytest.mark.parametrize(

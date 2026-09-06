@@ -46,10 +46,11 @@ evidence referenceとrevisionが揃い、callerが明示的にphysical authority
 
 ## Value shape and provenance
 
-`PhysicalLimit`はname、quantity（`position` / `velocity` / `acceleration`）、lower / upper、unit、
-space（`joint` / `motor` / `actuator`）、frame、status、source provenance、conversion provenanceを
-保持する。unknown / unavailableは値を`None`としてreasonを保持し、conflict / invalidを既知の
-bounded rangeへ変換しない。同一identity（name、quantity、space）の重複は拒否する。
+`PhysicalLimit`はbuilt-in `str`型のconcreteなname（`joint` / `motor` / `actuator` identity）、quantity（`position` /
+`velocity` / `acceleration`）、lower / upper、unit、space（`joint` / `motor` / `actuator`）、frame、
+status、source provenance、conversion provenanceを保持する。`unknown` / `unavailable`は値を`None`
+としてreasonを保持し、placeholderのnameで代用しない。conflict / invalidを既知のbounded rangeへ
+変換しない。同一identity（name、quantity、space）の重複は拒否する。
 
 同一spaceの値にもidentity conversionを記録する。gear、sign、offset等が不明な場合は推測せず、
 conversion provenanceに`None`を保持する。space間のdeterministic projectionとmodel parityはP2が
@@ -59,7 +60,7 @@ conversion provenanceに`None`を保持する。space間のdeterministic project
 
 `PhysicalSafetyEnvelope`はschema version、envelope identity、robot / model identity、limit list、
 optional source summaryを持つ。JSONはsorted key、compact separator、UTF-8 without BOMで決定的に
-serializeし、未知field、BOM、非finite値、欠落provenance、反転rangeをstrictに拒否する。
+serializeし、未知field、BOM、非finite値、JSON booleanを含む型違いの数値、欠落provenance、反転rangeをstrictに拒否する。
 
 このcontractのpure validation / serializationはruntime safety packageが所有する。MuJoCo、viewer、
 hardware、serial、OSC、network outputはこのcontractの責務ではない。MuJoCoはphysical stateのsource
