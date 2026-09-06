@@ -41,6 +41,7 @@ def _source(
 
 def _joint_limit(
     *,
+    name: str = "joint_1",
     status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
     source: LimitSourceProvenance | None = None,
     lower: float | None = -1.0,
@@ -48,7 +49,7 @@ def _joint_limit(
     conversion: LimitConversionProvenance | None = None,
 ) -> PhysicalLimit:
     return PhysicalLimit(
-        name="joint_1",
+        name=name,
         quantity=LimitQuantity.POSITION,
         lower=lower,
         upper=upper,
@@ -59,6 +60,152 @@ def _joint_limit(
         source=source or _source(status=status),
         conversion=conversion or LimitConversionProvenance.identity(LimitSpace.JOINT),
     )
+
+
+class _OverridingIdentity(str):
+    """casefold/stripをoverrideしてvalidatorの型境界を検証する。"""
+
+    def strip(self, chars: str | None = None) -> str:
+        raise AssertionError("identity validator must reject before strip")
+
+    def casefold(self) -> str:
+        raise AssertionError("identity validator must reject before casefold")
+
+
+@pytest.mark.parametrize(
+    "identity",
+    (
+        "unknown",
+        "UNKNOWN",
+        "unavailable",
+        "UNAVAILABLE",
+        "n/a",
+        "N/A",
+        "none",
+        "null",
+        "placeholder",
+        "sample",
+        "synthetic",
+        "fixture",
+        "test_fixture",
+        "fixture_data",
+        "n_a",
+        "not_available",
+        "not-applicable",
+    ),
+)
+def test_physical_limit_name_requires_concrete_identity(identity: str) -> None:
+    with pytest.raises(ValueError, match="concrete identity"):
+        _joint_limit(name=identity)
+
+
+def test_physical_limit_identity_requires_builtin_str_before_overrides() -> None:
+    identity = _OverridingIdentity("unknown")
+
+    with pytest.raises(ValueError, match="built-in string"):
+        _joint_limit(name=identity)
+
+    limit = _joint_limit()
+    object.__setattr__(limit, "name", identity)
+    with pytest.raises(ValueError, match="built-in string"):
+        validate_physical_limit(limit)
+
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    with pytest.raises(ValueError, match="built-in string"):
+        envelope.limit_for(identity)
+
+
+@pytest.mark.parametrize("field", ("source_id", "revision", "evidence_reference"))
+def test_authoritative_source_identity_fields_reject_str_subclass(
+    field: str,
+) -> None:
+    identity = _OverridingIdentity("unknown")
+
+    with pytest.raises(ValueError, match="non-empty string"):
+        _source(**{field: identity})
+
+
+def test_authority_classification_rejects_str_subclass_reference() -> None:
+    identity = _OverridingIdentity("unknown")
+
+    with pytest.raises(ValueError, match="non-empty string"):
+        classify_source_status(
+            source_kind="manufacturer_document",
+            evidence_reference=identity,
+            authority_asserted=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "identity",
+    ("unknown", "UNKNOWN", "unavailable", "N/A", "none", "fixture_data"),
+)
+def test_bypassed_limit_name_cannot_reach_validation_or_nested_envelope(
+    identity: str,
+) -> None:
+    limit = _joint_limit()
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(limit,),
+    )
+    object.__setattr__(limit, "name", identity)
+
+    assert not limit.is_authoritative
+    with pytest.raises(ValueError, match="concrete identity"):
+        validate_physical_limit(limit)
+    with pytest.raises(ValueError, match="concrete identity"):
+        envelope.to_json_bytes()
+    with pytest.raises(ValueError, match="concrete identity"):
+        validate_envelope(envelope)
+
+
+@pytest.mark.parametrize(
+    "identity",
+    ("unknown", "UNKNOWN", "unavailable", "n/a", "placeholder", "test_fixture"),
+)
+def test_envelope_decoder_rejects_placeholder_nested_limit_name(
+    identity: str,
+) -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    raw = json.loads(envelope.to_json_bytes())
+    raw["limits"][0]["name"] = identity
+
+    with pytest.raises(ValueError, match="concrete identity"):
+        PhysicalSafetyEnvelope.from_json_bytes(
+            json.dumps(raw, separators=(",", ":")).encode("utf-8")
+        )
+
+
+@pytest.mark.parametrize(
+    "identity",
+    ("unknown", "UNKNOWN", "unavailable", "N/A", "none", "fixture_data"),
+)
+def test_envelope_lookup_rejects_placeholder_query(identity: str) -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+
+    with pytest.raises(ValueError, match="concrete identity"):
+        envelope.limit_for(identity)
 
 
 def test_authoritative_limit_requires_explicit_physical_provenance() -> None:

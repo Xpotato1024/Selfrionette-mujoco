@@ -1339,6 +1339,74 @@ def test_provider_constructor_and_accessor_revalidate_resolution_identity() -> N
         provider.bound_for("unknown")
 
 
+@pytest.mark.parametrize(
+    "identity",
+    (
+        "unknown",
+        "UNKNOWN",
+        "unavailable",
+        "N/A",
+        "none",
+        "placeholder",
+        "fixture_data",
+    ),
+)
+def test_resolver_rejects_bypassed_placeholder_limit_identity(
+    identity: str,
+) -> None:
+    limit = _limit()
+    object.__setattr__(limit, "name", identity)
+
+    with pytest.raises(ValueError, match="concrete identity"):
+        resolve_joint_space_bounds(
+            (limit,),
+            expected_joint_names=("joint_1",),
+            robot_id="fast_arm-test",
+        )
+
+
+@pytest.mark.parametrize(
+    "identity",
+    ("unknown", "UNKNOWN", "unavailable", "N/A", "none", "fixture_data"),
+)
+def test_result_and_provider_lookup_reject_placeholder_identity(
+    identity: str,
+) -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    provider = FastArmResolvedBoundsProvider(result)
+
+    with pytest.raises(ValueError, match="concrete identity"):
+        result.bound_for(identity)
+    with pytest.raises(ValueError, match="concrete identity"):
+        provider.bound_for(identity)
+
+
+def test_result_and_provider_lookup_reject_str_subclass_identity() -> None:
+    class OverridingIdentity(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise AssertionError("identity validator must reject before strip")
+
+        def casefold(self) -> str:
+            raise AssertionError("identity validator must reject before casefold")
+
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    provider = FastArmResolvedBoundsProvider(result)
+    identity = OverridingIdentity("unknown")
+
+    with pytest.raises(ValueError, match="built-in string"):
+        result.bound_for(identity)
+    with pytest.raises(ValueError, match="built-in string"):
+        provider.bound_for(identity)
+
+
 def test_result_rejects_relation_source_name_mismatch_with_projected_provenance() -> None:
     source = _source(EvidenceStatus.PROVISIONAL, "fixture")
     source_identity_value = source_identity(source, unit="rad")

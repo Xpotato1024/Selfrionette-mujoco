@@ -245,7 +245,7 @@ _PLACEHOLDER_IDENTITIES = frozenset(
 
 
 def _text(name: str, value: object) -> str:
-    if not isinstance(value, str) or not value or value != value.strip():
+    if type(value) is not str or not value or value != value.strip():
         raise ValueError(f"{name} must be a non-empty string")
     return value
 
@@ -267,6 +267,8 @@ def _is_placeholder_identity(value: str) -> bool:
 def validate_concrete_limit_identity(name: str, value: object) -> str:
     """具体的なlimit relationをbindするidentityを検証する。"""
 
+    if type(value) is not str:
+        raise ValueError(f"{name} must be a built-in string")
     result = _text(name, value)
     if _is_placeholder_identity(result):
         raise ValueError(f"{name} must be a concrete identity")
@@ -506,7 +508,7 @@ class PhysicalLimit:
     )
 
     def __post_init__(self) -> None:
-        _text("name", self.name)
+        name = validate_concrete_limit_identity("name", self.name)
         quantity = _enum_value(LimitQuantity, "quantity", self.quantity)
         space = _enum_value(LimitSpace, "space", self.space)
         canonical_projection = (
@@ -569,6 +571,7 @@ class PhysicalLimit:
             _text("reason", self.reason)
         if space is not LimitSpace.JOINT and conversion.source_space is not space:
             raise ValueError("non-joint limit conversion source_space must match limit space")
+        object.__setattr__(self, "name", name)
         object.__setattr__(self, "quantity", quantity)
         object.__setattr__(self, "space", space)
         object.__setattr__(self, "lower", lower)
@@ -816,7 +819,7 @@ def _validate_physical_limit(limit: object) -> PhysicalLimit:
 
     if type(limit) is not PhysicalLimit:
         raise TypeError("limit must be PhysicalLimit")
-    name = _text("name", limit.name)
+    name = validate_concrete_limit_identity("name", limit.name)
     quantity = _enum_value(LimitQuantity, "quantity", limit.quantity)
     space = _enum_value(LimitSpace, "space", limit.space)
     lower = _finite_or_none("lower", limit.lower)
@@ -1000,6 +1003,7 @@ class PhysicalSafetyEnvelope:
         space: LimitSpace = LimitSpace.JOINT,
     ) -> PhysicalLimit:
         _validate_physical_safety_envelope(self)
+        name = validate_concrete_limit_identity("name", name)
         quantity = _enum_value(LimitQuantity, "quantity", quantity)  # type: ignore[assignment]
         space = _enum_value(LimitSpace, "space", space)  # type: ignore[assignment]
         for limit in self.limits:
@@ -1161,7 +1165,7 @@ def _limit_from_mapping(value: object) -> PhysicalLimit:
     unknown = set(raw) - allowed
     if unknown:
         raise ValueError(f"limit contains unknown fields: {sorted(unknown)!r}")
-    name = _text("name", raw.get("name"))
+    name = validate_concrete_limit_identity("name", raw.get("name"))
     quantity = _enum_value(LimitQuantity, "quantity", raw.get("quantity"))
     lower = raw.get("lower")
     upper = raw.get("upper")

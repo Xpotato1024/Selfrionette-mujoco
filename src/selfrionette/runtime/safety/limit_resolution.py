@@ -568,6 +568,7 @@ class LimitResolutionResult:
 
     def bound_for(self, joint_name: str) -> ResolvedJointBound:
         _validate_limit_resolution_result(self)
+        joint_name = validate_limit_resolution_identity("joint_name", joint_name)
         for bound in self.bounds:
             if bound.joint_name == joint_name:
                 return bound

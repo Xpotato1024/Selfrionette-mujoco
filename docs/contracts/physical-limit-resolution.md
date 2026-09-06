@@ -119,8 +119,8 @@ authorityを推測しない。unresolved statusは両boundを`None`とし、reas
 検証する。toleranceは`DEFAULT_COMPARISON_TOLERANCE_RAD`（`1e-9`）との完全一致だけを
 許可し、callerが大きな値を指定してparity差を隠す経路を持たない。この値はboundとresultへ
 同じ値で保存され、parity比較の単一の定義として使われる。
-`robot_id`、`expected_joint_names`、およびそれらへ到達するjoint identityは、P2 ownerの
-単一canonical identity validatorで検証する。空・whitespace・case variantを含む
+`PhysicalLimit.name`（built-in `str`型）、`robot_id`、`expected_joint_names`、およびそれらへ到達するjoint identityは、
+P1 / P2 ownerの単一canonical identity validatorで検証する。空・whitespace・case variantを含む
 `unknown`、`unavailable`、`n/a`、`none`、`placeholder`、`synthetic`、`fixture`、
 `test_fixture`、`fixture_data`などのplaceholder identityはconstructor、resolver、TOML / MuJoCo収集、
 provider factory、provider accessorのどの経路でも拒否する。通常のconcreteなrobot IDと
