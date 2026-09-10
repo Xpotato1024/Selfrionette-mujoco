@@ -38,6 +38,14 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
     validate_trajectory_feasibility_policy,
     validate_trajectory_feasibility_result,
 )
+from selfrionette.runtime.safety.physical_safety_core import (
+    validate_bounded_safety_sampling_result,
+    validate_safety_decision,
+    validate_safety_decision_projection,
+    validate_safety_input,
+    validate_safety_projection,
+    validate_safety_reason,
+)
 
 __all__ = [
     "EvidenceStatus",
@@ -70,4 +78,10 @@ __all__ = [
     "validate_jacobian_diagnostic",
     "validate_trajectory_feasibility_policy",
     "validate_trajectory_feasibility_result",
+    "validate_bounded_safety_sampling_result",
+    "validate_safety_decision",
+    "validate_safety_decision_projection",
+    "validate_safety_input",
+    "validate_safety_projection",
+    "validate_safety_reason",
 ]

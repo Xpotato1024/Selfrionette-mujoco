@@ -87,6 +87,26 @@ provenanceを失ってはならない。`invalid`でprovenanceを省略できる
 messageの部分一致やheuristicでinternal扱いへ昇格させない。`unknown` kindはどのstatusでも
 evidenceを構成できない。
 
+## Pair identityとclear evidence
+
+`CollisionEvaluation.pair_id`は、異なる二つの具体的geom nameを`|`で結び、name順に並べた
+canonical identity（`first|second`）でなければならない。`not-a-pair`、同一geom、逆順、wildcard、
+三つ以上のnameはinvalidである。aggregate reasonの`collision_clear`をpair evaluationのreasonへ
+流用しない。`*`を含むwildcard tokenは、共通のpair parserでP3 constructorとP5 boundaryの双方から
+拒否する。
+
+`clear` evaluationには、次のどちらかの根拠を必ず持たせる。
+
+- 通常のclearance測定は`reason_code=pair_clear`、有限の`distance_m > clearance_m`、非空の
+  `provenance`を要求する。
+- structural exclusionは`reason_code=explicit_structural_exclusion`、`kind=structural_proximity`、
+  distanceなし、非空のexclusion evidence `provenance`を要求する。
+
+P3 constructorがこのschemaを検証し、P5 physical-safety-coreも再検証する。不正なpair identityや
+clear evidenceは別componentのallowで隠さず、`collision:collision_result_inconsistent`として
+`invalid`へ写像する。`CollisionKind.UNKNOWN`もclearへ分類せず、role不明のpairは必ず`invalid`
+として扱う。
+
 ## Exclusion provenance
 
 collision exclusionは具体的な`pair_id`、理由、evidence referenceを持つsingle-pair declaration
