@@ -70,7 +70,12 @@ EXPECTED_MODULES = {
         "selfrionette_serial_dry_run",
         "websocket_publisher",
     },
-    "safety": {"input_safety", "physical_limits", "qpos_feasibility"},
+    "safety": {
+        "input_safety",
+        "limit_resolution",
+        "physical_limits",
+        "qpos_feasibility",
+    },
 }
 RETIRED_FLAT_MODULES = (frozenset().union(*EXPECTED_MODULES.values()) - set(EXPECTED_MODULES)) | {
     "evaluation_manifest",

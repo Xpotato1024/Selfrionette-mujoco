@@ -1,6 +1,7 @@
 """Runtime safety policies and feasibility contracts."""
 
 from selfrionette.runtime.safety.physical_limits import (
+    FAST_ARM_JOINT_SPACE_FRAME,
     EvidenceStatus,
     LimitConversionProvenance,
     LimitEvidenceStatus,
@@ -9,10 +10,24 @@ from selfrionette.runtime.safety.physical_limits import (
     LimitSpace,
     PhysicalLimit,
     PhysicalSafetyEnvelope,
+    canonical_fast_arm_joint_space_frame,
+    effective_limit_status,
+    source_identity,
+    validate_concrete_limit_identity,
+    validate_limit_conversion,
+    validate_limit_source,
+    validate_physical_limit,
+)
+from selfrionette.runtime.safety.limit_resolution import (
+    validate_limit_parity_record,
+    validate_limit_resolution_identity,
+    validate_limit_resolution_result,
+    validate_resolved_joint_bound,
 )
 
 __all__ = [
     "EvidenceStatus",
+    "FAST_ARM_JOINT_SPACE_FRAME",
     "LimitConversionProvenance",
     "LimitEvidenceStatus",
     "LimitQuantity",
@@ -20,4 +35,15 @@ __all__ = [
     "LimitSpace",
     "PhysicalLimit",
     "PhysicalSafetyEnvelope",
+    "canonical_fast_arm_joint_space_frame",
+    "effective_limit_status",
+    "source_identity",
+    "validate_concrete_limit_identity",
+    "validate_limit_conversion",
+    "validate_limit_source",
+    "validate_physical_limit",
+    "validate_limit_parity_record",
+    "validate_limit_resolution_identity",
+    "validate_limit_resolution_result",
+    "validate_resolved_joint_bound",
 ]

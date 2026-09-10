@@ -46,10 +46,19 @@ evidence referenceとrevisionが揃い、callerが明示的にphysical authority
 
 ## Value shape and provenance
 
-`PhysicalLimit`はname、quantity（`position` / `velocity` / `acceleration`）、lower / upper、unit、
-space（`joint` / `motor` / `actuator`）、frame、status、source provenance、conversion provenanceを
-保持する。unknown / unavailableは値を`None`としてreasonを保持し、conflict / invalidを既知の
-bounded rangeへ変換しない。同一identity（name、quantity、space）の重複は拒否する。
+`PhysicalLimit`はbuilt-in `str`型のconcreteなname（`joint` / `motor` / `actuator` identity）、quantity（`position` /
+`velocity` / `acceleration`）、lower / upper、unit、space（`joint` / `motor` / `actuator`）、frame、
+status、source provenance、conversion provenanceを保持する。source / conversion provenance、
+envelope、robot、modelのidentityおよびunit / frame / reasonなどのtext fieldもbuilt-in `str`だけを
+受け付け、検証前に文字列subclassのoverrideを実行しない。`unknown` / `unavailable`は値を`None`
+としてreasonを保持し、placeholderのnameで代用しない。conflict / invalidを既知のbounded rangeへ
+変換しない。同一identity（name、quantity、space）の重複は拒否する。
+
+`status`、`quantity`、`space`のenum fieldは、constructor / decoderでexactなbuilt-in `str`を
+canonical memberへ正規化できる。typedな入力はenum classが保持する実member singletonだけを受け付け、
+同じenum classに見える偽造memberは受け付けない。constructor後のdeep validator、seal比較、
+serializationでは保存済みfieldのraw stringや偽造memberをcanonical memberへ再正規化せず、
+fail-closedに拒否する。lookup引数の入力正規化はこのstored field検証と区別する。
 
 同一spaceの値にもidentity conversionを記録する。gear、sign、offset等が不明な場合は推測せず、
 conversion provenanceに`None`を保持する。space間のdeterministic projectionとmodel parityはP2が
@@ -58,8 +67,14 @@ conversion provenanceに`None`を保持する。space間のdeterministic project
 ## Serialization and ownership
 
 `PhysicalSafetyEnvelope`はschema version、envelope identity、robot / model identity、limit list、
-optional source summaryを持つ。JSONはsorted key、compact separator、UTF-8 without BOMで決定的に
-serializeし、未知field、BOM、非finite値、欠落provenance、反転rangeをstrictに拒否する。
+optional source summaryを持つ。`robot_id`はbuilt-in `str`型のconcrete identityであり、`unknown`、
+`unavailable`、`none`、`fixture_data`などを受け付けない。JSONはsorted key、compact separator、
+UTF-8 without BOMで決定的にserializeし、未知field、BOM、非finite値、JSON booleanを含む型違いの
+数値、欠落provenance、反転rangeをstrictに拒否する。
+`from_json_bytes`はbuilt-in `bytes`だけを受け付け、BOM判定やUTF-8 decodeをbytes subclassのoverrideへ
+委譲しない。保存する`limits`もbuilt-in `tuple`だけを受け付け、tuple subclassを反復する前に
+拒否する。constructorで正規化したnested numeric fieldはbuilt-in `float`として保持し、deep validator、
+seal比較、serializationはnumeric subclassのcoercionを実行しない。
 
 このcontractのpure validation / serializationはruntime safety packageが所有する。MuJoCo、viewer、
 hardware、serial、OSC、network outputはこのcontractの責務ではない。MuJoCoはphysical stateのsource
