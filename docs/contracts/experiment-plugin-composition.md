@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-08-06
+last_verified: 2026-08-28
 canonical_for:
   - experiment plugin composition contract
   - Robot Bundle capability provider contract
@@ -97,8 +97,8 @@ file symmetryだけを目的とする`mappings/registration.py`を作らない�
 | Input Source | 6 packageの`plugin.py::INPUT_SOURCE_PLUGIN` | `input_sources/{catalog.py,discovery.py,registration.py}` |
 | Control Mapping | 4 packageの`plugin.py::CONTROL_MAPPING_PLUGIN` | `mappings/{catalog.py,discovery.py}`。追加registration layerなし |
 | Environment / Scene | `environments/*/plugin.py::ENVIRONMENT_PLUGIN` | `environments/{catalog.py,discovery.py}` |
-| Task | `endpoint_reach_task/plugin.py::TASK_PLUGIN` | `tasks/{catalog.py,discovery.py}` |
-| Evaluation | 4 packageの`plugin.py::EVALUATION_PLUGIN` | `evaluations/{catalog.py,discovery.py}` |
+| Task | `endpoint_reach_task/plugin.py::TASK_PLUGIN`、`contact_press_hold_task/plugin.py::TASK_PLUGIN` | `tasks/{catalog.py,discovery.py}` |
+| Evaluation | 5 packageの`plugin.py::EVALUATION_PLUGIN` | `evaluations/{catalog.py,discovery.py}` |
 
 discoverable first-party axisは、固定namespace直下のdirect child packageだけを対象にする。`_support`
 等のprivate/shared packageを除外し、candidateをsortして`<package>.plugin`だけをimportする。
@@ -363,6 +363,38 @@ unavailable / invalid、reset、non-monotonic stream、technical statusは`techn
 両evidence identityとstrict value shapeはcross-axis layer contract
 `runtime/experiment/endpoint_reach_evidence.py`を唯一の定義元とし、Task / Evaluation packageへ複製しない。
 
+`contact_press_hold_task/v1`は`reset_initial_state/v1`とtyped `robot.tool_endpoint` roleを要求し、
+`contact_press_hold_terminal/v1`と`contact_press_hold_outcome/v1`をTask-owned evidenceとして生成する。
+Task contextはR7-H contact manifestのtarget face、object-frame normal、world-frame approach direction、
+penetration bandへ、dwell / timeout、任意のnormal-force band、alignment / drift gate、trial / repetition /
+attempt identityを一度だけbindする。Task bindingは#413のraw `ContactEvidence`をmanifest / scene / object
+identityへ照合し、`no_contact`、measured target contact、measurement unavailable、invalid contact、
+solver invalidを区別する。Taskは#414のfiltered / clamped reaction-forceを入力にせず、MuJoCo contactを再計算しない。
+
+phaseは`ready`、`approach`、`first_contact`、`press`、`hold`、`success`、`failure`、
+`technical_invalid`を区別する。target penetration band、任意のnormal-force / alignment / location-drift
+gate、連続hold dwell、timeoutを満たしたときだけsuccessとなる。contact lossはdwellをresetし、再接触を
+counterへ記録する。held / rejected / stale / operator timeoutはoperator-caused failureとし、measurement
+unavailable、solver invalid、reset failure、identity drift、非単調時刻はtechnical-invalidとする。
+
+`contact_press_hold_outcome/v1`はfirst-contact time、peak normal force、penetration overshoot、
+steady-state error、force variability、tangential force / slip proxy、final tip / object pose、
+contact-location drift、normal alignment、loss / recontact countをcanonical artifactとして保持する。
+さらにmanifest-bound penetration bandと、Task contextへbindしたdwell / timeout、normal-force band、
+alignment / drift gate、pose-measurement requirementをartifactへ含めるため、outcome条件をcanonical bytesから
+再構成できる。Taskはtechnical-invalidへ遷移する入力もraw observationとしてstate / replay順序へ保持し、
+`sample_time_s`または`simulation_time_s`の後退・同値をstaleとしてsuccessへ進めない。`measured` top-levelの
+record status、aggregate count、force、wrench不整合もtechnical-invalid境界である。
+failed trialのcompletion timeや未観測forceはnullのままとし、zeroやsuccessへ変換しない。Task-owned
+evidenceは`ContactOutcome` Evaluation Pluginがstrict decodeし、terminal / outcome identity、trial、
+manifest digest、classification、phase、completion timeの一致を検証してmetric resultへ投影する。
+runningはunavailable、technical-invalidはinvalidであり、どちらもsuccessへ変換しない。
+
+`ContactTaskRunner`は事前取得済みraw observation logを同じmanifestへ再生するbounded software-only fixture
+であり、MuJoCo step、Robot command、hardware outputを行わない。retryはtechnical-invalidだけを宣言済み
+attempt上限内で許可し、元trialとretryを`trial_id` / `retry_of_trial_id`で保持する。同じvalid logからの
+outcome summary regenerationはcanonical bytesを再生成するが、formal experiment evidenceではない。
+
 Robot Bundle、Environment、Taskのcompatible identityが空集合の場合はgeneric/unconstrainedとして
 扱う。指定された場合はraw nameではなく`VersionedIdentity`をexact matchし、同名でもcontract
 versionが異なるselectionを拒否する。本foundationではversion rangeを導入しない。
@@ -413,6 +445,7 @@ deterministic JSON artifactの所有者は`runtime/evaluation/artifact.py`であ
 | `off_axis_drift/v1` | initial-target axisからの最大直交距離 | measured trajectory | meter / MuJoCo world | missing / unavailableはunavailable、invalidはinvalid |
 | `completion_time/v1` | descriptive completion time | terminal classification | second / frameなし | success以外はvalueなしunavailable |
 | `final_endpoint_error/v1` | descriptive final tip-target distance | measured trajectory | meter / MuJoCo world | missing / unavailableはunavailable、invalidはinvalid |
+| `contact_outcome/v1` | closed contact press/hold outcome artifact | Task terminal / outcome evidence | contact_task_outcome / MuJoCo world | running / missing / unavailableはunavailable、technical-invalid / invalidはinvalid |
 
 ### Input Source runtime reader readiness
 
