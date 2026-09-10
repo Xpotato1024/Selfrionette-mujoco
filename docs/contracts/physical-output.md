@@ -75,6 +75,22 @@ requested -> accepted / rejected -> sent -> acknowledged
 `transmission_enabled`または`physical_actuation`ではexplicit operator gateを
 伴わなければならない。これはpermission decisionであり、送信実績ではない。
 `sent`と`acknowledged`は後続のtrace / transport boundaryで別eventとして記録する。
+traceの`permitted` eventも、non-disabled permissionに対する`accepted` decisionと
+explicit operator gateを要求し、disabled permissionを成功として記録しない。
+
+## Recording / dry-run trace
+
+`PhysicalOutputRecordingSink`はnetworkやRobot providerを持たないrecording-only sinkであり、
+`requested`、`permitted`、`rejected`、`dropped` eventを同じrequest bytes、permission bytes、
+target / session / sequence / timestamp / cadence identityへbindする。`permitted`は
+permission decisionのacceptedを表すだけで、`sent`または`acknowledged`ではない。
+
+`PhysicalOutputTrace`は`physical-output-trace/v1`のstrict deterministic JSONL artifactである。
+各lineのevent sequenceは0から連続し、session内request sequenceは増加順でなければならない。
+requested predecessorのないevent、duplicate / late / out-of-order event、unknown / missing /
+duplicate field、request / permission bytesとの不一致をrejectする。atomic write後にbytesと
+decoded semanticをstrict read-backし、`replay_physical_output_trace`はsinkへ再生してbyte
+equivalenceを確認する。trace replayはdry-runであり、transportを実行しない。
 
 ## Serialization / failure
 
@@ -86,7 +102,8 @@ serializeし、decode時にunknown field、missing field、duplicate key、non-f
 ## Ownership / safety
 
 - `schemas.command`がshared request、permission、decision、serialization shapeを所有する。
-- `runtime.output.permission`がpermission decisionだけを所有する。
+- `runtime.output.permission`がpermission decisionを所有し、`runtime.output.trace`がrecording /
+  dry-run trace、artifact、replayを所有する。
 - `runtime/`が将来のcompositionを所有し、Input Source固有分岐をphysical output coreへ持ち込まない。
 - K-preの実装とtestはsocket、network、serial、Arduino、OSC、Robot providerを開かない・呼ばない。
 - 実機作動は`docs/operations/hardware-safety.md`と専用Issue / 明示許可の範囲に限る。
