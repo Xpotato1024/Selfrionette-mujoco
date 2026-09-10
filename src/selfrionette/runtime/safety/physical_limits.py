@@ -292,7 +292,7 @@ def _finite_or_none(name: str, value: object) -> float | None:
 def _enum_value(enum_type: type[Enum], name: str, value: object) -> Enum:
     if isinstance(value, enum_type):
         return value
-    if not isinstance(value, str):
+    if type(value) is not str:
         raise TypeError(f"{name} must be a string")
     try:
         return enum_type(value)

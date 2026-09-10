@@ -27,6 +27,7 @@ from selfrionette.runtime.safety.physical_limits import (
     PhysicalLimit,
     PhysicalSafetyEnvelope,
     _construct_projected_limit,
+    _enum_value,
     canonical_fast_arm_joint_space_frame,
     effective_limit_status,
     make_unknown_limit,
@@ -103,7 +104,9 @@ def _sealed_resolution_snapshot(value: object) -> tuple[object, ...]:
 
 
 def _text(name: str, value: object) -> str:
-    if not isinstance(value, str) or not value or value != value.strip():
+    if type(value) is not str:
+        raise ValueError(f"{name} must be a built-in string")
+    if not value or value != value.strip():
         raise ValueError(f"{name} must be a non-empty string")
     return value
 
@@ -189,13 +192,13 @@ class JointSpaceConversion:
     )
 
     def __post_init__(self) -> None:
-        if not isinstance(self.source_space, LimitSpace):
-            try:
-                object.__setattr__(self, "source_space", LimitSpace(self.source_space))
-            except (TypeError, ValueError) as exc:
-                raise ValueError("source_space must be motor or actuator") from exc
-        if self.source_space is LimitSpace.JOINT:
+        try:
+            source_space = _enum_value(LimitSpace, "source_space", self.source_space)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("source_space must be motor or actuator") from exc
+        if source_space is LimitSpace.JOINT:
             raise ValueError("source_space must be motor or actuator")
+        object.__setattr__(self, "source_space", source_space)
         validate_limit_resolution_identity("joint_name", self.joint_name)
         validate_concrete_limit_identity("source_name", self.source_name)
         ratio = _finite("gear_ratio", self.gear_ratio)
@@ -262,8 +265,11 @@ class LimitParityRecord:
     def __post_init__(self) -> None:
         validate_limit_resolution_identity("joint_name", self.joint_name)
         _text("source_name", self.source_name)
-        if not isinstance(self.status, ParityStatus):
-            object.__setattr__(self, "status", ParityStatus(self.status))
+        try:
+            status = _enum_value(ParityStatus, "status", self.status)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("status must be a valid ParityStatus") from exc
+        object.__setattr__(self, "status", status)
         _text("unit", self.unit)
         _text("frame", self.frame)
         lower = _finite("lower", self.lower) if self.lower is not None else None
@@ -290,11 +296,14 @@ class LimitParityRecord:
                 raise ValueError("parity conversion must target joint space")
         source_status = self.source_status
         if source_status is not None:
-            if not isinstance(source_status, EvidenceStatus):
-                try:
-                    source_status = EvidenceStatus(source_status)
-                except (TypeError, ValueError) as exc:
-                    raise ValueError("source_status must be a valid EvidenceStatus") from exc
+            try:
+                source_status = _enum_value(
+                    EvidenceStatus,
+                    "source_status",
+                    source_status,
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("source_status must be a valid EvidenceStatus") from exc
             if self.source is not None and source_status is not self.source.status:
                 raise ValueError("source_status must match typed source status")
         elif self.source is not None:
@@ -369,16 +378,19 @@ class ResolvedJointBound:
 
     def __post_init__(self) -> None:
         validate_limit_resolution_identity("joint_name", self.joint_name)
-        if not isinstance(self.status, LimitResolutionStatus):
-            object.__setattr__(self, "status", LimitResolutionStatus(self.status))
+        try:
+            status = _enum_value(LimitResolutionStatus, "status", self.status)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("status must be a valid LimitResolutionStatus") from exc
+        object.__setattr__(self, "status", status)
         if not isinstance(self.source_names, tuple):
             raise TypeError("source_names must be a tuple")
         if not self.source_names:
             raise ValueError("resolved bound requires at least one source name")
-        if len(set(self.source_names)) != len(self.source_names):
-            raise ValueError("resolved bound source names must be unique")
         for source_name in self.source_names:
             _text("source_name", source_name)
+        if len(set(self.source_names)) != len(self.source_names):
+            raise ValueError("resolved bound source names must be unique")
         lower_rad = _finite("lower_rad", self.lower_rad) if self.lower_rad is not None else None
         upper_rad = _finite("upper_rad", self.upper_rad) if self.upper_rad is not None else None
         if (lower_rad is None) != (upper_rad is None):
@@ -391,6 +403,8 @@ class ResolvedJointBound:
             raise ValueError("resolved bound parity must be non-empty")
         if len(self.source_names) != len(self.parity):
             raise ValueError("resolved bound source_names and parity must have equal length")
+        for item in self.parity:
+            _validate_parity_record(item)
         if tuple(item.source_name for item in self.parity) != self.source_names:
             raise ValueError("resolved bound source_names must exactly match parity identities")
         if any(item.joint_name != self.joint_name for item in self.parity):
@@ -501,6 +515,8 @@ class LimitResolutionResult:
             raise ValueError("limit resolution requires at least one bound")
         if any(type(item) is not ResolvedJointBound for item in self.bounds):
             raise TypeError("bounds must contain ResolvedJointBound values")
+        for bound in self.bounds:
+            _validate_resolved_bound(bound)
         names = tuple(item.joint_name for item in self.bounds)
         if len(set(names)) != len(names):
             raise ValueError("limit resolution joint names must be unique")
@@ -793,10 +809,10 @@ def _validate_resolved_bound(
         raise ValueError("status must be a valid LimitResolutionStatus")
     if not isinstance(bound.source_names, tuple) or not bound.source_names:
         raise ValueError("resolved bound source names must be a non-empty tuple")
-    if len(set(bound.source_names)) != len(bound.source_names):
-        raise ValueError("resolved bound source names must be unique")
     for source_name in bound.source_names:
         _text("source_name", source_name)
+    if len(set(bound.source_names)) != len(bound.source_names):
+        raise ValueError("resolved bound source names must be unique")
     lower = _finite("lower_rad", bound.lower_rad) if bound.lower_rad is not None else None
     upper = _finite("upper_rad", bound.upper_rad) if bound.upper_rad is not None else None
     if (lower is None) != (upper is None):

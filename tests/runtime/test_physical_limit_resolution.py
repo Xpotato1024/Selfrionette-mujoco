@@ -85,6 +85,31 @@ def _limit(
     )
 
 
+class _ExplodingText(str):
+    def strip(self, chars: str | None = None) -> str:
+        raise AssertionError("text validator must reject before strip")
+
+    def __eq__(self, other: object) -> bool:
+        raise AssertionError("text validator must reject before equality")
+
+    def __ne__(self, other: object) -> bool:
+        raise AssertionError("text validator must reject before inequality")
+
+    def __hash__(self) -> int:
+        raise AssertionError("text validator must reject before hashing")
+
+
+class _AlwaysEqualText(str):
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __ne__(self, other: object) -> bool:
+        return False
+
+    def __hash__(self) -> int:
+        return hash(str(self))
+
+
 def _install_fake_mujoco(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_mujoco = ModuleType("mujoco")
     fake_mujoco.mjtObj = SimpleNamespace(mjOBJ_JOINT=object())
@@ -1405,6 +1430,139 @@ def test_result_and_provider_lookup_reject_str_subclass_identity() -> None:
         result.bound_for(identity)
     with pytest.raises(ValueError, match="built-in string"):
         provider.bound_for(identity)
+
+
+@pytest.mark.parametrize("field", ("source_name", "unit", "frame", "reason"))
+def test_resolution_text_boundary_rejects_str_subclass_before_hooks(
+    field: str,
+) -> None:
+    source = _source(EvidenceStatus.AUTHORITATIVE, "lab_document")
+    kwargs: dict[str, object] = {
+        "joint_name": "joint_1",
+        "source_name": source_identity(source, unit="rad"),
+        "status": ParityStatus.MISMATCH,
+        "lower": None,
+        "upper": None,
+        "unit": "rad",
+        "reason": "ranges disagree",
+        "source": source,
+        "frame": canonical_fast_arm_joint_space_frame(),
+    }
+    kwargs[field] = _ExplodingText("unknown" if field != "frame" else "wrong-frame")
+
+    with pytest.raises(ValueError, match="built-in string"):
+        LimitParityRecord(**kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("field", ("source_name", "frame"))
+def test_authoritative_parity_rejects_always_equal_str_subclass_identity(
+    field: str,
+) -> None:
+    source = _source(EvidenceStatus.AUTHORITATIVE, "lab_document")
+    kwargs: dict[str, object] = {
+        "joint_name": "joint_1",
+        "source_name": source_identity(source, unit="rad"),
+        "status": ParityStatus.MATCH,
+        "lower": -1.0,
+        "upper": 1.0,
+        "unit": "rad",
+        "source": source,
+        "frame": canonical_fast_arm_joint_space_frame(),
+    }
+    kwargs[field] = _AlwaysEqualText("unknown" if field == "source_name" else "wrong-frame")
+
+    with pytest.raises(ValueError, match="built-in string"):
+        LimitParityRecord(**kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (("status", "mismatch"), ("source_status", "authoritative")),
+)
+def test_resolution_enum_boundary_rejects_str_subclass_before_hooks(
+    field: str,
+    value: str,
+) -> None:
+    source = _source(EvidenceStatus.AUTHORITATIVE, "lab_document")
+    kwargs: dict[str, object] = {
+        "joint_name": "joint_1",
+        "source_name": source_identity(source, unit="rad"),
+        "status": ParityStatus.MISMATCH,
+        "lower": None,
+        "upper": None,
+        "unit": "rad",
+        "reason": "ranges disagree",
+        "source": source,
+        "source_status": source.status,
+        "frame": canonical_fast_arm_joint_space_frame(),
+    }
+    kwargs[field] = _ExplodingText(value)
+
+    with pytest.raises(ValueError, match="valid"):
+        LimitParityRecord(**kwargs)  # type: ignore[arg-type]
+
+
+def test_resolution_deep_validator_rejects_nested_str_subclass_before_hooks() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    bound = result.bounds[0]
+
+    with pytest.raises(ValueError, match="built-in string"):
+        ResolvedJointBound(
+            joint_name=bound.joint_name,
+            lower_rad=bound.lower_rad,
+            upper_rad=bound.upper_rad,
+            status=bound.status,
+            source_names=(_ExplodingText("unknown"),),
+            parity=bound.parity,
+            comparison_tolerance_rad=bound.comparison_tolerance_rad,
+        )
+
+    object.__setattr__(bound, "source_names", (_ExplodingText("unknown"),))
+
+    with pytest.raises(ValueError, match="built-in string"):
+        validate_resolved_joint_bound(bound)
+
+    valid_result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    valid_bound = valid_result.bounds[0]
+    parity = valid_bound.parity[0]
+    object.__setattr__(parity, "source_name", _ExplodingText("unknown"))
+    with pytest.raises(ValueError, match="built-in string"):
+        ResolvedJointBound(
+            joint_name=valid_bound.joint_name,
+            lower_rad=valid_bound.lower_rad,
+            upper_rad=valid_bound.upper_rad,
+            status=valid_bound.status,
+            source_names=valid_bound.source_names,
+            parity=(parity,),
+            comparison_tolerance_rad=valid_bound.comparison_tolerance_rad,
+        )
+
+
+def test_result_constructor_revalidates_bounds_before_joint_name_inventory() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    bound = result.bounds[0]
+    object.__setattr__(bound, "joint_name", _ExplodingText("joint_1"))
+
+    with pytest.raises(ValueError, match="built-in string"):
+        LimitResolutionResult(
+            schema_version=result.schema_version,
+            robot_id=result.robot_id,
+            bounds=result.bounds,
+            conversion_relations=result.conversion_relations,
+            expected_joint_names=result.expected_joint_names,
+        )
 
 
 def test_result_rejects_relation_source_name_mismatch_with_projected_provenance() -> None:

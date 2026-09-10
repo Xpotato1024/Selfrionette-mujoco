@@ -48,7 +48,9 @@ evidence referenceとrevisionが揃い、callerが明示的にphysical authority
 
 `PhysicalLimit`はbuilt-in `str`型のconcreteなname（`joint` / `motor` / `actuator` identity）、quantity（`position` /
 `velocity` / `acceleration`）、lower / upper、unit、space（`joint` / `motor` / `actuator`）、frame、
-status、source provenance、conversion provenanceを保持する。`unknown` / `unavailable`は値を`None`
+status、source provenance、conversion provenanceを保持する。source / conversion provenance、
+envelope、robot、modelのidentityおよびunit / frame / reasonなどのtext fieldもbuilt-in `str`だけを
+受け付け、検証前に文字列subclassのoverrideを実行しない。`unknown` / `unavailable`は値を`None`
 としてreasonを保持し、placeholderのnameで代用しない。conflict / invalidを既知のbounded rangeへ
 変換しない。同一identity（name、quantity、space）の重複は拒否する。
 

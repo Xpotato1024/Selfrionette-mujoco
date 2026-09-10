@@ -142,6 +142,24 @@ def test_authority_classification_rejects_str_subclass_reference() -> None:
         )
 
 
+def test_typed_evidence_status_rejects_str_subclass_before_enum_conversion() -> None:
+    class ExplodingStatus(str):
+        def strip(self, chars: str | None = None) -> str:
+            raise AssertionError("status boundary must reject before strip")
+
+        def __eq__(self, other: object) -> bool:
+            raise AssertionError("status boundary must reject before equality")
+
+        def __ne__(self, other: object) -> bool:
+            raise AssertionError("status boundary must reject before inequality")
+
+        def __hash__(self) -> int:
+            raise AssertionError("status boundary must reject before hashing")
+
+    with pytest.raises(TypeError, match="must be a string"):
+        _source(status=ExplodingStatus("authoritative"))  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize(
     "identity",
     ("unknown", "UNKNOWN", "unavailable", "N/A", "none", "fixture_data"),

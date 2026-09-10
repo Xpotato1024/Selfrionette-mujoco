@@ -126,6 +126,12 @@ P1 / P2 ownerの単一canonical identity validatorで検証する。空・whites
 provider factory、provider accessorのどの経路でも拒否する。通常のconcreteなrobot IDと
 joint名は有効な値として保持する。
 
+`JointSpaceConversion`、`LimitParityRecord`、`ResolvedJointBound`、`LimitResolutionResult`の
+`joint_name`、`source_name`、`relation_id`、`unit`、`frame`、`reason`などのtext fieldも同じ
+canonical text boundaryで検証し、built-in `str`だけを受け付ける。検証前にsubclassの
+`strip`、equality、hashなどのoverrideを実行せず、nested DTO、aggregate、serialization、
+lookupの再検証でもこの境界を維持する。
+
 `LimitSourceProvenance`、`LimitConversionProvenance`、`PhysicalLimit`、
 `JointSpaceConversion`、`LimitParityRecord`、`ResolvedJointBound`、
 `LimitResolutionResult`には各ownerのcanonical deep validatorがあり、constructorと公開の
