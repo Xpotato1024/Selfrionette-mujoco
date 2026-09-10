@@ -1038,7 +1038,7 @@ class PhysicalSafetyEnvelope:
 
     @classmethod
     def from_json_bytes(cls, data: bytes) -> "PhysicalSafetyEnvelope":
-        if not isinstance(data, bytes):
+        if type(data) is not bytes:
             raise TypeError("physical safety envelope bytes must be bytes")
         if data.startswith(b"\xef\xbb\xbf"):
             raise ValueError("physical safety envelope must not contain a UTF-8 BOM")

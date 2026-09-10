@@ -35,6 +35,9 @@ joint = sign * source / gear_ratio + offset
 
 gear ratioはnon-zero、signは`-1`または`1`、すべての数値はfiniteでなければならない。
 負のsignではlower / upperを並べ替え、conversion provenanceとrelation IDを結果へ保持する。
+conversion計算の中間値と結果もfiniteでなければならず、有限な入力でもoverflowした射影値は
+`invalid`として扱う。resolverが後段でrangeを検証する場合に限らず、公開のconversion method自身が
+non-finiteな値を返さない。
 `source_name`は入力`PhysicalLimit.name`と、`joint_name`は期待するcanonical joint identityと
 必ず一致しなければならない。source identityまたはrelation identityの重複・曖昧なfallbackは
 拒否する。同一jointへ複数の異なるsourceを投影することはparity比較のために許可する。

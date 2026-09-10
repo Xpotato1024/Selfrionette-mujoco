@@ -63,6 +63,8 @@ conversion provenanceに`None`を保持する。space間のdeterministic project
 `PhysicalSafetyEnvelope`はschema version、envelope identity、robot / model identity、limit list、
 optional source summaryを持つ。JSONはsorted key、compact separator、UTF-8 without BOMで決定的に
 serializeし、未知field、BOM、非finite値、JSON booleanを含む型違いの数値、欠落provenance、反転rangeをstrictに拒否する。
+`from_json_bytes`はbuilt-in `bytes`だけを受け付け、BOM判定やUTF-8 decodeをbytes subclassのoverrideへ
+委譲しない。
 
 このcontractのpure validation / serializationはruntime safety packageが所有する。MuJoCo、viewer、
 hardware、serial、OSC、network outputはこのcontractの責務ではない。MuJoCoはphysical stateのsource

@@ -780,6 +780,50 @@ def test_invalid_conversion_values_fail_closed() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("source_value", "gear_ratio", "offset"),
+    (
+        (1e308, 1e-308, 0.0),
+        (-1e308, 1e-308, 0.0),
+        (1.0, 5e-324, 0.0),
+        (1e308, 1.0, 1e308),
+    ),
+)
+def test_source_to_joint_rejects_nonfinite_projection_result(
+    source_value: float,
+    gear_ratio: float,
+    offset: float,
+) -> None:
+    relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=gear_ratio,
+        sign=1.0,
+        offset=offset,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+
+    with pytest.raises(ValueError, match="joint value must be finite"):
+        relation.source_to_joint(source_value)
+
+
+def test_source_to_joint_preserves_finite_projection() -> None:
+    relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=2.0,
+        sign=-1.0,
+        offset=0.25,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+
+    assert relation.source_to_joint(4.0) == pytest.approx(-1.75)
+
+
 def test_joint_source_space_conversion_is_rejected() -> None:
     with pytest.raises(ValueError, match="source_space must be motor or actuator"):
         JointSpaceConversion(
@@ -1362,6 +1406,33 @@ def test_provider_constructor_and_accessor_revalidate_resolution_identity() -> N
     provider = FastArmResolvedBoundsProvider(valid_result)
     with pytest.raises(ValueError, match="concrete identity"):
         provider.bound_for("unknown")
+
+
+def test_provider_bound_for_revalidates_result_before_delegation() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    provider = FastArmResolvedBoundsProvider(result)
+
+    class ForgedResult:
+        def bound_for(self, joint_name: str) -> object:
+            return f"forged:{joint_name}"
+
+    object.__setattr__(provider, "result", ForgedResult())
+    with pytest.raises(TypeError, match="result must be LimitResolutionResult"):
+        provider.bound_for("joint_1")
+
+    nested_tampered_result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    nested_provider = FastArmResolvedBoundsProvider(nested_tampered_result)
+    object.__setattr__(nested_tampered_result, "bounds", (object(),))
+    with pytest.raises(TypeError, match="bound must be ResolvedJointBound"):
+        nested_provider.bound_for("joint_1")
 
 
 @pytest.mark.parametrize(

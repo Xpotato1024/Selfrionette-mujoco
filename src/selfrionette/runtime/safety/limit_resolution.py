@@ -234,7 +234,13 @@ class JointSpaceConversion:
 
     def source_to_joint(self, value: float) -> float:
         _validate_joint_conversion(self)
-        return self.sign * (_finite("source value", value) / self.gear_ratio) + self.offset
+        try:
+            projected = self.sign * (
+                _finite("source value", value) / self.gear_ratio
+            ) + self.offset
+        except OverflowError as exc:
+            raise ValueError("joint value must be finite") from exc
+        return _finite("joint value", projected)
 
     def project_range(self, lower: float, upper: float) -> tuple[float, float]:
         _validate_joint_conversion(self)
@@ -1373,6 +1379,7 @@ class FastArmResolvedBoundsProvider:
         return self.result
 
     def bound_for(self, joint_name: str) -> ResolvedJointBound:
+        validate_limit_resolution_result(self.result)
         validate_limit_resolution_identity("joint_name", joint_name)
         return self.result.bound_for(joint_name)
 

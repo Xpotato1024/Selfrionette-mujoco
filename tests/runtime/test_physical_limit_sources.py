@@ -508,6 +508,52 @@ def test_envelope_rejects_unknown_fields_and_bom() -> None:
         PhysicalSafetyEnvelope.from_json_bytes(b"\xef\xbb\xbf" + envelope.to_json_bytes())
 
 
+def test_envelope_decoder_rejects_bytes_subclass_before_overrides() -> None:
+    class ExplodingBytes(bytes):
+        def startswith(
+            self,
+            prefix: bytes,
+            start: int = 0,
+            end: int | None = None,
+        ) -> bool:
+            raise AssertionError("bytes decoder must reject before startswith")
+
+        def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+            raise AssertionError("bytes decoder must reject before decode")
+
+    with pytest.raises(TypeError, match="bytes"):
+        PhysicalSafetyEnvelope.from_json_bytes(ExplodingBytes(b"\xef\xbb\xbfnot-json"))
+
+
+def test_envelope_decoder_rejects_spoofed_bytes_subclass_with_valid_decode() -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    calls: list[str] = []
+
+    class SpoofedBytes(bytes):
+        def startswith(
+            self,
+            prefix: bytes,
+            start: int = 0,
+            end: int | None = None,
+        ) -> bool:
+            calls.append("startswith")
+            return False
+
+        def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+            calls.append("decode")
+            return envelope.to_json_bytes().decode("utf-8")
+
+    with pytest.raises(TypeError, match="bytes"):
+        PhysicalSafetyEnvelope.from_json_bytes(SpoofedBytes(b"\xef\xbb\xbfnot-json"))
+    assert calls == []
+
+
 def test_invalid_and_conflicting_values_do_not_become_authoritative() -> None:
     with pytest.raises(ValueError, match="finite"):
         PhysicalLimit(
