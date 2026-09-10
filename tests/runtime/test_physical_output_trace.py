@@ -164,3 +164,14 @@ def test_permitted_trace_rejects_disabled_permission() -> None:
             permission=PhysicalOutputPermission(),
             decision_status="accepted",
         )
+
+
+def test_lifecycle_sink_rejects_to_json_bytes_lookalike() -> None:
+    class LookalikeLifecycleEvent:
+        def to_json_bytes(self) -> bytes:
+            return b"{}"
+
+    sink = PhysicalOutputRecordingSink()
+    with pytest.raises(TypeError, match="PhysicalOutputLifecycleEvent"):
+        sink.record_lifecycle_event(LookalikeLifecycleEvent())  # type: ignore[arg-type]
+    assert sink.lifecycle_events == ()

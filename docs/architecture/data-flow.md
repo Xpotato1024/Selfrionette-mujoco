@@ -37,8 +37,9 @@ viewerは受信payloadを再計算せず描画する。
 physical outputへ進む場合も、内部`MotionCommand`を直接transportへ渡さず、typed
 `RobotCommand`から`PhysicalOutputRequest`へ明示的に投影する。requestのpermission
 acceptedは送信完了を意味せず、K-preのdefaultは`disabled`である。K-preではこの境界の
-request検証、permission decision、lossless recording / dry-run replayを行い、network、serial、
-OSC、robot outputは実行しない。traceの`permitted` / `rejected` / `dropped`は送信実績と別である。
+request検証、permission decision、lossless recording / dry-run replay、stale / stop lifecycleを
+行い、network、serial、OSC、robot outputは実行しない。traceの`permitted` / `rejected` /
+`dropped`とlifecycle stateは送信実績と別である。
 
 現行のapplication-facing replay / viewer / smokeは、Robot、Input Source、Control Mapping、
 command semantics routeを接続するdiagnostic / operational runtimeである。Environment、Task、
