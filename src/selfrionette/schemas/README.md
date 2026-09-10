@@ -14,6 +14,10 @@ package public surfaceは`schemas.__init__`の明示的な`__all__`を正とす�
 
 各層が参照する immutable な contract 型。
 
+`schemas.command`の`PhysicalOutputRequest`、`PhysicalOutputPermission`、
+`PhysicalOutputDecision`は、内部commandと将来のphysical output境界を表す。K-preでは
+serializationとpermission decisionだけを行い、通信やhardware side effectを持たない。
+
 ## 依存してよい層
 
 なし。

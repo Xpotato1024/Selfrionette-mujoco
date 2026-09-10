@@ -135,6 +135,7 @@ Task / Evaluationを補わない。
 | control-frame resolution | runtime control-frame resolver | pure frame resolver | requested frame、pre-step orientation、`dt_s` | resolved world intentまたはunavailable status |
 | motion policy | selected plugin / runtime coordinator | motion policy adapter | intent、current qpos、target lifecycle | `MotionCommand`またはhold / reject |
 | backend update | typed Robot command provider / MuJoCo backend boundary | semantic-specific backend command applier | `JointPositionCommand`等のvalidated typed command | updated model stateまたは適用前failure |
+| physical output permission | runtime output boundary | typed `PhysicalOutputRequest` / permission evaluator | target、session、sequence、cadence、explicit operator gate | accepted / rejected decision。送信実績とは別 |
 | MuJoCo measurement | post-step measurement helper | pure measurement helper | post-step `MuJoCoState` | physical `tip` site measurement |
 | diagnostic annotation | runtime diagnostics | pure annotator | intent、prediction、measurement、source state | precedenceを固定したmetadata |
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |

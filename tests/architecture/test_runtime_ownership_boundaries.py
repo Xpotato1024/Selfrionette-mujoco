@@ -71,6 +71,7 @@ EXPECTED_MODULES = {
         "selfrionette_serial_dry_run",
         "websocket_publisher",
     },
+    "output": {"permission"},
     "safety": {
         "collision_policy",
         "input_safety",
