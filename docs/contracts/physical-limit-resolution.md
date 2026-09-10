@@ -155,7 +155,8 @@ inventoryを要求し、`to_dict` / `to_json_bytes` / lookupは外部sealを再�
 保存する`limits`、`bounds`、`parity`、`source_names`、`conversion_relations`、
 `expected_joint_names`はbuilt-in `tuple`だけを受け付け、deep validatorはtuple subclassを反復する前に
 拒否する。constructorで入力を正規化した数値fieldはbuilt-in `float`として保存し、nested DTOの
-validator、seal比較、serialization、conversion operationはfloat / int subclassを演算前に拒否する。
+validator、seal比較、serialization、conversion operationは、保存済み数値fieldに注入された
+float / int subclassを演算前に拒否する。公開methodへ渡す数値入力の正規化は維持する。
 
 ## fast_arm projection
 
