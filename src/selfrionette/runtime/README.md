@@ -9,7 +9,7 @@
 | `composition/` | config、Robot Profile / Plugin / Bundle、typed provider assembly、pipeline builder |
 | `execution/` | pipeline lifecycle、input step loop、timing / pacing |
 | `control/` | input selection/state、endpoint target、viewer control ingress、step diagnostics |
-| `safety/` | stale input policy、qpos feasibility |
+| `safety/` | stale input policy、qpos feasibility、physical safety・operator validation |
 | `experiment/` | versioned experiment contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint evaluation、progress、manifest / freeze readiness |
 | `runners/` | dry-run、live / offline smoke、WebSocket publisher、experimentのthin entry point |
