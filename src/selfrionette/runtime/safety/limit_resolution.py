@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import operator
 import weakref
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from numbers import Real
@@ -1287,38 +1287,6 @@ def resolve_joint_space_bounds(
     )
 
 
-def fast_arm_toml_limits_to_physical_limits(config: object, *, source_id: str = "fast_arm_core/resources/config/joint_limits.toml") -> tuple[PhysicalLimit, ...]:
-    """既存TOMLをprovisional sourceとしてP2 contractへ投影する。"""
-
-    joints = getattr(config, "joints", None)
-    if not isinstance(joints, tuple):
-        raise TypeError("config must provide tuple joints")
-    for joint in joints:
-        validate_limit_resolution_identity("joint_name", getattr(joint, "name", None))
-    schema_version = getattr(config, "schema_version", None)
-    source = LimitSourceProvenance(
-        source_kind="joint_limit_toml",
-        source_id=source_id,
-        revision=f"schema-{schema_version}",
-        status=EvidenceStatus.PROVISIONAL,
-        evidence_reference="software-configuration-only",
-    )
-    return tuple(
-        PhysicalLimit(
-            name=joint.name,
-            quantity=LimitQuantity.POSITION,
-            lower=joint.lower_rad,
-            upper=joint.upper_rad,
-            unit="rad",
-            space=LimitSpace.JOINT,
-            frame=canonical_fast_arm_joint_space_frame(),
-            status=EvidenceStatus.PROVISIONAL,
-            source=source,
-        )
-        for joint in joints
-    )
-
-
 def fast_arm_mujoco_limits_to_physical_limits(
     model: object | None,
     *,
@@ -1413,45 +1381,6 @@ class FastArmResolvedBoundsProvider:
         return self.result.bound_for(joint_name)
 
 
-def build_fast_arm_resolved_bounds_provider(
-    *,
-    config: object,
-    model: object | None = None,
-    profile_joint_names: Sequence[str] | None = None,
-    profile_bounds_rad: Mapping[str, Sequence[float]] | None = None,
-    conversions: Sequence[JointSpaceConversion] = (),
-) -> FastArmResolvedBoundsProvider:
-    """fast_arm profile / TOML / modelを同一resolutionへ渡す。"""
-
-    names = tuple(
-        validate_limit_resolution_identity("joint_name", name)
-        for name in (profile_joint_names or tuple(joint.name for joint in getattr(config, "joints", ())))
-    )
-    if not names:
-        raise ValueError("fast_arm profile must declare canonical joint names")
-    sources = list(fast_arm_toml_limits_to_physical_limits(config))
-    if profile_bounds_rad is not None:
-        profile_source = LimitSourceProvenance(
-            source_kind="robot_profile",
-            source_id="fast_arm-profile",
-            revision="profile-contract",
-            status=EvidenceStatus.PROVISIONAL,
-            evidence_reference="software-profile-only",
-        )
-        for name, values in profile_bounds_rad.items():
-            validate_limit_resolution_identity("profile joint name", name)
-            lower, upper = _range(values, f"profile bounds for {name}")
-            sources.append(PhysicalLimit(name=name, quantity=LimitQuantity.POSITION, lower=lower, upper=upper, unit="rad", space=LimitSpace.JOINT, frame=canonical_fast_arm_joint_space_frame(), status=EvidenceStatus.PROVISIONAL, source=profile_source))
-    sources.extend(fast_arm_mujoco_limits_to_physical_limits(model, joint_names=names))
-    result = resolve_joint_space_bounds(
-        sources,
-        expected_joint_names=names,
-        robot_id="fast_arm",
-        conversion_relations=conversions,
-    )
-    return FastArmResolvedBoundsProvider(result)
-
-
 __all__ = [
     "DEFAULT_COMPARISON_TOLERANCE_RAD",
     "FastArmResolvedBoundsProvider",
@@ -1461,9 +1390,7 @@ __all__ = [
     "LimitResolutionStatus",
     "ParityStatus",
     "ResolvedJointBound",
-    "build_fast_arm_resolved_bounds_provider",
     "fast_arm_mujoco_limits_to_physical_limits",
-    "fast_arm_toml_limits_to_physical_limits",
     "project_limit_to_joint_space",
     "resolve_joint_space_bounds",
     "validate_limit_resolution_identity",

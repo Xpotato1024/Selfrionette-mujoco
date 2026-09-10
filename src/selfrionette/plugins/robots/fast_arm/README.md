@@ -38,7 +38,10 @@ backendへ直接渡されない。
 ## resource contract
 
 physical model / joint-limit definitionを独立`fast_arm_core`が所有し、
-`adapter/`がSelfrionette contract、MuJoCo / viewer resource bindingへ投影する。
+`adapter/`がSelfrionette contract、P2のtyped TOML projection、MuJoCo / viewer resource
+bindingへ投影する。`adapter/physical_limit_resolution.py`はcoreの
+`FastArmJointLimitConfig`を型境界で再検証してからgeneric runtimeのresolutionへ渡し、
+genericなDTO、resolver、providerはruntimeが所有する。
 これはself-containedな巨大packageでもgeneric third-party installerでもない。
 
 ## constraintsとnon-goals

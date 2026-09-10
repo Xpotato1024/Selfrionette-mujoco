@@ -6,10 +6,19 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+from fast_arm_core.joint_limits import (
+    FastArmJointLimit,
+    FastArmJointLimitConfig,
+)
+
 from selfrionette.runtime.safety import limit_resolution as _limit_resolution_module
 
 from selfrionette.plugins.robots.fast_arm.adapter.feasibility import (
     parse_fast_arm_joint_limit_config,
+)
+from selfrionette.plugins.robots.fast_arm.adapter.physical_limit_resolution import (
+    build_fast_arm_resolved_bounds_provider,
+    fast_arm_toml_limits_to_physical_limits,
 )
 from selfrionette.plugins.robots.fast_arm.adapter.resources import FAST_ARM_JOINT_LIMIT_RESOURCE
 from selfrionette.runtime.safety.limit_resolution import (
@@ -21,9 +30,7 @@ from selfrionette.runtime.safety.limit_resolution import (
     LimitResolutionStatus,
     ParityStatus,
     ResolvedJointBound,
-    build_fast_arm_resolved_bounds_provider,
     fast_arm_mujoco_limits_to_physical_limits,
-    fast_arm_toml_limits_to_physical_limits,
     project_limit_to_joint_space,
     resolve_joint_space_bounds,
     validate_limit_resolution_identity,
@@ -83,6 +90,19 @@ def _limit(
         source=_source(source_status, source_kind),
         reason="fixture source is not authoritative" if status is not EvidenceStatus.PROVISIONAL else None,
     )
+
+
+def _parsed_fast_arm_config() -> FastArmJointLimitConfig:
+    config = parse_fast_arm_joint_limit_config(FAST_ARM_JOINT_LIMIT_RESOURCE)
+    assert type(config) is FastArmJointLimitConfig
+    assert all(type(joint) is FastArmJointLimit for joint in config.joints)
+    return config
+
+
+def _run_fast_arm_projection_helper(helper: object, config: object) -> object:
+    if helper is build_fast_arm_resolved_bounds_provider:
+        return build_fast_arm_resolved_bounds_provider(config=config)
+    return fast_arm_toml_limits_to_physical_limits(config)
 
 
 class _ExplodingText(str):
@@ -789,6 +809,224 @@ def test_toml_projection_preserves_provisional_status() -> None:
     assert len(limits) == 4
     assert all(limit.status is EvidenceStatus.PROVISIONAL for limit in limits)
     assert all(limit.source.source_kind == "joint_limit_toml" for limit in limits)
+
+
+def test_fast_arm_projection_helpers_are_adapter_owned() -> None:
+    assert not hasattr(
+        _limit_resolution_module,
+        "fast_arm_toml_limits_to_physical_limits",
+    )
+    assert not hasattr(
+        _limit_resolution_module,
+        "build_fast_arm_resolved_bounds_provider",
+    )
+
+
+def test_fast_arm_projection_rejects_duck_config_before_reading_metadata() -> None:
+    class DuckJoint:
+        name = "sholder_joint_1"
+        lower_rad = -1.0
+        upper_rad = 1.0
+
+    config = SimpleNamespace(
+        schema_version=1,
+        robot="fast_arm",
+        model="fast_arm",
+        angle_unit="rad",
+        status="provisional",
+        joints=(DuckJoint(),),
+    )
+    for helper in (
+        fast_arm_toml_limits_to_physical_limits,
+        build_fast_arm_resolved_bounds_provider,
+    ):
+        with pytest.raises(TypeError, match="FastArmJointLimitConfig"):
+            _run_fast_arm_projection_helper(helper, config)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("schema_version", 2),
+        ("robot", "other_robot"),
+        ("model", "other_model"),
+        ("angle_unit", "deg"),
+        ("status", "authoritative"),
+    ),
+)
+def test_fast_arm_projection_reuses_core_metadata_validation(
+    field: str,
+    value: object,
+) -> None:
+    for helper in (
+        fast_arm_toml_limits_to_physical_limits,
+        build_fast_arm_resolved_bounds_provider,
+    ):
+        config = _parsed_fast_arm_config()
+        object.__setattr__(config, field, value)
+        with pytest.raises(ValueError):
+            _run_fast_arm_projection_helper(helper, config)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("schema_version", _SpoofedInt(1, 2)),
+        ("robot", _ExplodingText("fast_arm")),
+        ("model", _ExplodingText("fast_arm")),
+        ("angle_unit", _ExplodingText("rad")),
+        ("status", _ExplodingText("provisional")),
+    ),
+)
+def test_fast_arm_projection_rejects_config_primitive_subclasses(
+    field: str,
+    value: object,
+) -> None:
+    for helper in (
+        fast_arm_toml_limits_to_physical_limits,
+        build_fast_arm_resolved_bounds_provider,
+    ):
+        config = _parsed_fast_arm_config()
+        object.__setattr__(config, field, value)
+        with pytest.raises(TypeError, match="built-in"):
+            _run_fast_arm_projection_helper(helper, config)
+
+
+def test_fast_arm_projection_rejects_joint_tuple_subclass_before_iteration() -> None:
+    config = _parsed_fast_arm_config()
+    stateful = _StatefulTuple(config.joints, ())
+    object.__setattr__(config, "joints", stateful)
+
+    for helper in (
+        fast_arm_toml_limits_to_physical_limits,
+        build_fast_arm_resolved_bounds_provider,
+    ):
+        with pytest.raises(TypeError, match="built-in tuple"):
+            _run_fast_arm_projection_helper(helper, config)
+    assert stateful.iteration_count == 0
+
+
+def test_fast_arm_projection_rejects_nested_joint_type_before_constructor() -> None:
+    config = _parsed_fast_arm_config()
+    object.__setattr__(config, "joints", (object(),))
+
+    for helper in (
+        fast_arm_toml_limits_to_physical_limits,
+        build_fast_arm_resolved_bounds_provider,
+    ):
+        with pytest.raises(TypeError, match="FastArmJointLimit"):
+            _run_fast_arm_projection_helper(helper, config)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("joint_name", "partial_joints"),
+)
+def test_fast_arm_projection_reuses_core_joint_inventory_validation(
+    mutation: str,
+) -> None:
+    config = _parsed_fast_arm_config()
+    if mutation == "joint_name":
+        object.__setattr__(config.joints[0], "name", "forged_joint")
+    else:
+        object.__setattr__(config, "joints", config.joints[:-1])
+
+    for helper in (
+        fast_arm_toml_limits_to_physical_limits,
+        build_fast_arm_resolved_bounds_provider,
+    ):
+        with pytest.raises(ValueError):
+            _run_fast_arm_projection_helper(helper, config)
+
+
+def test_fast_arm_projection_rejects_nested_numeric_subclass_before_core_hooks() -> None:
+    config = _parsed_fast_arm_config()
+    object.__setattr__(
+        config.joints[0],
+        "lower_rad",
+        _SpoofedFloat(-1.0, -999.0),
+    )
+
+    for helper in (
+        fast_arm_toml_limits_to_physical_limits,
+        build_fast_arm_resolved_bounds_provider,
+    ):
+        with pytest.raises(TypeError, match="built-in int or float"):
+            _run_fast_arm_projection_helper(helper, config)
+
+
+def test_fast_arm_projection_preserves_core_integer_endpoint_inputs() -> None:
+    parsed = _parsed_fast_arm_config()
+    config = FastArmJointLimitConfig(
+        schema_version=parsed.schema_version,
+        robot=parsed.robot,
+        model=parsed.model,
+        angle_unit=parsed.angle_unit,
+        status=parsed.status,
+        joints=tuple(
+            FastArmJointLimit(
+                name=joint.name,
+                lower_rad=-1,
+                upper_rad=1,
+            )
+            for joint in parsed.joints
+        ),
+    )
+
+    limits = fast_arm_toml_limits_to_physical_limits(config)
+
+    assert all(type(limit.lower) is float for limit in limits)
+    assert all(type(limit.upper) is float for limit in limits)
+    assert all(limit.lower == -1.0 and limit.upper == 1.0 for limit in limits)
+
+
+def test_fast_arm_provider_requires_explicit_profile_order() -> None:
+    config = _parsed_fast_arm_config()
+
+    with pytest.raises(ValueError, match="canonical joint names"):
+        build_fast_arm_resolved_bounds_provider(
+            config=config,
+            profile_joint_names=(),
+        )
+    with pytest.raises(ValueError, match="canonical fast_arm joint order"):
+        build_fast_arm_resolved_bounds_provider(
+            config=config,
+            profile_joint_names=tuple(reversed(config.joint_names)),
+        )
+
+
+def test_fast_arm_provider_rejects_extra_profile_bound_name() -> None:
+    config = _parsed_fast_arm_config()
+
+    with pytest.raises(ValueError, match="canonical fast_arm joint order"):
+        build_fast_arm_resolved_bounds_provider(
+            config=config,
+            profile_bounds_rad={"extra_joint": (-1.0, 1.0)},
+        )
+
+
+def test_fast_arm_provider_preserves_valid_bounded_provisional_projection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_mujoco(monkeypatch)
+    config = _parsed_fast_arm_config()
+    model = SimpleNamespace(
+        jnt_limited=[1],
+        jnt_range=[[-3.141592653589793, 3.141592653589793]],
+    )
+
+    provider = build_fast_arm_resolved_bounds_provider(
+        config=config,
+        model=model,
+    )
+
+    result = provider.resolve()
+    assert all(
+        bound.status is LimitResolutionStatus.RESOLVED_PROVISIONAL
+        for bound in result.bounds
+    )
+    assert all(bound.bounded for bound in result.bounds)
+    assert not result.authoritative
 
 
 def test_invalid_conversion_values_fail_closed() -> None:

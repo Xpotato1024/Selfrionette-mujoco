@@ -17,9 +17,11 @@ related:
 
 P1の`PhysicalLimit`を入力として、motor / actuator spaceのrangeを明示したconversion
 relationでjoint spaceへ投影し、Robot Profile、joint-limit TOML、MuJoCo `jnt_range`の
-software projectionをmachine-readableに照合する。pureなresolutionとread-only providerは
-`runtime/safety/limit_resolution.py`が所有し、fast_armの既存TOML parse / qpos guardやMuJoCo
-stateを再実装しない。
+software projectionをmachine-readableに照合する。genericなresolution、DTO、read-only
+provider、MuJoCo collectorは`runtime/safety/limit_resolution.py`が所有する。fast_armの
+typed TOML configuration boundary、projection、provider assemblyは
+`plugins/robots/fast_arm/adapter/physical_limit_resolution.py`が所有し、既存TOML parse /
+qpos guardやMuJoCo stateをgeneric runtimeへ再実装しない。
 
 ## Conversion
 
@@ -165,6 +167,14 @@ float / int subclassを演算前に拒否する。公開methodへ渡す数値入
 MuJoCoの`jnt_range`はlimited jointだけを読み、unlimited joint、missing model、inspection
 failureは`unknown`とする。現在のfast_arm modelはjoint rangeをphysical authorityとして提供
 しないため、既存TOMLの`[-pi, pi]`へ自動統合しない。
+
+TOML projectionはconcreteな`FastArmJointLimitConfig`とnested `FastArmJointLimit`を要求する。
+adapterはbuilt-in primitiveをsnapshotとして取り出し、core constructorを再利用してschema、
+robot / model、unit、status、finite range、全jointのcanonical順序を再検証する。constructorを
+迂回した不正configや型の派生によるvalidation hookの変更を、bounded resultへ変換しない。
+configの`validated` statusもphysical evidenceではなく、projectionは`provisional`を維持する。
+provider factoryの`profile_joint_names`は未指定時だけconfigから導出し、明示した場合は空・部分集合・
+並べ替えを認めずcanonical順序と一致させる。`profile_bounds_rad`のinventory外keyも拒否する。
 
 ## Boundary
 
