@@ -14,6 +14,13 @@
 contact parameterと`initial_penetration_tolerance_m`はmanifest digestへbindされ、scene側の別defaultで
 readinessを変更しない。
 
+## measured contact evidence
+
+scene instanceの`observe_contact_evidence()`は`runtime/contact/evidence.py`へ委譲し、
+同じMuJoCo `mjData.contact`と公式`mj_contactForce`からtarget-object、self、environmentの
+raw contact recordを取得する。ここではforce filter、clamp、reaction-force、task outcome、
+viewer用のcontact再計算を行わない。
+
 ## identityとfail-closed
 
 sceneはmanifest digest、object body / geom名、Environment / Robot / viewer identity、MuJoCo
