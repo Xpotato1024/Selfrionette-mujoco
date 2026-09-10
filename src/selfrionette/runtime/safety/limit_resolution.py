@@ -129,6 +129,24 @@ def _finite(name: str, value: object) -> float:
     return 0.0 if number == 0.0 else number
 
 
+def _stored_finite(name: str, value: object) -> float:
+    """構築後の数値fieldをhookなしで検証する。"""
+
+    if type(value) is not float:
+        raise TypeError(f"{name} must be a canonical float")
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be finite")
+    return 0.0 if value == 0.0 else value
+
+
+def _builtin_tuple(name: str, value: object) -> tuple[object, ...]:
+    """aggregate fieldにbuilt-in tuple実装だけを要求する。"""
+
+    if type(value) is not tuple:
+        raise TypeError(f"{name} must be a built-in tuple")
+    return value
+
+
 def _exact_integer(name: str, value: object) -> int:
     """Python boolを除く整数プロトコルscalarだけを受け付ける。"""
 
@@ -168,6 +186,15 @@ def _range(value: object, name: str) -> tuple[float, float]:
 
 def _comparison_tolerance(value: object) -> float:
     tolerance = _finite("comparison_tolerance_rad", value)
+    if tolerance != DEFAULT_COMPARISON_TOLERANCE_RAD:
+        raise ValueError(
+            "comparison_tolerance_rad must equal the canonical default"
+        )
+    return tolerance
+
+
+def _stored_comparison_tolerance(value: object) -> float:
+    tolerance = _stored_finite("comparison_tolerance_rad", value)
     if tolerance != DEFAULT_COMPARISON_TOLERANCE_RAD:
         raise ValueError(
             "comparison_tolerance_rad must equal the canonical default"
@@ -389,8 +416,7 @@ class ResolvedJointBound:
         except (TypeError, ValueError) as exc:
             raise ValueError("status must be a valid LimitResolutionStatus") from exc
         object.__setattr__(self, "status", status)
-        if not isinstance(self.source_names, tuple):
-            raise TypeError("source_names must be a tuple")
+        _builtin_tuple("source_names", self.source_names)
         if not self.source_names:
             raise ValueError("resolved bound requires at least one source name")
         for source_name in self.source_names:
@@ -403,7 +429,8 @@ class ResolvedJointBound:
             raise ValueError("resolved bound lower_rad and upper_rad must be provided together")
         if lower_rad is not None and upper_rad is not None and lower_rad > upper_rad:
             raise ValueError("resolved bound lower_rad must not exceed upper_rad")
-        if not isinstance(self.parity, tuple) or not all(type(item) is LimitParityRecord for item in self.parity):
+        _builtin_tuple("parity", self.parity)
+        if not all(type(item) is LimitParityRecord for item in self.parity):
             raise TypeError("parity must contain LimitParityRecord values")
         if not self.parity:
             raise ValueError("resolved bound parity must be non-empty")
@@ -517,7 +544,8 @@ class LimitResolutionResult:
         if type(self.schema_version) is not int or self.schema_version != 1:
             raise ValueError(f"unsupported limit resolution schema version: {self.schema_version!r}")
         validate_limit_resolution_identity("robot_id", self.robot_id)
-        if not isinstance(self.bounds, tuple) or not self.bounds:
+        _builtin_tuple("bounds", self.bounds)
+        if not self.bounds:
             raise ValueError("limit resolution requires at least one bound")
         if any(type(item) is not ResolvedJointBound for item in self.bounds):
             raise TypeError("bounds must contain ResolvedJointBound values")
@@ -526,8 +554,7 @@ class LimitResolutionResult:
         names = tuple(item.joint_name for item in self.bounds)
         if len(set(names)) != len(names):
             raise ValueError("limit resolution joint names must be unique")
-        if not isinstance(self.expected_joint_names, tuple):
-            raise TypeError("expected_joint_names must be a tuple")
+        _builtin_tuple("expected_joint_names", self.expected_joint_names)
         expected_names = tuple(
             validate_limit_resolution_identity("expected_joint_name", name)
             for name in self.expected_joint_names
@@ -538,8 +565,7 @@ class LimitResolutionResult:
             raise ValueError("expected_joint_names must be unique")
         if expected_names != names:
             raise ValueError("bounds must exactly cover expected_joint_names in canonical order")
-        if not isinstance(self.conversion_relations, tuple):
-            raise TypeError("conversion_relations must be a tuple")
+        _builtin_tuple("conversion_relations", self.conversion_relations)
         relation_sources: set[str] = set()
         relation_ids: set[str] = set()
         for relation in self.conversion_relations:
@@ -718,9 +744,9 @@ def _validate_joint_conversion(
         raise ValueError("source_space must be motor or actuator")
     validate_limit_resolution_identity("joint_name", relation.joint_name)
     validate_concrete_limit_identity("source_name", relation.source_name)
-    ratio = _finite("gear_ratio", relation.gear_ratio)
-    sign = _finite("sign", relation.sign)
-    offset = _finite("offset", relation.offset)
+    ratio = _stored_finite("gear_ratio", relation.gear_ratio)
+    sign = _stored_finite("sign", relation.sign)
+    offset = _stored_finite("offset", relation.offset)
     validate_concrete_limit_identity("relation_id", relation.relation_id)
     _text("unit", relation.unit)
     if ratio == 0.0:
@@ -754,8 +780,8 @@ def _validate_parity_record(
         raise ValueError("status must be a valid ParityStatus")
     _text("unit", parity.unit)
     _text("frame", parity.frame)
-    lower = _finite("lower", parity.lower) if parity.lower is not None else None
-    upper = _finite("upper", parity.upper) if parity.upper is not None else None
+    lower = _stored_finite("lower", parity.lower) if parity.lower is not None else None
+    upper = _stored_finite("upper", parity.upper) if parity.upper is not None else None
     if (lower is None) != (upper is None):
         raise ValueError("parity lower and upper must be provided together")
     if lower is not None and upper is not None and lower > upper:
@@ -813,19 +839,21 @@ def _validate_resolved_bound(
     status = bound.status
     if not isinstance(status, LimitResolutionStatus):
         raise ValueError("status must be a valid LimitResolutionStatus")
-    if not isinstance(bound.source_names, tuple) or not bound.source_names:
+    _builtin_tuple("source_names", bound.source_names)
+    if not bound.source_names:
         raise ValueError("resolved bound source names must be a non-empty tuple")
     for source_name in bound.source_names:
         _text("source_name", source_name)
     if len(set(bound.source_names)) != len(bound.source_names):
         raise ValueError("resolved bound source names must be unique")
-    lower = _finite("lower_rad", bound.lower_rad) if bound.lower_rad is not None else None
-    upper = _finite("upper_rad", bound.upper_rad) if bound.upper_rad is not None else None
+    lower = _stored_finite("lower_rad", bound.lower_rad) if bound.lower_rad is not None else None
+    upper = _stored_finite("upper_rad", bound.upper_rad) if bound.upper_rad is not None else None
     if (lower is None) != (upper is None):
         raise ValueError("resolved bound lower_rad and upper_rad must be provided together")
     if lower is not None and upper is not None and lower > upper:
         raise ValueError("resolved bound lower_rad must not exceed upper_rad")
-    if not isinstance(bound.parity, tuple) or not bound.parity:
+    _builtin_tuple("parity", bound.parity)
+    if not bound.parity:
         raise ValueError("resolved bound parity must be non-empty")
     for item in bound.parity:
         _validate_parity_record(item)
@@ -833,7 +861,7 @@ def _validate_resolved_bound(
         raise ValueError("resolved bound source_names must exactly match parity identities")
     if any(item.joint_name != joint_name for item in bound.parity):
         raise ValueError("resolved bound parity joint identity must match bound joint")
-    tolerance = _comparison_tolerance(bound.comparison_tolerance_rad)
+    tolerance = _stored_comparison_tolerance(bound.comparison_tolerance_rad)
     if status in {
         LimitResolutionStatus.RESOLVED_AUTHORITATIVE,
         LimitResolutionStatus.RESOLVED_PROVISIONAL,
@@ -886,14 +914,16 @@ def _validate_limit_resolution_result(
     if type(result.schema_version) is not int or result.schema_version != 1:
         raise ValueError("unsupported limit resolution schema version")
     validate_limit_resolution_identity("robot_id", result.robot_id)
-    if not isinstance(result.bounds, tuple) or not result.bounds:
+    _builtin_tuple("bounds", result.bounds)
+    if not result.bounds:
         raise ValueError("limit resolution requires at least one bound")
     for bound in result.bounds:
         _validate_resolved_bound(bound)
     bound_names = tuple(bound.joint_name for bound in result.bounds)
     if len(set(bound_names)) != len(bound_names):
         raise ValueError("limit resolution joint names must be unique")
-    if not isinstance(result.expected_joint_names, tuple) or not result.expected_joint_names:
+    _builtin_tuple("expected_joint_names", result.expected_joint_names)
+    if not result.expected_joint_names:
         raise ValueError("expected_joint_names must be a non-empty tuple")
     expected_names = tuple(
         validate_limit_resolution_identity("expected_joint_name", name)
@@ -901,8 +931,7 @@ def _validate_limit_resolution_result(
     )
     if len(set(expected_names)) != len(expected_names) or bound_names != expected_names:
         raise ValueError("bounds must exactly cover expected_joint_names in canonical order")
-    if not isinstance(result.conversion_relations, tuple):
-        raise TypeError("conversion_relations must be a tuple")
+    _builtin_tuple("conversion_relations", result.conversion_relations)
     for relation in result.conversion_relations:
         _validate_joint_conversion(relation)
     relations_by_id = {
@@ -930,7 +959,7 @@ def _validate_limit_resolution_result(
                 raise ValueError("parity conversion relation binding is inconsistent")
     if required_relation_ids != set(relations_by_id):
         raise ValueError("result conversion relations must exactly cover projected parity")
-    tolerance = _comparison_tolerance(result.comparison_tolerance_rad)
+    tolerance = _stored_comparison_tolerance(result.comparison_tolerance_rad)
     if any(bound.comparison_tolerance_rad != tolerance for bound in result.bounds):
         raise ValueError("bound comparison tolerance must match result tolerance")
     expected = _result_snapshot(result)

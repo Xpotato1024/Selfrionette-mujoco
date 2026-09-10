@@ -289,6 +289,18 @@ def _finite_or_none(name: str, value: object) -> float | None:
     return 0.0 if number == 0.0 else number
 
 
+def _stored_finite_or_none(name: str, value: object) -> float | None:
+    """構築後の数値fieldをhookなしで検証する。"""
+
+    if value is None:
+        return None
+    if type(value) is not float:
+        raise TypeError(f"{name} must be a canonical float or None")
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be finite")
+    return 0.0 if value == 0.0 else value
+
+
 def _enum_value(enum_type: type[Enum], name: str, value: object) -> Enum:
     if isinstance(value, enum_type):
         return value
@@ -754,9 +766,9 @@ def _validate_conversion_provenance(
         if conversion.source_name is None
         else validate_concrete_limit_identity("source_name", conversion.source_name)
     )
-    ratio = _finite_or_none("gear_ratio", conversion.gear_ratio)
-    sign = _finite_or_none("sign", conversion.sign)
-    offset = _finite_or_none("offset", conversion.offset)
+    ratio = _stored_finite_or_none("gear_ratio", conversion.gear_ratio)
+    sign = _stored_finite_or_none("sign", conversion.sign)
+    offset = _stored_finite_or_none("offset", conversion.offset)
     if ratio is not None and ratio == 0.0:
         raise ValueError("gear_ratio must be non-zero when provided")
     if sign is not None and sign not in (-1.0, 1.0):
@@ -822,8 +834,8 @@ def _validate_physical_limit(limit: object) -> PhysicalLimit:
     name = validate_concrete_limit_identity("name", limit.name)
     quantity = _enum_value(LimitQuantity, "quantity", limit.quantity)
     space = _enum_value(LimitSpace, "space", limit.space)
-    lower = _finite_or_none("lower", limit.lower)
-    upper = _finite_or_none("upper", limit.upper)
+    lower = _stored_finite_or_none("lower", limit.lower)
+    upper = _stored_finite_or_none("upper", limit.upper)
     _text("unit", limit.unit)
     _text("frame", limit.frame)
     status = _enum_value(EvidenceStatus, "status", limit.status)
@@ -1216,7 +1228,7 @@ def _envelope_from_mapping(value: object) -> PhysicalSafetyEnvelope:
     return PhysicalSafetyEnvelope(
         envelope_id=_text("envelope_id", raw.get("envelope_id")),
         envelope_version=raw.get("envelope_version"),  # type: ignore[arg-type]
-        robot_id=_text("robot_id", raw.get("robot_id")),
+        robot_id=validate_concrete_limit_identity("robot_id", raw.get("robot_id")),
         model_id=_text("model_id", raw.get("model_id")),
         limits=tuple(_limit_from_mapping(item) for item in limits_raw),
         source_summary=_optional_text(raw, "source_summary"),
@@ -1253,7 +1265,7 @@ def _validate_physical_safety_envelope(
         or envelope.envelope_version < 1
     ):
         raise ValueError("envelope_version must be a positive integer")
-    _text("robot_id", envelope.robot_id)
+    validate_concrete_limit_identity("robot_id", envelope.robot_id)
     _text("model_id", envelope.model_id)
     if (
         type(envelope.schema_version) is not int
@@ -1262,8 +1274,8 @@ def _validate_physical_safety_envelope(
         raise ValueError(
             f"unsupported physical safety envelope schema version: {envelope.schema_version!r}"
         )
-    if not isinstance(envelope.limits, tuple):
-        raise TypeError("limits must be a tuple")
+    if type(envelope.limits) is not tuple:
+        raise TypeError("limits must be a built-in tuple")
     if not envelope.limits:
         raise ValueError("limits must be non-empty")
     names: set[tuple[str, LimitQuantity, LimitSpace]] = set()

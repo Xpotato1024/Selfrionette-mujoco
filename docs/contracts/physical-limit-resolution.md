@@ -152,6 +152,10 @@ sourceから`kind:id@revision[unit=...]`として導出し、自由文字列でs
 `PhysicalSafetyEnvelope`も空でないlimits、各nested `PhysicalLimit`のdeep validity、重複のない
 inventoryを要求し、`to_dict` / `to_json_bytes` / lookupは外部sealを再検証する。JSON decodeは
 復元した各objectへ新しいsealを登録するため、validなprojected envelopeのround-tripは保持される。
+保存する`limits`、`bounds`、`parity`、`source_names`、`conversion_relations`、
+`expected_joint_names`はbuilt-in `tuple`だけを受け付け、deep validatorはtuple subclassを反復する前に
+拒否する。constructorで入力を正規化した数値fieldはbuilt-in `float`として保存し、nested DTOの
+validator、seal比較、serialization、conversion operationはfloat / int subclassを演算前に拒否する。
 
 ## fast_arm projection
 

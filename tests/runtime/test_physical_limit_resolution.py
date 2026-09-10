@@ -110,6 +110,42 @@ class _AlwaysEqualText(str):
         return hash(str(self))
 
 
+class _SpoofedFloat(float):
+    def __new__(cls, raw: float, coerced: float) -> "_SpoofedFloat":
+        value = float.__new__(cls, raw)
+        value._coerced = coerced
+        return value
+
+    def __float__(self) -> float:
+        return self._coerced
+
+
+class _SpoofedInt(int):
+    def __new__(cls, raw: int, coerced: float) -> "_SpoofedInt":
+        value = int.__new__(cls, raw)
+        value._coerced = coerced
+        return value
+
+    def __float__(self) -> float:
+        return self._coerced
+
+
+class _StatefulTuple(tuple[object, ...]):
+    def __new__(
+        cls,
+        first: tuple[object, ...],
+        later: tuple[object, ...],
+    ) -> "_StatefulTuple":
+        value = tuple.__new__(cls, first)
+        value.iteration_count = 0
+        value.later = later
+        return value
+
+    def __iter__(self):
+        self.iteration_count += 1
+        return iter(tuple.__iter__(self) if self.iteration_count == 1 else self.later)
+
+
 def _install_fake_mujoco(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_mujoco = ModuleType("mujoco")
     fake_mujoco.mjtObj = SimpleNamespace(mjOBJ_JOINT=object())
@@ -1433,6 +1469,121 @@ def test_provider_bound_for_revalidates_result_before_delegation() -> None:
     object.__setattr__(nested_tampered_result, "bounds", (object(),))
     with pytest.raises(TypeError, match="bound must be ResolvedJointBound"):
         nested_provider.bound_for("joint_1")
+
+
+@pytest.mark.parametrize(
+    ("field", "later"),
+    (
+        ("source_names", ("joint_2",)),
+        ("parity", (object(),)),
+    ),
+)
+def test_bound_stored_tuples_require_builtin_tuple_before_iteration(
+    field: str,
+    later: tuple[object, ...],
+) -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    bound = result.bounds[0]
+    stateful = _StatefulTuple(getattr(bound, field), later)
+    object.__setattr__(bound, field, stateful)
+
+    with pytest.raises(TypeError, match="built-in tuple"):
+        validate_resolved_joint_bound(bound)
+    assert stateful.iteration_count == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "later"),
+    (
+        ("bounds", (object(),)),
+        ("conversion_relations", (object(),)),
+        ("expected_joint_names", ("joint_2",)),
+    ),
+)
+def test_result_stored_tuples_require_builtin_tuple_before_iteration(
+    field: str,
+    later: tuple[object, ...],
+) -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    stateful = _StatefulTuple(getattr(result, field), later)
+    object.__setattr__(result, field, stateful)
+
+    with pytest.raises(TypeError, match="built-in tuple"):
+        validate_limit_resolution_result(result)
+    assert stateful.iteration_count == 0
+
+
+@pytest.mark.parametrize("field", ("lower", "upper"))
+def test_parity_validator_rejects_spoofed_stored_float_before_float_hook(
+    field: str,
+) -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    parity = result.bounds[0].parity[0]
+    object.__setattr__(parity, field, _SpoofedFloat(999.0, -1.0))
+
+    with pytest.raises(TypeError, match="canonical float"):
+        validate_limit_parity_record(parity)
+
+
+def test_bound_validator_rejects_spoofed_stored_float_before_float_hook() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    bound = result.bounds[0]
+    object.__setattr__(bound, "lower_rad", _SpoofedFloat(999.0, -1.0))
+
+    assert not bound.bounded
+    with pytest.raises(TypeError, match="canonical float"):
+        validate_resolved_joint_bound(bound)
+    with pytest.raises(TypeError, match="canonical float"):
+        bound.to_dict()
+
+
+@pytest.mark.parametrize("numeric_type", ("float", "int"))
+def test_conversion_sign_requires_stored_canonical_float_before_operation(
+    numeric_type: str,
+) -> None:
+    relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+    result = resolve_joint_space_bounds(
+        (_limit(name="motor_1", space=LimitSpace.MOTOR),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+        conversion_relations=(relation,),
+    )
+    spoofed_sign: object = (
+        _SpoofedFloat(-1.0, 1.0)
+        if numeric_type == "float"
+        else _SpoofedInt(-1, 1.0)
+    )
+    object.__setattr__(relation, "sign", spoofed_sign)
+
+    with pytest.raises(TypeError, match="canonical float"):
+        relation.source_to_joint(2.0)
+    with pytest.raises(TypeError, match="canonical float"):
+        validate_limit_resolution_result(result)
 
 
 @pytest.mark.parametrize(

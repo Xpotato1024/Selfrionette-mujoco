@@ -72,6 +72,32 @@ class _OverridingIdentity(str):
         raise AssertionError("identity validator must reject before casefold")
 
 
+class _SpoofedFloat(float):
+    def __new__(cls, raw: float, coerced: float) -> "_SpoofedFloat":
+        value = float.__new__(cls, raw)
+        value._coerced = coerced
+        return value
+
+    def __float__(self) -> float:
+        return self._coerced
+
+
+class _StatefulTuple(tuple[object, ...]):
+    def __new__(
+        cls,
+        first: tuple[object, ...],
+        later: tuple[object, ...],
+    ) -> "_StatefulTuple":
+        value = tuple.__new__(cls, first)
+        value.iteration_count = 0
+        value.later = later
+        return value
+
+    def __iter__(self):
+        self.iteration_count += 1
+        return iter(tuple.__iter__(self) if self.iteration_count == 1 else self.later)
+
+
 @pytest.mark.parametrize(
     "identity",
     (
@@ -376,6 +402,78 @@ def test_envelope_requires_non_empty_limits() -> None:
             model_id="fast_arm",
             limits=(),
         )
+
+
+@pytest.mark.parametrize(
+    "identity",
+    ("unknown", "unavailable", "none", "fixture_data"),
+)
+def test_envelope_robot_id_requires_concrete_identity_in_constructor_and_json(
+    identity: str,
+) -> None:
+    with pytest.raises(ValueError, match="concrete identity"):
+        PhysicalSafetyEnvelope(
+            envelope_id="fast_arm_physical_limits",
+            envelope_version=1,
+            robot_id=identity,
+            model_id="fast_arm",
+            limits=(_joint_limit(),),
+        )
+
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    raw = json.loads(envelope.to_json_bytes())
+    raw["robot_id"] = identity
+    with pytest.raises(ValueError, match="concrete identity"):
+        PhysicalSafetyEnvelope.from_json_bytes(
+            json.dumps(raw, separators=(",", ":")).encode("utf-8")
+        )
+
+
+def test_envelope_stored_limits_require_builtin_tuple_before_iteration() -> None:
+    envelope = PhysicalSafetyEnvelope(
+        envelope_id="fast_arm_physical_limits",
+        envelope_version=1,
+        robot_id="fast_arm",
+        model_id="fast_arm",
+        limits=(_joint_limit(),),
+    )
+    stateful_limits = _StatefulTuple(
+        envelope.limits,
+        (_joint_limit(name="joint_2"),),
+    )
+    object.__setattr__(envelope, "limits", stateful_limits)
+
+    with pytest.raises(TypeError, match="built-in tuple"):
+        validate_envelope(envelope)
+    assert stateful_limits.iteration_count == 0
+
+
+def test_physical_limit_validator_rejects_spoofed_stored_float_before_float_hook() -> None:
+    limit = _joint_limit()
+    object.__setattr__(limit, "lower", _SpoofedFloat(999.0, -1.0))
+
+    assert not limit.is_authoritative
+    with pytest.raises(TypeError, match="canonical float"):
+        validate_physical_limit(limit)
+    with pytest.raises(TypeError, match="canonical float"):
+        limit.to_dict()
+
+
+@pytest.mark.parametrize("field", ("gear_ratio", "sign", "offset"))
+def test_conversion_validator_rejects_spoofed_stored_float_before_float_hook(
+    field: str,
+) -> None:
+    conversion = LimitConversionProvenance.identity(LimitSpace.JOINT)
+    object.__setattr__(conversion, field, _SpoofedFloat(999.0, 1.0))
+
+    with pytest.raises(TypeError, match="canonical float"):
+        validate_limit_conversion(conversion)
 
 
 def test_envelope_boundary_rejects_nested_replacement_and_bypass() -> None:
