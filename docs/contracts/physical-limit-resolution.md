@@ -137,6 +137,11 @@ canonical text boundaryで検証し、built-in `str`だけを受け付ける。�
 `strip`、equality、hashなどのoverrideを実行せず、nested DTO、aggregate、serialization、
 lookupの再検証でもこの境界を維持する。
 
+`LimitSpace`、`EvidenceStatus`、`ParityStatus`、`LimitResolutionStatus`のenum fieldは、
+constructor入力でexactなbuilt-in `str`をcanonical memberへ正規化できる。保存後のtyped fieldは
+enum classが保持する実member singletonだけを許可し、raw stringや同じenum classを装う偽造memberは
+deep validator、seal比較、parity / authority判定、serializationの前にfail-closedで拒否する。
+
 `LimitSourceProvenance`、`LimitConversionProvenance`、`PhysicalLimit`、
 `JointSpaceConversion`、`LimitParityRecord`、`ResolvedJointBound`、
 `LimitResolutionResult`には各ownerのcanonical deep validatorがあり、constructorと公開の

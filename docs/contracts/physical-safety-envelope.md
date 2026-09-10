@@ -54,6 +54,12 @@ envelope、robot、modelのidentityおよびunit / frame / reasonなどのtext f
 としてreasonを保持し、placeholderのnameで代用しない。conflict / invalidを既知のbounded rangeへ
 変換しない。同一identity（name、quantity、space）の重複は拒否する。
 
+`status`、`quantity`、`space`のenum fieldは、constructor / decoderでexactなbuilt-in `str`を
+canonical memberへ正規化できる。typedな入力はenum classが保持する実member singletonだけを受け付け、
+同じenum classに見える偽造memberは受け付けない。constructor後のdeep validator、seal比較、
+serializationでは保存済みfieldのraw stringや偽造memberをcanonical memberへ再正規化せず、
+fail-closedに拒否する。lookup引数の入力正規化はこのstored field検証と区別する。
+
 同一spaceの値にもidentity conversionを記録する。gear、sign、offset等が不明な場合は推測せず、
 conversion provenanceに`None`を保持する。space間のdeterministic projectionとmodel parityはP2が
 所有する。

@@ -28,6 +28,7 @@ from selfrionette.runtime.safety.physical_limits import (
     PhysicalSafetyEnvelope,
     _construct_projected_limit,
     _enum_value,
+    _stored_enum_value,
     canonical_fast_arm_joint_space_frame,
     effective_limit_status,
     make_unknown_limit,
@@ -739,8 +740,12 @@ def _validate_joint_conversion(
 ) -> JointSpaceConversion:
     if type(relation) is not JointSpaceConversion:
         raise TypeError("conversion relation must be JointSpaceConversion")
-    source_space = relation.source_space
-    if not isinstance(source_space, LimitSpace) or source_space is LimitSpace.JOINT:
+    source_space = _stored_enum_value(
+        LimitSpace,
+        "source_space",
+        relation.source_space,
+    )
+    if source_space is LimitSpace.JOINT:
         raise ValueError("source_space must be motor or actuator")
     validate_limit_resolution_identity("joint_name", relation.joint_name)
     validate_concrete_limit_identity("source_name", relation.source_name)
@@ -775,9 +780,7 @@ def _validate_parity_record(
         raise TypeError("parity must contain LimitParityRecord values")
     joint_name = validate_limit_resolution_identity("joint_name", parity.joint_name)
     source_name = _text("source_name", parity.source_name)
-    status = parity.status
-    if not isinstance(status, ParityStatus):
-        raise ValueError("status must be a valid ParityStatus")
+    status = _stored_enum_value(ParityStatus, "status", parity.status)
     _text("unit", parity.unit)
     _text("frame", parity.frame)
     lower = _stored_finite("lower", parity.lower) if parity.lower is not None else None
@@ -788,7 +791,15 @@ def _validate_parity_record(
         raise ValueError("parity lower must not exceed upper")
     if parity.reason is not None:
         _text("reason", parity.reason)
-    source_status = parity.source_status
+    source_status = (
+        None
+        if parity.source_status is None
+        else _stored_enum_value(
+            EvidenceStatus,
+            "source_status",
+            parity.source_status,
+        )
+    )
     if parity.source is not None:
         validate_limit_source(parity.source)
         canonical_name = source_identity(parity.source, unit=parity.unit)
@@ -796,8 +807,6 @@ def _validate_parity_record(
             raise ValueError("parity source_name must match typed source identity")
         if source_status is not parity.source.status:
             raise ValueError("source_status must match typed source status")
-    elif source_status is not None and not isinstance(source_status, EvidenceStatus):
-        raise ValueError("source_status must be a valid EvidenceStatus")
     if parity.conversion is not None:
         validate_limit_conversion(parity.conversion)
         if parity.conversion.target_space is not LimitSpace.JOINT:
@@ -836,9 +845,11 @@ def _validate_resolved_bound(
     if type(bound) is not ResolvedJointBound:
         raise TypeError("bound must be ResolvedJointBound")
     joint_name = validate_limit_resolution_identity("joint_name", bound.joint_name)
-    status = bound.status
-    if not isinstance(status, LimitResolutionStatus):
-        raise ValueError("status must be a valid LimitResolutionStatus")
+    status = _stored_enum_value(
+        LimitResolutionStatus,
+        "status",
+        bound.status,
+    )
     _builtin_tuple("source_names", bound.source_names)
     if not bound.source_names:
         raise ValueError("resolved bound source names must be a non-empty tuple")

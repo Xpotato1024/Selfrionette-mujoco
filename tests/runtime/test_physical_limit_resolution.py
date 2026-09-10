@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from decimal import Decimal
+from enum import Enum
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -164,6 +165,21 @@ class _StatefulTuple(tuple[object, ...]):
     def __iter__(self):
         self.iteration_count += 1
         return iter(tuple.__iter__(self) if self.iteration_count == 1 else self.later)
+
+
+def _forged_enum_member(
+    enum_type: type[Enum],
+    *,
+    name: str,
+    value: str,
+    raw_value: str | None = None,
+) -> Enum:
+    """constructorとstored validatorを試す偽造str enum memberを作る。"""
+
+    forged = str.__new__(enum_type, value if raw_value is None else raw_value)
+    object.__setattr__(forged, "_name_", name)
+    object.__setattr__(forged, "_value_", value)
+    return forged
 
 
 def _install_fake_mujoco(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1110,6 +1126,168 @@ def test_joint_source_space_conversion_is_rejected() -> None:
             relation_id="invalid-joint-conversion",
             unit="rad",
         )
+
+
+def test_resolution_enum_constructors_normalize_builtin_strings() -> None:
+    source = _source(EvidenceStatus.PROVISIONAL, "fixture")
+    relation = JointSpaceConversion(
+        source_space="motor",  # type: ignore[arg-type]
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+    assert relation.source_space is LimitSpace.MOTOR
+
+    parity = LimitParityRecord(
+        joint_name="joint_1",
+        source_name=source_identity(source, unit="rad"),
+        status="match",  # type: ignore[arg-type]
+        lower=-1.0,
+        upper=1.0,
+        unit="rad",
+        source=source,
+        source_status="provisional",  # type: ignore[arg-type]
+    )
+    assert parity.status is ParityStatus.MATCH
+    assert parity.source_status is EvidenceStatus.PROVISIONAL
+
+    bound = ResolvedJointBound(
+        joint_name="joint_1",
+        lower_rad=-1.0,
+        upper_rad=1.0,
+        status="resolved_provisional",  # type: ignore[arg-type]
+        source_names=(parity.source_name,),
+        parity=(parity,),
+    )
+    assert bound.status is LimitResolutionStatus.RESOLVED_PROVISIONAL
+
+
+def test_resolution_constructors_reject_forged_enum_members() -> None:
+    source = _source(EvidenceStatus.PROVISIONAL, "fixture")
+    source_name = source_identity(source, unit="rad")
+
+    forged_space = _forged_enum_member(
+        LimitSpace,
+        name="MOTOR",
+        value="motor",
+    )
+    with pytest.raises(ValueError, match="source_space must be motor or actuator"):
+        JointSpaceConversion(
+            source_space=forged_space,  # type: ignore[arg-type]
+            joint_name="joint_1",
+            source_name="motor_1",
+            gear_ratio=1.0,
+            sign=1.0,
+            offset=0.0,
+            relation_id="motor_1-to-joint_1/v1",
+            unit="rad",
+        )
+
+    forged_parity_status = _forged_enum_member(
+        ParityStatus,
+        name="MATCH",
+        value="match",
+    )
+    with pytest.raises(ValueError, match="valid ParityStatus"):
+        LimitParityRecord(
+            joint_name="joint_1",
+            source_name=source_name,
+            status=forged_parity_status,  # type: ignore[arg-type]
+            lower=-1.0,
+            upper=1.0,
+            unit="rad",
+            source=source,
+            source_status=EvidenceStatus.PROVISIONAL,
+        )
+
+    forged_resolution_status = _forged_enum_member(
+        LimitResolutionStatus,
+        name="RESOLVED_PROVISIONAL",
+        value="resolved_provisional",
+    )
+    with pytest.raises(ValueError, match="valid LimitResolutionStatus"):
+        ResolvedJointBound(
+            joint_name="joint_1",
+            lower_rad=-1.0,
+            upper_rad=1.0,
+            status=forged_resolution_status,  # type: ignore[arg-type]
+            source_names=(source_name,),
+            parity=(),
+        )
+
+
+def test_resolution_stored_enum_fields_reject_raw_strings_and_forged_members() -> None:
+    relation = JointSpaceConversion(
+        source_space=LimitSpace.MOTOR,
+        joint_name="joint_1",
+        source_name="motor_1",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+        relation_id="motor_1-to-joint_1/v1",
+        unit="rad",
+    )
+    for bad in (
+        "motor",
+        _forged_enum_member(LimitSpace, name="MOTOR", value="motor"),
+    ):
+        object.__setattr__(relation, "source_space", bad)
+        with pytest.raises(TypeError, match="canonical"):
+            _limit_resolution_module._validate_joint_conversion(relation)
+
+    source = _source(EvidenceStatus.PROVISIONAL, "fixture")
+    parity = LimitParityRecord(
+        joint_name="joint_1",
+        source_name=source_identity(source, unit="rad"),
+        status=ParityStatus.MATCH,
+        lower=-1.0,
+        upper=1.0,
+        unit="rad",
+        source=source,
+        source_status=EvidenceStatus.PROVISIONAL,
+    )
+    for bad in (
+        "match",
+        _forged_enum_member(ParityStatus, name="MATCH", value="match"),
+    ):
+        object.__setattr__(parity, "status", bad)
+        with pytest.raises(TypeError, match="canonical"):
+            validate_limit_parity_record(parity)
+
+    object.__setattr__(parity, "status", ParityStatus.MATCH)
+    for bad in (
+        "provisional",
+        _forged_enum_member(
+            EvidenceStatus,
+            name="PROVISIONAL",
+            value="provisional",
+        ),
+    ):
+        object.__setattr__(parity, "source_status", bad)
+        with pytest.raises(TypeError, match="canonical"):
+            validate_limit_parity_record(parity)
+
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+    bound = result.bounds[0]
+    for bad in (
+        "resolved_provisional",
+        _forged_enum_member(
+            LimitResolutionStatus,
+            name="RESOLVED_PROVISIONAL",
+            value="resolved_provisional",
+        ),
+    ):
+        object.__setattr__(bound, "status", bad)
+        with pytest.raises(TypeError, match="canonical"):
+            validate_resolved_joint_bound(bound)
 
 
 def test_actuator_projection_applies_one_explicit_conversion() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 
 import pytest
 
@@ -98,6 +99,21 @@ class _StatefulTuple(tuple[object, ...]):
         return iter(tuple.__iter__(self) if self.iteration_count == 1 else self.later)
 
 
+def _forged_enum_member(
+    enum_type: type[Enum],
+    *,
+    name: str,
+    value: str,
+    raw_value: str | None = None,
+) -> Enum:
+    """constructorとstored validatorを試す偽造str enum memberを作る。"""
+
+    forged = str.__new__(enum_type, value if raw_value is None else raw_value)
+    object.__setattr__(forged, "_name_", name)
+    object.__setattr__(forged, "_value_", value)
+    return forged
+
+
 @pytest.mark.parametrize(
     "identity",
     (
@@ -184,6 +200,150 @@ def test_typed_evidence_status_rejects_str_subclass_before_enum_conversion() -> 
 
     with pytest.raises(TypeError, match="must be a string"):
         _source(status=ExplodingStatus("authoritative"))  # type: ignore[arg-type]
+
+
+def test_physical_enum_constructors_normalize_builtin_strings() -> None:
+    source = _source(status="provisional")  # type: ignore[arg-type]
+    assert source.status is EvidenceStatus.PROVISIONAL
+
+    conversion = LimitConversionProvenance(
+        source_space="joint",  # type: ignore[arg-type]
+        target_space="joint",  # type: ignore[arg-type]
+        method="identity",
+        relation_id="identity:joint",
+        gear_ratio=1.0,
+        sign=1.0,
+        offset=0.0,
+    )
+    assert conversion.source_space is LimitSpace.JOINT
+    assert conversion.target_space is LimitSpace.JOINT
+
+    limit = PhysicalLimit(
+        name="joint_1",
+        quantity="position",  # type: ignore[arg-type]
+        lower=-1.0,
+        upper=1.0,
+        unit="rad",
+        space="joint",  # type: ignore[arg-type]
+        frame="fast_arm joint space",
+        status="provisional",  # type: ignore[arg-type]
+        source=source,
+    )
+    assert limit.quantity is LimitQuantity.POSITION
+    assert limit.space is LimitSpace.JOINT
+    assert limit.status is EvidenceStatus.PROVISIONAL
+
+
+def test_forged_quantity_member_is_rejected_at_constructor_and_deep_validator() -> None:
+    spoof = _forged_enum_member(
+        LimitQuantity,
+        name="VELOCITY",
+        value="velocity",
+        raw_value="position",
+    )
+    assert isinstance(spoof, LimitQuantity)
+    assert spoof is not LimitQuantity.VELOCITY
+    assert spoof == LimitQuantity.POSITION
+
+    with pytest.raises(TypeError, match="canonical"):
+        PhysicalLimit(
+            name="joint_1",
+            quantity=spoof,  # type: ignore[arg-type]
+            lower=-1.0,
+            upper=1.0,
+            unit="rad",
+            space=LimitSpace.JOINT,
+            frame="fast_arm joint space",
+            status=EvidenceStatus.PROVISIONAL,
+            source=_source(status=EvidenceStatus.PROVISIONAL),
+        )
+
+    limit = _joint_limit()
+    object.__setattr__(limit, "quantity", spoof)
+    assert not limit.is_authoritative
+    with pytest.raises(TypeError, match="canonical"):
+        validate_physical_limit(limit)
+    with pytest.raises(TypeError, match="canonical"):
+        limit.to_dict()
+
+
+@pytest.mark.parametrize(
+    ("kind", "field", "enum_type", "raw", "forged"),
+    (
+        (
+            "source",
+            "status",
+            EvidenceStatus,
+            "provisional",
+            _forged_enum_member(
+                EvidenceStatus,
+                name="AUTHORITATIVE",
+                value="authoritative",
+            ),
+        ),
+        (
+            "conversion",
+            "source_space",
+            LimitSpace,
+            "joint",
+            _forged_enum_member(LimitSpace, name="MOTOR", value="motor"),
+        ),
+        (
+            "conversion",
+            "target_space",
+            LimitSpace,
+            "joint",
+            _forged_enum_member(LimitSpace, name="MOTOR", value="motor"),
+        ),
+        (
+            "limit",
+            "quantity",
+            LimitQuantity,
+            "position",
+            _forged_enum_member(LimitQuantity, name="VELOCITY", value="velocity"),
+        ),
+        (
+            "limit",
+            "space",
+            LimitSpace,
+            "joint",
+            _forged_enum_member(LimitSpace, name="MOTOR", value="motor"),
+        ),
+        (
+            "limit",
+            "status",
+            EvidenceStatus,
+            "provisional",
+            _forged_enum_member(
+                EvidenceStatus,
+                name="AUTHORITATIVE",
+                value="authoritative",
+            ),
+        ),
+    ),
+)
+def test_physical_stored_enum_fields_reject_raw_strings_and_forged_members(
+    kind: str,
+    field: str,
+    enum_type: type[Enum],
+    raw: str,
+    forged: Enum,
+) -> None:
+    assert type(forged) is enum_type
+    if kind == "source":
+        value: object = _source(status=EvidenceStatus.PROVISIONAL)
+        validator = validate_limit_source
+    elif kind == "conversion":
+        value = LimitConversionProvenance.identity(LimitSpace.JOINT)
+        validator = validate_limit_conversion
+    else:
+        value = _joint_limit()
+        validator = validate_physical_limit
+
+    for bad in (raw, forged):
+        object.__setattr__(value, field, bad)
+        with pytest.raises(TypeError, match="canonical"):
+            validator(value)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

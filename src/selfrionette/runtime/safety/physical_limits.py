@@ -301,9 +301,30 @@ def _stored_finite_or_none(name: str, value: object) -> float | None:
     return 0.0 if value == 0.0 else value
 
 
-def _enum_value(enum_type: type[Enum], name: str, value: object) -> Enum:
-    if isinstance(value, enum_type):
-        return value
+def _enum_value(
+    enum_type: type[Enum],
+    name: str,
+    value: object,
+    *,
+    normalize_string: bool = True,
+) -> Enum:
+    """正規メンバーidentityを保ったままenum入力を解決する。
+
+    constructorとdecoderではexactなbuilt-in stringをenum memberへ正規化できる。
+    既にenum型の値はclassが保持するsingleton memberだけを受け付ける。
+    ``isinstance``だけでは``object.__new__``とfield mutationで作った偽造memberを
+    受け入れるため、identityを検査する。stored DTO fieldの再検証では
+    ``_stored_enum_value``を使い、raw stringを信頼済みmemberへ再正規化しない。
+    """
+
+    if type(value) is enum_type:
+        if any(member is value for member in enum_type.__members__.values()):
+            return value
+        raise TypeError(
+            f"{name} must be a canonical {enum_type.__name__} member"
+        )
+    if not normalize_string:
+        raise TypeError(f"{name} must be a canonical {enum_type.__name__} member")
     if type(value) is not str:
         raise TypeError(f"{name} must be a string")
     try:
@@ -311,6 +332,12 @@ def _enum_value(enum_type: type[Enum], name: str, value: object) -> Enum:
     except ValueError as exc:
         allowed = ", ".join(member.value for member in enum_type)
         raise ValueError(f"{name} must be one of: {allowed}") from exc
+
+
+def _stored_enum_value(enum_type: type[Enum], name: str, value: object) -> Enum:
+    """raw stringを受け付けず、stored enum fieldのsingleton identityを検証する。"""
+
+    return _enum_value(enum_type, name, value, normalize_string=False)
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
@@ -717,7 +744,7 @@ def _validate_limit_source(source: object) -> LimitSourceProvenance:
     source_kind = _source_kind(source.source_kind)
     source_id = _text("source_id", source.source_id)
     revision = _text("revision", source.revision)
-    status = _enum_value(EvidenceStatus, "status", source.status)
+    status = _stored_enum_value(EvidenceStatus, "status", source.status)
     for name, value in (
         ("evidence_reference", source.evidence_reference),
         ("observed_at", source.observed_at),
@@ -757,8 +784,8 @@ def _validate_conversion_provenance(
 
     if type(conversion) is not LimitConversionProvenance:
         raise TypeError("conversion must be LimitConversionProvenance")
-    source_space = _enum_value(LimitSpace, "source_space", conversion.source_space)
-    target_space = _enum_value(LimitSpace, "target_space", conversion.target_space)
+    source_space = _stored_enum_value(LimitSpace, "source_space", conversion.source_space)
+    target_space = _stored_enum_value(LimitSpace, "target_space", conversion.target_space)
     method = _text("method", conversion.method)
     relation_id = _text("relation_id", conversion.relation_id)
     source_name = (
@@ -832,13 +859,13 @@ def _validate_physical_limit(limit: object) -> PhysicalLimit:
     if type(limit) is not PhysicalLimit:
         raise TypeError("limit must be PhysicalLimit")
     name = validate_concrete_limit_identity("name", limit.name)
-    quantity = _enum_value(LimitQuantity, "quantity", limit.quantity)
-    space = _enum_value(LimitSpace, "space", limit.space)
+    quantity = _stored_enum_value(LimitQuantity, "quantity", limit.quantity)
+    space = _stored_enum_value(LimitSpace, "space", limit.space)
     lower = _stored_finite_or_none("lower", limit.lower)
     upper = _stored_finite_or_none("upper", limit.upper)
     _text("unit", limit.unit)
     _text("frame", limit.frame)
-    status = _enum_value(EvidenceStatus, "status", limit.status)
+    status = _stored_enum_value(EvidenceStatus, "status", limit.status)
     source = _validate_limit_source(limit.source)
     conversion = _validate_conversion_provenance(limit.conversion)
     _validate_conversion_origin(conversion, source_space=space)
@@ -957,7 +984,12 @@ def effective_limit_status(limit: PhysicalLimit) -> EvidenceStatus:
     except (AttributeError, TypeError, ValueError):
         return EvidenceStatus.INVALID
     statuses = (limit.status, limit.source.status)
-    if any(not isinstance(status, EvidenceStatus) for status in statuses):
+    try:
+        statuses = tuple(
+            _stored_enum_value(EvidenceStatus, "status", status)
+            for status in statuses
+        )
+    except (TypeError, ValueError):
         return EvidenceStatus.INVALID
     for status in _EFFECTIVE_STATUS_PRECEDENCE:
         if status in statuses:
