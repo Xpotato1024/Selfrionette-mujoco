@@ -96,7 +96,7 @@ file symmetryだけを目的とする`mappings/registration.py`を作らない�
 | Robot | `plugins/robots/fast_arm/plugin.py::ROBOT_PLUGIN` | `robots/{catalog.py,discovery.py,registration.py}` |
 | Input Source | 6 packageの`plugin.py::INPUT_SOURCE_PLUGIN` | `input_sources/{catalog.py,discovery.py,registration.py}` |
 | Control Mapping | 4 packageの`plugin.py::CONTROL_MAPPING_PLUGIN` | `mappings/{catalog.py,discovery.py}`。追加registration layerなし |
-| Environment / Scene | `free_space_environment/plugin.py::ENVIRONMENT_PLUGIN` | `environments/{catalog.py,discovery.py}` |
+| Environment / Scene | `environments/*/plugin.py::ENVIRONMENT_PLUGIN` | `environments/{catalog.py,discovery.py}` |
 | Task | `endpoint_reach_task/plugin.py::TASK_PLUGIN` | `tasks/{catalog.py,discovery.py}` |
 | Evaluation | 4 packageの`plugin.py::EVALUATION_PLUGIN` | `evaluations/{catalog.py,discovery.py}` |
 
@@ -229,6 +229,15 @@ ambiguousとして拒否する。`SemanticRoleRequirement`はrole名に加えて
 sceneを使用し、task objectとcontact requirementを追加しないことを明示する。parameter、semantic
 role、produced evidenceを持たず、MuJoCo backendとの互換性だけを宣言する。このidentityはobjectなしの
 universal fallbackではなく、free-space条件を選択した場合だけ解決されるversioned production pluginである。
+
+`contact_cube_environment/v1`はR7-Hのtyped `ContactSceneBuildRequest`を受け取り、
+`ContactSceneComposer`へ委譲してRobot-owned base MJCFへcube body / freejoint / geom / materialを
+追加する。scene providerがMuJoCo model/dataをloadし、同じinstanceのresetでmanifestのqpos、qvel、
+`ctrl`（`data.ctrl`）、`act`（`data.act`）、object pose、simulation time、warm-startを再適用する。base model name衝突、identity / role /
+capability mismatch、reset dimension mismatch、未知のMuJoCo setting、初期object contact / penetrationは
+startup successへ変換しない。viewerはphysical objectを生成せず、contact evidenceやtask outcomeは後続の
+typed provider / Task ownerへ残す。disabled contact sceneはobjectを構成せず、contact evidenceを暗黙に
+生成しない。
 
 ## mappingとtask
 

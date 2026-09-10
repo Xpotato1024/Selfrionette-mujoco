@@ -231,11 +231,14 @@ class ContactResetState:
 
     qpos_rad: tuple[float, ...]
     qvel_rad_s: tuple[float, ...]
+    # 旧callerが渡すcontrol値をctrlへ正規化するcompatibility alias。
     actuator: tuple[float, ...] = ()
     object_position_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
     object_orientation_wxyz: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
     simulation_time_s: float = 0.0
     warm_start: tuple[float, ...] = ()
+    ctrl: tuple[float, ...] = ()
+    act: tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
         qpos = _tuple_values("reset.qpos_rad", self.qpos_rad)
@@ -244,12 +247,20 @@ class ContactResetState:
             raise ContactManifestError("reset qpos/qvel dimensions must match")
         object.__setattr__(self, "qpos_rad", qpos)
         object.__setattr__(self, "qvel_rad_s", qvel)
-        object.__setattr__(
-            self,
-            "actuator",
+        legacy_ctrl = (
             ()
             if self.actuator == ()
-            else _tuple_values("reset.actuator", self.actuator),
+            else _tuple_values("reset.actuator", self.actuator)
+        )
+        declared_ctrl = (
+            () if self.ctrl == () else _tuple_values("reset.ctrl", self.ctrl)
+        )
+        object.__setattr__(self, "ctrl", declared_ctrl or legacy_ctrl)
+        object.__setattr__(self, "actuator", declared_ctrl or legacy_ctrl)
+        object.__setattr__(
+            self,
+            "act",
+            () if self.act == () else _tuple_values("reset.act", self.act),
         )
         object.__setattr__(
             self,
@@ -578,7 +589,8 @@ def _manifest_document(manifest: ContactTaskManifest) -> dict[str, object]:
                 )
             ],
             "reset": {
-                "actuator": _vector_document(reset.actuator),
+                "act": _vector_document(reset.act),
+                "ctrl": _vector_document(reset.ctrl),
                 "object_orientation_wxyz": _vector_document(reset.object_orientation_wxyz),
                 "object_position_m": _vector_document(reset.object_position_m),
                 "qpos_rad": _vector_document(reset.qpos_rad),
@@ -785,7 +797,8 @@ def decode_contact_manifest(value: bytes | str | Mapping[str, object]) -> Contac
         scene_root["reset"],
         "manifest.scene.reset",
         frozenset({
-            "actuator",
+            "act",
+            "ctrl",
             "object_orientation_wxyz",
             "object_position_m",
             "qpos_rad",
@@ -842,7 +855,8 @@ def decode_contact_manifest(value: bytes | str | Mapping[str, object]) -> Contac
         reset = ContactResetState(
             qpos_rad=tuple(reset_root["qpos_rad"]),  # type: ignore[arg-type]
             qvel_rad_s=tuple(reset_root["qvel_rad_s"]),  # type: ignore[arg-type]
-            actuator=tuple(reset_root["actuator"]),  # type: ignore[arg-type]
+            ctrl=tuple(reset_root["ctrl"]),  # type: ignore[arg-type]
+            act=tuple(reset_root["act"]),  # type: ignore[arg-type]
             object_position_m=tuple(reset_root["object_position_m"]),  # type: ignore[arg-type]
             object_orientation_wxyz=tuple(
                 reset_root["object_orientation_wxyz"]  # type: ignore[arg-type]

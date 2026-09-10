@@ -40,11 +40,20 @@ sliding frictionは正、その他frictionは非負でなければならない�
 `condim`はMuJoCoが許す`1`、`3`、`4`、`6`のいずれかでなければならない。非有限値、未定義shape、
 空identityは拒否する。
 
-`ContactResetState`はrobot qpos / qvel、actuator、object pose、simulation time、warm-start stateを
-保持する。qpos / qvelのdimensionは一致し、reset simulation timeは`0`に固定する。#412はこの値を
-MuJoCo dataへ適用し、contact、velocity、actuator、simulation time、warm-startのtrial間leakageを防ぐ。
+`ContactResetState`はrobot qpos / qvel、`ctrl`（MuJoCo `data.ctrl`へ適用するcontrol input）、
+`act`（MuJoCo `data.act`へ適用するactivation state）、object pose、simulation time、warm-start stateを
+保持する。qpos / qvelのdimensionは一致し、reset simulation timeは`0`に固定する。旧`actuator`入力は
+`ctrl`へ正規化されるsource-compatibility aliasであり、canonical documentには出力しない。#412は宣言された`ctrl`と`act`を
+別々のownerへ適用し、contact、velocity、actuation、simulation time、warm-startのtrial間leakageを防ぐ。
 `ContactSceneContract.initial_penetration_tolerance_m`は初期接触判定の許容値としてmanifestへbindされ、
 contact parameterと同じcanonical identityに含まれる。scene側が別の値を暗黙に補ってreadinessを変えてはならない。
+
+R7-H v1 scene identityは`contact_cube_scene/v1`である。`ContactCubeObject.size_m`はMuJoCo `box`
+geomの各軸half-extentとして解釈する。#412の
+`ContactSceneComposer`はRobot-owned base MJCFへversioned object body、freejoint、geom、materialを
+追加し、viewerへ別のcubeを生成しない。disabled sceneではobjectを追加せず、contact task用sceneとして
+誤って扱わない。scene load時はmanifestのEnvironment / Robot / viewer identity、MuJoCo settings、
+reset vector dimensionを照合し、`mj_forward`後の初期contactまたはpenetrationをfail-closedで拒否する。
 
 ## targetとMuJoCo設定
 
