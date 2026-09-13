@@ -57,6 +57,7 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
 - viewerはcontact physics、force transform / filter、Task outcomeを再計算しない。3D overlayはbackend presentation projectionから作り、derived force arrowはframeが`mujoco_world`と明示された場合だけ描く。
 - offline contact logにはrobot qposが含まれない。別途表示中のposeと時刻同期が保証されないため、UIはlog-only入力をその旨明示する。決定的synthetic fixtureはMuJoCo実測として表示しない。
 - transport payload-v0 JSONをlocal fileとして読み込む入口では、既存のprofile / qpos validatorを通し、同じsnapshot由来の`qpos`とoptional `metadata.contact_task_v1`を表示する。contact metadataがmissing / malformed / stale / profile mismatchなら接触force overlayを消去し、残留させない。
+- ContactScene全体の`qpos`にobject freejointが含まれる場合、producerは別optional `metadata.contact_scene_robot_qpos_v1` (`contact-scene-robot-qpos/v1`)で、同一scene / manifest / frame / timeのfull-scene qposからloaded Robot profileのcanonical joint addressを示す。viewerはこのmappingを同sampleの`contact_task_v1`とprofile / model identityへ照合し、妥当な場合だけ対応joint値を適用する。mappingまたはbindingが欠落・不正・stale・replayed・mismatchedならsceneを`ready`にせず、前回sceneを新sampleとして残さない。extensionがないpayloadは従来どおりqpos lengthとmodel dimensionのexact matchを要求する。
 - live payloadでもcontact projectionはread-only display用である。invalid contact metadataはcontact sectionをunavailableにし、qpos / sceneの別validationを迂回しない。どの入口もnetwork、serial、OSC、device、robotへのforce / command出力を追加しない。
 
 ## startup pose source

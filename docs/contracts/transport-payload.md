@@ -59,6 +59,10 @@ callerは同一`MuJoCoState` snapshotの`time_s` / `frame_index`とbinding済み
 
 このextensionはscene identity、manifest digest、signal manifest digest、trial、robot bundle、payload ageを含むread-only projectionである。viewerはload済みprofileとschema / digest / bindingを検証する。contact metadataが欠落、不正、stale、またはprofileと不一致ならcontact表示と前回のforce overlayを消去する。metadata不正だけでprofile-validなqpos payload全体をcontact evidenceとして扱わない。
 
+ContactSceneがobject freejointを含む全sceneの`qpos`を出力する場合、profile用qpos部分を切り出す値列は追加せず、別のoptional extension `metadata.contact_scene_robot_qpos_v1`で対応を表す。このversioned objectは`schema_version: "contact-scene-robot-qpos/v1"`、`scene_identity`、`manifest_digest`、outer payloadと同じ`frame_index` / `time_s`、`source_qpos_dimension`、`robot_profile_id`、`model_contract_version`、canonical orderの`robot_joint_names`、`robot_qpos_dimension`、および同順の`qpos_addresses`を持つ。producerはresolved Robot profile metadata helperと実MuJoCo model上のjoint name / `jnt_qposadr`からaddressを解決する。任意callerのindexをauthorityとして受け取らない。
+
+viewerはこのkeyがある場合、既存parserで検証した`contact_task_v1`のscene / manifest bindingとsample frame / timeを再利用して対応を照合する。extensionのfield set、profile / model identity、full source qpos lengthとfinite値、canonical joint order、addressの一意性とrange、scene / manifest / frame / timeが一つでも一致しない場合はpayloadをsceneへ適用せず、`ready`状態にしない。staleまたは欠落したcontact bindingもprojectionを無効にする。keyを省略したpayloadは従来どおり`qpos.length === model.nq`のstrict validationを使う。qpos列、`payload-v0` schema、Robot profile dimension、body / site snapshotは変更しない。
+
 ## viewer boundary
 
 viewerはpayloadをread-onlyに描画する。body/site transform、target marker、optional diagnosticから

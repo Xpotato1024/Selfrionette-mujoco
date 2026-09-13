@@ -63,3 +63,12 @@ specialized procedures は、統一 CLI に未実装の behavior を失わない
 | script | consumer / evidence | 分類 | 判断と canonical replacement |
 | --- | --- | --- | --- |
 | `generate_contact_task_log_demo.py` | runtime contact-task-log contract、viewer fixture test | developer validation toolとして維持 | `scripts/viewer/`に配置し、型付きlog契約から固定の合成fixtureを再生成する。MuJoCo実行・hardware evidence・runtime captureを生成しない |
+
+## 2026-09-13 Issue #417 追加分類
+
+この追加行はIssue #417のfinite software-only contact E2Eを追加した時点のscript inventoryである。
+Issue #436当時の分類と、Issue #416の合成log demo分類は変更しない。
+
+| script | consumer / evidence | 分類 | 判断と canonical replacement |
+| --- | --- | --- | --- |
+| `generate_contact_e2e_artifacts.py` | `r7-h-p7-contact-e2e.md`、`tests/integration/test_contact_e2e.py`、completion audit | developer validation toolとして維持 | copied RobotBundle assetにsoftware proxyを加え、規定qpos / `mj_forward`でcontact solverからraw evidenceを取得する。log、same-state payload、strict summaryを有限に生成する。hardware、`mj_step`、physical experimentを実行しない |
