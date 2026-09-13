@@ -387,6 +387,48 @@ def test_lifecycle_no_contact_missing_unavailable_and_invalid() -> None:
     assert invalid.force_n is None
 
 
+def test_missing_frame_index_preserves_monotonic_index() -> None:
+    contact = _contact_manifest()
+    processor = VirtualReactionForceProcessor(
+        _signal_manifest(contact, _config())
+    )
+    trial = ContactTrialIdentity("optional-frame-index")
+    first = processor.process(
+        _evidence(
+            contact,
+            sample_time_s=0.0,
+            simulation_time_s=0.0,
+            force=(1.0, 0.0, 0.0),
+            frame_index=10,
+        ),
+        trial=trial,
+    )
+    missing_index = processor.process(
+        _evidence(
+            contact,
+            sample_time_s=0.1,
+            simulation_time_s=0.1,
+            force=(2.0, 0.0, 0.0),
+            frame_index=None,
+        ),
+        trial=trial,
+    )
+    regressed_index = processor.process(
+        _evidence(
+            contact,
+            sample_time_s=0.2,
+            simulation_time_s=0.2,
+            force=(3.0, 0.0, 0.0),
+            frame_index=9,
+        ),
+        trial=trial,
+    )
+    assert first.status is VirtualReactionForceStatus.ACTIVE
+    assert missing_index.status is VirtualReactionForceStatus.ACTIVE
+    assert regressed_index.status is VirtualReactionForceStatus.INVALID
+    assert regressed_index.force_n is None
+
+
 def test_stale_trial_change_and_invalid_transform_fail_closed() -> None:
     contact = _contact_manifest()
     manifest = _signal_manifest(

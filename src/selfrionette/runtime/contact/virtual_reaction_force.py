@@ -701,7 +701,8 @@ class VirtualReactionForceProcessor:
     def _record_clock(self, evidence: ContactEvidence) -> None:
         self._last_sample_time_s = evidence.sample_time_s
         self._last_simulation_time_s = evidence.simulation_time_s
-        self._last_frame_index = evidence.frame_index
+        if evidence.frame_index is not None:
+            self._last_frame_index = evidence.frame_index
 
     def _signal(
         self,
