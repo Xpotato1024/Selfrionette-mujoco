@@ -153,4 +153,155 @@ function toWirePresentation(presentation: ContactTaskPresentationV1): Record<str
   };
 }
 
+type JsonDocument = Record<string, unknown>;
+
+function objectValue(value: unknown): JsonDocument {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("expected JSON object in contact task log test");
+  }
+  return value as JsonDocument;
+}
+
+function editJsonl(source: string, update: (documents: JsonDocument[]) => void): string {
+  const sourceLines = source.slice(0, -1).split("\n");
+  const headerLine = sourceLines[0];
+  if (headerLine === undefined) {
+    throw new Error("contact log test fixture is empty");
+  }
+  const documents = sourceLines.map((line) => objectValue(JSON.parse(line)));
+  update(documents);
+  return [
+    headerLine,
+    ...documents.slice(1).map((document) => JSON.stringify(document)),
+  ].join("\n") + "\n";
+}
+
+function noContactFinalizerLog(source: string): string {
+  return editJsonl(source, (documents) => {
+    const finalSample = objectValue(documents[documents.length - 2]);
+    const evidence = objectValue(finalSample["raw_contact_evidence"]);
+    evidence["aggregate"] = {
+      contact_count: 0,
+      normal_force_n: 0,
+      object_on_tool_force_world_n: [0, 0, 0],
+      object_on_tool_wrench_world_nm: [0, 0, 0, 0, 0, 0],
+      resultant_force_n: 0,
+      resultant_force_world_n: [0, 0, 0],
+      tangential_force_world_n: [0, 0, 0],
+      tool_on_object_force_world_n: [0, 0, 0],
+    };
+    evidence["contacts"] = [];
+    evidence["reason"] = null;
+    evidence["status"] = "no_contact";
+
+    const signal = objectValue(finalSample["derived_reaction_force"]);
+    objectValue(signal["force_source"])["status"] = "no_contact";
+    const output = objectValue(signal["output"]);
+    output["force_n"] = [0, 0, 0];
+    output["raw_force_n"] = [0, 0, 0];
+    signal["deadbanded"] = false;
+    signal["filtered"] = false;
+    signal["rate_limited"] = false;
+    signal["raw_force_world_n"] = [0, 0, 0];
+    signal["reason"] = null;
+    signal["saturated"] = false;
+    signal["status"] = "no_contact";
+
+    const taskState = objectValue(finalSample["task_state"]);
+    taskState["classification"] = "running";
+    taskState["phase"] = "approach";
+    taskState["reason"] = null;
+
+    const summary = objectValue(documents[documents.length - 1]);
+    const outcome = objectValue(summary["outcome"]);
+    outcome["classification"] = "failure";
+    outcome["completion_time_s"] = null;
+    outcome["phase"] = "failure";
+    outcome["reason"] = "contact task fixture ended before terminal classification";
+  });
+}
+
+const noContactLog = noContactFinalizerLog(fixture);
+const finalizedNoContact = await parseContactTaskLogJsonl(noContactLog, expectedProfile);
+assert.equal(finalizedNoContact.status, "available");
+assert.equal(finalizedNoContact.rawEvidence?.status, "no_contact");
+assert.equal(finalizedNoContact.taskState?.classification, "running");
+assert.equal(finalizedNoContact.outcome?.classification, "failure");
+
+const forgedNoContactSuccessLog = editJsonl(noContactLog, (documents) => {
+  const finalSample = objectValue(documents[documents.length - 2]);
+  const taskState = objectValue(finalSample["task_state"]);
+  taskState["classification"] = "success";
+  taskState["phase"] = "success";
+  taskState["reason"] = null;
+  const summary = objectValue(documents[documents.length - 1]);
+  const outcome = objectValue(summary["outcome"]);
+  outcome["classification"] = "success";
+  outcome["completion_time_s"] = 0.2;
+  outcome["phase"] = "success";
+  outcome["reason"] = null;
+});
+const forgedNoContactSuccess = await parseContactTaskLogJsonl(
+  forgedNoContactSuccessLog,
+  expectedProfile,
+);
+assert.equal(forgedNoContactSuccess.status, "unavailable");
+assert.match(forgedNoContactSuccess.reason ?? "", /measured final target contact evidence/);
+
+const mismatchedSummaryLog = editJsonl(fixture, (documents) => {
+  const finalSample = objectValue(documents[documents.length - 2]);
+  const taskState = objectValue(finalSample["task_state"]);
+  taskState["classification"] = "failure";
+  taskState["phase"] = "failure";
+  taskState["reason"] = "synthetic final-state mismatch";
+});
+const mismatchedSummary = await parseContactTaskLogJsonl(mismatchedSummaryLog, expectedProfile);
+assert.equal(mismatchedSummary.status, "unavailable");
+assert.match(mismatchedSummary.reason ?? "", /does not match the final task state/);
+
+const unknownPhaseLog = editJsonl(fixture, (documents) => {
+  const finalSample = objectValue(documents[documents.length - 2]);
+  objectValue(finalSample["task_state"])["phase"] = "unsupported_phase";
+});
+const unknownPhase = await parseContactTaskLogJsonl(unknownPhaseLog, expectedProfile);
+assert.equal(unknownPhase.status, "unavailable");
+assert.match(unknownPhase.reason ?? "", /task_state.phase is unsupported/);
+
+const impreciseRawForceLog = editJsonl(fixture, (documents) => {
+  const finalSample = objectValue(documents[documents.length - 2]);
+  const signal = objectValue(finalSample["derived_reaction_force"]);
+  const rawForce = signal["raw_force_world_n"] as number[];
+  rawForce[0] = 2.0000005;
+});
+const impreciseRawForce = await parseContactTaskLogJsonl(impreciseRawForceLog, expectedProfile);
+assert.equal(impreciseRawForce.status, "unavailable");
+assert.match(impreciseRawForce.reason ?? "", /does not preserve the raw contact aggregate/);
+
+const unboundedForceBandLog = fixture.replaceAll(
+  '"target_normal_force_band_n":[1.0,3.0]',
+  '"target_normal_force_band_n":null',
+);
+const unboundedForceBand = await parseContactTaskLogJsonl(unboundedForceBandLog, expectedProfile);
+assert.equal(unboundedForceBand.status, "available");
+
+const mismatchedMetadata = toWirePresentation(available);
+const mismatchedMetadataState = objectValue(mismatchedMetadata["task_state"]);
+mismatchedMetadataState["classification"] = "failure";
+mismatchedMetadataState["phase"] = "failure";
+mismatchedMetadataState["reason"] = "synthetic metadata mismatch";
+const mismatchedMetadataResult = parseContactTaskPresentationV1(
+  mismatchedMetadata,
+  expectedProfile,
+);
+assert.equal(mismatchedMetadataResult.status, "unavailable");
+assert.match(mismatchedMetadataResult.reason ?? "", /does not match the final task state/);
+
+const impreciseMetadata = toWirePresentation(available);
+objectValue(impreciseMetadata["derived_force"])["raw_force_world_n"] = [2.0000005, 0, 0];
+const impreciseMetadataResult = parseContactTaskPresentationV1(
+  impreciseMetadata,
+  expectedProfile,
+);
+assert.equal(impreciseMetadataResult.status, "unavailable");
+assert.match(impreciseMetadataResult.reason ?? "", /does not preserve raw measured contact evidence/);
 console.log("contact-task-log viewer tests passed");

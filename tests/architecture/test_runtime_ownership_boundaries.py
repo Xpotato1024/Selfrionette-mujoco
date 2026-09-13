@@ -26,11 +26,13 @@ EXPECTED_MODULES = {
         "viewer_package_resource_manifest",
     },
     "contact": {
-        "virtual_reaction_force",
         "evidence",
+        "log",
         "manifest",
+        "presentation",
         "scene",
         "task_contract",
+        "virtual_reaction_force",
     },
     "control": {
         "desired_endpoint_resolver",

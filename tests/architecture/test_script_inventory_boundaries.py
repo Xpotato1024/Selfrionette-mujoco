@@ -22,6 +22,7 @@ EXPECTED_SCRIPTS = {
     "scripts/diagnostics/fast_arm/view_fast_arm_native_mujoco.py",
     "scripts/viewer/export_wasm_qpos_fixture.py",
     "scripts/viewer/run_live_viewer_smoke.py",
+    "scripts/viewer/generate_contact_task_log_demo.py",
     "scripts/viewer/run-browser-viewer-smoke.ps1",
     "scripts/repository/validate_github_body_structure.py",
     "scripts/repository/validate_agent_skills.py",

@@ -8,6 +8,7 @@
 |---|---|
 | `composition/` | config、Robot Profile / Plugin / Bundle、typed provider assembly、pipeline builder |
 | `execution/` | pipeline lifecycle、input step loop、timing / pacing |
+| `contact/` | contact manifest、raw evidence、derived reaction force、task log / presentation |
 | `control/` | input selection/state、endpoint target、viewer control ingress、step diagnostics |
 | `safety/` | stale input policy、qpos feasibility、physical safety・operator validation |
 | `output/` | typed physical output permission decision、recording / dry-run trace、lifecycle / bounded stop。transport / hardware送信は所有しない |

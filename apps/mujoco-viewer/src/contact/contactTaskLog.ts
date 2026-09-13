@@ -108,6 +108,32 @@ const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
 type JsonRecord = Record<string, unknown>;
 
+const CONTACT_TASK_PHASES = [
+  "ready",
+  "approach",
+  "first_contact",
+  "press",
+  "hold",
+  "success",
+  "failure",
+  "technical_invalid",
+] as const;
+type ContactTaskPhase = (typeof CONTACT_TASK_PHASES)[number];
+
+const CONTACT_TASK_CLASSIFICATIONS = [
+  "success",
+  "failure",
+  "technical_invalid",
+  "running",
+] as const;
+type ContactTaskClassification = (typeof CONTACT_TASK_CLASSIFICATIONS)[number];
+
+interface ParsedTaskState {
+  phase: ContactTaskPhase;
+  classification: ContactTaskClassification;
+  reason: string | null;
+}
+
 interface ParsedJsonLine {
   value: JsonRecord;
   rawTopLevelValues: Map<string, string>;
@@ -820,7 +846,7 @@ function parseDerivedForce(
     }
     if (
       rawEvidence.forceWorldN === null ||
-      rawForceWorldN.some((component, index) => Math.abs(component - (rawEvidence.forceWorldN?.[index] ?? 0)) > 1e-6)
+      rawForceWorldN.some((component, index) => component !== rawEvidence.forceWorldN?.[index])
     ) {
       throw new Error("derived raw force does not preserve the raw contact aggregate");
     }
@@ -1014,6 +1040,48 @@ function profileMismatch(
   );
 }
 
+function parseTaskPhase(value: unknown, label: string): ContactTaskPhase {
+  const phase = stringValue(value, label);
+  if (!(CONTACT_TASK_PHASES as readonly string[]).includes(phase)) {
+    throw new Error(label + " is unsupported");
+  }
+  return phase as ContactTaskPhase;
+}
+
+function parseTaskClassification(value: unknown, label: string): ContactTaskClassification {
+  const classification = stringValue(value, label);
+  if (!(CONTACT_TASK_CLASSIFICATIONS as readonly string[]).includes(classification)) {
+    throw new Error(label + " is unsupported");
+  }
+  return classification as ContactTaskClassification;
+}
+
+function validateTaskLifecycle(
+  phase: ContactTaskPhase,
+  classification: ContactTaskClassification,
+  reason: string | null,
+  label: string,
+): void {
+  if (reason !== null && reason.trim().length === 0) {
+    throw new Error(label + " reason must be non-empty or null");
+  }
+  if (classification === "success") {
+    if (phase !== "success" || reason !== null) {
+      throw new Error(label + " success state is inconsistent");
+    }
+  } else if (classification === "failure") {
+    if (phase !== "failure" || reason === null) {
+      throw new Error(label + " failure state is inconsistent");
+    }
+  } else if (classification === "technical_invalid") {
+    if (phase !== "technical_invalid" || reason === null) {
+      throw new Error(label + " technical-invalid state is inconsistent");
+    }
+  } else if (phase === "success" || phase === "failure" || phase === "technical_invalid") {
+    throw new Error(label + " running state has a terminal phase");
+  }
+}
+
 function validateTaskContext(value: unknown, binding: ContactTaskLogBinding): void {
   const context = exactKeys(
     value,
@@ -1035,6 +1103,9 @@ function validateTaskContext(value: unknown, binding: ContactTaskLogBinding): vo
   nonNegativeNumber(context.dwell_interval_s, "task_context.dwell_interval_s");
   nonNegativeNumber(context.timeout_s, "task_context.timeout_s");
   booleanValue(context.require_pose_measurement, "task_context.require_pose_measurement");
+  if (context.target_normal_force_band_n === null) {
+    return;
+  }
   if (!Array.isArray(context.target_normal_force_band_n) || context.target_normal_force_band_n.length !== 2) {
     throw new Error("task context target force band is invalid");
   }
@@ -1043,13 +1114,13 @@ function validateTaskContext(value: unknown, binding: ContactTaskLogBinding): vo
   );
 }
 
-function validateTaskState(value: unknown): { phase: string; classification: string; reason: string | null } {
+function validateTaskState(value: unknown): ParsedTaskState {
   const state = exactKeys(value, ["classification", "phase", "reason"], "contact task state");
-  return {
-    phase: stringValue(state.phase, "task_state.phase"),
-    classification: stringValue(state.classification, "task_state.classification"),
-    reason: nullableString(state.reason, "task_state.reason"),
-  };
+  const phase = parseTaskPhase(state.phase, "task_state.phase");
+  const classification = parseTaskClassification(state.classification, "task_state.classification");
+  const reason = nullableString(state.reason, "task_state.reason");
+  validateTaskLifecycle(phase, classification, reason, "task state");
+  return { phase, classification, reason };
 }
 
 function validateTaskObservation(value: unknown): JsonRecord {
@@ -1126,7 +1197,52 @@ function validateOutcome(value: unknown, binding: ContactTaskLogBinding, sampleC
   ) {
     throw new Error("contact task outcome identity or sample count does not match the log");
   }
+  const phase = parseTaskPhase(outcome.phase, "outcome.phase");
+  const classification = parseTaskClassification(outcome.classification, "outcome.classification");
+  const reason = nullableString(outcome.reason, "outcome.reason");
+  validateTaskLifecycle(phase, classification, reason, "task outcome");
+  const completionTimeS = outcome.completion_time_s === null
+    ? null
+    : nonNegativeNumber(outcome.completion_time_s, "outcome.completion_time_s");
+  if (
+    (classification === "success" && completionTimeS === null) ||
+    (classification !== "success" && completionTimeS !== null)
+  ) {
+    throw new Error("contact task outcome completion time does not match its classification");
+  }
   return outcome;
+}
+
+function validateFinalSampleOutcome(
+  taskState: ParsedTaskState,
+  rawEvidence: Pick<ParsedRawEvidence, "status" | "targetContacts">,
+  phase: ContactTaskPhase,
+  classification: ContactTaskClassification,
+  reason: string | null,
+): void {
+  if (classification === "success") {
+    if (
+      taskState.phase !== "success" ||
+      taskState.classification !== "success" ||
+      taskState.reason !== null
+    ) {
+      throw new Error("successful outcome does not match the final task state");
+    }
+    if (rawEvidence.status !== "measured" || rawEvidence.targetContacts.length === 0) {
+      throw new Error("successful outcome requires measured final target contact evidence");
+    }
+    return;
+  }
+  if (taskState.classification === "running" && classification === "failure") {
+    return;
+  }
+  if (
+    taskState.phase !== phase ||
+    taskState.classification !== classification ||
+    taskState.reason !== reason
+  ) {
+    throw new Error("task outcome does not match the final task state");
+  }
 }
 
 function validateSample(
@@ -1139,7 +1255,7 @@ function validateSample(
   rawEvidence: ParsedRawEvidence;
   derivedForce: ParsedDerivedForce;
   observation: JsonRecord;
-  taskState: { phase: string; classification: string; reason: string | null };
+  taskState: ParsedTaskState;
 } {
   const sample = exactKeys(
     value,
@@ -1482,7 +1598,7 @@ function parsePresentationDocument(
       derivedForceN === null ||
       rawForce === null ||
       derivedRawWorldN === null ||
-      derivedRawWorldN.some((component, index) => Math.abs(component - rawForce[index]) > 1e-6)
+      derivedRawWorldN.some((component, index) => component !== rawForce[index])
     ) {
       throw new Error("active derived force does not preserve raw measured contact evidence");
     }
@@ -1533,22 +1649,38 @@ function parsePresentationDocument(
     status = "unavailable";
     reason = reason ?? parsedDerived.reason ?? "derived reaction-force signal is unavailable";
   }
-  const taskStateValue = exactKeys(
-    presentation.task_state,
-    ["classification", "phase", "reason"],
-    "contact presentation task state",
-  );
+  const taskState = validateTaskState(presentation.task_state);
   const outcomeValue = exactKeys(
     presentation.outcome,
     ["classification", "completion_time_s", "observations_count", "phase", "reason"],
     "contact presentation outcome",
   );
+  const outcomePhase = parseTaskPhase(outcomeValue.phase, "presentation.outcome.phase");
+  const outcomeClassification = parseTaskClassification(
+    outcomeValue.classification,
+    "presentation.outcome.classification",
+  );
+  const outcomeReason = nullableString(outcomeValue.reason, "presentation.outcome.reason");
+  validateTaskLifecycle(outcomePhase, outcomeClassification, outcomeReason, "presentation outcome");
   const completionTimeS = outcomeValue.completion_time_s === null
     ? null
     : nonNegativeNumber(outcomeValue.completion_time_s, "presentation.outcome.completion_time_s");
+  if (
+    (outcomeClassification === "success" && completionTimeS === null) ||
+    (outcomeClassification !== "success" && completionTimeS !== null)
+  ) {
+    throw new Error("presentation outcome completion time does not match its classification");
+  }
   const observationsCount = nonNegativeInteger(
     outcomeValue.observations_count,
     "presentation.outcome.observations_count",
+  );
+  validateFinalSampleOutcome(
+    taskState,
+    { status: rawStatus, targetContacts: contacts },
+    outcomePhase,
+    outcomeClassification,
+    outcomeReason,
   );
   if (
     parsedDerived.frame !== "mujoco_world" &&
@@ -1591,18 +1723,12 @@ function parsePresentationDocument(
           signConvention: "object_on_tool",
         }
       : null,
-    taskState: status === "available"
-      ? {
-          phase: stringValue(taskStateValue.phase, "presentation.task_state.phase"),
-          classification: stringValue(taskStateValue.classification, "presentation.task_state.classification"),
-          reason: nullableString(taskStateValue.reason, "presentation.task_state.reason"),
-        }
-      : null,
+    taskState: status === "available" ? taskState : null,
     outcome: status === "available"
       ? {
-          phase: stringValue(outcomeValue.phase, "presentation.outcome.phase"),
-          classification: stringValue(outcomeValue.classification, "presentation.outcome.classification"),
-          reason: nullableString(outcomeValue.reason, "presentation.outcome.reason"),
+          phase: outcomePhase,
+          classification: outcomeClassification,
+          reason: outcomeReason,
           completionTimeS,
           observationsCount,
         }
@@ -1714,6 +1840,13 @@ export async function parseContactTaskLogJsonl(
     }
     const outcome = validateOutcome(summary.outcome, binding, samples.length);
     const lastSample = samples[samples.length - 1];
+    validateFinalSampleOutcome(
+      lastSample.taskState,
+      lastSample.rawEvidence,
+      parseTaskPhase(outcome.phase, "outcome.phase"),
+      parseTaskClassification(outcome.classification, "outcome.classification"),
+      nullableString(outcome.reason, "outcome.reason"),
+    );
     const projection = buildPresentationDocument(
       lastSample,
       manifest,

@@ -14,7 +14,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, help="出力先。省略時は固定のviewer fixture path")
     arguments = parser.parse_args()
-    repository_root = Path(__file__).resolve().parents[1]
+    repository_root = Path(__file__).resolve().parents[2]
     for import_root in (
         repository_root / "src",
         repository_root / "src" / "selfrionette" / "plugins" / "robots" / "fast_arm" / "core" / "src",

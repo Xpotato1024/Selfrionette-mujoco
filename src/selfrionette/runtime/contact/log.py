@@ -1013,6 +1013,64 @@ def _validate_sample_bindings(
         raise ContactTaskLogError("derived force simulation time does not match raw evidence")
     if signal.frame_index is not None and signal.frame_index != evidence.frame_index:
         raise ContactTaskLogError("derived force frame index does not match raw evidence")
+    raw_force_world_n = (
+        None
+        if evidence.aggregate is None
+        else evidence.aggregate.object_on_tool_force_world_n
+    )
+    if (
+        signal.raw_force_world_n is not None
+        and signal.raw_force_world_n != raw_force_world_n
+    ):
+        raise ContactTaskLogError(
+            "derived raw force does not exactly preserve raw contact evidence"
+        )
+    if signal.status in {
+        VirtualReactionForceStatus.ACTIVE,
+        VirtualReactionForceStatus.NO_CONTACT,
+    } and signal.raw_force_world_n != raw_force_world_n:
+        raise ContactTaskLogError(
+            "available derived force must carry the exact raw contact force"
+        )
+
+
+def _validate_final_sample_outcome(
+    samples: tuple[ContactTaskLogSample, ...],
+    outcome: ContactTaskOutcome,
+) -> None:
+    final_sample = samples[-1]
+    task_state = final_sample.task_state
+    if outcome.classification is TaskTerminalClassification.SUCCESS:
+        if (
+            task_state.classification is not TaskTerminalClassification.SUCCESS
+            or task_state.phase is not ContactTaskPhase.SUCCESS
+            or task_state.reason is not None
+        ):
+            raise ContactTaskLogError(
+                "successful outcome does not match the final task state"
+            )
+        evidence = final_sample.observation.contact_evidence
+        if (
+            evidence.status is not ContactEvidenceStatus.MEASURED
+            or not evidence.target_contacts
+        ):
+            raise ContactTaskLogError(
+                "successful outcome requires measured final target contact evidence"
+            )
+        return
+    if (
+        task_state.classification is TaskTerminalClassification.RUNNING
+        and outcome.classification is TaskTerminalClassification.FAILURE
+    ):
+        return
+    if (
+        task_state.phase is not outcome.phase
+        or task_state.classification is not outcome.classification
+        or task_state.reason != outcome.reason
+    ):
+        raise ContactTaskLogError(
+            "task outcome does not match the final task state"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1043,6 +1101,7 @@ class ContactTaskLog:
             raise ContactTaskLogError("task outcome identity or observation count does not match the log")
         for sample in samples:
             _validate_sample_bindings(self.header, sample)
+        _validate_final_sample_outcome(samples, outcome)
 
     def to_jsonl(self) -> bytes:
         records = [self.header.to_document()]

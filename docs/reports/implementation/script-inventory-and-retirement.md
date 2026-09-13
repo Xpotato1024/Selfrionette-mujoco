@@ -1,7 +1,7 @@
 ---
 status: historical
 owner: implementation
-last_verified: 2026-07-18
+last_verified: 2026-09-13
 canonical_for: []
 related:
   - docs/operations/unified-cli.md
@@ -55,3 +55,11 @@ specialized procedures は、統一 CLI に未実装の behavior を失わない
 - research log は更新しない。既存操作入口の分類と退役だけで研究条件・仮説・結果は変わらない。
 - experiment notes は更新しない。新しい experiment condition や観測結果を取得していない。
 - #437 の external plugin architecture は実装していない。
+
+## 2026-09-13 Issue #416 追加分類
+
+この日付の追加分類はIssue #416で導入したviewer用の決定的な合成contact-task-log fixture生成入口を記録する。Issue #436当時の分類と履歴行は変更しない。
+
+| script | consumer / evidence | 分類 | 判断と canonical replacement |
+| --- | --- | --- | --- |
+| `generate_contact_task_log_demo.py` | runtime contact-task-log contract、viewer fixture test | developer validation toolとして維持 | `scripts/viewer/`に配置し、型付きlog契約から固定の合成fixtureを再生成する。MuJoCo実行・hardware evidence・runtime captureを生成しない |

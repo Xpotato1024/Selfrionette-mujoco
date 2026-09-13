@@ -429,3 +429,61 @@ def test_checked_in_viewer_demo_fixture_is_deterministic_and_uses_sample_pose() 
     assert sample.object_position_world_m == decoded.header.context.manifest.scene.object.position_m
     assert sample.contact_location_world_m == (0.19, 0.0, 0.07)
     assert decoded.header.source_kind is ContactTaskLogSourceKind.SYNTHETIC_FIXTURE
+
+
+def test_contact_log_requires_exact_raw_force_copy() -> None:
+    log = _build_log()
+    lines = _canonical_lines(log.to_jsonl())
+    signal = lines[1]["derived_reaction_force"]
+    assert isinstance(signal, dict)
+    raw_force = signal["raw_force_world_n"]
+    assert isinstance(raw_force, list)
+    raw_force[0] = 2.0000005
+
+    with pytest.raises(ContactTaskLogError, match="exactly preserve"):
+        decode_contact_task_log(_encode_lines(lines))
+
+
+def test_contact_log_requires_success_to_match_final_state_and_contact() -> None:
+    no_contact_log = _build_log(ContactEvidenceStatus.NO_CONTACT)
+    final_state = no_contact_log.samples[-1].task_state
+    assert final_state.classification is TaskTerminalClassification.RUNNING
+    assert no_contact_log.summary.outcome.classification is TaskTerminalClassification.FAILURE
+    assert decode_contact_task_log(no_contact_log.to_jsonl()) == no_contact_log
+
+    measured_log = _build_log()
+    success_state = ContactTaskLogTaskState(
+        phase=ContactTaskPhase.SUCCESS,
+        classification=TaskTerminalClassification.SUCCESS,
+    )
+    forged_sample = replace(no_contact_log.samples[-1], task_state=success_state)
+    forged_outcome = replace(
+        measured_log.summary.outcome,
+        observations_count=len(no_contact_log.samples),
+    )
+    forged_summary = replace(no_contact_log.summary, outcome=forged_outcome)
+
+    with pytest.raises(ContactTaskLogError, match="measured final target contact"):
+        replace(
+            no_contact_log,
+            samples=(forged_sample,),
+            summary=forged_summary,
+        )
+
+
+def test_contact_log_rejects_final_task_state_outcome_mismatch() -> None:
+    log = _build_log()
+    failure_state = ContactTaskLogTaskState(
+        phase=ContactTaskPhase.FAILURE,
+        classification=TaskTerminalClassification.FAILURE,
+        reason="synthetic final-state mismatch",
+    )
+
+    with pytest.raises(ContactTaskLogError, match="successful outcome"):
+        replace(
+            log,
+            samples=(
+                *log.samples[:-1],
+                replace(log.samples[-1], task_state=failure_state),
+            ),
+        )

@@ -34,6 +34,14 @@ JSONLのrecord順は固定である。
 
 `header.binding`はmanifest digest、signal manifest digest、trial、robot bundle、scene / object / presentation identity、source kindをcanonicalな値で繰り返す。各sampleとsummaryも同じbindingを持ち、decoderは全recordのidentity、count、order、cross-field consistencyを検証する。manifest、signal manifest、raw evidence、derived signal、Task state / outcomeのいずれかを別trialの値と差し替えても受け付けない。
 
+## 末尾sample、summary、raw forceの整合性
+
+各`virtual-reaction-force/v1` sampleの`raw_force_world_n`は、そのsampleのraw evidenceにある`aggregate.object_on_tool_force_world_n`の完全なcopyである。`active`および`no_contact` signalでは値が必須で、値がある場合はraw aggregateとcomponentごとに完全一致しなければならない。filterや出力変換後のforceは別の値として保持する。
+
+`task_state`とsummaryの`outcome`は既知のphase / classification enumと整合する。success / failure / technical-invalidには対応するterminal phaseが必要で、failureとtechnical-invalidにはreasonを必須とする。summaryは末尾sampleのterminal stateとphase、classification、reasonが一致しなければならない。record済みsampleを追加しない有限streamの確定時だけ、末尾sampleがrunningのままsummary outcomeがfailureとなるfinalizer形式を許可する。
+
+successful outcomeは末尾`task_state`がsuccessで、末尾raw evidenceが測定済みかつtarget contactを含む場合だけ有効である。no-contact evidenceからsuccessful outcomeを成立させてはならない。outcome判定と`target_normal_force_band_n`の評価元は#415のraw evidence契約であり、viewerはそれを再計算しない。`target_normal_force_band_n`は任意値であり、`null`も正当な設定としてheaderとoutcomeに保存できる。
+
 ## 決定的なJSONL形式と保存
 
 serializationはcanonical UTF-8 JSONを1行1recordで出力し、最後にLFを1つ置く。BOM、CR、重複JSON key、unknown field / enum / version、non-finite number、record順・sequence index・binding不一致はstrict decoderが拒否する。読込後の型付きrecordを再encodeしたbytesが入力と完全一致することをread-back gateとする。
