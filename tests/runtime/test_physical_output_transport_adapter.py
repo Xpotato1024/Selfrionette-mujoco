@@ -569,6 +569,41 @@ def test_timeout_failure_is_recorded_and_cannot_be_retried() -> None:
     assert len(sender.send_calls) == 1
 
 
+@pytest.mark.parametrize(
+    "invalid_time",
+    [float("nan"), float("inf"), float("-inf")],
+)
+def test_non_finite_dispatch_time_invalidates_latest_request(invalid_time: float) -> None:
+    clock = _Clock()
+    lifecycle, sendable = _active_lifecycle(_permission(), clock=clock)
+    sender = _FakeSender()
+    adapter = PhysicalOutputTransportAdapter(
+        _config(
+            "transmission_enabled",
+            operator_enable=PhysicalOutputOperatorEnable("operator-1", "enable-1"),
+        ),
+        sender=sender,
+        clock=clock,
+    )
+
+    result = adapter.dispatch(lifecycle, sendable, now_s=invalid_time)
+
+    assert result.status == "rejected"
+    assert lifecycle.state == "failed"
+    assert lifecycle.latest_request is None
+    assert lifecycle.latest_sendable_request is None
+    failure = lifecycle.trace().events[-1]
+    assert failure.event_kind == "failure"
+    assert failure.reason == "physical_output_transport_clock_invalid"
+    assert failure.timestamp_s is None
+
+    retry = adapter.dispatch(lifecycle, sendable, now_s=1.0)
+    assert retry.status == "rejected"
+    assert retry.reason == "physical_output_lifecycle_not_active"
+    assert sender.prepare_calls == []
+    assert sender.send_calls == []
+
+
 def test_udp_provider_uses_only_injected_socket_and_closes_it() -> None:
     class FakeSocket:
         def __init__(self) -> None:
