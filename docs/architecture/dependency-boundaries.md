@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-30
+last_verified: 2026-09-13
 canonical_for:
   - import boundaries
 related:
@@ -250,6 +250,7 @@ legacyの責務を移行する場合は、script全体をcopyせず、次のowne
 | device input読取 | `plugins/input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
 | inputの意味付けとscale | `plugins/mappings/` | mapping semanticsのcanonical owner。`input_interpreters/`とlegacy `RuntimePipeline`は退役済み |
 | target更新とsafety limit | `motion/` | `MotionCommand`を生成する |
+| physical output safety binding / lifecycle | `runtime/output/` | 既存P5 decisionをexact typed requestへ結合し、明示allowのlifecycle acceptanceだけを所有する。safety formulaやtransport / hardware送信を所有しない |
 | FK / IK / joint limit | `kinematics/`またはrobot-specific plugin | kinematics責務に限定する |
 | MJCF model state | `mujoco_backend/` | MuJoCoをphysical stateのsource of truthとする |
 | logging / replay / WebSocket delivery | `transport/` | motionまたはkinematics logicを所有しない |

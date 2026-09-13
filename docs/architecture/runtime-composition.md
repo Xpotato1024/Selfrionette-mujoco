@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-08-28
+last_verified: 2026-09-13
 canonical_for:
   - runtime composition root
 related:
@@ -25,7 +25,7 @@ related:
 | `execution/` | route-bound `ControlMappedRuntimePipeline`、input step loop、typed command / input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
-| `output/` | physical output request permission decision、lossless recording / dry-run trace、lifecycle / bounded stop。transport / hardware送信は行わない |
+| `output/` | P5 safety evaluationとexact request binding、allow-only sendable type、permission decision、lossless recording / dry-run trace、safety-aware lifecycle / bounded stop。transport / hardware送信は行わない |
 | `contact/` | versioned contact manifest、backend-owned MuJoCo scene composition / reset、MuJoCo measured contact evidence、Task contractの共有型 |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
@@ -155,7 +155,7 @@ Task / Evaluationを補わない。
 | control-frame resolution | runtime control-frame resolver | pure frame resolver | requested frame、pre-step orientation、`dt_s` | resolved world intentまたはunavailable status |
 | motion policy | selected plugin / runtime coordinator | motion policy adapter | intent、current qpos、target lifecycle | `MotionCommand`またはhold / reject |
 | backend update | typed Robot command provider / MuJoCo backend boundary | semantic-specific backend command applier | `JointPositionCommand`等のvalidated typed command | updated model stateまたは適用前failure |
-| physical output permission / trace / lifecycle | runtime output boundary | typed `PhysicalOutputRequest` / permission evaluator / recording sink / lifecycle controller | target、session、sequence、cadence、explicit operator gate、stale / stop reason | accepted / rejected / permitted / dropped / lifecycle evidence。送信実績とは別 |
+| physical output safety / permission / trace / lifecycle | runtime output boundary | typed `PhysicalOutputRequest`、P5 safety evaluation / binding、permission evaluator / recording sink / lifecycle controller | exact request bytes、typed P2/P3/P4 evidence、candidate、Robot / software revision、freshness、explicit operator gate、stale / stop reason | allow-only sendable wrapper、accepted / rejected / permitted / dropped / safety-aware lifecycle evidence。送信実績とは別 |
 | MuJoCo measurement | post-step measurement helper | pure measurement helper | post-step `MuJoCoState` | physical `tip` site measurement |
 | diagnostic annotation | runtime diagnostics | pure annotator | intent、prediction、measurement、source state | precedenceを固定したmetadata |
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |

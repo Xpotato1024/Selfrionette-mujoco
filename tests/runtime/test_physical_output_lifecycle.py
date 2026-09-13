@@ -8,27 +8,65 @@ from threading import Barrier
 import pytest
 
 from selfrionette.runtime.output import (
+    evaluate_and_bind_physical_output_safety,
     PhysicalOutputLifecycle,
     PhysicalOutputLifecycleEvent,
     PhysicalOutputLifecycleTrace,
     PhysicalOutputRecordingSink,
 )
 from selfrionette.runtime.output.permission import evaluate_physical_output_permission
+from selfrionette.runtime.safety.collision_policy import CollisionStatus
+from selfrionette.runtime.safety.limit_resolution import LimitResolutionStatus
+from selfrionette.runtime.safety.trajectory_feasibility import FeasibilityStatus
 from selfrionette.schemas import PhysicalOutputPermission
 
 from tests.schemas.test_physical_output_contract import _endpoint_request
+from tests.runtime.test_physical_safety_core import _input as _safety_input_fixture
+
+
+def _request(**changes: object):
+    request = replace(_endpoint_request(), target_robot_id="fixture-robot")
+    return replace(request, **changes) if changes else request
+
+
+def _safety_input(request, *, base=None, include_revision: bool = True):
+    safety_input = _safety_input_fixture() if base is None else base
+    if include_revision:
+        provenance = (*safety_input.provenance, f"software_revision:{request.software_revision}")
+        safety_input = replace(safety_input, provenance=provenance)
+    return safety_input
+
+
+def _evaluation(request, *, checked_at_s: float | None = None, base=None, include_revision: bool = True):
+    return evaluate_and_bind_physical_output_safety(
+        request,
+        _safety_input(request, base=base, include_revision=include_revision),
+        checked_at_s=request.timestamp_s if checked_at_s is None else checked_at_s,
+    )
+
+
+def _submit(lifecycle, request, **kwargs):
+    max_safety_age_s = kwargs.pop("max_safety_age_s", kwargs.get("max_age_s"))
+    return lifecycle.submit(
+        _evaluation(request),
+        max_safety_age_s=max_safety_age_s,
+        **kwargs,
+    )
 
 
 def test_default_disabled_and_explicit_arm_are_fail_closed() -> None:
     lifecycle = PhysicalOutputLifecycle("session-1")
-    request = _endpoint_request()
+    request = _request()
 
     assert lifecycle.state == "disabled"
-    rejected = lifecycle.submit(request)
+    raw = lifecycle.submit(request)
+    assert not raw.accepted
+    assert raw.reason == "physical_safety_binding_required"
+    rejected = _submit(lifecycle, request)
     assert not rejected.accepted
     assert rejected.reason == "lifecycle_state_not_accepting"
     assert lifecycle.state == "disabled"
-    repeated = lifecycle.submit(request)
+    repeated = _submit(lifecycle, request)
     assert not repeated.accepted
     assert repeated.reason == "lifecycle_state_not_accepting"
     assert lifecycle.trace().events[-1].request_sequence is None
@@ -37,27 +75,27 @@ def test_default_disabled_and_explicit_arm_are_fail_closed() -> None:
     assert lifecycle.state == "disabled"
     assert lifecycle.arm(PhysicalOutputPermission(mode="dry_run")).accepted
     assert lifecycle.state == "armed"
-    assert lifecycle.submit(request, now_s=1.0, max_age_s=1.0).accepted
+    assert _submit(lifecycle, request, now_s=1.0, max_age_s=1.0).accepted
 
 
 def test_submit_tracks_latest_state_but_rejects_duplicate_late_and_stale_requests() -> None:
     lifecycle = PhysicalOutputLifecycle("session-1")
     permission = PhysicalOutputPermission(mode="dry_run")
-    request = _endpoint_request()
+    request = _request()
     lifecycle.arm(permission)
 
-    accepted = lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
+    accepted = _submit(lifecycle, request, now_s=1.0, max_age_s=1.0)
     assert accepted.accepted
     assert lifecycle.state == "active"
     assert lifecycle.latest_request == request
     assert lifecycle.last_request_sequence == request.sequence
 
-    duplicate = lifecycle.submit(request, now_s=1.01)
+    duplicate = _submit(lifecycle, request, now_s=1.01)
     assert not duplicate.accepted
     assert duplicate.reason == "duplicate_or_out_of_order_sequence"
     assert lifecycle.latest_request == request
 
-    late = lifecycle.submit(replace(request, sequence=3), now_s=1.02)
+    late = _submit(lifecycle, replace(request, sequence=3), now_s=1.02)
     assert not late.accepted
     assert late.reason == "duplicate_or_out_of_order_sequence"
     assert lifecycle.latest_request == request
@@ -69,14 +107,26 @@ def test_submit_tracks_latest_state_but_rejects_duplicate_late_and_stale_request
         command=replace(request.command, timestamp_s=2.0),
         timestamp_s=2.0,
     )
-    stale = lifecycle.submit(stale_request, now_s=3.0, max_age_s=0.5)
+    stale = _submit(
+        lifecycle,
+        stale_request,
+        now_s=3.0,
+        max_age_s=0.5,
+        max_safety_age_s=2.0,
+    )
     assert not stale.accepted
     assert stale.reason == "physical_output_request_stale"
     assert lifecycle.state == "hold"
     assert lifecycle.latest_request is None
     assert lifecycle.last_request_sequence == stale_request.sequence
 
-    replay = lifecycle.submit(stale_request, now_s=2.1, max_age_s=0.5)
+    replay = _submit(
+        lifecycle,
+        stale_request,
+        now_s=2.1,
+        max_age_s=0.5,
+        max_safety_age_s=2.0,
+    )
     assert not replay.accepted
     assert replay.reason == "duplicate_or_out_of_order_sequence"
 
@@ -85,32 +135,177 @@ def test_session_mismatch_rejection_is_not_bound_to_current_sequence() -> None:
     lifecycle = PhysicalOutputLifecycle("session-1")
     permission = PhysicalOutputPermission(mode="dry_run")
     lifecycle.arm(permission)
-    foreign = replace(_endpoint_request(), session_id="session-foreign", sequence=99)
+    foreign = replace(_request(), session_id="session-foreign", sequence=99)
 
-    rejected = lifecycle.submit(foreign, now_s=1.0)
+    rejected = _submit(lifecycle, foreign, now_s=1.0)
     assert not rejected.accepted
     assert rejected.reason == "session_mismatch"
     assert rejected.event is not None
     assert rejected.event.request_sequence is None
 
-    accepted = lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
+    accepted = _submit(lifecycle, _request(), now_s=1.0, max_age_s=1.0)
     assert accepted.accepted
     assert lifecycle.trace().events[-1].request_sequence == 4
+
+
+def test_safety_hold_reject_stop_stale_and_identity_mismatch_clear_prior_sendable() -> None:
+    request = _request()
+    wrong_robot_input = _safety_input_fixture()
+    wrong_robot = "other-fixture-robot"
+    wrong_robot_input = replace(
+        wrong_robot_input,
+        limit_resolution=replace(wrong_robot_input.limit_resolution, robot_id=wrong_robot),
+        collision=replace(
+            wrong_robot_input.collision,
+            context=replace(wrong_robot_input.collision.context, robot_id=wrong_robot),
+        ),
+    )
+    next_request = replace(
+        request,
+        sequence=request.sequence + 1,
+        command=replace(request.command, timestamp_s=request.timestamp_s + 0.1),
+        timestamp_s=request.timestamp_s + 0.1,
+    )
+    scenarios = (
+        (
+            "hold",
+            _evaluation(next_request, base=_safety_input_fixture(dynamic_authoritative=False)),
+            next_request.timestamp_s,
+            1.0,
+            "safety_hold",
+            "held",
+        ),
+        (
+            "unavailable",
+            _evaluation(next_request, base=_safety_input_fixture(limits=LimitResolutionStatus.UNKNOWN)),
+            next_request.timestamp_s,
+            1.0,
+            "safety_hold",
+            "unavailable",
+        ),
+        (
+            "invalid",
+            _evaluation(next_request, base=_safety_input_fixture(dynamic=FeasibilityStatus.INVALID)),
+            next_request.timestamp_s,
+            1.0,
+            "safety_invalid",
+            "invalid",
+        ),
+        (
+            "reject",
+            _evaluation(next_request, base=_safety_input_fixture(limits=LimitResolutionStatus.MISMATCH)),
+            next_request.timestamp_s,
+            1.0,
+            "safety_rejected",
+            "rejected",
+        ),
+        (
+            "stop",
+            _evaluation(next_request, base=_safety_input_fixture(collision=CollisionStatus.COLLISION)),
+            next_request.timestamp_s,
+            1.0,
+            "safety_stop",
+            "stopped",
+        ),
+        (
+            "stale",
+            _evaluation(next_request, checked_at_s=0.0),
+            next_request.timestamp_s,
+            0.5,
+            "safety_hold",
+            "allowed",
+        ),
+        (
+            "future decision",
+            _evaluation(next_request, checked_at_s=next_request.timestamp_s + 1.0),
+            next_request.timestamp_s,
+            0.5,
+            "safety_hold",
+            "allowed",
+        ),
+        (
+            "robot mismatch",
+            _evaluation(next_request, base=wrong_robot_input),
+            next_request.timestamp_s,
+            1.0,
+            "safety_rejected",
+            "rejected",
+        ),
+        (
+            "revision mismatch",
+            _evaluation(next_request, include_revision=False),
+            next_request.timestamp_s,
+            1.0,
+            "safety_rejected",
+            "rejected",
+        ),
+    )
+
+    for name, evaluation, now_s, max_safety_age_s, event_kind, gate_status in scenarios:
+        lifecycle = PhysicalOutputLifecycle("session-1")
+        assert lifecycle.arm(PhysicalOutputPermission(mode="dry_run")).accepted
+        allowed = _submit(
+            lifecycle,
+            request,
+            now_s=request.timestamp_s,
+            max_age_s=1.0,
+            max_safety_age_s=1.0,
+        )
+        assert allowed.accepted
+        assert lifecycle.latest_sendable_request is not None
+
+        result = lifecycle.submit(
+            evaluation,
+            now_s=now_s,
+            max_age_s=1.0,
+            max_safety_age_s=max_safety_age_s,
+        )
+
+        assert result.accepted is (event_kind == "safety_stop"), name
+        assert result.event is not None
+        assert result.event.event_kind == event_kind
+        assert result.event.safety_evidence is not None
+        assert result.event.safety_evidence.gate_status == gate_status
+        assert lifecycle.latest_request is None
+        assert lifecycle.latest_sendable_request is None
+
+
+def test_raw_intent_cannot_replace_an_active_sendable_request() -> None:
+    lifecycle = PhysicalOutputLifecycle("session-1")
+    request = _request()
+    assert lifecycle.arm(PhysicalOutputPermission(mode="dry_run")).accepted
+    accepted = _submit(
+        lifecycle,
+        request,
+        now_s=request.timestamp_s,
+        max_age_s=1.0,
+    )
+    assert accepted.accepted
+
+    rejected = lifecycle.submit(
+        replace(request, sequence=request.sequence + 1),
+        now_s=request.timestamp_s + 0.1,
+    )
+
+    assert not rejected.accepted
+    assert rejected.reason == "physical_safety_binding_required"
+    assert lifecycle.latest_request is None
+    assert lifecycle.latest_sendable_request is None
 
 
 def test_reconnect_does_not_rearm_and_explicit_rearm_keeps_stale_commands_out() -> None:
     lifecycle = PhysicalOutputLifecycle("session-1")
     permission = PhysicalOutputPermission(mode="dry_run")
-    request = _endpoint_request()
+    request = _request()
     lifecycle.arm(permission)
-    lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
+    _submit(lifecycle, request, now_s=1.0, max_age_s=1.0)
     lifecycle.source_disconnected(timestamp_s=2.0)
 
     reconnect = lifecycle.reconnect(timestamp_s=3.0)
     assert reconnect.state_before == "hold"
     assert reconnect.state_after == "hold"
     assert lifecycle.state == "hold"
-    assert not lifecycle.submit(replace(request, sequence=5), now_s=3.1).accepted
+    assert not _submit(lifecycle, replace(request, sequence=5), now_s=3.1).accepted
 
     assert lifecycle.arm(permission, session_id="session-2").accepted
     assert lifecycle.state == "armed"
@@ -121,14 +316,14 @@ def test_reconnect_does_not_rearm_and_explicit_rearm_keeps_stale_commands_out() 
         command=replace(request.command, timestamp_s=3.2),
         timestamp_s=3.2,
     )
-    assert lifecycle.submit(next_request, now_s=3.2, max_age_s=1.0).accepted
+    assert _submit(lifecycle, next_request, now_s=3.2, max_age_s=1.0).accepted
 
 
 def test_stop_is_idempotent_and_bounded() -> None:
     lifecycle = PhysicalOutputLifecycle("session-1", shutdown_timeout_s=1.0)
     permission = PhysicalOutputPermission(mode="dry_run")
     lifecycle.arm(permission)
-    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
+    _submit(lifecycle, _request(), now_s=1.0, max_age_s=1.0)
 
     stopping = lifecycle.operator_stop(now_s=2.0)
     assert stopping.accepted
@@ -150,7 +345,12 @@ def test_stop_is_idempotent_and_bounded() -> None:
 
     timed_out = PhysicalOutputLifecycle("session-timeout", shutdown_timeout_s=1.0)
     timed_out.arm(permission)
-    timed_out.submit(_endpoint_request(), now_s=0.0, max_age_s=1.0)
+    _submit(
+        timed_out,
+        _request(session_id="session-timeout"),
+        now_s=0.0,
+        max_age_s=1.0,
+    )
     timed_out.operator_stop(now_s=0.0)
     exceeded = timed_out.complete_stop(now_s=1.1)
     assert not exceeded.accepted
@@ -186,12 +386,12 @@ def test_non_finite_transition_timestamp_cannot_partially_commit(
 ) -> None:
     lifecycle = PhysicalOutputLifecycle("session-timestamp")
     permission = PhysicalOutputPermission(mode="dry_run")
-    request = _endpoint_request()
+    request = _request()
     if operation != "arm":
         lifecycle.arm(permission)
     if operation in {"submit", "source_stale", "source_invalid", "abort", "fail", "cleanup", "reconnect"}:
         if operation != "submit":
-            lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
+            _submit(lifecycle, request, now_s=1.0, max_age_s=1.0)
     before = (
         lifecycle.state,
         lifecycle.permission,
@@ -207,7 +407,7 @@ def test_non_finite_transition_timestamp_cannot_partially_commit(
         if operation == "arm":
             lifecycle.arm(permission, timestamp_s=timestamp)
         elif operation == "submit":
-            lifecycle.submit(request, now_s=timestamp, max_age_s=1.0)
+            _submit(lifecycle, request, now_s=timestamp, max_age_s=1.0)
         elif operation == "source_stale":
             lifecycle.source_stale(timestamp_s=timestamp)
         elif operation == "source_invalid":
@@ -238,7 +438,7 @@ def test_source_invalid_aborts_and_new_session_is_required_after_terminal_state(
     lifecycle = PhysicalOutputLifecycle("session-1")
     permission = PhysicalOutputPermission(mode="dry_run")
     lifecycle.arm(permission)
-    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
+    _submit(lifecycle, _request(), now_s=1.0, max_age_s=1.0)
 
     invalid = lifecycle.source_invalid("source_payload_invalid", timestamp_s=2.0)
     assert not invalid.accepted
@@ -256,7 +456,7 @@ def test_source_invalid_aborts_and_new_session_is_required_after_terminal_state(
 def test_cleanup_failure_does_not_hide_primary_failure() -> None:
     lifecycle = PhysicalOutputLifecycle("session-1")
     lifecycle.arm(PhysicalOutputPermission(mode="dry_run"))
-    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
+    _submit(lifecycle, _request(), now_s=1.0, max_age_s=1.0)
 
     def cleanup() -> None:
         raise RuntimeError("cleanup broke")
@@ -279,10 +479,10 @@ def test_dry_run_sink_captures_lifecycle_trace_separately_from_output_trace() ->
     sink = PhysicalOutputRecordingSink()
     lifecycle = PhysicalOutputLifecycle("session-1", sink=sink)
     permission = PhysicalOutputPermission(mode="dry_run")
-    request = _endpoint_request()
+    request = _request()
     lifecycle.arm(permission)
     decision = evaluate_physical_output_permission(request, permission)
-    lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
+    _submit(lifecycle, request, now_s=1.0, max_age_s=1.0)
     sink.record_requested(request, permission)
     sink.record_permission_decision(decision)
     lifecycle.source_stale(timestamp_s=2.0)
@@ -309,6 +509,47 @@ def test_lifecycle_trace_rejects_duplicate_and_out_of_order_artifacts() -> None:
     reordered = b"\n".join((event_lines[0].replace(b'"event_sequence":0', b'"event_sequence":1', 1), event_lines[0])) + b"\n"
     with pytest.raises(ValueError, match="contiguous"):
         PhysicalOutputLifecycleTrace.from_jsonl(reordered)
+
+
+def test_lifecycle_trace_reads_legacy_v1_events_and_round_trips_safety_evidence() -> None:
+    legacy_event = PhysicalOutputLifecycleEvent(
+        event_sequence=0,
+        event_kind="armed",
+        session_id="legacy-session",
+        state_before="disabled",
+        state_after="armed",
+        timestamp_s=0.0,
+        schema_version="physical-output-lifecycle/v1",
+    )
+    legacy_accepted = PhysicalOutputLifecycleEvent(
+        event_sequence=1,
+        event_kind="request_accepted",
+        session_id="legacy-session",
+        state_before="armed",
+        state_after="active",
+        request_sequence=4,
+        timestamp_s=1.0,
+        schema_version="physical-output-lifecycle/v1",
+    )
+    legacy_events = (legacy_event, legacy_accepted)
+    legacy_bytes = PhysicalOutputLifecycleTrace(events=legacy_events).to_jsonl_bytes()
+    assert PhysicalOutputLifecycleTrace.from_jsonl(legacy_bytes).events == legacy_events
+
+    lifecycle = PhysicalOutputLifecycle("session-v2")
+    assert lifecycle.arm(PhysicalOutputPermission(mode="dry_run")).accepted
+    request = _request(session_id="session-v2")
+    accepted = _submit(
+        lifecycle,
+        request,
+        now_s=request.timestamp_s,
+        max_age_s=1.0,
+    )
+    assert accepted.event is not None
+    assert accepted.event.safety_evidence is not None
+    encoded = lifecycle.trace().to_jsonl_bytes()
+    decoded = PhysicalOutputLifecycleTrace.from_jsonl(encoded)
+    assert decoded.events == lifecycle.events
+    assert decoded.to_jsonl_bytes() == encoded
 
 
 def test_lifecycle_event_rejects_impossible_state_transition() -> None:
@@ -364,7 +605,7 @@ def test_missing_freshness_context_enters_hold_without_acceptance() -> None:
     permission = PhysicalOutputPermission(mode="dry_run")
     lifecycle.arm(permission)
 
-    result = lifecycle.submit(_endpoint_request(), now_s=1.0)
+    result = _submit(lifecycle, _request(), now_s=1.0, max_safety_age_s=1.0)
 
     assert not result.accepted
     assert result.reason == "physical_output_freshness_context_missing"
@@ -377,7 +618,7 @@ def test_hold_rearm_requires_an_unused_session_id_for_lifetime() -> None:
     lifecycle = PhysicalOutputLifecycle("session-1")
     permission = PhysicalOutputPermission(mode="dry_run")
     lifecycle.arm(permission)
-    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
+    _submit(lifecycle, _request(), now_s=1.0, max_age_s=1.0)
     lifecycle.source_stale(timestamp_s=2.0)
 
     same_session = lifecycle.arm(permission, session_id="session-1")
@@ -397,13 +638,13 @@ def test_submit_and_source_health_are_serialized_without_trace_corruption(
 ) -> None:
     lifecycle = PhysicalOutputLifecycle("session-1")
     permission = PhysicalOutputPermission(mode="dry_run")
-    request = _endpoint_request()
+    request = _request()
     lifecycle.arm(permission)
     barrier = Barrier(2)
 
     def submit() -> object:
         barrier.wait()
-        return lifecycle.submit(request, now_s=1.0, max_age_s=1.0)
+        return _submit(lifecycle, request, now_s=1.0, max_age_s=1.0)
 
     def stale() -> object:
         barrier.wait()
@@ -443,7 +684,12 @@ def test_shutdown_uses_post_cleanup_monotonic_time_and_marks_overrun_failed() ->
         clock=lambda: next(clock_values),
     )
     lifecycle.arm(PhysicalOutputPermission(mode="dry_run"))
-    lifecycle.submit(_endpoint_request(), now_s=1.0, max_age_s=1.0)
+    _submit(
+        lifecycle,
+        _request(session_id="session-slow-cleanup"),
+        now_s=1.0,
+        max_age_s=1.0,
+    )
 
     result = lifecycle.shutdown(now_s=2.0, cleanup=lambda: None)
 

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-08-28
+last_verified: 2026-09-13
 canonical_for:
   - versioned physical output request and permission boundary
 related:
@@ -78,6 +78,33 @@ requested -> accepted / rejected -> sent -> acknowledged
 traceの`permitted` eventも、non-disabled permissionに対する`accepted` decisionと
 explicit operator gateを要求し、disabled permissionを成功として記録しない。
 
+## P5 safety binding
+
+`PhysicalOutputSafetyEvaluation`は既存の`runtime.safety.physical_safety_core`を一度評価し、
+そのtyped `SafetyInput`、`SafetyDecision`、`candidate_id`を特定のoutput requestへ結合する。
+`request_sha256`はcanonical `PhysicalOutputRequest` bytesから計算し、
+`safety_input_sha256`はvalidatedなP2/P3/P4 DTOの公開typed contentから計算する。
+`binding_sha256`はrequest digest、safety input digest、decision projection、candidate、
+`checked_at_s`、Robot、software revision、status / reasonをまとめて識別する。
+この結合はupstream safety formulaを複製せず、P2/P3/P4の出力に含まれないjoint positionや
+trajectory値を再構築しない。
+
+SafetyInput中のP2 `limit_resolution.robot_id`とP3 `collision.context.robot_id`は一致し、
+requestの`target_robot_id`とも一致しなければならない。requestの`software_revision`に対応する
+`software_revision:<id>` provenance tokenをSafetyInputとSafetyDecisionの両方で照合する。
+identity不一致、revision不一致、missing / invalid safety evidenceはallowへ昇格しない。
+
+P5の`allow`だけが`PhysicalOutputSendableRequest`を生成できる。`hold`と`unavailable`は
+lifecycleを`hold`へ移し、`reject`はrequestを拒否し、`stop`はbounded stopへ移り、`invalid`は
+terminalな`aborted`へ移す。非allow、staleなdecision、identity不一致、raw intentのsubmitでは、
+直前のlatest requestとsendable wrapperを消去する。重複・逆順sequenceの拒否は既存sendable stateを
+置き換えない。
+
+Lifecycle submitはcallerの`now_s`と別々の`max_age_s` / `max_safety_age_s`を受け取り、requestと
+safety decisionの時刻を個別に検査する。freshness contextが欠落・不正、またはdecisionがfuture / staleの
+場合は受理せず、reasonとgate evidenceを記録する。operator permissionとsafety allowは独立したgateであり、
+どちらか一方が他方を代用しない。
+
 ## Recording / dry-run trace
 
 `PhysicalOutputRecordingSink`はnetworkやRobot providerを持たないrecording-only sinkであり、
@@ -117,6 +144,9 @@ session identityと明示permissionが必要であり、session IDをlifetime内
 public transitionは一つのreducer lockで直列化し、event sinkの失敗はlifecycleをfail-closedにする。
 各transitionのtimestampは有限値であることを状態、permission、session、sequenceのmutation前に
 検証する。`complete_stop`はstop開始時刻より前のtimestampを拒否し、停止状態とtraceを変更しない。
+新規lifecycle eventは`physical-output-lifecycle/v2`でP5のstatus / reason、action、candidate、
+robot / revision、checked-at、provenance、request / safety-input / decision / binding digestsを保存する。readerは既存のv1
+eventも受理し、新規v2の`request_accepted`にはsafety evidenceを必須とする。
 
 ## Serialization / failure
 
@@ -128,9 +158,10 @@ serializeし、decode時にunknown field、missing field、duplicate key、non-f
 ## Ownership / safety
 
 - `schemas.command`がshared request、permission、decision、serialization shapeを所有する。
-- `runtime.output.permission`がpermission decisionを所有し、`runtime.output.trace`がrecording /
-  dry-run request trace、artifact、replayを所有し、`runtime.output.lifecycle`がstate、stop、
-  lifecycle traceを所有する。
+- `runtime.output.permission`がpermission decisionを所有し、`runtime.output.safety_gate`がP5 safety
+  evaluationとrequest binding、allow-only sendable wrapperを所有する。`runtime.output.trace`がrecording /
+  dry-run request trace、artifact、replayを所有し、`runtime.output.lifecycle`がstate、bounded stop、
+  safety-aware lifecycle traceを所有する。
 - `runtime/`が将来のcompositionを所有し、Input Source固有分岐をphysical output coreへ持ち込まない。
 - K-preの実装とtestはsocket、network、serial、Arduino、OSC、Robot providerを開かない・呼ばない。
 - 実機作動は`docs/operations/hardware-safety.md`と専用Issue / 明示許可の範囲に限る。
