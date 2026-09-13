@@ -1374,11 +1374,18 @@ class PhysicalOutputTransportAdapter:
     ) -> PhysicalOutputTransportResult:
         try:
             stop_time = self._now(now_s)
-            stop_result = lifecycle.operator_stop(reason, now_s=stop_time)
-            if stop_result.state == "stopping":
-                lifecycle.complete_stop(now_s=stop_time)
         except Exception:
-            pass
+            try:
+                lifecycle.fail("physical_output_transport_clock_invalid")
+            except Exception:
+                pass
+        else:
+            try:
+                stop_result = lifecycle.operator_stop(reason, now_s=stop_time)
+                if stop_result.state == "stopping":
+                    lifecycle.complete_stop(now_s=stop_time)
+            except Exception:
+                pass
         return self._rejected(
             reason,
             wire_message=wire_message,
