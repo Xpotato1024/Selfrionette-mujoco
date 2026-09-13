@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Final
 
 from selfrionette.runtime.contact.evidence import ContactEvidenceStatus
@@ -17,8 +18,14 @@ from selfrionette.runtime.contact.log import (
 from selfrionette.runtime.contact.virtual_reaction_force import (
     VirtualReactionForceStatus,
 )
+from selfrionette.runtime.composition.robot_profile import (
+    RobotProfile,
+    robot_profile_runtime_metadata,
+)
 
 CONTACT_TASK_PRESENTATION_METADATA_KEY: Final[str] = "contact_task_v1"
+CONTACT_SCENE_ROBOT_QPOS_METADATA_KEY: Final[str] = "contact_scene_robot_qpos_v1"
+CONTACT_SCENE_ROBOT_QPOS_SCHEMA_VERSION: Final[str] = "contact-scene-robot-qpos/v1"
 
 
 def build_contact_task_presentation_v1(
@@ -200,4 +207,127 @@ def contact_task_payload_metadata_v1(
             payload_frame_index=payload_frame_index,
             sample_index=sample_index,
         )
+    }
+
+
+def contact_scene_robot_qpos_payload_metadata_v1(
+    log: ContactTaskLog,
+    *,
+    model: object,
+    robot_profile: RobotProfile,
+    payload_time_s: float,
+    payload_frame_index: int,
+    sample_index: int = -1,
+) -> dict[str, object]:
+    """実MuJoCo modelのjoint addressとcontact sampleをbindするoptional metadataを返す。"""
+
+    if not isinstance(log, ContactTaskLog):
+        raise TypeError("contact qpos projection requires ContactTaskLog")
+    if not isinstance(robot_profile, RobotProfile):
+        raise TypeError("contact qpos projection requires resolved RobotProfile")
+    if isinstance(sample_index, bool) or not isinstance(sample_index, int):
+        raise TypeError("sample_index must be an integer")
+    if isinstance(payload_time_s, bool) or not isinstance(payload_time_s, (int, float)):
+        raise TypeError("payload_time_s must be a finite number")
+    if not math.isfinite(float(payload_time_s)) or payload_time_s < 0.0:
+        raise ContactTaskLogError("payload_time_s must be finite and non-negative")
+    if isinstance(payload_frame_index, bool) or not isinstance(payload_frame_index, int):
+        raise TypeError("payload_frame_index must be an integer")
+    if payload_frame_index < 0:
+        raise ContactTaskLogError("payload_frame_index must be non-negative")
+    if not (-len(log.samples) <= sample_index < len(log.samples)):
+        raise IndexError("contact qpos projection sample_index is outside the log")
+
+    manifest = log.header.context.manifest
+    selection = manifest.robot_bundle
+    if (
+        robot_profile.profile_id != selection.plugin_id
+        or robot_profile.profile_contract_version != selection.contract_version
+    ):
+        raise ContactTaskLogError(
+            "resolved Robot profile does not match the contact manifest bundle"
+        )
+    resolved_index = sample_index if sample_index >= 0 else len(log.samples) + sample_index
+    evidence = log.samples[resolved_index].observation.contact_evidence
+    if (
+        evidence.frame_index != payload_frame_index
+        or evidence.simulation_time_s != float(payload_time_s)
+    ):
+        raise ContactTaskLogError(
+            "contact sample and MuJoCo payload must share exact frame/time identity"
+        )
+
+    profile_metadata = robot_profile_runtime_metadata(robot_profile)
+    robot_profile_id = profile_metadata.get("robot_profile_id")
+    model_contract_version = profile_metadata.get("model_contract_version")
+    robot_joint_names = profile_metadata.get("robot_joint_names")
+    robot_qpos_dimension = profile_metadata.get("robot_qpos_dimension")
+    if (
+        not isinstance(robot_profile_id, str)
+        or not isinstance(model_contract_version, str)
+        or not isinstance(robot_joint_names, tuple)
+        or not all(isinstance(name, str) and name for name in robot_joint_names)
+        or isinstance(robot_qpos_dimension, bool)
+        or not isinstance(robot_qpos_dimension, int)
+        or robot_qpos_dimension < 1
+        or len(robot_joint_names) != robot_qpos_dimension
+        or len(robot_joint_names) != len(set(robot_joint_names))
+    ):
+        raise ContactTaskLogError("resolved Robot profile metadata is invalid")
+
+    source_qpos_dimension = getattr(model, "nq", None)
+    if (
+        isinstance(source_qpos_dimension, bool)
+        or not isinstance(source_qpos_dimension, int)
+        or source_qpos_dimension < robot_qpos_dimension
+    ):
+        raise ContactTaskLogError("MuJoCo model.nq cannot contain the Robot profile qpos")
+
+    try:
+        import mujoco
+    except ImportError as exc:  # pragma: no cover - project dependency
+        raise ContactTaskLogError("MuJoCo is required to resolve contact scene qpos") from exc
+
+    qpos_addresses: list[int] = []
+    one_dof_joint_types = {
+        int(mujoco.mjtJoint.mjJNT_HINGE),
+        int(mujoco.mjtJoint.mjJNT_SLIDE),
+    }
+    for joint_name in robot_joint_names:
+        joint_id = int(
+            mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+        )
+        if joint_id < 0:
+            raise ContactTaskLogError(
+                f"MuJoCo model is missing canonical Robot joint {joint_name!r}"
+            )
+        if int(model.jnt_type[joint_id]) not in one_dof_joint_types:
+            raise ContactTaskLogError(
+                f"canonical Robot joint {joint_name!r} is not a scalar qpos joint"
+            )
+        qpos_addresses.append(int(model.jnt_qposadr[joint_id]))
+    if (
+        len(set(qpos_addresses)) != robot_qpos_dimension
+        or any(address < 0 or address >= source_qpos_dimension for address in qpos_addresses)
+    ):
+        raise ContactTaskLogError("resolved Robot qpos addresses are invalid")
+
+    scene_identity = manifest.scene.identity
+    return {
+        CONTACT_SCENE_ROBOT_QPOS_METADATA_KEY: {
+            "schema_version": CONTACT_SCENE_ROBOT_QPOS_SCHEMA_VERSION,
+            "scene_identity": {
+                "name": scene_identity.name,
+                "version": scene_identity.version,
+            },
+            "manifest_digest": log.header.context.manifest_digest,
+            "frame_index": payload_frame_index,
+            "time_s": float(payload_time_s),
+            "source_qpos_dimension": source_qpos_dimension,
+            "robot_profile_id": robot_profile_id,
+            "model_contract_version": model_contract_version,
+            "robot_qpos_dimension": robot_qpos_dimension,
+            "robot_joint_names": list(robot_joint_names),
+            "qpos_addresses": qpos_addresses,
+        }
     }

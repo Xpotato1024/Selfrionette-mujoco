@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseContactTaskLogJsonl, parseContactTaskPresentationV1, type ContactTaskPresentationV1 } from "../src/contact/contactTaskLog.js";
+import { resolveTransportQpos } from "../src/wasm-scene/mujocoQposSync.js";
+import type { TransportPayloadV0 } from "../src/types/transportPayload.js";
+import { FAST_ARM_VIEWER_PROFILE } from "./testViewerProfile.js";
 
 const expectedProfile = { profileId: "fast_arm", profileContractVersion: 1 };
 const fixturePath = join(
@@ -61,6 +64,194 @@ assert.equal(futureEvidenceOuter.status, "unavailable");
 assert.equal(futureEvidenceOuter.derivedForce, null);
 assert.equal(futureEvidenceOuter.taskState, null);
 assert.equal(futureEvidenceOuter.outcome, null);
+
+function contactSceneRobotQposProjection(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    schema_version: "contact-scene-robot-qpos/v1",
+    scene_identity: available.binding!.scene_identity,
+    manifest_digest: available.binding!.manifest_digest,
+    frame_index: sampleFrameIndex,
+    time_s: sample.simulationTimeS,
+    source_qpos_dimension: 11,
+    robot_profile_id: FAST_ARM_VIEWER_PROFILE.profileId,
+    model_contract_version: FAST_ARM_VIEWER_PROFILE.modelContractVersion,
+    robot_qpos_dimension: FAST_ARM_VIEWER_PROFILE.qposDimension,
+    robot_joint_names: Array.from(FAST_ARM_VIEWER_PROFILE.jointNames),
+    qpos_addresses: [0, 4, 6, 10],
+    ...overrides,
+  };
+}
+
+function payloadWithRobotQposProjection(
+  projection: Record<string, unknown>,
+  {
+    contactTask = wirePresentation,
+    frameIndex = sampleFrameIndex,
+    timeS = sample.simulationTimeS,
+    qpos = Array.from({ length: 11 }, (_, index) => index + 1),
+  }: {
+    contactTask?: unknown;
+    frameIndex?: number;
+    timeS?: number;
+    qpos?: number[];
+  } = {},
+): TransportPayloadV0 {
+  return {
+    version: 0,
+    frame_index: frameIndex,
+    time_s: timeS,
+    qpos,
+    qvel: [],
+    bodies: [],
+    sites: [],
+    target_position_m: null,
+    metadata: {
+      robot_profile_id: FAST_ARM_VIEWER_PROFILE.profileId,
+      model_contract_version: FAST_ARM_VIEWER_PROFILE.modelContractVersion,
+      robot_joint_names: Array.from(FAST_ARM_VIEWER_PROFILE.jointNames),
+      robot_qpos_dimension: FAST_ARM_VIEWER_PROFILE.qposDimension,
+      contact_task_v1: contactTask,
+      contact_scene_robot_qpos_v1: projection,
+    },
+  };
+}
+
+const projectedQpos = resolveTransportQpos(
+  payloadWithRobotQposProjection(contactSceneRobotQposProjection()),
+  FAST_ARM_VIEWER_PROFILE.qposDimension,
+  FAST_ARM_VIEWER_PROFILE,
+);
+assert.equal(projectedQpos.status, "ready", projectedQpos.errorMessage ?? undefined);
+assert.deepEqual(projectedQpos.qpos, [1, 5, 7, 11]);
+
+function assertInvalidProjection(
+  payload: TransportPayloadV0,
+  pattern: RegExp,
+): void {
+  const result = resolveTransportQpos(
+    payload,
+    FAST_ARM_VIEWER_PROFILE.qposDimension,
+    FAST_ARM_VIEWER_PROFILE,
+  );
+  assert.equal(result.status, "invalid");
+  assert.equal(result.qpos, null);
+  assert.match(result.errorMessage ?? "", pattern);
+}
+
+const unknownProjectionField = contactSceneRobotQposProjection({ unexpected: true });
+assertInvalidProjection(
+  payloadWithRobotQposProjection(unknownProjectionField),
+  /fields do not match/,
+);
+const missingAddressProjection = contactSceneRobotQposProjection();
+delete missingAddressProjection.qpos_addresses;
+assertInvalidProjection(
+  payloadWithRobotQposProjection(missingAddressProjection),
+  /fields do not match/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({
+      manifest_digest: `sha256:${"0".repeat(64)}`,
+    }),
+  ),
+  /does not match contact manifest binding/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({
+      scene_identity: { name: "other_scene", version: 1 },
+    }),
+  ),
+  /does not match contact manifest binding/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({ frame_index: sampleFrameIndex + 1 }),
+  ),
+  /does not match payload frame\/time/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({ time_s: sample.simulationTimeS + 0.001 }),
+  ),
+  /does not match payload frame\/time/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({ source_qpos_dimension: 12 }),
+  ),
+  /source qpos dimension/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({ robot_profile_id: "other_robot" }),
+  ),
+  /loaded Robot profile/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({
+      robot_joint_names: ["wrong", ...Array.from(FAST_ARM_VIEWER_PROFILE.jointNames).slice(1)],
+    }),
+  ),
+  /joint name\/order/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({ qpos_addresses: [0, 0, 6, 10] }),
+  ),
+  /qpos addresses/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({ qpos_addresses: [0, 4, 6, 11] }),
+  ),
+  /qpos addresses/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection(),
+    { qpos: [1, 2, Number.NaN, 4, 5, 6, 7, 8, 9, 10, 11] },
+  ),
+  /source qpos dimension or values/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection(),
+    { contactTask: null },
+  ),
+  /contact_task_v1 binding is missing/,
+);
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({
+      frame_index: sampleFrameIndex + 1,
+      time_s: sample.simulationTimeS + 0.001,
+    }),
+    {
+      frameIndex: sampleFrameIndex + 1,
+      timeS: sample.simulationTimeS + 0.001,
+    },
+  ),
+  /sample was replayed or does not match payload frame\/time/,
+);
+const staleOuterTime = sample.simulationTimeS + (available.maxAgeS ?? 0) + 0.01;
+assertInvalidProjection(
+  payloadWithRobotQposProjection(
+    contactSceneRobotQposProjection({
+      frame_index: sampleFrameIndex + 2,
+      time_s: staleOuterTime,
+    }),
+    {
+      frameIndex: sampleFrameIndex + 2,
+      timeS: staleOuterTime,
+    },
+  ),
+  /contact_task_v1 binding is missing, stale, or unavailable/,
+);
 
 const mismatchedProfile = await parseContactTaskLogJsonl(fixture, {
   profileId: "another_robot",

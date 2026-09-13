@@ -56,6 +56,8 @@ callerは**同じ**`MuJoCoState` snapshotの`time_s`と`frame_index`を用いて
 
 presentation bindingにはcontact / signal manifest digest、trial、robot bundle、scene / object / presentation identityを保持する。payload time / frameからsample ageを評価し、unsupported identity、未来sample、age上限超過、invalid measurement / signal、欠落したbackend object poseは`unavailable`または`stale`となる。
 
+contact logにはrobot qposを複製しない。ContactSceneのfull qposにobject freejointが含まれる場合のloaded Robot modelとの対応は、payload-v0の別optional `metadata.contact_scene_robot_qpos_v1`で表す。producerは`schema_version: "contact-scene-robot-qpos/v1"`を付け、resolved `RobotProfile`と同一snapshotの実MuJoCo modelからcanonical joint name順のqpos addressを解決し、scene / manifest / frame / timeとprofile / model identityを結び付ける。viewerはこのmappingと同じsampleの`contact_task_v1` bindingを検証してから必要なjoint値だけをloaded profile modelへ適用する。欠落、stale、replayed sample、identity / dimension / address不一致はfail-closedとし、full qposを切り詰めたり第二のqpos列を作ったりしない。このextensionがない従来payloadは既存のexact-length validationを維持する。
+
 ## Viewerの表示境界
 
 `apps/mujoco-viewer`はpayload metadataまたは明示的なlocal file inputからpresentationを厳密に読み、登録済み・現在load済みrobot profileと比較する。viewerはstatusが`available`の間、cube geometry / pose、contact point / normal、world raw force、frame情報付きderived force、Task state、raw-evidence outcomeをread-onlyに表示する。derived-force statusは`active`、`no_contact`、`measurement_unavailable`、`invalid`、`stale`に限り、raw evidenceの`invalid_contact` / `solver_invalid`をderived statusとして受け付けない。derived forceを3D矢印にするのは`mujoco_world` frameの場合だけであり、tool / device-neutral vectorをworld vectorとして再解釈しない。

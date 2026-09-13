@@ -542,8 +542,29 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     const payload = candidate.payload;
     const endpointEvaluation = payload.endpoint_evaluation ?? null;
     const inputOverlay = buildProductViewerInputOverlayState(payload);
-    const qposResolution = resolveTransportQpos(payload, model.nq, requireProfile());
+    const activeProfile = requireProfile();
+    const contactPresentation = parseContactTaskPresentationV1(
+      payload.metadata.contact_task_v1,
+      {
+        profileId: activeProfile.profileId,
+        profileContractVersion: activeProfile.profileContractVersion,
+      },
+      { timeS: payload.time_s, frameIndex: payload.frame_index },
+    );
+    const qposResolution = resolveTransportQpos(
+      payload,
+      model.nq,
+      activeProfile,
+    );
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
+      if (contactPresentation.status !== "stale") {
+        setContactTaskPresentation(
+          unavailableContactTaskPresentation(
+            qposResolution.errorMessage ?? "payload qpos is incompatible; contact overlay was cleared",
+          ),
+          "transport_metadata",
+        );
+      }
       updateRendererStatus({
         status: "warning",
         sourceLabel: qposResolution.sourceLabel,
@@ -608,25 +629,29 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   ): void => {
     frameTiming.receive(payload, observation);
     const activeProfile = requireProfile();
-    setContactTaskPresentation(
-      parseContactTaskPresentationV1(payload.metadata.contact_task_v1, {
+    const payloadContactPresentation = parseContactTaskPresentationV1(
+      payload.metadata.contact_task_v1,
+      {
         profileId: activeProfile.profileId,
         profileContractVersion: activeProfile.profileContractVersion,
       },
-      {
-        timeS: payload.time_s,
-        frameIndex: payload.frame_index,
-      }),
-      "transport_metadata",
+      { timeS: payload.time_s, frameIndex: payload.frame_index },
     );
-    const qposResolution = resolveTransportQpos(payload, model.nq, requireProfile());
+    setContactTaskPresentation(payloadContactPresentation, "transport_metadata");
+    const qposResolution = resolveTransportQpos(
+      payload,
+      model.nq,
+      activeProfile,
+    );
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
-      setContactTaskPresentation(
-        unavailableContactTaskPresentation(
-          qposResolution.errorMessage ?? "payload qpos is incompatible; contact overlay was cleared",
-        ),
-        "transport_metadata",
-      );
+      if (payloadContactPresentation.status !== "stale") {
+        setContactTaskPresentation(
+          unavailableContactTaskPresentation(
+            qposResolution.errorMessage ?? "payload qpos is incompatible; contact overlay was cleared",
+          ),
+          "transport_metadata",
+        );
+      }
       frameTiming.recordCompatibilityInvalidIngress();
       updateRendererStatus({
         status: "warning",
@@ -647,14 +672,29 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
   const applyOfflinePayload = (payload: TransportPayloadV0): void => {
     const activeProfile = requireProfile();
-    const qposResolution = resolveTransportQpos(payload, model.nq, activeProfile);
+    const contactPresentation = parseContactTaskPresentationV1(
+      payload.metadata.contact_task_v1,
+      {
+        profileId: activeProfile.profileId,
+        profileContractVersion: activeProfile.profileContractVersion,
+      },
+      { timeS: payload.time_s, frameIndex: payload.frame_index },
+    );
+    setContactTaskPresentation(contactPresentation, "offline_payload");
+    const qposResolution = resolveTransportQpos(
+      payload,
+      model.nq,
+      activeProfile,
+    );
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
-      setContactTaskPresentation(
-        unavailableContactTaskPresentation(
-          qposResolution.errorMessage ?? "transport payload cannot be applied",
-        ),
-        "offline_payload",
-      );
+      if (contactPresentation.status !== "stale") {
+        setContactTaskPresentation(
+          unavailableContactTaskPresentation(
+            qposResolution.errorMessage ?? "transport payload cannot be applied",
+          ),
+          "offline_payload",
+        );
+      }
       updateRendererStatus({
         status: "warning",
         sourceLabel: "offline payload-v0 file / transport payload incompatible",
@@ -670,17 +710,6 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       return;
     }
 
-    setContactTaskPresentation(
-      parseContactTaskPresentationV1(payload.metadata.contact_task_v1, {
-        profileId: activeProfile.profileId,
-        profileContractVersion: activeProfile.profileContractVersion,
-      },
-      {
-        timeS: payload.time_s,
-        frameIndex: payload.frame_index,
-      }),
-      "offline_payload",
-    );
     applyModelPose(
       qposResolution.qpos,
       "offline payload-v0 file",

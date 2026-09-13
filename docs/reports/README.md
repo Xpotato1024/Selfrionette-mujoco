@@ -23,6 +23,7 @@ contract、反復operationのsource of truthにはしない。現在仕様は`do
 ## 主要な入口
 
 - [R7-G deterministic E2E completion audit](audits/r7-g-p5-completion-audit.md): #409の実装済み範囲、software-only観測、未証明事項、R7-H/I/J/K handoffを分類したcompletion audit。
+- [R7-H-P7 contact E2E completion audit](audits/r7-h-p7-completion-audit.md): #417のfinite software fixture、contact solver / Task / log / viewer payload evidence、未実施gateを分類するcompletion audit。
 
 - [2026-07-30 current documentation SoT audit](audits/current-documentation-sot-audit-2026-07-30.md):
   baseline `baabf057e02a8f5e29e51987b3ea25b92ecf6bc4`に対するIssue #482のcurrent SoT監査。

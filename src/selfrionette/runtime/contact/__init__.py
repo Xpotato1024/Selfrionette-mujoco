@@ -121,8 +121,11 @@ from .log import (
     write_contact_task_log,
 )
 from .presentation import (
+    CONTACT_SCENE_ROBOT_QPOS_METADATA_KEY,
+    CONTACT_SCENE_ROBOT_QPOS_SCHEMA_VERSION,
     CONTACT_TASK_PRESENTATION_METADATA_KEY,
     build_contact_task_presentation_v1,
+    contact_scene_robot_qpos_payload_metadata_v1,
     contact_task_payload_metadata_v1,
 )
 __all__ = [
@@ -222,6 +225,8 @@ __all__ = [
     "CONTACT_TASK_LOG_SCHEMA_VERSION",
     "CONTACT_TASK_PRESENTATION_SCHEMA_VERSION",
     "CONTACT_TASK_PRESENTATION_METADATA_KEY",
+    "CONTACT_SCENE_ROBOT_QPOS_METADATA_KEY",
+    "CONTACT_SCENE_ROBOT_QPOS_SCHEMA_VERSION",
     "ContactTaskLog",
     "ContactTaskLogError",
     "ContactTaskLogHeader",
@@ -231,6 +236,7 @@ __all__ = [
     "ContactTaskLogSummary",
     "ContactTaskLogTaskState",
     "build_contact_task_presentation_v1",
+    "contact_scene_robot_qpos_payload_metadata_v1",
     "contact_task_log_artifact_name",
     "contact_task_payload_metadata_v1",
     "decode_contact_task_log",
