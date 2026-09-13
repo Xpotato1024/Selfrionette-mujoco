@@ -16,6 +16,7 @@ from selfrionette.plugins.robots.fast_arm.adapter.physical_output import (
 from selfrionette.plugins.robots.fast_arm.adapter.profile import FAST_ARM_ROBOT_PROFILE
 from selfrionette.runtime.output.fast_arm_adapter import (
     FastArmPhysicalEvidenceAcceptance,
+    FastArmPhysicalEvidenceHandoff,
     FastArmPhysicalOutputSession,
     create_fast_arm_wire_encoder,
     fast_arm_codec_identity,
@@ -33,6 +34,10 @@ from selfrionette.runtime.output.transport_adapter import (
     PhysicalOutputTransportConfig,
 )
 from selfrionette.runtime.safety.limit_resolution import resolve_joint_space_bounds
+from selfrionette.runtime.safety.operator_validation import (
+    EvidenceClass,
+    build_dry_run_validation_artifact,
+)
 from selfrionette.runtime.safety.physical_limits import (
     EvidenceStatus,
     LimitQuantity,
@@ -56,6 +61,7 @@ from tests.runtime.test_physical_safety_core import (
     _collision,
     _dynamic,
 )
+from tests.runtime.test_operator_validation import COMPLETED, STARTED, _all_checks, _procedure
 
 
 _PROFILE = FAST_ARM_ROBOT_PROFILE
@@ -194,20 +200,148 @@ def _accepted_evidence(target_robot_id: str = _TARGET_ROBOT_ID) -> FastArmPhysic
         source_summary="synthetic test fixture only; not hardware evidence",
     )
     envelope_sha256 = sha256(envelope.to_json_bytes()).hexdigest()
-    return FastArmPhysicalEvidenceAcceptance(
-        acceptance_reference="synthetic-test-only:#509-acceptance-record",
-        acceptance_sha256=sha256(
-            b"synthetic test fixture only; no #509 evidence artifact"
-        ).hexdigest(),
+    acceptance_reference = "synthetic-test-only:#509-acceptance-record"
+    joint_measurement_references = tuple(references)
+    handoff_bytes = FastArmPhysicalEvidenceHandoff(
+        acceptance_reference=acceptance_reference,
         target_robot_id=target_robot_id,
         profile_id=_PROFILE.profile_id,
         profile_contract_version=_PROFILE.profile_contract_version,
         model_contract_version=_PROFILE.model_contract_version,
+        envelope_sha256=envelope_sha256,
+        joint_measurement_references=joint_measurement_references,
+        accepted_at_s=1.0,
+    ).to_json_bytes()
+    return FastArmPhysicalEvidenceAcceptance(
+        acceptance_reference=acceptance_reference,
+        acceptance_sha256=sha256(handoff_bytes).hexdigest(),
+        handoff_bytes=handoff_bytes,
+        target_robot_id=target_robot_id,
+        profile_id=_PROFILE.profile_id,
+        profile_contract_version=_PROFILE.profile_contract_version,
+        model_contract_version=_PROFILE.model_contract_version,
+        observation_class="physical_measurement",
         envelope=envelope,
         envelope_sha256=envelope_sha256,
-        joint_measurement_references=tuple(references),
+        joint_measurement_references=joint_measurement_references,
         accepted_at_s=1.0,
     )
+
+
+def test_physical_evidence_handoff_uses_strict_canonical_json_bytes() -> None:
+    evidence = _accepted_evidence()
+    handoff = FastArmPhysicalEvidenceHandoff.from_json_bytes(evidence.handoff_bytes)
+
+    assert handoff.schema_version == "fast-arm-physical-evidence-handoff/v1"
+    assert handoff.issue_id == "#509"
+    assert handoff.status == "accepted"
+    assert handoff.observation_class == "physical_measurement"
+    assert sha256(evidence.handoff_bytes).hexdigest() == evidence.acceptance_sha256
+    assert handoff.to_json_bytes() == evidence.handoff_bytes
+
+    duplicate_key = evidence.handoff_bytes.replace(
+        b'"acceptance_reference":"synthetic-test-only:#509-acceptance-record"',
+        b'"acceptance_reference":"duplicate","acceptance_reference":"synthetic-test-only:#509-acceptance-record"',
+        1,
+    )
+    with pytest.raises(ValueError, match="duplicate field"):
+        FastArmPhysicalEvidenceHandoff.from_json_bytes(duplicate_key)
+    with pytest.raises(ValueError, match="BOM"):
+        FastArmPhysicalEvidenceHandoff.from_json_bytes(b"\xef\xbb\xbf" + evidence.handoff_bytes)
+    with pytest.raises(ValueError, match="canonical JSON"):
+        FastArmPhysicalEvidenceHandoff.from_json_bytes(
+            evidence.handoff_bytes.replace(b'"accepted_at_s":1.0', b'"accepted_at_s":1.00')
+        )
+    with pytest.raises(ValueError, match="non-finite JSON constant"):
+        FastArmPhysicalEvidenceHandoff.from_json_bytes(
+            evidence.handoff_bytes.replace(b'"accepted_at_s":1.0', b'"accepted_at_s":NaN')
+        )
+    with pytest.raises(ValueError, match="missing or unknown fields"):
+        FastArmPhysicalEvidenceHandoff.from_json_bytes(
+            evidence.handoff_bytes.replace(b'"target_robot_id":"arm_a"', b'"target_robot_id":"arm_a","unexpected":true')
+        )
+    with pytest.raises(ValueError, match="missing or unknown fields"):
+        FastArmPhysicalEvidenceHandoff.from_json_bytes(
+            evidence.handoff_bytes.replace(b',"target_robot_id":"arm_a"', b'')
+        )
+    with pytest.raises(ValueError, match="valid UTF-8 JSON"):
+        FastArmPhysicalEvidenceHandoff.from_json_bytes(b"\xff")
+
+    handoff = FastArmPhysicalEvidenceHandoff.from_json_bytes(evidence.handoff_bytes)
+    with pytest.raises(ValueError, match="accepted physical-measurement"):
+        replace(handoff, status="rejected")
+    with pytest.raises(ValueError, match="accepted physical-measurement"):
+        replace(handoff, observation_class="software_only")
+    with pytest.raises(ValueError, match="accepted physical-measurement"):
+        replace(handoff, schema_version="other/v1")
+
+
+def test_physical_evidence_acceptance_requires_matching_handoff_bytes() -> None:
+    evidence = _accepted_evidence()
+    with pytest.raises(ValueError, match="handoff digest"):
+        replace(evidence, acceptance_sha256="0" * 64)
+    with pytest.raises(TypeError, match="exact handoff bytes"):
+        replace(evidence, handoff_bytes=None)
+
+    handoff = FastArmPhysicalEvidenceHandoff.from_json_bytes(evidence.handoff_bytes)
+    changed_bytes = replace(handoff, acceptance_reference="synthetic-test-only:other-reference").to_json_bytes()
+    with pytest.raises(ValueError, match="do not match typed physical evidence"):
+        replace(evidence, handoff_bytes=changed_bytes, acceptance_sha256=sha256(changed_bytes).hexdigest())
+
+
+@pytest.mark.parametrize(
+    ("field_name", "replacement"),
+    (
+        ("acceptance_reference", "synthetic-test-only:other-reference"),
+        ("target_robot_id", "another-arm"),
+        ("profile_id", "another-profile"),
+        ("profile_contract_version", 99),
+        ("model_contract_version", "another-model"),
+        ("envelope_sha256", "0" * 64),
+        ("joint_measurement_references", (("joint-1", "other-reference"),)),
+        ("accepted_at_s", 2.0),
+    ),
+)
+def test_physical_evidence_acceptance_rejects_typed_handoff_mismatch(field_name: str, replacement: object) -> None:
+    evidence = _accepted_evidence()
+    with pytest.raises((TypeError, ValueError)):
+        replace(evidence, **{field_name: replacement})
+
+
+def test_physical_evidence_handoff_rejects_software_only_p6_artifact() -> None:
+    p6_artifact = build_dry_run_validation_artifact(
+        _procedure(),
+        _all_checks(),
+        artifact_id="synthetic-software-only-p6",
+        started_at=STARTED,
+        completed_at=COMPLETED,
+    )
+    assert p6_artifact.evidence_class is EvidenceClass.SOFTWARE_ONLY
+    with pytest.raises(ValueError, match="missing or unknown fields"):
+        FastArmPhysicalEvidenceHandoff.from_json_bytes(p6_artifact.to_json_bytes())
+
+
+def test_session_rejects_accepted_envelope_model_mismatch() -> None:
+    evidence = _accepted_evidence()
+    envelope = replace(evidence.envelope, model_id="another-model")
+    envelope_sha256 = sha256(envelope.to_json_bytes()).hexdigest()
+    handoff = replace(
+        FastArmPhysicalEvidenceHandoff.from_json_bytes(evidence.handoff_bytes),
+        model_contract_version="another-model",
+        envelope_sha256=envelope_sha256,
+    )
+    handoff_bytes = handoff.to_json_bytes()
+    mismatched_evidence = replace(
+        evidence,
+        model_contract_version="another-model",
+        envelope=envelope,
+        envelope_sha256=envelope_sha256,
+        handoff_bytes=handoff_bytes,
+        acceptance_sha256=sha256(handoff_bytes).hexdigest(),
+    )
+
+    with pytest.raises(ValueError, match="accepted #509 evidence does not match"):
+        _new_session(evidence=mismatched_evidence)
 
 
 def _evaluation(

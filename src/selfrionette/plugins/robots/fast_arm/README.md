@@ -46,6 +46,11 @@ profile軸とrouter semantic軸の対応・zero基準は未確定で、実機用
 runtime target / transport / accepted evidenceをそれぞれ照合する。
 pure mapping moduleはruntimeやgeneric transportへ依存しない。P5 lifecycle、accepted #509 physical-measurement handoff、
 二つのpermissionとoperator gateからtransportまでのcompositionは`runtime.output.fast_arm_adapter`が所有する。
+accepted evidenceにはreference / digestだけでなく`FastArmPhysicalEvidenceHandoff/v1`のexact JSON bytesが必要である。
+strict parserはUTF-8 BOM、duplicate / unknown / missing field、non-finite value、non-canonical JSONを拒否し、exact byte digestと
+`#509` / accepted status / physical-measurement class / profile / target / model / envelope digest / joint別measurement reference / accepted timeを照合する。
+これはcontent integrityとidentity consistencyを示すだけで、source authenticityやGitHub stateを証明しない。P6 software-only
+dry-run artifactはhandoffとして扱わず、実際のaccepted #509 artifactはfixtureに含めない。
 
 FastArm output sessionはv2 external authorizationを要求するgeneric adapter構成だけを受け付ける。router observationは
 correlated commandを示す範囲に限り、Pi / Robot受理、movement、physical stopは証明しない。現taskで使った測定・観測

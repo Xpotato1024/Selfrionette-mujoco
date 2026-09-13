@@ -229,6 +229,18 @@ physical-measurement source referenceと一致しなければならない。`phy
 adapterへ渡される。FastArm public wire encoderはrequired-authorization capabilityを宣言し、generic adapterは
 v1またはexternal authorizationなしのv2 configとのcompositionを拒否する。
 
+FastArmのaccepted evidenceは、referenceとdigestだけでは受け付けず、callerが渡す
+`FastArmPhysicalEvidenceHandoff/v1`のexact JSON bytesを必須とする。文書は`#509`、`accepted`、
+`physical_measurement`、schema version、acceptance reference、target、profile / model contract、accepted envelope
+SHA-256、jointごとのmeasurement reference、accepted timestampを束ねる。UTF-8 BOM、duplicate / unknown / missing
+field、non-finite number、non-canonical JSONを拒否し、exact byte列のSHA-256と文書内の全identity / referenceをtyped
+evidenceへ照合する。typed envelopeのrobot idはtargetへ、model idはresolved Profileのmodel contractへ一致させる。
+
+このdigestとbindingはcontent integrityとidentity consistencyを確認するもので、source authenticity、署名、GitHub Issueの
+state、またはcaller自身が意図的にfabricateした整合文書の真正性を証明しない。P6のsoftware-only dry-run artifactは
+このhandoff schemaとして受理されない。自動testsのhandoff bytesはsynthetic fixtureであり、実際の#509 accepted physical
+measurement artifactは取得していない。
+
 local socket receipt後はcorrelated router observationを待つ。synthetic senderでも同じpending、correlation、timeout、
 stop state transitionを検証できるが、simulated observationはpendingを解除するだけでstatusは`unavailable`のままとし、
 `router_command_observed`へ昇格しない。実senderの一致する観測はrouterがcommandを処理したことだけを示し、Pi / Robot
