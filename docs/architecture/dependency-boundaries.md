@@ -38,6 +38,14 @@ transport           -> schemas
 runtime             -> all layers
 ```
 
+output transport compositionの許可例は次のとおりである。既存permission、safety gate、lifecycle、trace coreは
+transportへ直接依存しない。
+
+```text
+runtime.output.transport_adapter -> runtime.output.permission / safety_gate / lifecycle
+runtime.output.transport_adapter -> schemas, transport
+```
+
 Input Source Pluginのgeneric `InputSource.read_frame() -> RawInputFrame` contractは
 `runtime/experiment/input_source.py`がdefinitionを所有し、production source implementationとregistrationは
 `plugins/input_sources/`が所有する。Control Mappingのcanonical ownerは`plugins/mappings/`である。
@@ -250,10 +258,11 @@ legacyの責務を移行する場合は、script全体をcopyせず、次のowne
 | device input読取 | `plugins/input_sources/` | `RawInputFrame`を返し、IKまたはMuJoCo stateを書き換えない |
 | inputの意味付けとscale | `plugins/mappings/` | mapping semanticsのcanonical owner。`input_interpreters/`とlegacy `RuntimePipeline`は退役済み |
 | target更新とsafety limit | `motion/` | `MotionCommand`を生成する |
-| physical output safety binding / lifecycle | `runtime/output/` | 既存P5 decisionをexact typed requestへ結合し、明示allowのlifecycle acceptanceだけを所有する。safety formulaやtransport / hardware送信を所有しない |
+| physical output safety binding / permission / lifecycle | `runtime/output/{safety_gate,permission,lifecycle,trace}.py` | P5 decisionをexact typed requestへ結合し、permission、recording、allow-only lifecycleを所有する。transport importとhardware送信を持たない |
+| physical output transport composition | `runtime/output/transport_adapter.py` | explicit configでP5 allow、permission、lifecycleとgeneric transportを結ぶ唯一のoutput owner。robot-specific mappingを持たない |
 | FK / IK / joint limit | `kinematics/`またはrobot-specific plugin | kinematics責務に限定する |
 | MJCF model state | `mujoco_backend/` | MuJoCoをphysical stateのsource of truthとする |
-| logging / replay / WebSocket delivery | `transport/` | motionまたはkinematics logicを所有しない |
+| logging / replay / WebSocket / generic OSC / UDP delivery | `transport/` | runtimeやrobot mappingをimportせず、generic message encodingとendpoint deliveryを所有する |
 | application composition | `runtime/` | 唯一のcomposition rootとする |
 | visual rendering | `apps/mujoco-viewer/` | Three.js rendering-onlyとする |
 
