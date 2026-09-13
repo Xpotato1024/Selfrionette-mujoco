@@ -53,7 +53,11 @@ model settings、trial reset、初期contact readinessを所有する。scene co
 failure stateはno_contact、measurement_unavailable、invalid_contact、solver_invalidを分離する。
 `virtual_reaction_force.py`はraw `ContactEvidence`から別manifest identityを持つsoftware-only signalを導出し、
 frame変換とfilter pipelineを所有する。derived signalはraw evidenceを変更せず、
-`ContactTaskOutcome` / terminal evidenceはraw contact contractに従う。
+`ContactTaskOutcome` / terminal evidenceはraw contact contractに従う。`log.py`はexplicit callerがtrial単位の
+raw evidence、derived signal、Task state、summaryをversioned JSONLへ投影する。summary outcomeはraw contact
+evidenceに基づき、derived force filterから判定しない。writerは同一directoryの一時file、strict read-back、
+atomic replaceを使い、default runtimeはfileを開かない。`presentation.py`は選択sampleを
+`contact-task-presentation/v1`として同一MuJoCo snapshotの`metadata.contact_task_v1`へ投影する。
 task outcomeのlifecycleは`plugins/tasks/contact_press_hold_task/`、canonical outcome / terminal shapeの
 共有型は`task_contract.py`がownerである。scene compositionとviewerはforce filter、terminal判定、contact再計算を
 行わない。#415のfixture runnerはraw measured evidenceのreplayだけを扱い、MuJoCoのphysical sceneや

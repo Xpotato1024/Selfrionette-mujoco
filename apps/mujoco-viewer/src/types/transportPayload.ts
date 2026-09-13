@@ -19,6 +19,7 @@ export type EndpointProgressStatus =
 
 /** Known endpoint metadata carried inside the open payload-v0 metadata map. */
 export interface TransportEndpointMetadata {
+  contact_task_v1?: unknown;
   robot_profile_id?: string;
   model_contract_version?: string;
   robot_joint_names?: string[];

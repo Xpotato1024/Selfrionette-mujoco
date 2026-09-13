@@ -32,3 +32,4 @@ canonical contract文書:
 - `docs/contracts/physical-operator-validation.md`
 - `docs/contracts/contact-task-manifest.md`
 - `docs/contracts/virtual-reaction-force.md`
+- `docs/contracts/contact-task-log-v1.md`

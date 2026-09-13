@@ -4,6 +4,11 @@
  */
 import type { TransportEndpointEvaluationPayload, TransportPayloadV0 } from "../types/transportPayload.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
+import {
+  unavailableContactTaskPresentation,
+  type ContactTaskInputSource,
+  type ContactTaskPresentationV1,
+} from "../contact/contactTaskLog.js";
 import { formatQpos } from "./mujocoQposSync.js";
 import type { ViewerFrameTimingSnapshot } from "./viewerFrameTiming.js";
 import {
@@ -80,6 +85,8 @@ export interface ProductViewerState {
   currentQpos: number[] | null;
   currentQposText: string;
   endpointEvaluation: TransportEndpointEvaluationPayload | null;
+  contactTaskPresentation: ContactTaskPresentationV1;
+  contactTaskInputSource: ContactTaskInputSource;
   inputOverlay: ProductViewerInputOverlayState | null;
   viewerTiming: ViewerFrameTimingSnapshot | null;
   modelNq: number | null;
@@ -131,6 +138,8 @@ export function createInitialProductViewerState(profile?: ViewerRobotProfile): P
     currentQpos: null,
     currentQposText: "[]",
     endpointEvaluation: null,
+    contactTaskPresentation: unavailableContactTaskPresentation("No contact task log or metadata loaded."),
+    contactTaskInputSource: "none",
     inputOverlay: null,
     viewerTiming: null,
     modelNq: null,
@@ -148,6 +157,11 @@ export function formatViewerStatusText(state: ProductViewerState): string {
   const modelNq = state.modelNq === null ? "n/a" : String(state.modelNq);
   const qposError = state.qposError === null ? "none" : state.qposError;
   const endpointEvaluation = state.endpointEvaluation === null ? "unavailable" : "available";
+  const contact = state.contactTaskPresentation;
+  const contactForce =
+    contact.status === "available" && contact.derivedForce?.forceN !== null && contact.derivedForce !== null
+      ? contact.derivedForce.forceN.map((value) => value.toFixed(3)).join(", ") + " N"
+      : "unavailable";
   const inputOverlay = state.inputOverlay === null ? "unavailable" : "available";
   const viewerTiming = state.viewerTiming;
 
@@ -165,6 +179,11 @@ export function formatViewerStatusText(state: ProductViewerState): string {
     `model.nq: ${modelNq}`,
     `current qpos: ${state.currentQposText}`,
     `endpoint evaluation: ${endpointEvaluation}`,
+    `contact task status: ${contact.status}`,
+    `contact task input: ${state.contactTaskInputSource}`,
+    `contact declared source: ${contact.sourceKind ?? "unavailable"}`,
+    `contact derived force: ${contactForce}`,
+    `contact unavailable reason: ${contact.reason ?? "none"}`,
     `input overlay: ${inputOverlay}`,
     `latest received frame: ${viewerTiming?.latestReceivedFrameIndex ?? "n/a"}`,
     `latest compatibility-accepted frame: ${viewerTiming?.latestCompatibilityAcceptedFrameIndex ?? "n/a"}`,
