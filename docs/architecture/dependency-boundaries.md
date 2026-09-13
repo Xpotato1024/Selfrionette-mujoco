@@ -340,3 +340,5 @@ execution loopはroute-bound `ControlMappedRuntimePipeline`とtyped command prov
 #407のmotion-log recorderは`runtime/experiment/`でrunnerのimmutable traceを既存
 `schemas.experiment_log`へprojectionするfilesystem consumerである。schema moduleはruntimeまたはfilesystemへ
 依存せず、runnerはrecordを生成するためにMapping、motion policy、MuJoCo step、Task判定を再実行しない。
+
+#513のoutput compositionはP3 observation producer由来の実評価configurationをP4へ渡し、request / P3 / P4の値bindingを検証する。`runtime/safety/evaluated_candidate.py`はchecker間で共有する値projectionだけを持つ。P2へcandidate評価責務を移さず、collision / dynamic formulaとhardware / transport責務は既存ownerに保持する。

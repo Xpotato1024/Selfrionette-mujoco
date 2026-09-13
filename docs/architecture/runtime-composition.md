@@ -341,3 +341,9 @@ blur、stale、invalidの既存hold safetyも維持する。
 Control Mapping parametersは`explicit runtime mapping parameters > Mapping plugin defaults`の順で
 解決する。Input Source instance、frame metadata、source registrationからMapping parameterを投影しない。
 selection / plan readinessでMapping contractを正規化・freezeし、source lifecycle開始前に確定する。
+
+### Physical output評価候補のcomposition
+
+`runtime/output/safety_gate.py`はjoint-position requestとP3 observation producerが実評価したconfigurationを照合し、`compose_physical_output_safety_input`で同じqpos / qvelをP4へ渡す。P3/P4は`runtime/safety/evaluated_candidate.py`のimmutableな値projectionを返し、それぞれのowner-local originをauthorityとする。outputは両projectionとrequest targetを照合し、formulaを再実装しない。endpoint-velocityおよびcanonical resolverのないtrajectoryはnon-sendableであり、plannerやphysical observation architectureは追加しない。
+
+Runtimeが構成する`EvaluatedJointRoute`はendpoint設定とRobot-owned joint順序の対応をP3観測からP4評価まで保持する。requestのendpoint変更を単なる数値qpos一致で許可せず、評価したrouteとの一致を検証する。

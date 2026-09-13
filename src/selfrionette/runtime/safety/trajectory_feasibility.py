@@ -16,6 +16,8 @@ from enum import Enum
 from threading import RLock
 from typing import Final
 
+from selfrionette.runtime.safety.evaluated_candidate import EvaluatedCandidate, EvaluatedJointRoute
+
 from selfrionette.runtime.safety.physical_limits import (
     _construct_projected_limit,
     EvidenceStatus,
@@ -204,6 +206,34 @@ def _binding_matches(
     return binding.identity.value is value and binding.semantic == semantic
 
 
+def evaluated_feasibility_candidate(
+    result: ConfigurationFeasibilityResult | TrajectoryFeasibilityResult,
+) -> EvaluatedCandidate | None:
+    """公開constructorやsource_idをauthorityにせず、評価時originの値を返す。"""
+    if type(result) is ConfigurationFeasibilityResult:
+        _validate_configuration_result(result)
+    elif type(result) is TrajectoryFeasibilityResult:
+        _validate_trajectory_result(result)
+    else:
+        raise TypeError("expected a P4 result")
+    try:
+        origin = _sealed_feasibility_origin(result)
+    except ValueError:
+        return None
+    if origin.kind == "configuration" and origin.source_state is not None:
+        state = origin.source_state.semantic
+        return EvaluatedCandidate(result.expected_joint_names, ((state[0], state[1]),), joint_route=state[4])
+    if origin.kind == "trajectory":
+        samples = tuple(item.semantic for item in origin.samples)
+        return EvaluatedCandidate(
+            result.expected_joint_names,
+            tuple((sample[1], sample[2]) for sample in samples),
+            tuple(sample[0] for sample in samples),
+            samples[0][5] if samples else None,
+        )
+    return None
+
+
 def canonical_fast_arm_joint_space_frame() -> str:
     """fast_armのjoint-space limitへ要求する唯一のframe identityを返す。"""
 
@@ -280,6 +310,7 @@ def _state_snapshot(state: object) -> tuple[object, ...]:
         if jacobian is None
         else (_IdentitySeal(jacobian), _jacobian_snapshot(jacobian)),
         getattr(state, "source_id"),
+        getattr(state, "joint_route"),
     )
 
 
@@ -293,6 +324,7 @@ def _sample_snapshot(sample: object) -> tuple[object, ...]:
         if jacobian is None
         else (_IdentitySeal(jacobian), _jacobian_snapshot(jacobian)),
         getattr(sample, "source_id"),
+        getattr(sample, "joint_route"),
     )
 
 
@@ -663,6 +695,7 @@ class ConfigurationState:
     qvel_rad_s: tuple[float, ...] | None = None
     jacobian: JacobianDiagnostic | None = None
     source_id: str = "mujoco-state"
+    joint_route: EvaluatedJointRoute | None = None
 
     def __post_init__(self) -> None:
         _text("source_id", self.source_id)
@@ -689,6 +722,7 @@ class TrajectorySample:
     qvel_rad_s: tuple[float, ...] | None = None
     jacobian: JacobianDiagnostic | None = None
     source_id: str = "mujoco-trajectory"
+    joint_route: EvaluatedJointRoute | None = None
 
     def __post_init__(self) -> None:
         _finite("timestamp_s", self.timestamp_s)
@@ -906,6 +940,11 @@ class ConfigurationFeasibilityResult:
         _validate_configuration_result(self, initialize=True)
 
     @property
+    def evaluated_candidate(self) -> EvaluatedCandidate | None:
+        """P4 evaluatorのoriginから実際の入力configurationを復元する。"""
+        return evaluated_feasibility_candidate(self)
+
+    @property
     def feasible(self) -> bool:
         try:
             _validate_configuration_result(self)
@@ -932,6 +971,11 @@ class ConfigurationFeasibilityResult:
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class TrajectoryFeasibilityResult:
     """finite trajectoryのdynamic/Jacobian result。"""
+
+    @property
+    def evaluated_candidate(self) -> EvaluatedCandidate | None:
+        """P4 evaluatorのoriginから実際の入力sample列を復元する。"""
+        return evaluated_feasibility_candidate(self)
 
     status: FeasibilityStatus
     reason_code: str
@@ -1954,6 +1998,11 @@ def _configuration_result_origin(
         raise TypeError("configuration origin policy must be TrajectoryFeasibilityPolicy")
     _validate_configuration_state(state)
     policy_fingerprint = _validate_trajectory_feasibility_policy(policy)
+    if state.joint_route is not None and (
+        type(state.joint_route) is not EvaluatedJointRoute
+        or state.joint_route.joint_names != policy.joint_names
+    ):
+        raise ValueError("configuration joint route does not match evaluated joint order")
     jacobian = (
         (_origin_binding(state.jacobian, _jacobian_snapshot(state.jacobian)),)
         if state.jacobian is not None
@@ -1984,6 +2033,13 @@ def _trajectory_result_origin(
         raise TypeError("trajectory origin samples must contain TrajectorySample values")
     for sample in normalized_samples:
         _validate_trajectory_sample(sample)
+        if sample.joint_route is not None and (
+            type(sample.joint_route) is not EvaluatedJointRoute
+            or sample.joint_route.joint_names != policy.joint_names
+        ):
+            raise ValueError("trajectory joint route does not match evaluated joint order")
+    if normalized_samples and any(sample.joint_route != normalized_samples[0].joint_route for sample in normalized_samples):
+        raise ValueError("trajectory sample joint routes must match")
     policy_fingerprint = _validate_trajectory_feasibility_policy(policy)
     return _EvaluatorResultOrigin(
         kind="trajectory",

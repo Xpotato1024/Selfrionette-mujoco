@@ -24,22 +24,24 @@ from selfrionette.schemas import PhysicalOutputPermission
 
 from tests.schemas.test_physical_output_contract import _endpoint_request
 from tests.runtime.test_physical_safety_core import _input as _safety_input_fixture
+from tests.support.output_candidate_evidence import joint_request, observed_safety_input
 
 
 def _request(**changes: object):
-    request = replace(_endpoint_request(), target_robot_id="fixture-robot")
-    return replace(request, **changes) if changes else request
+    return joint_request(**changes)
 
 
 def _safety_input(request, *, base=None, include_revision: bool = True):
-    safety_input = _safety_input_fixture() if base is None else base
+    safety_input = observed_safety_input(request) if base is None else base
     safety_input = replace(
         safety_input,
         candidate_id=physical_output_candidate_id(request),
     )
     if include_revision:
-        provenance = (*safety_input.provenance, f"software_revision:{request.software_revision}")
+        provenance = tuple(dict.fromkeys((*safety_input.provenance, f"software_revision:{request.software_revision}")))
         safety_input = replace(safety_input, provenance=provenance)
+    else:
+        safety_input = replace(safety_input, provenance=tuple(p for p in safety_input.provenance if not p.startswith("software_revision:")))
     return safety_input
 
 
@@ -299,9 +301,9 @@ def test_candidate_mismatch_after_active_clears_latest_sendable_request() -> Non
         sequence=request.sequence + 1,
         command=replace(
             request.command,
-            velocity_m_s=(
-                request.command.velocity_m_s[0] + 0.01,
-                *request.command.velocity_m_s[1:],
+            joint_angles_rad=(
+                request.command.joint_angles_rad[0] + 0.01,
+                *request.command.joint_angles_rad[1:],
             ),
         ),
     )

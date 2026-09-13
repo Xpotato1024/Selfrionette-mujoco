@@ -86,20 +86,27 @@ explicit operator gateを要求し、disabled permissionを成功として記録
 `safety_input_sha256`はvalidatedなP2/P3/P4 DTOの公開typed contentから計算する。
 `binding_sha256`はrequest digest、safety input digest、decision projection、candidate、
 `checked_at_s`、Robot、software revision、status / reasonをまとめて識別する。
-この結合はupstream safety formulaを複製せず、P2/P3/P4の出力に含まれないjoint positionや
-trajectory値を再構築しない。
+この結合はupstream safety formulaを複製しない。`physical_output_candidate_id(request)`は
+canonical request bytesのversioned SHA-256であり、request identityの照合に使う。
+このcaller-visible IDだけではallowを作れない。
 
-`physical_output_candidate_id(request)`はcanonical request bytesから
-`physical-output-candidate/v1:sha256:<request_sha256>`を作る。生成側は
-`PhysicalOutputRequest`を固定してからこの関数を呼び、返されたIDを使って同一のcommand / trajectoryを
-P2/P3/P4 checkerへ渡す。`SafetyInput.candidate_id`と`SafetyDecision.candidate_id`の両方がこの
-request由来IDと一致しなければ、outputへの結合は`rejected`となる。この関数とbinding処理は受け取った
-candidate IDを補完・書き換えない。
+`compose_physical_output_safety_input`は、`JointPositionCommand.joint_angles_rad`を
+Robot-owned joint順序のtarget configurationとして解決する。P3の
+`evaluate_mujoco_collision_configuration`が実際にforward・観測したqpos / qvelとjoint名を
+保持している場合だけ、そのqposとrequest targetを完全一致で照合し、同じconfigurationをP4へ渡す。
+qvelは観測した値を保持し、ゼロや有限差分を捏造しない。Jacobianとphysical limitsのevidence契約は維持する。
 
-このID一致は生成側が同じcommand / trajectoryをcheckしたことの意味上の保証に依存する。
-P2/P3/P4 DTOはupstream safety evidenceを保持するが、元のqpos / trajectory値全体は保持しないため、
-output bindingはそれらの値を再構築または再計算しない。candidate IDは検査対象のidentityを結ぶもので、
-独立したphysical measurementやupstream checker実行の証明ではない。
+P3/P4 resultの`evaluated_candidate`は、公開constructorの任意IDではなく、P3 observation producer /
+P4 evaluatorのowner-local originに保持した値から得る。output gateは両resultのjoint順序・qpos・qvel・
+sample時刻を照合し、さらにrequestのtarget qposと照合する。result再構築でP3 observation originを
+引き継げず、candidate Aの結果のcaller-visible IDをrequest Bへ合わせてもnon-sendableとなる。
+`SafetyInput.candidate_id`と`SafetyDecision.candidate_id`のrequest一致、既存のrobot / revision検証も維持する。
+
+この経路はconfiguration-only評価であり、目標までの移動軌道・実機motionの安全性を証明しない。
+`endpoint_velocity_command/v1`にはphysical requestから評価軌道へのcanonical resolverがないため、
+`physical_safety_candidate_semantics_unresolved`としてnon-sendableにする。任意のbounded trajectoryも
+単一joint targetから補間してallowしない。P4の実評価sample列は保持するが、outputに必要なresolverが
+ない経路はfail-closedである。新しいplanner、#516、hardware observationは追加しない。
 
 SafetyInput中のP2 `limit_resolution.robot_id`とP3 `collision.context.robot_id`は一致し、
 requestの`target_robot_id`とも一致しなければならない。requestの`software_revision`に対応する
@@ -177,3 +184,5 @@ serializeし、decode時にunknown field、missing field、duplicate key、non-f
 - `runtime/`が将来のcompositionを所有し、Input Source固有分岐をphysical output coreへ持ち込まない。
 - K-preの実装とtestはsocket、network、serial、Arduino、OSC、Robot providerを開かない・呼ばない。
 - 実機作動は`docs/operations/hardware-safety.md`と専用Issue / 明示許可の範囲に限る。
+
+Runtime設定は`EvaluatedJointRoute(endpoint_id, joint_names)`で、既存endpoint設定とRobot-ownedの全joint順序を明示的に結ぶ。P3 producerはこのrouteのjoint名を実MuJoCo joint addressへ解決して観測し、routeもoriginへ保持する。P4は同じrouteをConfigurationState / TrajectorySampleの評価入力として保持し、policyのjoint順序との一致を要求する。output gateはrequest endpointも照合するため、同じqpos数値の別endpointへIDだけ付け替えても拒否する。routeはruntimeの構成情報であり、requestから任意の別joint groupを推測するresolverではない。FastArmでは既存endpoint設定とProfileのcanonical joint orderを使用し、route不明のgroupは評価しない。

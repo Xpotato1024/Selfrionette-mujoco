@@ -44,6 +44,25 @@ from selfrionette.runtime.safety.trajectory_feasibility import (
 JOINTS = ("joint_a", "joint_b", "joint_c")
 
 
+def test_evaluated_candidate_projection_preserves_actual_configuration_and_samples() -> None:
+    state = ConfigurationState((0.1, 0.2, 0.3), (0.0, 0.0, 0.0), _jacobian(), "same-source")
+    result = evaluate_configuration_feasibility(state, _policy())
+    assert result.evaluated_candidate.joint_names == JOINTS
+    assert result.evaluated_candidate.configurations == ((state.qpos_rad, state.qvel_rad_s),)
+    changed = replace(state, qpos_rad=(0.2, 0.2, 0.3))
+    other = evaluate_configuration_feasibility(changed, _policy())
+    assert result.source_id == other.source_id
+    assert result.evaluated_candidate != other.evaluated_candidate
+    samples = (
+        _sample(0.0, (0.0, 0.0, 0.0)),
+        _sample(0.1, (0.01, 0.0, 0.0)),
+        _sample(0.2, (0.02, 0.0, 0.0)),
+    )
+    trajectory = evaluate_trajectory_feasibility(samples, _policy())
+    assert trajectory.evaluated_candidate.timestamps_s == (0.0, 0.1, 0.2)
+    assert trajectory.evaluated_candidate.configurations == tuple((s.qpos_rad, s.qvel_rad_s) for s in samples)
+
+
 def _source(
     status: EvidenceStatus = EvidenceStatus.AUTHORITATIVE,
     *,

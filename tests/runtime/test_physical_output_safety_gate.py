@@ -20,19 +20,19 @@ from selfrionette.schemas import PhysicalOutputRequest
 
 from tests.runtime.test_physical_safety_core import _input
 from tests.schemas.test_physical_output_contract import _endpoint_request
+from tests.support.output_candidate_evidence import joint_request, observed_safety_input
 
 
 def _request(**changes: object) -> PhysicalOutputRequest:
-    request = replace(_endpoint_request(), target_robot_id="fixture-robot")
-    return replace(request, **changes) if changes else request
+    return joint_request(**changes)
 
 
 def _safety_input(request: PhysicalOutputRequest, *, limits=LimitResolutionStatus.RESOLVED_AUTHORITATIVE):
-    safety_input = _input(limits=limits)
+    safety_input = observed_safety_input(request, limits=_input(limits=limits).limit_resolution)
     return replace(
         safety_input,
         candidate_id=physical_output_candidate_id(request),
-        provenance=(*safety_input.provenance, f"software_revision:{request.software_revision}"),
+        provenance=safety_input.provenance,
     )
 
 
@@ -104,15 +104,76 @@ def test_candidate_id_is_versioned_sha256_of_canonical_request_bytes() -> None:
     )
 
 
+def test_public_candidate_id_relabel_cannot_promote_evidence_for_another_target() -> None:
+    request_a = _request()
+    evidence_a = _safety_input(request_a)
+    request_b = replace(request_a, command=replace(request_a.command, joint_angles_rad=(0.25, 0.0)))
+    relabeled = replace(evidence_a, candidate_id=physical_output_candidate_id(request_b))
+    decision_b = evaluate_physical_safety(relabeled)
+    assert decision_b.action.value == "allow"
+    evaluation = bind_physical_output_safety(request_b, relabeled, decision_b, checked_at_s=1.0)
+    assert evaluation.status == "rejected"
+    assert evaluation.reason == "physical_safety_evaluated_candidate_mismatch"
+    assert not evaluation.sendable
+    with pytest.raises(ValueError, match="explicit safety allow"):
+        evaluation.to_sendable_request()
+    correct = evaluate_and_bind_physical_output_safety(request_b, _safety_input(request_b), checked_at_s=1.0)
+    assert correct.sendable
+
+
+def test_checker_candidate_mismatch_is_fail_closed_before_output() -> None:
+    request_a = _request()
+    request_b = replace(request_a, command=replace(request_a.command, joint_angles_rad=(0.25, 0.0)))
+    a, b = _safety_input(request_a), _safety_input(request_b)
+    mixed = replace(a, dynamic=b.dynamic)
+    assert evaluate_physical_safety(mixed).action.value == "invalid"
+    assert not evaluate_and_bind_physical_output_safety(request_a, mixed, checked_at_s=1.0).sendable
+
+
+def test_endpoint_relabel_cannot_reuse_another_evaluated_joint_route() -> None:
+    request_a = _request()
+    evidence_a = _safety_input(request_a)
+    request_b = replace(request_a, endpoint_id="other-joint-group")
+    relabeled = replace(evidence_a, candidate_id=physical_output_candidate_id(request_b))
+    evaluation = evaluate_and_bind_physical_output_safety(request_b, relabeled, checked_at_s=1.0)
+    assert evaluation.reason == "physical_safety_evaluated_endpoint_mismatch"
+    assert not evaluation.sendable
+    correct = evaluate_and_bind_physical_output_safety(request_b, _safety_input(request_b), checked_at_s=1.0)
+    assert correct.sendable
+    mixed = replace(relabeled, dynamic=_safety_input(request_b).dynamic)
+    assert evaluate_physical_safety(mixed).action.value == "invalid"
+
+
+def test_unresolved_endpoint_velocity_does_not_infer_a_trajectory() -> None:
+    request = replace(_endpoint_request(), target_robot_id="fixture-robot")
+    evidence = replace(_safety_input(_request()), candidate_id=physical_output_candidate_id(request))
+    evaluation = evaluate_and_bind_physical_output_safety(request, evidence, checked_at_s=1.0)
+    assert evaluation.reason == "physical_safety_candidate_semantics_unresolved"
+    assert not evaluation.sendable
+
+
+def test_reconstructed_collision_result_does_not_inherit_observation_origin() -> None:
+    request = _request()
+    evidence = _safety_input(request)
+    reconstructed = replace(evidence.collision)
+    assert reconstructed.clear
+    assert reconstructed.evaluated_candidate is None
+    evaluation = evaluate_and_bind_physical_output_safety(
+        request, replace(evidence, collision=reconstructed), checked_at_s=1.0,
+    )
+    assert evaluation.reason == "physical_safety_evaluated_candidate_missing"
+    assert not evaluation.sendable
+
+
 def test_same_safe_candidate_evidence_cannot_be_reused_for_changed_command() -> None:
     request = _request()
     safety_input = _safety_input(request)
     safe_decision = evaluate_physical_safety(safety_input)
     changed_command = replace(
         request.command,
-        velocity_m_s=(
-            request.command.velocity_m_s[0] + 0.01,
-            *request.command.velocity_m_s[1:],
+        joint_angles_rad=(
+            request.command.joint_angles_rad[0] + 0.01,
+            *request.command.joint_angles_rad[1:],
         ),
     )
     changed_request = replace(

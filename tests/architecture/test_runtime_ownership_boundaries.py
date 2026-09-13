@@ -82,6 +82,7 @@ EXPECTED_MODULES = {
     },
     "output": {"lifecycle", "permission", "safety_gate", "trace"},
     "safety": {
+        "evaluated_candidate",
         "collision_policy",
         "input_safety",
         "limit_resolution",

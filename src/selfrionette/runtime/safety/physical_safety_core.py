@@ -1657,6 +1657,10 @@ def evaluate_physical_safety(safety_input: SafetyInput) -> SafetyDecision:
             _collision_assessment(safety_input.collision),
             _dynamic_assessment(safety_input.dynamic),
         )
+        if all(item.action is SafetyDecisionAction.ALLOW for item in assessments):
+            collision_candidate = safety_input.collision.evaluated_candidate
+            if collision_candidate is not None and collision_candidate != safety_input.dynamic.evaluated_candidate:
+                return invalid_input()
         selected = max(assessments, key=lambda item: _ACTION_PRIORITY[item.action])
         provenance = tuple(
             sorted(

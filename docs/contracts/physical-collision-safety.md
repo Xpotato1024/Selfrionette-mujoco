@@ -180,3 +180,9 @@ bindingを共有し、trajectoryは最初のnon-clear sampleで停止する。ag
 MuJoCo inventory / contact projectionはadapter helperとして利用できるが、viewerに第二の
 collision判定を追加しない。serial、OSC、robot output、hardware validationはこのcontractの
 scope外である。
+
+## 実評価candidateのoutput binding
+
+`evaluate_mujoco_collision_configuration`は同じMuJoCo model/dataに対するforwardと既存contact observation生成・P3評価を行い、named hinge jointのqpos / qvelをowner-local originへ保持する。`CollisionCheckResult.evaluated_candidate`はその実評価値を返す。通常のobservation iterableや公開result constructorは評価stateの証明ではないため、このpropertyはnullとなる。result再構築やcaller IDの付替えではoriginを継承しない。clearance / collision formula、missing pair、exclusionの意味は変更しない。これはsoftware-only configuration観測であり、実機または移動軌道全体の安全性を証明しない。
+
+Observation producerへ渡す`EvaluatedJointRoute`はruntimeがendpoint設定とRobot-owned joint順序から構成する。producerはそのjoint名を実MuJoCo addressへ解決し、実評価qpos / qvelとrouteを一緒に保持する。resultから別endpointのrouteへ再ラベルする公開APIはない。

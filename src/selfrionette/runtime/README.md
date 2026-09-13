@@ -11,7 +11,7 @@
 | `contact/` | contact manifest、raw evidence、derived reaction force、task log / presentation |
 | `control/` | input selection/state、endpoint target、viewer control ingress、step diagnostics |
 | `safety/` | stale input policy、qpos feasibility、physical safety・operator validation |
-| `output/` | typed physical output permission decision、recording / dry-run trace、lifecycle / bounded stop。transport / hardware送信は所有しない |
+| `output/` | 実評価candidate / endpoint routeのsafety binding、typed physical output permission decision、recording / dry-run trace、lifecycle / bounded stop。transport / hardware送信は所有しない |
 | `experiment/` | versioned experiment contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint evaluation、progress、manifest / freeze readiness |
 | `runners/` | dry-run、live / offline smoke、WebSocket publisher、experimentのthin entry point |

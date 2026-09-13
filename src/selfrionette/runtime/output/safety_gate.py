@@ -18,7 +18,15 @@ from selfrionette.runtime.safety.physical_safety_core import (
     validate_safety_decision,
     validate_safety_input,
 )
-from selfrionette.schemas import PhysicalOutputRequest
+from selfrionette.schemas import JointPositionCommand, PhysicalOutputRequest
+from selfrionette.runtime.safety.collision_policy import CollisionCheckResult
+from selfrionette.runtime.safety.limit_resolution import LimitResolutionResult
+from selfrionette.runtime.safety.trajectory_feasibility import (
+    ConfigurationState,
+    JacobianDiagnostic,
+    TrajectoryFeasibilityPolicy,
+    evaluate_configuration_feasibility,
+)
 
 
 PHYSICAL_OUTPUT_SAFETY_BINDING_SCHEMA_VERSION = "physical-output-safety-binding/v1"
@@ -90,6 +98,61 @@ def physical_output_candidate_id(request: PhysicalOutputRequest) -> str:
     )
 
 
+def _evaluated_candidate_error(request: PhysicalOutputRequest, safety_input: SafetyInput) -> str | None:
+    """一意に解決できるjoint targetだけをowner由来の評価値へ照合する。"""
+    if not isinstance(request.command, JointPositionCommand):
+        return "physical_safety_candidate_semantics_unresolved"
+    collision = safety_input.collision
+    dynamic = safety_input.dynamic
+    if collision is None or dynamic is None:
+        return "physical_safety_evaluated_candidate_missing"
+    candidate = collision.evaluated_candidate
+    if candidate is None or dynamic.evaluated_candidate is None:
+        return "physical_safety_evaluated_candidate_missing"
+    if candidate != dynamic.evaluated_candidate:
+        return "physical_safety_evaluated_candidate_mismatch"
+    if candidate.joint_route is None or candidate.joint_route.endpoint_id != request.endpoint_id:
+        return "physical_safety_evaluated_endpoint_mismatch"
+    if candidate.timestamps_s or len(candidate.configurations) != 1:
+        return "physical_safety_candidate_semantics_unresolved"
+    if candidate.configurations[0][0] != request.command.joint_angles_rad:
+        return "physical_safety_evaluated_candidate_mismatch"
+    return None
+
+
+def compose_physical_output_safety_input(
+    request: PhysicalOutputRequest,
+    limit_resolution: LimitResolutionResult,
+    collision: CollisionCheckResult,
+    dynamic_policy: TrajectoryFeasibilityPolicy,
+    jacobian: JacobianDiagnostic | None,
+) -> SafetyInput:
+    """P3が実観測したrequest targetの同一configurationをP4へ渡す。"""
+    candidate = collision.evaluated_candidate
+    if not isinstance(request.command, JointPositionCommand):
+        raise ValueError("physical output candidate semantics are unresolved")
+    if candidate is None or candidate.timestamps_s or len(candidate.configurations) != 1:
+        raise ValueError("physical output requires a producer-bound configuration")
+    if candidate.joint_route is None or candidate.joint_route.endpoint_id != request.endpoint_id:
+        raise ValueError("physical output evaluated endpoint mismatch")
+    qpos, qvel = candidate.configurations[0]
+    if qpos != request.command.joint_angles_rad:
+        raise ValueError("physical output evaluated candidate mismatch")
+    if candidate.joint_names != dynamic_policy.joint_names:
+        raise ValueError("physical output evaluated joint inventory mismatch")
+    dynamic = evaluate_configuration_feasibility(
+        ConfigurationState(qpos, qvel, jacobian, "physical-output-evaluated-configuration", candidate.joint_route),
+        dynamic_policy,
+    )
+    return SafetyInput(
+        physical_output_candidate_id(request),
+        limit_resolution,
+        collision,
+        dynamic,
+        (f"software_revision:{request.software_revision}",),
+    )
+
+
 def _typed_safety_value(value: object) -> object:
     """Serialize validated P2/P3/P4 DTOs by their public typed content."""
 
@@ -124,6 +187,8 @@ def _typed_safety_value(value: object) -> object:
             for item in fields(value)
             if not item.name.startswith("_")
         }
+        if hasattr(value, "evaluated_candidate"):
+            public_fields["evaluated_candidate"] = _typed_safety_value(value.evaluated_candidate)
         return {
             "dto_type": f"{value_type.__module__}.{value_type.__qualname__}",
             "fields": public_fields,
@@ -452,6 +517,12 @@ class PhysicalOutputSafetyEvaluation:
                         if decision.action is not SafetyDecisionAction.ALLOW
                         else "physical_safety_allowed"
                     )
+                    if decision.action is SafetyDecisionAction.ALLOW:
+                        candidate_error = _evaluated_candidate_error(self.request, safety_input)
+                        if candidate_error is not None:
+                            status = "rejected"
+                            reason = candidate_error
+                            validation_error = reason
 
         binding_sha256 = _digest(
             {
@@ -625,6 +696,7 @@ __all__ = [
     "PhysicalOutputSafetyTraceEvidence",
     "PhysicalOutputSendableRequest",
     "bind_physical_output_safety",
+    "compose_physical_output_safety_input",
     "evaluate_and_bind_physical_output_safety",
     "physical_output_candidate_id",
     "validate_physical_output_safety_evaluation",
