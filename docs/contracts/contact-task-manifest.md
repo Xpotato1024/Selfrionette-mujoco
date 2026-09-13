@@ -69,6 +69,10 @@ viewerへ判定責務を移さない。
 `runtime/contact/evidence.py`は、#412でloadした同一のMuJoCo model/dataから
 `mjData.contact`を読み、公式`mj_contactForce`で各contactの6D force / torqueを測定する
 backend ownerである。viewer、reaction-force filter、clamp、task outcomeはこの測定を再実装しない。
+
+#414のderived virtual reaction-force signalは別のVirtualReactionForceManifest / VirtualReactionForceSignalとして
+[virtual reaction-force contract](virtual-reaction-force.md)に定義する。source `ContactEvidence`とtask outcome / terminal evidenceのraw inputは
+変更しない。
 Robot geom identityはcallerがRobot Bundleのcanonical model resourceから名前またはIDで明示する。
 generic extractorはmodel内の未分類geomをrobotと推測せず、identityがmissingならfail-closedにする。
 

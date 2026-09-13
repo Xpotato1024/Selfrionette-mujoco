@@ -31,3 +31,4 @@ canonical contract文書:
 - `docs/contracts/evaluation-manifest-readiness.md`
 - `docs/contracts/physical-operator-validation.md`
 - `docs/contracts/contact-task-manifest.md`
+- `docs/contracts/virtual-reaction-force.md`

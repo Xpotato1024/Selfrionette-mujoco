@@ -50,11 +50,14 @@ model settings、trial reset、初期contact readinessを所有する。scene co
 追加せず、disabled sceneも明示的にobjectなしとして扱う。`evidence.py`は同じbackend model/dataの
 `mjData.contact`と公式`mj_contactForce`からpoint、frame、normal、distance / penetration、force / wrenchを
 測定し、target-object、self、environmentの分類とdeterministic aggregationを所有する。contact evidenceの
-failure stateは`no_contact`、`measurement_unavailable`、`invalid_contact`、`solver_invalid`を分離し、
+failure stateはno_contact、measurement_unavailable、invalid_contact、solver_invalidを分離する。
+`virtual_reaction_force.py`はraw `ContactEvidence`から別manifest identityを持つsoftware-only signalを導出し、
+frame変換とfilter pipelineを所有する。derived signalはraw evidenceを変更せず、
+`ContactTaskOutcome` / terminal evidenceはraw contact contractに従う。
 task outcomeのlifecycleは`plugins/tasks/contact_press_hold_task/`、canonical outcome / terminal shapeの
-共有型は`task_contract.py`がownerである。scene ownerがforce filter、reaction-force、terminal判定を実装せず、
-viewerはcontactを再計算しない。#415のfixture runnerはraw measured evidenceのreplayだけを扱い、MuJoCoの
-physical sceneやRobot commandを二重に所有しない。
+共有型は`task_contract.py`がownerである。scene compositionとviewerはforce filter、terminal判定、contact再計算を
+行わない。#415のfixture runnerはraw measured evidenceのreplayだけを扱い、MuJoCoのphysical sceneや
+Robot commandを二重に所有しない。
 
 production compositionは明示的に選択した`RobotRuntimePlugin`を解決し、model、joint order、
 startup keyframe、IK / FK、motion policy、qpos feasibility guardの整合を検証する。generic stub、
