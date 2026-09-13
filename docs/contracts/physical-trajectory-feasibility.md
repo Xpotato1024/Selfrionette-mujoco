@@ -138,3 +138,9 @@ P5 physical-safety-coreがlimit、collision、dynamic resultをclosed decision v
 
 serial、OSC、robot output、hardware validation、実機のdynamic measurementはこのcontractの
 scope外である。
+
+## 実評価candidateの公開projection
+
+両resultの`evaluated_candidate`は既存P4 evaluator originから、実際に評価したConfigurationStateのqpos / qvel、またはTrajectorySample列のqpos / qvel / timestampをjoint順序付きで返す。caller-supplied source_idやcandidate_idから生成しない。originを持たない結果はnullとなる。state / samples、policy、Jacobian、diagnosticの既存origin検証とvelocity / acceleration / singularity formulaは維持する。output側のcommand resolverがないtrajectoryを、このprojectionだけでsendableにしない。
+
+Output用のConfigurationState / TrajectorySampleはruntimeの`joint_route`を任意contextとして受け取る。P4はそのjoint順序とpolicyのjoint順序を照合し、trajectory内のroute一致を検証して、実評価originへ保持する。既存のrouteなしP4単独評価は維持するが、output gateのendpoint bindingを満たさない。

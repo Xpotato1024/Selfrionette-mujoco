@@ -138,3 +138,7 @@ mesh全体、full planner、実機安全、physical actuation、manual hardware 
 ない。
 
 serial、OSC、robot output、deployment、credentials、#509 hardware validationはscope外である。
+
+## P3/P4実評価candidateの照合
+
+既存のcomponent assessmentがすべてallowの場合だけ、P3がproducer-boundな`evaluated_candidate`を持つ場合、P4の実評価configuration / trajectory projectionとの不一致・欠落をinvalidへ閉じる。既存のnonallow action / reasonは優先して保持する。既存のP5単独利用でP3 originを持たない結果は従来どおり評価できるが、#513 output gateではorigin欠落からsendableを作れない。P2はrobot / model / revision / limits contextを所有し、per-candidate trajectory identityを追加しない。

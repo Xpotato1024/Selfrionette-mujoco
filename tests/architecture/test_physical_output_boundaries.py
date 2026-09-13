@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PERMISSION_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "permission.py"
 TRACE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "trace.py"
 LIFECYCLE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "lifecycle.py"
+SAFETY_GATE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "safety_gate.py"
 FORBIDDEN_IMPORT_ROOTS = {
     "mujoco",
     "osc4py3",
@@ -92,4 +93,29 @@ def test_lifecycle_owner_has_no_transport_or_hardware_imports() -> None:
             for forbidden in FORBIDDEN_SELF_RIONETTE_IMPORTS
         )
         for module in imported
+    )
+
+
+def test_safety_gate_uses_the_canonical_p5_evaluator_without_transport() -> None:
+    tree = ast.parse(
+        SAFETY_GATE_PATH.read_text(encoding="utf-8"),
+        filename=str(SAFETY_GATE_PATH),
+    )
+    imported = _imported_modules(tree)
+    assert {
+        module.split(".", maxsplit=1)[0]
+        for module in imported
+    }.isdisjoint(FORBIDDEN_IMPORT_ROOTS)
+    assert all(
+        not any(
+            module == forbidden or module.startswith(f"{forbidden}.")
+            for forbidden in FORBIDDEN_SELF_RIONETTE_IMPORTS
+        )
+        for module in imported
+    )
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "evaluate_physical_safety"
+        for node in ast.walk(tree)
     )

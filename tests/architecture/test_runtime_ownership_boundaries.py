@@ -80,8 +80,9 @@ EXPECTED_MODULES = {
         "selfrionette_serial_dry_run",
         "websocket_publisher",
     },
-    "output": {"lifecycle", "permission", "trace"},
+    "output": {"lifecycle", "permission", "safety_gate", "trace"},
     "safety": {
+        "evaluated_candidate",
         "collision_policy",
         "input_safety",
         "limit_resolution",

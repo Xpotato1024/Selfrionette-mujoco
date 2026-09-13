@@ -15,6 +15,28 @@ from dataclasses import dataclass, field
 from enum import Enum
 from threading import RLock
 
+from selfrionette.runtime.safety.evaluated_candidate import EvaluatedCandidate, EvaluatedJointRoute
+
+
+# Observation producerだけが登録する。DTOの再構築やIDの付替えでは継承しない。
+_COLLISION_CANDIDATES: dict[
+    int, tuple[weakref.ReferenceType[object], EvaluatedCandidate]
+] = {}
+_COLLISION_CANDIDATES_LOCK = RLock()
+
+
+def _register_collision_candidate(result: object, candidate: EvaluatedCandidate) -> None:
+    key = id(result)
+
+    def release(reference: weakref.ReferenceType[object]) -> None:
+        with _COLLISION_CANDIDATES_LOCK:
+            entry = _COLLISION_CANDIDATES.get(key)
+            if entry is not None and entry[0] is reference:
+                _COLLISION_CANDIDATES.pop(key, None)
+
+    with _COLLISION_CANDIDATES_LOCK:
+        _COLLISION_CANDIDATES[key] = (weakref.ref(result, release), candidate)
+
 
 class GeometryRole(str, Enum):
     ROBOT = "robot"
@@ -997,6 +1019,14 @@ class CollisionCheckResult:
         except Exception:
             return False
         return self.status is CollisionStatus.CLEAR
+
+    @property
+    def evaluated_candidate(self) -> EvaluatedCandidate | None:
+        """実際にMuJoCo observationを生成したstateの値identity。"""
+        _validate_collision_check_result(self)
+        with _COLLISION_CANDIDATES_LOCK:
+            entry = _COLLISION_CANDIDATES.get(id(self))
+            return entry[1] if entry is not None and entry[0]() is self else None
 
 
 def _validate_collision_check_result(result: CollisionCheckResult) -> None:
@@ -2142,6 +2172,44 @@ def build_mujoco_geometry_inventory(
     return GeometryInventory(tuple(geometries))
 
 
+def evaluate_mujoco_collision_configuration(
+    model: object,
+    data: object,
+    inventory: GeometryInventory,
+    policy: CollisionPolicy,
+    context: CollisionContext,
+    *,
+    joint_route: EvaluatedJointRoute,
+) -> CollisionCheckResult:
+    """同じMuJoCo stateでforward・観測・既存P3評価を行い、候補を保持する。"""
+    import mujoco
+
+    if not isinstance(model, mujoco.MjModel) or not isinstance(data, mujoco.MjData):
+        raise TypeError("candidate observations require MuJoCo model/data")
+    if type(joint_route) is not EvaluatedJointRoute:
+        raise TypeError("candidate requires a runtime joint route")
+    joint_names = joint_route.joint_names
+    joint_ids = tuple(
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+        for name in joint_names
+    )
+    if any(index < 0 or model.jnt_type[index] != mujoco.mjtJoint.mjJNT_HINGE for index in joint_ids):
+        raise ValueError("candidate requires named scalar angular joints")
+    mujoco.mj_forward(model, data)
+    candidate = EvaluatedCandidate(
+        joint_names,
+        ((
+            tuple(_finite("candidate qpos", float(data.qpos[model.jnt_qposadr[index]])) for index in joint_ids),
+            tuple(_finite("candidate qvel", float(data.qvel[model.jnt_dofadr[index]])) for index in joint_ids),
+        ),),
+        joint_route=joint_route,
+    )
+    observations = read_mujoco_contact_observations(model, data, inventory)
+    result = evaluate_collision_configuration(inventory, observations, policy, context)
+    _register_collision_candidate(result, candidate)
+    return result
+
+
 def read_mujoco_contact_observations(
     model: object,
     data: object,
@@ -2233,6 +2301,7 @@ __all__ = [
     "build_mujoco_geometry_inventory",
     "evaluate_bounded_collision_trajectory",
     "evaluate_collision_configuration",
+    "evaluate_mujoco_collision_configuration",
     "read_mujoco_contact_observations",
     "validate_bounded_collision_trajectory_result",
     "validate_collision_check_result",

@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-08-28
+last_verified: 2026-09-13
 canonical_for:
   - runtime composition root
 related:
@@ -25,7 +25,7 @@ related:
 | `execution/` | route-bound `ControlMappedRuntimePipeline`、input step loop、typed command / input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
-| `output/` | physical output request permission decision、lossless recording / dry-run trace、lifecycle / bounded stop。transport / hardware送信は行わない |
+| `output/` | P5 safety evaluationとexact request binding、allow-only sendable type、permission decision、lossless recording / dry-run trace、safety-aware lifecycle / bounded stop。transport / hardware送信は行わない |
 | `contact/` | versioned contact manifest、backend-owned MuJoCo scene composition / reset、MuJoCo measured contact evidence、Task contractの共有型 |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
@@ -155,7 +155,7 @@ Task / Evaluationを補わない。
 | control-frame resolution | runtime control-frame resolver | pure frame resolver | requested frame、pre-step orientation、`dt_s` | resolved world intentまたはunavailable status |
 | motion policy | selected plugin / runtime coordinator | motion policy adapter | intent、current qpos、target lifecycle | `MotionCommand`またはhold / reject |
 | backend update | typed Robot command provider / MuJoCo backend boundary | semantic-specific backend command applier | `JointPositionCommand`等のvalidated typed command | updated model stateまたは適用前failure |
-| physical output permission / trace / lifecycle | runtime output boundary | typed `PhysicalOutputRequest` / permission evaluator / recording sink / lifecycle controller | target、session、sequence、cadence、explicit operator gate、stale / stop reason | accepted / rejected / permitted / dropped / lifecycle evidence。送信実績とは別 |
+| physical output safety / permission / trace / lifecycle | runtime output boundary | typed `PhysicalOutputRequest`、P5 safety evaluation / binding、permission evaluator / recording sink / lifecycle controller | exact request bytes、typed P2/P3/P4 evidence、candidate、Robot / software revision、freshness、explicit operator gate、stale / stop reason | allow-only sendable wrapper、accepted / rejected / permitted / dropped / safety-aware lifecycle evidence。送信実績とは別 |
 | MuJoCo measurement | post-step measurement helper | pure measurement helper | post-step `MuJoCoState` | physical `tip` site measurement |
 | diagnostic annotation | runtime diagnostics | pure annotator | intent、prediction、measurement、source state | precedenceを固定したmetadata |
 | publication | runtime publication coordinator | `StatePublisher` | fully annotated state | publication completion |
@@ -341,3 +341,9 @@ blur、stale、invalidの既存hold safetyも維持する。
 Control Mapping parametersは`explicit runtime mapping parameters > Mapping plugin defaults`の順で
 解決する。Input Source instance、frame metadata、source registrationからMapping parameterを投影しない。
 selection / plan readinessでMapping contractを正規化・freezeし、source lifecycle開始前に確定する。
+
+### Physical output評価候補のcomposition
+
+`runtime/output/safety_gate.py`はjoint-position requestとP3 observation producerが実評価したconfigurationを照合し、`compose_physical_output_safety_input`で同じqpos / qvelをP4へ渡す。P3/P4は`runtime/safety/evaluated_candidate.py`のimmutableな値projectionを返し、それぞれのowner-local originをauthorityとする。outputは両projectionとrequest targetを照合し、formulaを再実装しない。endpoint-velocityおよびcanonical resolverのないtrajectoryはnon-sendableであり、plannerやphysical observation architectureは追加しない。
+
+Runtimeが構成する`EvaluatedJointRoute`はendpoint設定とRobot-owned joint順序の対応をP3観測からP4評価まで保持する。requestのendpoint変更を単なる数値qpos一致で許可せず、評価したrouteとの一致を検証する。
