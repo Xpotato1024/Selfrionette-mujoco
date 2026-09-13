@@ -49,6 +49,7 @@ from selfrionette.transport.osc import OscMessage, decode_osc_message
 
 
 FAST_ARM_PHYSICAL_EVIDENCE_SCHEMA_VERSION = "fast-arm-physical-evidence-acceptance/v1"
+FAST_ARM_PHYSICAL_EVIDENCE_HANDOFF_SCHEMA_VERSION = "fast-arm-physical-evidence-handoff/v1"
 FAST_ARM_SESSION_STATE = Literal["disarmed", "armed", "active", "stopped", "aborted", "failed"]
 FAST_ARM_ACK_STATUS = Literal["not_applicable", "pending", "router_command_observed", "unavailable"]
 
@@ -83,16 +84,167 @@ def fast_arm_envelope_provenance_token(envelope: PhysicalSafetyEnvelope, envelop
     return f"physical_safety_envelope:{envelope.envelope_id}:sha256:{envelope_sha256}"
 
 
+def _reject_duplicate_handoff_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate field in FastArm physical evidence handoff: {key!r}")
+        result[key] = value
+    return result
+
+
+def _reject_handoff_json_constant(value: str) -> object:
+    raise ValueError(f"non-finite JSON constant is forbidden: {value}")
+
+
 @dataclass(frozen=True, slots=True)
-class FastArmPhysicalEvidenceAcceptance:
-    """#509のaccepted envelopeとjoint測定sourceの明示的handoff。"""
+class FastArmPhysicalEvidenceHandoff:
+    """#509の受理済み物理観測を結ぶcanonical handoff文書。"""
 
     acceptance_reference: str
-    acceptance_sha256: str
     target_robot_id: str
     profile_id: str
     profile_contract_version: int
     model_contract_version: str
+    envelope_sha256: str
+    joint_measurement_references: tuple[tuple[str, str], ...]
+    accepted_at_s: float
+    issue_id: str = "#509"
+    status: Literal["accepted"] = "accepted"
+    observation_class: Literal["physical_measurement"] = "physical_measurement"
+    schema_version: str = FAST_ARM_PHYSICAL_EVIDENCE_HANDOFF_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        if (
+            self.schema_version != FAST_ARM_PHYSICAL_EVIDENCE_HANDOFF_SCHEMA_VERSION
+            or self.issue_id != "#509"
+            or self.status != "accepted"
+            or self.observation_class != "physical_measurement"
+        ):
+            raise ValueError("#509 accepted physical-measurement handoff is required")
+        for name, value in (
+            ("acceptance_reference", self.acceptance_reference),
+            ("target_robot_id", self.target_robot_id),
+            ("profile_id", self.profile_id),
+            ("model_contract_version", self.model_contract_version),
+        ):
+            _identifier(name, value)
+        _digest("envelope_sha256", self.envelope_sha256)
+        if type(self.profile_contract_version) is not int or self.profile_contract_version < 1:
+            raise ValueError("profile_contract_version must be a positive integer")
+        if type(self.joint_measurement_references) is not tuple or not self.joint_measurement_references:
+            raise TypeError("joint_measurement_references must be a non-empty tuple")
+        if any(type(pair) is not tuple or len(pair) != 2 for pair in self.joint_measurement_references):
+            raise TypeError("joint_measurement_references must contain joint/reference pairs")
+        pairs = tuple(
+            (_identifier("joint_name", joint), _identifier("measurement reference", reference))
+            for joint, reference in self.joint_measurement_references
+        )
+        if len({joint for joint, _ in pairs}) != len(pairs) or len({reference for _, reference in pairs}) != len(pairs):
+            raise ValueError("measurement references must map unique joints and sources")
+        object.__setattr__(self, "joint_measurement_references", pairs)
+        object.__setattr__(self, "accepted_at_s", _timestamp("accepted_at_s", self.accepted_at_s))
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "acceptance_reference": self.acceptance_reference,
+            "accepted_at_s": self.accepted_at_s,
+            "envelope_sha256": self.envelope_sha256,
+            "issue_id": self.issue_id,
+            "joint_measurement_references": [
+                {"joint_name": joint, "measurement_reference": reference}
+                for joint, reference in self.joint_measurement_references
+            ],
+            "model_contract_version": self.model_contract_version,
+            "observation_class": self.observation_class,
+            "profile_contract_version": self.profile_contract_version,
+            "profile_id": self.profile_id,
+            "schema_version": self.schema_version,
+            "status": self.status,
+            "target_robot_id": self.target_robot_id,
+        }
+
+    def to_json_bytes(self) -> bytes:
+        return json.dumps(
+            self.to_dict(),
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    @classmethod
+    def from_json_bytes(cls, document: bytes) -> FastArmPhysicalEvidenceHandoff:
+        if type(document) is not bytes:
+            raise TypeError("FastArm physical evidence handoff must be UTF-8 bytes")
+        if document.startswith(b"\xef\xbb\xbf"):
+            raise ValueError("FastArm physical evidence handoff must not contain a UTF-8 BOM")
+        try:
+            text = document.decode("utf-8", errors="strict")
+            raw = json.loads(
+                text,
+                object_pairs_hook=_reject_duplicate_handoff_keys,
+                parse_constant=_reject_handoff_json_constant,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("FastArm physical evidence handoff must be valid UTF-8 JSON") from exc
+        if type(raw) is not dict:
+            raise ValueError("FastArm physical evidence handoff must be a JSON object")
+        expected_fields = {
+            "acceptance_reference",
+            "accepted_at_s",
+            "envelope_sha256",
+            "issue_id",
+            "joint_measurement_references",
+            "model_contract_version",
+            "observation_class",
+            "profile_contract_version",
+            "profile_id",
+            "schema_version",
+            "status",
+            "target_robot_id",
+        }
+        if set(raw) != expected_fields:
+            raise ValueError("FastArm physical evidence handoff has missing or unknown fields")
+        raw_references = raw["joint_measurement_references"]
+        if type(raw_references) is not list:
+            raise ValueError("joint_measurement_references must be a JSON array")
+        references: list[tuple[str, str]] = []
+        for item in raw_references:
+            if type(item) is not dict or set(item) != {"joint_name", "measurement_reference"}:
+                raise ValueError("joint measurement reference entry has missing or unknown fields")
+            references.append((item["joint_name"], item["measurement_reference"]))
+        handoff = cls(
+            acceptance_reference=raw["acceptance_reference"],
+            target_robot_id=raw["target_robot_id"],
+            profile_id=raw["profile_id"],
+            profile_contract_version=raw["profile_contract_version"],
+            model_contract_version=raw["model_contract_version"],
+            envelope_sha256=raw["envelope_sha256"],
+            joint_measurement_references=tuple(references),
+            accepted_at_s=raw["accepted_at_s"],
+            issue_id=raw["issue_id"],
+            status=raw["status"],
+            observation_class=raw["observation_class"],
+            schema_version=raw["schema_version"],
+        )
+        if handoff.to_json_bytes() != document:
+            raise ValueError("FastArm physical evidence handoff must use canonical JSON bytes")
+        return handoff
+
+
+@dataclass(frozen=True, slots=True)
+class FastArmPhysicalEvidenceAcceptance:
+    """digest照合済みの#509 handoffとtyped envelope。"""
+
+    acceptance_reference: str
+    acceptance_sha256: str
+    handoff_bytes: bytes
+    target_robot_id: str
+    profile_id: str
+    profile_contract_version: int
+    model_contract_version: str
+    observation_class: Literal["physical_measurement"]
     envelope: PhysicalSafetyEnvelope
     envelope_sha256: str
     joint_measurement_references: tuple[tuple[str, str], ...]
@@ -114,6 +266,8 @@ class FastArmPhysicalEvidenceAcceptance:
             raise TypeError("accepted evidence requires PhysicalSafetyEnvelope")
         if sha256(self.envelope.to_json_bytes()).hexdigest() != self.envelope_sha256:
             raise ValueError("accepted envelope digest does not match typed envelope")
+        if self.observation_class != "physical_measurement":
+            raise ValueError("accepted evidence must use physical_measurement observations")
         if type(self.joint_measurement_references) is not tuple or not self.joint_measurement_references:
             raise TypeError("joint_measurement_references must be a non-empty tuple")
         if any(type(pair) is not tuple or len(pair) != 2 for pair in self.joint_measurement_references):
@@ -123,6 +277,39 @@ class FastArmPhysicalEvidenceAcceptance:
             raise ValueError("measurement references must map unique joints and sources")
         object.__setattr__(self, "joint_measurement_references", pairs)
         object.__setattr__(self, "accepted_at_s", _timestamp("accepted_at_s", self.accepted_at_s))
+        if type(self.handoff_bytes) is not bytes:
+            raise TypeError("accepted evidence requires the exact handoff bytes")
+        if sha256(self.handoff_bytes).hexdigest() != self.acceptance_sha256:
+            raise ValueError("accepted handoff digest does not match its bytes")
+        handoff = FastArmPhysicalEvidenceHandoff.from_json_bytes(self.handoff_bytes)
+        expected_handoff_fields = (
+            self.acceptance_reference,
+            self.target_robot_id,
+            self.profile_id,
+            self.profile_contract_version,
+            self.model_contract_version,
+            self.envelope_sha256,
+            self.joint_measurement_references,
+            self.accepted_at_s,
+            self.issue_id,
+            self.status,
+            self.observation_class,
+        )
+        actual_handoff_fields = (
+            handoff.acceptance_reference,
+            handoff.target_robot_id,
+            handoff.profile_id,
+            handoff.profile_contract_version,
+            handoff.model_contract_version,
+            handoff.envelope_sha256,
+            handoff.joint_measurement_references,
+            handoff.accepted_at_s,
+            handoff.issue_id,
+            handoff.status,
+            handoff.observation_class,
+        )
+        if actual_handoff_fields != expected_handoff_fields:
+            raise ValueError("accepted handoff bytes do not match typed physical evidence")
 
     @property
     def measurement_reference_by_joint(self) -> dict[str, str]:
@@ -285,6 +472,7 @@ class FastArmPhysicalOutputSession:
             or accepted_evidence.profile_contract_version != profile.profile_contract_version
             or accepted_evidence.model_contract_version != profile.model_contract_version
             or accepted_evidence.envelope.robot_id != target_robot_id
+            or accepted_evidence.envelope.model_id != profile.model_contract_version
         ):
             raise ValueError("accepted #509 evidence does not match FastArm profile and target")
         if transport_config.expected_codec_identity != fast_arm_codec_identity(mapping):
@@ -783,8 +971,10 @@ class FastArmPhysicalOutputSession:
 
 __all__ = [
     "FAST_ARM_PHYSICAL_EVIDENCE_SCHEMA_VERSION",
+    "FAST_ARM_PHYSICAL_EVIDENCE_HANDOFF_SCHEMA_VERSION",
     "FastArmAcknowledgementEvidence",
     "FastArmPhysicalEvidenceAcceptance",
+    "FastArmPhysicalEvidenceHandoff",
     "FastArmPhysicalOutputResult",
     "FastArmPhysicalOutputSession",
     "FastArmWireEncoder",
