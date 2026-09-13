@@ -62,6 +62,7 @@ from tests.runtime.test_physical_safety_core import (
     _dynamic,
 )
 from tests.runtime.test_operator_validation import COMPLETED, STARTED, _all_checks, _procedure
+from tests.support.output_candidate_evidence import observed_safety_input
 
 
 _PROFILE = FAST_ARM_ROBOT_PROFILE
@@ -350,15 +351,6 @@ def _evaluation(
     *,
     include_envelope_provenance: bool = True,
 ):
-    collision = _collision(CollisionStatus.CLEAR)
-    collision = replace(
-        collision,
-        context=replace(
-            collision.context,
-            robot_id=request.target_robot_id,
-            model_id=_PROFILE.model_contract_version,
-        ),
-    )
     provenance = (
         (
             fast_arm_envelope_provenance_token(
@@ -369,23 +361,17 @@ def _evaluation(
         if include_envelope_provenance
         else ()
     )
-    safety_input = SafetyInput(
-        candidate_id=physical_output_candidate_id(request),
-        limit_resolution=resolve_joint_space_bounds(
+    safety_input = observed_safety_input(
+        request,
+        joint_names=_PROFILE_JOINTS,
+        model_id=_PROFILE.model_contract_version,
+        limits=resolve_joint_space_bounds(
             evidence.envelope.limits,
             expected_joint_names=_PROFILE_JOINTS,
             robot_id=request.target_robot_id,
         ),
-        collision=collision,
-        dynamic=_dynamic(
-            FeasibilityStatus.FEASIBLE,
-            expected_joint_names=_PROFILE_JOINTS,
-        ),
-        provenance=(
-            *provenance,
-            f"software_revision:{request.software_revision}",
-        ),
     )
+    safety_input = replace(safety_input, provenance=(*provenance, *safety_input.provenance))
     evaluation = evaluate_and_bind_physical_output_safety(
         request,
         safety_input,
