@@ -183,9 +183,10 @@ bounded provider callの途中でstopは割り込まず、in-flight datagramを�
 ## #514 generic OSC / UDP transport
 
 `runtime.output.transport_adapter`はP5 allow-only wrapper、active lifecycle、permissionとgeneric
-`transport/`をつなぐ。strictな`physical-output-transport-config/v1`はtarget robot、software revision、
-endpoint、mode、freshness / cadence、`expected_codec_identity`を保持する。codec identityはversion付きIDと
-immutable settingsのcontent digestから作り、adapterはencoder identityとの完全一致を要求する。
+`transport/`をつなぐ。strictなconfig v1 / v2はtarget robot、software revision、endpoint、mode、
+freshness / cadence、`expected_codec_identity`を保持する。codec identityはversion付きIDとimmutable
+settingsのcontent digestから作り、adapterはencoder identityとの完全一致を要求する。v2は明示的な
+`external_authorization_required` fieldを持つ。v1は既存generic encoderとの互換用に維持し、FastArm codecには使えない。
 
 pure `PhysicalOutputWireEncoder`はvalidated requestを含むtyped logical envelopeからOSC semanticsだけを返す。
 共通の`encode_osc_message`がdatagram bytesを一度生成し、`PhysicalOutputEncodedDatagram`がlogical envelope、
@@ -200,6 +201,49 @@ datagram evidenceを渡す。これらはDNS、socket、network callをしない
 calibration、receiver mappingを持たない。送信attempt、simulated / local socket result、receiver ACKは別のevidence
 levelとして扱い、ACKは`unavailable`のままとする。
 
+v2でexternal authorizationを要求するencoderは、runtime compositionが発行した使い切りgrantなしにsendできない。
+grantはrequest、P5 binding / candidate、codec / config、target、endpoint、revision、session、sequence、二つの
+permission identity、authorization context、expiryへ結び付き、guarded send時に一度だけ消費する。adapterは
+encoderが宣言するgeneric required-authorization capabilityをconstructorで照合する。robot IDやmapping semanticsを
+generic transportへ埋め込まない。
+
+## #515 FastArm固有の構成とoperator gate
+
+`runtime.output.fast_arm_adapter.FastArmPhysicalOutputSession`がFastArm固有のaccepted physical evidence、Robot
+Profile、P5 lifecycle、二つのpermission、operator enable、generic transportを結ぶ。mapping / wire semanticsの
+ownerは`plugins.robots.fast_arm.adapter.physical_output`であり、profile joint orderとwire joint orderの完全な対応、
+jointごとのcoordinate sign (`-1` / `1`)、offset値と`rad` / `degree` offset unitをversion付きmappingの必須fieldとし、
+digestへ含める。request radにsignを適用し、明示unitのoffsetを加えてwire degreeへ純粋変換する。これはrouter側の
+motor calibrationやshoulder-mount補正を複製しない。profile / router軸とzero基準は未確定のためmapping値を推測せず、
+実際の対応選択は#509 / #516 preflightへ残す。joint command、router observation parser、endpoint、revision、cadenceも
+明示してbindingする。
+
+`profile_id`はrobot typeを識別し、`target_robot_id`は物理出力先のlogical identityを識別する。sessionは
+`runtime_plugin_id == profile.profile_id`と`runtime_robot_id == target_robot_id == transport_config.target_robot_id`を
+要求し、accepted evidence / envelope / P2 resolution / collisionもtarget identityへ一致させる。
+
+sessionはtarget、resolved Profile / model contract、mapping、endpoint、software revision、session、cadence、
+P5 candidate / safety evidence、#509 envelope provenanceを毎requestで一致させる。各jointのlimitはaccepted #509
+physical-measurement source referenceと一致しなければならない。`physical_actuation` permissionと
+`transmission_enabled` permissionは別々に必要で、両方のidentityを含むfresh authorization grantがgeneric
+adapterへ渡される。FastArm public wire encoderはrequired-authorization capabilityを宣言し、generic adapterは
+v1またはexternal authorizationなしのv2 configとのcompositionを拒否する。
+
+local socket receipt後はcorrelated router observationを待つ。synthetic senderでも同じpending、correlation、timeout、
+stop state transitionを検証できるが、simulated observationはpendingを解除するだけでstatusは`unavailable`のままとし、
+`router_command_observed`へ昇格しない。実senderの一致する観測はrouterがcommandを処理したことだけを示し、Pi / Robot
+受理、physical movement、physical stopは示さない。malformed / mismatched observationはACKとして扱わずpendingを保ち、
+追加requestをblockする。timeoutまたはinvalid clockはlocal sessionをfail-closedにしてsend可能状態をclearする。
+operator stop / abort / disconnectもlocal lifecycleを停止するだけで、physical robot stopの証拠ではない。
+
+`observe_router_datagram`は受信済みdatagramをsessionへ渡すingestion境界である。この変更ではactual receive socketからsessionへ渡す
+bounded listener / producerとtimeout tick schedulerを実装・検証していない。automated testsはfake datagramとinjected clockだけを使う。
+実際のrouter observation、timeout、disconnectを取得するreceive wiringと#514 network validationは、後続#516 preflight / scopeで具体化する。
+
+このtaskのaccepted evidence fixtureとrouter observationはsynthetic test dataだけであり、#509の実物理測定record、
+実DNS / UDP送信、receiver ACK、robot actuation、movement、安全性の確認ではない。FastArm output利用は#509のaccepted
+physical-measurement handoffと専用hardware safety gateが成立するまで有効化しない。
+
 ## Serialization / failure
 
 requestとpermissionはUTF-8 without BOMのsorted-key compact JSONへ deterministicに
@@ -213,7 +257,9 @@ serializeし、decode時にunknown field、missing field、duplicate key、non-f
 - `runtime.output.permission`がpermission decisionを所有し、`runtime.output.safety_gate`がP5 safety
   evaluationとrequest binding、allow-only sendable wrapperを所有する。`runtime.output.trace`がrecording /
   dry-run request trace、artifact、replayを所有し、`runtime.output.lifecycle`がstate、bounded stop、
-  safety-aware lifecycle traceを所有する。`runtime.output.transport_adapter`だけがそれらをtransportへ合成する。
+  safety-aware lifecycle traceを所有する。`runtime.output.transport_adapter`はgeneric P5/lifecycle/permission/
+  config identityをtransportへ合成し、`runtime.output.fast_arm_adapter`はFastArm固有のaccepted physical evidence、
+  mapping、二重permission、operator gateを合成する。plugin側mapping / wire encoderはgeneric transportへ依存しない。
 - `transport/`がgeneric OSC encoding、endpoint設定、UDP providerを所有し、runtimeやrobot固有mappingをimportしない。
 - testsはfake sender / fake socketを使い、DNS、実socket、network、serial、Arduino、robot outputは実行しない。
 - 実機作動は`docs/operations/hardware-safety.md`と専用Issue / 明示許可の範囲に限る。
