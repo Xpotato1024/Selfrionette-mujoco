@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
+import {
+  parseContactTaskLogJsonl,
+  unavailableContactTaskPresentation,
+} from "../contact/contactTaskLog.js";
 import { readViewerEndpointConfig } from "../config/websocketEndpoint.js";
 import {
   createViewerKeyboardCapture,
@@ -19,6 +24,7 @@ import {
   type ProductViewerState,
 } from "../wasm-scene/productViewerState.js";
 import { createMujocoSceneRenderer } from "../wasm-scene/mujocoSceneRenderer.js";
+import { parseTransportPayloadV0Message } from "../transport/parseTransportPayloadV0Message.js";
 import { loadDefaultViewerRobotProfile } from "../robot-profiles/registry.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import { viewerVisualLegend } from "../wasm-scene/visualStyles.js";
@@ -30,6 +36,10 @@ function formatNumber(value: number | null): string {
   }
 
   return Number.isInteger(value) ? String(value) : value.toFixed(6);
+}
+
+function formatContactVector(value: readonly number[] | null | undefined): string {
+  return value === null || value === undefined ? "unavailable" : `[${value.map((item) => item.toFixed(3)).join(", ")}]`;
 }
 
 function Legend({ profile }: { profile: ViewerRobotProfile | null }) {
@@ -117,6 +127,7 @@ function InputOverlayPanel({ state }: { state: ProductViewerState }) {
 
 export function ProductViewerApp() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rendererRef = useRef<ReturnType<typeof createMujocoSceneRenderer> | null>(null);
   const keyboardCaptureRef = useRef(
     createViewerKeyboardCapture(
       DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS,
@@ -124,6 +135,7 @@ export function ProductViewerApp() {
     ),
   );
   const [profile, setProfile] = useState<ViewerRobotProfile | null>(null);
+  const [rendererReady, setRendererReady] = useState(false);
   const [state, setState] = useState<ProductViewerState>(() => createInitialProductViewerState());
   const endpointConfig = useMemo(() => {
     if (typeof window === "undefined") {
@@ -179,11 +191,17 @@ export function ProductViewerApp() {
               qposError: error.message,
               statusText: error.message,
             }));
+            setRendererReady(false);
           },
         });
+        rendererRef.current = renderer;
         await renderer.start();
+        if (!disposed) {
+          setRendererReady(true);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        setRendererReady(false);
         setState((current) => ({
           ...current,
           status: "error",
@@ -197,6 +215,10 @@ export function ProductViewerApp() {
     void start();
     return () => {
       disposed = true;
+      setRendererReady(false);
+      if (rendererRef.current === renderer) {
+        rendererRef.current = null;
+      }
       renderer?.dispose();
     };
   }, [endpointConfig.websocketUrl, requestedProfileId]);
@@ -222,6 +244,76 @@ export function ProductViewerApp() {
     inputLifecycle.setLiveInputEnabled(liveInputEnabled);
     return () => inputLifecycle.dispose();
   }, [endpointConfig.websocketUrl, liveInputEnabled]);
+
+  const onContactTaskLogChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = "";
+    if (file === undefined) {
+      return;
+    }
+    if (profile === null) {
+      rendererRef.current?.setContactTaskPresentation(
+        unavailableContactTaskPresentation("robot profile の読み込み前はcontact-task-log/v1を検証できません"),
+        "offline_log",
+      );
+      return;
+    }
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+      const presentation = await parseContactTaskLogJsonl(text, {
+        profileId: profile.profileId,
+        profileContractVersion: profile.profileContractVersion,
+      });
+      rendererRef.current?.setContactTaskPresentation(presentation, "offline_log");
+    } catch (error) {
+      rendererRef.current?.setContactTaskPresentation(
+        unavailableContactTaskPresentation(
+          error instanceof Error ? error.message : "contact-task-log/v1 JSONLを読み込めませんでした",
+        ),
+        "offline_log",
+      );
+    }
+  };
+
+  const onTransportPayloadFileChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ): Promise<void> => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = "";
+    if (file === undefined) {
+      return;
+    }
+    const renderer = rendererRef.current;
+    if (profile === null || renderer === null || !rendererReady) {
+      setState((current) => ({
+        ...current,
+        contactTaskInputSource: "offline_payload",
+        contactTaskPresentation: unavailableContactTaskPresentation(
+          "MuJoCo viewer の初期化後にtransport payload-v0 JSONを読み込んでください",
+        ),
+      }));
+      return;
+    }
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+      renderer.applyOfflinePayload(parseTransportPayloadV0Message(text));
+    } catch (error) {
+      renderer.setContactTaskPresentation(
+        unavailableContactTaskPresentation(
+          error instanceof Error ? error.message : "transport payload-v0 JSONを読み込めませんでした",
+        ),
+        "offline_payload",
+      );
+    }
+  };
+  const clearContactTaskPresentation = (): void => {
+    rendererRef.current?.setContactTaskPresentation(
+      unavailableContactTaskPresentation("offline contact task log の表示を消去しました"),
+      "none",
+    );
+  };
 
   const currentQposText = state.currentQpos === null ? "qpos unavailable" : formatQpos(state.currentQpos);
 
@@ -324,6 +416,145 @@ export function ProductViewerApp() {
             <div className="viewer-subtle">read-only diagnostic overlay</div>
           </div>
           <EndpointEvaluationPanel state={state} />
+        </div>
+        <div className="viewer-contact-task">
+          <div className="viewer-contact-task__header">
+            <h3>接触証拠と仮想反力</h3>
+            <div className={`viewer-subtle viewer-contact-task__status viewer-contact-task__status--${state.contactTaskPresentation.status}`}>
+              {state.contactTaskPresentation.status}
+            </div>
+          </div>
+          <div className="viewer-contact-task__controls">
+            <label>
+              contact-task-log/v1 JSONL を読み込む
+              <input
+                data-testid="contact-task-log-input"
+                type="file"
+                accept=".jsonl,application/x-ndjson,application/json"
+                disabled={profile === null || !rendererReady}
+                onChange={(event) => void onContactTaskLogChange(event)}
+              />
+            </label>
+            <label>
+              transport payload-v0 JSON を読み込む
+              <input
+                data-testid="transport-payload-v0-input"
+                type="file"
+                accept=".json,application/json"
+                disabled={profile === null || !rendererReady}
+                onChange={(event) => void onTransportPayloadFileChange(event)}
+              />
+            </label>
+            <button type="button" onClick={clearContactTaskPresentation}>
+              接触表示を消去
+            </button>
+          </div>
+          {state.contactTaskPresentation.reason === null ? null : (
+            <p className="viewer-contact-task__reason">{state.contactTaskPresentation.reason}</p>
+          )}
+          {state.contactTaskPresentation.evidenceNotice === null ? null : (
+            <p className="viewer-contact-task__notice">{state.contactTaskPresentation.evidenceNotice}</p>
+          )}
+          {state.contactTaskInputSource === "offline_log" ? (
+            <p className="viewer-contact-task__notice">
+              offline_log の contact sample と表示中の robot qpos は別入力です。contact-task-log/v1 に robot qpos は含まれず、同一時刻の姿勢と接触の同期を保証しません。同期した表示には、同じ payload-v0 の qpos と metadata.contact_task_v1 を使用してください。
+            </p>
+          ) : null}
+          <dl className="viewer-contact-task__kv">
+            <div>
+              <dt>入力元</dt>
+              <dd>{state.contactTaskInputSource}</dd>
+            </div>
+            <div>
+              <dt>証拠の種別</dt>
+              <dd>{state.contactTaskPresentation.sourceKind ?? "unavailable"}</dd>
+            </div>
+            <div>
+              <dt>シーン / object identity</dt>
+              <dd>
+                {state.contactTaskPresentation.binding === null
+                  ? "unavailable"
+                  : `${state.contactTaskPresentation.binding.scene_identity.name}/v${state.contactTaskPresentation.binding.scene_identity.version} / ${state.contactTaskPresentation.binding.object_identity.name}/v${state.contactTaskPresentation.binding.object_identity.version}`}
+              </dd>
+            </div>
+            <div>
+              <dt>試行 (trial)</dt>
+              <dd>{state.contactTaskPresentation.binding?.trial.trial_id ?? "unavailable"}</dd>
+            </div>
+            <div>
+              <dt>サンプル時刻 / frame</dt>
+              <dd>
+                {state.contactTaskPresentation.sample === null
+                  ? "unavailable"
+                  : `${state.contactTaskPresentation.sample.simulationTimeS.toFixed(3)} s / ${state.contactTaskPresentation.sample.frameIndex ?? "n/a"}`}
+              </dd>
+            </div>
+            <div>
+              <dt>payloadとの経過時間 / max age</dt>
+              <dd>
+                {state.contactTaskInputSource === "offline_log"
+                  ? "offline_log では算出対象外"
+                  : state.contactTaskPresentation.payloadAgeS === null ||
+                      state.contactTaskPresentation.maxAgeS === null
+                    ? "unavailable"
+                    : state.contactTaskPresentation.payloadAgeS.toFixed(3) +
+                      " / " +
+                      state.contactTaskPresentation.maxAgeS.toFixed(3) +
+                      " s"}
+              </dd>
+            </div>
+            <div>
+              <dt>立方体の位置 / half-size</dt>
+              <dd>
+                {state.contactTaskPresentation.cube === null
+                  ? "unavailable"
+                  : `${formatContactVector(state.contactTaskPresentation.cube.positionWorldM)} / ${formatContactVector(state.contactTaskPresentation.cube.halfSizeM)} m`}
+              </dd>
+            </div>
+            <div>
+              <dt>生の接触証拠 (raw contact evidence)</dt>
+              <dd>
+                {state.contactTaskPresentation.rawEvidence === null
+                  ? "unavailable"
+                  : `${state.contactTaskPresentation.rawEvidence.status}; contacts ${state.contactTaskPresentation.rawEvidence.contactCount ?? "n/a"}; force ${formatContactVector(state.contactTaskPresentation.rawEvidence.forceWorldN)} N`}
+              </dd>
+            </div>
+            <div>
+              <dt>導出反力 (derived reaction force)</dt>
+              <dd>
+                {state.contactTaskPresentation.derivedForce === null
+                  ? "unavailable"
+                  : `${state.contactTaskPresentation.derivedForce.status}; ${state.contactTaskPresentation.derivedForce.frame}; ${formatContactVector(state.contactTaskPresentation.derivedForce.forceN)} N`}
+              </dd>
+            </div>
+            <div>
+              <dt>対象 task の状態</dt>
+              <dd>
+                {state.contactTaskPresentation.taskState === null
+                  ? "unavailable"
+                  : `${state.contactTaskPresentation.taskState.phase} / ${state.contactTaskPresentation.taskState.classification}`}
+              </dd>
+            </div>
+            <div>
+              <dt>生の接触証拠に基づく判定 (raw-evidence outcome)</dt>
+              <dd>
+                {state.contactTaskPresentation.outcome === null
+                  ? "unavailable"
+                  : `${state.contactTaskPresentation.outcome.phase} / ${state.contactTaskPresentation.outcome.classification}`}
+              </dd>
+            </div>
+            <div>
+              <dt>接触点 / 法線 (world frame)</dt>
+              <dd>
+                {state.contactTaskPresentation.contacts.length === 0
+                  ? "none"
+                  : state.contactTaskPresentation.contacts.map((contact) =>
+                      `${contact.contactIdentity}: point ${formatContactVector(contact.pointWorldM)} m, normal ${formatContactVector(contact.normalWorld)}`,
+                    ).join("; ")}
+              </dd>
+            </div>
+          </dl>
+          <div className="viewer-subtle">力の矢印は表示長を対数スケールかつ上限付きで描画し、表示する N 値は変換しません。導出反力が tool frame の場合は数値だけを示し、world frame の矢印として描画しません。</div>
         </div>
         <div className="viewer-input-overlay">
           <div className="viewer-input-overlay__header">

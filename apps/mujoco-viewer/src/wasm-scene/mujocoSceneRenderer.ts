@@ -4,6 +4,7 @@
  */
 import {
   AmbientLight,
+  ArrowHelper,
   AxesHelper,
   BoxGeometry,
   BufferGeometry,
@@ -12,6 +13,7 @@ import {
   DoubleSide,
   DirectionalLight,
   Float32BufferAttribute,
+  Group,
   HemisphereLight,
   CanvasTexture,
   Mesh,
@@ -21,6 +23,7 @@ import {
   Scene,
   SphereGeometry,
   SRGBColorSpace,
+  Vector3 as ThreeVector3,
   NearestFilter,
   RepeatWrapping,
   Uint32BufferAttribute,
@@ -28,6 +31,12 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { TransportPayloadV0 } from "../types/transportPayload.js";
+import {
+  parseContactTaskPresentationV1,
+  unavailableContactTaskPresentation,
+  type ContactTaskInputSource,
+  type ContactTaskPresentationV1,
+} from "../contact/contactTaskLog.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import {
   loadViewerRobotProfileFromPayload,
@@ -77,7 +86,12 @@ export interface MujocoSceneRendererOptions {
 
 /** render resource lifecycle。dispose後はcanvas/scene resourceを再利用しない。 */
 export interface MujocoSceneRenderer {
+  applyOfflinePayload(payload: TransportPayloadV0): void;
   start(): Promise<void>;
+  setContactTaskPresentation(
+    presentation: ContactTaskPresentationV1,
+    inputSource: ContactTaskInputSource,
+  ): void;
   dispose(): void;
 }
 
@@ -173,6 +187,9 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
   const scene = new Scene();
   scene.background = new Color("#08111f");
+  const contactOverlay = new Group();
+  contactOverlay.name = "read-only contact-task overlay";
+  scene.add(contactOverlay);
 
   const renderer = new WebGLRenderer({ canvas: options.canvas, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
@@ -236,6 +253,112 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
   const updateRendererStatus = (patch: ProductViewerRendererStatePatch): void => {
     emitState(applyProductViewerRendererStatePatch(state, patch));
+  };
+
+  const clearContactOverlay = (): void => {
+    contactOverlay.traverse((object) => {
+      const renderObject = object as typeof object & {
+        geometry?: { dispose?: () => void };
+        material?: { dispose?: () => void } | Array<{ dispose?: () => void }>;
+      };
+      renderObject.geometry?.dispose?.();
+      const materials = Array.isArray(renderObject.material)
+        ? renderObject.material
+        : renderObject.material === undefined
+          ? []
+          : [renderObject.material];
+      for (const material of materials) {
+        material.dispose?.();
+      }
+    });
+    contactOverlay.clear();
+  };
+
+  const updateContactOverlay = (presentation: ContactTaskPresentationV1): void => {
+    clearContactOverlay();
+    if (presentation.status !== "available" || presentation.cube === null) {
+      return;
+    }
+
+    const cube = presentation.cube;
+    const cubeMesh = new Mesh(
+      new BoxGeometry(
+        cube.halfSizeM[0] * 2,
+        cube.halfSizeM[1] * 2,
+        cube.halfSizeM[2] * 2,
+      ),
+      new MeshPhongMaterial({
+        color: new Color().setRGB(cube.rgba[0], cube.rgba[1], cube.rgba[2]),
+        transparent: cube.rgba[3] < 1,
+        opacity: cube.rgba[3],
+        depthWrite: cube.rgba[3] >= 1,
+        side: DoubleSide,
+        shininess: 14,
+      }),
+    );
+    cubeMesh.name = `contact overlay: ${cube.identity.name}/v${cube.identity.version}`;
+    cubeMesh.position.set(...cube.positionWorldM);
+    cubeMesh.quaternion.set(
+      cube.orientationWXYZ[1],
+      cube.orientationWXYZ[2],
+      cube.orientationWXYZ[3],
+      cube.orientationWXYZ[0],
+    );
+    contactOverlay.add(cubeMesh);
+
+    const arrow = (vector: readonly number[], origin: readonly number[], color: number): void => {
+      const direction = new ThreeVector3(vector[0], vector[1], vector[2]);
+      const magnitude = direction.length();
+      if (!Number.isFinite(magnitude) || magnitude < 1e-8) {
+        return;
+      }
+      direction.normalize();
+      const length = Math.min(0.22, Math.max(0.035, Math.log1p(magnitude) * 0.06));
+      contactOverlay.add(
+        new ArrowHelper(
+          direction,
+          new ThreeVector3(origin[0], origin[1], origin[2]),
+          length,
+          color,
+          Math.min(0.03, length * 0.28),
+          Math.min(0.018, length * 0.16),
+        ),
+      );
+    };
+    for (const contact of presentation.contacts) {
+      const point = new ThreeVector3(...contact.pointWorldM);
+      const radius = Math.max(0.002, Math.min(...cube.halfSizeM) * 0.12);
+      const marker = new Mesh(
+        new SphereGeometry(radius, 12, 8),
+        new MeshPhongMaterial({ color: new Color("#f97316"), shininess: 24 }),
+      );
+      marker.name = `contact point: ${contact.contactIdentity}`;
+      marker.position.set(point.x, point.y, point.z);
+      contactOverlay.add(marker);
+      arrow(contact.normalWorld, contact.pointWorldM, 0xf97316);
+    }
+
+    const forceOrigin = presentation.contacts[0]?.pointWorldM ?? cube.positionWorldM;
+    if (presentation.rawEvidence?.forceWorldN !== null && presentation.rawEvidence?.forceWorldN !== undefined) {
+      arrow(presentation.rawEvidence.forceWorldN, forceOrigin, 0x22d3ee);
+    }
+    if (
+      presentation.derivedForce?.frame === "mujoco_world" &&
+      presentation.derivedForce.forceN !== null
+    ) {
+      arrow(presentation.derivedForce.forceN, forceOrigin, 0xfacc15);
+    }
+  };
+
+  const setContactTaskPresentation = (
+    presentation: ContactTaskPresentationV1,
+    inputSource: ContactTaskInputSource,
+  ): void => {
+    updateContactOverlay(presentation);
+    updateRendererStatus({
+      contactTaskPresentation: presentation,
+      contactTaskInputSource: inputSource,
+    });
   };
 
   const updateConnectionStatus = (
@@ -484,8 +607,26 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     observation: ViewerWebSocketPayloadObservation,
   ): void => {
     frameTiming.receive(payload, observation);
+    const activeProfile = requireProfile();
+    setContactTaskPresentation(
+      parseContactTaskPresentationV1(payload.metadata.contact_task_v1, {
+        profileId: activeProfile.profileId,
+        profileContractVersion: activeProfile.profileContractVersion,
+      },
+      {
+        timeS: payload.time_s,
+        frameIndex: payload.frame_index,
+      }),
+      "transport_metadata",
+    );
     const qposResolution = resolveTransportQpos(payload, model.nq, requireProfile());
     if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
+      setContactTaskPresentation(
+        unavailableContactTaskPresentation(
+          qposResolution.errorMessage ?? "payload qpos is incompatible; contact overlay was cleared",
+        ),
+        "transport_metadata",
+      );
       frameTiming.recordCompatibilityInvalidIngress();
       updateRendererStatus({
         status: "warning",
@@ -504,6 +645,51 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     frameTiming.acceptLatestCandidate(payload, observation);
   };
 
+  const applyOfflinePayload = (payload: TransportPayloadV0): void => {
+    const activeProfile = requireProfile();
+    const qposResolution = resolveTransportQpos(payload, model.nq, activeProfile);
+    if (qposResolution.status !== "ready" || qposResolution.qpos === null) {
+      setContactTaskPresentation(
+        unavailableContactTaskPresentation(
+          qposResolution.errorMessage ?? "transport payload cannot be applied",
+        ),
+        "offline_payload",
+      );
+      updateRendererStatus({
+        status: "warning",
+        sourceLabel: "offline payload-v0 file / transport payload incompatible",
+        qposStatus: qposResolution.status,
+        qposError: qposResolution.errorMessage,
+        currentFrameIndex: qposResolution.currentFrameIndex,
+        currentTimestampS: qposResolution.currentTimestampS,
+        currentQpos: null,
+        currentQposText: "[]",
+        endpointEvaluation: payload.endpoint_evaluation ?? null,
+        inputOverlay: buildProductViewerInputOverlayState(payload),
+      });
+      return;
+    }
+
+    setContactTaskPresentation(
+      parseContactTaskPresentationV1(payload.metadata.contact_task_v1, {
+        profileId: activeProfile.profileId,
+        profileContractVersion: activeProfile.profileContractVersion,
+      },
+      {
+        timeS: payload.time_s,
+        frameIndex: payload.frame_index,
+      }),
+      "offline_payload",
+    );
+    applyModelPose(
+      qposResolution.qpos,
+      "offline payload-v0 file",
+      qposResolution.currentFrameIndex,
+      qposResolution.currentTimestampS,
+      payload.endpoint_evaluation ?? null,
+      buildProductViewerInputOverlayState(payload),
+    );
+  };
   const startWebSocketClient = (): void => {
     if (websocketUrl === null) {
       updateConnectionStatus("disabled");
@@ -764,6 +950,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
         options.onError?.(error instanceof Error ? error : new Error(message));
       }
     },
+    applyOfflinePayload,
+    setContactTaskPresentation,
     dispose() {
       disposed = true;
       frameTiming.dispose();
@@ -778,6 +966,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       objectByGeomIndex.clear();
       materialByKey.clear();
       modelMeshNameById.clear();
+      clearContactOverlay();
+      scene.remove(contactOverlay);
       floorTexture.dispose();
       floorMaterial.dispose();
       renderer.dispose();

@@ -37,6 +37,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | evaluation manifest / readiness freeze | `docs/contracts/evaluation-manifest-readiness.md` | pre-run manifestのcanonical bytes、world/tool pair invariant、requested/resolved identity、software-only readiness |
 | R7-H contact task / object manifest | `docs/contracts/contact-task-manifest.md` | cube physical condition、reset、target、MuJoCo setting、semantic role、canonical serialization |
 | virtual reaction-force signal | `docs/contracts/virtual-reaction-force.md` | raw contact evidenceから導出するsoftware-only signal、frame、filter、lifecycle、manifest identity |
+| contact-task trial log / viewer projection | `docs/contracts/contact-task-log-v1.md` | raw contact、derived force、Task outcomeを分離するversioned JSONLとpayload/viewer境界 |
 | kinematics / command境界 | `docs/contracts/kinematics-command-contract.md` | solver、command、qpos境界 |
 | physical output contract | `docs/contracts/physical-output.md` | typed request、permission mode、truth level、K-preのno-side-effect境界 |
 | fast_arm MuJoCo model name | `docs/contracts/mujoco-model-name-contract.md` | plugin-owned body/site name、fallback、failure contract |

@@ -29,10 +29,16 @@ declare module "three" {
 
   export class Vector3 {
     constructor(x?: number, y?: number, z?: number);
+    x: number;
+    y: number;
+    z: number;
+    length(): number;
+    normalize(): this;
   }
 
   export class Color {
     constructor(color?: unknown);
+    setRGB(r: number, g: number, b: number): this;
   }
 
   export class CanvasTexture {
@@ -142,6 +148,17 @@ declare module "three" {
     add(...objects: Object3D[]): this;
   }
 
+  export class ArrowHelper extends Object3D {
+    constructor(
+      direction: Vector3,
+      origin: Vector3,
+      length: number,
+      color?: unknown,
+      headLength?: number,
+      headWidth?: number,
+    );
+  }
+
   export class Object3D {
     name: string;
     parent: Object3D | null;
@@ -186,6 +203,7 @@ declare module "three" {
     lookAt(x: number, y: number, z: number): void;
     add(...objects: Object3D[]): this;
     clear(): void;
+    traverse(callback: (object: Object3D) => void): void;
   }
 
   export class PerspectiveCamera extends Object3D {

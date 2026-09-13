@@ -51,6 +51,13 @@ target lifecycleを実行しない。payload versionを保持し、別のphysica
   Python module / class / package pathを含まない。runtimeは三つを組としてauthoritativeに上書きし、
   partial referenceと旧full declarationのspoofingを除去する。
 - profile-free generic payloadからfast_armを推論しない。
+- `metadata.contact_task_v1`は`contact-task-presentation/v1`のoptionalなopen metadata extensionであり、contact ownerの`runtime/contact/presentation.py`が構成する。transport payloadのversionも、reservedなrobot-profile metadataも変更しない。
+
+## `contact_task_v1` metadata extension
+
+callerは同一`MuJoCoState` snapshotの`time_s` / `frame_index`とbinding済み`contact-task-log/v1` sampleを使い、`contact_task_payload_metadata_v1(...)`が返す`contact_task_v1`を`MuJoCoState.metadata`へmergeしてから通常のserializerへ渡す。別時刻のqposとcontact evidenceを同期済みとして合成しない。contact log自体はrobot qposを持たない。
+
+このextensionはscene identity、manifest digest、signal manifest digest、trial、robot bundle、payload ageを含むread-only projectionである。viewerはload済みprofileとschema / digest / bindingを検証する。contact metadataが欠落、不正、stale、またはprofileと不一致ならcontact表示と前回のforce overlayを消去する。metadata不正だけでprofile-validなqpos payload全体をcontact evidenceとして扱わない。
 
 ## viewer boundary
 
