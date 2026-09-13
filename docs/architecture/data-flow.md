@@ -44,8 +44,19 @@ traceの`permitted` / `rejected` / `dropped`とlifecycle stateは送信実績と
 
 送信attempt、fake経路の`simulated` receipt、実UDP providerの`local_socket` receipt、receiver ACKを独立して
 扱う。local socketのbyte countはreceiver受理、robot acceptance、physical movementを示さず、ACK evidenceは
-`unavailable`である。automated validationはfake sender / injected fake socketのみを用い、DNS resolution、
+actual observationを`observe_router_datagram`へ取り込んだ場合のcorrelated router command statusに限る。
+
+FastArm joint outputは`runtime.output.fast_arm_adapter`が#509 accepted physical-measurement handoff、Robot
+Profile、P5、二重permission、operator gate、generic transportを結ぶ。plugin-local
+`adapter/physical_output.py`でversioned joint order、sign、offset、offset unitを含むpure mappingとrad-to-degree変換を行い、generic encoder capabilityが要求するv2
+external authorization grantをguarded send時に消費する。malformed / mismatched observationはACKとして扱わずpendingを
+保持して追加requestをblockし、timeoutまたはinvalid clockはlocal stateをfail-closedにする。
+simulated observationはcorrelation stateを検証するだけでrouter ACKへ昇格しない。いずれの経路もPi / robot受理、
+movement、physical stopの実証にはならない。
+`observe_router_datagram`はingestion APIまでであり、actual receive socketからsessionへ渡すbounded producerとtimeout tick
+schedulerはこの変更で実装・検証していない。automated validationはfake sender / injected fake socketのみを用い、DNS resolution、
 実socket、network、serial、robot outputを実行しない。
+後続#516 preflight / scopeでbounded receive wiring、timeout / disconnect integration、#514 network validationを具体化する。
 
 現行のapplication-facing replay / viewer / smokeは、Robot、Input Source、Control Mapping、
 command semantics routeを接続するdiagnostic / operational runtimeである。Environment、Task、

@@ -9,6 +9,10 @@ PERMISSION_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "permis
 TRACE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "trace.py"
 LIFECYCLE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "lifecycle.py"
 SAFETY_GATE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "safety_gate.py"
+FAST_ARM_RUNTIME_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "fast_arm_adapter.py"
+FAST_ARM_PLUGIN_PATH = (
+    ROOT / "src" / "selfrionette" / "plugins" / "robots" / "fast_arm" / "adapter" / "physical_output.py"
+)
 TRANSPORT_ADAPTER_PATH = (
     ROOT / "src" / "selfrionette" / "runtime" / "output" / "transport_adapter.py"
 )
@@ -145,3 +149,30 @@ def test_transport_adapter_is_the_output_composition_transport_owner() -> None:
     )
     package_imports = _imported_modules(package_tree)
     assert all("transport_adapter" not in module for module in package_imports)
+
+
+def test_fast_arm_mapping_and_runtime_output_composition_keep_layer_ownership() -> None:
+    plugin_tree = ast.parse(
+        FAST_ARM_PLUGIN_PATH.read_text(encoding="utf-8"),
+        filename=str(FAST_ARM_PLUGIN_PATH),
+    )
+    plugin_imports = _imported_modules(plugin_tree)
+    assert "selfrionette.schemas.command" in plugin_imports
+    assert all(
+        not module.startswith((
+            "selfrionette.runtime",
+            "selfrionette.transport",
+        ))
+        for module in plugin_imports
+    )
+
+    runtime_tree = ast.parse(
+        FAST_ARM_RUNTIME_PATH.read_text(encoding="utf-8"),
+        filename=str(FAST_ARM_RUNTIME_PATH),
+    )
+    runtime_imports = _imported_modules(runtime_tree)
+    assert "selfrionette.plugins.robots.fast_arm.adapter.physical_output" in runtime_imports
+    assert "selfrionette.runtime.output.transport_adapter" in runtime_imports
+    assert "selfrionette.runtime.output.lifecycle" in runtime_imports
+    assert "selfrionette.runtime.output.safety_gate" in runtime_imports
+    assert "selfrionette.transport.osc" in runtime_imports
