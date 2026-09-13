@@ -55,6 +55,11 @@ operator gate、generic transportを結ぶcomposition ownerである。robot固�
 plugin-local adapterが持つpure contractであり、runtimeやtransportをimportしない。generic `transport_adapter`
 はencoderのrequired-authorization capabilityをconstructorで照合し、FastArm codecにはv2 external gateを要求する。
 
+このruntime-to-plugin importは限定例外である。`runtime/output/fast_arm_adapter.py`だけが
+`selfrionette.plugins.robots.fast_arm.adapter.physical_output`とその明示したsymbolsをimportできる。
+同じownerから別のconcrete FastArm moduleをimportすること、および他のruntime / core / transport moduleからこの
+`physical_output` moduleをimportすることは禁止し、runtimeからplugin implementationへの一般的な許可には広げない。
+
 Input Source Pluginのgeneric `InputSource.read_frame() -> RawInputFrame` contractは
 `runtime/experiment/input_source.py`がdefinitionを所有し、production source implementationとregistrationは
 `plugins/input_sources/`が所有する。Control Mappingのcanonical ownerは`plugins/mappings/`である。

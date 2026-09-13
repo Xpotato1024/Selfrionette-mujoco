@@ -20,6 +20,20 @@ from selfrionette.plugins.robots.fast_arm.plugin import ROBOT_PLUGIN
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "selfrionette"
 FAST_ARM_PLUGIN_ROOT = SRC / "plugins" / "robots" / "fast_arm"
+FAST_ARM_PACKAGE = "selfrionette.plugins.robots.fast_arm"
+FAST_ARM_PHYSICAL_OUTPUT_MODULE = f"{FAST_ARM_PACKAGE}.adapter.physical_output"
+FAST_ARM_RUNTIME_COMPOSITION_OWNER = SRC / "runtime" / "output" / "fast_arm_adapter.py"
+FAST_ARM_RUNTIME_COMPOSITION_IMPORTS = frozenset(
+    {
+        FAST_ARM_PHYSICAL_OUTPUT_MODULE,
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.FAST_ARM_JOINT_POSITION_SEMANTICS",
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.FastArmJointWireCommand",
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.FastArmOutputMapping",
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.build_fast_arm_joint_wire_command",
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.parse_fast_arm_router_observation",
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.router_observation_matches",
+    }
+)
 REMOVED_MODULE_PATHS = (
     SRC / "robot_profile.py",
     SRC / "viewer_robot_declaration.py",
@@ -86,6 +100,15 @@ def _imports(path: Path) -> set[str]:
     )
 
 
+def _is_permitted_concrete_fast_arm_import(path: Path, imported: str) -> bool:
+    if imported != FAST_ARM_PACKAGE and not imported.startswith(f"{FAST_ARM_PACKAGE}."):
+        return True
+    return (
+        path == FAST_ARM_RUNTIME_COMPOSITION_OWNER
+        and imported in FAST_ARM_RUNTIME_COMPOSITION_IMPORTS
+    )
+
+
 def test_package_for_path_uses_containing_package_for_modules_and_initializers() -> None:
     assert _package_for_path(SRC / "runtime" / "foo.py") == "selfrionette.runtime"
     assert _package_for_path(SRC / "plugins" / "robots" / "__init__.py") == (
@@ -124,15 +147,28 @@ def test_relative_removed_compatibility_import_is_detected() -> None:
     assert imported & REMOVED_IMPORT_MODULES
 
 
-def test_only_fast_arm_plugin_package_imports_concrete_fast_arm_modules() -> None:
+def test_fast_arm_runtime_composition_import_exception_is_exact() -> None:
+    owner = FAST_ARM_RUNTIME_COMPOSITION_OWNER
+    assert _is_permitted_concrete_fast_arm_import(owner, FAST_ARM_PHYSICAL_OUTPUT_MODULE)
+    for imported in FAST_ARM_RUNTIME_COMPOSITION_IMPORTS - {FAST_ARM_PHYSICAL_OUTPUT_MODULE}:
+        assert _is_permitted_concrete_fast_arm_import(owner, imported)
+
+    assert not _is_permitted_concrete_fast_arm_import(owner, FAST_ARM_PACKAGE)
+    assert not _is_permitted_concrete_fast_arm_import(
+        owner, f"{FAST_ARM_PACKAGE}.adapter.bundle"
+    )
+    assert not _is_permitted_concrete_fast_arm_import(
+        SRC / "runtime" / "output" / "transport_adapter.py", FAST_ARM_PHYSICAL_OUTPUT_MODULE
+    )
+
+
+def test_concrete_fast_arm_imports_are_limited_to_plugin_and_exact_runtime_owner() -> None:
     violations: list[str] = []
     for path in SRC.rglob("*.py"):
         if path.is_relative_to(FAST_ARM_PLUGIN_ROOT):
             continue
         for imported in sorted(_imports(path)):
-            if imported == "selfrionette.plugins.robots.fast_arm" or imported.startswith(
-                "selfrionette.plugins.robots.fast_arm."
-            ):
+            if not _is_permitted_concrete_fast_arm_import(path, imported):
                 violations.append(f"{path.relative_to(ROOT)}: {imported}")
     assert not violations, "concrete fast_arm import outside plugin owner:\n" + "\n".join(
         violations
