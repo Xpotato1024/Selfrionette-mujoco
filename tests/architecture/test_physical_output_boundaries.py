@@ -9,6 +9,10 @@ PERMISSION_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "permis
 TRACE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "trace.py"
 LIFECYCLE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "lifecycle.py"
 SAFETY_GATE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "safety_gate.py"
+TRANSPORT_ADAPTER_PATH = (
+    ROOT / "src" / "selfrionette" / "runtime" / "output" / "transport_adapter.py"
+)
+OUTPUT_PACKAGE_PATH = ROOT / "src" / "selfrionette" / "runtime" / "output" / "__init__.py"
 FORBIDDEN_IMPORT_ROOTS = {
     "mujoco",
     "osc4py3",
@@ -119,3 +123,25 @@ def test_safety_gate_uses_the_canonical_p5_evaluator_without_transport() -> None
         and node.func.id == "evaluate_physical_safety"
         for node in ast.walk(tree)
     )
+
+
+def test_transport_adapter_is_the_output_composition_transport_owner() -> None:
+    tree = ast.parse(
+        TRANSPORT_ADAPTER_PATH.read_text(encoding="utf-8"),
+        filename=str(TRANSPORT_ADAPTER_PATH),
+    )
+    imported = _imported_modules(tree)
+    assert "selfrionette.transport.endpoint" in imported
+    assert "selfrionette.transport.osc" in imported
+    assert "selfrionette.transport.udp" in imported
+    assert all(
+        not module.startswith("selfrionette.plugins.robots")
+        for module in imported
+    )
+
+    package_tree = ast.parse(
+        OUTPUT_PACKAGE_PATH.read_text(encoding="utf-8"),
+        filename=str(OUTPUT_PACKAGE_PATH),
+    )
+    package_imports = _imported_modules(package_tree)
+    assert all("transport_adapter" not in module for module in package_imports)
