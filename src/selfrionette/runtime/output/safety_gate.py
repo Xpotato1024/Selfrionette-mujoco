@@ -23,6 +23,7 @@ from selfrionette.schemas import PhysicalOutputRequest
 
 PHYSICAL_OUTPUT_SAFETY_BINDING_SCHEMA_VERSION = "physical-output-safety-binding/v1"
 PHYSICAL_OUTPUT_SAFETY_EVIDENCE_SCHEMA_VERSION = "physical-output-safety-evidence/v1"
+PHYSICAL_OUTPUT_CANDIDATE_ID_PREFIX = "physical-output-candidate/v1:sha256:"
 
 PhysicalOutputSafetyStatus = Literal[
     "allowed",
@@ -76,6 +77,17 @@ def _canonical_json_bytes(value: object) -> bytes:
 
 def _digest(value: object) -> str:
     return sha256(_canonical_json_bytes(value)).hexdigest()
+
+
+def physical_output_candidate_id(request: PhysicalOutputRequest) -> str:
+    """Canonicalなoutput request bytesからversioned candidate identityを作る。"""
+
+    if not isinstance(request, PhysicalOutputRequest):
+        raise TypeError("candidate identity requires PhysicalOutputRequest")
+    return (
+        f"{PHYSICAL_OUTPUT_CANDIDATE_ID_PREFIX}"
+        f"{sha256(request.to_json_bytes()).hexdigest()}"
+    )
 
 
 def _typed_safety_value(value: object) -> object:
@@ -320,6 +332,7 @@ class PhysicalOutputSafetyEvaluation:
         checked_at_s = _finite_timestamp("checked_at_s", self.checked_at_s)
         request_bytes = self.request.to_json_bytes()
         request_sha256 = sha256(request_bytes).hexdigest()
+        expected_candidate_id = physical_output_candidate_id(self.request)
         target_robot_id = self.request.target_robot_id
         software_revision = self.request.software_revision
 
@@ -371,6 +384,13 @@ class PhysicalOutputSafetyEvaluation:
         )
 
         validation_error = input_error or decision_error
+        candidate_mismatch = False
+        decision_mismatch = False
+        if validation_error is None and safety_input is not None and decision is not None:
+            candidate_mismatch = (
+                safety_input.candidate_id != expected_candidate_id
+                or decision.candidate_id != expected_candidate_id
+            )
         if validation_error is None and safety_input is not None and decision is not None:
             expected = evaluate_physical_safety(safety_input)
             try:
@@ -378,7 +398,7 @@ class PhysicalOutputSafetyEvaluation:
             except Exception:
                 validation_error = "physical_safety_decision_invalid"
             if validation_error is None and expected != decision:
-                validation_error = "physical_safety_decision_mismatch"
+                decision_mismatch = True
 
         status: PhysicalOutputSafetyStatus
         reason: str
@@ -388,6 +408,14 @@ class PhysicalOutputSafetyEvaluation:
         elif safety_input is None or decision is None:
             status = "invalid"
             reason = "physical_safety_binding_missing"
+            validation_error = reason
+        elif candidate_mismatch:
+            status = "rejected"
+            reason = "physical_safety_candidate_mismatch"
+            validation_error = reason
+        elif decision_mismatch:
+            status = "invalid"
+            reason = "physical_safety_decision_mismatch"
             validation_error = reason
         else:
             p2_robot = (
@@ -589,6 +617,7 @@ def validate_physical_output_sendable_request(
 
 
 __all__ = [
+    "PHYSICAL_OUTPUT_CANDIDATE_ID_PREFIX",
     "PHYSICAL_OUTPUT_SAFETY_BINDING_SCHEMA_VERSION",
     "PHYSICAL_OUTPUT_SAFETY_EVIDENCE_SCHEMA_VERSION",
     "PhysicalOutputSafetyEvaluation",
@@ -597,6 +626,7 @@ __all__ = [
     "PhysicalOutputSendableRequest",
     "bind_physical_output_safety",
     "evaluate_and_bind_physical_output_safety",
+    "physical_output_candidate_id",
     "validate_physical_output_safety_evaluation",
     "validate_physical_output_sendable_request",
 ]

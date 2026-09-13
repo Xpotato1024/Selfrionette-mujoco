@@ -16,6 +16,7 @@ from selfrionette.runtime.output.lifecycle import (
     PhysicalOutputLifecycleTrace,
 )
 from selfrionette.runtime.output.safety_gate import (
+    PHYSICAL_OUTPUT_CANDIDATE_ID_PREFIX,
     PHYSICAL_OUTPUT_SAFETY_BINDING_SCHEMA_VERSION,
     PHYSICAL_OUTPUT_SAFETY_EVIDENCE_SCHEMA_VERSION,
     PhysicalOutputSafetyEvaluation,
@@ -24,6 +25,7 @@ from selfrionette.runtime.output.safety_gate import (
     PhysicalOutputSendableRequest,
     bind_physical_output_safety,
     evaluate_and_bind_physical_output_safety,
+    physical_output_candidate_id,
     validate_physical_output_safety_evaluation,
     validate_physical_output_sendable_request,
 )
@@ -39,6 +41,7 @@ from selfrionette.runtime.output.trace import (
 )
 
 __all__ = [
+    "PHYSICAL_OUTPUT_CANDIDATE_ID_PREFIX",
     "PHYSICAL_OUTPUT_SAFETY_BINDING_SCHEMA_VERSION",
     "PHYSICAL_OUTPUT_SAFETY_EVIDENCE_SCHEMA_VERSION",
     "PHYSICAL_OUTPUT_TRACE_SCHEMA_VERSION",
@@ -62,6 +65,7 @@ __all__ = [
     "bind_physical_output_safety",
     "evaluate_and_bind_physical_output_safety",
     "evaluate_physical_output_permission",
+    "physical_output_candidate_id",
     "physical_output_traces_equivalent",
     "replay_physical_output_trace",
     "validate_physical_output_safety_evaluation",

@@ -8,11 +8,13 @@ from threading import Barrier
 import pytest
 
 from selfrionette.runtime.output import (
+    bind_physical_output_safety,
     evaluate_and_bind_physical_output_safety,
     PhysicalOutputLifecycle,
     PhysicalOutputLifecycleEvent,
     PhysicalOutputLifecycleTrace,
     PhysicalOutputRecordingSink,
+    physical_output_candidate_id,
 )
 from selfrionette.runtime.output.permission import evaluate_physical_output_permission
 from selfrionette.runtime.safety.collision_policy import CollisionStatus
@@ -31,6 +33,10 @@ def _request(**changes: object):
 
 def _safety_input(request, *, base=None, include_revision: bool = True):
     safety_input = _safety_input_fixture() if base is None else base
+    safety_input = replace(
+        safety_input,
+        candidate_id=physical_output_candidate_id(request),
+    )
     if include_revision:
         provenance = (*safety_input.provenance, f"software_revision:{request.software_revision}")
         safety_input = replace(safety_input, provenance=provenance)
@@ -268,6 +274,53 @@ def test_safety_hold_reject_stop_stale_and_identity_mismatch_clear_prior_sendabl
         assert result.event.safety_evidence.gate_status == gate_status
         assert lifecycle.latest_request is None
         assert lifecycle.latest_sendable_request is None
+
+
+def test_candidate_mismatch_after_active_clears_latest_sendable_request() -> None:
+    request = _request()
+    evaluation = _evaluation(request)
+    assert evaluation.safety_input is not None
+    assert evaluation.decision is not None
+
+    lifecycle = PhysicalOutputLifecycle("session-1")
+    assert lifecycle.arm(PhysicalOutputPermission(mode="dry_run")).accepted
+    accepted = _submit(
+        lifecycle,
+        request,
+        now_s=request.timestamp_s,
+        max_age_s=1.0,
+        max_safety_age_s=1.0,
+    )
+    assert accepted.accepted
+    assert lifecycle.latest_sendable_request is not None
+
+    changed_request = replace(
+        request,
+        sequence=request.sequence + 1,
+        command=replace(
+            request.command,
+            velocity_m_s=(
+                request.command.velocity_m_s[0] + 0.01,
+                *request.command.velocity_m_s[1:],
+            ),
+        ),
+    )
+    mismatched = bind_physical_output_safety(
+        changed_request,
+        evaluation.safety_input,
+        evaluation.decision,
+        checked_at_s=changed_request.timestamp_s,
+    )
+    result = lifecycle.submit(mismatched, now_s=changed_request.timestamp_s + 0.1)
+
+    assert not result.accepted
+    assert result.reason == "physical_safety_candidate_mismatch"
+    assert result.event is not None
+    assert result.event.event_kind == "safety_rejected"
+    assert result.event.safety_evidence is not None
+    assert result.event.safety_evidence.gate_reason == "physical_safety_candidate_mismatch"
+    assert lifecycle.latest_request is None
+    assert lifecycle.latest_sendable_request is None
 
 
 def test_raw_intent_cannot_replace_an_active_sendable_request() -> None:

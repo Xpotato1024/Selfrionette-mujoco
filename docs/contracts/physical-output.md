@@ -89,6 +89,18 @@ explicit operator gateを要求し、disabled permissionを成功として記録
 この結合はupstream safety formulaを複製せず、P2/P3/P4の出力に含まれないjoint positionや
 trajectory値を再構築しない。
 
+`physical_output_candidate_id(request)`はcanonical request bytesから
+`physical-output-candidate/v1:sha256:<request_sha256>`を作る。生成側は
+`PhysicalOutputRequest`を固定してからこの関数を呼び、返されたIDを使って同一のcommand / trajectoryを
+P2/P3/P4 checkerへ渡す。`SafetyInput.candidate_id`と`SafetyDecision.candidate_id`の両方がこの
+request由来IDと一致しなければ、outputへの結合は`rejected`となる。この関数とbinding処理は受け取った
+candidate IDを補完・書き換えない。
+
+このID一致は生成側が同じcommand / trajectoryをcheckしたことの意味上の保証に依存する。
+P2/P3/P4 DTOはupstream safety evidenceを保持するが、元のqpos / trajectory値全体は保持しないため、
+output bindingはそれらの値を再構築または再計算しない。candidate IDは検査対象のidentityを結ぶもので、
+独立したphysical measurementやupstream checker実行の証明ではない。
+
 SafetyInput中のP2 `limit_resolution.robot_id`とP3 `collision.context.robot_id`は一致し、
 requestの`target_robot_id`とも一致しなければならない。requestの`software_revision`に対応する
 `software_revision:<id>` provenance tokenをSafetyInputとSafetyDecisionの両方で照合する。

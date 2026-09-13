@@ -9,7 +9,9 @@ from selfrionette.runtime.output.safety_gate import (
     PhysicalOutputSafetyEvaluation,
     PhysicalOutputSafetyTraceEvidence,
     PhysicalOutputSendableRequest,
+    bind_physical_output_safety,
     evaluate_and_bind_physical_output_safety,
+    physical_output_candidate_id,
     validate_physical_output_sendable_request,
 )
 from selfrionette.runtime.safety.limit_resolution import LimitResolutionStatus
@@ -29,6 +31,7 @@ def _safety_input(request: PhysicalOutputRequest, *, limits=LimitResolutionStatu
     safety_input = _input(limits=limits)
     return replace(
         safety_input,
+        candidate_id=physical_output_candidate_id(request),
         provenance=(*safety_input.provenance, f"software_revision:{request.software_revision}"),
     )
 
@@ -45,6 +48,8 @@ def test_allow_binding_hashes_canonical_request_and_typed_safety_content() -> No
     assert evaluation.status == "allowed"
     assert evaluation.sendable
     assert evaluation.request_sha256 == sha256(request.to_json_bytes()).hexdigest()
+    assert evaluation.candidate_id == physical_output_candidate_id(request)
+    assert safety_input.candidate_id == evaluation.decision.candidate_id
     assert evaluation.safety_input_sha256
     assert evaluation.decision_sha256
     sendable = evaluation.to_sendable_request()
@@ -72,6 +77,9 @@ def test_allow_binding_hashes_canonical_request_and_typed_safety_content() -> No
     )
     assert changed_request_evaluation.request_sha256 != evaluation.request_sha256
     assert changed_request_evaluation.binding_sha256 != evaluation.binding_sha256
+    assert changed_request_evaluation.status == "rejected"
+    assert changed_request_evaluation.reason == "physical_safety_candidate_mismatch"
+    assert not changed_request_evaluation.sendable
 
     changed_safety_input = _safety_input(
         request,
@@ -85,6 +93,78 @@ def test_allow_binding_hashes_canonical_request_and_typed_safety_content() -> No
     assert changed_safety_input.candidate_id == safety_input.candidate_id
     assert changed_safety_evaluation.safety_input_sha256 != evaluation.safety_input_sha256
     assert changed_safety_evaluation.binding_sha256 != evaluation.binding_sha256
+
+
+def test_candidate_id_is_versioned_sha256_of_canonical_request_bytes() -> None:
+    request = _request()
+
+    assert physical_output_candidate_id(request) == (
+        "physical-output-candidate/v1:sha256:"
+        f"{sha256(request.to_json_bytes()).hexdigest()}"
+    )
+
+
+def test_same_safe_candidate_evidence_cannot_be_reused_for_changed_command() -> None:
+    request = _request()
+    safety_input = _safety_input(request)
+    safe_decision = evaluate_physical_safety(safety_input)
+    changed_command = replace(
+        request.command,
+        velocity_m_s=(
+            request.command.velocity_m_s[0] + 0.01,
+            *request.command.velocity_m_s[1:],
+        ),
+    )
+    changed_request = replace(
+        request,
+        sequence=request.sequence + 1,
+        command=changed_command,
+    )
+
+    evaluation = bind_physical_output_safety(
+        changed_request,
+        safety_input,
+        safe_decision,
+        checked_at_s=changed_request.timestamp_s,
+    )
+
+    assert evaluation.status == "rejected"
+    assert evaluation.reason == "physical_safety_candidate_mismatch"
+    assert not evaluation.sendable
+
+
+def test_arbitrary_safety_candidate_id_cannot_become_sendable() -> None:
+    request = _request()
+    safety_input = replace(_safety_input(request), candidate_id="arbitrary-safe-candidate")
+    evaluation = evaluate_and_bind_physical_output_safety(
+        request,
+        safety_input,
+        checked_at_s=request.timestamp_s,
+    )
+
+    assert evaluation.safety_action.value == "allow"
+    assert evaluation.status == "rejected"
+    assert evaluation.reason == "physical_safety_candidate_mismatch"
+    assert not evaluation.sendable
+
+
+def test_safety_decision_candidate_id_must_match_request() -> None:
+    request = _request()
+    safety_input = _safety_input(request)
+    unrelated_input = replace(safety_input, candidate_id="arbitrary-safe-candidate")
+    mismatched_decision = evaluate_physical_safety(unrelated_input)
+    assert mismatched_decision.action.value == "allow"
+
+    evaluation = bind_physical_output_safety(
+        request,
+        safety_input,
+        mismatched_decision,
+        checked_at_s=request.timestamp_s,
+    )
+
+    assert evaluation.status == "rejected"
+    assert evaluation.reason == "physical_safety_candidate_mismatch"
+    assert not evaluation.sendable
 
 
 def test_nonallow_decision_cannot_create_sendable_request() -> None:
