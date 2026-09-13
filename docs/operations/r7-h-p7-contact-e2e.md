@@ -25,12 +25,13 @@ viewer payloadを一続きで検証する。出力はsoftware fixtureの検証ar
   `contact_e2e_tool_proxy`球を追加し、production assetやRobot profileは変更しない。
 - cubeのscene identityは`contact_cube_scene/v1`である。初期状態は非接触で、reset後もscene identityと
   manifest digestを照合する。
-- 軌道は明示したqpos目標をJacobian pseudoinverseで設定し、`mj_forward`で状態を再計算する。
-  `mj_step`、hardware、serial、OSC、robot output、network accessは実行しない。
+- 有限なCartesian tool-target点列をJacobian pseudoinverse IKで解いてqposを更新し、各sampleをquasistaticに
+  `mj_forward`で評価する。`mj_step`による時間積分、hardware、serial、OSC、robot output、network accessは実行しない。
 - Taskはraw contact evidenceから評価する。derived forceには2 Nのmagnitude clampを設定し、
   Taskの5–15 N raw bandと異なる値のまま同じsampleへ記録する。
-- `--software-revision`には対象source commitを明示する。CLIはGit HEADやdirty working treeから
-  revisionを推測しない。unit / integration testでは専用の`test-only-...` identityを使用する。
+- `--software-revision`にはsource commitのfull SHAを指定する。scriptの所在からsource checkoutを特定し、
+  Git HEADとの完全一致とtracked fileのclean状態を生成前に検証する。callerのworking directoryには依存しない。
+  unit / integration testの`test-only-...`は明示的なfixture identityであり、実commitの証拠ではない。
   manifest identityとsummaryはrevision、fixture version、model input SHA-256、proxy identityを保持する。
 - 生成するJSONLは既存`contact-task-log/v1`であり、そのschemaを変更しない。summaryはこのscriptが
   strict decodeする`contact-e2e-summary/v1`、viewer snapshotは`payload-v0`である。
@@ -54,8 +55,9 @@ python "$repoRoot\scripts\viewer\generate_contact_e2e_artifacts.py" `
   --software-revision $sourceRevision
 ```
 
-テストでは`--software-revision test-only-contact-e2e-v1`のような明示identityを使う。productionまたは
-PR validationでは、検証対象commit SHAを呼出側が渡す。作業中のHEADを実装snapshotと見なさない。
+テストでは`--software-revision test-only-contact-e2e-v1`のような明示fixture identityを使う。productionまたは
+PR validationでは現在のHEADのfull SHAを渡す。Gitが利用できない、指定SHAがHEADと異なる、またはtracked fileに
+変更がある場合はartifactを生成しない。untracked fileはこのtracked-clean gateの対象外である。
 
 成功時は次の3 artifactを出力directoryだけへ作成する。
 

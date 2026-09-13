@@ -31,9 +31,11 @@ software fixtureであり、physical force、robot output、participant studyの
 ## software-only実装
 
 finite command `scripts/viewer/generate_contact_e2e_artifacts.py`はRobotBundleを読み、`arm.xml`の一時copyへ
-半径0.01 mのcontact proxyを加える。production assetは変更しない。明示したqposをJacobian pseudoinverseで
-設定し、`mj_forward`だけでsceneを更新する。`mj_step`、hardware、serial、OSC、robot output、network accessは
-実行しない。proxy / fixture version / model input digestを記録する。
+半径0.01 mのcontact proxyを加える。production assetは変更しない。Cartesian tool-targetを反復するJacobian
+pseudoinverse IKでqposを定め、各sampleのquasistatic scene stateを`mj_forward`だけで更新する。`mj_step`による
+時間積分、hardware、serial、OSC、robot output、network accessは実行しない。proxy / fixture version / model input
+digestを記録する。実commitを指定する場合はscript所在地で解決するGit HEADとの一致とtracked-cleanを生成前に検証し、
+`test-only-...`は実commit証拠と区別したfixture identityとして扱う。
 
 commandはMuJoCo solverのraw contact evidence、2 N magnitude clampを持つderived virtual force、raw evidenceだけで
 評価するTask、strict `contact-task-log/v1`、same-snapshot `payload-v0`を一続きに検証する。derived forceは
@@ -71,7 +73,7 @@ UTF-8 / LF、BOMなし、mojibake tokenなしを確認し、staged diffの`git d
 
 - root担当のfresh independent review、final commitでのartifact再生成、Vite build、offline browser visible QA、
   GitHub CIは本workerの検証ではない。
-- prescribed qposと`mj_forward`のfixtureはdynamic stability、continuous trajectory safety、physical force、
+- Cartesian-target Jacobian-IKとquasistatic `mj_forward`のfixtureはdynamic stability、continuous trajectory safety、physical force、
   haptic output、real robot operation、participant responseを示さない。
-- `docs/research/logs/2026-09.md`はsoftware capabilityの変更に合わせて更新した。participant / hardware実験条件や
+- `research/logs/2026-09.md`はsoftware capabilityの変更に合わせて更新した。participant / hardware実験条件や
   実測を追加していないため、`docs/experiment-notes/`には実験記録を追加しない。

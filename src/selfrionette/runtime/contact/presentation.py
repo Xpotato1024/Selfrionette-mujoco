@@ -15,6 +15,7 @@ from selfrionette.runtime.contact.log import (
     ContactTaskLog,
     ContactTaskLogError,
 )
+from selfrionette.runtime.contact.scene import ContactSceneInstance
 from selfrionette.runtime.contact.virtual_reaction_force import (
     VirtualReactionForceStatus,
 )
@@ -213,16 +214,18 @@ def contact_task_payload_metadata_v1(
 def contact_scene_robot_qpos_payload_metadata_v1(
     log: ContactTaskLog,
     *,
-    model: object,
+    instance: ContactSceneInstance,
     robot_profile: RobotProfile,
     payload_time_s: float,
     payload_frame_index: int,
     sample_index: int = -1,
 ) -> dict[str, object]:
-    """実MuJoCo modelのjoint addressとcontact sampleをbindするoptional metadataを返す。"""
+    """scene instanceのdefinitionをlogへ照合してからqpos address metadataを返す。"""
 
     if not isinstance(log, ContactTaskLog):
         raise TypeError("contact qpos projection requires ContactTaskLog")
+    if not isinstance(instance, ContactSceneInstance):
+        raise TypeError("contact qpos projection requires ContactSceneInstance")
     if not isinstance(robot_profile, RobotProfile):
         raise TypeError("contact qpos projection requires resolved RobotProfile")
     if isinstance(sample_index, bool) or not isinstance(sample_index, int):
@@ -239,6 +242,15 @@ def contact_scene_robot_qpos_payload_metadata_v1(
         raise IndexError("contact qpos projection sample_index is outside the log")
 
     manifest = log.header.context.manifest
+    scene_definition = instance.definition
+    scene_manifest = scene_definition.manifest
+    if (
+        scene_definition.manifest_digest != log.header.context.manifest_digest
+        or scene_manifest.scene.identity != manifest.scene.identity
+    ):
+        raise ContactTaskLogError(
+            "ContactSceneInstance definition does not match the contact log"
+        )
     selection = manifest.robot_bundle
     if (
         robot_profile.profile_id != selection.plugin_id
@@ -275,6 +287,7 @@ def contact_scene_robot_qpos_payload_metadata_v1(
     ):
         raise ContactTaskLogError("resolved Robot profile metadata is invalid")
 
+    model = instance.model
     source_qpos_dimension = getattr(model, "nq", None)
     if (
         isinstance(source_qpos_dimension, bool)

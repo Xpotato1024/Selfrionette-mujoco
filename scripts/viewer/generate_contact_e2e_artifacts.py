@@ -8,6 +8,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
@@ -111,6 +112,9 @@ FIXTURE_SCHEMA_VERSION = "contact-e2e-software-fixture/v1"
 SUMMARY_SCHEMA_VERSION = "contact-e2e-summary/v1"
 SUMMARY_CONTRACT_VERSION = 1
 SOFTWARE_REVISION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}")
+GIT_COMMIT_PATTERN = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
+TEST_ONLY_SOFTWARE_REVISION_PREFIX = "test-only-"
+EXECUTION_METHOD = "cartesian_target_jacobian_ik_quasistatic_mj_forward_no_step/v1"
 PROXY_GEOM_NAME = "contact_e2e_tool_proxy"
 PROXY_RADIUS_M = 0.01
 OBJECT_BODY_NAME = "contact_cube"
@@ -195,10 +199,67 @@ def _validate_software_revision(value: object) -> str:
         or value != value.strip()
         or SOFTWARE_REVISION_PATTERN.fullmatch(value) is None
     ):
+        raise ValueError("software revision must be a stable identifier")
+    if value.startswith(TEST_ONLY_SOFTWARE_REVISION_PREFIX):
+        if len(value) == len(TEST_ONLY_SOFTWARE_REVISION_PREFIX):
+            raise ValueError("test-only software revision identity must not be empty")
+        return value
+    if GIT_COMMIT_PATTERN.fullmatch(value) is None:
         raise ValueError(
-            "software revision must be a stable identifier such as a commit hash"
+            "software revision must be a full Git commit SHA or an explicit test-only identity"
         )
     return value
+
+
+def _validate_capture_software_revision(value: object) -> str:
+    """Git HEADとtracked-cleanを確認し、capture用revision identityを返す。"""
+
+    software_revision = _validate_software_revision(value)
+    if software_revision.startswith(TEST_ONLY_SOFTWARE_REVISION_PREFIX):
+        return software_revision
+
+    source_root = REPOSITORY_ROOT.resolve()
+    git_environment = os.environ.copy()
+    for variable in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_COMMON_DIR",
+        "GIT_INDEX_FILE",
+    ):
+        git_environment.pop(variable, None)
+    git_environment["GIT_OPTIONAL_LOCKS"] = "0"
+
+    def run_source_git(*arguments: str) -> str:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(source_root), *arguments],
+                capture_output=True,
+                check=False,
+                encoding="utf-8",
+                errors="strict",
+                env=git_environment,
+                text=True,
+            )
+        except OSError as exc:
+            raise ValueError("could not verify the source checkout with Git") from exc
+        if result.returncode != 0:
+            raise ValueError("could not inspect the source checkout with Git")
+        return result.stdout.strip()
+
+    head = run_source_git("rev-parse", "--verify", "HEAD^{commit}").lower()
+    if GIT_COMMIT_PATTERN.fullmatch(head) is None:
+        raise ValueError("source checkout Git HEAD is not a full commit SHA")
+    if head != software_revision:
+        raise ValueError("software revision does not match source checkout Git HEAD")
+
+    tracked_status = run_source_git(
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=no",
+    )
+    if tracked_status:
+        raise ValueError("source checkout has tracked changes")
+    return software_revision
 
 
 def decode_contact_e2e_summary(data: bytes | bytearray | memoryview) -> dict[str, object]:
@@ -291,7 +352,7 @@ def decode_contact_e2e_summary(data: bytes | bytearray | memoryview) -> dict[str
         or execution["integration_step_executed"] is not False
         or execution["network_accessed"] is not False
         or execution["software_only"] is not True
-        or execution["method"] != "prescribed_qpos_mj_forward_only/v1"
+        or execution["method"] != EXECUTION_METHOD
     ):
         raise ValueError("execution provenance does not match the software-only contract")
 
@@ -826,7 +887,7 @@ def _run_valid_capture(
         ),
         contact_scene_robot_qpos_payload_metadata_v1(
             log,
-            model=instance.model,
+            instance=instance,
             robot_profile=FAST_ARM_ROBOT_BUNDLE.profile,
             payload_time_s=payload_time_s,
             payload_frame_index=payload_frame_index,
@@ -1211,7 +1272,7 @@ def _build_summary(
         "execution": {
             "hardware_accessed": False,
             "integration_step_executed": False,
-            "method": "prescribed_qpos_mj_forward_only/v1",
+            "method": EXECUTION_METHOD,
             "network_accessed": False,
             "software_only": True,
         },
@@ -1304,6 +1365,8 @@ def run_contact_e2e(
     *,
     software_revision: str,
 ) -> tuple[Path, Path, Path]:
+    """検証済みのsource revisionから有限なsoftware-only artifactを生成する。"""
+
     if not isinstance(output_dir, Path) or not output_dir.is_absolute():
         raise ValueError("output directory must be an explicit absolute path")
     if not output_dir.is_dir():
@@ -1311,7 +1374,7 @@ def run_contact_e2e(
     if any(output_dir.iterdir()):
         raise FileExistsError(f"output directory must be empty: {output_dir}")
 
-    software_revision = _validate_software_revision(software_revision)
+    software_revision = _validate_capture_software_revision(software_revision)
     manifest, request, model_digest = _build_fixture(software_revision)
     first = _run_valid_capture(manifest, request, model_digest, software_revision)
     second = _run_valid_capture(manifest, request, model_digest, software_revision)
@@ -1374,7 +1437,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--software-revision",
         required=True,
-        help="artifactへ記録するsource commitまたはtest-only identity。",
+        help="現在のclean source checkoutのfull commit SHA、または明示したtest-only identity。",
     )
     arguments = parser.parse_args(argv)
     log_path, payload_path, summary_path = run_contact_e2e(
