@@ -44,7 +44,21 @@ transportへ直接依存しない。
 ```text
 runtime.output.transport_adapter -> runtime.output.permission / safety_gate / lifecycle
 runtime.output.transport_adapter -> schemas, transport
+runtime.output.fast_arm_adapter -> runtime.output.safety_gate / lifecycle / transport_adapter
+runtime.output.fast_arm_adapter -> runtime.safety, runtime.composition.robot_profile
+runtime.output.fast_arm_adapter -> plugins.robots.fast_arm.adapter.physical_output
+plugins.robots.fast_arm.adapter.physical_output -> schemas.command
 ```
+
+`runtime.output.fast_arm_adapter`はaccepted physical evidence handoff、FastArm mapping、P5、二重permission、
+operator gate、generic transportを結ぶcomposition ownerである。robot固有mappingとrouter observation parserは
+plugin-local adapterが持つpure contractであり、runtimeやtransportをimportしない。generic `transport_adapter`
+はencoderのrequired-authorization capabilityをconstructorで照合し、FastArm codecにはv2 external gateを要求する。
+
+このruntime-to-plugin importは限定例外である。`runtime/output/fast_arm_adapter.py`だけが
+`selfrionette.plugins.robots.fast_arm.adapter.physical_output`とその明示したsymbolsをimportできる。
+同じownerから別のconcrete FastArm moduleをimportすること、および他のruntime / core / transport moduleからこの
+`physical_output` moduleをimportすることは禁止し、runtimeからplugin implementationへの一般的な許可には広げない。
 
 Input Source Pluginのgeneric `InputSource.read_frame() -> RawInputFrame` contractは
 `runtime/experiment/input_source.py`がdefinitionを所有し、production source implementationとregistrationは
@@ -259,7 +273,9 @@ legacyの責務を移行する場合は、script全体をcopyせず、次のowne
 | inputの意味付けとscale | `plugins/mappings/` | mapping semanticsのcanonical owner。`input_interpreters/`とlegacy `RuntimePipeline`は退役済み |
 | target更新とsafety limit | `motion/` | `MotionCommand`を生成する |
 | physical output safety binding / permission / lifecycle | `runtime/output/{safety_gate,permission,lifecycle,trace}.py` | P5 decisionをexact typed requestへ結合し、permission、recording、allow-only lifecycleを所有する。transport importとhardware送信を持たない |
-| physical output transport composition | `runtime/output/transport_adapter.py` | explicit configでP5 allow、permission、lifecycleとgeneric transportを結ぶ唯一のoutput owner。robot-specific mappingを持たない |
+| generic physical output transport | `runtime/output/transport_adapter.py` | explicit configでP5 allow、permission、lifecycleとgeneric transportを結ぶ。encoder capabilityが要求する場合はv2 external authorization grantを必須にする。robot-specific mappingを持たない |
+| FastArm physical output composition | `runtime/output/fast_arm_adapter.py` | accepted #509 evidence、Robot Profile、mapping identity、P5、physical-actuation / transmission permissions、operator gate、generic transport、router observation correlationを結ぶ。physical stopを証明しない |
+| FastArm physical-output mapping | `plugins/robots/fast_arm/adapter/physical_output.py` | explicit profile-to-wire joint map、rad-to-degree conversion、FastArm OSC semantics、router observation parserを所有し、runtime / transportをimportしない |
 | FK / IK / joint limit | `kinematics/`またはrobot-specific plugin | kinematics責務に限定する |
 | MJCF model state | `mujoco_backend/` | MuJoCoをphysical stateのsource of truthとする |
 | logging / replay / WebSocket / generic OSC / UDP delivery | `transport/` | runtimeやrobot mappingをimportせず、generic message encodingとendpoint deliveryを所有する |

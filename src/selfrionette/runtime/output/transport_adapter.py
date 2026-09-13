@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 from math import isfinite
 from numbers import Real
 import tomllib
+from threading import Lock
 from time import monotonic
 from typing import Literal, Protocol
 
@@ -37,7 +38,10 @@ from selfrionette.transport.udp import (
 )
 
 
-PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION = "physical-output-transport-config/v1"
+PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V1 = "physical-output-transport-config/v1"
+PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2 = "physical-output-transport-config/v2"
+PHYSICAL_OUTPUT_TRANSPORT_AUTHORIZATION_SCHEMA_VERSION = "physical-output-transport-authorization/v1"
+PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION = PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V1
 PHYSICAL_OUTPUT_WIRE_SCHEMA_VERSION = "physical-output-wire/v1"
 PHYSICAL_OUTPUT_OSC_ADDRESS = "/selfrionette/physical-output/v1"
 PhysicalOutputTransportMode = Literal[
@@ -57,7 +61,7 @@ PhysicalOutputTransportResultStatus = Literal[
 _TRANSPORT_MODES = frozenset(
     {"disabled", "dry_run", "recording", "transmission_enabled"}
 )
-_CONFIG_FIELDS = frozenset(
+_CONFIG_FIELDS_V1 = frozenset(
     {
         "endpoint",
         "expected_codec_identity",
@@ -71,7 +75,9 @@ _CONFIG_FIELDS = frozenset(
         "target_robot_id",
     }
 )
+_CONFIG_FIELDS_V2 = _CONFIG_FIELDS_V1 | {"external_authorization_required"}
 _OPERATOR_ENABLE_FIELDS = frozenset({"enable_token_id", "operator_id"})
+_TRANSPORT_AUTHORIZATION_ISSUER = object()
 _ENDPOINT_FIELDS = frozenset(
     {
         "endpoint_id",
@@ -265,13 +271,24 @@ class PhysicalOutputTransportConfig:
     max_request_age_s: float = 0.25
     max_safety_age_s: float = 0.25
     minimum_cadence_s: float = 0.0
+    external_authorization_required: bool = False
     schema_version: str = PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
-        if self.schema_version != PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION:
+        if self.schema_version not in {
+            PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V1,
+            PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2,
+        }:
             raise ValueError(
                 f"unsupported transport config schema_version: {self.schema_version!r}"
             )
+        if type(self.external_authorization_required) is not bool:
+            raise TypeError("external_authorization_required must be a boolean")
+        if (
+            self.schema_version == PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V1
+            and self.external_authorization_required
+        ):
+            raise ValueError("transport config v1 cannot require external authorization")
         _identifier("target_robot_id", self.target_robot_id)
         _identifier("software_revision", self.software_revision)
         if type(self.endpoint) is not OscUdpEndpointConfig:
@@ -311,6 +328,11 @@ class PhysicalOutputTransportConfig:
             "max_request_age_s": self.max_request_age_s,
             "max_safety_age_s": self.max_safety_age_s,
             "minimum_cadence_s": self.minimum_cadence_s,
+            **(
+                {"external_authorization_required": self.external_authorization_required}
+                if self.schema_version == PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2
+                else {}
+            ),
             "mode": self.mode,
             "operator_enable": (
                 None if self.operator_enable is None else self.operator_enable.to_json_value()
@@ -325,10 +347,24 @@ class PhysicalOutputTransportConfig:
 
     @classmethod
     def from_mapping(cls, value: object) -> "PhysicalOutputTransportConfig":
-        if not isinstance(value, Mapping) or set(value) != _CONFIG_FIELDS:
-            raise ValueError("transport config fields are incomplete or unknown")
-        if type(value["schema_version"]) is not str:
+        if not isinstance(value, Mapping):
+            raise ValueError("transport config must be an object")
+        schema_version = value.get("schema_version")
+        if type(schema_version) is not str:
             raise ValueError("transport config schema_version must be a string")
+        expected_fields = (
+            _CONFIG_FIELDS_V1
+            if schema_version == PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V1
+            else _CONFIG_FIELDS_V2
+            if schema_version == PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2
+            else None
+        )
+        if expected_fields is None:
+            raise ValueError(f"unsupported transport config schema_version: {schema_version!r}")
+        if set(value) != expected_fields:
+            raise ValueError("transport config fields are incomplete or unknown")
+        if schema_version == PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2 and type(value["external_authorization_required"]) is not bool:
+            raise ValueError("external_authorization_required must be a boolean")
         if type(value["target_robot_id"]) is not str:
             raise ValueError("target_robot_id must be a string")
         if type(value["software_revision"]) is not str:
@@ -361,7 +397,12 @@ class PhysicalOutputTransportConfig:
             max_request_age_s=value["max_request_age_s"],  # type: ignore[arg-type]
             max_safety_age_s=value["max_safety_age_s"],  # type: ignore[arg-type]
             minimum_cadence_s=value["minimum_cadence_s"],  # type: ignore[arg-type]
-            schema_version=value["schema_version"],
+            external_authorization_required=(
+                value["external_authorization_required"]
+                if schema_version == PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2
+                else False
+            ),  # type: ignore[arg-type]
+            schema_version=schema_version,
         )
 
     @classmethod
@@ -385,6 +426,225 @@ class PhysicalOutputTransportConfig:
             # TOMLにはnullがないため、enable不要modeでは省略をnullと同じ意味にする。
             value["operator_enable"] = None
         return cls.from_mapping(value)
+
+
+
+class _AuthorizationGrantUseState:
+    __slots__ = ("lock", "consumed", "revoked")
+
+    def __init__(self) -> None:
+        self.lock = Lock()
+        self.consumed = False
+        self.revoked = False
+
+
+@dataclass(frozen=True, slots=True)
+class PhysicalOutputTransportAuthorizationGrant:
+    """使い切りのexternal authorization snapshot。再送やdurable authorityではない。"""
+
+    target_robot_id: str
+    endpoint_id: str
+    software_revision: str
+    session_id: str
+    sequence: int
+    request_sha256: str
+    safety_binding_sha256: str
+    candidate_id: str
+    codec_identity_sha256: str
+    config_sha256: str
+    transmission_permission_sha256: str
+    actuation_permission_sha256: str
+    authorization_context_sha256: str
+    issued_at_s: float
+    expires_at_s: float
+    schema_version: str = PHYSICAL_OUTPUT_TRANSPORT_AUTHORIZATION_SCHEMA_VERSION
+    _state: _AuthorizationGrantUseState = field(
+        default_factory=_AuthorizationGrantUseState,
+        repr=False,
+        compare=False,
+    )
+    _issuer_token: object = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self._issuer_token is not _TRANSPORT_AUTHORIZATION_ISSUER:
+            raise ValueError("transport authorization grants can only be issued by runtime composition")
+        if self.schema_version != PHYSICAL_OUTPUT_TRANSPORT_AUTHORIZATION_SCHEMA_VERSION:
+            raise ValueError("unsupported transport authorization schema_version")
+        for name in (
+            "target_robot_id",
+            "endpoint_id",
+            "software_revision",
+            "session_id",
+            "candidate_id",
+        ):
+            _identifier(name, getattr(self, name))
+        if type(self.sequence) is not int or self.sequence < 0:
+            raise ValueError("authorization sequence must be a non-negative integer")
+        for name in (
+            "request_sha256",
+            "safety_binding_sha256",
+            "codec_identity_sha256",
+            "config_sha256",
+            "transmission_permission_sha256",
+            "actuation_permission_sha256",
+            "authorization_context_sha256",
+        ):
+            _sha256_hex(name, getattr(self, name))
+        issued_at_s = _timestamp("authorization issued_at_s", self.issued_at_s)
+        expires_at_s = _timestamp("authorization expires_at_s", self.expires_at_s)
+        if expires_at_s <= issued_at_s:
+            raise ValueError("authorization expiry must follow issuance")
+        if type(self._state) is not _AuthorizationGrantUseState:
+            raise TypeError("authorization grant state is invalid")
+        object.__setattr__(self, "issued_at_s", issued_at_s)
+        object.__setattr__(self, "expires_at_s", expires_at_s)
+
+    def _binding_error(
+        self,
+        request: PhysicalOutputSendableRequest,
+        config: PhysicalOutputTransportConfig,
+        permission: PhysicalOutputPermission,
+        *,
+        authorization_context_sha256: str,
+        now_s: float,
+    ) -> str | None:
+        if type(request) is not PhysicalOutputSendableRequest:
+            return "physical_output_transport_authorization_request_mismatch"
+        if (
+            config.schema_version != PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2
+            or not config.external_authorization_required
+        ):
+            return "physical_output_transport_external_authorization_not_required"
+        if type(permission) is not PhysicalOutputPermission:
+            return "physical_output_transport_authorization_permission_mismatch"
+        evaluation = request.evaluation
+        raw_request = request.request
+        expected = (
+            (self.target_robot_id, raw_request.target_robot_id),
+            (self.endpoint_id, raw_request.endpoint_id),
+            (self.software_revision, raw_request.software_revision),
+            (self.session_id, raw_request.session_id),
+            (self.sequence, raw_request.sequence),
+            (self.request_sha256, request.request_sha256),
+            (self.safety_binding_sha256, request.binding_sha256),
+            (self.candidate_id, evaluation.candidate_id),
+            (self.codec_identity_sha256, config.expected_codec_identity.identity_sha256),
+            (self.config_sha256, sha256(config.to_json_bytes()).hexdigest()),
+            (self.transmission_permission_sha256, sha256(permission.to_json_bytes()).hexdigest()),
+            (self.authorization_context_sha256, authorization_context_sha256),
+        )
+        if any(actual != required for actual, required in expected):
+            return "physical_output_transport_authorization_grant_mismatch"
+        if (
+            permission.mode != "transmission_enabled"
+            or permission.operator_id is None
+            or permission.enable_token_id is None
+        ):
+            return "physical_output_transport_authorization_permission_mismatch"
+        if now_s < self.issued_at_s or now_s >= self.expires_at_s:
+            return "physical_output_transport_authorization_grant_expired"
+        return None
+
+    def validate_for(
+        self,
+        request: PhysicalOutputSendableRequest,
+        config: PhysicalOutputTransportConfig,
+        permission: PhysicalOutputPermission,
+        *,
+        authorization_context_sha256: str,
+        now_s: float,
+    ) -> str | None:
+        """再検証のみ行う。送信権限の消費はconsume_forだけで行う。"""
+
+        now = _timestamp("authorization now_s", now_s)
+        _sha256_hex("authorization_context_sha256", authorization_context_sha256)
+        with self._state.lock:
+            if self._state.revoked:
+                return "physical_output_transport_authorization_grant_revoked"
+            if self._state.consumed:
+                return "physical_output_transport_authorization_grant_consumed"
+            return self._binding_error(
+                request,
+                config,
+                permission,
+                authorization_context_sha256=authorization_context_sha256,
+                now_s=now,
+            )
+
+    def consume_for(
+        self,
+        request: PhysicalOutputSendableRequest,
+        config: PhysicalOutputTransportConfig,
+        permission: PhysicalOutputPermission,
+        *,
+        authorization_context_sha256: str,
+        now_s: float,
+    ) -> str | None:
+        """有効なgrantを一度だけ消費し、2回目以降はfail closedにする。"""
+
+        now = _timestamp("authorization now_s", now_s)
+        _sha256_hex("authorization_context_sha256", authorization_context_sha256)
+        with self._state.lock:
+            if self._state.revoked:
+                return "physical_output_transport_authorization_grant_revoked"
+            if self._state.consumed:
+                return "physical_output_transport_authorization_grant_consumed"
+            reason = self._binding_error(
+                request,
+                config,
+                permission,
+                authorization_context_sha256=authorization_context_sha256,
+                now_s=now,
+            )
+            if reason is None:
+                self._state.consumed = True
+            return reason
+
+    def revoke(self) -> None:
+        """operator disarm/stop時に未使用grantを無効にする。"""
+
+        with self._state.lock:
+            self._state.revoked = True
+
+
+def _create_physical_output_transport_authorization_grant(
+    *,
+    target_robot_id: str,
+    endpoint_id: str,
+    software_revision: str,
+    session_id: str,
+    sequence: int,
+    request_sha256: str,
+    safety_binding_sha256: str,
+    candidate_id: str,
+    codec_identity_sha256: str,
+    config_sha256: str,
+    transmission_permission_sha256: str,
+    actuation_permission_sha256: str,
+    authorization_context_sha256: str,
+    issued_at_s: float,
+    expires_at_s: float,
+) -> PhysicalOutputTransportAuthorizationGrant:
+    """runtime compositionがgate通過後にだけgrantを作るinternal factory."""
+
+    return PhysicalOutputTransportAuthorizationGrant(
+        target_robot_id=target_robot_id,
+        endpoint_id=endpoint_id,
+        software_revision=software_revision,
+        session_id=session_id,
+        sequence=sequence,
+        request_sha256=request_sha256,
+        safety_binding_sha256=safety_binding_sha256,
+        candidate_id=candidate_id,
+        codec_identity_sha256=codec_identity_sha256,
+        config_sha256=config_sha256,
+        transmission_permission_sha256=transmission_permission_sha256,
+        actuation_permission_sha256=actuation_permission_sha256,
+        authorization_context_sha256=authorization_context_sha256,
+        issued_at_s=issued_at_s,
+        expires_at_s=expires_at_s,
+        _issuer_token=_TRANSPORT_AUTHORIZATION_ISSUER,
+    )
 
 
 def _attempt_id(
@@ -600,6 +860,9 @@ class PhysicalOutputWireEncoder(Protocol):
     """immutable identityを持ち、logical envelopeをOSC semanticsへ写すpure codec。"""
 
     @property
+    def requires_external_authorization(self) -> bool: ...
+
+    @property
     def identity(self) -> PhysicalOutputCodecIdentity: ...
 
     def encode(self, envelope: PhysicalOutputWireMessage) -> OscMessage: ...
@@ -609,6 +872,7 @@ class GenericPhysicalOutputWireEncoder:
     """既定のphysical-output-wire/v1 OSC envelope encoder。"""
 
     identity = _GENERIC_CODEC_IDENTITY
+    requires_external_authorization = False
 
     def encode(self, envelope: PhysicalOutputWireMessage) -> OscMessage:
         if type(envelope) is not PhysicalOutputWireMessage:
@@ -873,6 +1137,51 @@ class PhysicalOutputTransportRecordingSink(Protocol):
     def record_datagram(self, datagram: PhysicalOutputEncodedDatagram) -> object: ...
 
 
+@dataclass(frozen=True, slots=True)
+class PhysicalOutputTransportPreparedDispatch:
+    """preflight済みdatagram。lifecycle lock内で再検証してからのみ送れる。"""
+
+    _adapter_token: object = field(repr=False, compare=False)
+    _config: PhysicalOutputTransportConfig = field(repr=False, compare=False)
+    config_sha256: str
+    lifecycle: PhysicalOutputLifecycle
+    request: PhysicalOutputSendableRequest
+    permission: PhysicalOutputPermission
+    wire_message: PhysicalOutputWireMessage
+    encoded_datagram: PhysicalOutputEncodedDatagram
+    destination: PreparedDatagramDestination | None
+    prepared_at_s: float
+    authorization_grant: PhysicalOutputTransportAuthorizationGrant | None = field(
+        repr=False,
+        compare=False,
+    )
+    authorization_context_sha256: str | None = None
+
+    def __post_init__(self) -> None:
+        _sha256_hex("prepared config_sha256", self.config_sha256)
+        object.__setattr__(self, "prepared_at_s", _timestamp("prepared_at_s", self.prepared_at_s))
+        if type(self._config) is not PhysicalOutputTransportConfig:
+            raise TypeError("prepared dispatch requires transport config")
+        if type(self.lifecycle) is not PhysicalOutputLifecycle:
+            raise TypeError("prepared dispatch requires lifecycle")
+        if type(self.request) is not PhysicalOutputSendableRequest:
+            raise TypeError("prepared dispatch requires P5 sendable request")
+        if type(self.permission) is not PhysicalOutputPermission:
+            raise TypeError("prepared dispatch requires permission")
+        if type(self.wire_message) is not PhysicalOutputWireMessage:
+            raise TypeError("prepared dispatch requires wire message")
+        if type(self.encoded_datagram) is not PhysicalOutputEncodedDatagram:
+            raise TypeError("prepared dispatch requires encoded datagram")
+        if self.encoded_datagram.wire_message != self.wire_message:
+            raise ValueError("prepared wire and datagram identities differ")
+        if self.destination is not None and type(self.destination) is not PreparedDatagramDestination:
+            raise TypeError("prepared destination must be typed or None")
+        if self.authorization_grant is not None and type(self.authorization_grant) is not PhysicalOutputTransportAuthorizationGrant:
+            raise TypeError("prepared authorization grant has an invalid type")
+        if self.authorization_context_sha256 is not None:
+            _sha256_hex("prepared authorization_context_sha256", self.authorization_context_sha256)
+
+
 class PhysicalOutputTransportAdapter:
     """latest P5 allowをidentity/freshnessでguardし、必要時だけproviderを呼ぶ。"""
 
@@ -904,10 +1213,27 @@ class PhysicalOutputTransportAdapter:
             raise TypeError("encoder must expose a typed immutable identity")
         if selected_encoder.identity != config.expected_codec_identity:
             raise ValueError("encoder identity does not match expected_codec_identity")
+        requires_external_authorization = getattr(
+            selected_encoder,
+            "requires_external_authorization",
+            False,
+        )
+        if type(requires_external_authorization) is not bool:
+            raise TypeError("encoder authorization capability must be a boolean")
+        if requires_external_authorization and not (
+            config.schema_version == PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2
+            and config.external_authorization_required
+        ):
+            raise ValueError(
+                "encoder requires transport config v2 external authorization"
+            )
         self.config = config
+        self._adapter_token = object()
+        self._config_sha256 = sha256(config.to_json_bytes()).hexdigest()
         self._sender = sender
         self._encoder = selected_encoder
         self._codec_identity = selected_encoder.identity
+        self._encoder_requires_external_authorization = requires_external_authorization
         self._recording_sink = recording_sink
         self._clock = monotonic if clock is None else clock
 
@@ -917,11 +1243,35 @@ class PhysicalOutputTransportAdapter:
         request: PhysicalOutputSendableRequest | PhysicalOutputRequest,
         *,
         now_s: float | None = None,
+        authorization_grant: PhysicalOutputTransportAuthorizationGrant | None = None,
+        authorization_context_sha256: str | None = None,
     ) -> PhysicalOutputTransportResult:
-        """current lifecycle latestと完全一致するP5 allowだけを処理する。"""
+        """preflightとguarded dispatchを順に行う互換wrapper。"""
+
+        prepared = self.prepare_dispatch(
+            lifecycle,
+            request,
+            now_s=now_s,
+            authorization_grant=authorization_grant,
+            authorization_context_sha256=authorization_context_sha256,
+        )
+        if type(prepared) is PhysicalOutputTransportResult:
+            return prepared
+        return self.dispatch_prepared(prepared, now_s=now_s)
+
+    def prepare_dispatch(
+        self,
+        lifecycle: PhysicalOutputLifecycle,
+        request: PhysicalOutputSendableRequest | PhysicalOutputRequest,
+        *,
+        now_s: float | None = None,
+        authorization_grant: PhysicalOutputTransportAuthorizationGrant | None = None,
+        authorization_context_sha256: str | None = None,
+    ) -> PhysicalOutputTransportPreparedDispatch | PhysicalOutputTransportResult:
+        """送信せずにcodec/endpointをpreflightし、後続のguarded dispatchを準備する。"""
 
         if type(lifecycle) is not PhysicalOutputLifecycle:
-            raise TypeError("dispatch requires PhysicalOutputLifecycle")
+            raise TypeError("prepare_dispatch requires PhysicalOutputLifecycle")
         if self.config.mode == "disabled":
             return PhysicalOutputTransportResult(
                 status="disabled",
@@ -947,7 +1297,6 @@ class PhysicalOutputTransportAdapter:
                 "physical_output_sendable_request_not_latest",
                 now_s=now_s,
             )
-
         try:
             validate_physical_output_sendable_request(request)
         except Exception:
@@ -991,6 +1340,31 @@ class PhysicalOutputTransportAdapter:
                     "physical_output_operator_enable_mismatch",
                     now_s=now_s,
                 )
+            grant_required = (
+                self._encoder_requires_external_authorization
+                or (
+                    self.config.schema_version
+                    == PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2
+                    and self.config.external_authorization_required
+                )
+            )
+            if grant_required:
+                if (
+                    type(authorization_grant)
+                    is not PhysicalOutputTransportAuthorizationGrant
+                    or authorization_context_sha256 is None
+                ):
+                    return self._stop_and_reject(
+                        lifecycle,
+                        "physical_output_transport_authorization_grant_required",
+                        now_s=now_s,
+                    )
+            elif authorization_grant is not None or authorization_context_sha256 is not None:
+                return self._stop_and_reject(
+                    lifecycle,
+                    "physical_output_transport_authorization_unexpected",
+                    now_s=now_s,
+                )
 
         try:
             current_time = self._now(now_s)
@@ -1018,16 +1392,28 @@ class PhysicalOutputTransportAdapter:
                 return self._rejected(reason, acknowledgement_reason="transport_not_attempted")
             return self._stop_and_reject(lifecycle, reason, now_s=current_time)
 
+        wire_message: PhysicalOutputWireMessage | None = None
+        datagram: bytes | None = None
+        encoded_datagram: PhysicalOutputEncodedDatagram | None = None
         try:
-            wire_message: PhysicalOutputWireMessage | None = None
-            datagram: bytes | None = None
-            encoded_datagram: PhysicalOutputEncodedDatagram | None = None
             wire_message = build_physical_output_wire_message(request, self.config)
             if (
                 self._encoder.identity != self._codec_identity
                 or self._codec_identity != self.config.expected_codec_identity
             ):
                 raise ValueError("encoder identity changed after adapter construction")
+            if self.config.mode == "transmission_enabled" and self.config.external_authorization_required:
+                assert authorization_grant is not None
+                assert authorization_context_sha256 is not None
+                grant_error = authorization_grant.validate_for(
+                    request,
+                    self.config,
+                    permission,
+                    authorization_context_sha256=authorization_context_sha256,
+                    now_s=current_time,
+                )
+                if grant_error is not None:
+                    raise PermissionError(grant_error)
             osc_message = self._encoder.encode(wire_message)
             if self._encoder.identity != self._codec_identity:
                 raise ValueError("encoder identity changed during encoding")
@@ -1046,12 +1432,178 @@ class PhysicalOutputTransportAdapter:
         except Exception as exc:
             reason = (
                 "physical_output_datagram_too_large"
-                if isinstance(exc, ValueError) and str(exc) == "physical_output_datagram_too_large"
+                if isinstance(exc, ValueError)
+                and str(exc) == "physical_output_datagram_too_large"
+                else "physical_output_transport_authorization_invalid"
+                if isinstance(exc, PermissionError)
                 else "physical_output_wire_encoding_failed"
             )
             return self._stop_and_reject(
                 lifecycle,
                 reason,
+                now_s=current_time,
+                wire_message=wire_message,
+                datagram=datagram,
+                encoded_datagram=encoded_datagram,
+            )
+
+        destination: PreparedDatagramDestination | None = None
+        if self.config.mode == "transmission_enabled":
+            if self._sender is None:
+                return self._stop_and_reject(
+                    lifecycle,
+                    "physical_output_datagram_sender_unavailable",
+                    now_s=current_time,
+                    wire_message=wire_message,
+                    datagram=datagram,
+                    encoded_datagram=encoded_datagram,
+                )
+            try:
+                destination = self._sender.prepare(self.config.endpoint)
+                if (
+                    type(destination) is not PreparedDatagramDestination
+                    or destination.endpoint != self.config.endpoint
+                ):
+                    raise ValueError("prepared destination identity mismatch")
+            except Exception:
+                return self._stop_and_reject(
+                    lifecycle,
+                    "physical_output_endpoint_preflight_failed",
+                    now_s=current_time,
+                    wire_message=wire_message,
+                    datagram=datagram,
+                    encoded_datagram=encoded_datagram,
+                )
+
+        assert wire_message is not None and encoded_datagram is not None and datagram is not None
+        return PhysicalOutputTransportPreparedDispatch(
+            _adapter_token=self._adapter_token,
+            _config=self.config,
+            config_sha256=self._config_sha256,
+            lifecycle=lifecycle,
+            request=request,
+            permission=permission,
+            wire_message=wire_message,
+            encoded_datagram=encoded_datagram,
+            destination=destination,
+            prepared_at_s=current_time,
+            authorization_grant=authorization_grant,
+            authorization_context_sha256=authorization_context_sha256,
+        )
+
+    def dispatch_prepared(
+        self,
+        prepared: PhysicalOutputTransportPreparedDispatch,
+        *,
+        now_s: float | None = None,
+    ) -> PhysicalOutputTransportResult:
+        """prepared bytesをcurrent lifecycleのfresh gate下だけで送信する。"""
+
+        if type(prepared) is not PhysicalOutputTransportPreparedDispatch:
+            raise TypeError("dispatch_prepared requires PhysicalOutputTransportPreparedDispatch")
+        lifecycle = prepared.lifecycle
+        request = prepared.request
+        permission = prepared.permission
+        wire_message = prepared.wire_message
+        encoded_datagram = prepared.encoded_datagram
+        datagram = encoded_datagram.datagram
+        if (
+            prepared._adapter_token is not self._adapter_token
+            or prepared._config is not self.config
+            or prepared.config_sha256 != self._config_sha256
+            or encoded_datagram.codec_identity != self._codec_identity
+            or encoded_datagram.codec_identity != self.config.expected_codec_identity
+            or wire_message != encoded_datagram.wire_message
+            or wire_message.to_bytes() != encoded_datagram.wire_message.to_bytes()
+        ):
+            return self._stop_and_reject(
+                lifecycle,
+                "physical_output_prepared_dispatch_binding_invalid",
+                now_s=now_s,
+                wire_message=wire_message,
+                datagram=datagram,
+                encoded_datagram=encoded_datagram,
+            )
+        if self.config.mode == "disabled":
+            return PhysicalOutputTransportResult(
+                status="disabled",
+                reason="physical_output_transport_disabled",
+                acknowledgement=PhysicalOutputAcknowledgementEvidence(
+                    reason="transport_not_attempted"
+                ),
+            )
+        if lifecycle.state != "active" or lifecycle.latest_sendable_request is not request:
+            return self._rejected(
+                "physical_output_sendable_request_not_latest",
+                wire_message=wire_message,
+                datagram=datagram,
+                encoded_datagram=encoded_datagram,
+                acknowledgement_reason="transport_not_attempted",
+            )
+        if lifecycle.permission != permission:
+            return self._stop_and_reject(
+                lifecycle,
+                "physical_output_permission_changed_after_preflight",
+                now_s=now_s,
+                wire_message=wire_message,
+                datagram=datagram,
+                encoded_datagram=encoded_datagram,
+            )
+
+        try:
+            current_time = self._now(now_s)
+        except Exception:
+            return self._stop_and_reject(
+                lifecycle,
+                "physical_output_transport_clock_invalid",
+                now_s=now_s,
+                wire_message=wire_message,
+                datagram=datagram,
+                encoded_datagram=encoded_datagram,
+            )
+        grant_required = (
+            self.config.mode == "transmission_enabled"
+            and (
+                self._encoder_requires_external_authorization
+                or (
+                    self.config.schema_version
+                    == PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2
+                    and self.config.external_authorization_required
+                )
+            )
+        )
+        if grant_required:
+            grant = prepared.authorization_grant
+            context_digest = prepared.authorization_context_sha256
+            if grant is None or context_digest is None:
+                return self._stop_and_reject(
+                    lifecycle,
+                    "physical_output_transport_authorization_grant_required",
+                    now_s=current_time,
+                    wire_message=wire_message,
+                    datagram=datagram,
+                    encoded_datagram=encoded_datagram,
+                )
+            grant_error = grant.validate_for(
+                request,
+                self.config,
+                permission,
+                authorization_context_sha256=context_digest,
+                now_s=current_time,
+            )
+            if grant_error is not None:
+                return self._stop_and_reject(
+                    lifecycle,
+                    grant_error,
+                    now_s=current_time,
+                    wire_message=wire_message,
+                    datagram=datagram,
+                    encoded_datagram=encoded_datagram,
+                )
+        elif prepared.authorization_grant is not None or prepared.authorization_context_sha256 is not None:
+            return self._stop_and_reject(
+                lifecycle,
+                "physical_output_transport_authorization_unexpected",
                 now_s=current_time,
                 wire_message=wire_message,
                 datagram=datagram,
@@ -1094,23 +1646,13 @@ class PhysicalOutputTransportAdapter:
                 current_time,
             )
 
-        if self._sender is None:
-            return self._stop_and_reject(
-                lifecycle,
-                "physical_output_datagram_sender_unavailable",
-                now_s=current_time,
-                wire_message=wire_message,
-                datagram=datagram,
-                encoded_datagram=encoded_datagram,
-            )
-        try:
-            destination = self._sender.prepare(self.config.endpoint)
-            if (
-                type(destination) is not PreparedDatagramDestination
-                or destination.endpoint != self.config.endpoint
-            ):
-                raise ValueError("prepared destination identity mismatch")
-        except Exception:
+        destination = prepared.destination
+        if (
+            self._sender is None
+            or destination is None
+            or type(destination) is not PreparedDatagramDestination
+            or destination.endpoint != self.config.endpoint
+        ):
             return self._stop_and_reject(
                 lifecycle,
                 "physical_output_endpoint_preflight_failed",
@@ -1130,6 +1672,18 @@ class PhysicalOutputTransportAdapter:
             if sender_evidence_kind not in {"simulated", "local_socket"}:
                 raise TypeError("sender evidence_kind is invalid")
             started_at_s = self._now(None)
+            if grant_required:
+                assert prepared.authorization_grant is not None
+                assert prepared.authorization_context_sha256 is not None
+                grant_error = prepared.authorization_grant.consume_for(
+                    active_request,
+                    self.config,
+                    permission,
+                    authorization_context_sha256=prepared.authorization_context_sha256,
+                    now_s=started_at_s,
+                )
+                if grant_error is not None:
+                    raise PermissionError(grant_error)
             attempt = PhysicalOutputTransportAttempt(
                 attempt_id=wire_message.attempt_id,
                 target_robot_id=wire_message.target_robot_id,
@@ -1436,7 +1990,10 @@ class PhysicalOutputTransportAdapter:
 
 __all__ = [
     "PHYSICAL_OUTPUT_OSC_ADDRESS",
+    "PHYSICAL_OUTPUT_TRANSPORT_AUTHORIZATION_SCHEMA_VERSION",
     "PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION",
+    "PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V1",
+    "PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2",
     "PHYSICAL_OUTPUT_WIRE_SCHEMA_VERSION",
     "PhysicalOutputAcknowledgementEvidence",
     "PhysicalOutputCodecIdentity",
@@ -1447,9 +2004,11 @@ __all__ = [
     "PhysicalOutputOperatorEnable",
     "PhysicalOutputRecordingResult",
     "PhysicalOutputTransportAdapter",
+    "PhysicalOutputTransportAuthorizationGrant",
     "PhysicalOutputTransportAttempt",
     "PhysicalOutputTransportConfig",
     "PhysicalOutputTransportMode",
+    "PhysicalOutputTransportPreparedDispatch",
     "PhysicalOutputTransportResult",
     "PhysicalOutputTransportResultStatus",
     "PhysicalOutputTransportRecordingSink",
