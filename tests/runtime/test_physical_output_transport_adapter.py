@@ -43,6 +43,7 @@ from selfrionette.transport.udp import (
 
 from tests.runtime.test_physical_safety_core import _input as _safety_input_fixture
 from tests.schemas.test_physical_output_contract import _endpoint_request
+from tests.support.output_candidate_evidence import joint_request, observed_safety_input
 
 
 class _Clock:
@@ -122,19 +123,11 @@ class _FixtureWireEncoder:
 
 
 def _request(**changes: object) -> PhysicalOutputRequest:
-    request = replace(_endpoint_request(), target_robot_id="fixture-robot")
-    return replace(request, **changes) if changes else request
+    return joint_request(**changes)
 
 
 def _evaluation(request: PhysicalOutputRequest):
-    safety_input = replace(
-        _safety_input_fixture(),
-        candidate_id=physical_output_candidate_id(request),
-        provenance=(
-            *_safety_input_fixture().provenance,
-            f"software_revision:{request.software_revision}",
-        ),
-    )
+    safety_input = observed_safety_input(request)
     return evaluate_and_bind_physical_output_safety(
         request,
         safety_input,
