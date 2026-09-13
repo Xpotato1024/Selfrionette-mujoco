@@ -1099,6 +1099,21 @@ class ContactTaskLog:
             or outcome.observations_count != len(samples)
         ):
             raise ContactTaskLogError("task outcome identity or observation count does not match the log")
+        context_conditions = _task_context_document(self.header.context)
+        outcome_values = outcome.to_document()
+        if any(
+            context_conditions[field] != outcome_values[field]
+            for field in (
+                "dwell_interval_s",
+                "timeout_s",
+                "target_normal_force_band_n",
+                "approach_alignment_min_cosine",
+                "normal_alignment_min_cosine",
+                "max_contact_location_drift_m",
+                "require_pose_measurement",
+            )
+        ):
+            raise ContactTaskLogError("task outcome conditions do not match the log context")
         for sample in samples:
             _validate_sample_bindings(self.header, sample)
         _validate_final_sample_outcome(samples, outcome)

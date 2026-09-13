@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseContactTaskLogJsonl, parseContactTaskPresentationV1, type ContactTaskPresentationV1 } from "../src/contact/contactTaskLog.js";
@@ -78,6 +79,119 @@ const truncated = await parseContactTaskLogJsonl(fixture.slice(0, -1), expectedP
 assert.equal(truncated.status, "unavailable");
 assert.equal(truncated.cube, null);
 assert.equal(truncated.derivedForce, null);
+
+const taskConditionMismatches: Array<[string, unknown]> = [
+  ["dwell_interval_s", 0.3],
+  ["timeout_s", 1.5],
+  ["target_normal_force_band_n", [1.5, 3.5]],
+  ["approach_alignment_min_cosine", 0.5],
+  ["normal_alignment_min_cosine", 0.5],
+  ["max_contact_location_drift_m", 0.01],
+  ["require_pose_measurement", true],
+];
+for (const [field, mismatch] of taskConditionMismatches) {
+  const lines = fixture.trimEnd().split("\n");
+  const summary = JSON.parse(lines[lines.length - 1]!) as Record<string, unknown>;
+  const outcome = summary["outcome"] as Record<string, unknown>;
+  outcome[field] = mismatch;
+  lines[lines.length - 1] = JSON.stringify(summary);
+  const inconsistentConditions = lines.join("\n") + "\n";
+  const rejectedConditions = await parseContactTaskLogJsonl(inconsistentConditions, expectedProfile);
+  assert.equal(rejectedConditions.status, "unavailable", `outcome ${field} must match header context`);
+  assert.equal(rejectedConditions.reason, "contact task outcome conditions do not match the header context");
+}
+
+const sourceLines = fixture.trimEnd().split("\n");
+const signalManifestMatch = sourceLines[0]!.match(/"signal_manifest":(\{.*\}),"source_kind":/);
+assert.ok(signalManifestMatch);
+const deviceNeutralSignalManifest = signalManifestMatch[1]!.replace(
+  '"output_frame":"mujoco_world"',
+  '"output_frame":"device_neutral"',
+);
+const signalManifestDigest = "sha256:" + createHash("sha256").update(deviceNeutralSignalManifest).digest("hex");
+const deviceNeutralHeader = sourceLines[0]!
+  .replace(/"signal_manifest":\{.*\},"source_kind":/, `"signal_manifest":${deviceNeutralSignalManifest},"source_kind":`)
+  .replace(/"signal_manifest_digest":"sha256:[0-9a-f]{64}"/, `"signal_manifest_digest":"${signalManifestDigest}"`);
+const deviceNeutralLines = sourceLines.slice(1).map((line) => JSON.parse(line) as Record<string, unknown>);
+for (const line of deviceNeutralLines) {
+  const binding = line["binding"] as Record<string, unknown>;
+  binding["signal_manifest_digest"] = signalManifestDigest;
+}
+for (const line of deviceNeutralLines) {
+  if (line["record_kind"] !== "sample") {
+    continue;
+  }
+  const derivedSignal = line["derived_reaction_force"] as Record<string, unknown>;
+  derivedSignal["manifest_digest"] = signalManifestDigest;
+  const derivedOutput = derivedSignal["output"] as Record<string, unknown>;
+  derivedOutput["frame"] = "device_neutral";
+}
+const deviceNeutralLog = [deviceNeutralHeader, ...deviceNeutralLines.map((line) => JSON.stringify(line))].join("\n") + "\n";
+const deviceNeutralPresentation = await parseContactTaskLogJsonl(deviceNeutralLog, expectedProfile);
+assert.equal(deviceNeutralPresentation.status, "available", deviceNeutralPresentation.reason ?? "device-neutral presentation was unavailable");
+assert.equal(deviceNeutralPresentation.derivedForce?.frame, "device_neutral");
+assert.deepEqual(deviceNeutralPresentation.derivedForce?.forceN, [2, 0, 0]);
+assert.notEqual(deviceNeutralPresentation.derivedForce?.frame, "mujoco_world");
+assert.notEqual(deviceNeutralPresentation.derivedForce?.forceN, null);
+const sceneRendererSource = await readFile(
+  join(process.cwd(), "src", "wasm-scene", "mujocoSceneRenderer.ts"),
+  "utf8",
+);
+assert.match(
+  sceneRendererSource,
+  /if\s*\(\s*presentation\.derivedForce\?\.frame === "mujoco_world"\s*&&\s*presentation\.derivedForce\.forceN !== null\s*\)\s*\{\s*arrow\(presentation\.derivedForce\.forceN,\s*forceOrigin,\s*0xfacc15\);/,
+);
+
+const invalidDerivedWire = toWirePresentation(available);
+const invalidDerived = invalidDerivedWire["derived_force"] as Record<string, unknown>;
+invalidDerived["status"] = "invalid";
+invalidDerived["force_n"] = null;
+const invalidDerivedPresentation = parseContactTaskPresentationV1(invalidDerivedWire, expectedProfile);
+assert.equal(invalidDerivedPresentation.status, "unavailable");
+assert.equal(invalidDerivedPresentation.derivedForce, null);
+assert.equal(invalidDerivedPresentation.reason, "derived reaction-force signal is unavailable");
+
+for (const rawStatus of ["invalid_contact", "solver_invalid"]) {
+  const rawStatusAsDerivedWire = toWirePresentation(available);
+  const derived = rawStatusAsDerivedWire["derived_force"] as Record<string, unknown>;
+  derived["status"] = rawStatus;
+  derived["force_n"] = null;
+  const rejectedDerivedStatus = parseContactTaskPresentationV1(rawStatusAsDerivedWire, expectedProfile);
+  assert.equal(rejectedDerivedStatus.status, "unavailable");
+  assert.equal(rejectedDerivedStatus.derivedForce, null);
+  assert.equal(rejectedDerivedStatus.reason, "presentation derived force status is unsupported");
+}
+
+const invalidSignalLines = fixture.trimEnd().split("\n");
+for (let index = 1; index < invalidSignalLines.length - 1; index += 1) {
+  const invalidSignalSample = JSON.parse(invalidSignalLines[index]!) as Record<string, unknown>;
+  const invalidSignal = invalidSignalSample["derived_reaction_force"] as Record<string, unknown>;
+  invalidSignal["status"] = "invalid";
+  const invalidSignalOutput = invalidSignal["output"] as Record<string, unknown>;
+  invalidSignalOutput["force_n"] = null;
+  invalidSignalLines[index] = JSON.stringify(invalidSignalSample);
+}
+const invalidSignalLog = invalidSignalLines.join("\n") + "\n";
+const invalidSignalPresentation = await parseContactTaskLogJsonl(invalidSignalLog, expectedProfile);
+assert.equal(invalidSignalPresentation.status, "unavailable");
+assert.equal(invalidSignalPresentation.derivedForce, null);
+assert.equal(invalidSignalPresentation.reason, "derived reaction-force signal is unavailable");
+
+for (const rawStatus of ["invalid_contact", "solver_invalid"]) {
+  const rawStatusLines = fixture.trimEnd().split("\n");
+  for (let index = 1; index < rawStatusLines.length - 1; index += 1) {
+    const sampleLine = JSON.parse(rawStatusLines[index]!) as Record<string, unknown>;
+    const signal = sampleLine["derived_reaction_force"] as Record<string, unknown>;
+    signal["status"] = rawStatus;
+    const output = signal["output"] as Record<string, unknown>;
+    output["force_n"] = null;
+    rawStatusLines[index] = JSON.stringify(sampleLine);
+  }
+  const rawStatusLog = rawStatusLines.join("\n") + "\n";
+  const rejectedRawStatus = await parseContactTaskLogJsonl(rawStatusLog, expectedProfile);
+  assert.equal(rejectedRawStatus.status, "unavailable");
+  assert.equal(rejectedRawStatus.reason, "derived reaction-force status is unsupported");
+}
 
 function toWirePresentation(presentation: ContactTaskPresentationV1): Record<string, unknown> {
   const sample = presentation.sample!;

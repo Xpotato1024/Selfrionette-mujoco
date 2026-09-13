@@ -32,7 +32,7 @@ JSONLのrecord順は固定である。
 2. 1件以上の`sample`: zero-based連続`sequence_index`、elapsed time、raw contact evidence、derived force signal、Task observation、Task stateを持つ。
 3. `summary`: sample countと同じmanifest / trialに結び付いたTask outcomeを持つ。
 
-`header.binding`はmanifest digest、signal manifest digest、trial、robot bundle、scene / object / presentation identity、source kindをcanonicalな値で繰り返す。各sampleとsummaryも同じbindingを持ち、decoderは全recordのidentity、count、order、cross-field consistencyを検証する。manifest、signal manifest、raw evidence、derived signal、Task state / outcomeのいずれかを別trialの値と差し替えても受け付けない。
+`header.binding`はmanifest digest、signal manifest digest、trial、robot bundle、scene / object / presentation identity、source kindをcanonicalな値で繰り返す。各sampleとsummaryも同じbindingを持ち、decoderは全recordのidentity、count、order、cross-field consistencyを検証する。summary outcomeのtask条件（`dwell_interval_s`、`timeout_s`、`target_normal_force_band_n`、`approach_alignment_min_cosine`、`normal_alignment_min_cosine`、`max_contact_location_drift_m`、`require_pose_measurement`）は`header.task_context`と一致しなければならない。manifest、signal manifest、raw evidence、derived signal、Task state / outcomeのいずれかを別trialの値と差し替えても受け付けない。
 
 ## 末尾sample、summary、raw forceの整合性
 
@@ -58,7 +58,7 @@ presentation bindingにはcontact / signal manifest digest、trial、robot bundl
 
 ## Viewerの表示境界
 
-`apps/mujoco-viewer`はpayload metadataまたは明示的なlocal file inputからpresentationを厳密に読み、登録済み・現在load済みrobot profileと比較する。viewerはstatusが`available`の間、cube geometry / pose、contact point / normal、world raw force、frame情報付きderived force、Task state、raw-evidence outcomeをread-onlyに表示する。derived forceを3D矢印にするのは`mujoco_world` frameの場合だけであり、tool / device-neutral vectorをworld vectorとして再解釈しない。
+`apps/mujoco-viewer`はpayload metadataまたは明示的なlocal file inputからpresentationを厳密に読み、登録済み・現在load済みrobot profileと比較する。viewerはstatusが`available`の間、cube geometry / pose、contact point / normal、world raw force、frame情報付きderived force、Task state、raw-evidence outcomeをread-onlyに表示する。derived-force statusは`active`、`no_contact`、`measurement_unavailable`、`invalid`、`stale`に限り、raw evidenceの`invalid_contact` / `solver_invalid`をderived statusとして受け付けない。derived forceを3D矢印にするのは`mujoco_world` frameの場合だけであり、tool / device-neutral vectorをworld vectorとして再解釈しない。
 
 状態の扱い:
 

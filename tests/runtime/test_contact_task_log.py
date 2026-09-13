@@ -290,6 +290,40 @@ def test_contact_log_round_trip_keeps_raw_force_and_outcome_separate() -> None:
     assert encoded == decoded.to_jsonl()
 
 
+@pytest.mark.parametrize(
+    ("field", "typed_mismatch", "json_mismatch"),
+    [
+        ("dwell_interval_s", 0.25, 0.25),
+        ("timeout_s", 1.5, 1.5),
+        ("target_normal_force_band_n", (1.5, 3.5), [1.5, 3.5]),
+        ("approach_alignment_min_cosine", 0.5, 0.5),
+        ("normal_alignment_min_cosine", 0.5, 0.5),
+        ("max_contact_location_drift_m", 0.01, 0.01),
+        ("require_pose_measurement", True, True),
+    ],
+)
+def test_contact_log_rejects_outcome_task_condition_mismatch(
+    field: str,
+    typed_mismatch: object,
+    json_mismatch: object,
+) -> None:
+    log = _build_log()
+    mismatched_outcome = replace(log.summary.outcome, **{field: typed_mismatch})
+    with pytest.raises(ContactTaskLogError, match="task outcome conditions"):
+        ContactTaskLog(
+            header=log.header,
+            samples=log.samples,
+            summary=replace(log.summary, outcome=mismatched_outcome),
+        )
+
+    lines = _canonical_lines(log.to_jsonl())
+    outcome = lines[-1]["outcome"]
+    assert isinstance(outcome, dict)
+    outcome[field] = json_mismatch
+    with pytest.raises(ContactTaskLogError, match="task outcome conditions"):
+        decode_contact_task_log(_encode_lines(lines))
+
+
 @pytest.mark.parametrize("mutation", ["duplicate", "unknown", "binding", "sequence"])
 def test_contact_log_decoder_rejects_untrusted_jsonl_changes(mutation: str) -> None:
     data = _build_log().to_jsonl()

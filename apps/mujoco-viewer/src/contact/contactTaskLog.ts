@@ -74,9 +74,9 @@ export interface ContactTaskPresentationV1 {
     forceWorldN: Vector3 | null;
   } | null;
   derivedForce: {
-    status: string;
+    status: DerivedForceStatus;
     sourceStatus: string | null;
-    frame: "mujoco_world" | "tool";
+    frame: DerivedForceFrame;
     forceN: Vector3 | null;
     rawForceWorldN: Vector3 | null;
     unit: string;
@@ -107,6 +107,29 @@ const SYNTHETIC_NOTICE = "決定的に生成した合成fixtureです。MuJoCo�
 const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
 type JsonRecord = Record<string, unknown>;
+type DerivedForceStatus = "active" | "no_contact" | "measurement_unavailable" | "invalid" | "stale";
+type DerivedForceFrame = "mujoco_world" | "tool" | "device_neutral";
+
+const DERIVED_FORCE_STATUSES: readonly DerivedForceStatus[] = [
+  "active",
+  "no_contact",
+  "measurement_unavailable",
+  "invalid",
+  "stale",
+];
+const TASK_CONDITION_FIELDS = [
+  "approach_alignment_min_cosine",
+  "dwell_interval_s",
+  "max_contact_location_drift_m",
+  "normal_alignment_min_cosine",
+  "require_pose_measurement",
+  "target_normal_force_band_n",
+  "timeout_s",
+] as const;
+
+function isDerivedForceStatus(value: string): value is DerivedForceStatus {
+  return DERIVED_FORCE_STATUSES.includes(value as DerivedForceStatus);
+}
 
 const CONTACT_TASK_PHASES = [
   "ready",
@@ -155,7 +178,7 @@ interface ParsedManifest {
 
 interface ParsedSignalManifest {
   maxInterSampleGapS: number;
-  outputFrame: "mujoco_world" | "tool";
+  outputFrame: DerivedForceFrame;
   sourceSceneIdentity: ContactTaskIdentity;
   sourceObjectIdentity: ContactTaskIdentity;
 }
@@ -174,9 +197,9 @@ interface ParsedRawEvidence {
 
 interface ParsedDerivedForce {
   document: JsonRecord;
-  status: string;
+  status: DerivedForceStatus;
   sourceStatus: string | null;
-  frame: "mujoco_world" | "tool";
+  frame: DerivedForceFrame;
   forceN: Vector3 | null;
   rawForceWorldN: Vector3 | null;
   filtered: boolean;
@@ -537,7 +560,11 @@ function parseSignalManifest(value: unknown, binding: ContactTaskLogBinding): Pa
   if (maxInterSampleGapS <= 0) {
     throw new Error("signal manifest maximum sample gap must be positive");
   }
-  if (config.output_frame !== "mujoco_world" && config.output_frame !== "tool") {
+  if (
+    config.output_frame !== "mujoco_world" &&
+    config.output_frame !== "tool" &&
+    config.output_frame !== "device_neutral"
+  ) {
     throw new Error("signal manifest output frame is unsupported");
   }
   return {
@@ -800,7 +827,11 @@ function parseDerivedForce(
     "derived force output",
   );
   const outputFrame = output.frame;
-  if (outputFrame !== "mujoco_world" && outputFrame !== "tool") {
+  if (
+    outputFrame !== "mujoco_world" &&
+    outputFrame !== "tool" &&
+    outputFrame !== "device_neutral"
+  ) {
     throw new Error("derived reaction-force output frame is unsupported");
   }
   if (
@@ -813,14 +844,7 @@ function parseDerivedForce(
     throw new Error("derived reaction-force output contract is unsupported");
   }
   const status = stringValue(signal.status, "derived signal status");
-  if (![
-    "active",
-    "no_contact",
-    "stale",
-    "measurement_unavailable",
-    "invalid_contact",
-    "solver_invalid",
-  ].includes(status)) {
+  if (!isDerivedForceStatus(status)) {
     throw new Error("derived reaction-force status is unsupported");
   }
   const frameIndex = signal.frame_index === null ? null : nonNegativeInteger(signal.frame_index, "signal.frame_index");
@@ -1082,19 +1106,10 @@ function validateTaskLifecycle(
   }
 }
 
-function validateTaskContext(value: unknown, binding: ContactTaskLogBinding): void {
+function validateTaskContext(value: unknown, binding: ContactTaskLogBinding): JsonRecord {
   const context = exactKeys(
     value,
-    [
-      "approach_alignment_min_cosine",
-      "dwell_interval_s",
-      "max_contact_location_drift_m",
-      "normal_alignment_min_cosine",
-      "require_pose_measurement",
-      "target_normal_force_band_n",
-      "timeout_s",
-      "trial",
-    ],
+    [...TASK_CONDITION_FIELDS, "trial"],
     "contact task context",
   );
   if (!sameJson(parseTrial(context.trial), binding.trial)) {
@@ -1103,15 +1118,15 @@ function validateTaskContext(value: unknown, binding: ContactTaskLogBinding): vo
   nonNegativeNumber(context.dwell_interval_s, "task_context.dwell_interval_s");
   nonNegativeNumber(context.timeout_s, "task_context.timeout_s");
   booleanValue(context.require_pose_measurement, "task_context.require_pose_measurement");
-  if (context.target_normal_force_band_n === null) {
-    return;
+  if (context.target_normal_force_band_n !== null) {
+    if (!Array.isArray(context.target_normal_force_band_n) || context.target_normal_force_band_n.length !== 2) {
+      throw new Error("task context target force band is invalid");
+    }
+    context.target_normal_force_band_n.forEach((item, index) =>
+      nonNegativeNumber(item, "task_context.target_normal_force_band_n[" + index + "]"),
+    );
   }
-  if (!Array.isArray(context.target_normal_force_band_n) || context.target_normal_force_band_n.length !== 2) {
-    throw new Error("task context target force band is invalid");
-  }
-  context.target_normal_force_band_n.forEach((item, index) =>
-    nonNegativeNumber(item, "task_context.target_normal_force_band_n[" + index + "]"),
-  );
+  return context;
 }
 
 function validateTaskState(value: unknown): ParsedTaskState {
@@ -1149,7 +1164,12 @@ function validateTaskObservation(value: unknown): JsonRecord {
   return observation;
 }
 
-function validateOutcome(value: unknown, binding: ContactTaskLogBinding, sampleCount: number): JsonRecord {
+function validateOutcome(
+  value: unknown,
+  binding: ContactTaskLogBinding,
+  sampleCount: number,
+  taskContext: JsonRecord,
+): JsonRecord {
   const outcome = exactKeys(
     value,
     [
@@ -1189,6 +1209,9 @@ function validateOutcome(value: unknown, binding: ContactTaskLogBinding, sampleC
     ],
     "contact task outcome",
   );
+  if (TASK_CONDITION_FIELDS.some((field) => !sameJson(outcome[field], taskContext[field]))) {
+    throw new Error("contact task outcome conditions do not match the header context");
+  }
   if (
     outcome.schema_version !== OUTCOME_SCHEMA_VERSION ||
     outcome.manifest_digest !== binding.manifest_digest ||
@@ -1573,11 +1596,18 @@ function parsePresentationDocument(
     "contact presentation derived force",
   );
   const derivedStatus = stringValue(derivedValue.status, "presentation.derived_force.status");
+  if (!isDerivedForceStatus(derivedStatus)) {
+    throw new Error("presentation derived force status is unsupported");
+  }
   const derivedFrameValue = derivedValue.frame;
-  if (derivedFrameValue !== "mujoco_world" && derivedFrameValue !== "tool") {
+  if (
+    derivedFrameValue !== "mujoco_world" &&
+    derivedFrameValue !== "tool" &&
+    derivedFrameValue !== "device_neutral"
+  ) {
     throw new Error("presentation derived force frame is unsupported");
   }
-  const derivedFrame = derivedFrameValue as "mujoco_world" | "tool";
+  const derivedFrame = derivedFrameValue as DerivedForceFrame;
   if (derivedValue.unit !== "newton" || derivedValue.sign_convention !== "object_on_tool") {
     throw new Error("presentation derived force units or sign are unsupported");
   }
@@ -1803,7 +1833,7 @@ export async function parseContactTaskLogJsonl(
     if (sourceKind !== binding.source_kind) {
       throw new Error("contact log source kind does not match its binding");
     }
-    validateTaskContext(header.task_context, binding);
+    const taskContext = validateTaskContext(header.task_context, binding);
     const manifest = parseManifest(header.manifest, binding);
     const rawManifest = headerLine.rawTopLevelValues.get("manifest");
     const rawSignalManifest = headerLine.rawTopLevelValues.get("signal_manifest");
@@ -1838,7 +1868,7 @@ export async function parseContactTaskLogJsonl(
     ) {
       throw new Error("contact task log summary identity or sample count is invalid");
     }
-    const outcome = validateOutcome(summary.outcome, binding, samples.length);
+    const outcome = validateOutcome(summary.outcome, binding, samples.length, taskContext);
     const lastSample = samples[samples.length - 1];
     validateFinalSampleOutcome(
       lastSample.taskState,
