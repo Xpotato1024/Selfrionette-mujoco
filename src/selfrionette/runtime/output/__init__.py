@@ -8,6 +8,7 @@ from selfrionette.runtime.output.permission import (
 from selfrionette.runtime.output.lifecycle import (
     PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION,
     PhysicalOutputLifecycle,
+    PhysicalOutputLifecycleDispatchResult,
     PhysicalOutputLifecycleEvent,
     PhysicalOutputLifecycleEventKind,
     PhysicalOutputLifecycleResult,
@@ -48,6 +49,7 @@ __all__ = [
     "PHYSICAL_OUTPUT_TRACE_SCHEMA_VERSION",
     "PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION",
     "PhysicalOutputLifecycle",
+    "PhysicalOutputLifecycleDispatchResult",
     "PhysicalOutputLifecycleEvent",
     "PhysicalOutputLifecycleEventKind",
     "PhysicalOutputLifecycleResult",
