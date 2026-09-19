@@ -114,6 +114,9 @@ requested command、candidate prediction、post-step observationを別々にasse
 
 ## P2: bounded acquisition / health
 
+有限取得policyと状態遷移の正本は`docs/contracts/r7-a-lite-serial-frame-contract.md`。
+取得不能を偽sampleへ変換せず、例外で既存sessionを終了する。自動retry/polling frameworkは追加しない。
+
 serial wire形式を変更せず、readerの有限read timeout、1 tick当たりline budget、
 最大line bytes、診断保持数、no-vector / EOF / malformed / disconnectを明示する。
 数値上限はversioned software test policyとして宣言し、実機cadenceの実測値とは扱わない。

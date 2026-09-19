@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from math import isfinite
 from typing import cast
 
 from selfrionette.schemas import RawInputFrame
+
+
+# wire仕様ではなく、取得処理と診断保持のsoftware保護policy。
+MAX_LINES_PER_FRAME = 64
+MAX_LINE_BYTES = 1024
+MAX_DIAGNOSTICS = 64
+
+
+class SerialAcquisitionError(RuntimeError):
+    """正常sampleを取得できなかった有限取得の失敗。過去frameでは代用しない。"""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"Selfrionette acquisition failed: {reason}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,7 +162,8 @@ class SerialInputSource:
         else:
             self._read_line = _iterable_to_line_reader(line_reader)
 
-        self._diagnostics: list[SerialDiagnosticEvent] = []
+        self._diagnostics: deque[SerialDiagnosticEvent] = deque(maxlen=MAX_DIAGNOSTICS)
+        self.diagnostics_dropped = 0
 
     @classmethod
     def from_lines(cls, lines: Iterable[str]) -> "SerialInputSource":
@@ -164,21 +180,33 @@ class SerialInputSource:
             raise StopIteration("SerialInputSource reached end of injected lines") from exc
 
     def _read_next_vector_record(self) -> RawLoadcellVectorRecord:
-        while True:
+        for _ in range(MAX_LINES_PER_FRAME):
             line = self._read_next_line()
+            if not isinstance(line, str):
+                raise SerialFrameParseError(repr(line)[:128], "line must be a string")
+            # 先に文字数を制限し、巨大文字列のencodeやerrorへの複製を避ける。
+            if len(line) > MAX_LINE_BYTES or len(line.encode("utf-8")) > MAX_LINE_BYTES:
+                raise SerialFrameParseError(line[:128], "line byte limit exceeded")
             record_or_event = parse_serial_frame_line(line)
 
             if isinstance(record_or_event, SerialDiagnosticEvent):
+                if len(self._diagnostics) == MAX_DIAGNOSTICS:
+                    self.diagnostics_dropped += 1
                 self._diagnostics.append(record_or_event)
                 continue
 
             return record_or_event
+        raise SerialAcquisitionError("no_vector_line_budget")
 
     def read_frame(self) -> RawInputFrame:
         vector_record = self._read_next_vector_record()
+        try:
+            timestamp_s = float(vector_record.timestamp_ms) / 1000.0
+        except OverflowError as exc:
+            raise SerialFrameParseError(vector_record.raw_line, "timestamp out of range") from exc
         return RawInputFrame(
             source="selfrionette",
-            timestamp_s=float(vector_record.timestamp_ms) / 1000.0,
+            timestamp_s=timestamp_s,
             values=vector_record.channels,
             metadata={
                 "source_kind": "selfrionette",

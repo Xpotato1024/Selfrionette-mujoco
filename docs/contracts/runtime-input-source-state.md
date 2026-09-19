@@ -120,3 +120,10 @@ step loopと同じ照合・補完規則を適用する。stale / invalid / disco
 frameのstate省略によってactiveへ戻さない。明示的不一致はMappingやbackend指令より前に拒否する。
 readerのstart/closeは単発実行のcallerが所有する。既存offline/replayの記録済みstate復元は維持する。
 この境界は既に取得したhealthの消費規則であり、read timeoutや受信clockの生成は別の取得ownerが担う。
+
+## Selfrionetteの有限取得
+
+Selfrionetteはstart成功だけではactiveとせず、vector未確認時はinactive/age=Noneとする。
+source時刻とhost受信時刻は別物で、ageは後者から算出する。取得不能の際は例外で終了し、
+過去のnonzero sampleや偽zero sampleで処理を継続しない。状態遷移と数値上限の正本は
+`docs/contracts/r7-a-lite-serial-frame-contract.md`を参照する。
