@@ -15,9 +15,11 @@ from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.control.input_source_state import (
     RuntimeInputSourceState,
     build_runtime_input_source_state_from_metadata,
+    reconcile_runtime_input_source_state,
+    annotate_raw_input_frame,
 )
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
-from selfrionette.runtime.experiment.input_source import HealthyInputSource
+from selfrionette.runtime.experiment.input_source import HealthyInputSource, ManagedInputSource
 from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
 from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
@@ -143,12 +145,19 @@ class ControlMappedRuntimePipeline:
     async def run_once(self, dt_s: float | None = None) -> MuJoCoState:
         dt = self.config.dt_s if dt_s is None else dt_s
         frame = self.input_source.read_frame()
+        if isinstance(self.input_source, ManagedInputSource):
+            # live/viewerのhealthは取得元の正本。frameの省略値でactiveへ戻さない。
+            source_state = reconcile_runtime_input_source_state(
+                frame, self.input_source.current_health(), source_kind=frame.source
+            )
+            frame = annotate_raw_input_frame(frame, source_state)
+        else:
+            # 既存offline/replayの記録済み状態をinitial healthで上書きしない。
+            source_state = build_runtime_input_source_state_from_metadata(
+                frame.metadata, default_source_kind=frame.source
+            )
         pre_step_state = self.simulator.snapshot()
         intent = self.map_input(frame, pre_step_state=pre_step_state)
-        source_state = build_runtime_input_source_state_from_metadata(
-            frame.metadata,
-            default_source_kind=frame.source,
-        )
         safety_result = self.execute_intent(
             intent,
             dt_s=dt,

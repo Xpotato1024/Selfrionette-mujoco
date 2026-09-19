@@ -216,3 +216,84 @@ def test_gamepad_velocity_has_same_backend_request_at_both_entrypoints(frame):
     assert plans[0].pipeline.simulator.last_joint_position_command == plans[1].pipeline.simulator.last_joint_position_command
     assert record.state.qpos == observed.qpos
     assert record.motion_command.metadata["intent_kind"] == "local_endpoint_velocity"
+
+
+@pytest.mark.parametrize("entry", ("step_loop", "run_once"))
+@pytest.mark.parametrize("status", ("inactive", "stale", "invalid", "disconnected"))
+def test_managed_health_stops_motion_at_both_entrypoints(entry, status):
+    """取得済みhealthの非active状態を、frameの省略値でactiveへ戻さない。"""
+    from selfrionette.runtime.experiment.input_source import InputSourceHealth
+
+    plan = build_runtime_input_source_step_loop_plan(_selection((1.0,)))
+    original = plan.pipeline.input_source
+    initial = plan.pipeline.simulator.snapshot()
+    lifecycle = []
+
+    class HealthOverride:
+        def start(self):
+            lifecycle.append("start")
+            original.start()
+
+        def close(self):
+            lifecycle.append("close")
+            original.close()
+
+        def read_frame(self):
+            return original.read_frame()
+
+        def current_health(self):
+            return InputSourceHealth(InputSourceHealthStatus(status), age_ms=500,
+                                     reason=None if status == "inactive" else "audit_" + status)
+
+    reader = HealthOverride()
+    plan.pipeline.input_source = reader
+    if entry == "step_loop":
+        asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=0.02))
+    else:
+        reader.start()
+        try:
+            asyncio.run(plan.pipeline.run_once(0.02))
+        finally:
+            reader.close()
+    assert lifecycle == ["start", "close"]
+    assert plan.pipeline.simulator.last_joint_position_command.joint_angles_rad == initial.qpos
+    assert plan.pipeline.simulator.snapshot().qpos == initial.qpos
+    assert plan.pipeline.simulator.last_command.metadata["runtime_input_safety_applied"] is True
+
+
+@pytest.mark.parametrize("entry", ("step_loop", "run_once"))
+@pytest.mark.parametrize("field,value", (("source_active", False), ("command_age_ms", 500), ("stale_reason", "old")))
+def test_managed_health_conflict_fails_before_backend_request(entry, field, value):
+    """frameとhealthに明示的不一致がある場合、どちらの入口も指令前に拒否する。"""
+    from selfrionette.runtime.experiment.input_source import InputSourceHealth
+
+    plan = build_runtime_input_source_step_loop_plan(_selection((1.0,)))
+    original = plan.pipeline.input_source
+
+    class ConflictingSource:
+        def start(self):
+            original.start()
+
+        def close(self):
+            original.close()
+
+        def read_frame(self):
+            frame = original.read_frame()
+            return replace(frame, metadata={**frame.metadata, field: value})
+
+        def current_health(self):
+            return InputSourceHealth(InputSourceHealthStatus.ACTIVE, age_ms=0)
+
+    reader = ConflictingSource()
+    plan.pipeline.input_source = reader
+    with pytest.raises(ValueError, match="frame metadata and typed health disagree"):
+        if entry == "step_loop":
+            asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=0.02))
+        else:
+            reader.start()
+            try:
+                asyncio.run(plan.pipeline.run_once(0.02))
+            finally:
+                reader.close()
+    assert plan.pipeline.simulator.last_joint_position_command is None
+    assert plan.pipeline.simulator.snapshot().frame_index == 0

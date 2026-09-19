@@ -29,7 +29,7 @@ from selfrionette.runtime.control.input_source_selection import (
 from selfrionette.runtime.control.input_source_state import (
     annotate_raw_input_frame,
     build_runtime_input_source_state_from_metadata,
-    build_runtime_input_source_state_from_health,
+    reconcile_runtime_input_source_state,
 )
 from selfrionette.runtime.experiment.input_source import (
     ManagedInputSource,
@@ -56,7 +56,6 @@ from selfrionette.runtime.composition.robot_bundle import (
     RobotBundle,
 )
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
-from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
 from selfrionette.runtime.execution.command_routes import MappingRuntimeContextBinding
 from selfrionette.runtime.execution.input_source_adapters import (
@@ -485,25 +484,10 @@ async def _run_runtime_input_source_step_loop(
                 default_source_kind=plan.selection.source_name,
             )
         else:
-            health = plan.pipeline.input_source.current_health()
-            source_state = build_runtime_input_source_state_from_health(
-                health, source_kind=plan.selection.source_name
+            source_state = reconcile_runtime_input_source_state(
+                raw_frame, plan.pipeline.input_source.current_health(),
+                source_kind=plan.selection.source_name,
             )
-            native_state = build_runtime_input_source_state_from_metadata(
-                raw_frame.metadata,
-                default_source_kind=source_state.source_kind,
-            )
-            field_keys = (
-                ("source_active", "source_active"),
-                ("command_age_ms", "command_age_ms"),
-                ("stale_reason", "stale_reason"),
-            )
-            if any(
-                key in raw_frame.metadata
-                and getattr(native_state, field) != getattr(source_state, field)
-                for field, key in field_keys
-            ):
-                raise ValueError("input source frame metadata and typed health disagree")
         frame = annotate_raw_input_frame(raw_frame, source_state)
         pre_step_state = plan.pipeline.simulator.snapshot()
         mapped_intent = plan.pipeline.map_input(

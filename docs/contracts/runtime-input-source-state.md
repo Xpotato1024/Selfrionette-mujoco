@@ -112,3 +112,11 @@ viewer canonical sampleでは、raw `raw_axes`、legacy normalized `axes`、prov
 mapping parameterはselection / plan readinessで検証・正規化・freezeされ、source lifecycle開始前に
 実行可能性を確定する。explicit runtime parameter、Mapping plugin defaultの順で解決し、sourceから
 parameterを投影しない。source healthとmapping command zeroを混同しない。
+
+## managed sourceの単発実行
+
+`pipeline.run_once`でlive / viewerのmanaged readerを使う場合も、read直後のtyped healthを取得し、
+step loopと同じ照合・補完規則を適用する。stale / invalid / disconnected / inactiveを
+frameのstate省略によってactiveへ戻さない。明示的不一致はMappingやbackend指令より前に拒否する。
+readerのstart/closeは単発実行のcallerが所有する。既存offline/replayの記録済みstate復元は維持する。
+この境界は既に取得したhealthの消費規則であり、read timeoutや受信clockの生成は別の取得ownerが担う。
