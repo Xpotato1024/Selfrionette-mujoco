@@ -18,7 +18,8 @@ PR #544 `ae27b0746017dab5eac416e14f71763386fd8f07` を区別した。
 本報告は後者の時点snapshotであり、current contractの第二SoTではない。
 
 全845 tracked filesをpath/hashで棚卸しし、482 Python filesをASTで解析、
-78 canonical Markdown documentsをfront matterで索引化した。
+canonical候補78文書を抽出した。merge前に先頭front matterだけを再検査した結果、
+canonicalは77文書であり、historical文書内の転載例を拾った1件を集計から除外した。
 これは全845ファイルの逐行意味監査を意味しない。構造棚卸しと下表の境界レビューを分ける。
 外部reviewerやCodexは使わず、同じassistantが要件から再検討した。
 
@@ -95,3 +96,10 @@ ContactSceneはcube freejointを含み、robotとobjectをaddressでresetする�
 
 全体の構造調査を終えたことと、不整合の実装修正が終わったことは別である。
 本報告単体でR7-L完了またはphysical readinessを宣言しない。
+
+## merge前再監査での集計訂正
+
+当初の機械索引は`canonical-content-history-separation-supplement-2026-07-16.md`内の
+転載された`status: canonical`を拾っていた。当該文書自身の先頭front matterはhistoricalであり、
+canonical数は78ではなく77。845 tracked filesと482 Python filesの数・AST解析は再確認済み。
+過去の転載本文や原inventoryは変更せず、本報告の集計と現行契約の区別だけを訂正した。
