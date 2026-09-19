@@ -31,7 +31,7 @@ Input Source Plugin / validated reader
 ```
 
 `runtime/`がこのflowを接続する唯一のownerである。MuJoCo stateより前の値はintentまたはpredictionであり、
-post-step `MuJoCoState`がphysical evidenceである。transportはserialize / deliveryだけを行い、
+post-step `MuJoCoState`がsimulation observationである。実機measurementではない。transportはserialize / deliveryだけを行い、
 viewerは受信payloadを再計算せず描画する。
 
 physical outputへ進む場合も、内部`MotionCommand`を直接transportへ渡さず、typed
@@ -59,9 +59,11 @@ schedulerはこの変更で実装・検証していない。automated validation
 後続#516 preflight / scopeでbounded receive wiring、timeout / disconnect integration、#514 network validationを具体化する。
 
 現行のapplication-facing replay / viewer / smokeは、Robot、Input Source、Control Mapping、
-command semantics routeを接続するdiagnostic / operational runtimeである。Environment、Task、
-Evaluationを含むgeneric experiment compositionはreadiness contractとして存在するが、production
-experiment runnerには未接続である。この区別はcurrent behaviorであり、viewerまたはreplayの欠陥ではない。
+command semantics routeを接続するdiagnostic / operational runtimeである。これとは別に
+`runtime/experiment/world_tool_runner.py`が6軸readiness、有限free-space実行、Task evidenceを接続する
+専用production experiment runnerを所有する。R7-Gはoffline / replay限定であり、managed sourceや
+contact sceneをそのまま実行できるとは主張しない。generic CLIにevaluation subcommandがないことと、
+専用runnerが未実装であることを混同しない。
 
 ## Endpointとjointのflow
 
@@ -71,7 +73,7 @@ experiment runnerには未接続である。この区別はcurrent behaviorで�
 - `JointPositionCommand` / `EndpointVelocityCommand`: selected route後にtyped Robot command providerが
   直接受理するcommand boundary。
 - `target_position_m`: viewer-visible feedback / active targetであり、desired intentと同一とは限らない。
-- `current_tip_position_m`: MuJoCo `tip` siteから測定したphysical endpoint。
+- `current_tip_position_m`: source/consumerごとのcompatibility anchor。callerがMuJoCo観測から値を与える場合もあるが、keyだけをmeasurement authorityとしない。正本は`docs/contracts/endpoint-metadata-vocabulary.md`。
 
 unresolved frame、unreachable target、invalid qpos候補、stale inputは、runtime safety semanticsに従って
 明示statusまたはholdへ変換する。partial candidateをbackendへ適用しない。
