@@ -248,9 +248,9 @@ stop state transitionを検証できるが、simulated observationはpendingを�
 追加requestをblockする。timeoutまたはinvalid clockはlocal sessionをfail-closedにしてsend可能状態をclearする。
 operator stop / abort / disconnectもlocal lifecycleを停止するだけで、physical robot stopの証拠ではない。
 
-`observe_router_datagram`は受信済みdatagramをsessionへ渡すingestion境界である。この変更ではactual receive socketからsessionへ渡す
-bounded listener / producerとtimeout tick schedulerを実装・検証していない。automated testsはfake datagramとinjected clockだけを使う。
-実際のrouter observation、timeout、disconnectを取得するreceive wiringと#514 network validationは、後続#516 preflight / scopeで具体化する。
+`observe_router_datagram`は受信済みdatagramをsessionへ渡すingestion境界である。#542はnonblocking受信callbackを結ぶ有限driverとcaller-driven expiryを追加するが、
+actual receive socket/listenerとschedulerは所有しない。automated testsはfake datagramとinjected clockだけを使う。
+実際のreceive wiringと#514 network validationは#516 preflight / scopeに残す。
 
 このtaskのaccepted evidence fixtureとrouter observationはsynthetic test dataだけであり、#509の実物理測定record、
 実DNS / UDP送信、receiver ACK、robot actuation、movement、安全性の確認ではない。FastArm output利用は#509のaccepted
@@ -277,3 +277,36 @@ serializeし、decode時にunknown field、missing field、duplicate key、non-f
 - 実機作動は`docs/operations/hardware-safety.md`と専用Issue / 明示許可の範囲に限る。
 
 Runtime設定は`EvaluatedJointRoute(endpoint_id, joint_names)`で、既存endpoint設定とRobot-ownedの全joint順序を明示的に結ぶ。P3 producerはこのrouteのjoint名を実MuJoCo joint addressへ解決して観測し、routeもoriginへ保持する。P4は同じrouteをConfigurationState / TrajectorySampleの評価入力として保持し、policyのjoint順序との一致を要求する。output gateはrequest endpointも照合するため、同じqpos数値の別endpointへIDだけ付け替えても拒否する。routeはruntimeの構成情報であり、requestから任意の別joint groupを推測するresolverではない。FastArmでは既存endpoint設定とProfileのcanonical joint orderを使用し、route不明のgroupは評価しない。
+
+## #542 no-I/O signal previewと有限応答driver
+
+`runtime.output.fast_arm_emulation`は、実機用sessionとは別のno-I/O境界である。
+`build_fast_arm_signal_preview`はtyped requestと明示mappingから、既存pure joint変換とOSC codecで
+wire bytesを生成する。結果は常にsyntheticであり、sendable wrapper・permission・grantではない。
+`FastArmSignalSession`は明示Robot Profile/mappingを検証し、最初の完全requestのtarget、endpoint、
+session、revision、cadenceを固定する。単調sequenceとrequest timestampを検査し、pending中の追加preview、
+重複sequence、終了後の再利用を拒否する。request timestampと受信側clockの絶対値は直接比較しない。
+実機のjoint sign/offsetを推測してdefault値を作らず、利用者が渡したmappingを試験条件として保持する。
+
+`emulate_fast_arm_peer`はOSC bytesと明示target/wire joint orderだけを入力に取り、受信したaddress、
+float32 typetag、joint数を検証する。expected commandを入力としてコピーせず、decodeした値から
+`/router/<target>/command`の3-string応答を生成する。これはrepo-owned wire contractの疑似peerであり、
+実配備router/controllerの互換性、認証、motor calibration、実機受理を確認したことにはならない。
+
+`runtime.output.fast_arm_observation`は既存ACK DTOとpendingの共通定義、codec/parser/correlation/expiryの
+副作用なし判定を所有する。`fast_arm_adapter`からのACK DTO importは互換aliasとして維持する。
+既存physical sessionもこの判定を使うが、permission、#509 evidence、P5、grant、transport lifecycleは
+従来のownerから移さない。preview側はevidence kindをsimulatedに固定し、相関成功でもstatusはunavailable。
+不正packetとidentity不一致はpendingを解除せず、deadlineちょうどまたは超過はtimeoutとなる。
+有効packetだけでなくmalformed packet到着時も、期限超過が優先される。
+
+`BoundedFastArmObservationDriver`はexplicitなnonblocking `receive_nowait`、clock、正整数`max_datagrams`を
+受ける。callerが`tick()`を呼び、tick開始、read復帰後、tick終了でexpiryを確認する。
+Noneは現時点の無受信、空bytesはmalformed packetとして区別する。1 tickで上限以上をreadしない。
+無受信・stormでも次tickで期限を確認し、受信OSErrorはdisconnect、不正/逆行clockはfailedにする。
+その他callback例外もpendingを無効化し、元の例外を再送出する。stop/disconnect後は追加readしない。
+callback自体のblockingは中断できず、wall-clock deadlineやOS/driver応答性を保証する機構ではない。
+thread、timer、auto retry、socket listenerは持たない。actual receive wiringは#516のoperator gate下に残す。
+
+この段階はprogrammaticなprotocol E2Eである。Input Source、Task/contact、trace/artifactをまとめる
+実験runnerは#543に残る。previewや疑似受信だけをphysical stop、実測ACK、検証環境全体の完成と呼ばない。

@@ -176,3 +176,21 @@ def test_fast_arm_mapping_and_runtime_output_composition_keep_layer_ownership() 
     assert "selfrionette.runtime.output.lifecycle" in runtime_imports
     assert "selfrionette.runtime.output.safety_gate" in runtime_imports
     assert "selfrionette.transport.osc" in runtime_imports
+
+
+
+def test_no_io_fast_arm_owners_cannot_import_transmission_or_authorization():
+    """P3の新ownerはpure byte処理に限定し、実機sessionや許可を構築させない。"""
+    for name in ("fast_arm_observation.py", "fast_arm_emulation.py"):
+        path = FAST_ARM_RUNTIME_PATH.with_name(name)
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        modules = _imported_modules(tree)
+        assert {item.split(".")[0] for item in modules}.isdisjoint(FORBIDDEN_IMPORT_ROOTS | {"threading", "asyncio"})
+        assert all(not item.startswith((
+            "selfrionette.transport.udp", "selfrionette.runtime.output.fast_arm_adapter",
+            "selfrionette.runtime.output.permission", "selfrionette.runtime.output.safety_gate",
+            "selfrionette.runtime.output.transport_adapter", "selfrionette.runtime.safety",
+        )) for item in modules)
+        calls = {node.func.attr for node in ast.walk(tree)
+                 if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute)}
+        assert calls.isdisjoint({"send", "sendto", "connect", "bind", "arm", "dispatch", "submit_physical"})

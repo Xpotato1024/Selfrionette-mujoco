@@ -205,3 +205,23 @@ merge、Issue close、branch削除はこの依頼の実行権限に含めない�
 
 R7-L親: #539。P1 #540、P2 #541、P3 #542、P4 #543。
 P1は連続input / delta-routeの実装対象。P2-P4の完成は個別acceptanceで判定する。
+
+## P3の実装判断（#542）
+
+- no-I/O previewはPhysicalOutputRequestと明示FastArmOutputMappingから既存pure変換とOSC codecを使う。
+  sendable wrapper、physical evidence、permission、socket senderを要求・生成しない。
+- 既存FastArm sessionのACK DTOとdecode/parser/correlation/timeout判定だけを共通moduleへ移す。
+  実機permission、grant、P5 safety、send処理は変更しない。
+- in-memory peerはdatagram bytesからOSC addressとfloat argumentsをdecodeする。expected commandは渡さない。
+  明示targetとwire joint orderで受信を検証し、repo-owned router command形式の疑似応答を返す。
+- preview sessionは最初の完全requestでtarget/endpoint/session/revision/cadenceを固定し、sequence再利用を拒否する。
+  pending中の追加previewを拒否し、stop/disconnect/timeout後は新session objectが必要。自動再送は行わない。
+- bounded driverは明示receive_nowait、clock、1 tickの最大packet数を受ける。
+  tick開始・各read復帰後・終了にexpiryを確認する。packetなしでもtimeoutが進む。
+  callbackのnonblockingはcaller契約であり、thread、scheduler、socket lifecycleは追加しない。
+- 両sessionに同じdriverを試験する。physical-session用の既存test-only handoff fixtureは回帰に限り使い、
+  preview実装へ持ち込まない。疑似応答はphysical ACK・運動・停止の証拠へ昇格しない。
+- golden OSC bytesは独立定数oracleを使う。joint順序、sign、offsetのrad/degree、float32丸め、
+  wrong target/token/values、遅延、timeout境界、stop後応答、packet stormを確認する。
+
+実配備routerの互換性・認証・calibrationは主張しない。Input Source/Task/contact統合は#543へ残す。

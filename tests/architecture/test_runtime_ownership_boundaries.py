@@ -82,6 +82,8 @@ EXPECTED_MODULES = {
     },
     "output": {
         "fast_arm_adapter",
+        "fast_arm_observation",
+        "fast_arm_emulation",
         "lifecycle",
         "permission",
         "safety_gate",

@@ -21,3 +21,5 @@ ADRはdesign decisionを、その時点のcontextとprovenanceを含めて記録
 - `0005-prehardware-runtime-consistency.md`: 実機前SILのroute/context/policy整合と段階実装の判断。
 
 - `0006-bounded-acquisition-failure.md`: 取得失敗を偽sampleにせず有限例外として扱い、明示restartを要求する。
+
+- `0007-no-io-protocol-observation.md`: 実機許可を維持した信号previewと応答判定共有。
