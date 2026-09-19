@@ -74,32 +74,43 @@ physical sessionの正常系は既存test-only synthetic evidenceで別途回帰
 
 ### APIと責務
 
-`build_runtime_input_source_step_loop_plan`が既存LOADCELL_SOURCEを受理する。
-`RuntimeInputSourceExecutionAdapter`に、既存loadcell semanticsから決まる
-measured-tip context requirementを明示し、source ID文字列による分岐を追加しない。
-1 planは1 simulatorと1 managed readerを所有する。runの開始・終了でstart/close各1回とする。
-各stepでpre-step MuJoCo snapshotを一度取得し、typed EndpointPoseProviderが観測した位置を
-そのstepの `current_tip_position_m` へ渡す。frozen mapping weights/gainは変更しない。
-実行用contextは新しいmappingとして生成し、selectionのparameter objectを変更しない。
-endpoint unavailable、次元不一致、非finite contextはfail-closedとし、0や古い期待値で代用しない。
+`build_runtime_input_source_step_loop_plan`は既存LOADCELL_SOURCEを受理する。
+取得adapterはsource lifecycleを担い、delta/velocityの数式は選ばない。
+`endpoint_delta_to_joint_position/v1`のtyped bindingがRobot-owned local generatorを構築し、
+`EndpointDeltaMotionGenerator.update_delta`を明示的に呼ぶ。
+`local_endpoint_velocity_to_joint_position/v1`は既存のvelocity積分を使う。
+label metadataを書き換えても実行方式は切り替わらない。
+
+Mappingは`runtime_context_parameters`を宣言し、routeの供給集合と一致することをcompositionで検証する。
+continuous sourceのselectionでは`current_tip_position_m`を省略でき、placeholderは要求しない。
+従来のpure mappingの完全parameter検証は維持する。明示した不正contextや未知fieldは拒否する。
+毎step、同じpre-step MuJoCo snapshotから観測した位置をMappingへ渡し、固定weights/gainは変更しない。
+欠落、次元違い、非finiteな観測はfail-closedとする。観測値の代わりに0を補わない。
+
+1 planは1 simulatorと1 readerを所有する。step loopはstart/close各1回を担当する。
+`pipeline.run_once`を直接使うcallerはreaderのstart/closeを所有する。
+両入口は同じpipelineのMapping/context/command executionを通す。表示用annotationとpacingは別責務である。
 
 ### 意味と互換性
 
-`loadcell_endpoint_delta/v1`は1 sample当たりの位置増分であり、velocityへ読み替えない。
-Gamepadのvelocity、world/tool semanticsとは別の既存routeのまま扱う。
-zero sampleの目標は当該stepのmeasured current tipであり、初期tipへ戻さない。
-existing dedicated legacy smokeは挙動互換のため残し、連続入力の正本として扱わない。
-新しいruntime pathを操作手順から明示し、legacy helperの廃止や全API移行は混在させない。
+`loadcell_endpoint_delta/v1`は位置増分/sampleであり、velocityへ読み替えない。
+ゼロ入力は現在姿勢を保持し、固定した初期位置へ戻さない。
+Robot-ownedな既存local DLS policyとqpos feasibilityを再利用し、数値上限は緩めない。
+Mappingの要求は`mapped_endpoint_delta_m`、policy bound後は`endpoint_delta_requested_m`へ分けて記録する。
+`motion_policy_v1`がpolicy identity、endpoint norm上限、joint norm上限、FD幅、dampingを保持する。
+前者も後者も要求/予測側の値であり、post-stepの`actual_tip_delta_m`とは別である。
 
-Robot-ownedなmodel-aligned local motion generatorへ明示的`local_endpoint_delta`を渡す。
-位置増分にdtを掛けず、既存Jacobian/guardを再利用する。velocity経路と旧absolute IKは変更しない。
+従来のabsolute-target smokeは互換のため残すが、continuous routeの証拠とは扱わない。
+公開wire schema、物理evidence、既存Robot providerの許可境界は変更しない。
+統合CLI、bounded acquisition、protocol peer、contact E2Eは後続P2-P4で扱う。
 
 ### 必須検証
 
-正常7ch入力の複数sample、zero、各軸、明示7x3 weights、malformed / EOF cleanup、
-model生成1回、MuJoCo timeの累積、current tipの各step更新、selection不変、
-requested JointPositionCommandとmeasured qposの区別を検証する。
-既存Gamepad、replay、runtime ownership回帰を維持する。
+複数sample、zero、各軸、model生成1回、state/timeの累積、fixed parameters不変、malformed/EOF cleanupを確認する。
+同じsource/Mapping/route/configからのstep loopとrun_onceについて、実際のbackend requestを照合する。
+current-tip省略、観測失敗、route-context不一致、偽label、上限跨ぎ、guard rejectを含める。
+requested command、candidate prediction、post-step observationを別々にassertする。
+既存Gamepad world/tool、replay、R7-Gとarchitectureの回帰を維持する。
 
 ## P2: bounded acquisition / health
 

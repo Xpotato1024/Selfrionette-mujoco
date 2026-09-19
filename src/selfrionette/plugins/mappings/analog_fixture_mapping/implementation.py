@@ -11,7 +11,7 @@ from selfrionette.plugins.mappings._continuous_endpoint_velocity import (
     build_normalized_analog_fixture_intent,
 )
 from selfrionette.plugins.mappings._command_routes import (
-    joint_position_command_route,
+    local_endpoint_velocity_command_route,
 )
 from selfrionette.runtime.experiment.contracts import (
     ControlMappingPlugin,
@@ -232,7 +232,7 @@ ANALOG_FIXTURE_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(
     mapping_semantics_identity=ANALOG_FIXTURE_MAPPING_SEMANTICS_IDENTITY,
     command_semantics_routes=frozenset(
         {
-            joint_position_command_route(
+            local_endpoint_velocity_command_route(
                 route_identity=LOCAL_ENDPOINT_VELOCITY_TO_JOINT_POSITION_V1,
                 control_semantics_identity=ANALOG_FIXTURE_MAPPING_SEMANTICS_IDENTITY,
             )

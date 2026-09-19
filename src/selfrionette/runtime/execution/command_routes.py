@@ -6,11 +6,17 @@ routeはcommand型とprovider capabilityをside effect前に検証し、unsuppor
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
+from math import isfinite
+
+from selfrionette.motion.base import EndpointDeltaMotionGenerator, MotionGenerator
+from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local_motion_metadata
 from typing import TYPE_CHECKING, ClassVar, Protocol, runtime_checkable
 
 from selfrionette.runtime.composition.robot_bundle import (
     RobotCommandSemanticProvider,
+    EndpointCommandProvider, EndpointPoseProvider, EndpointPoseObservation,
 )
 from selfrionette.runtime.control.input_source_state import RuntimeInputSourceState
 from selfrionette.runtime.experiment.contracts import (
@@ -53,6 +59,44 @@ class CommandExecutionBinding(Protocol):
         source_state: RuntimeInputSourceState,
         pipeline: ControlMappedRuntimePipeline,
     ) -> RuntimeInputSafetyResult: ...
+
+
+@runtime_checkable
+class RouteMotionGeneratorFactory(Protocol):
+    """resolved routeがRobot-owned generatorの構築を選ぶoptional capability。"""
+
+    def build_motion_generator(self, provider: EndpointCommandProvider) -> MotionGenerator: ...
+
+
+@runtime_checkable
+class MappingRuntimeContextBinding(Protocol):
+    """固定parameterから分離した同stepの観測contextをMappingへ渡す契約。"""
+
+    mapping_context_parameters: frozenset[str]
+
+    def mapping_parameters(self, parameters: Mapping[str, object], *, state: MuJoCoState,
+                           provider: EndpointPoseProvider) -> Mapping[str, object]: ...
+
+
+@runtime_checkable
+class RuntimeIntentPreparation(Protocol):
+    """実行入口によらずroute-ownedな座標解決を行う契約。"""
+
+    def prepare_intent(self, intent: InputIntent, *, dt_s: float, state: MuJoCoState,
+                       provider: EndpointPoseProvider | None) -> InputIntent: ...
+
+
+def build_route_motion_generator(binding: CommandExecutionBinding,
+                                 provider: EndpointCommandProvider | None,
+                                 fallback: Callable[[], MotionGenerator]) -> MotionGenerator | None:
+    """typed routeの構築契約を優先し、旧target/replayだけ明示fallbackを使う。"""
+    if not binding.requires_motion_generator:
+        return None
+    if isinstance(binding, RouteMotionGeneratorFactory):
+        if provider is None:
+            raise ValueError("selected route requires an endpoint command provider")
+        return binding.build_motion_generator(provider)
+    return fallback()
 
 
 @runtime_checkable
@@ -219,6 +263,66 @@ class JointPositionCommandExecutionBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class LocalEndpointVelocityCommandExecutionBinding(JointPositionCommandExecutionBinding):
+    """速度経路のgeneratorとworld/tool解決をsourceではなくrouteが所有する。"""
+
+    def build_motion_generator(self, provider: EndpointCommandProvider) -> MotionGenerator:
+        return provider.build_local_endpoint_motion_generator()
+
+    def prepare_intent(self, intent: InputIntent, *, dt_s: float, state: MuJoCoState,
+                       provider: EndpointPoseProvider | None) -> InputIntent:
+        metadata = dict(intent.metadata)
+        metadata["intent_kind"] = "local_endpoint_velocity"
+        # tool姿勢は入力metadataではなく同stepのRobot providerをauthorityにする。
+        metadata["current_tip_orientation_wxyz"] = None
+        if provider is not None:
+            observation = provider.observe_endpoint_pose(state)
+            if not isinstance(observation, EndpointPoseObservation):
+                raise TypeError("endpoint pose provider returned an invalid observation")
+            metadata["current_tip_orientation_wxyz"] = observation.quaternion_wxyz
+        return replace(intent, metadata=build_viewer_local_motion_metadata(metadata, dt_s=dt_s))
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointDeltaCommandExecutionBinding(JointPositionCommandExecutionBinding):
+    """位置増分/sampleを明示methodで実行し、観測contextを同じsnapshotへ結ぶ。"""
+
+    mapping_context_parameters: ClassVar[frozenset[str]] = frozenset({"current_tip_position_m"})
+
+    def build_motion_generator(self, provider: EndpointCommandProvider) -> MotionGenerator:
+        generator = provider.build_local_endpoint_motion_generator()
+        if not isinstance(generator, EndpointDeltaMotionGenerator):
+            raise TypeError("endpoint delta route requires an explicit delta motion generator")
+        return generator
+
+    def mapping_parameters(self, parameters: Mapping[str, object], *, state: MuJoCoState,
+                           provider: EndpointPoseProvider) -> Mapping[str, object]:
+        observation = provider.observe_endpoint_pose(state)
+        position = observation.position_m if isinstance(observation, EndpointPoseObservation) else None
+        if position is None or len(position) != 3 or any(
+            isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value)
+            for value in position
+        ):
+            raise ValueError("measured endpoint context is unavailable or invalid")
+        return {**parameters, "current_tip_position_m": tuple(position)}
+
+    def execute(self, intent: InputIntent, *, dt_s: float, pre_step_state: MuJoCoState,
+                source_state: RuntimeInputSourceState,
+                pipeline: ControlMappedRuntimePipeline) -> RuntimeInputSafetyResult:
+        generator = pipeline.motion_generator
+        if not isinstance(generator, EndpointDeltaMotionGenerator):
+            raise TypeError("endpoint delta route requires an explicit delta motion generator")
+        if intent.metadata.get("control_frame", "world") != "world":
+            raise ValueError("endpoint delta route requires world frame")
+        generator.set_current_qpos_rad(tuple(pre_step_state.qpos))
+        command = generator.update_delta(
+            replace(intent, metadata={**intent.metadata, "control_frame": "world"}), dt_s
+        )
+        return self.execute_motion_command(command, pre_step_state=pre_step_state,
+                                           source_state=source_state, pipeline=pipeline)
+
+
+@dataclass(frozen=True, slots=True)
 class NativeEndpointVelocityCommandExecutionBinding:
     """local frameのendpoint velocity commandを対応providerへ渡すbinding。
 
@@ -320,6 +424,28 @@ class JointPositionCommandRouteExecutionStrategy:
 
 
 @dataclass(frozen=True, slots=True)
+class LocalEndpointVelocityCommandRouteExecutionStrategy(JointPositionCommandRouteExecutionStrategy):
+    """joint-position providerへ結ぶ速度変換strategy。"""
+
+    def bind(self, provider: object) -> LocalEndpointVelocityCommandExecutionBinding:
+        typed = _validate_provider(provider, semantic_identity=self.robot_command_semantics_identity,
+                                   command_type=JointPositionCommand)
+        return LocalEndpointVelocityCommandExecutionBinding(
+            self.route_identity, self.control_semantics_identity, self.robot_command_semantics_identity, typed)
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointDeltaCommandRouteExecutionStrategy(JointPositionCommandRouteExecutionStrategy):
+    """joint-position providerへ結ぶ位置増分変換strategy。"""
+
+    def bind(self, provider: object) -> EndpointDeltaCommandExecutionBinding:
+        typed = _validate_provider(provider, semantic_identity=self.robot_command_semantics_identity,
+                                   command_type=JointPositionCommand)
+        return EndpointDeltaCommandExecutionBinding(
+            self.route_identity, self.control_semantics_identity, self.robot_command_semantics_identity, typed)
+
+
+@dataclass(frozen=True, slots=True)
 class NativeEndpointVelocityCommandRouteExecutionStrategy:
     """endpoint-velocity passthrough routeをcompatible providerへbindするstrategy。"""
 
@@ -346,6 +472,14 @@ class NativeEndpointVelocityCommandRouteExecutionStrategy:
 
 __all__ = [
     "CommandExecutionBinding",
+    "RouteMotionGeneratorFactory",
+    "MappingRuntimeContextBinding",
+    "RuntimeIntentPreparation",
+    "build_route_motion_generator",
+    "EndpointDeltaCommandExecutionBinding",
+    "EndpointDeltaCommandRouteExecutionStrategy",
+    "LocalEndpointVelocityCommandExecutionBinding",
+    "LocalEndpointVelocityCommandRouteExecutionStrategy",
     "JointPositionCommandExecutionBinding",
     "JointPositionCommandRouteExecutionStrategy",
     "MotionCommandExecutionBinding",

@@ -601,3 +601,21 @@ Control Mappingはaxis / sign / gain / deadzone / button supplement / control fr
 所有する。Mapping parameterの解決順位は
 `explicit runtime mapping parameters > Mapping plugin defaults`とし、source instance、frame metadata、
 source registrationから投影しない。
+
+### 実行入口に依存しないlocal route
+
+`local_endpoint_velocity_to_joint_position/v1`と`endpoint_delta_to_joint_position/v1`は
+それぞれのtyped strategy/bindingがlocal motion generatorと変換APIを選ぶ。
+velocityはdt積分、deltaはworld位置増分/sampleであり、入力metadataのlabelで選び直さない。
+`ControlMappedRuntimePipeline.map_input`と`execute_intent`をstep loop / run_onceから共用する。
+source取得、表示用annotation、pacing、caller-owned lifecycleまでを同一APIへ詰め込まない。
+
+Mappingが宣言する`runtime_context_parameters`はroute側の供給集合と完全一致させる。
+continuous selectionの`normalize_runtime_parameters`はこの項目だけを後段供給可能にする。
+固定configと明示されたcontextは選択時に検証し、不正値を観測値で隠さない。
+完全なpure mapping向け`normalize_parameters`と正式manifestの既存検証は維持する。
+新しいpartial-context contractをformal experiment manifestへ暗黙適用しない。
+
+構築・context供給・world/tool解決のoptional capabilityは、既存routeを壊さず必要な処理を
+共有するためのものに限定する。新しいregistry、独立pipeline、汎用middlewareは設けない。
+legacy replay/absolute-targetは従来の明示builder契約を維持する。

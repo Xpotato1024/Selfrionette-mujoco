@@ -23,6 +23,7 @@ from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
 
 if TYPE_CHECKING:
+    from selfrionette.runtime.composition.robot_bundle import EndpointPoseProvider
     from selfrionette.runtime.execution.command_routes import (
         CommandExecutionBinding,
     )
@@ -47,6 +48,7 @@ class ControlMappedRuntimePipeline:
     qpos_feasibility_guard: QposFeasibilityGuard | None = None
     state_metadata: Mapping[str, object] | None = None
     robot_profile_metadata: Mapping[str, object] | None = None
+    endpoint_pose_provider: EndpointPoseProvider | None = None
 
     def __post_init__(self) -> None:
         from selfrionette.runtime.execution.command_routes import (
@@ -71,16 +73,20 @@ class ControlMappedRuntimePipeline:
                 "runtime pipeline command route/execution binding mismatch"
             )
 
-    def map_input(self, frame: RawInputFrame) -> InputIntent:
-        mapping_input = (
-            self.mapping_input_adapter(frame)
-            if self.mapping_input_adapter is not None
-            else frame
-        )
-        intent = self.control_mapping.strategy.map_input(
-            mapping_input,
-            self.control_mapping_parameters,
-        )
+    def map_input(self, frame: RawInputFrame, *, pre_step_state: MuJoCoState | None = None,
+                  endpoint_pose_provider: EndpointPoseProvider | None = None) -> InputIntent:
+        """固定Mappingと同stepのroute-owned観測contextから入力を変換する。"""
+        from selfrionette.runtime.execution.command_routes import MappingRuntimeContextBinding
+
+        parameters = self.control_mapping_parameters
+        if isinstance(self.command_execution, MappingRuntimeContextBinding):
+            provider = endpoint_pose_provider or self.endpoint_pose_provider
+            if provider is None:
+                raise ValueError("measured endpoint context requires an endpoint pose provider")
+            state = self.simulator.snapshot() if pre_step_state is None else pre_step_state
+            parameters = self.command_execution.mapping_parameters(parameters, state=state, provider=provider)
+        mapping_input = self.mapping_input_adapter(frame) if self.mapping_input_adapter is not None else frame
+        intent = self.control_mapping.strategy.map_input(mapping_input, parameters)
         if not isinstance(intent, InputIntent):
             raise TypeError("control mapping strategy must return a typed InputIntent")
         return intent
@@ -92,7 +98,15 @@ class ControlMappedRuntimePipeline:
         dt_s: float,
         pre_step_state: MuJoCoState,
         source_state: RuntimeInputSourceState,
+        endpoint_pose_provider: EndpointPoseProvider | None = None,
     ) -> RuntimeInputSafetyResult:
+        from selfrionette.runtime.execution.command_routes import RuntimeIntentPreparation
+
+        if isinstance(self.command_execution, RuntimeIntentPreparation):
+            intent = self.command_execution.prepare_intent(
+                intent, dt_s=dt_s, state=pre_step_state,
+                provider=endpoint_pose_provider or self.endpoint_pose_provider,
+            )
         return self.command_execution.execute(
             intent,
             dt_s=dt_s,
@@ -129,8 +143,8 @@ class ControlMappedRuntimePipeline:
     async def run_once(self, dt_s: float | None = None) -> MuJoCoState:
         dt = self.config.dt_s if dt_s is None else dt_s
         frame = self.input_source.read_frame()
-        intent = self.map_input(frame)
         pre_step_state = self.simulator.snapshot()
+        intent = self.map_input(frame, pre_step_state=pre_step_state)
         source_state = build_runtime_input_source_state_from_metadata(
             frame.metadata,
             default_source_kind=frame.source,

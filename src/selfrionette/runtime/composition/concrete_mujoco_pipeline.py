@@ -17,6 +17,7 @@ from selfrionette.runtime.composition.robot_resolution import (
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.evaluation.endpoint_metrics import build_endpoint_evaluation_state_publisher
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from selfrionette.runtime.execution.command_routes import build_route_motion_generator
 from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
 from selfrionette.runtime.experiment.contracts import VersionedIdentity
@@ -140,6 +141,14 @@ def build_concrete_mujoco_pipeline(
     resolved_model_path = _resolve_model_path(
         model_path=model_path, config=runtime_config, robot_bundle=robot_bundle
     )
+    motion_generator = build_route_motion_generator(
+        command_execution.binding, endpoint_command_provider,
+        lambda: endpoint_command_provider.build_target_motion_generator(
+            seed_joint_angles_rad=seed_joint_angles_rad,
+            discontinuity_threshold_rad=discontinuity_threshold_rad,
+            discontinuity_threshold_label=discontinuity_threshold_label,
+        ),
+    )
     simulator = plugin.build_simulator(
         model_path=resolved_model_path,
         initial_keyframe_name=initial_state.source_id,
@@ -157,15 +166,8 @@ def build_concrete_mujoco_pipeline(
             else control_mapping_parameters
         ),
         mapping_input_adapter=mapping_input_adapter,
-        motion_generator=(
-            endpoint_command_provider.build_target_motion_generator(
-                seed_joint_angles_rad=seed_joint_angles_rad,
-                discontinuity_threshold_rad=discontinuity_threshold_rad,
-                discontinuity_threshold_label=discontinuity_threshold_label,
-            )
-            if endpoint_command_provider is not None
-            else None
-        ),
+        motion_generator=motion_generator,
+        endpoint_pose_provider=endpoint_pose_provider,
         simulator=simulator,
         publisher=build_endpoint_evaluation_state_publisher(
             publisher,

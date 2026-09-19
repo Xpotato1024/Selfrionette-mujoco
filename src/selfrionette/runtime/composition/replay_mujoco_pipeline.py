@@ -9,6 +9,7 @@ from selfrionette.motion import InputIntentMotionGenerator
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.robot_bundle import (
     QPOS_FEASIBILITY_V1,
+    ENDPOINT_COMMAND_V1, ENDPOINT_POSE_V1,
     RESET_INITIAL_STATE_V1,
     QposFeasibilityProvider,
     ResetInitialStateProvider,
@@ -21,6 +22,7 @@ from selfrionette.runtime.composition.robot_resolution import (
     validate_production_robot_selection_consistency,
 )
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from selfrionette.runtime.execution.command_routes import RouteMotionGeneratorFactory, build_route_motion_generator
 from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import (
     ControlMappingPlugin,
@@ -101,6 +103,12 @@ def build_replay_mujoco_pipeline(
     )
     state_publisher = _ReplayCompatibilityStatePublisher() if publisher is None else publisher
     plugin = robot_bundle.runtime_plugin
+    local_route = isinstance(command_execution.binding, RouteMotionGeneratorFactory)
+    endpoint_provider = robot_bundle.provider(ENDPOINT_COMMAND_V1) if local_route else None
+    pose_provider = robot_bundle.provider(ENDPOINT_POSE_V1) if local_route else None
+    motion_generator = build_route_motion_generator(
+        command_execution.binding, endpoint_provider, InputIntentMotionGenerator
+    )
     simulator = plugin.build_simulator(
         model_path=resolved_model_path,
         initial_keyframe_name=initial_state.source_id,
@@ -121,11 +129,8 @@ def build_replay_mujoco_pipeline(
             else control_mapping_parameters
         ),
         mapping_input_adapter=mapping_input_adapter,
-        motion_generator=(
-            InputIntentMotionGenerator()
-            if command_execution.binding.requires_motion_generator
-            else None
-        ),
+        motion_generator=motion_generator,
+        endpoint_pose_provider=pose_provider,
         simulator=simulator,
         publisher=state_publisher,
         command_semantics_route=command_execution.route,

@@ -118,7 +118,7 @@ def _normalize_control_mapping_parameters(
     if control_mapping is None:
         return MappingProxyType({})
 
-    return control_mapping.normalize_parameters(selected_parameters)
+    return control_mapping.normalize_runtime_parameters(selected_parameters)
 
 
 def _resolve_control_mapping_parameters(

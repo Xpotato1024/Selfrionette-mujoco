@@ -30,6 +30,7 @@ from selfrionette.runtime.experiment.input_source import InputSourcePlugin
 from selfrionette.runtime.experiment.registry import VersionedPluginRegistry
 from selfrionette.runtime.execution.command_routes import (
     CommandExecutionBinding,
+    MappingRuntimeContextBinding,
     ResolvedCommandExecution,
 )
 from selfrionette.runtime.composition.robot_bundle import RobotBundle
@@ -265,6 +266,13 @@ def resolve_command_execution(
             "command route execution strategy must return a "
             "CommandExecutionBinding"
         )
+    supplied_context = (
+        binding.mapping_context_parameters
+        if isinstance(binding, MappingRuntimeContextBinding)
+        else frozenset()
+    )
+    if mapping.runtime_context_parameters != supplied_context:
+        raise ValueError("Mapping/runtime route context declaration mismatch")
     return ResolvedCommandExecution(route=route, binding=binding)
 
 

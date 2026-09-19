@@ -53,6 +53,7 @@ from selfrionette.runtime.evaluation.r7_g_free_space import (
     build_r7_g_free_space_manifest_pair,
 )
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from selfrionette.runtime.execution.command_routes import build_route_motion_generator
 from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import (
     EvidenceStatus,
@@ -325,11 +326,11 @@ def _assemble_condition(readiness: EvaluationReadiness) -> _AssembledCondition:
         control_mapping=composition.control_mapping,
         control_mapping_parameters=mapping_parameters,
         mapping_input_adapter=composition.input_source.mapping_input_adapter,
-        motion_generator=(
-            endpoint_command_provider.build_local_endpoint_motion_generator()
-            if endpoint_command_provider is not None
-            else None
+        motion_generator=build_route_motion_generator(
+            command_execution.binding, endpoint_command_provider,
+            lambda: endpoint_command_provider.build_local_endpoint_motion_generator(),
         ),
+        endpoint_pose_provider=endpoint_pose_provider,
         simulator=simulator,
         publisher=_NullStatePublisher(),
         qpos_feasibility_guard=qpos_feasibility_provider.build_guard(

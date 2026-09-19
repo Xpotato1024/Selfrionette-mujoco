@@ -201,6 +201,43 @@ class LocalEndpointMotionGenerator:
         )
 
     def update(self, intent: InputIntent, dt_s: float) -> MotionCommand:
+        """既存velocity入力をdtで積分する。metadata labelは方式を変更しない。"""
+        return self._update(intent, dt_s, delta_input=False)
+
+    def update_delta(self, intent: InputIntent, dt_s: float) -> MotionCommand:
+        """明示world位置増分を既存policyへ通し、要求と制約後の値を分離する。"""
+        if isinstance(dt_s, bool) or not isfinite(dt_s) or dt_s <= 0.0:
+            raise ValueError("dt_s must be finite and positive")
+        if intent.metadata.get("control_frame") != "world":
+            raise ValueError("endpoint delta input requires explicit world frame")
+        requested = _resolve_vector3_from_intent(intent, key="endpoint_delta_m")
+        if requested is None:
+            raise ValueError("endpoint delta input requires endpoint_delta_m")
+        command = self._update(intent, dt_s, delta_input=True)
+        metadata = dict(command.metadata)
+        for key in (
+            "axis_values", "local_endpoint_speed_m_s", "local_endpoint_velocity_frame",
+            "local_endpoint_velocity_m_s", "resolved_world_endpoint_velocity_m_s",
+            "endpoint_velocity_m_s", "endpoint_velocity_frame",
+        ):
+            metadata.pop(key, None)
+        metadata.update({
+            "intent_kind": "local_endpoint_delta",
+            "motion_input_semantics": "endpoint_delta_per_sample/v1",
+            "mapped_endpoint_delta_m": requested,
+            "motion_policy_v1": {
+                "identity": "local_endpoint_dls_bounds/v1",
+                "endpoint_model": self._endpoint_model,
+                "max_endpoint_delta_norm_m": self._max_endpoint_delta_per_tick_m,
+                "max_qpos_delta_norm_rad": self._max_qpos_delta_norm_rad,
+                "fd_epsilon_rad": self._fd_epsilon_rad,
+                "damping": self._damping,
+            },
+        })
+        return MotionCommand(timestamp_s=command.timestamp_s, target=command.target,
+                             joint=command.joint, metadata=metadata)
+
+    def _update(self, intent: InputIntent, dt_s: float, *, delta_input: bool) -> MotionCommand:
         if self._current_qpos_rad is None:
             return MotionCommand(
                 timestamp_s=intent.timestamp_s,
@@ -230,30 +267,36 @@ class LocalEndpointMotionGenerator:
                 endpoint_delta_requested_m=(0.0, 0.0, 0.0),
             )
 
-        axis_values = _resolve_axis_values(intent)
-        control_frame = _resolve_control_frame(intent)
-        if (
-            control_frame == "tool"
-            and intent.metadata.get("control_frame_resolution_status") != "tool_orientation_resolved"
-        ):
-            return self._build_holding_command(
-                intent=intent,
-                reason=str(intent.metadata.get("control_frame_resolution_reason", "tool_orientation_unavailable")),
-                qpos_before_rad=current_qpos_rad,
-                endpoint_delta_requested_m=(0.0, 0.0, 0.0),
-            )
-        local_endpoint_speed_m_s = float(intent.metadata.get("local_endpoint_speed_m_s", 0.0) or 0.0)
-        local_endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="local_endpoint_velocity_m_s")
-        endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="resolved_world_endpoint_velocity_m_s")
-        if endpoint_velocity_m_s is None:
-            endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="endpoint_velocity_m_s")
-        if local_endpoint_velocity_m_s is None:
-            local_endpoint_velocity_m_s = endpoint_velocity_m_s
-        if local_endpoint_velocity_m_s is None:
-            local_endpoint_velocity_m_s = tuple(component * local_endpoint_speed_m_s for component in axis_values)
-        if endpoint_velocity_m_s is None:
-            endpoint_velocity_m_s = local_endpoint_velocity_m_s
-        delta_input = intent.metadata.get("intent_kind") == "local_endpoint_delta"
+        if delta_input:
+            axis_values = (0.0, 0.0, 0.0)
+            control_frame = "world"
+            local_endpoint_speed_m_s = 0.0
+            local_endpoint_velocity_m_s = (0.0, 0.0, 0.0)
+            endpoint_velocity_m_s = (0.0, 0.0, 0.0)
+        else:
+            axis_values = _resolve_axis_values(intent)
+            control_frame = _resolve_control_frame(intent)
+            if (
+                control_frame == "tool"
+                and intent.metadata.get("control_frame_resolution_status") != "tool_orientation_resolved"
+            ):
+                return self._build_holding_command(
+                    intent=intent,
+                    reason=str(intent.metadata.get("control_frame_resolution_reason", "tool_orientation_unavailable")),
+                    qpos_before_rad=current_qpos_rad,
+                    endpoint_delta_requested_m=(0.0, 0.0, 0.0),
+                )
+            local_endpoint_speed_m_s = float(intent.metadata.get("local_endpoint_speed_m_s", 0.0) or 0.0)
+            local_endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="local_endpoint_velocity_m_s")
+            endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="resolved_world_endpoint_velocity_m_s")
+            if endpoint_velocity_m_s is None:
+                endpoint_velocity_m_s = _resolve_vector3_from_intent(intent, key="endpoint_velocity_m_s")
+            if local_endpoint_velocity_m_s is None:
+                local_endpoint_velocity_m_s = endpoint_velocity_m_s
+            if local_endpoint_velocity_m_s is None:
+                local_endpoint_velocity_m_s = tuple(component * local_endpoint_speed_m_s for component in axis_values)
+            if endpoint_velocity_m_s is None:
+                endpoint_velocity_m_s = local_endpoint_velocity_m_s
         if delta_input:
             # 位置増分はsampleごとのworld変位であり、dtを掛ける速度入力ではない。
             if intent.metadata.get("control_frame") != "world":
@@ -360,15 +403,6 @@ class LocalEndpointMotionGenerator:
             "desired_endpoint_m": desired_endpoint_m,
         }
 
-        if delta_input:
-            # raw channel値を速度軸と偽って記録しない。位置増分の意味をそのまま保持する。
-            for key in (
-                "axis_values", "local_endpoint_speed_m_s", "local_endpoint_velocity_frame",
-                "local_endpoint_velocity_m_s", "resolved_world_endpoint_velocity_m_s",
-                "endpoint_velocity_m_s", "endpoint_velocity_frame",
-            ):
-                metadata.pop(key, None)
-            metadata["motion_input_semantics"] = "endpoint_delta_per_sample/v1"
         return MotionCommand(
             timestamp_s=intent.timestamp_s,
             joint=JointCommand(joint_angles_rad=candidate_qpos_rad),

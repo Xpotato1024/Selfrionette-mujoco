@@ -9,7 +9,7 @@ from types import MappingProxyType
 from typing import Protocol, cast, runtime_checkable
 
 from selfrionette.plugins.mappings._command_routes import (
-    joint_position_command_route,
+    endpoint_delta_command_route,
 )
 from selfrionette.runtime.experiment.contracts import (
     ControlMappingPlugin,
@@ -252,6 +252,7 @@ def _current_tip_from_parameters(parameters: Mapping[str, object]) -> Vector3:
 
 def normalize_loadcell_endpoint_mapping_parameters(
     parameters: Mapping[str, object],
+    *, allow_missing_context: bool = False,
 ) -> Mapping[str, object]:
     """Validate and canonicalize loadcell mapping parameters before source use."""
 
@@ -264,12 +265,15 @@ def normalize_loadcell_endpoint_mapping_parameters(
         normalized_config = LoadcellEndpointMappingConfig(**dict(mapping_config))
     else:
         raise ValueError("loadcell mapping requires mapping_config")
-    return MappingProxyType(
-        {
-            "mapping_config": normalized_config,
-            "current_tip_position_m": _current_tip_from_parameters(parameters),
-        }
-    )
+    normalized = {"mapping_config": normalized_config}
+    if not allow_missing_context or "current_tip_position_m" in parameters:
+        normalized["current_tip_position_m"] = _current_tip_from_parameters(parameters)
+    return MappingProxyType(normalized)
+
+
+def normalize_loadcell_runtime_parameters(parameters: Mapping[str, object]) -> Mapping[str, object]:
+    """runtimeが後段で供給する観測位置を、任意のplaceholderで補完しない。"""
+    return normalize_loadcell_endpoint_mapping_parameters(parameters, allow_missing_context=True)
 
 
 class LoadcellEndpointMappingStrategy:
@@ -308,13 +312,15 @@ LOADCELL_ENDPOINT_MAPPING_PLUGIN = ControlMappingPlugin(
     mapping_semantics_identity=LOADCELL_MAPPING_SEMANTICS_IDENTITY,
     command_semantics_routes=frozenset(
         {
-            joint_position_command_route(
+            endpoint_delta_command_route(
                 route_identity=ENDPOINT_DELTA_TO_JOINT_POSITION_V1,
                 control_semantics_identity=LOADCELL_MAPPING_SEMANTICS_IDENTITY,
             )
         }
     ),
     parameter_normalizer=normalize_loadcell_endpoint_mapping_parameters,
+    runtime_context_parameters=frozenset({"current_tip_position_m"}),
+    runtime_parameter_normalizer=normalize_loadcell_runtime_parameters,
 )
 
 

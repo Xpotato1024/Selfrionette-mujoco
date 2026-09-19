@@ -364,7 +364,7 @@ Runtimeが構成する`EvaluatedJointRoute`はendpoint設定とRobot-owned joint
 
 ## 実機前の連続入力検証
 
-位置増分のsource execution adapterは、同じMuJoCo snapshotのmeasured endpointを
-そのstepのMapping contextへ渡す。明示readerはconcrete pipelineへ直接注入し、
+位置増分のresolved command routeは、同じMuJoCo snapshotのmeasured endpointを
+そのstepのMapping contextへ渡す。source adapterは数式の切替authorityではない。明示readerはconcrete pipelineへ直接注入し、
 一時replay frameや別modelで取得経路を置換しない。実行側のcontextは固定configと分離する。
 設計正本は`docs/contracts/pre-hardware-signal-emulation.md`とする。
