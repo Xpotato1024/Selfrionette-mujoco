@@ -17,10 +17,11 @@ from selfrionette.runtime.composition.robot_resolution import (
 from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.evaluation.endpoint_metrics import build_endpoint_evaluation_state_publisher
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from selfrionette.runtime.execution.command_routes import build_route_motion_generator
 from selfrionette.runtime.experiment.composition import resolve_command_execution
 from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
 from selfrionette.runtime.experiment.contracts import VersionedIdentity
-from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
+from selfrionette.runtime.experiment.input_source import HealthyInputSource, InputSourceMappingAdapterContract
 from selfrionette.runtime.composition.robot_bundle import (
     ENDPOINT_COMMAND_V1,
     ENDPOINT_POSE_V1,
@@ -74,8 +75,19 @@ def build_concrete_mujoco_pipeline(
     control_mapping: ControlMappingPlugin = REPLAY_CONTROL_MAPPING_PLUGIN,
     control_mapping_parameters: Mapping[str, object] | None = None,
     mapping_input_adapter: InputSourceMappingAdapterContract | None = None,
+    input_source: HealthyInputSource | None = None,
     command_semantics_route_selection: VersionedIdentity | None = None,
 ) -> ControlMappedRuntimePipeline:
+    """明示readerまたはreplay framesからRobot-ownedな単一simulationを組み立てる。
+
+    readerを指定した場合、そのlifecycleは呼出側runtimeが所有する。ここではstart/readせず、
+    不要なreplay sourceやダミーframeを生成しない。二つの取得経路の同時指定は拒否する。
+    """
+    if input_source is not None:
+        if not isinstance(input_source, HealthyInputSource):
+            raise TypeError("input_source must provide the typed source and health contract")
+        if frames:
+            raise ValueError("input_source and replay frames cannot be combined")
     runtime_config = RuntimeConfig(robot_profile_id="fast_arm") if config is None else config
     if runtime_config.robot_profile_id is None:
         raise ValueError("production concrete composition requires robot_profile_id")
@@ -123,9 +135,19 @@ def build_concrete_mujoco_pipeline(
     initial_state = initial_state_provider.resolve_initial_state()
     if initial_state.source_kind != "named_keyframe":
         raise ValueError("production concrete composition requires a named-keyframe initial state")
-    replay_frames = tuple(frames) if frames is not None else (_default_concrete_frame(),)
+    if input_source is None:
+        replay_frames = tuple(frames) if frames is not None else (_default_concrete_frame(),)
+        input_source = ReplayInputSource(replay_frames, loop=loop)
     resolved_model_path = _resolve_model_path(
         model_path=model_path, config=runtime_config, robot_bundle=robot_bundle
+    )
+    motion_generator = build_route_motion_generator(
+        command_execution.binding, endpoint_command_provider,
+        lambda: endpoint_command_provider.build_target_motion_generator(
+            seed_joint_angles_rad=seed_joint_angles_rad,
+            discontinuity_threshold_rad=discontinuity_threshold_rad,
+            discontinuity_threshold_label=discontinuity_threshold_label,
+        ),
     )
     simulator = plugin.build_simulator(
         model_path=resolved_model_path,
@@ -136,7 +158,7 @@ def build_concrete_mujoco_pipeline(
 
     return ControlMappedRuntimePipeline(
         config=runtime_config,
-        input_source=ReplayInputSource(replay_frames, loop=loop),
+        input_source=input_source,
         control_mapping=control_mapping,
         control_mapping_parameters=(
             {}
@@ -144,15 +166,8 @@ def build_concrete_mujoco_pipeline(
             else control_mapping_parameters
         ),
         mapping_input_adapter=mapping_input_adapter,
-        motion_generator=(
-            endpoint_command_provider.build_target_motion_generator(
-                seed_joint_angles_rad=seed_joint_angles_rad,
-                discontinuity_threshold_rad=discontinuity_threshold_rad,
-                discontinuity_threshold_label=discontinuity_threshold_label,
-            )
-            if endpoint_command_provider is not None
-            else None
-        ),
+        motion_generator=motion_generator,
+        endpoint_pose_provider=endpoint_pose_provider,
         simulator=simulator,
         publisher=build_endpoint_evaluation_state_publisher(
             publisher,

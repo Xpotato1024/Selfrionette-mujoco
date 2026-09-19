@@ -28,6 +28,7 @@ class RuntimeInputSourceExecutionAdapter:
         return self.semantics in (
             InputSourceExecutionSemantics.TARGET_METADATA,
             InputSourceExecutionSemantics.VIEWER_LOCAL_ENDPOINT_COMPATIBILITY,
+            InputSourceExecutionSemantics.LOADCELL_SOURCE,
         )
 
     @property

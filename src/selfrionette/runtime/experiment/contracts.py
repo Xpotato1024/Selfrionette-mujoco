@@ -7,7 +7,7 @@ role、evidence、command routeの整合だけをside effect前に確定する�
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from types import MappingProxyType
 from typing import Protocol, runtime_checkable
@@ -578,6 +578,8 @@ class ControlMappingPlugin:
         default_factory=frozenset
     )
     parameter_normalizer: Callable[[Mapping[str, object]], Mapping[str, object]] | None = None
+    runtime_context_parameters: frozenset[str] = frozenset()
+    runtime_parameter_normalizer: Callable[[Mapping[str, object]], Mapping[str, object]] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.strategy, ControlMappingStrategy):
@@ -627,6 +629,16 @@ class ControlMappingPlugin:
         object.__setattr__(self, "command_semantics_routes", routes)
         if self.parameter_normalizer is not None and not callable(self.parameter_normalizer):
             raise TypeError("control mapping parameter_normalizer must be callable")
+        if isinstance(self.runtime_context_parameters, (str, bytes)):
+            raise TypeError("runtime context parameters must be a collection of field names")
+        context = frozenset(self.runtime_context_parameters)
+        if any(not isinstance(name, str) or not name for name in context):
+            raise TypeError("runtime context parameters must contain non-empty field names")
+        if not context.issubset({item.name for item in self.parameter_contract.fields}):
+            raise ValueError("runtime context must name declared mapping parameters")
+        object.__setattr__(self, "runtime_context_parameters", context)
+        if self.runtime_parameter_normalizer is not None and not callable(self.runtime_parameter_normalizer):
+            raise TypeError("runtime_parameter_normalizer must be callable")
 
     def resolve_command_semantics_route(
         self,
@@ -671,6 +683,24 @@ class ControlMappingPlugin:
         if not isinstance(normalized, Mapping):
             raise TypeError("control mapping parameter_normalizer must return a mapping")
         self.parameter_contract.validate(normalized)
+        return MappingProxyType(dict(sorted(normalized.items())))
+
+    def normalize_runtime_parameters(self, parameters: Mapping[str, object]) -> Mapping[str, object]:
+        """宣言された観測contextだけを後段供給可能にし、固定configは通常どおり検証する。"""
+        if not self.runtime_context_parameters:
+            return self.normalize_parameters(parameters)
+        if not isinstance(parameters, Mapping):
+            raise TypeError("control mapping parameters must use a mapping")
+        contract = ParameterContract(tuple(
+            replace(item, required=False) if item.name in self.runtime_context_parameters else item
+            for item in self.parameter_contract.fields
+        ))
+        contract.validate(parameters)
+        normalizer = self.runtime_parameter_normalizer or self.parameter_normalizer
+        normalized = dict(parameters) if normalizer is None else normalizer(parameters)
+        if not isinstance(normalized, Mapping):
+            raise TypeError("runtime parameter normalizer must return a mapping")
+        contract.validate(normalized)
         return MappingProxyType(dict(sorted(normalized.items())))
 
     def resolve_control_frame(self, parameters: Mapping[str, object]) -> str | None:

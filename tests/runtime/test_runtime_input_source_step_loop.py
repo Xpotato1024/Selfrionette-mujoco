@@ -628,10 +628,13 @@ def test_runtime_step_loop_holds_when_tool_orientation_is_unavailable(monkeypatc
     viewer_input_source, plan = _build_plan(clock)
     initial_state = plan.pipeline.simulator.snapshot()
 
+    # 観測ownerをfault injectionする。旧step-loop内部wrapperへの依存を除く。
+    from dataclasses import replace as replace_observation
+    provider_type = type(plan.endpoint_pose_provider)
+    observe = provider_type.observe_endpoint_pose
     monkeypatch.setattr(
-        input_step_loop,
-        "_extract_endpoint_orientation_wxyz_from_state",
-        lambda state, plugin: None,
+        provider_type, "observe_endpoint_pose",
+        lambda provider, state: replace_observation(observe(provider, state), quaternion_wxyz=None),
     )
     ingest_viewer_control_message(
         viewer_input_source,
@@ -666,10 +669,13 @@ def test_runtime_step_loop_converts_scalar_tool_orientation_to_safe_hold(monkeyp
     viewer_input_source, plan = _build_plan(clock)
     initial_state = plan.pipeline.simulator.snapshot()
 
+    # 観測ownerをfault injectionする。旧step-loop内部wrapperへの依存を除く。
+    from dataclasses import replace as replace_observation
+    provider_type = type(plan.endpoint_pose_provider)
+    observe = provider_type.observe_endpoint_pose
     monkeypatch.setattr(
-        input_step_loop,
-        "_extract_endpoint_orientation_wxyz_from_state",
-        lambda state, plugin: 7.0,
+        provider_type, "observe_endpoint_pose",
+        lambda provider, state: replace_observation(observe(provider, state), quaternion_wxyz=7.0),
     )
     ingest_viewer_control_message(
         viewer_input_source,

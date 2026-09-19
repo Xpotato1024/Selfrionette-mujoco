@@ -214,3 +214,11 @@ formal evaluationでは入力装置、写像、補助、反力条件を同時に
 この文書はcurrent execution priorityの正本である。Round番号・Issue本文はこの文書と矛盾させない。
 
 優先順位またはdependencyのmaterialな変更を行う場合は、current canonical documentを更新し、判断理由が将来必要な場合は新しいADRとして残す。既存ADRは現在方針に合わせて書き換えない。
+
+## 実機前のsoftware gate
+
+実機へ進む前にR7-L #539（#540-#543）の信号エミュレーションを実施する。
+詳細は`docs/contracts/pre-hardware-signal-emulation.md`を正本とする。
+対象は連続入力、bounded取得、protocol/response、contactを含む統合検証であり、
+既存#509のphysical acceptanceと#516-#519の実機確認を代替しない。
+R7-Lにsoftware未完が残っている間は「残りは実機検証だけ」と判定しない。

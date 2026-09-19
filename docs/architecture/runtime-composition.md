@@ -361,3 +361,10 @@ selection / plan readinessでMapping contractを正規化・freezeし、source l
 `runtime/output/safety_gate.py`はjoint-position requestとP3 observation producerが実評価したconfigurationを照合し、`compose_physical_output_safety_input`で同じqpos / qvelをP4へ渡す。P3/P4は`runtime/safety/evaluated_candidate.py`のimmutableな値projectionを返し、それぞれのowner-local originをauthorityとする。outputは両projectionとrequest targetを照合し、formulaを再実装しない。endpoint-velocityおよびcanonical resolverのないtrajectoryはnon-sendableであり、plannerやphysical observation architectureは追加しない。
 
 Runtimeが構成する`EvaluatedJointRoute`はendpoint設定とRobot-owned joint順序の対応をP3観測からP4評価まで保持する。requestのendpoint変更を単なる数値qpos一致で許可せず、評価したrouteとの一致を検証する。
+
+## 実機前の連続入力検証
+
+位置増分のresolved command routeは、同じMuJoCo snapshotのmeasured endpointを
+そのstepのMapping contextへ渡す。source adapterは数式の切替authorityではない。明示readerはconcrete pipelineへ直接注入し、
+一時replay frameや別modelで取得経路を置換しない。実行側のcontextは固定configと分離する。
+設計正本は`docs/contracts/pre-hardware-signal-emulation.md`とする。

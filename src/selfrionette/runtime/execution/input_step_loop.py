@@ -29,7 +29,7 @@ from selfrionette.runtime.control.input_source_selection import (
 from selfrionette.runtime.control.input_source_state import (
     annotate_raw_input_frame,
     build_runtime_input_source_state_from_metadata,
-    build_runtime_input_source_state_from_health,
+    reconcile_runtime_input_source_state,
 )
 from selfrionette.runtime.experiment.input_source import (
     ManagedInputSource,
@@ -56,8 +56,8 @@ from selfrionette.runtime.composition.robot_bundle import (
     RobotBundle,
 )
 from selfrionette.runtime.composition.robot_profile_metadata import merge_runtime_metadata
-from selfrionette.runtime.control.viewer_motion_policy import build_viewer_local_motion_metadata
 from selfrionette.runtime.execution.pipeline import ControlMappedRuntimePipeline
+from selfrionette.runtime.execution.command_routes import MappingRuntimeContextBinding
 from selfrionette.runtime.execution.input_source_adapters import (
     RuntimeInputSourceExecutionAdapter,
 )
@@ -152,12 +152,6 @@ def _extract_current_endpoint_m(
     return provider.observe_endpoint_pose(pipeline.simulator.snapshot()).position_m
 
 
-def _extract_endpoint_orientation_wxyz_from_state(
-    state: MuJoCoState, provider: EndpointPoseProvider
-) -> tuple[float, float, float, float] | None:
-    return provider.observe_endpoint_pose(state).quaternion_wxyz
-
-
 def build_runtime_input_source_step_loop_plan(
     selection: RuntimeInputSourceSelection,
     *,
@@ -220,6 +214,8 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if execution_adapter.annotates_target_position and not execution_adapter.uses_viewer_endpoint_compatibility:
+        if selection.control_mapping.runtime_context_parameters and selection.runtime_reader is None:
+            raise ValueError("measured-endpoint input requires an explicit managed reader")
         pipeline = build_concrete_mujoco_pipeline(
             frames=selection.frames,
             config=runtime_config,
@@ -231,6 +227,11 @@ def build_runtime_input_source_step_loop_plan(
             mapping_input_adapter=selection.mapping_input_adapter,
             robot_catalog=robot_catalog,
             command_semantics_route_selection=selected_command_semantics_route.identity,
+            input_source=(
+                selection.runtime_reader
+                if selection.control_mapping.runtime_context_parameters
+                else None
+            ),
         )
         if selection.runtime_reader is not None:
             pipeline.input_source = selection.runtime_reader
@@ -354,11 +355,6 @@ def build_runtime_input_source_step_loop_plan(
         )
         if endpoint_command_provider is not None:
             assert isinstance(endpoint_command_provider, EndpointCommandProvider)
-        if pipeline.command_execution.requires_motion_generator:
-            assert endpoint_command_provider is not None
-            pipeline.motion_generator = (
-                endpoint_command_provider.build_local_endpoint_motion_generator()
-            )
         initial_tip_site_position_m = _extract_current_endpoint_m(
             pipeline, endpoint_pose_provider
         )
@@ -488,34 +484,14 @@ async def _run_runtime_input_source_step_loop(
                 default_source_kind=plan.selection.source_name,
             )
         else:
-            health = plan.pipeline.input_source.current_health()
-            source_state = build_runtime_input_source_state_from_health(
-                health, source_kind=plan.selection.source_name
+            source_state = reconcile_runtime_input_source_state(
+                raw_frame, plan.pipeline.input_source.current_health(),
+                source_kind=plan.selection.source_name,
             )
-            native_state = build_runtime_input_source_state_from_metadata(
-                raw_frame.metadata,
-                default_source_kind=source_state.source_kind,
-            )
-            field_keys = (
-                ("source_active", "source_active"),
-                ("command_age_ms", "command_age_ms"),
-                ("stale_reason", "stale_reason"),
-            )
-            if any(
-                key in raw_frame.metadata
-                and getattr(native_state, field) != getattr(source_state, field)
-                for field, key in field_keys
-            ):
-                raise ValueError("input source frame metadata and typed health disagree")
         frame = annotate_raw_input_frame(raw_frame, source_state)
-        mapping_input = (
-            plan.mapping_input_adapter(frame)
-            if plan.mapping_input_adapter is not None
-            else frame
-        )
-        mapped_intent = plan.control_mapping.strategy.map_input(
-            mapping_input,
-            plan.control_mapping_parameters,
+        pre_step_state = plan.pipeline.simulator.snapshot()
+        mapped_intent = plan.pipeline.map_input(
+            frame, pre_step_state=pre_step_state, endpoint_pose_provider=plan.endpoint_pose_provider,
         )
         if not isinstance(mapped_intent, InputIntent):
             raise TypeError(
@@ -532,12 +508,7 @@ async def _run_runtime_input_source_step_loop(
             buttons=intent.buttons,
             metadata={**frame.metadata, **intent.metadata},
         )
-        pre_step_state = plan.pipeline.simulator.snapshot()
-        pre_step_tip_site_orientation_wxyz = None
         if plan.execution_adapter.uses_viewer_endpoint_compatibility:
-            pre_step_tip_site_orientation_wxyz = _extract_endpoint_orientation_wxyz_from_state(
-                pre_step_state, plan.endpoint_pose_provider
-            )
             pre_step_tip_site_position_m = _extract_current_endpoint_m(
                 plan.pipeline, plan.endpoint_pose_provider
             )
@@ -552,21 +523,13 @@ async def _run_runtime_input_source_step_loop(
             )
         motion_intent = intent
         if plan.execution_adapter.uses_viewer_endpoint_compatibility:
-            motion_intent_metadata = {
-                **frame.metadata,
-                **intent.metadata,
-            }
-            if pre_step_tip_site_orientation_wxyz is not None:
-                motion_intent_metadata["current_tip_orientation_wxyz"] = pre_step_tip_site_orientation_wxyz
-            motion_intent = replace(
-                intent,
-                metadata=build_viewer_local_motion_metadata(motion_intent_metadata, dt_s=dt),
-            )
+            motion_intent = replace(intent, metadata={**frame.metadata, **intent.metadata})
         safety_result = plan.pipeline.execute_intent(
             motion_intent,
             dt_s=dt,
             pre_step_state=pre_step_state,
             source_state=source_state,
+            endpoint_pose_provider=plan.endpoint_pose_provider,
         )
         step_endpoint_m = last_valid_endpoint_m
         if (
@@ -593,7 +556,10 @@ async def _run_runtime_input_source_step_loop(
             ),
         )
         measurement = PostStepMeasurement(None, None, None)
-        if plan.execution_adapter.uses_viewer_endpoint_compatibility and plan.endpoint_site_name is not None:
+        if (
+            plan.execution_adapter.uses_viewer_endpoint_compatibility
+            or isinstance(plan.command_execution, MappingRuntimeContextBinding)
+        ) and plan.endpoint_site_name is not None:
             measurement = measure_post_step_endpoint(
                 pre_step_state,
                 state,

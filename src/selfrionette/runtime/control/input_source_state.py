@@ -151,6 +151,25 @@ def build_runtime_input_source_state_from_health(
     )
 
 
+def reconcile_runtime_input_source_state(
+    frame: RawInputFrame, health: InputSourceHealth, *, source_kind: str
+) -> RuntimeInputSourceState:
+    """read後のhealthを使い、frameに明示されたstateだけを照合する。
+
+    省略値をactiveの根拠にしない。recorded replayはこの照合を使わず、記録済みstateを保持する。
+    """
+    state = build_runtime_input_source_state_from_health(health, source_kind=source_kind)
+    native = build_runtime_input_source_state_from_metadata(
+        frame.metadata, default_source_kind=state.source_kind
+    )
+    if any(
+        key in frame.metadata and getattr(native, key) != getattr(state, key)
+        for key in ("source_active", "command_age_ms", "stale_reason")
+    ):
+        raise ValueError("input source frame metadata and typed health disagree")
+    return state
+
+
 def runtime_input_source_state_to_metadata(
     state: RuntimeInputSourceState,
 ) -> dict[str, object]:
@@ -200,4 +219,5 @@ __all__ = [
     "build_runtime_input_source_state_from_metadata",
     "build_runtime_input_source_state_from_health",
     "runtime_input_source_state_to_metadata",
+    "reconcile_runtime_input_source_state",
 ]

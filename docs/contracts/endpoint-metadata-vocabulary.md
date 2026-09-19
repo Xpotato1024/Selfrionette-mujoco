@@ -49,7 +49,9 @@ qposはradian（`rad`）を使用する。frame columnをauthoritativeとする�
 | `resolved_world_endpoint_velocity_m_s` | resolved command | frame resolver | MuJoCo world frame | canonical、failure時はabsent |
 | `endpoint_velocity_m_s` | compatibility alias | motion policy | resolved world velocityと同じ値 | fallback専用 |
 | `endpoint_velocity_frame` | resolved command | motion policy | `mujoco_world` | resolved velocityとともに存在 |
+| `mapped_endpoint_delta_m` | Mapping request | delta motion API | world位置増分/sample、policy適用前 | delta routeが実行したMapping要求。観測ではない |
 | `endpoint_delta_requested_m` | policy request | motion policy | boundedなMuJoCo world frame | canonical requested delta |
+| `motion_policy_v1` | policy provenance | local delta motion API | identityと実際に使用した上限・数値条件 | 許可証や実機evidenceではない |
 | `endpoint_delta_m` | compatibility alias | motion policy | requested deltaと同じ値 | fallback専用 |
 | `endpoint_delta_achieved_m` | policy prediction | policy / candidate evaluator | policy endpoint frame | MuJoCo measurementではない |
 | `actual_tip_delta_m` | measured truth | step後のinput step loop | MuJoCo world frame | validなbefore/after tip sampleがある場合だけ |
@@ -101,6 +103,7 @@ target-generator pathとloadcell pathはcaller-supplied endpoint anchorを使用
 | `ViewerInputSource` | `_current_endpoint_m`内のstateful command endpoint anchor | rebase時はMuJoCo world-aligned command frame、それ以外は設定済みsafe endpoint | initialize後、viewer command/rebase lifecycleでupdate | 不可。rebase時にtip-site sampleと一致する場合はあるが、MuJoCo stepごとにはupdateされない |
 | `EndpointTargetGeneratorInput` / target generation | desired targetのinitializeまたはadvanceに使うcaller-supplied current endpoint | caller-defined endpoint frame、現在はworld-command frame | 1回のtarget-generation call / stateful target lifecycle | callerがMuJoCo state由来であることを別途証明しない限り不可 |
 | loadcell endpoint converter | command metadataへcopyするcaller-supplied endpoint anchor | caller-provided endpoint frame | 1回のmotion-command lifecycle | 不可。command-side provenanceである |
+| continuous delta route | pre-step snapshotからtyped providerで観測してMappingへ渡すanchor | 同stepのMuJoCo world / scene | step loop / run_onceの1 tick | key単独では不可。出所はsnapshotとproviderで追跡する。実機測定ではない |
 | MuJoCo state / tip extraction | physical tip position | MuJoCo world / scene frame、`MuJoCoState.sites`と`tip` site extractor | state snapshot lifecycle | 可。このcompatibility keyではなくsite valueを使う |
 
 viewer runtime rebaseにより、最初のviewer valueがinitial MuJoCo tip siteと一致しうる一方、

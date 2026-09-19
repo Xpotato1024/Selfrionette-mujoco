@@ -12,8 +12,10 @@ normalized loadcell sample、mapping config、current tip positionを受け、en
 
 ## parameters
 
-`mapping_config`と`current_tip_position_m`を必須とする。型、axis weight、scale等のcurrent semanticsは
-[`implementation.py`](implementation.py)を正とする。
+pure mappingは`mapping_config`と`current_tip_position_m`を必須とする。continuous runtimeの
+selectionでは後者を省略でき、typed delta routeが同stepのMuJoCo観測から供給する。
+固定parameterと動的contextを混同せず、未観測位置のplaceholderを要求しない。
+型、axis weight、scale等は[`implementation.py`](implementation.py)を正とする。
 
 ## lifecycleとside effect
 
