@@ -34,6 +34,7 @@ from selfrionette.runtime.safety.limit_resolution import (
     LimitResolutionStatus,
     ParityStatus,
     ResolvedJointBound,
+    authoritative_position_bound_violations,
     validate_limit_resolution_result,
 )
 from selfrionette.runtime.safety.trajectory_feasibility import (
@@ -1254,6 +1255,7 @@ _COMPONENT_REASON_ACTIONS = {
         "limit_resolution_unbounded": SafetyDecisionAction.INVALID,
         "limit_resolution_invalid": SafetyDecisionAction.INVALID,
         "limit_resolution_mismatch": SafetyDecisionAction.REJECT,
+        "limit_candidate_out_of_bounds": SafetyDecisionAction.REJECT,
         "limit_resolution_provisional": SafetyDecisionAction.HOLD,
         "limit_resolution_authoritative": SafetyDecisionAction.ALLOW,
     },
@@ -1659,8 +1661,28 @@ def evaluate_physical_safety(safety_input: SafetyInput) -> SafetyDecision:
         )
         if all(item.action is SafetyDecisionAction.ALLOW for item in assessments):
             collision_candidate = safety_input.collision.evaluated_candidate
-            if collision_candidate is not None and collision_candidate != safety_input.dynamic.evaluated_candidate:
-                return invalid_input()
+            if collision_candidate is not None:
+                if collision_candidate != safety_input.dynamic.evaluated_candidate:
+                    return invalid_input()
+                if len(collision_candidate.configurations) != 1:
+                    return invalid_input()
+                violations = authoritative_position_bound_violations(
+                    safety_input.limit_resolution,
+                    joint_names=collision_candidate.joint_names,
+                    qpos_rad=collision_candidate.configurations[0][0],
+                )
+                if violations:
+                    assessments = (
+                        _assessment_from_reason(
+                            SafetyComponent.LIMIT,
+                            "limit_candidate_out_of_bounds",
+                            "candidate joint position is outside authoritative physical limits: "
+                            + ", ".join(violations),
+                            assessments[0].reason.provenance,
+                        ),
+                        assessments[1],
+                        assessments[2],
+                    )
         selected = max(assessments, key=lambda item: _ACTION_PRIORITY[item.action])
         provenance = tuple(
             sorted(

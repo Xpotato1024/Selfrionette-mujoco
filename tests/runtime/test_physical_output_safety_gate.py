@@ -121,6 +121,52 @@ def test_public_candidate_id_relabel_cannot_promote_evidence_for_another_target(
     assert correct.sendable
 
 
+def test_authoritative_position_bounds_reject_out_of_range_candidate() -> None:
+    for joint_angles in ((1.01, 0.0), (0.0, -1.01)):
+        request = _request(command=replace(_request().command, joint_angles_rad=joint_angles))
+        safety_input = _safety_input(request)
+        decision = evaluate_physical_safety(safety_input)
+        assert decision.action.value == "reject"
+        assert decision.reason.identity == "limit:limit_candidate_out_of_bounds"
+        evaluation = bind_physical_output_safety(
+            request,
+            safety_input,
+            decision,
+            checked_at_s=request.timestamp_s,
+        )
+        assert evaluation.status == "rejected"
+        assert not evaluation.sendable
+
+
+def test_authoritative_position_bounds_are_inclusive() -> None:
+    for joint_angles in ((-1.0, 1.0), (1.0, -1.0)):
+        request = _request(command=replace(_request().command, joint_angles_rad=joint_angles))
+        evaluation = evaluate_and_bind_physical_output_safety(
+            request,
+            _safety_input(request),
+            checked_at_s=request.timestamp_s,
+        )
+        assert evaluation.status == "allowed"
+        assert evaluation.sendable
+
+
+def test_relabelled_out_of_range_candidate_cannot_become_sendable() -> None:
+    request = _request(command=replace(_request().command, joint_angles_rad=(1.01, 0.0)))
+    safety_input = _safety_input(request)
+    relabelled = replace(safety_input, candidate_id=physical_output_candidate_id(request))
+    decision = evaluate_physical_safety(relabelled)
+    assert decision.action.value == "reject"
+    assert decision.reason.identity == "limit:limit_candidate_out_of_bounds"
+    evaluation = bind_physical_output_safety(
+        request,
+        relabelled,
+        decision,
+        checked_at_s=request.timestamp_s,
+    )
+    assert evaluation.status == "rejected"
+    assert not evaluation.sendable
+
+
 def test_checker_candidate_mismatch_is_fail_closed_before_output() -> None:
     request_a = _request()
     request_b = replace(request_a, command=replace(request_a.command, joint_angles_rad=(0.25, 0.0)))

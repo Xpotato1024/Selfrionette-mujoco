@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-09-05
+last_verified: 2026-09-20
 canonical_for:
   - physical limit resolution
   - fast_arm joint motor actuator parity
@@ -124,6 +124,13 @@ authorityを推測しない。unresolved statusは両boundを`None`とし、reas
 検証する。toleranceは`DEFAULT_COMPARISON_TOLERANCE_RAD`（`1e-9`）との完全一致だけを
 許可し、callerが大きな値を指定してparity差を隠す経路を持たない。この値はboundとresultへ
 同じ値で保存され、parity比較の単一の定義として使われる。
+
+`authoritative_position_bound_violations()`は後続P5が実評価candidateを位置limitへ照合するための
+canonical helperである。`joint_names`は`expected_joint_names`と順序まで完全一致し、qpos次元と各値は
+finiteでなければならない。全boundが`resolved_authoritative`かつboundedである場合だけ照合し、
+`lower_rad <= qpos <= upper_rad`を満たさないjoint identityを返す。provisional / unknown /
+unavailable / mismatch / invalid resultをこのhelperでauthorityへ昇格させず、conversionやparityを
+再計算しない。
 `PhysicalLimit.name`（built-in `str`型）、`robot_id`、`expected_joint_names`、およびそれらへ到達するjoint identityは、
 P1 / P2 ownerの単一canonical identity validatorで検証する。空・whitespace・case variantを含む
 `unknown`、`unavailable`、`n/a`、`none`、`placeholder`、`synthetic`、`fixture`、

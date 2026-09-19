@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-09-13
+last_verified: 2026-09-20
 canonical_for:
   - versioned physical output request and permission boundary
 related:
@@ -101,6 +101,12 @@ P4 evaluatorのowner-local originに保持した値から得る。output gateは
 sample時刻を照合し、さらにrequestのtarget qposと照合する。result再構築でP3 observation originを
 引き継げず、candidate Aの結果のcaller-visible IDをrequest Bへ合わせてもnon-sendableとなる。
 `SafetyInput.candidate_id`と`SafetyDecision.candidate_id`のrequest一致、既存のrobot / revision検証も維持する。
+
+同じ実評価configurationはP2の`LimitResolutionResult.expected_joint_names`ともcanonical順序で一致し、
+`resolved_authoritative`な各joint position boundへ直接照合する。candidate qposはlower / upperを含む範囲内だけを
+allow候補とし、1 jointでも範囲外なら`limit:limit_candidate_out_of_bounds`としてrejectする。境界内判定は
+P2 ownerのcanonical helperを使い、output layerでrange / conversion / authority formulaを複製しない。
+provisional / unknown / unavailable / mismatchなP2 resultは従来どおりnon-allowであり、この照合でauthorityへ昇格しない。
 
 この経路はconfiguration-only評価であり、目標までの移動軌道・実機motionの安全性を証明しない。
 `endpoint_velocity_command/v1`にはphysical requestから評価軌道へのcanonical resolverがないため、

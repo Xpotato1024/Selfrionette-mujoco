@@ -31,6 +31,7 @@ from selfrionette.runtime.safety.limit_resolution import (
     LimitResolutionStatus,
     ParityStatus,
     ResolvedJointBound,
+    authoritative_position_bound_violations,
     fast_arm_mujoco_limits_to_physical_limits,
     project_limit_to_joint_space,
     resolve_joint_space_bounds,
@@ -718,6 +719,76 @@ def test_authoritative_and_matching_provisional_source_resolve_authoritatively()
     assert bound.upper_rad == pytest.approx(1.0)
     assert bound.reason is None
     assert result.authoritative
+
+
+def test_authoritative_position_bound_violations_are_inclusive() -> None:
+    result = resolve_joint_space_bounds(
+        (
+            _limit(status=EvidenceStatus.AUTHORITATIVE, source_kind="lab_document"),
+        ),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+
+    assert authoritative_position_bound_violations(
+        result,
+        joint_names=("joint_1",),
+        qpos_rad=(-1.0,),
+    ) == ()
+    assert authoritative_position_bound_violations(
+        result,
+        joint_names=("joint_1",),
+        qpos_rad=(1.0,),
+    ) == ()
+    assert authoritative_position_bound_violations(
+        result,
+        joint_names=("joint_1",),
+        qpos_rad=(1.0001,),
+    ) == ("joint_1",)
+    assert authoritative_position_bound_violations(
+        result,
+        joint_names=("joint_1",),
+        qpos_rad=(-1.0001,),
+    ) == ("joint_1",)
+
+
+def test_authoritative_position_bound_check_requires_canonical_joint_inventory() -> None:
+    result = resolve_joint_space_bounds(
+        (
+            _limit(name="joint_1", status=EvidenceStatus.AUTHORITATIVE, source_kind="lab_document"),
+            _limit(name="joint_2", status=EvidenceStatus.AUTHORITATIVE, source_kind="manufacturer_document"),
+        ),
+        expected_joint_names=("joint_1", "joint_2"),
+        robot_id="fast_arm-test",
+    )
+
+    with pytest.raises(ValueError, match="joint order"):
+        authoritative_position_bound_violations(
+            result,
+            joint_names=("joint_2", "joint_1"),
+            qpos_rad=(0.0, 0.0),
+        )
+    with pytest.raises(ValueError, match="qpos dimension"):
+        authoritative_position_bound_violations(
+            result,
+            joint_names=("joint_1", "joint_2"),
+            qpos_rad=(0.0,),
+        )
+
+
+def test_authoritative_position_bound_check_rejects_non_authoritative_resolution() -> None:
+    result = resolve_joint_space_bounds(
+        (_limit(),),
+        expected_joint_names=("joint_1",),
+        robot_id="fast_arm-test",
+    )
+
+    with pytest.raises(ValueError, match="authoritative resolved bounds"):
+        authoritative_position_bound_violations(
+            result,
+            joint_names=("joint_1",),
+            qpos_rad=(0.0,),
+        )
 
 
 def test_conflicting_sources_are_not_resolved() -> None:

@@ -647,6 +647,51 @@ class LimitResolutionResult:
         }
 
 
+def authoritative_position_bound_violations(
+    result: LimitResolutionResult,
+    *,
+    joint_names: tuple[str, ...],
+    qpos_rad: tuple[float, ...],
+) -> tuple[str, ...]:
+    """実評価candidateをauthoritativeなjoint-position boundへ照合する。"""
+
+    _validate_limit_resolution_result(result)
+    _builtin_tuple("joint_names", joint_names)
+    canonical_joint_names = tuple(
+        validate_limit_resolution_identity("joint_name", name)
+        for name in joint_names
+    )
+    if canonical_joint_names != result.expected_joint_names:
+        raise ValueError(
+            "candidate joint order must exactly match resolved limit inventory"
+        )
+    _builtin_tuple("qpos_rad", qpos_rad)
+    if len(qpos_rad) != len(canonical_joint_names):
+        raise ValueError("candidate qpos dimension must match resolved limit inventory")
+    positions = tuple(
+        _finite(f"qpos_rad[{index}]", value)
+        for index, value in enumerate(qpos_rad)
+    )
+    violations: list[str] = []
+    for joint_name, position, bound in zip(
+        canonical_joint_names,
+        positions,
+        result.bounds,
+        strict=True,
+    ):
+        if bound.status is not LimitResolutionStatus.RESOLVED_AUTHORITATIVE:
+            raise ValueError(
+                "candidate position check requires authoritative resolved bounds"
+            )
+        if bound.lower_rad is None or bound.upper_rad is None:
+            raise ValueError(
+                "candidate position check requires bounded authoritative ranges"
+            )
+        if position < bound.lower_rad or position > bound.upper_rad:
+            violations.append(joint_name)
+    return tuple(violations)
+
+
 def _conversion_snapshot(
     relation: JointSpaceConversion,
 ) -> tuple[object, ...]:
@@ -1401,6 +1446,7 @@ __all__ = [
     "LimitResolutionStatus",
     "ParityStatus",
     "ResolvedJointBound",
+    "authoritative_position_bound_violations",
     "fast_arm_mujoco_limits_to_physical_limits",
     "project_limit_to_joint_space",
     "resolve_joint_space_bounds",
