@@ -144,8 +144,8 @@ serial、OSC、robot output、deployment、credentials、#509 hardware validatio
 既存のcomponent assessmentがすべてallowの場合だけ、P3がproducer-boundな`evaluated_candidate`を持つ場合、P4の実評価configuration / trajectory projectionとの不一致・欠落をinvalidへ閉じる。既存のnonallow action / reasonは優先して保持する。既存のP5単独利用でP3 originを持たない結果は従来どおり評価できるが、#513 output gateではorigin欠落からsendableを作れない。P2はrobot / model / revision / limits contextを所有し、per-candidate trajectory identityを追加しない。
 
 P3/P4の実評価candidateが一致し、limit / collision / dynamicの各componentがallow候補になった場合、
-P5はそのcandidateのjoint順序とqposをP2のauthoritative resolved position boundsへ照合する。
-1 jointでも範囲外ならlimit assessmentを`reject / limit_candidate_out_of_bounds`へ置き換え、
+P5はそのcandidateのjoint順序と各configuration qposをP2のauthoritative resolved position boundsへ照合する。
+1 sampleの1 jointでも範囲外ならlimit assessmentを`reject / limit_candidate_out_of_bounds`へ置き換え、
 `SafetyDecision`をallowにしない。lower / upper境界はinclusiveとし、inventory mismatch、次元不一致、
 non-finite candidate、authoritativeでないboundはfail-closedに扱う。この判定はP2のcanonical helperを
 再利用し、limit resolution / conversion / authority formulaをP5へ複製しない。

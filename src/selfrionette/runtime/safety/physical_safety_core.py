@@ -1664,20 +1664,24 @@ def evaluate_physical_safety(safety_input: SafetyInput) -> SafetyDecision:
             if collision_candidate is not None:
                 if collision_candidate != safety_input.dynamic.evaluated_candidate:
                     return invalid_input()
-                if len(collision_candidate.configurations) != 1:
+                if not collision_candidate.configurations:
                     return invalid_input()
-                violations = authoritative_position_bound_violations(
-                    safety_input.limit_resolution,
-                    joint_names=collision_candidate.joint_names,
-                    qpos_rad=collision_candidate.configurations[0][0],
-                )
-                if violations:
+                violating_joints: list[str] = []
+                for qpos_rad, _ in collision_candidate.configurations:
+                    for joint_name in authoritative_position_bound_violations(
+                        safety_input.limit_resolution,
+                        joint_names=collision_candidate.joint_names,
+                        qpos_rad=qpos_rad,
+                    ):
+                        if joint_name not in violating_joints:
+                            violating_joints.append(joint_name)
+                if violating_joints:
                     assessments = (
                         _assessment_from_reason(
                             SafetyComponent.LIMIT,
                             "limit_candidate_out_of_bounds",
                             "candidate joint position is outside authoritative physical limits: "
-                            + ", ".join(violations),
+                            + ", ".join(violating_joints),
                             assessments[0].reason.provenance,
                         ),
                         assessments[1],
