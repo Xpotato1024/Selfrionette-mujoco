@@ -53,10 +53,10 @@ external authorization grantをguarded send時に消費する。malformed / mism
 保持して追加requestをblockし、timeoutまたはinvalid clockはlocal stateをfail-closedにする。
 simulated observationはcorrelation stateを検証するだけでrouter ACKへ昇格しない。いずれの経路もPi / robot受理、
 movement、physical stopの実証にはならない。
-`observe_router_datagram`はingestion APIまでであり、actual receive socketからsessionへ渡すbounded producerとtimeout tick
-schedulerはこの変更で実装・検証していない。automated validationはfake sender / injected fake socketのみを用い、DNS resolution、
-実socket、network、serial、robot outputを実行しない。
-後続#516 preflight / scopeでbounded receive wiring、timeout / disconnect integration、#514 network validationを具体化する。
+`observe_router_datagram`へは#542のcaller-drivenな有限driverでnonblocking受信callbackを接続できる。
+no-I/O peerはwire bytesから疑似応答を生成し、previewとphysical sessionは応答判定を共有する。
+actual receive socket、scheduler、#514 network validationは#516 preflightに残る。自動検証では実socket、
+network、serial、robot outputを実行しない。詳細は`docs/contracts/physical-output.md`を正本とする。
 
 現行のapplication-facing replay / viewer / smokeは、Robot、Input Source、Control Mapping、
 command semantics routeを接続するdiagnostic / operational runtimeである。これとは別に

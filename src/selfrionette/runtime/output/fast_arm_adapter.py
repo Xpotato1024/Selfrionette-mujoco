@@ -16,11 +16,17 @@ from selfrionette.plugins.robots.fast_arm.adapter.physical_output import (
     FastArmJointWireCommand,
     FastArmOutputMapping,
     build_fast_arm_joint_wire_command,
-    parse_fast_arm_router_observation,
-    router_observation_matches,
 )
 from selfrionette.runtime.composition.robot_profile import RobotProfile
 from selfrionette.runtime.output.lifecycle import PhysicalOutputLifecycle, PhysicalOutputLifecycleResult
+from selfrionette.runtime.output.fast_arm_observation import (
+    FAST_ARM_ACK_STATUS,
+    FastArmAcknowledgementEvidence,
+    FastArmPendingObservation as _PendingAcknowledgement,
+    expired_fast_arm_acknowledgement,
+    pending_fast_arm_acknowledgement,
+    resolve_fast_arm_router_datagram,
+)
 from selfrionette.runtime.output.safety_gate import (
     PhysicalOutputSafetyEvaluation,
     PhysicalOutputSendableRequest,
@@ -45,13 +51,12 @@ from selfrionette.runtime.safety.physical_limits import (
 )
 from selfrionette.runtime.safety.physical_safety_core import SafetyInput
 from selfrionette.schemas import PhysicalOutputPermission
-from selfrionette.transport.osc import OscMessage, decode_osc_message
+from selfrionette.transport.osc import OscMessage
 
 
 FAST_ARM_PHYSICAL_EVIDENCE_SCHEMA_VERSION = "fast-arm-physical-evidence-acceptance/v1"
 FAST_ARM_PHYSICAL_EVIDENCE_HANDOFF_SCHEMA_VERSION = "fast-arm-physical-evidence-handoff/v1"
 FAST_ARM_SESSION_STATE = Literal["disarmed", "armed", "active", "stopped", "aborted", "failed"]
-FAST_ARM_ACK_STATUS = Literal["not_applicable", "pending", "router_command_observed", "unavailable"]
 
 
 def _identifier(name: str, value: object) -> str:
@@ -317,34 +322,6 @@ class FastArmPhysicalEvidenceAcceptance:
 
 
 @dataclass(frozen=True, slots=True)
-class FastArmAcknowledgementEvidence:
-    """router observationだけを記録し、Pi/robot/movementを推定しない。"""
-
-    status: FAST_ARM_ACK_STATUS
-    reason: str
-    attempt_id: str | None = None
-    source_token: str | None = None
-    target_robot_id: str | None = None
-    observed_at_s: float | None = None
-    schema_version: str = "fast-arm-ack-evidence/v1"
-
-    def __post_init__(self) -> None:
-        if self.schema_version != "fast-arm-ack-evidence/v1":
-            raise ValueError("unsupported FastArm acknowledgement schema_version")
-        if self.status not in {"not_applicable", "pending", "router_command_observed", "unavailable"}:
-            raise ValueError("unknown FastArm acknowledgement status")
-        _identifier("acknowledgement reason", self.reason)
-        if self.status == "router_command_observed":
-            _identifier("attempt_id", self.attempt_id)
-            _identifier("source_token", self.source_token)
-            _identifier("target_robot_id", self.target_robot_id)
-            if self.observed_at_s is None:
-                raise ValueError("router observation requires observed_at_s")
-        if self.observed_at_s is not None:
-            object.__setattr__(self, "observed_at_s", _timestamp("observed_at_s", self.observed_at_s))
-
-
-@dataclass(frozen=True, slots=True)
 class FastArmPhysicalOutputResult:
     """transport resultとFastArm側router observationを別々に返す。"""
 
@@ -359,14 +336,6 @@ class FastArmPhysicalOutputResult:
             raise ValueError("unknown FastArm output result status")
         if self.reason is not None:
             _identifier("result reason", self.reason)
-
-
-@dataclass(frozen=True, slots=True)
-class _PendingAcknowledgement:
-    attempt_id: str
-    expected_command: FastArmJointWireCommand
-    deadline_s: float
-    evidence_kind: Literal["local_socket", "simulated"]
 
 
 class FastArmWireEncoder:
@@ -520,18 +489,7 @@ class FastArmPhysicalOutputSession:
             pending = self._pending_acknowledgement
             if pending is None:
                 return self._last_acknowledgement
-            reason = (
-                "awaiting_simulated_router_observation"
-                if pending.evidence_kind == "simulated"
-                else "awaiting_correlated_router_command_observation"
-            )
-            return FastArmAcknowledgementEvidence(
-                "pending",
-                reason,
-                attempt_id=pending.attempt_id,
-                source_token=pending.expected_command.source_token,
-                target_robot_id=pending.expected_command.target_robot_id,
-            )
+            return pending_fast_arm_acknowledgement(pending)
 
     def _now(self, override: float | None) -> float:
         return _timestamp("clock", self._clock() if override is None else override)
@@ -774,7 +732,7 @@ class FastArmPhysicalOutputSession:
             ):
                 command = build_fast_arm_joint_wire_command(sendable.request, self.mapping, attempt_id=result.attempt.attempt_id)
                 deadline = result.attempt.started_at_s + self.acknowledgement_timeout_s
-                if not isfinite(deadline):
+                if not isfinite(deadline) or deadline <= result.attempt.started_at_s:
                     self._invalidate_locked()
                     life = self.lifecycle.fail("fast_arm_acknowledgement_deadline_invalid", timestamp_s=now)
                     self._state = "failed"
@@ -794,6 +752,7 @@ class FastArmPhysicalOutputSession:
                     command,
                     deadline,
                     evidence_kind,
+                    started_at_s=result.attempt.started_at_s,
                 )
                 self._last_acknowledgement = FastArmAcknowledgementEvidence(
                     "pending",
@@ -810,115 +769,48 @@ class FastArmPhysicalOutputSession:
             return FastArmPhysicalOutputResult("transmission_attempted", transport_result=result, acknowledgement=self._last_acknowledgement)
 
     def observe_router_datagram(self, datagram: bytes, *, now_s: float | None = None) -> FastArmAcknowledgementEvidence:
-        try:
-            now = self._now(now_s)
-        except Exception:
-            with self._lock:
-                self._fail_closed_locked(
-                    "fast_arm_clock_invalid",
-                    acknowledgement_reason="fast_arm_clock_invalid",
-                )
-                return self._last_acknowledgement
-        if type(datagram) is not bytes:
-            with self._lock:
-                pending = self._pending_acknowledgement
-                return FastArmAcknowledgementEvidence(
-                    "unavailable",
-                    "router_observation_malformed",
-                    attempt_id=None if pending is None else pending.attempt_id,
-                    source_token=(
-                        None
-                        if pending is None
-                        else pending.expected_command.source_token
-                    ),
-                    target_robot_id=(
-                        None
-                        if pending is None
-                        else pending.expected_command.target_robot_id
-                    ),
-                    observed_at_s=now,
-                )
-        try:
-            message = decode_osc_message(datagram)
-            observation = parse_fast_arm_router_observation(
-                message.address,
-                message.arguments,
-            )
-        except Exception:
-            with self._lock:
-                pending = self._pending_acknowledgement
-                return FastArmAcknowledgementEvidence(
-                    "unavailable",
-                    "router_observation_malformed",
-                    attempt_id=None if pending is None else pending.attempt_id,
-                    source_token=(
-                        None
-                        if pending is None
-                        else pending.expected_command.source_token
-                    ),
-                    target_robot_id=(
-                        None
-                        if pending is None
-                        else pending.expected_command.target_robot_id
-                    ),
-                    observed_at_s=now,
-                )
+        """共通parser/判定だけを用い、状態と許可の無効化はsessionが所有する。"""
         with self._lock:
-            pending = self._pending_acknowledgement
-            if pending is None:
-                return FastArmAcknowledgementEvidence("unavailable", "router_observation_without_pending_attempt")
-            if now >= pending.deadline_s:
+            try:
+                now = self._now(now_s)
+                resolution = resolve_fast_arm_router_datagram(
+                    self._pending_acknowledgement, datagram, now_s=now,
+                )
+            except Exception:
+                self._fail_closed_locked("fast_arm_clock_invalid")
+                return self._last_acknowledgement
+            if resolution.disposition == "expire":
                 self._expire_acknowledgement_locked(now)
                 return self._last_acknowledgement
-            if not router_observation_matches(observation, pending.expected_command):
-                return FastArmAcknowledgementEvidence("unavailable", "router_observation_correlation_mismatch", attempt_id=pending.attempt_id, source_token=pending.expected_command.source_token, target_robot_id=pending.expected_command.target_robot_id, observed_at_s=now)
-            self._pending_acknowledgement = None
-            if pending.evidence_kind == "simulated":
-                evidence = FastArmAcknowledgementEvidence(
-                    "unavailable",
-                    "simulated_router_observation_correlated",
-                    attempt_id=pending.attempt_id,
-                    source_token=observation.source_token,
-                    target_robot_id=observation.target_robot_id,
-                    observed_at_s=now,
-                )
-            else:
-                evidence = FastArmAcknowledgementEvidence("router_command_observed", "router_command_processed", attempt_id=pending.attempt_id, source_token=observation.source_token, target_robot_id=observation.target_robot_id, observed_at_s=now)
-            self._last_acknowledgement = evidence
-            return evidence
+            if resolution.disposition == "clear":
+                self._pending_acknowledgement = None
+                self._last_acknowledgement = resolution.evidence
+            return resolution.evidence
 
     def expire_acknowledgement(self, *, now_s: float | None = None) -> FastArmAcknowledgementEvidence:
-        try:
-            now = self._now(now_s)
-        except Exception:
-            with self._lock:
-                self._fail_closed_locked(
-                    "fast_arm_clock_invalid",
-                    acknowledgement_reason="fast_arm_clock_invalid",
-                )
-                return self._last_acknowledgement
+        """受信がなくても共通deadline判定を適用する。"""
         with self._lock:
-            if self._pending_acknowledgement is not None and now >= self._pending_acknowledgement.deadline_s:
+            try:
+                now = self._now(now_s)
+                expired = expired_fast_arm_acknowledgement(self._pending_acknowledgement, now_s=now)
+            except Exception:
+                self._fail_closed_locked("fast_arm_clock_invalid")
+                return self._last_acknowledgement
+            if expired is not None:
                 self._expire_acknowledgement_locked(now)
             return self._last_acknowledgement
 
     def _expire_acknowledgement_locked(self, now: float) -> None:
         pending = self._pending_acknowledgement
-        if pending is None:
+        expired = expired_fast_arm_acknowledgement(pending, now_s=now)
+        if pending is None or expired is None:
             return
-        self._pending_acknowledgement = None
         self._invalidate_locked()
-        timeout_reason = (
-            "simulated_router_observation_timeout"
-            if pending.evidence_kind == "simulated"
-            else "router_command_observation_timeout"
-        )
+        self._last_acknowledgement = expired
         failure_reason = (
-            "fast_arm_simulated_observation_timeout"
-            if pending.evidence_kind == "simulated"
+            "fast_arm_simulated_observation_timeout" if pending.evidence_kind == "simulated"
             else "fast_arm_router_acknowledgement_timeout"
         )
-        self._last_acknowledgement = FastArmAcknowledgementEvidence("unavailable", timeout_reason, attempt_id=pending.attempt_id, source_token=pending.expected_command.source_token, target_robot_id=pending.expected_command.target_robot_id, observed_at_s=now)
         self.lifecycle.fail(failure_reason, timestamp_s=now)
         self._state = "failed"
 

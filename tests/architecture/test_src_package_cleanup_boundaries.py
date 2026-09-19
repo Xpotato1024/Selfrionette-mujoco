@@ -34,6 +34,20 @@ FAST_ARM_RUNTIME_COMPOSITION_IMPORTS = frozenset(
         f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.router_observation_matches",
     }
 )
+FAST_ARM_NO_IO_COMPOSITION_IMPORTS = {
+    SRC / "runtime" / "output" / "fast_arm_observation.py": frozenset({
+        FAST_ARM_PHYSICAL_OUTPUT_MODULE,
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.FastArmJointWireCommand",
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.parse_fast_arm_router_observation",
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.router_observation_matches",
+    }),
+    SRC / "runtime" / "output" / "fast_arm_emulation.py": frozenset({
+        FAST_ARM_PHYSICAL_OUTPUT_MODULE,
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.FastArmJointWireCommand",
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.FastArmOutputMapping",
+        f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.build_fast_arm_joint_wire_command",
+    }),
+}
 REMOVED_MODULE_PATHS = (
     SRC / "robot_profile.py",
     SRC / "viewer_robot_declaration.py",
@@ -106,7 +120,7 @@ def _is_permitted_concrete_fast_arm_import(path: Path, imported: str) -> bool:
     return (
         path == FAST_ARM_RUNTIME_COMPOSITION_OWNER
         and imported in FAST_ARM_RUNTIME_COMPOSITION_IMPORTS
-    )
+    ) or imported in FAST_ARM_NO_IO_COMPOSITION_IMPORTS.get(path, frozenset())
 
 
 def test_package_for_path_uses_containing_package_for_modules_and_initializers() -> None:
@@ -274,3 +288,15 @@ def test_catalog_registration_bundle_profile_and_runtime_identity_is_unchanged()
     assert ROBOT_PLUGIN.bundle is bundle
     assert resolve_robot_profile("fast_arm") is bundle.profile
     assert resolve_robot_runtime_plugin("fast_arm") is bundle.runtime_plugin
+
+
+
+def test_no_io_concrete_import_exceptions_are_exact_and_not_transitive():
+    """新ownerでも許可したpure symbols以外を機種依存importにしない。"""
+    for owner, allowed in FAST_ARM_NO_IO_COMPOSITION_IMPORTS.items():
+        for imported in allowed:
+            assert _is_permitted_concrete_fast_arm_import(owner, imported)
+        assert not _is_permitted_concrete_fast_arm_import(owner, FAST_ARM_PACKAGE)
+        assert not _is_permitted_concrete_fast_arm_import(owner, f"{FAST_ARM_PACKAGE}.adapter.bundle")
+        assert not _is_permitted_concrete_fast_arm_import(owner, f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.unknown")
+        assert not _is_permitted_concrete_fast_arm_import(owner.with_name("other.py"), FAST_ARM_PHYSICAL_OUTPUT_MODULE)
