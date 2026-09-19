@@ -18,3 +18,4 @@ ADRはdesign decisionを、その時点のcontextとprovenanceを含めて記録
 - `0002-use-threejs-as-renderer-only.md`: Three.jsをrenderer-onlyとする。
 - `0003-skeleton-first-development.md`: 初期skeleton-first development判断。
 - `0004-prioritize-physical-contact-bringup.md`: R7-G後はcontact-core / physical safetyを並行し、実機contact bring-upを最優先にする。
+- `0005-prehardware-runtime-consistency.md`: 実機前SILのroute/context/policy整合と段階実装の判断。
