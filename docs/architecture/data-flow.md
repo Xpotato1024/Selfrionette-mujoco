@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-30
+last_verified: 2026-09-13
 canonical_for:
   - runtime data flow
 related:
@@ -36,10 +36,16 @@ viewerは受信payloadを再計算せず描画する。
 
 physical outputへ進む場合も、内部`MotionCommand`を直接transportへ渡さず、typed
 `RobotCommand`から`PhysicalOutputRequest`へ明示的に投影する。requestのpermission
-acceptedは送信完了を意味せず、K-preのdefaultは`disabled`である。K-preではこの境界の
-request検証、permission decision、lossless recording / dry-run replay、stale / stop lifecycleを
-行い、network、serial、OSC、robot outputは実行しない。traceの`permitted` / `rejected` /
-`dropped`とlifecycle stateは送信実績と別である。
+acceptedは送信完了を意味せず、defaultは`disabled`である。explicit configで`transmission_enabled`を
+選び、P5 allow、active lifecycle、permission、target / endpoint / revision / codec identity、freshnessが
+一致した場合だけ、`runtime.output.transport_adapter`がgeneric OSC bytesを一つのUDP attemptとして送る。
+`dry_run`はpreviewのみ、`recording`はlocal-only sinkのみを使い、どちらもnetwork callをしない。
+traceの`permitted` / `rejected` / `dropped`とlifecycle stateは送信実績と別である。
+
+送信attempt、fake経路の`simulated` receipt、実UDP providerの`local_socket` receipt、receiver ACKを独立して
+扱う。local socketのbyte countはreceiver受理、robot acceptance、physical movementを示さず、ACK evidenceは
+`unavailable`である。automated validationはfake sender / injected fake socketのみを用い、DNS resolution、
+実socket、network、serial、robot outputを実行しない。
 
 現行のapplication-facing replay / viewer / smokeは、Robot、Input Source、Control Mapping、
 command semantics routeを接続するdiagnostic / operational runtimeである。Environment、Task、

@@ -44,6 +44,7 @@ PhysicalOutputLifecycleEventKind: TypeAlias = Literal[
     "arm_rejected",
     "armed",
     "request_accepted",
+    "request_claimed",
     "request_rejected",
     "safety_hold",
     "safety_rejected",
@@ -70,6 +71,7 @@ _LIFECYCLE_EVENT_KINDS = frozenset(
         "arm_rejected",
         "armed",
         "request_accepted",
+        "request_claimed",
         "request_rejected",
         "safety_hold",
         "safety_rejected",
@@ -212,6 +214,7 @@ class PhysicalOutputLifecycleEvent:
         if self.event_kind in {
             "arm_rejected",
             "request_rejected",
+            "request_claimed",
             "safety_hold",
             "safety_rejected",
             "safety_stop",
@@ -247,6 +250,11 @@ class PhysicalOutputLifecycleEvent:
             and self.safety_evidence is None
         ):
             raise ValueError("accepted v2 lifecycle event requires safety evidence")
+        if self.event_kind == "request_claimed":
+            if self.schema_version != PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION:
+                raise ValueError("request_claimed requires lifecycle v2")
+            if self.safety_evidence is None:
+                raise ValueError("request_claimed event requires safety evidence")
         if (
             self.schema_version == _PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION_V1
             and self.event_kind in {
@@ -276,6 +284,10 @@ class PhysicalOutputLifecycleEvent:
             raise ValueError("request_accepted event must come from armed or active state")
         if self.event_kind == "request_accepted" and self.state_after != "active":
             raise ValueError("request_accepted event must enter active state")
+        if self.event_kind == "request_claimed" and (
+            self.state_before != "active" or self.state_after != "active"
+        ):
+            raise ValueError("request_claimed event must preserve active state")
         if self.event_kind == "request_rejected" and self.state_after not in {
             self.state_before,
             "hold",
@@ -561,6 +573,8 @@ def _validate_lifecycle_events(events: tuple[PhysicalOutputLifecycleEvent, ...])
     used_session_ids: set[str] = set()
     latest_request_sequence_by_session: dict[str, int] = {}
     seen_request_sequences_by_session: dict[str, set[int]] = {}
+    latest_accepted_request_sequence_by_session: dict[str, int] = {}
+    claimed_request_sequences_by_session: dict[str, set[int]] = {}
     for event in events:
         if event.event_sequence != expected_sequence:
             raise ValueError("physical output lifecycle event sequence must be contiguous from zero")
@@ -598,6 +612,21 @@ def _validate_lifecycle_events(events: tuple[PhysicalOutputLifecycleEvent, ...])
             "safety_stop",
             "safety_invalid",
         }
+        if event.event_kind == "request_claimed":
+            if event.request_sequence is None:
+                raise ValueError("request_claimed requires request_sequence")
+            latest_accepted = latest_accepted_request_sequence_by_session.get(
+                event.session_id
+            )
+            if event.request_sequence != latest_accepted:
+                raise ValueError("request_claimed must name the latest accepted request")
+            claimed_sequences = claimed_request_sequences_by_session.setdefault(
+                event.session_id,
+                set(),
+            )
+            if event.request_sequence in claimed_sequences:
+                raise ValueError("physical output request may be claimed only once")
+            claimed_sequences.add(event.request_sequence)
         if event.event_kind in request_event_kinds:
             if (
                 event.request_sequence is None
@@ -620,6 +649,10 @@ def _validate_lifecycle_events(events: tuple[PhysicalOutputLifecycleEvent, ...])
                 raise ValueError("duplicate physical output lifecycle request event")
             seen_request_sequences.add(event.request_sequence)
             latest_request_sequence_by_session[event.session_id] = event.request_sequence
+            if event.event_kind == "request_accepted":
+                latest_accepted_request_sequence_by_session[event.session_id] = (
+                    event.request_sequence
+                )
 
 
 @dataclass(frozen=True, slots=True)
@@ -680,6 +713,19 @@ class PhysicalOutputLifecycleResult:
     sendable_request: PhysicalOutputSendableRequest | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class PhysicalOutputLifecycleDispatchResult:
+    """latest requestのone-shot claim / guarded dispatch結果。"""
+
+    claimed: bool
+    state: PhysicalOutputLifecycleState
+    reason: str | None = None
+    event: PhysicalOutputLifecycleEvent | None = None
+    operation_invoked: bool = False
+    operation_result: object | None = None
+    operation_error_type: str | None = None
+
+
 class PhysicalOutputLifecycle:
     """P5 safety binding、freshness、lifecycle state、bounded stopを守るpure local state machine。"""
 
@@ -710,6 +756,10 @@ class PhysicalOutputLifecycle:
         self._latest_request: PhysicalOutputRequest | None = None
         self._latest_sendable_request: PhysicalOutputSendableRequest | None = None
         self._last_request_sequence: int | None = None
+        self._last_claimed_sequence: int | None = None
+        self._last_claimed_request_timestamp_s: float | None = None
+        self._last_claimed_at_s: float | None = None
+        self._last_claimed_cadence_s: float | None = None
         self._event_sequence = 0
         self._events: list[PhysicalOutputLifecycleEvent] = []
         self._stop_deadline_s: float | None = None
@@ -904,6 +954,10 @@ class PhysicalOutputLifecycle:
             self._session_id = resolved_session_id
             self._used_session_ids.add(resolved_session_id)
             self._last_request_sequence = None
+            self._last_claimed_sequence = None
+            self._last_claimed_request_timestamp_s = None
+            self._last_claimed_at_s = None
+            self._last_claimed_cadence_s = None
         elif session_id is not None and _lifecycle_identifier("session_id", session_id) != self._session_id:
             reason = "session_mismatch"
             event = self._record(
@@ -1121,6 +1175,259 @@ class PhysicalOutputLifecycle:
             True,
             event=event,
             sendable_request=sendable_request,
+        )
+
+    @_lifecycle_locked
+    def claim_latest_sendable_request(
+        self,
+        request: PhysicalOutputSendableRequest,
+        *,
+        expected_permission: PhysicalOutputPermission,
+        expected_request_sha256: str,
+        expected_binding_sha256: str,
+        now_s: float,
+        max_age_s: float,
+        max_safety_age_s: float,
+        minimum_cadence_s: float = 0.0,
+    ) -> PhysicalOutputLifecycleDispatchResult:
+        """リデューサーのロック内で、要求とバインディングを検証して一度だけ消費する。"""
+
+        return self._claim_latest_sendable_locked(
+            request,
+            expected_permission=expected_permission,
+            expected_request_sha256=expected_request_sha256,
+            expected_binding_sha256=expected_binding_sha256,
+            now_s=now_s,
+            max_age_s=max_age_s,
+            max_safety_age_s=max_safety_age_s,
+            minimum_cadence_s=minimum_cadence_s,
+        )
+
+    @_lifecycle_locked
+    def guarded_dispatch_latest_sendable_request(
+        self,
+        request: PhysicalOutputSendableRequest,
+        *,
+        expected_permission: PhysicalOutputPermission,
+        expected_request_sha256: str,
+        expected_binding_sha256: str,
+        now_s: float | None = None,
+        max_age_s: float,
+        max_safety_age_s: float,
+        minimum_cadence_s: float,
+        operation: Callable[[PhysicalOutputSendableRequest], object],
+    ) -> PhysicalOutputLifecycleDispatchResult:
+        """同じlock内で時刻とbindingを検査して一度だけbounded operationを実行する。"""
+
+        if not callable(operation):
+            raise TypeError("guarded dispatch operation must be callable")
+        dispatch_now = self._clock_now() if now_s is None else _required_timestamp(
+            "now_s", now_s
+        )
+        claimed = self._claim_latest_sendable_locked(
+            request,
+            expected_permission=expected_permission,
+            expected_request_sha256=expected_request_sha256,
+            expected_binding_sha256=expected_binding_sha256,
+            now_s=dispatch_now,
+            max_age_s=max_age_s,
+            max_safety_age_s=max_safety_age_s,
+            minimum_cadence_s=minimum_cadence_s,
+        )
+        if not claimed.claimed:
+            return claimed
+        try:
+            operation_result = operation(request)
+        except Exception as exc:
+            failure = self._terminal_transition(
+                "failure",
+                "failed",
+                "physical_output_guarded_dispatch_failed",
+                dispatch_now,
+            )
+            return PhysicalOutputLifecycleDispatchResult(
+                claimed=True,
+                state=failure.state,
+                reason="physical_output_guarded_dispatch_failed",
+                event=failure.event,
+                operation_invoked=True,
+                operation_error_type=type(exc).__name__,
+            )
+        return PhysicalOutputLifecycleDispatchResult(
+            claimed=True,
+            state=self._state,
+            event=claimed.event,
+            operation_invoked=True,
+            operation_result=operation_result,
+        )
+
+    def _claim_latest_sendable_locked(
+        self,
+        request: PhysicalOutputSendableRequest,
+        *,
+        expected_permission: PhysicalOutputPermission,
+        expected_request_sha256: str,
+        expected_binding_sha256: str,
+        now_s: float,
+        max_age_s: float,
+        max_safety_age_s: float,
+        minimum_cadence_s: float,
+    ) -> PhysicalOutputLifecycleDispatchResult:
+        now = _required_timestamp("now_s", now_s)
+        if not isinstance(expected_permission, PhysicalOutputPermission):
+            raise TypeError("expected_permission must be PhysicalOutputPermission")
+        if not isinstance(request, PhysicalOutputSendableRequest):
+            raise TypeError("request must be PhysicalOutputSendableRequest")
+        if not isinstance(expected_request_sha256, str) or not isinstance(
+            expected_binding_sha256, str
+        ):
+            raise TypeError("expected request and binding digests must be strings")
+        minimum_cadence = _lifecycle_timestamp(
+            "minimum_cadence_s",
+            minimum_cadence_s,
+        )
+        if minimum_cadence is None or minimum_cadence < 0.0:
+            raise ValueError("minimum_cadence_s must be finite and non-negative")
+        if self._state != "active":
+            return PhysicalOutputLifecycleDispatchResult(
+                claimed=False,
+                state=self._state,
+                reason="lifecycle_state_not_active",
+            )
+        if (
+            self._latest_sendable_request is not request
+            or self._latest_request is not request.request
+        ):
+            return PhysicalOutputLifecycleDispatchResult(
+                claimed=False,
+                state=self._state,
+                reason="physical_output_sendable_request_not_latest",
+            )
+        if self._permission != expected_permission:
+            failure = self._terminal_transition(
+                "failure",
+                "failed",
+                "physical_output_permission_binding_mismatch",
+                now,
+            )
+            return PhysicalOutputLifecycleDispatchResult(
+                claimed=False,
+                state=failure.state,
+                reason=failure.reason,
+                event=failure.event,
+            )
+        try:
+            validate_physical_output_sendable_request(request)
+        except Exception:
+            failure = self._terminal_transition(
+                "failure",
+                "failed",
+                "physical_output_safety_binding_invalid",
+                now,
+            )
+            return PhysicalOutputLifecycleDispatchResult(
+                claimed=False,
+                state=failure.state,
+                reason=failure.reason,
+                event=failure.event,
+            )
+        if (
+            request.request_sha256 != expected_request_sha256
+            or request.binding_sha256 != expected_binding_sha256
+        ):
+            failure = self._terminal_transition(
+                "failure",
+                "failed",
+                "physical_output_binding_identity_mismatch",
+                now,
+            )
+            return PhysicalOutputLifecycleDispatchResult(
+                claimed=False,
+                state=failure.state,
+                reason=failure.reason,
+                event=failure.event,
+            )
+
+        evaluation = request.evaluation
+        freshness_reason = _request_freshness_reason(
+            request.request,
+            now_s=now,
+            max_age_s=max_age_s,
+        ) or _safety_freshness_reason(
+            evaluation,
+            now_s=now,
+            max_age_s=max_safety_age_s,
+        )
+        if freshness_reason is not None:
+            event = self._enter_hold(
+                "source_stale",
+                freshness_reason,
+                timestamp_s=now,
+            ).event
+            return PhysicalOutputLifecycleDispatchResult(
+                claimed=False,
+                state=self._state,
+                reason=freshness_reason,
+                event=event,
+            )
+
+        request_timestamp = request.request.timestamp_s
+        if (
+            self._last_claimed_sequence is not None
+            and request.request.sequence <= self._last_claimed_sequence
+        ):
+            return PhysicalOutputLifecycleDispatchResult(
+                claimed=False,
+                state=self._state,
+                reason="physical_output_sequence_out_of_order",
+            )
+        if (
+            self._last_claimed_request_timestamp_s is not None
+            and request_timestamp <= self._last_claimed_request_timestamp_s
+        ):
+            event = self._enter_hold(
+                "source_stale",
+                "physical_output_timestamp_out_of_order",
+                timestamp_s=now,
+            ).event
+            return PhysicalOutputLifecycleDispatchResult(
+                claimed=False,
+                state=self._state,
+                reason="physical_output_timestamp_out_of_order",
+                event=event,
+            )
+        if self._last_claimed_at_s is not None:
+            minimum_interval = max(
+                minimum_cadence,
+                request.request.cadence_s,
+                self._last_claimed_cadence_s or 0.0,
+            )
+            if now - self._last_claimed_at_s < minimum_interval:
+                return PhysicalOutputLifecycleDispatchResult(
+                    claimed=False,
+                    state=self._state,
+                    reason="physical_output_cadence_not_elapsed",
+                )
+
+        self._clear_latest_request()
+        self._last_claimed_sequence = request.request.sequence
+        self._last_claimed_request_timestamp_s = request_timestamp
+        self._last_claimed_at_s = now
+        self._last_claimed_cadence_s = request.request.cadence_s
+        event = self._record(
+            "request_claimed",
+            state_before=self._state,
+            state_after=self._state,
+            request_sequence=request.request.sequence,
+            timestamp_s=now,
+            reason="physical_output_request_claimed",
+            safety_evidence=evaluation.to_trace_evidence(),
+        )
+        return PhysicalOutputLifecycleDispatchResult(
+            claimed=True,
+            state=self._state,
+            reason="physical_output_request_claimed",
+            event=event,
         )
 
     def _clear_latest_request(self) -> None:
@@ -1663,6 +1970,7 @@ def _request_freshness_reason(
 __all__ = [
     "PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION",
     "PhysicalOutputLifecycle",
+    "PhysicalOutputLifecycleDispatchResult",
     "PhysicalOutputLifecycleEvent",
     "PhysicalOutputLifecycleEventKind",
     "PhysicalOutputLifecycleResult",

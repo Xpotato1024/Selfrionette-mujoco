@@ -25,7 +25,7 @@ related:
 | `execution/` | route-bound `ControlMappedRuntimePipeline`、input step loop、typed command / input-source execution adapters、timing / pacing |
 | `control/` | input source state / selection、endpoint target、viewer ingress、motion metadata |
 | `safety/` | stale command safety、qpos feasibility |
-| `output/` | P5 safety evaluationとexact request binding、allow-only sendable type、permission decision、lossless recording / dry-run trace、safety-aware lifecycle / bounded stop。transport / hardware送信は行わない |
+| `output/` | P5 safety evaluationとexact request binding、allow-only sendable type、permission decision、lossless recording / dry-run trace、safety-aware lifecycle / bounded stop、明示設定されたgeneric transport adapter。robot actuationは行わない |
 | `contact/` | versioned contact manifest、backend-owned MuJoCo scene composition / reset、MuJoCo measured contact evidence、Task contractの共有型 |
 | `experiment/` | 6軸のexperiment plugin contract、registry、readiness composition、software-only trial lifecycle |
 | `evaluation/` | FK / endpoint metric、progress、evaluation manifest / freeze readiness |
@@ -44,6 +44,13 @@ artifact emissionを実装しない。validated v1 logからのmetric導出とca
 `runtime/` is the only composition root。input、motion、kinematics、MuJoCo backend、transportを
 layer横断で接続できるのはruntimeだけである。MuJoCo remains the physical source of truth。
 viewerはrender-onlyであり、runtime stateを再計算しない。
+
+`runtime.output.transport_adapter`はP5 allow、lifecycle、permissionと`transport/`のgeneric OSC / UDP
+providerを接続する唯一のoutput transport compositionである。defaultは`disabled`で、explicit
+`transmission_enabled`と一致するoperator gateを要求する。adapterはcodec identity、request bytes、candidate、
+target、endpoint、revision、freshness、sequenceを結び、送信は1回に制限する。`transport/`はOSC bytesとendpoint
+deliveryを所有し、runtimeやrobot固有command mappingをimportしない。module-level contractをruntime package
+rootからre-exportせず、adapter以外のoutput coreからtransportへ依存させない。
 
 R7-Hの`runtime/contact/`はmanifestからMuJoCo scene variantを構成し、task objectのbackend body / geom、
 model settings、trial reset、初期contact readinessを所有する。scene compositionはviewerへ装飾cubeを

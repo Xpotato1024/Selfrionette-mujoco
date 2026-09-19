@@ -15,9 +15,10 @@ related:
 
 ## 目的
 
-この文書は、runtime内部のcommandと、将来のphysical outputへ渡せるrequestを分離する
-versioned contractを定義する。K-preではrequestの構築、permission判定、JSONのstrict
-round-tripだけを行い、transport、network、serial、OSC、robot actuationは行わない。
+この文書はruntime内部のcommandとphysical output requestを分離するversioned contractを
+定義する。defaultは`disabled`であり、request構築やmodule importだけではtransportを呼ばない。
+#514は明示設定されたruntime adapterからgeneric OSC / UDP datagramを試行できるが、実送信、receiver
+受理、robot actuationの実測証拠を与えない。
 
 ## Request
 
@@ -53,9 +54,9 @@ modeは次のclosed vocabularyだけを受理する。
 | mode | 意味 | network / robot side effect |
 |---|---|---|
 | `disabled` | default。outputを拒否する | なし |
-| `dry_run` | requestを検査できるrecording-only mode | なし |
-| `transmission_enabled` | explicit operator gate付きの将来transport許可 | K-preでは実行しない |
-| `physical_actuation` | explicit operator gate付きの将来physical mode | K-preでは実行しない |
+| `dry_run` | requestとOSC previewを検査するmode | なし |
+| `transmission_enabled` | explicit operator gate付きのtransport permission | P5 allow、active lifecycle、freshness、target / endpoint / revision / codec identityが一致した場合だけUDPを1回試行 |
+| `physical_actuation` | explicit operator gate付きのphysical mode | #514 adapterは受け付けない |
 
 `transmission_enabled`と`physical_actuation`には、`operator_id`とopaqueな
 `enable_token_id`の両方を必須とする。`enable_token_id`そのものはsecretではなく、
@@ -77,6 +78,9 @@ requested -> accepted / rejected -> sent -> acknowledged
 `sent`と`acknowledged`は後続のtrace / transport boundaryで別eventとして記録する。
 traceの`permitted` eventも、non-disabled permissionに対する`accepted` decisionと
 explicit operator gateを要求し、disabled permissionを成功として記録しない。
+`simulated_acceptance`はfake providerの応答でありsocket送信を示さない。`accepted_by_local_socket`は
+実UDP providerのlocal socketが返したbyte countだけを示す。どちらもreceiver受理、robot受理、movementを
+示さず、receiver ACKは相関できる受信経路がないため`unavailable`である。
 
 ## P5 safety binding
 
@@ -171,7 +175,30 @@ public transitionは一つのreducer lockで直列化し、event sinkの失敗�
 検証する。`complete_stop`はstop開始時刻より前のtimestampを拒否し、停止状態とtraceを変更しない。
 新規lifecycle eventは`physical-output-lifecycle/v2`でP5のstatus / reason、action、candidate、
 robot / revision、checked-at、provenance、request / safety-input / decision / binding digestsを保存する。readerは既存のv1
-eventも受理し、新規v2の`request_accepted`にはsafety evidenceを必須とする。
+eventも受理し、新規v2の`request_accepted`にはsafety evidenceを必須とする。transport dispatchは同じreducer lockで
+latest sendable wrapper、identity、freshness、permission、sequence、cadenceを再検査し、1回だけclaimする。
+bounded provider callの途中でstopは割り込まず、in-flight datagramを取り消せるとは保証しない。UDP providerは
+設定timeoutを使い、各datagram後にsocketを閉じ、自動retryを行わない。
+
+## #514 generic OSC / UDP transport
+
+`runtime.output.transport_adapter`はP5 allow-only wrapper、active lifecycle、permissionとgeneric
+`transport/`をつなぐ。strictな`physical-output-transport-config/v1`はtarget robot、software revision、
+endpoint、mode、freshness / cadence、`expected_codec_identity`を保持する。codec identityはversion付きIDと
+immutable settingsのcontent digestから作り、adapterはencoder identityとの完全一致を要求する。
+
+pure `PhysicalOutputWireEncoder`はvalidated requestを含むtyped logical envelopeからOSC semanticsだけを返す。
+共通の`encode_osc_message`がdatagram bytesを一度生成し、`PhysicalOutputEncodedDatagram`がlogical envelope、
+codec ID / version / immutable settings digest、およびそれらから導く`identity_sha256`、OSC semantics、実byte列と
+SHA-256を束ねる。attemptと`PhysicalOutputTransportRecordingSink`にも同じtyped値を渡す。providerはそのbyte列を
+変更しない。generic defaultは`physical-output-wire/v1`でcanonical request bytes、
+candidate、request / safety binding、target、endpoint、revision、session、sequence、attempt identityを含める。
+
+`disabled`は処理を止め、`dry_run`はlocal previewを返し、`recording`は明示されたlocal-only sinkへencoded
+datagram evidenceを渡す。これらはDNS、socket、network callをしない。`transmission_enabled`だけが、permissionと
+全identity / freshnessが一致した後に1回のUDP attemptを行う。generic layerはrobot固有joint order、unit変換、
+calibration、receiver mappingを持たない。送信attempt、simulated / local socket result、receiver ACKは別のevidence
+levelとして扱い、ACKは`unavailable`のままとする。
 
 ## Serialization / failure
 
@@ -186,9 +213,9 @@ serializeし、decode時にunknown field、missing field、duplicate key、non-f
 - `runtime.output.permission`がpermission decisionを所有し、`runtime.output.safety_gate`がP5 safety
   evaluationとrequest binding、allow-only sendable wrapperを所有する。`runtime.output.trace`がrecording /
   dry-run request trace、artifact、replayを所有し、`runtime.output.lifecycle`がstate、bounded stop、
-  safety-aware lifecycle traceを所有する。
-- `runtime/`が将来のcompositionを所有し、Input Source固有分岐をphysical output coreへ持ち込まない。
-- K-preの実装とtestはsocket、network、serial、Arduino、OSC、Robot providerを開かない・呼ばない。
+  safety-aware lifecycle traceを所有する。`runtime.output.transport_adapter`だけがそれらをtransportへ合成する。
+- `transport/`がgeneric OSC encoding、endpoint設定、UDP providerを所有し、runtimeやrobot固有mappingをimportしない。
+- testsはfake sender / fake socketを使い、DNS、実socket、network、serial、Arduino、robot outputは実行しない。
 - 実機作動は`docs/operations/hardware-safety.md`と専用Issue / 明示許可の範囲に限る。
 
 Runtime設定は`EvaluatedJointRoute(endpoint_id, joint_names)`で、既存endpoint設定とRobot-ownedの全joint順序を明示的に結ぶ。P3 producerはこのrouteのjoint名を実MuJoCo joint addressへ解決して観測し、routeもoriginへ保持する。P4は同じrouteをConfigurationState / TrajectorySampleの評価入力として保持し、policyのjoint順序との一致を要求する。output gateはrequest endpointも照合するため、同じqpos数値の別endpointへIDだけ付け替えても拒否する。routeはruntimeの構成情報であり、requestから任意の別joint groupを推測するresolverではない。FastArmでは既存endpoint設定とProfileのcanonical joint orderを使用し、route不明のgroupは評価しない。
