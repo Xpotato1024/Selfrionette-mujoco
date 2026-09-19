@@ -64,3 +64,5 @@ Markdown migration全体のpath、role、action、destinationは上記snapshot�
 全Markdown migration indexではない。
 
 historical evidenceの本文とprovenanceを現在仕様へ合わせて改稿しない。
+
+- [R7-L全体整合の実装前調査](audits/r7-l-consistency-baseline-2026-09-20.md): #545の基点、再現欠陥、前回self監査の訂正、未確認範囲。

@@ -47,7 +47,7 @@ CLI behaviorを維持する。
 | --- | --- |
 | live Selfrionette runtime | hardware / serial operator gate を含み、generic CLI の対象外 |
 | robot diagnostics | 現在は `fast_arm` 固有で、Robot Bundle に対応する typed capability がない |
-| evaluation | 統一対象となる既存の plugin-aware runner がない。将来 runner は #406 以降の範囲 |
+| evaluation | R7-Gの専用plugin-aware runnerは実装済みだが、generic CLIのsubcommandには統合していない。`docs/operations/r7-g-deterministic-e2e.md`を参照 |
 | fixture export | repository developer tool であり、production CLI の責務ではない |
 
 未知 robot、必要 capability の欠落、runtime failure は終了 status `1`、help は `0`、引数
