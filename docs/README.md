@@ -40,6 +40,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | contact-task trial log / viewer projection | `docs/contracts/contact-task-log-v1.md` | raw contact、derived force、Task outcomeを分離するversioned JSONLとpayload/viewer境界 |
 | kinematics / command境界 | `docs/contracts/kinematics-command-contract.md` | solver、command、qpos境界 |
 | physical output contract | `docs/contracts/physical-output.md` | typed request、permission mode、truth level、K-preのno-side-effect境界 |
+| pre-hardware signal emulation design and acceptance boundary | `docs/contracts/pre-hardware-signal-emulation.md` | 連続入力、bounded取得、no-I/O peer、統合gate、未確定なphysical情報 |
 | fast_arm MuJoCo model name | `docs/contracts/mujoco-model-name-contract.md` | plugin-owned body/site name、fallback、failure contract |
 | forward kinematics | `docs/contracts/forward-kinematics.md` | robot-specific FK ownership |
 | inverse kinematics | `docs/contracts/inverse-kinematics.md` | robot-specific IK ownership |

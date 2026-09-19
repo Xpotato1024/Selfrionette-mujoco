@@ -9,3 +9,5 @@
 *.png binary
 *.jpg binary
 *.jpeg binary
+# Pythonとviewerがbyte一致を検証するfixtureは改行を変換しない。
+apps/mujoco-viewer/tests/fixtures/contact-cube-v1-demo.jsonl text eol=lf

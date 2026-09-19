@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-09-20
 canonical_for:
   - R7-B runtime input pipeline contract
 related:
@@ -193,3 +193,22 @@ serial frame lines
 ## Historical provenance
 
 pre-audit inventoryとimplementation chronologyは`docs/reports/audits/canonical-content-history-separation-2026-07-16.md`へ保存した。
+
+## 連続Selfrionetteのstep-loop経路
+
+`select_runtime_input_source("selfrionette", line_source=..., steps=...,
+control_mapping_parameters=...)`と`build_runtime_input_source_step_loop_plan`を使用する。
+`run_runtime_input_source_step_loop`の一度の呼出しで複数sampleを処理し、readerの
+start/close、Robot-owned model生成はsessionごとに一度とする。
+
+LOADCELL_SOURCEの位置増分写像には、runtimeが同stepのpre-step snapshotから観測した
+`current_tip_position_m`を渡す。selectionの固定parameterは変更せず、初期値へ戻さない。
+model-aligned local motion generatorへ`local_endpoint_delta`を明示して渡し、増分/sampleを
+velocityと読み替えたりdtを掛けたりしない。既存Gamepad velocity経路とabsolute IKは維持する。
+増分経路にはvelocity入力を示すmetadataを生成せず、`endpoint_delta_per_sample/v1`を記録する。
+
+7x3 weights/gainは明示する。既定のzero weightsは実機calibrationではない。
+measured tipが利用不能ならfail-closedで停止し、期待位置やzeroで置き換えない。
+malformed/EOFでreaderをcloseする。silent/staleのbounded取得はR7-L-P2の別gateとする。
+`live_selfrionette`の旧per-frame smoke helperは互換のため残るが、連続sessionの正本ではない。
+詳細・残作業は`docs/contracts/pre-hardware-signal-emulation.md`を参照する。

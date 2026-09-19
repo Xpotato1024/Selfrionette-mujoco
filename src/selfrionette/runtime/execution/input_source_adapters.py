@@ -28,11 +28,17 @@ class RuntimeInputSourceExecutionAdapter:
         return self.semantics in (
             InputSourceExecutionSemantics.TARGET_METADATA,
             InputSourceExecutionSemantics.VIEWER_LOCAL_ENDPOINT_COMPATIBILITY,
+            InputSourceExecutionSemantics.LOADCELL_SOURCE,
         )
 
     @property
     def uses_viewer_endpoint_compatibility(self) -> bool:
         return self.semantics is InputSourceExecutionSemantics.VIEWER_LOCAL_ENDPOINT_COMPATIBILITY
+
+    @property
+    def requires_measured_endpoint_context(self) -> bool:
+        """位置増分写像には同じstepのMuJoCo観測位置をruntimeが渡す。"""
+        return self.semantics is InputSourceExecutionSemantics.LOADCELL_SOURCE
 
     @property
     def uses_replay_pipeline(self) -> bool:

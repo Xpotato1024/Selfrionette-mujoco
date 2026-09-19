@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from math import isfinite
 from time import monotonic
 
 from selfrionette.plugins.input_sources.viewer import (
@@ -220,6 +221,8 @@ def build_runtime_input_source_step_loop_plan(
         )
 
     if execution_adapter.annotates_target_position and not execution_adapter.uses_viewer_endpoint_compatibility:
+        if execution_adapter.requires_measured_endpoint_context and selection.runtime_reader is None:
+            raise ValueError("measured-endpoint input requires an explicit managed reader")
         pipeline = build_concrete_mujoco_pipeline(
             frames=selection.frames,
             config=runtime_config,
@@ -231,6 +234,11 @@ def build_runtime_input_source_step_loop_plan(
             mapping_input_adapter=selection.mapping_input_adapter,
             robot_catalog=robot_catalog,
             command_semantics_route_selection=selected_command_semantics_route.identity,
+            input_source=(
+                selection.runtime_reader
+                if execution_adapter.requires_measured_endpoint_context
+                else None
+            ),
         )
         if selection.runtime_reader is not None:
             pipeline.input_source = selection.runtime_reader
@@ -241,6 +249,10 @@ def build_runtime_input_source_step_loop_plan(
         )
         if endpoint_command_provider is not None:
             assert isinstance(endpoint_command_provider, EndpointCommandProvider)
+        if execution_adapter.requires_measured_endpoint_context:
+            if endpoint_command_provider is None:
+                raise ValueError("endpoint-delta input requires a local motion provider")
+            pipeline.motion_generator = endpoint_command_provider.build_local_endpoint_motion_generator()
         return RuntimeInputSourceStepLoopPlan(
             selection=selection,
             pipeline=pipeline,
@@ -447,6 +459,18 @@ async def run_runtime_input_source_step_loop(
                     raise
 
 
+def _mapping_parameters_for_snapshot(
+    plan: RuntimeInputSourceStepLoopPlan, state: MuJoCoState
+) -> Mapping[str, object]:
+    """固定configを変更せず、位置増分写像だけに同stepの実観測contextを渡す。"""
+    if not plan.execution_adapter.requires_measured_endpoint_context:
+        return plan.control_mapping_parameters
+    position = plan.endpoint_pose_provider.observe_endpoint_pose(state).position_m
+    if position is None or len(position) != 3 or not all(isfinite(value) for value in position):
+        raise ValueError("measured endpoint context is unavailable or invalid")
+    return {**plan.control_mapping_parameters, "current_tip_position_m": tuple(position)}
+
+
 async def _run_runtime_input_source_step_loop(
     plan: RuntimeInputSourceStepLoopPlan,
     *,
@@ -508,6 +532,8 @@ async def _run_runtime_input_source_step_loop(
             ):
                 raise ValueError("input source frame metadata and typed health disagree")
         frame = annotate_raw_input_frame(raw_frame, source_state)
+        pre_step_state = plan.pipeline.simulator.snapshot()
+        mapping_parameters = _mapping_parameters_for_snapshot(plan, pre_step_state)
         mapping_input = (
             plan.mapping_input_adapter(frame)
             if plan.mapping_input_adapter is not None
@@ -515,7 +541,7 @@ async def _run_runtime_input_source_step_loop(
         )
         mapped_intent = plan.control_mapping.strategy.map_input(
             mapping_input,
-            plan.control_mapping_parameters,
+            mapping_parameters,
         )
         if not isinstance(mapped_intent, InputIntent):
             raise TypeError(
@@ -532,7 +558,6 @@ async def _run_runtime_input_source_step_loop(
             buttons=intent.buttons,
             metadata={**frame.metadata, **intent.metadata},
         )
-        pre_step_state = plan.pipeline.simulator.snapshot()
         pre_step_tip_site_orientation_wxyz = None
         if plan.execution_adapter.uses_viewer_endpoint_compatibility:
             pre_step_tip_site_orientation_wxyz = _extract_endpoint_orientation_wxyz_from_state(
@@ -551,6 +576,12 @@ async def _run_runtime_input_source_step_loop(
                 },
             )
         motion_intent = intent
+        if plan.execution_adapter.requires_measured_endpoint_context:
+            # このrouteは位置増分/sample。Gamepadの速度積分として再解釈しない。
+            motion_intent = replace(
+                intent,
+                metadata={**intent.metadata, "intent_kind": "local_endpoint_delta", "control_frame": "world"},
+            )
         if plan.execution_adapter.uses_viewer_endpoint_compatibility:
             motion_intent_metadata = {
                 **frame.metadata,
@@ -593,7 +624,10 @@ async def _run_runtime_input_source_step_loop(
             ),
         )
         measurement = PostStepMeasurement(None, None, None)
-        if plan.execution_adapter.uses_viewer_endpoint_compatibility and plan.endpoint_site_name is not None:
+        if (
+            plan.execution_adapter.uses_viewer_endpoint_compatibility
+            or plan.execution_adapter.requires_measured_endpoint_context
+        ) and plan.endpoint_site_name is not None:
             measurement = measure_post_step_endpoint(
                 pre_step_state,
                 state,

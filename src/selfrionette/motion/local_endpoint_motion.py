@@ -253,7 +253,16 @@ class LocalEndpointMotionGenerator:
             local_endpoint_velocity_m_s = tuple(component * local_endpoint_speed_m_s for component in axis_values)
         if endpoint_velocity_m_s is None:
             endpoint_velocity_m_s = local_endpoint_velocity_m_s
-        raw_requested_endpoint_delta_m = tuple(component * dt_s for component in endpoint_velocity_m_s)
+        delta_input = intent.metadata.get("intent_kind") == "local_endpoint_delta"
+        if delta_input:
+            # 位置増分はsampleごとのworld変位であり、dtを掛ける速度入力ではない。
+            if intent.metadata.get("control_frame") != "world":
+                raise ValueError("endpoint delta input requires explicit world frame")
+            raw_requested_endpoint_delta_m = _resolve_vector3_from_intent(intent, key="endpoint_delta_m")
+            if raw_requested_endpoint_delta_m is None:
+                raise ValueError("endpoint delta input requires endpoint_delta_m")
+        else:
+            raw_requested_endpoint_delta_m = tuple(component * dt_s for component in endpoint_velocity_m_s)
         requested_endpoint_delta_m = _scale_vector(
             raw_requested_endpoint_delta_m,
             limit=self._max_endpoint_delta_per_tick_m,
@@ -351,6 +360,15 @@ class LocalEndpointMotionGenerator:
             "desired_endpoint_m": desired_endpoint_m,
         }
 
+        if delta_input:
+            # raw channel値を速度軸と偽って記録しない。位置増分の意味をそのまま保持する。
+            for key in (
+                "axis_values", "local_endpoint_speed_m_s", "local_endpoint_velocity_frame",
+                "local_endpoint_velocity_m_s", "resolved_world_endpoint_velocity_m_s",
+                "endpoint_velocity_m_s", "endpoint_velocity_frame",
+            ):
+                metadata.pop(key, None)
+            metadata["motion_input_semantics"] = "endpoint_delta_per_sample/v1"
         return MotionCommand(
             timestamp_s=intent.timestamp_s,
             joint=JointCommand(joint_angles_rad=candidate_qpos_rad),
