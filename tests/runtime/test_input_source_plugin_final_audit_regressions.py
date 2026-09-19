@@ -106,7 +106,9 @@ def test_loadcell_health_tracks_start_read_close_and_restart() -> None:
     assert initial.reason == "not_started"
 
     reader.start()
-    assert reader.current_health().status is InputSourceHealthStatus.ACTIVE
+    # startは受信の証拠ではない。未受信を明示し、次のread成功後だけactiveとなる。
+    assert reader.current_health().status is InputSourceHealthStatus.INACTIVE
+    assert reader.current_health().age_ms is None
     reader.read_frame()
     assert reader.current_health().status is InputSourceHealthStatus.ACTIVE
 
@@ -116,7 +118,9 @@ def test_loadcell_health_tracks_start_read_close_and_restart() -> None:
     assert closed.reason == "not_started"
 
     reader.start()
-    assert reader.current_health().status is InputSourceHealthStatus.ACTIVE
+    # startは受信の証拠ではない。未受信を明示し、次のread成功後だけactiveとなる。
+    assert reader.current_health().status is InputSourceHealthStatus.INACTIVE
+    assert reader.current_health().age_ms is None
     reader.close()
 
 

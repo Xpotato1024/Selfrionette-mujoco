@@ -93,3 +93,11 @@ serial module is required for live Selfrionette mode. Install pyserial or use in
 ```
 
 この場合はlive acquisitionを開始せず、injected-lines / fixture modeを使用する。
+
+### 取得が停止した場合
+
+sourceの有限取得policyは`docs/contracts/r7-a-lite-serial-frame-contract.md`を正とする。
+vector未到着、diagnostic連続、途中line、malformed、EOF、切断は成功frameで代用しない。
+runnerは取得例外を伝播してsourceをcloseする。初期化や校正によりvectorが出ていない場合も
+待ち続けないため、operatorはstreaming可能な状態を確認して明示的に再実行する。
+自動再接続・自動retryはない。静的clockのfixture実行を実時間staleや実機正常性の証拠にしない。
