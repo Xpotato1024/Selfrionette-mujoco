@@ -304,7 +304,7 @@ float32 typetag、joint数を検証する。expected commandを入力として�
 受ける。callerが`tick()`を呼び、tick開始、read復帰後、tick終了でexpiryを確認する。
 Noneは現時点の無受信、空bytesはmalformed packetとして区別する。1 tickで上限以上をreadしない。
 無受信・stormでも次tickで期限を確認し、受信OSErrorはdisconnect、不正/逆行clockはfailedにする。
-その他callback例外もpendingを無効化し、元の例外を再送出する。stop/disconnect後は追加readしない。
+その他callback例外もpendingを無効化し、元の例外を再送出する。後始末も失敗した場合は元の例外へ注記し、driverを閉じたままにする。stop/disconnect後は追加readしない。
 callback自体のblockingは中断できず、wall-clock deadlineやOS/driver応答性を保証する機構ではない。
 thread、timer、auto retry、socket listenerは持たない。actual receive wiringは#516のoperator gate下に残す。
 

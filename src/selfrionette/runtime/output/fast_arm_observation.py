@@ -243,16 +243,15 @@ class BoundedFastArmObservationDriver:
                 count += 1
                 events.append(self._target.observe_router_datagram(datagram, now_s=now))
             final = self._target.expire_acknowledgement(now_s=self._now())
-        except _ObservationClockError:
+        except Exception as failure:
             self._closed = True
-            self._target.expire_acknowledgement(now_s=float("nan"))
-            raise
-        except Exception:
-            # callback failureをclock failureと誤記録せず、取得済み時刻で切断する。
-            self._closed = True
-            if self._last_now is None:
-                self._target.expire_acknowledgement(now_s=float("nan"))
-            else:
-                self._target.disconnect(now_s=self._last_now)
+            try:
+                if isinstance(failure, _ObservationClockError) or self._last_now is None:
+                    self._target.expire_acknowledgement(now_s=float("nan"))
+                else:
+                    # callback failureをclock failureと誤記録しない。
+                    self._target.disconnect(now_s=self._last_now)
+            except Exception as cleanup_failure:
+                failure.add_note(f"observation cleanup failed: {cleanup_failure!r}")
             raise
         return FastArmObservationTick(tuple(events), final, count, count == self._budget)

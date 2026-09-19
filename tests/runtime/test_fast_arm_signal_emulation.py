@@ -375,3 +375,29 @@ def test_malformed_packet_at_deadline_cannot_keep_physical_session_alive():
     assert result.reason=="simulated_router_observation_timeout"
     assert target.state=="failed" and target.latest_sendable_request is None
     assert len(sender.send_calls)==1
+
+
+
+@pytest.mark.parametrize("cause",("receiver","clock"))
+def test_cleanup_failure_preserves_primary_cause_and_closes_driver(cause):
+    class FailingCleanupSession(FastArmSignalSession):
+        def disconnect(self, *, now_s):
+            super().disconnect(now_s=now_s)
+            raise RuntimeError("cleanup_failure")
+
+        def expire_acknowledgement(self, *, now_s):
+            result=super().expire_acknowledgement(now_s=now_s)
+            if now_s != now_s:
+                raise RuntimeError("cleanup_failure")
+            return result
+
+    target=FailingCleanupSession(profile=FAST_ARM_ROBOT_PROFILE,mapping=mapping(),acknowledgement_timeout_s=1.0)
+    target.submit(request(),now_s=10.0)
+    def receive(): raise ValueError("primary_receiver_failure")
+    driver=BoundedFastArmObservationDriver(target,receive_nowait=receive,
+        clock=Clock(float("nan") if cause=="clock" else 10.1),max_datagrams=1)
+    with pytest.raises(ValueError,match="clock is invalid" if cause=="clock" else "primary_receiver_failure") as error:
+        driver.tick()
+    assert any("cleanup_failure" in note for note in error.value.__notes__)
+    assert target.state=="failed"
+    assert driver.tick().received_count==0
