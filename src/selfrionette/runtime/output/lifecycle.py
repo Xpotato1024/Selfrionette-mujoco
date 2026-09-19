@@ -18,10 +18,18 @@ from threading import RLock
 from time import monotonic
 from typing import Literal, Protocol, TypeAlias
 
+from selfrionette.runtime.output.safety_gate import (
+    PhysicalOutputSafetyEvaluation,
+    PhysicalOutputSafetyTraceEvidence,
+    PhysicalOutputSendableRequest,
+    validate_physical_output_safety_evaluation,
+    validate_physical_output_sendable_request,
+)
 from selfrionette.schemas import PhysicalOutputPermission, PhysicalOutputRequest
 
 
-PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION = "physical-output-lifecycle/v1"
+PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION = "physical-output-lifecycle/v2"
+_PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION_V1 = "physical-output-lifecycle/v1"
 PhysicalOutputLifecycleState: TypeAlias = Literal[
     "disabled",
     "armed",
@@ -37,6 +45,10 @@ PhysicalOutputLifecycleEventKind: TypeAlias = Literal[
     "armed",
     "request_accepted",
     "request_rejected",
+    "safety_hold",
+    "safety_rejected",
+    "safety_stop",
+    "safety_invalid",
     "source_stale",
     "source_disconnected",
     "source_invalid",
@@ -59,6 +71,10 @@ _LIFECYCLE_EVENT_KINDS = frozenset(
         "armed",
         "request_accepted",
         "request_rejected",
+        "safety_hold",
+        "safety_rejected",
+        "safety_stop",
+        "safety_invalid",
         "source_stale",
         "source_disconnected",
         "source_invalid",
@@ -72,7 +88,7 @@ _LIFECYCLE_EVENT_KINDS = frozenset(
         "reconnect",
     }
 )
-_LIFECYCLE_EVENT_FIELDS = frozenset(
+_LIFECYCLE_EVENT_FIELDS_V1 = frozenset(
     {
         "event_kind",
         "event_sequence",
@@ -83,6 +99,16 @@ _LIFECYCLE_EVENT_FIELDS = frozenset(
         "state_after",
         "state_before",
         "timestamp_s",
+    }
+)
+_LIFECYCLE_EVENT_FIELDS_V2 = _LIFECYCLE_EVENT_FIELDS_V1 | {"safety_evidence"}
+_LIFECYCLE_NO_SEQUENCE_REASONS = frozenset(
+    {
+        "session_mismatch",
+        "duplicate_or_out_of_order_sequence",
+        "lifecycle_state_not_accepting",
+        "physical_safety_binding_required",
+        "physical_safety_binding_invalid",
     }
 )
 
@@ -145,7 +171,7 @@ def _lifecycle_canonical_json_bytes(value: object) -> bytes:
 
 @dataclass(frozen=True, slots=True)
 class PhysicalOutputLifecycleEvent:
-    """Immutable transition evidence; state_after is the authoritative result."""
+    """`state_after`を正とし、transitionとP5 evidenceを保持するimmutable event。"""
 
     event_sequence: int
     event_kind: PhysicalOutputLifecycleEventKind
@@ -156,11 +182,15 @@ class PhysicalOutputLifecycleEvent:
     timestamp_s: float | None = None
     reason: str | None = None
     schema_version: str = PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION
+    safety_evidence: PhysicalOutputSafetyTraceEvidence | None = None
 
     def __post_init__(self) -> None:
         _lifecycle_sequence(self.event_sequence)
         _lifecycle_identifier("session_id", self.session_id)
-        if self.schema_version != PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION:
+        if self.schema_version not in {
+            _PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION_V1,
+            PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION,
+        }:
             raise ValueError(
                 "unsupported physical output lifecycle schema_version: "
                 f"{self.schema_version!r}"
@@ -182,6 +212,10 @@ class PhysicalOutputLifecycleEvent:
         if self.event_kind in {
             "arm_rejected",
             "request_rejected",
+            "safety_hold",
+            "safety_rejected",
+            "safety_stop",
+            "safety_invalid",
             "source_stale",
             "source_disconnected",
             "source_invalid",
@@ -193,6 +227,36 @@ class PhysicalOutputLifecycleEvent:
             "cleanup_failure",
         } and reason is None:
             raise ValueError(f"{self.event_kind} lifecycle event requires a reason")
+        if self.safety_evidence is not None:
+            if not isinstance(self.safety_evidence, PhysicalOutputSafetyTraceEvidence):
+                raise TypeError(
+                    "safety_evidence must be PhysicalOutputSafetyTraceEvidence or None"
+                )
+            if self.schema_version != PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION:
+                raise ValueError("legacy lifecycle event cannot carry safety evidence")
+        if self.event_kind in {
+            "safety_hold",
+            "safety_rejected",
+            "safety_stop",
+            "safety_invalid",
+        } and self.safety_evidence is None:
+            raise ValueError(f"{self.event_kind} event requires safety evidence")
+        if (
+            self.event_kind == "request_accepted"
+            and self.schema_version == PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION
+            and self.safety_evidence is None
+        ):
+            raise ValueError("accepted v2 lifecycle event requires safety evidence")
+        if (
+            self.schema_version == _PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION_V1
+            and self.event_kind in {
+                "safety_hold",
+                "safety_rejected",
+                "safety_stop",
+                "safety_invalid",
+            }
+        ):
+            raise ValueError("legacy lifecycle event cannot carry a safety transition")
         if self.event_kind == "armed" and self.state_after != "armed":
             raise ValueError("armed event must enter armed state")
         if self.event_kind == "armed" and self.state_before not in {
@@ -217,6 +281,35 @@ class PhysicalOutputLifecycleEvent:
             "hold",
         }:
             raise ValueError("request_rejected event may only preserve state or enter hold")
+        if self.event_kind == "safety_hold":
+            if self.state_after not in {self.state_before, "hold"}:
+                raise ValueError("safety_hold event may only preserve state or enter hold")
+            if self.state_after == "hold" and self.state_before not in {
+                "armed",
+                "active",
+                "hold",
+            }:
+                raise ValueError("safety_hold may enter hold only from an accepting state")
+        if self.event_kind == "safety_rejected" and self.state_after != self.state_before:
+            raise ValueError("safety_rejected event cannot change lifecycle state")
+        if self.event_kind == "safety_stop":
+            if self.state_after not in {self.state_before, "stopping"}:
+                raise ValueError("safety_stop may only preserve state or enter stopping")
+            if self.state_after == "stopping" and self.state_before not in {
+                "armed",
+                "active",
+                "hold",
+                "stopping",
+            }:
+                raise ValueError("safety_stop cannot enter stopping from this state")
+        if self.event_kind == "safety_invalid":
+            expected_state = (
+                self.state_before
+                if self.state_before in {"aborted", "failed"}
+                else "aborted"
+            )
+            if self.state_after != expected_state:
+                raise ValueError("safety_invalid must enter aborted or preserve a terminal state")
         if self.event_kind == "stop_completed":
             if self.state_before not in {"stopping", "stopped"}:
                 raise ValueError("stop_completed event must come from stopping or stopped state")
@@ -336,7 +429,7 @@ class PhysicalOutputLifecycleEvent:
         object.__setattr__(self, "reason", reason)
 
     def to_json_value(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "event_kind": self.event_kind,
             "event_sequence": self.event_sequence,
             "reason": self.reason,
@@ -347,6 +440,13 @@ class PhysicalOutputLifecycleEvent:
             "state_before": self.state_before,
             "timestamp_s": self.timestamp_s,
         }
+        if self.schema_version == PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION:
+            result["safety_evidence"] = (
+                None
+                if self.safety_evidence is None
+                else self.safety_evidence.to_json_value()
+            )
+        return result
 
     def to_json_bytes(self) -> bytes:
         return _lifecycle_canonical_json_bytes(self.to_json_value())
@@ -399,9 +499,16 @@ def _lifecycle_event_from_json(
         if isinstance(document, dict)
         else _lifecycle_parse_json_object(document)
     )
+    schema_version = payload.get("schema_version")
+    if schema_version == _PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION_V1:
+        expected_fields = _LIFECYCLE_EVENT_FIELDS_V1
+    elif schema_version == PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION:
+        expected_fields = _LIFECYCLE_EVENT_FIELDS_V2
+    else:
+        raise ValueError("unsupported physical output lifecycle schema_version")
     actual = frozenset(payload)
-    unknown = sorted(actual - _LIFECYCLE_EVENT_FIELDS)
-    missing = sorted(_LIFECYCLE_EVENT_FIELDS - actual)
+    unknown = sorted(actual - expected_fields)
+    missing = sorted(expected_fields - actual)
     if unknown:
         raise ValueError(f"physical output lifecycle event has unknown fields: {unknown}")
     if missing:
@@ -410,8 +517,10 @@ def _lifecycle_event_from_json(
     state_before = payload["state_before"]
     state_after = payload["state_after"]
     session_id = payload["session_id"]
-    schema_version = payload["schema_version"]
-    if not all(isinstance(value, str) for value in (event_kind, state_before, state_after, session_id, schema_version)):
+    if not all(
+        isinstance(value, str)
+        for value in (event_kind, state_before, state_after, session_id, schema_version)
+    ):
         raise ValueError("physical output lifecycle string fields have invalid types")
     request_sequence = payload["request_sequence"]
     if request_sequence is not None and type(request_sequence) is not int:
@@ -424,6 +533,13 @@ def _lifecycle_event_from_json(
     reason = payload["reason"]
     if reason is not None and not isinstance(reason, str):
         raise ValueError("physical output lifecycle reason must be string or null")
+    safety_evidence = None
+    if schema_version == PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION:
+        evidence_document = payload["safety_evidence"]
+        if evidence_document is not None:
+            safety_evidence = PhysicalOutputSafetyTraceEvidence.from_json_value(
+                evidence_document
+            )
     return PhysicalOutputLifecycleEvent(
         event_sequence=_lifecycle_sequence(payload["event_sequence"]),
         event_kind=event_kind,  # type: ignore[arg-type]
@@ -434,6 +550,7 @@ def _lifecycle_event_from_json(
         timestamp_s=timestamp_s,
         reason=reason,
         schema_version=schema_version,
+        safety_evidence=safety_evidence,
     )
 
 
@@ -473,15 +590,18 @@ def _validate_lifecycle_events(events: tuple[PhysicalOutputLifecycleEvent, ...])
         }:
             raise ValueError("physical output lifecycle re-arm requires a new session")
         previous_state = event.state_after
-        if event.event_kind in {"request_accepted", "request_rejected"}:
-            if event.request_sequence is None and not (
-                event.event_kind == "request_rejected"
-                and event.reason
-                in {
-                    "session_mismatch",
-                    "duplicate_or_out_of_order_sequence",
-                    "lifecycle_state_not_accepting",
-                }
+        request_event_kinds = {
+            "request_accepted",
+            "request_rejected",
+            "safety_hold",
+            "safety_rejected",
+            "safety_stop",
+            "safety_invalid",
+        }
+        if event.event_kind in request_event_kinds:
+            if (
+                event.request_sequence is None
+                and event.reason not in _LIFECYCLE_NO_SEQUENCE_REASONS
             ):
                 raise ValueError(f"{event.event_kind} requires request_sequence")
             if event.request_sequence is None:
@@ -504,7 +624,7 @@ def _validate_lifecycle_events(events: tuple[PhysicalOutputLifecycleEvent, ...])
 
 @dataclass(frozen=True, slots=True)
 class PhysicalOutputLifecycleTrace:
-    """Strict deterministic lifecycle-only JSONL evidence."""
+    """lifecycle event v1のreadとv2のstrict deterministic JSONL evidence。"""
 
     events: tuple[PhysicalOutputLifecycleEvent, ...] = ()
     schema_version: str = PHYSICAL_OUTPUT_LIFECYCLE_SCHEMA_VERSION
@@ -551,16 +671,17 @@ class PhysicalOutputLifecycleTrace:
 
 @dataclass(frozen=True, slots=True)
 class PhysicalOutputLifecycleResult:
-    """Outcome returned by request/transition operations."""
+    """request / transition operationの結果。"""
 
     accepted: bool
     state: PhysicalOutputLifecycleState
     reason: str | None = None
     event: PhysicalOutputLifecycleEvent | None = None
+    sendable_request: PhysicalOutputSendableRequest | None = None
 
 
 class PhysicalOutputLifecycle:
-    """Pure local state machine guarding request acceptance and stop semantics."""
+    """P5 safety binding、freshness、lifecycle state、bounded stopを守るpure local state machine。"""
 
     def __init__(
         self,
@@ -587,6 +708,7 @@ class PhysicalOutputLifecycle:
         self._state: PhysicalOutputLifecycleState = "disabled"
         self._permission: PhysicalOutputPermission | None = None
         self._latest_request: PhysicalOutputRequest | None = None
+        self._latest_sendable_request: PhysicalOutputSendableRequest | None = None
         self._last_request_sequence: int | None = None
         self._event_sequence = 0
         self._events: list[PhysicalOutputLifecycleEvent] = []
@@ -612,6 +734,11 @@ class PhysicalOutputLifecycle:
     @_lifecycle_locked
     def latest_request(self) -> PhysicalOutputRequest | None:
         return self._latest_request
+
+    @property
+    @_lifecycle_locked
+    def latest_sendable_request(self) -> PhysicalOutputSendableRequest | None:
+        return self._latest_sendable_request
 
     @property
     @_lifecycle_locked
@@ -646,6 +773,7 @@ class PhysicalOutputLifecycle:
         request_sequence: int | None = None,
         timestamp_s: float | None = None,
         reason: str | None = None,
+        safety_evidence: PhysicalOutputSafetyTraceEvidence | None = None,
     ) -> PhysicalOutputLifecycleEvent:
         # Normalize before constructing evidence; public transitions also do
         # this before changing state so invalid timestamps cannot partially
@@ -660,6 +788,7 @@ class PhysicalOutputLifecycle:
             request_sequence=request_sequence,
             timestamp_s=timestamp_s,
             reason=reason,
+            safety_evidence=safety_evidence,
         )
         self._event_sequence += 1
         self._events.append(event)
@@ -671,7 +800,8 @@ class PhysicalOutputLifecycle:
                     "aborted" if event.state_after == "aborted" else "failed"
                 )
                 self._state = failure_state
-                self._latest_request = None
+                self._clear_latest_request()
+                self._latest_sendable_request = None
                 self._stop_deadline_s = None
                 self._stop_started_s = None
                 failure_event = PhysicalOutputLifecycleEvent(
@@ -695,12 +825,14 @@ class PhysicalOutputLifecycle:
         accepted: bool,
         reason: str | None = None,
         event: PhysicalOutputLifecycleEvent | None = None,
+        sendable_request: PhysicalOutputSendableRequest | None = None,
     ) -> PhysicalOutputLifecycleResult:
         return PhysicalOutputLifecycleResult(
             accepted=accepted,
             state=self._state,
             reason=reason,
             event=event,
+            sendable_request=sendable_request,
         )
 
     def _clock_now(self) -> float:
@@ -785,7 +917,8 @@ class PhysicalOutputLifecycle:
 
         before = self._state
         self._permission = permission
-        self._latest_request = None
+        self._clear_latest_request()
+        self._latest_sendable_request = None
         self._stop_deadline_s = None
         self._stop_started_s = None
         self._state = "armed"
@@ -813,70 +946,282 @@ class PhysicalOutputLifecycle:
     @_lifecycle_locked
     def submit(
         self,
-        request: PhysicalOutputRequest,
+        request: (
+            PhysicalOutputRequest
+            | PhysicalOutputSafetyEvaluation
+            | PhysicalOutputSendableRequest
+        ),
         *,
         now_s: float | None = None,
         max_age_s: float | None = None,
+        max_safety_age_s: float | None = None,
     ) -> PhysicalOutputLifecycleResult:
-        """Accept only fresh, increasing requests in armed/active state."""
+        """Safety allowとfreshnessを確認したtyped requestだけを受理する。"""
 
-        now_s = _lifecycle_timestamp("now_s", now_s)
-        if not isinstance(request, PhysicalOutputRequest):
-            raise TypeError("lifecycle submit requires PhysicalOutputRequest")
-        if request.session_id != self._session_id:
+        try:
+            now_s = _lifecycle_timestamp("now_s", now_s)
+        except (TypeError, ValueError):
+            if isinstance(
+                request,
+                (
+                    PhysicalOutputRequest,
+                    PhysicalOutputSafetyEvaluation,
+                    PhysicalOutputSendableRequest,
+                ),
+            ):
+                self._clear_latest_request()
+            raise
+
+        if isinstance(request, PhysicalOutputRequest):
+            self._clear_latest_request()
             return self._reject_request(
                 request,
-                "session_mismatch",
+                "physical_safety_binding_required",
                 timestamp_s=now_s,
                 record_sequence=False,
+            )
+
+        if isinstance(request, PhysicalOutputSendableRequest):
+            try:
+                validate_physical_output_sendable_request(request)
+            except Exception:
+                raw_request = request.request
+                self._clear_latest_request()
+                return self._reject_request(
+                    raw_request,
+                    "physical_safety_binding_invalid",
+                    timestamp_s=now_s,
+                    record_sequence=False,
+                )
+            evaluation = request.evaluation
+        elif isinstance(request, PhysicalOutputSafetyEvaluation):
+            evaluation = request
+            try:
+                validate_physical_output_safety_evaluation(evaluation)
+            except Exception:
+                raw_request = evaluation.request
+                self._clear_latest_request()
+                return self._reject_request(
+                    raw_request,
+                    "physical_safety_binding_invalid",
+                    timestamp_s=now_s,
+                    record_sequence=False,
+                )
+        else:
+            raise TypeError(
+                "lifecycle submit requires a typed physical output safety evaluation"
+            )
+
+        raw_request = evaluation.request
+        safety_evidence = evaluation.to_trace_evidence()
+        if evaluation.status != "allowed":
+            request_sequence, sequence_reason = self._consume_safety_sequence(raw_request)
+            event_reason = sequence_reason or evaluation.reason
+            self._clear_latest_request()
+            if evaluation.status == "stopped":
+                return self._apply_safety_stop(
+                    evaluation,
+                    event_reason,
+                    request_sequence=request_sequence,
+                    now_s=now_s if now_s is not None else self._clock_now(),
+                )
+            if evaluation.status in {"held", "unavailable"}:
+                return self._apply_safety_hold(
+                    evaluation,
+                    event_reason,
+                    request_sequence=request_sequence,
+                    timestamp_s=now_s,
+                )
+            if evaluation.status == "invalid":
+                return self._apply_safety_invalid(
+                    evaluation,
+                    event_reason,
+                    request_sequence=request_sequence,
+                    timestamp_s=now_s,
+                )
+            return self._apply_safety_rejected(
+                evaluation,
+                event_reason,
+                request_sequence=request_sequence,
+                timestamp_s=now_s,
+            )
+
+        if raw_request.session_id != self._session_id:
+            self._clear_latest_request()
+            return self._apply_safety_rejected(
+                evaluation,
+                "session_mismatch",
+                request_sequence=None,
+                timestamp_s=now_s,
             )
         if (
             self._last_request_sequence is not None
-            and request.sequence <= self._last_request_sequence
+            and raw_request.sequence <= self._last_request_sequence
         ):
-            return self._reject_request(
-                request,
+            return self._apply_safety_rejected(
+                evaluation,
                 "duplicate_or_out_of_order_sequence",
+                request_sequence=None,
                 timestamp_s=now_s,
-                record_sequence=False,
             )
         if self._state not in {"armed", "active"}:
-            return self._reject_request(
-                request,
+            return self._apply_safety_rejected(
+                evaluation,
                 "lifecycle_state_not_accepting",
+                request_sequence=None,
                 timestamp_s=now_s,
-                record_sequence=False,
             )
-        freshness_reason = _request_freshness_reason(
-            request,
+
+        request_sequence, _ = self._consume_safety_sequence(raw_request)
+        safety_freshness_reason = _safety_freshness_reason(
+            evaluation,
             now_s=now_s,
-            max_age_s=max_age_s,
+            max_age_s=max_safety_age_s,
         )
-        self._last_request_sequence = request.sequence
-        if freshness_reason is not None:
-            before = self._state
-            self._state = "hold"
-            self._latest_request = None
-            event = self._record(
-                "request_rejected",
-                state_before=before,
-                state_after=self._state,
-                request_sequence=request.sequence,
+        if safety_freshness_reason is not None:
+            self._clear_latest_request()
+            return self._apply_safety_hold(
+                evaluation,
+                safety_freshness_reason,
+                request_sequence=request_sequence,
                 timestamp_s=now_s,
-                reason=freshness_reason,
             )
-            return self._result(False, freshness_reason, event)
+
+        try:
+            request_freshness_reason = _request_freshness_reason(
+                raw_request,
+                now_s=now_s,
+                max_age_s=max_age_s,
+            )
+        except (TypeError, ValueError):
+            request_freshness_reason = "physical_output_freshness_context_invalid"
+        if request_freshness_reason is not None:
+            self._clear_latest_request()
+            return self._apply_safety_hold(
+                evaluation,
+                request_freshness_reason,
+                request_sequence=request_sequence,
+                timestamp_s=now_s,
+            )
+
+        sendable_request = evaluation.to_sendable_request()
         before = self._state
-        self._latest_request = request
+        self._latest_request = sendable_request.request
+        self._latest_sendable_request = sendable_request
         self._state = "active"
         event = self._record(
             "request_accepted",
             state_before=before,
             state_after=self._state,
-            request_sequence=request.sequence,
+            request_sequence=raw_request.sequence,
             timestamp_s=now_s,
+            safety_evidence=safety_evidence,
         )
-        return self._result(True, event=event)
+        return self._result(
+            True,
+            event=event,
+            sendable_request=sendable_request,
+        )
+
+    def _clear_latest_request(self) -> None:
+        self._latest_request = None
+        self._latest_sendable_request = None
+
+    def _consume_safety_sequence(
+        self,
+        request: PhysicalOutputRequest,
+    ) -> tuple[int | None, str | None]:
+        if request.session_id != self._session_id:
+            return None, "session_mismatch"
+        if (
+            self._last_request_sequence is not None
+            and request.sequence <= self._last_request_sequence
+        ):
+            return None, "duplicate_or_out_of_order_sequence"
+        self._last_request_sequence = request.sequence
+        return request.sequence, None
+
+    def _apply_safety_hold(
+        self,
+        evaluation: PhysicalOutputSafetyEvaluation,
+        reason: str,
+        *,
+        request_sequence: int | None,
+        timestamp_s: float | None,
+    ) -> PhysicalOutputLifecycleResult:
+        before = self._state
+        if self._state in {"armed", "active"}:
+            self._state = "hold"
+        self._clear_latest_request()
+        event = self._record(
+            "safety_hold",
+            state_before=before,
+            state_after=self._state,
+            request_sequence=request_sequence,
+            timestamp_s=timestamp_s,
+            reason=reason,
+            safety_evidence=evaluation.to_trace_evidence(),
+        )
+        return self._result(False, reason, event)
+
+    def _apply_safety_rejected(
+        self,
+        evaluation: PhysicalOutputSafetyEvaluation,
+        reason: str,
+        *,
+        request_sequence: int | None,
+        timestamp_s: float | None,
+    ) -> PhysicalOutputLifecycleResult:
+        event = self._record(
+            "safety_rejected",
+            state_before=self._state,
+            state_after=self._state,
+            request_sequence=request_sequence,
+            timestamp_s=timestamp_s,
+            reason=reason,
+            safety_evidence=evaluation.to_trace_evidence(),
+        )
+        return self._result(False, reason, event)
+
+    def _apply_safety_invalid(
+        self,
+        evaluation: PhysicalOutputSafetyEvaluation,
+        reason: str,
+        *,
+        request_sequence: int | None,
+        timestamp_s: float | None,
+    ) -> PhysicalOutputLifecycleResult:
+        before = self._state
+        self._state = before if before in {"aborted", "failed"} else "aborted"
+        self._clear_latest_request()
+        self._stop_deadline_s = None
+        self._stop_started_s = None
+        event = self._record(
+            "safety_invalid",
+            state_before=before,
+            state_after=self._state,
+            request_sequence=request_sequence,
+            timestamp_s=timestamp_s,
+            reason=reason,
+            safety_evidence=evaluation.to_trace_evidence(),
+        )
+        return self._result(False, reason, event)
+
+    def _apply_safety_stop(
+        self,
+        evaluation: PhysicalOutputSafetyEvaluation,
+        reason: str,
+        *,
+        request_sequence: int | None,
+        now_s: float,
+    ) -> PhysicalOutputLifecycleResult:
+        return self._request_stop(
+            "safety_stop",
+            reason,
+            now_s=now_s,
+            request_sequence=request_sequence,
+            safety_evidence=evaluation.to_trace_evidence(),
+        )
 
     def _reject_request(
         self,
@@ -926,7 +1271,7 @@ class PhysicalOutputLifecycle:
         before = self._state
         if self._state in {"active", "armed"}:
             self._state = "hold"
-            self._latest_request = None
+            self._clear_latest_request()
         event = self._record(
             event_kind,
             state_before=before,
@@ -965,20 +1310,26 @@ class PhysicalOutputLifecycle:
 
     def _request_stop(
         self,
-        event_kind: Literal["operator_stop", "runtime_shutdown"],
+        event_kind: Literal["operator_stop", "runtime_shutdown", "safety_stop"],
         reason: str,
         *,
         now_s: float,
+        request_sequence: int | None = None,
+        safety_evidence: PhysicalOutputSafetyTraceEvidence | None = None,
     ) -> PhysicalOutputLifecycleResult:
         now = _required_timestamp("now_s", now_s)
         reason = _lifecycle_identifier("reason", reason)
+        if event_kind == "safety_stop":
+            self._clear_latest_request()
         if self._state == "disabled":
             event = self._record(
                 event_kind,
                 state_before=self._state,
                 state_after=self._state,
+                request_sequence=request_sequence,
                 timestamp_s=now,
                 reason="stop_idempotent",
+                safety_evidence=safety_evidence,
             )
             return self._result(True, event=event)
         if self._state in {"stopping", "stopped"}:
@@ -986,8 +1337,10 @@ class PhysicalOutputLifecycle:
                 event_kind,
                 state_before=self._state,
                 state_after=self._state,
+                request_sequence=request_sequence,
                 timestamp_s=now,
                 reason="stop_idempotent",
+                safety_evidence=safety_evidence,
             )
             return self._result(True, event=event)
         if self._state in {"aborted", "failed"}:
@@ -995,36 +1348,42 @@ class PhysicalOutputLifecycle:
                 event_kind,
                 state_before=self._state,
                 state_after=self._state,
+                request_sequence=request_sequence,
                 timestamp_s=now,
                 reason="terminal_state_preserved",
+                safety_evidence=safety_evidence,
             )
             return self._result(True, event=event)
         deadline = now + self._shutdown_timeout_s
         if not isfinite(deadline):
             before = self._state
             self._state = "failed"
-            self._latest_request = None
+            self._clear_latest_request()
             self._stop_deadline_s = None
             self._stop_started_s = None
             event = self._record(
                 "failure",
                 state_before=before,
                 state_after=self._state,
+                request_sequence=request_sequence,
                 timestamp_s=now,
                 reason="bounded_shutdown_deadline_overflow",
+                safety_evidence=safety_evidence,
             )
             return self._result(False, "bounded_shutdown_deadline_overflow", event)
         before = self._state
         self._state = "stopping"
-        self._latest_request = None
+        self._clear_latest_request()
         self._stop_deadline_s = deadline
         self._stop_started_s = now
         event = self._record(
             event_kind,
             state_before=before,
             state_after=self._state,
+            request_sequence=request_sequence,
             timestamp_s=now,
             reason=reason,
+            safety_evidence=safety_evidence,
         )
         return self._result(True, event=event)
 
@@ -1065,7 +1424,7 @@ class PhysicalOutputLifecycle:
             return self._result(False, "bounded_shutdown_deadline_exceeded", event)
         before = self._state
         self._state = "stopped"
-        self._latest_request = None
+        self._clear_latest_request()
         self._stop_deadline_s = None
         self._stop_started_s = None
         event = self._record(
@@ -1116,7 +1475,7 @@ class PhysicalOutputLifecycle:
             )
             return self._result(True, event=event)
         self._state = "failed"
-        self._latest_request = None
+        self._clear_latest_request()
         self._stop_deadline_s = None
         self._stop_started_s = None
         event = self._record(
@@ -1206,7 +1565,7 @@ class PhysicalOutputLifecycle:
             )
             return self._result(True, event=event)
         self._state = terminal_state
-        self._latest_request = None
+        self._clear_latest_request()
         self._stop_deadline_s = None
         self._stop_started_s = None
         event = self._record(
@@ -1238,6 +1597,29 @@ def _required_timestamp(name: str, value: object) -> float:
     if timestamp is None:
         raise ValueError(f"{name} is required")
     return timestamp
+
+
+def _safety_freshness_reason(
+    evaluation: PhysicalOutputSafetyEvaluation,
+    *,
+    now_s: float | None,
+    max_age_s: float | None,
+) -> str | None:
+    if now_s is None or max_age_s is None:
+        return "physical_safety_freshness_context_missing"
+    try:
+        now = _required_timestamp("now_s", now_s)
+        max_age = _required_timestamp("max_safety_age_s", max_age_s)
+    except (TypeError, ValueError):
+        return "physical_safety_freshness_context_invalid"
+    if max_age < 0.0:
+        return "physical_safety_freshness_context_invalid"
+    age = now - evaluation.checked_at_s
+    if age < 0.0:
+        return "physical_safety_decision_timestamp_in_future"
+    if age > max_age:
+        return "physical_safety_decision_stale"
+    return None
 
 
 def _request_freshness_reason(

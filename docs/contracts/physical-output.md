@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-08-28
+last_verified: 2026-09-20
 canonical_for:
   - versioned physical output request and permission boundary
 related:
@@ -78,6 +78,58 @@ requested -> accepted / rejected -> sent -> acknowledged
 traceの`permitted` eventも、non-disabled permissionに対する`accepted` decisionと
 explicit operator gateを要求し、disabled permissionを成功として記録しない。
 
+## P5 safety binding
+
+`PhysicalOutputSafetyEvaluation`は既存の`runtime.safety.physical_safety_core`を一度評価し、
+そのtyped `SafetyInput`、`SafetyDecision`、`candidate_id`を特定のoutput requestへ結合する。
+`request_sha256`はcanonical `PhysicalOutputRequest` bytesから計算し、
+`safety_input_sha256`はvalidatedなP2/P3/P4 DTOの公開typed contentから計算する。
+`binding_sha256`はrequest digest、safety input digest、decision projection、candidate、
+`checked_at_s`、Robot、software revision、status / reasonをまとめて識別する。
+この結合はupstream safety formulaを複製しない。`physical_output_candidate_id(request)`は
+canonical request bytesのversioned SHA-256であり、request identityの照合に使う。
+このcaller-visible IDだけではallowを作れない。
+
+`compose_physical_output_safety_input`は、`JointPositionCommand.joint_angles_rad`を
+Robot-owned joint順序のtarget configurationとして解決する。P3の
+`evaluate_mujoco_collision_configuration`が実際にforward・観測したqpos / qvelとjoint名を
+保持している場合だけ、そのqposとrequest targetを完全一致で照合し、同じconfigurationをP4へ渡す。
+qvelは観測した値を保持し、ゼロや有限差分を捏造しない。Jacobianとphysical limitsのevidence契約は維持する。
+
+P3/P4 resultの`evaluated_candidate`は、公開constructorの任意IDではなく、P3 observation producer /
+P4 evaluatorのowner-local originに保持した値から得る。output gateは両resultのjoint順序・qpos・qvel・
+sample時刻を照合し、さらにrequestのtarget qposと照合する。result再構築でP3 observation originを
+引き継げず、candidate Aの結果のcaller-visible IDをrequest Bへ合わせてもnon-sendableとなる。
+`SafetyInput.candidate_id`と`SafetyDecision.candidate_id`のrequest一致、既存のrobot / revision検証も維持する。
+
+同じ実評価configurationはP2の`LimitResolutionResult.expected_joint_names`ともcanonical順序で一致し、
+`resolved_authoritative`な各joint position boundへ直接照合する。candidate qposはlower / upperを含む範囲内だけを
+allow候補とし、1 jointでも範囲外なら`limit:limit_candidate_out_of_bounds`としてrejectする。境界内判定は
+P2 ownerのcanonical helperを使い、output layerでrange / conversion / authority formulaを複製しない。
+provisional / unknown / unavailable / mismatchなP2 resultは従来どおりnon-allowであり、この照合でauthorityへ昇格しない。
+
+この経路はconfiguration-only評価であり、目標までの移動軌道・実機motionの安全性を証明しない。
+`endpoint_velocity_command/v1`にはphysical requestから評価軌道へのcanonical resolverがないため、
+`physical_safety_candidate_semantics_unresolved`としてnon-sendableにする。任意のbounded trajectoryも
+単一joint targetから補間してallowしない。P4の実評価sample列は保持するが、outputに必要なresolverが
+ない経路はfail-closedである。新しいplanner、#516、hardware observationは追加しない。
+
+SafetyInput中のP2 `limit_resolution.robot_id`とP3 `collision.context.robot_id`は一致し、
+requestの`target_robot_id`とも一致しなければならない。requestの`software_revision`に対応する
+`software_revision:<id>` provenance tokenをSafetyInputとSafetyDecisionの両方で照合する。
+identity不一致、revision不一致、missing / invalid safety evidenceはallowへ昇格しない。
+
+P5の`allow`だけが`PhysicalOutputSendableRequest`を生成できる。`hold`と`unavailable`は
+lifecycleを`hold`へ移し、`reject`はrequestを拒否し、`stop`はbounded stopへ移り、`invalid`は
+terminalな`aborted`へ移す。非allow、staleなdecision、identity不一致、raw intentのsubmitでは、
+直前のlatest requestとsendable wrapperを消去する。重複・逆順sequenceの拒否は既存sendable stateを
+置き換えない。
+
+Lifecycle submitはcallerの`now_s`と別々の`max_age_s` / `max_safety_age_s`を受け取り、requestと
+safety decisionの時刻を個別に検査する。freshness contextが欠落・不正、またはdecisionがfuture / staleの
+場合は受理せず、reasonとgate evidenceを記録する。operator permissionとsafety allowは独立したgateであり、
+どちらか一方が他方を代用しない。
+
 ## Recording / dry-run trace
 
 `PhysicalOutputRecordingSink`はnetworkやRobot providerを持たないrecording-only sinkであり、
@@ -117,6 +169,9 @@ session identityと明示permissionが必要であり、session IDをlifetime内
 public transitionは一つのreducer lockで直列化し、event sinkの失敗はlifecycleをfail-closedにする。
 各transitionのtimestampは有限値であることを状態、permission、session、sequenceのmutation前に
 検証する。`complete_stop`はstop開始時刻より前のtimestampを拒否し、停止状態とtraceを変更しない。
+新規lifecycle eventは`physical-output-lifecycle/v2`でP5のstatus / reason、action、candidate、
+robot / revision、checked-at、provenance、request / safety-input / decision / binding digestsを保存する。readerは既存のv1
+eventも受理し、新規v2の`request_accepted`にはsafety evidenceを必須とする。
 
 ## Serialization / failure
 
@@ -128,9 +183,12 @@ serializeし、decode時にunknown field、missing field、duplicate key、non-f
 ## Ownership / safety
 
 - `schemas.command`がshared request、permission、decision、serialization shapeを所有する。
-- `runtime.output.permission`がpermission decisionを所有し、`runtime.output.trace`がrecording /
-  dry-run request trace、artifact、replayを所有し、`runtime.output.lifecycle`がstate、stop、
-  lifecycle traceを所有する。
+- `runtime.output.permission`がpermission decisionを所有し、`runtime.output.safety_gate`がP5 safety
+  evaluationとrequest binding、allow-only sendable wrapperを所有する。`runtime.output.trace`がrecording /
+  dry-run request trace、artifact、replayを所有し、`runtime.output.lifecycle`がstate、bounded stop、
+  safety-aware lifecycle traceを所有する。
 - `runtime/`が将来のcompositionを所有し、Input Source固有分岐をphysical output coreへ持ち込まない。
 - K-preの実装とtestはsocket、network、serial、Arduino、OSC、Robot providerを開かない・呼ばない。
 - 実機作動は`docs/operations/hardware-safety.md`と専用Issue / 明示許可の範囲に限る。
+
+Runtime設定は`EvaluatedJointRoute(endpoint_id, joint_names)`で、既存endpoint設定とRobot-ownedの全joint順序を明示的に結ぶ。P3 producerはこのrouteのjoint名を実MuJoCo joint addressへ解決して観測し、routeもoriginへ保持する。P4は同じrouteをConfigurationState / TrajectorySampleの評価入力として保持し、policyのjoint順序との一致を要求する。output gateはrequest endpointも照合するため、同じqpos数値の別endpointへIDだけ付け替えても拒否する。routeはruntimeの構成情報であり、requestから任意の別joint groupを推測するresolverではない。FastArmでは既存endpoint設定とProfileのcanonical joint orderを使用し、route不明のgroupは評価しない。
