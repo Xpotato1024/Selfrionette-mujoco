@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from hashlib import sha256
 import socket
-from threading import Barrier, Event
+from threading import Barrier, Event, Lock
 from typing import Literal
 
 import pytest
@@ -20,6 +20,7 @@ from selfrionette.runtime.output.safety_gate import PhysicalOutputSendableReques
 from selfrionette.runtime.output.transport_adapter import (
     PHYSICAL_OUTPUT_OSC_ADDRESS,
     PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION,
+    PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2,
     PHYSICAL_OUTPUT_WIRE_SCHEMA_VERSION,
     GenericPhysicalOutputWireEncoder,
     PhysicalOutputCodecIdentity,
@@ -27,8 +28,11 @@ from selfrionette.runtime.output.transport_adapter import (
     PhysicalOutputOperatorEnable,
     PhysicalOutputRecordingResult,
     PhysicalOutputTransportAdapter,
+    PhysicalOutputTransportAuthorizationGrant,
     PhysicalOutputTransportConfig,
+    PhysicalOutputTransportPreparedDispatch,
     PhysicalOutputWireMessage,
+    _create_physical_output_transport_authorization_grant,
     build_physical_output_wire_message,
     decode_physical_output_wire_message,
 )
@@ -52,6 +56,26 @@ class _Clock:
 
     def __call__(self) -> float:
         return self.value
+
+
+class _SecondReadBlockingClock:
+    def __init__(self, value: float = 1.0) -> None:
+        self.value = value
+        self.read_count = 0
+        self.second_read_entered = Event()
+        self.second_read_release = Event()
+        self._lock = Lock()
+
+    def __call__(self) -> float:
+        with self._lock:
+            self.read_count += 1
+            read_count = self.read_count
+            value = self.value
+        if read_count == 2:
+            self.second_read_entered.set()
+            if not self.second_read_release.wait(timeout=2.0):
+                raise TimeoutError("blocking clock release timeout")
+        return value
 
 
 class _FakeSender:
@@ -594,6 +618,156 @@ def test_non_finite_dispatch_time_invalidates_latest_request(invalid_time: float
     assert retry.status == "rejected"
     assert retry.reason == "physical_output_lifecycle_not_active"
     assert sender.prepare_calls == []
+    assert sender.send_calls == []
+
+
+def _authorization_grant_fields(
+    sendable: PhysicalOutputSendableRequest,
+    config: PhysicalOutputTransportConfig,
+    permission: PhysicalOutputPermission,
+    context_sha256: str,
+) -> dict[str, object]:
+    request = sendable.request
+    return {
+        "target_robot_id": request.target_robot_id,
+        "endpoint_id": request.endpoint_id,
+        "software_revision": request.software_revision,
+        "session_id": request.session_id,
+        "sequence": request.sequence,
+        "request_sha256": sendable.request_sha256,
+        "safety_binding_sha256": sendable.binding_sha256,
+        "candidate_id": sendable.evaluation.candidate_id,
+        "codec_identity_sha256": config.expected_codec_identity.identity_sha256,
+        "config_sha256": sha256(config.to_json_bytes()).hexdigest(),
+        "transmission_permission_sha256": sha256(permission.to_json_bytes()).hexdigest(),
+        "actuation_permission_sha256": sha256(b"synthetic-test-actuation-permission").hexdigest(),
+        "authorization_context_sha256": context_sha256,
+        "issued_at_s": 1.0,
+        "expires_at_s": 2.0,
+    }
+
+
+def test_transport_config_v2_round_trips_an_explicit_external_gate() -> None:
+    config = replace(
+        _config("disabled"),
+        schema_version=PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2,
+        external_authorization_required=True,
+    )
+
+    assert PhysicalOutputTransportConfig.from_json(config.to_json_bytes()) == config
+    assert config.to_json_value()["external_authorization_required"] is True
+    with pytest.raises(ValueError, match="fields are incomplete or unknown"):
+        PhysicalOutputTransportConfig.from_mapping(
+            {**config.to_json_value(), "unrecognized": True}
+        )
+
+
+def test_v2_transport_requires_and_consumes_one_shot_runtime_grant() -> None:
+    clock = _Clock()
+    permission = _permission()
+    config = replace(
+        _config(
+            "transmission_enabled",
+            operator_enable=PhysicalOutputOperatorEnable("operator-1", "enable-1"),
+        ),
+        schema_version=PHYSICAL_OUTPUT_TRANSPORT_CONFIG_SCHEMA_VERSION_V2,
+        external_authorization_required=True,
+    )
+
+    lifecycle, sendable = _active_lifecycle(permission, clock=clock)
+    missing_sender = _FakeSender()
+    missing_adapter = PhysicalOutputTransportAdapter(
+        config,
+        sender=missing_sender,
+        clock=clock,
+    )
+    missing = missing_adapter.prepare_dispatch(lifecycle, sendable, now_s=1.0)
+    assert missing.status == "rejected"
+    assert missing.reason == "physical_output_transport_authorization_grant_required"
+    assert missing_sender.prepare_calls == []
+    assert missing_sender.send_calls == []
+
+    lifecycle, sendable = _active_lifecycle(permission, clock=clock)
+    sender = _FakeSender()
+    adapter = PhysicalOutputTransportAdapter(config, sender=sender, clock=clock)
+    context_sha256 = sha256(b"synthetic-test-authorization-context").hexdigest()
+    grant_fields = _authorization_grant_fields(
+        sendable,
+        config,
+        permission,
+        context_sha256,
+    )
+    with pytest.raises(ValueError, match="only be issued by runtime composition"):
+        PhysicalOutputTransportAuthorizationGrant(**grant_fields)  # type: ignore[arg-type]
+
+    grant = _create_physical_output_transport_authorization_grant(**grant_fields)  # type: ignore[arg-type]
+    assert grant.validate_for(
+        sendable,
+        config,
+        permission,
+        authorization_context_sha256=context_sha256,
+        now_s=1.0,
+    ) is None
+    prepared = adapter.prepare_dispatch(
+        lifecycle,
+        sendable,
+        now_s=1.0,
+        authorization_grant=grant,
+        authorization_context_sha256=context_sha256,
+    )
+    assert type(prepared) is PhysicalOutputTransportPreparedDispatch
+
+    result = adapter.dispatch_prepared(prepared, now_s=1.0)
+
+    assert result.status == "transmission_attempted"
+    assert len(sender.send_calls) == 1
+    assert grant.validate_for(
+        sendable,
+        config,
+        permission,
+        authorization_context_sha256=context_sha256,
+        now_s=1.0,
+    ) == "physical_output_transport_authorization_grant_consumed"
+    retry = adapter.dispatch_prepared(prepared, now_s=1.0)
+    assert retry.status == "rejected"
+    assert len(sender.send_calls) == 1
+
+
+def test_prepared_dispatch_rechecks_freshness_after_lifecycle_lock_wait() -> None:
+    clock = _SecondReadBlockingClock()
+    permission = _permission()
+    lifecycle, sendable = _active_lifecycle(permission, clock=clock)  # type: ignore[arg-type]
+    sender = _FakeSender()
+    adapter = PhysicalOutputTransportAdapter(
+        _config(
+            "transmission_enabled",
+            operator_enable=PhysicalOutputOperatorEnable("operator-1", "enable-1"),
+        ),
+        sender=sender,
+        clock=clock,
+    )
+    prepared = adapter.prepare_dispatch(lifecycle, sendable)
+    assert type(prepared) is PhysicalOutputTransportPreparedDispatch
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        dispatch_future = pool.submit(adapter.dispatch_prepared, prepared)
+        assert clock.second_read_entered.wait(timeout=1.0)
+        with lifecycle._lock:
+            clock.value = 7.0
+            clock.second_read_release.set()
+        result = dispatch_future.result(timeout=2.0)
+
+    assert result.status == "rejected"
+    assert result.reason in {
+        "physical_output_request_stale",
+        "physical_output_safety_stale",
+    }
+    assert lifecycle.latest_request is None
+    assert lifecycle.latest_sendable_request is None
+    assert sender.prepare_calls == [_config(
+        "transmission_enabled",
+        operator_enable=PhysicalOutputOperatorEnable("operator-1", "enable-1"),
+    ).endpoint]
     assert sender.send_calls == []
 
 

@@ -35,6 +35,29 @@ Bundleはtyped `joint_position_command` execution providerを持つ。Mapping由
 runtimeのmotion / safety boundaryでjoint positionへ解決され、native endpoint commandとして
 backendへ直接渡されない。
 
+## FastArmの物理出力mapping
+
+`adapter/physical_output.py`はFastArm固有のversion付きjoint mapping、rad-to-degree変換、OSC command semantics、
+router observation parserを所有する。profile順、wire順、unit、source tokenは明示設定とし、暗黙defaultを置かない。
+per-joint coordinate sign (`-1` / `1`)、angle offsetと`rad` / `degree` unitを必須にし、pure mapping digestへ含める。
+変換はcommand座標のsign / zero offsetだけを扱い、router側motor calibrationやshoulder-mount補正を複製しない。
+profile軸とrouter semantic軸の対応・zero基準は未確定で、実機用mapping値は#509 / #516 preflightで確認する。
+`profile_id`はrobot type、`target_robot_id`はruntime上の出力先logical identityとして別に扱い、plugin / profileと
+runtime target / transport / accepted evidenceをそれぞれ照合する。
+pure mapping moduleはruntimeやgeneric transportへ依存しない。P5 lifecycle、accepted #509 physical-measurement handoff、
+二つのpermissionとoperator gateからtransportまでのcompositionは`runtime.output.fast_arm_adapter`が所有する。
+accepted evidenceにはreference / digestだけでなく`FastArmPhysicalEvidenceHandoff/v1`のexact JSON bytesが必要である。
+strict parserはUTF-8 BOM、duplicate / unknown / missing field、non-finite value、non-canonical JSONを拒否し、exact byte digestと
+`#509` / accepted status / physical-measurement class / profile / target / model / envelope digest / joint別measurement reference / accepted timeを照合する。
+これはcontent integrityとidentity consistencyを示すだけで、source authenticityやGitHub stateを証明しない。P6 software-only
+dry-run artifactはhandoffとして扱わず、実際のaccepted #509 artifactはfixtureに含めない。
+
+FastArm output sessionはv2 external authorizationを要求するgeneric adapter構成だけを受け付ける。router observationは
+correlated commandを示す範囲に限り、Pi / Robot受理、movement、physical stopは証明しない。現taskで使った測定・観測
+fixtureはsynthetic testsのみであり、#509の実accepted measurement artifactやhardware validationではない。
+`observe_router_datagram`はinjected observation用ingestion境界であり、actual receive socket producerとtimeout tick schedulerは
+実装・検証していない。bounded receive wiringと#514 network validationは後続#516 preflight / scopeで具体化する。
+
 ## resource contract
 
 physical model / joint-limit definitionを独立`fast_arm_core`が所有し、
@@ -48,6 +71,7 @@ genericなDTO、resolver、providerはruntimeが所有する。
 
 - constraint: model、joint order、endpoint site、resource manifestをregistration時とstartup時に検証する
 - non-goal: generic runtime、viewer、Input Source / Mappingの責務をrobot packageへ吸収しない
+- non-goal: mapping fixtureやrouter observation parserから実測 / receiver / physical successを主張しない
 
 ## tests / validation
 
