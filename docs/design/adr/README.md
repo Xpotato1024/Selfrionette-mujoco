@@ -27,3 +27,5 @@ ADRはdesign decisionを、その時点のcontextとprovenanceを含めて記録
 - [ADR 0008: 信号から接触までの単一scene統合](0008-signal-contact-integration.md)
 
 - [ADR 0009: 有限SILの対応範囲とtrace整合検証](0009-bounded-sil-validation.md)
+
+- [ADR 0010: 入力とphysical sessionの有限owner](0010-bounded-physical-runtime-owner.md)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 import json
@@ -636,7 +637,14 @@ class FastArmPhysicalOutputSession:
             return "fast_arm_dynamic_joint_identity_mismatch"
         return None
 
-    def submit(self, evaluation: PhysicalOutputSafetyEvaluation, *, now_s: float | None = None) -> FastArmPhysicalOutputResult:
+    def submit(self, evaluation: PhysicalOutputSafetyEvaluation, *, now_s: float | None = None,
+               pre_dispatch_check: Callable[[], bool] | None = None) -> FastArmPhysicalOutputResult:
+        """既存gate通過後、prepare復帰時の追加vetoを確認してからdispatchする。
+
+        callbackは許可を生成せず、True以外/例外で送信を拒否する。未指定は既存経路を維持する。
+        """
+        if pre_dispatch_check is not None and not callable(pre_dispatch_check):
+            raise TypeError("pre_dispatch_check must be callable or None")
         try:
             now = self._now(now_s)
         except Exception:
@@ -716,6 +724,26 @@ class FastArmPhysicalOutputSession:
                     self._invalidate_locked()
                     self._state = "failed" if self.lifecycle.state in {"failed", "aborted", "stopped"} else "armed"
             return FastArmPhysicalOutputResult("failed" if prepared.status == "rejected" else "rejected", prepared.reason or "fast_arm_transport_preflight_rejected", transport_result=prepared)
+        if pre_dispatch_check is not None:
+            try:
+                ready = pre_dispatch_check()
+            except Exception as failure:
+                with self._lock:
+                    grant.revoke()
+                    if self._state in {"armed", "active"}:
+                        try:
+                            self._fail_closed_locked("fast_arm_pre_dispatch_check_failed")
+                        except Exception as cleanup:
+                            failure.add_note(f"pre-dispatch cleanup failed: {cleanup!r}")
+                raise
+            if ready is not True:
+                with self._lock:
+                    grant.revoke()
+                    life = (
+                        self._fail_closed_locked("fast_arm_pre_dispatch_check_rejected")
+                        if self._state in {"armed", "active"} else None
+                    )
+                return FastArmPhysicalOutputResult("rejected", "fast_arm_pre_dispatch_check_rejected", lifecycle_result=life)
         with self._lock:
             if generation != self._generation or not self._dispatch_inflight or self._state not in {"armed", "active"} or self.lifecycle.latest_sendable_request is not sendable or self._active_grant is not grant or self._pending_acknowledgement is not None or self._transmission_permission != transmission_permission:
                 grant.revoke()

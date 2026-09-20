@@ -72,6 +72,7 @@ EXPECTED_MODULES = {
         "world_tool_runner",
     },
     "runners": {
+        "fast_arm_input_runtime",
         "dry_run",
         "live_selfrionette",
         "live_viewer_smoke",

@@ -326,3 +326,9 @@ terminationは最終advanceのTask状態から確認し、finalize後のoutcome�
 `mujoco_version`は3つの数値componentと任意のASCII英数字/点/プラス/ハイフンsuffixを持つ128文字以下の文字列とする。
 数値・空文字・改行等は拒否するが、読取り環境と異なる正しい形式の版は保持する。版一致は実験条件の比較側で明示確認する。
 単純なhash再計算で矛盾を隠せないことと、署名による真正性保証とは区別する。
+
+## physical-session接続の後続範囲
+
+#551は既存planとphysical sessionをcaller-drivenな有限ownerへ結ぶ。signal previewの実行済みtraceを
+physical sessionの証拠へ変換しない。接続・時刻・停止の現在契約は[physical-output](physical-output.md)を参照する。
+実受信adapter・配備identity・実機校正・#509 evidenceの取得は引き続き実機gateへ残す。
