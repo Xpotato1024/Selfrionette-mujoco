@@ -318,13 +318,13 @@ def capture_signal_contact(document: bytes | str | dict, *, software_revision: s
                 terminal={"kind":"task_terminal","reason":task_state.terminal_reason,"input_index":index,"exception_type":None};break
     except Exception as failure:
         primary=failure
-        terminal={"kind":"execution_failure","reason":str(failure),"input_index":len(records),"exception_type":type(failure).__name__}
+        terminal={"kind":"execution_failure","reason":str(failure) or type(failure).__name__,"input_index":len(records),"exception_type":type(failure).__name__}
     finally:
         if started:
             try: reader.close()
             except Exception as cleanup:
                 if primary is not None: primary.add_note(f"cleanup failed: {cleanup!r}")
-                else: terminal={"kind":"cleanup_failure","reason":str(cleanup),"input_index":len(records),"exception_type":type(cleanup).__name__}
+                else: terminal={"kind":"cleanup_failure","reason":str(cleanup) or type(cleanup).__name__,"input_index":len(records),"exception_type":type(cleanup).__name__}
         signal_session.stop(now_s=clock.value)
     if instance.simulator.snapshot().frame_index != len(records):
         # step後の内部失敗を、古い観測と新しいsnapshotの混在artifactへ変換しない。

@@ -320,6 +320,7 @@ terminationは最終advanceのTask状態から確認し、finalize後のoutcome�
 `task_terminal`は最後の記録indexとTask終了理由、`response_failure`は最後の非成功応答と理由、
 `budget_exhausted`はbudget消費・index=null・未終了Task、`execution_failure`は次の未完了indexと
 非空のreason/exception_type、`cleanup_failure`は実行を終える条件と完了件数に一致しなければならない。
+例外messageが空の場合は、原因を推測せず例外型名をreasonにも記録する。
 内部例外のcause文字列や環境の真正性までは、整合検証だけでは保証しない。
 
 `mujoco_version`は3つの数値componentと任意のASCII英数字/点/プラス/ハイフンsuffixを持つ128文字以下の文字列とする。

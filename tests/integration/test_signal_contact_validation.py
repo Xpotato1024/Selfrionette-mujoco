@@ -205,3 +205,22 @@ def test_readback_uses_robot_preflight_without_simulation_step_or_network(monkey
     monkeypatch.setattr(socket, "socket", forbidden)
     monkeypatch.setattr(socket, "getaddrinfo", forbidden)
     assert decode_signal_trace(raw, expected_revision=REVISION)["metric"]["status"] == "measured"
+
+
+@pytest.mark.parametrize("phase", ("start", "close"))
+def test_empty_exception_message_remains_a_readable_failure(monkeypatch, phase):
+    """例外の空messageを架空の原因で補わず、型名で理由を保持する。"""
+    from selfrionette.plugins.input_sources.selfrionette import SelfrionetteInputSource
+    original_close = SelfrionetteInputSource.close
+
+    def empty_error(reader):
+        if phase == "close":
+            original_close(reader)
+        raise OSError()
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(SelfrionetteInputSource, phase, empty_error)
+        raw = capture_signal_contact(fixture(), software_revision=REVISION)
+    result = decode_signal_trace(raw, expected_revision=REVISION)
+    assert result["termination"]["exception_type"] == "OSError"
+    assert result["termination"]["reason"] == "OSError"

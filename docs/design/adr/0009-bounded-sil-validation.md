@@ -27,6 +27,7 @@ solverやphysicsは再実装しない。candidateとphysicsが本当に観測さ
 
 Taskの最後のadvanceと、入力budget終了後のfinalizeを区別する。前者がrunningのままなのに、後者のfailureをTask自然終了の証拠に使わない。
 終了kindごとのindex、件数、応答、理由と例外型を照合し、実行終了後の追加commandや空の原因情報を受け入れない。
+固定SHA自己監査で空messageのOSErrorが読戻せないことを再現したため、producerは空message時に例外型名をreasonへ残す。架空のcauseは補わない。
 
 MuJoCo versionは3つの数値componentと任意のASCII版suffixを持つ128文字以下の文字列として検証する。
 読取り環境と版が違うだけで旧記録を拒否せず、版文字列の正しさや同一実行環境を暗黙に認定しない。
