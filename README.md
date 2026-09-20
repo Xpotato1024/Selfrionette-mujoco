@@ -21,7 +21,8 @@ MuJoCoがphysical stateのsource of truthであり、Three.js / browser viewer�
 read-only diagnosticsを担当します。複数層のcompositionは`src/selfrionette/runtime/`だけが所有します。
 pluginはRobot、Environment、Mapping、Task、Evaluation、Input Sourceの6軸で独立選択しますが、
 現在のproduction診断・運用pathはRobot、Input Source、Mappingが中心です。
-Environment、Task、Evaluationはgeneric contractのみで、production concrete pluginやrunner / UIはありません。
+Environment、Task、Evaluationにもfree-space/contactのproduction pluginと専用runnerがあります。
+全6軸の選択をgeneric CLI / Web UIが一律に提供するわけではありません。
 
 ## directory map
 
@@ -41,7 +42,7 @@ Environment、Task、Evaluationはgeneric contractのみで、production concret
   `uv sync --frozen --group dev`はrootとcoreをeditableに同期し、配布確認ではcore wheelとroot wheelを別々にbuild/installします。
 - viewer 側は `apps/mujoco-viewer` 配下で `npm ci` を実行します。
 - browser viewer 用の build は `npm run browser:build` です。
-- `npm run typecheck` と `npm run build` は TypeScript の静的検証です。
+- `npm run typecheck`はTypeScript静的検証、`npm run build`はViteによるブラウザbundle生成です。
 - `npm test` は viewer runtime / WebSocket skeleton のテストを実行します。
 
 独立wheelの確認:
@@ -55,6 +56,19 @@ root sdist/wheelは`fast_arm_core` sourceを内包せず、install時にcore whe
 rootのpackage dataはadapter resourceだけを明示収集し、物理mount pointは`MANIFEST.in`でもpruneします。
 
 ## 起動導線
+
+通常はリポジトリrootから次の一つを実行します。初回だけ`uv sync --frozen --group dev`と
+`npm --prefix apps/mujoco-viewer ci`で依存を揃えてください。
+
+```powershell
+uv run selfrionette app --profile sim-gamepad
+```
+
+`sim-keyboard` / `replay-sweep`へprofileを切り替えられます。Webとbackendの両方を起動し、
+ブラウザを一度だけ開きます。終了はCtrl+Cまたはprofileの有限実行完了です。
+`uv run selfrionette app --profile sim-gamepad --check`は検査のみを行います。
+設定仕様は`docs/contracts/launch-profile.md`、操作の正本は`docs/operations/backend-viewer-startup.md`です。
+以下は低位の個別開発・診断用の入口です。
 
 ### backend / dry-run
 

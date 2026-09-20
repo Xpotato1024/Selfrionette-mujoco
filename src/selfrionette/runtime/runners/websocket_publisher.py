@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable, Mapping
+
+from selfrionette.runtime.experiment.contracts import PluginSelection, VersionedIdentity
 
 from selfrionette.plugins.input_sources.catalog import get_input_source_registration
 from selfrionette.plugins.input_sources.programmed_target import build_sweep_x_input_source
@@ -15,6 +18,7 @@ from selfrionette.runtime.control.input_source_state import (
 from selfrionette.runtime.control.viewer_control_ingress import (
     build_viewer_input_source,
     ingest_viewer_control_message_json,
+    ingest_viewer_control_message,
 )
 from selfrionette.runtime.execution.input_step_loop import (
     build_runtime_input_source_step_loop_plan,
@@ -134,10 +138,17 @@ async def _run_input_source_websocket_publisher_async(
     preset: str | None,
     input_source: str,
     robot_profile_id: str,
+    robot_logical_version: int = 1,
+    control_mapping_selection: PluginSelection | None = None,
+    control_mapping_parameters: Mapping[str, object] | None = None,
+    command_semantics_route_selection: VersionedIdentity | None = None,
+    viewer_provider_id: str | None = None,
+    on_ready: Callable[[], None] | None = None,
 ) -> None:
     runtime_config = RuntimeConfig(
         dt_s=dt_s,
         robot_profile_id=robot_profile_id,
+        robot_logical_version=robot_logical_version,
     )
     registration = get_input_source_registration(input_source)
     viewer_input_source = None
@@ -147,7 +158,10 @@ async def _run_input_source_websocket_publisher_async(
 
         def handle_viewer_message(message: str) -> None:
             assert viewer_input_source is not None
-            ingest_viewer_control_message_json(viewer_input_source, message)
+            if viewer_provider_id is None:
+                ingest_viewer_control_message_json(viewer_input_source, message)
+            else:
+                ingest_viewer_control_message(viewer_input_source, message, expected_provider_id=viewer_provider_id)
 
         on_message = handle_viewer_message
 
@@ -156,6 +170,8 @@ async def _run_input_source_websocket_publisher_async(
         server_kwargs["on_message"] = on_message
     async with WebSocketPublisherServer(**server_kwargs) as server:
         _log(f"serving on ws://{server.host}:{server.bound_port}")
+        if on_ready is not None:
+            on_ready()
         _log(f"Waiting for viewer during grace period ({grace_period_s:.2f}s)")
 
         has_client = await server.wait_for_client(timeout_s=grace_period_s)
@@ -169,6 +185,9 @@ async def _run_input_source_websocket_publisher_async(
             input_source,
             steps=steps,
             preset=preset,
+            control_mapping_selection=control_mapping_selection,
+            control_mapping_parameters=control_mapping_parameters,
+            command_semantics_route_selection=command_semantics_route_selection,
         )
 
         if viewer_input_source is not None:
@@ -233,6 +252,12 @@ def run_input_source_websocket_publisher(
     grace_period_s: float = DEFAULT_WEBSOCKET_PUBLISHER_GRACE_PERIOD_S,
     preset: str | None = None,
     robot_profile_id: str = "fast_arm",
+    robot_logical_version: int = 1,
+    control_mapping_selection: PluginSelection | None = None,
+    control_mapping_parameters: Mapping[str, object] | None = None,
+    command_semantics_route_selection: VersionedIdentity | None = None,
+    viewer_provider_id: str | None = None,
+    on_ready: Callable[[], None] | None = None,
 ) -> None:
     _validate_host(host)
     _validate_port(port)
@@ -241,6 +266,10 @@ def run_input_source_websocket_publisher(
     _validate_interval_s(interval_s)
     _validate_grace_period_s(grace_period_s)
     get_input_source_registration(input_source)
+    if viewer_provider_id not in (None, "keyboard/v1", "gamepad/v1"):
+        raise ValueError("unknown viewer input provider")
+    if on_ready is not None and not callable(on_ready):
+        raise TypeError("on_ready must be callable")
     asyncio.run(
         _run_input_source_websocket_publisher_async(
             host=host,
@@ -252,6 +281,12 @@ def run_input_source_websocket_publisher(
             preset=preset,
             input_source=input_source,
             robot_profile_id=robot_profile_id,
+            robot_logical_version=robot_logical_version,
+            control_mapping_selection=control_mapping_selection,
+            control_mapping_parameters=control_mapping_parameters,
+            command_semantics_route_selection=command_semantics_route_selection,
+            viewer_provider_id=viewer_provider_id,
+            on_ready=on_ready,
         )
     )
 
