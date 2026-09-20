@@ -17,6 +17,7 @@ export interface ViewerFrameTimingSnapshot {
   coalescedFrameCount: number;
   parseErrorCount: number;
   latestReceivedFrameIndex: number | null;
+  latestReceivedAtMs: number | null;
   latestCompatibilityAcceptedFrameIndex: number | null;
   latestSceneAppliedFrameIndex: number | null;
   latestIngressStatus: "none" | "received" | "accepted" | "compatibility_invalid" | "parse_error";
@@ -83,6 +84,7 @@ export function createViewerFrameTiming(
   let coalescedFrameCount = 0;
   let parseErrorCount = 0;
   let latestReceivedFrameIndex: number | null = null;
+  let latestReceivedAtMs: number | null = null;
   let latestCompatibilityAcceptedFrameIndex: number | null = null;
   let latestSceneAppliedFrameIndex: number | null = null;
   let latestIngressStatus: ViewerFrameTimingSnapshot["latestIngressStatus"] = "none";
@@ -95,6 +97,7 @@ export function createViewerFrameTiming(
       }
       receivedFrameCount += 1;
       latestReceivedFrameIndex = payload.frame_index;
+      latestReceivedAtMs = observation.receivedAtMs;
       latestIngressStatus = "received";
       appendBounded(parseDurationMs, observation.parseDurationMs);
     },
@@ -166,6 +169,7 @@ export function createViewerFrameTiming(
         coalescedFrameCount,
         parseErrorCount,
         latestReceivedFrameIndex,
+        latestReceivedAtMs,
         latestCompatibilityAcceptedFrameIndex,
         latestSceneAppliedFrameIndex,
         latestIngressStatus,

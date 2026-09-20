@@ -11,7 +11,6 @@ import {
 } from "../input/keyboardInput.js";
 import type { ViewerGamepadLike } from "../input/gamepadInput.js";
 import { createViewerInputLifecycle, readViewerInputSelection } from "./viewerInputLifecycle.js";
-import { formatQpos } from "../wasm-scene/mujocoQposSync.js";
 import {
   formatEndpointEvaluationAngles,
   formatEndpointEvaluationScalar,
@@ -28,6 +27,7 @@ import { parseTransportPayloadV0Message } from "../transport/parseTransportPaylo
 import { loadDefaultViewerRobotProfile } from "../robot-profiles/registry.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import { viewerVisualLegend } from "../wasm-scene/visualStyles.js";
+import { describeWorkbenchConnection, formatWorkbenchAge } from "./workbenchPresentation.js";
 import "./productViewer.css";
 
 function formatNumber(value: number | null): string {
@@ -127,6 +127,13 @@ function InputOverlayPanel({ state }: { state: ProductViewerState }) {
 
 export function ProductViewerApp() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const diagnosticsRef = useRef<HTMLDetailsElement | null>(null);
+  const [inputPaused, setInputPaused] = useState(false);
+  const [nowMs, setNowMs] = useState(() => performance.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(performance.now()), 100);
+    return () => window.clearInterval(timer);
+  }, []);
   const rendererRef = useRef<ReturnType<typeof createMujocoSceneRenderer> | null>(null);
   const keyboardCaptureRef = useRef(
     createViewerKeyboardCapture(
@@ -153,7 +160,7 @@ export function ProductViewerApp() {
   const inputSelection = useMemo(() => readViewerInputSelection(
     typeof window === "undefined" ? "" : window.location.search,
   ), []);
-  const liveInputEnabled = inputSelection.error === null && isProductViewerLiveInputEnabled(state);
+  const liveInputEnabled = !inputPaused && inputSelection.error === null && isProductViewerLiveInputEnabled(state);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -319,95 +326,105 @@ export function ProductViewerApp() {
     );
   };
 
-  const currentQposText = state.currentQpos === null ? "qpos unavailable" : formatQpos(state.currentQpos);
+  const connection = describeWorkbenchConnection(state, Math.max(nowMs, performance.now()));
+  const overlay = state.inputOverlay;
+  const inputLabel = inputSelection.providerIds.length === 0 ? "入力なし" : inputSelection.providerIds.join(" / ");
+  const endpointError = state.endpointEvaluation?.desired_to_site_error_norm_m;
+  const openDiagnostics = (): void => {
+    const element = diagnosticsRef.current;
+    if (element !== null) {
+      element.open = !element.open;
+      if (element.open) element.scrollIntoView({ block: "start" });
+    }
+  };
 
   return (
     <main className="viewer-shell">
-      <header className="viewer-header">
-        <div>
-          <div className="viewer-eyebrow">product viewer</div>
-          <h1>MuJoCo WASM scene renderer</h1>
-          <p>Python native MuJoCo remains the source of truth. Browser WASM only renders the supplied qpos.</p>
-        </div>
-        <div className={`viewer-badge viewer-badge--${state.status}`}>{state.status}</div>
+      <header className="workbench-header">
+        <div className="workbench-brand"><span className="brand-mark" aria-hidden="true">S</span><h1>Selfrionette</h1><span className="brand-section">WORKBENCH</span></div>
+        <div className="workbench-identity">{state.robotProfileId ?? "model loading"}<span>MuJoCo viewer</span></div>
+        <nav className="workbench-actions" aria-label="表示と入力">
+          <button type="button" onClick={() => setInputPaused((paused) => !paused)}
+            disabled={inputSelection.providerIds.length === 0 || state.connectionStatus !== "open"}
+            aria-pressed={inputPaused} data-testid="input-pause">
+            {inputPaused ? "入力取得を再開" : "入力取得を停止"}
+          </button>
+          <button type="button" onClick={openDiagnostics}>詳細診断</button>
+        </nav>
       </header>
-
-      {inputSelection.error === null ? null : <p role="alert">{inputSelection.error}</p>}
-      <div className="viewer-grid">
-        <section className="viewer-panel viewer-panel--info">
-          <h2>Runtime</h2>
-          <dl className="viewer-kv">
-            <div>
-              <dt>Renderer mode</dt>
-              <dd>{state.rendererMode}</dd>
-            </div>
-            <div>
-              <dt>Connection</dt>
-              <dd>{state.connectionStatus}</dd>
-            </div>
-            <div>
-              <dt>Model path</dt>
-              <dd>{state.modelPath}</dd>
-            </div>
-            <div>
-              <dt>Debug fixture path (reference only)</dt>
-              <dd>{state.fixturePath}</dd>
-            </div>
-            <div>
-              <dt>Pose source</dt>
-              <dd>{state.sourceLabel}</dd>
-            </div>
-            <div>
-              <dt>Qpos status</dt>
-              <dd>{state.qposStatus}</dd>
-            </div>
-          </dl>
-
-          <h2>Model</h2>
-          <dl className="viewer-kv">
-            <div>
-              <dt>nq</dt>
-              <dd>{formatNumber(state.modelNq)}</dd>
-            </div>
-            <div>
-              <dt>nv</dt>
-              <dd>{formatNumber(state.modelNv)}</dd>
-            </div>
-            <div>
-              <dt>ngeom</dt>
-              <dd>{formatNumber(state.modelNgeom)}</dd>
-            </div>
-            <div>
-              <dt>nmesh</dt>
-              <dd>{formatNumber(state.modelNmesh)}</dd>
-            </div>
-            <div>
-              <dt>Current frame</dt>
-              <dd>{formatNumber(state.currentFrameIndex)}</dd>
-            </div>
-            <div>
-              <dt>Timestamp_s</dt>
-              <dd>{formatNumber(state.currentTimestampS)}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="viewer-panel viewer-panel--canvas">
-          <div className="viewer-canvas__header">
-            <div>
-              <h2>Canvas</h2>
-              <p>Floor, axes, and color legend are aligned to the compiled MuJoCo scene.</p>
-            </div>
-            <div className="viewer-subtle">mode: {state.rendererMode}</div>
-          </div>
-          <canvas ref={canvasRef} className="viewer-canvas" />
-          <div className="viewer-canvas__footer">
-            <div className="viewer-note">Current qpos</div>
-            <code>{currentQposText}</code>
-          </div>
-        </section>
+      <div className="workbench-statusbar">
+        <span className={`connection-indicator tone-${connection.tone}`} role="status" data-testid="connection-label">
+          <i aria-hidden="true" />{connection.label}
+        </span>
+        <span className="status-age">{formatWorkbenchAge(connection.ageMs)}</span>
+        <span className="status-divider" />
+        <span>{state.qposStatus === "ready" ? "描画準備済み" : "描画: " + state.qposStatus}</span>
+        <span className="status-divider" />
+        <span className="input-summary">{inputLabel} · {liveInputEnabled ? "取得有効" : "取得停止"}</span>
+        <span className="status-disclaimer">実機安全性は未判定</span>
       </div>
-
+      {inputSelection.error === null ? null : <p className="workbench-alert" role="alert">{inputSelection.error}</p>}
+      {state.qposError === null ? null : <p className="workbench-alert" role="alert">{state.qposError}</p>}
+      <div className="workbench-main">
+        <section className="workbench-scene" aria-label="3Dロボット表示">
+          <div className="scene-toolbar">
+            <span className="section-kicker">SCENE</span>
+            <span className="scene-source">{state.sourceLabel}</span>
+            <div className="camera-actions" aria-label="カメラ方向">
+              {([['iso', '斜め'], ['front', '正面'], ['side', '側面'], ['top', '上面'], ['fit', '全体']] as const).map(([view, label]) => (
+                <button key={view} type="button" disabled={state.qposStatus !== "ready"}
+                  onClick={() => rendererRef.current?.setCameraView(view)}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="scene-viewport">
+            <canvas ref={canvasRef} className="viewer-canvas" tabIndex={0} aria-label="MuJoCo姿勢の3D描画" />
+            <div className="scene-caption"><span>X</span><span>Y</span><span>Z</span><span>ドラッグ: 回転 / ホイール: 拡大</span></div>
+            {(connection.tone === "warning" || connection.tone === "danger") && <div className="scene-state-note">{connection.detail}</div>}
+          </div>
+          <div className="scene-timeline"><span>SIMULATION TIME</span><strong>{state.currentTimestampS === null ? "—" : state.currentTimestampS.toFixed(2) + " s"}</strong><span>FRAME</span><strong>{state.currentFrameIndex ?? "—"}</strong><span className="timeline-note">表示値は実機計測ではありません</span></div>
+        </section>
+      <section className="joint-strip" aria-label="現在のqpos">
+        <div className="strip-heading"><h2>姿勢</h2><span className="section-kicker">QPOS · {state.sourceLabel}</span></div>
+        <div className="joint-values">
+          {state.currentQpos === null ? <p>姿勢データなし</p> : state.currentQpos.map((value, index) => (
+            <div className="joint-value" key={index}><span>qpos {index}</span><strong>{value.toFixed(3)}</strong></div>
+          ))}
+        </div>
+      </section>
+        <aside className="workbench-inspector" aria-label="状態の概要">
+          <section className="inspector-section">
+            <div className="inspector-heading"><h2>入力</h2><span className="section-kicker">INPUT</span></div>
+            <p className="inspector-primary">{overlay?.sourceKind ?? "入力情報なし"}</p>
+            <div className="inspector-row"><span>取得</span><strong>{inputPaused ? "一時停止" : liveInputEnabled ? "有効" : "停止"}</strong></div>
+            <div className="inspector-row"><span>backend状態</span><strong>{overlay === null ? "未取得" : overlay.sourceActive ? "入力あり" : "待機 / 保持"}</strong></div>
+            <div className="inspector-row"><span>入力age</span><strong>{overlay?.commandAgeMs === null || overlay?.commandAgeMs === undefined ? "—" : overlay.commandAgeMs + " ms"}</strong></div>
+            <p className="inspector-note">{overlay?.staleReason ?? "入力の解釈と安全判定はbackendが管理します。"}</p>
+            <p className="inspector-note">入力取得停止は実機の非常停止ではありません。</p>
+          </section>
+          <section className="inspector-section">
+            <div className="inspector-heading"><h2>手先</h2><span className="section-kicker">ENDPOINT</span></div>
+            <div className="endpoint-readout"><strong>{typeof endpointError === "number" && Number.isFinite(endpointError) ? (endpointError * 1000).toFixed(1) : "—"}</strong><span>mm</span></div>
+            <p className="inspector-note">目標 → MuJoCo site の位置誤差</p>
+            <div className="inspector-row"><span>motion</span><strong>{overlay?.motionStatus ?? "未取得"}</strong></div>
+            {overlay?.motionRejectionReason && <p className="inspector-note tone-warning">{overlay.motionRejectionReason}</p>}
+          </section>
+          <section className="inspector-section">
+            <div className="inspector-heading"><h2>タスク</h2><span className="section-kicker">CONTACT</span></div>
+            <p className="inspector-primary">{state.contactTaskPresentation.taskState?.phase ?? "接触情報なし"}</p>
+            {state.contactTaskPresentation.taskState !== null ? <p className="inspector-note">{state.contactTaskPresentation.taskState.classification}</p> : <p className="inspector-note">接触log / payloadの読込みと証拠の詳細は診断にあります。</p>}
+          </section>
+          <div className="inspector-footer">{connection.detail}</div>
+        </aside>
+      </div>
+      <details className="workbench-diagnostics" ref={diagnosticsRef}>
+        <summary>詳細診断<span>model / payload / contact / input</span></summary>
+        <div className="diagnostics-body">
+          <dl className="model-diagnostics">
+            <div><dt>モデル</dt><dd>{state.modelPath}</dd></div>
+            <div><dt>fixture参照</dt><dd>{state.fixturePath}</dd></div>
+            <div><dt>nq / nv / ngeom / nmesh</dt><dd>{[state.modelNq, state.modelNv, state.modelNgeom, state.modelNmesh].map(formatNumber).join(" / ")}</dd></div>
+          </dl>
         <section className="viewer-panel viewer-panel--status">
           <div className="viewer-status__header">
             <h2>Status</h2>
@@ -569,14 +586,9 @@ export function ProductViewerApp() {
           <InputOverlayPanel state={state} />
         </div>
       </section>
-
-      <section className="viewer-panel viewer-panel--legend">
-        <div className="viewer-status__header">
-          <h2>Legend</h2>
-          <div className="viewer-subtle">shared colors</div>
+          <Legend profile={profile} />
         </div>
-        <Legend profile={profile} />
-      </section>
+      </details>
     </main>
   );
 }
