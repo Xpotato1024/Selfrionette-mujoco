@@ -21,3 +21,5 @@ diagnosticsやdry-runをhardware validationと呼ばない。
 - [validation](../docs/operations/validation.md)
 - [backend / viewer startup](../docs/operations/backend-viewer-startup.md)
 - [hardware safety](../docs/operations/hardware-safety.md)
+
+信号からcontactまでのhardware-free実行は[pre-hardware contract](../docs/contracts/pre-hardware-signal-emulation.md)のCLI手順を参照する。

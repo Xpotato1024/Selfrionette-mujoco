@@ -1,0 +1,359 @@
+{
+  "ack_timeout_s": 0.1,
+  "contact_manifest": {
+    "contract_version": 1,
+    "environment": {
+      "contract_version": 1,
+      "plugin_id": "contact_cube_environment"
+    },
+    "evaluators": [
+      {
+        "contract_version": 1,
+        "plugin_id": "contact_outcome"
+      }
+    ],
+    "robot_bundle": {
+      "contract_version": 1,
+      "plugin_id": "fast_arm"
+    },
+    "scene": {
+      "enabled": true,
+      "identity": {
+        "name": "contact_cube_scene",
+        "version": 1
+      },
+      "initial_penetration_tolerance_m": 1e-12,
+      "mujoco": {
+        "integrator": "Euler",
+        "iterations": 20,
+        "ls_iterations": 20,
+        "noslip_iterations": 0,
+        "solver": "Newton",
+        "timestep_s": 0.002
+      },
+      "object": {
+        "body_name": "contact_cube",
+        "conaffinity": 1,
+        "condim": 3,
+        "contype": 1,
+        "enabled": true,
+        "friction": [
+          0.7,
+          0.01,
+          0.001
+        ],
+        "geom_name": "contact_cube_geom",
+        "identity": {
+          "name": "contact_cube",
+          "version": 1
+        },
+        "mass_kg": 0.2,
+        "material": {
+          "material_id": "signal-object",
+          "rgba": [
+            0.8,
+            0.1,
+            0.1,
+            1.0
+          ]
+        },
+        "orientation_wxyz": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "position_m": [
+          0.1990000000000001,
+          -0.24595121467478057,
+          0.2843078061834695
+        ],
+        "shape": "box",
+        "size_m": [
+          0.03,
+          0.03,
+          0.03
+        ]
+      },
+      "presentation": {
+        "camera_identity": "signal-camera/v1",
+        "visual_feedback_identity": "contact-cube/v1"
+      },
+      "required_capabilities": [],
+      "required_robot_roles": [],
+      "reset": {
+        "act": [],
+        "ctrl": [],
+        "object_orientation_wxyz": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "object_position_m": [
+          0.1990000000000001,
+          -0.24595121467478057,
+          0.2843078061834695
+        ],
+        "qpos_rad": [
+          0.0,
+          -0.5235987755982989,
+          0.0,
+          -1.0471975511965976
+        ],
+        "qvel_rad_s": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "simulation_time_s": 0.0,
+        "warm_start": []
+      },
+      "target": {
+        "approach_direction_world": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "face": "+x",
+        "normal_object": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "penetration_band_m": [
+          5e-05,
+          0.01
+        ]
+      }
+    },
+    "schema_version": "contact-task-manifest/v1",
+    "software_revision_identity": "synthetic-signal-contact-fixture/v1",
+    "task": {
+      "contract_version": 1,
+      "plugin_id": "contact_press_hold_task"
+    }
+  },
+  "host_times_s": [
+    0.0,
+    0.002,
+    0.004,
+    0.006,
+    0.008,
+    0.01,
+    0.012,
+    0.014,
+    0.016,
+    0.018000000000000002,
+    0.02,
+    0.022,
+    0.024,
+    0.026000000000000002,
+    0.028,
+    0.03,
+    0.032,
+    0.034,
+    0.036000000000000004,
+    0.038,
+    0.04,
+    0.042,
+    0.044,
+    0.046,
+    0.048,
+    0.05,
+    0.052000000000000005,
+    0.054,
+    0.056,
+    0.058,
+    0.06,
+    0.062,
+    0.064,
+    0.066,
+    0.068,
+    0.07,
+    0.07200000000000001,
+    0.074,
+    0.076,
+    0.078
+  ],
+  "mapping": {
+    "contract_version": 1,
+    "plugin_id": "loadcell_endpoint_mapping"
+  },
+  "mapping_parameters": {
+    "mapping_config": {
+      "channel_axis_weights": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "gain_m": 0.001,
+      "max_delta_m": 0.01
+    }
+  },
+  "payloads": [
+    "vector,0,0,0,0,0,0,0,0",
+    "vector,2,-1,0,0,0,0,0,0",
+    "vector,4,-1,0,0,0,0,0,0",
+    "vector,6,-1,0,0,0,0,0,0",
+    "vector,8,-1,0,0,0,0,0,0",
+    "vector,10,-1,0,0,0,0,0,0",
+    "vector,12,-1,0,0,0,0,0,0",
+    "vector,14,-1,0,0,0,0,0,0",
+    "vector,16,-1,0,0,0,0,0,0",
+    "vector,18,-1,0,0,0,0,0,0",
+    "vector,20,-1,0,0,0,0,0,0",
+    "vector,22,-1,0,0,0,0,0,0",
+    "vector,24,-1,0,0,0,0,0,0",
+    "vector,26,-1,0,0,0,0,0,0",
+    "vector,28,-1,0,0,0,0,0,0",
+    "vector,30,-1,0,0,0,0,0,0",
+    "vector,32,-1,0,0,0,0,0,0",
+    "vector,34,-1,0,0,0,0,0,0",
+    "vector,36,-1,0,0,0,0,0,0",
+    "vector,38,-1,0,0,0,0,0,0",
+    "vector,40,-1,0,0,0,0,0,0",
+    "vector,42,-1,0,0,0,0,0,0",
+    "vector,44,-1,0,0,0,0,0,0",
+    "vector,46,-1,0,0,0,0,0,0",
+    "vector,48,-1,0,0,0,0,0,0",
+    "vector,50,-1,0,0,0,0,0,0",
+    "vector,52,-1,0,0,0,0,0,0",
+    "vector,54,-1,0,0,0,0,0,0",
+    "vector,56,-1,0,0,0,0,0,0",
+    "vector,58,-1,0,0,0,0,0,0",
+    "vector,60,-1,0,0,0,0,0,0",
+    "vector,62,-1,0,0,0,0,0,0",
+    "vector,64,-1,0,0,0,0,0,0",
+    "vector,66,-1,0,0,0,0,0,0",
+    "vector,68,-1,0,0,0,0,0,0",
+    "vector,70,-1,0,0,0,0,0,0",
+    "vector,72,-1,0,0,0,0,0,0",
+    "vector,74,-1,0,0,0,0,0,0",
+    "vector,76,-1,0,0,0,0,0,0",
+    "vector,78,-1,0,0,0,0,0,0"
+  ],
+  "response_mode": "immediate",
+  "route": {
+    "name": "endpoint_delta_to_joint_position",
+    "version": 1
+  },
+  "scenario_id": "synthetic-contact-selfrionette",
+  "schema_version": "prehardware-signal-scenario/v1",
+  "source": "selfrionette",
+  "task": {
+    "dwell_interval_s": 0.004,
+    "target_normal_force_band_n": null,
+    "timeout_s": 0.08
+  },
+  "wire_mapping": {
+    "angle_input_unit": "rad",
+    "angle_offset_unit": "degree",
+    "angle_output_unit": "degree",
+    "command_semantics": "joint_position_command/v1",
+    "joint_angle_offsets": [
+      [
+        "sholder_joint_1",
+        0.0
+      ],
+      [
+        "sholder_joint_2",
+        1.0
+      ],
+      [
+        "sholder_joint_3",
+        -2.0
+      ],
+      [
+        "elbow_joint",
+        3.0
+      ]
+    ],
+    "joint_coordinate_signs": [
+      [
+        "sholder_joint_1",
+        1
+      ],
+      [
+        "sholder_joint_2",
+        -1
+      ],
+      [
+        "sholder_joint_3",
+        1
+      ],
+      [
+        "elbow_joint",
+        -1
+      ]
+    ],
+    "joint_map": [
+      [
+        "sholder_joint_1",
+        "wire0"
+      ],
+      [
+        "sholder_joint_2",
+        "wire1"
+      ],
+      [
+        "sholder_joint_3",
+        "wire2"
+      ],
+      [
+        "elbow_joint",
+        "wire3"
+      ]
+    ],
+    "model_contract_version": "fast_arm-mujoco-model/v1",
+    "profile_contract_version": 1,
+    "profile_id": "fast_arm",
+    "profile_joint_order": [
+      "sholder_joint_1",
+      "sholder_joint_2",
+      "sholder_joint_3",
+      "elbow_joint"
+    ],
+    "schema_version": "fast-arm-physical-output-mapping/v1",
+    "source_id": "synthetic-signal",
+    "wire_joint_order": [
+      "wire2",
+      "wire0",
+      "wire3",
+      "wire1"
+    ]
+  }
+}

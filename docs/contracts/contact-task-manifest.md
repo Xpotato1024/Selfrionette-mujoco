@@ -165,3 +165,9 @@ canonical bytesの`sha256:<64 lowercase hex>`を返す。
 
 このmanifestはsoftware-only readinessの入力であり、serialization成功だけではscene readiness、contact
 measurement、task outcome、experiment evidence、hardware safetyを意味しない。
+
+## 正規化済み法線cosineの数値端点
+
+Task ownerが正規化した二vectorのdotは、浮動小数点丸めで1を数ulp超える場合がある。
+producerは[-1,1]から8 ulp以内の端点誤差だけをclampする。8 ulpを超える値は拒否し、
+outcome decoderの[-1,1] validationは緩めない。raw contact force/normalの内容は変更しない。

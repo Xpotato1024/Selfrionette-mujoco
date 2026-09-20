@@ -32,6 +32,7 @@ EXPECTED_MODULES = {
         "presentation",
         "scene",
         "task_contract",
+        "robot_view",
         "virtual_reaction_force",
     },
     "control": {
@@ -78,6 +79,8 @@ EXPECTED_MODULES = {
         "offline_input_smoke",
         "r7_g_world_tool_experiment",
         "selfrionette_serial_dry_run",
+        "signal_contact",
+        "signal_contact_artifact",
         "websocket_publisher",
     },
     "output": {
