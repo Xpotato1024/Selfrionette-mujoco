@@ -343,7 +343,9 @@ reader startが途中で失敗してもlocal authorizationを撤回してclose�
 
 各tickは受信/expiryを先に処理する。pendingとcadence待ちの間は入力を消費せず、追加commandを生成しない。
 pending/cadence待ちでstaleを検出した場合もstopする。最後のbudget tickは応答検査とcloseに使い、新規dispatchしない。
-新しい入力のread後、P5 callback後にhost clockとsource healthを再検査し、age不明や期限超過をfresh扱いしない。
+新しい入力のread時は、frameに明示されたsource subtypeとtyped healthのsource subtypeを照合する。
+P5 callback後とtransport prepare後にもhost clock、source health、同一commandのsource subtypeを再検査し、
+age不明・期限超過・identity変化をfresh扱いしない。
 inactive/stale、local hold/reject、P5 non-allow、dispatch不受理で閉じる。正常ゼロ入力は新しい有効sampleとして処理する。
 取得/評価/clock等の例外ではabortし、原例外を伝播する。cleanupも失敗した場合は原例外へ注記する。
 既存sessionがfailedになった場合は、そのACK/timeout理由をstopによって上書きしない。
