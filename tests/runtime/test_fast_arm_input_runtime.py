@@ -404,3 +404,99 @@ def test_closed_owner_from_receive_callback_does_not_read_source(monkeypatch):
     monkeypatch.setattr(h.reader, "read_frame", lambda: pytest.fail("read after stop"))
     assert h.runtime.tick().reason == "operator_stop"
     assert len(h.sender.send_calls) == 1
+
+
+@pytest.mark.parametrize("delay", (.375, .5))
+def test_stale_input_during_transport_preparation_is_not_sent(monkeypatch, delay):
+    """prepare中にstaleになった入力はgrantが有効でも送信しない。"""
+    h = Harness()
+    original = h.sender.prepare
+    def delayed(endpoint):
+        result = original(endpoint)
+        h.clock.value += delay
+        return result
+    monkeypatch.setattr(h.sender, "prepare", delayed)
+    h.start()
+    result = h.runtime.tick()
+    assert not h.sender.send_calls, (result.phase, result.request.timestamp_s, h.clock.value)
+    assert h.runtime.closed
+
+
+@pytest.mark.parametrize("veto", (False, None, 1, "true"))
+def test_pre_dispatch_veto_requires_exact_true(veto):
+    """追加callbackは許可を増やさず、真値相当の別型でも送信しない。"""
+    from tests.runtime.test_fast_arm_physical_output import _request
+    h = Harness()
+    assert h.session.arm(h.physical_permission, h.transmission_permission).accepted
+    evaluation = _evaluation(_request(), h.evidence)
+    result = h.session.submit(evaluation, pre_dispatch_check=lambda: veto)
+    assert result.reason == "fast_arm_pre_dispatch_check_rejected"
+    assert h.session.state == "failed" and h.session.latest_sendable_request is None
+    assert len(h.sender.prepare_calls) == 1 and not h.sender.send_calls
+
+
+@pytest.mark.parametrize("end", ("stop", "abort"))
+def test_stop_from_pre_dispatch_check_wins_even_if_it_returns_true(end):
+    """callback後にも既存generation検査が働くことを確認する。"""
+    from tests.runtime.test_fast_arm_physical_output import _request
+    h = Harness()
+    assert h.session.arm(h.physical_permission, h.transmission_permission).accepted
+    def check():
+        getattr(h.session, end)()
+        return True
+    result = h.session.submit(_evaluation(_request(), h.evidence), pre_dispatch_check=check)
+    assert result.status == "rejected" and not h.sender.send_calls
+    assert h.session.state in {"stopped", "aborted"}
+
+
+def test_pre_dispatch_check_exception_retains_cause_and_revokes():
+    """送信直前の再検査が壊れた場合も許可を撤回し、元例外を伝播する。"""
+    from tests.runtime.test_fast_arm_physical_output import _request
+    h = Harness()
+    assert h.session.arm(h.physical_permission, h.transmission_permission).accepted
+    def check():
+        raise ValueError("source freshness unavailable")
+    with pytest.raises(ValueError, match="source freshness unavailable"):
+        h.session.submit(_evaluation(_request(), h.evidence), pre_dispatch_check=check)
+    assert h.session.state == "failed" and not h.sender.send_calls
+    assert h.session.latest_sendable_request is None
+
+
+def test_wrong_raw_source_is_rejected_before_mapping(monkeypatch):
+    """同じschema形状でも取得元identityを別sourceへ付け替えられない。"""
+    h = Harness(); h.start()
+    read = h.reader.read_frame
+    monkeypatch.setattr(h.reader, "read_frame", lambda: replace(read(), source="other-source"))
+    with pytest.raises(ValueError, match="source identity"): h.runtime.tick()
+    assert not h.evaluations and not h.sender.prepare_calls and h.runtime.closed
+
+
+def test_recorded_route_command_must_equal_backend_command(monkeypatch):
+    """backendが別の指令を保持した場合に、その値を黙って出力しない。"""
+    h = Harness()
+    sim = h.plan.pipeline.simulator
+    apply = sim.apply_joint_position_command
+    def changed(backend, command):
+        assert backend is sim
+        apply(replace(command, joint_angles_rad=(.1, -.5, 0., -.5)))
+    monkeypatch.setattr(type(sim), "apply_joint_position_command", changed)
+    h.start()
+    with pytest.raises(ValueError, match="backend command differs"): h.runtime.tick()
+    assert not h.evaluations and not h.sender.prepare_calls and h.runtime.closed
+
+
+@pytest.mark.parametrize("source", ("selfrionette", "gamepad"))
+def test_fresh_zero_is_a_valid_hold_command_not_missing_input(source):
+    """新しいゼロsampleは未取得と区別し、同じ姿勢の明示指令として記録する。"""
+    h = Harness(source, lines=("vector,900000,0,0,0,0,0,0,0",))
+    h.start()
+    if source == "gamepad":
+        h.plan.viewer_bridge_capability.ingest_control_message_json(json.dumps({
+            "type":"viewer_control_message", "timestamp_s":h.clock.value,
+            "source_kind":"gamepad", "metadata":{"control_frame":"world"},
+            "gamepad":{"connected":True,"axes":[0.,0.,0.],"buttons":[]}}))
+    result = h.runtime.tick()
+    assert result.phase == "dispatched" and result.health.status.value == "active"
+    assert result.request.command.joint_angles_rad == result.simulation_before.qpos
+    assert len(h.sender.send_calls) == 1
+    h.runtime.stop()

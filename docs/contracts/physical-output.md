@@ -363,3 +363,11 @@ clearance/stop/rollbackを別途満たす。local stopは許可撤回であり�
 
 viewer bridgeのstart/closeは既存のno-op契約を維持する。ownerのcloseはブラウザやWebSocket取得の停止を意味しない。
 close呼出しと出力ownerのterminal性を検証し、外側の取得停止はその取得ownerへ委譲する。
+
+### prepare復帰時の追加拒否境界
+
+FastArmPhysicalOutputSession.submitのoptional `pre_dispatch_check`は、送信先prepareから戻った後、
+既存のgeneration/grant/permission最終照合の前に実行する。結果は厳密なTrueだけを通し、それ以外や例外で
+許可を撤回する。callback自体は既存gateを許可に変更できず、既存callerは未指定で従来動作を保つ。
+FastArmInputRuntimeはclock・source age・構成・終了状態を確認するcallbackを必ず渡す。
+開始済みのsendを中断する保証はなく、callerのbounded transport contractを維持する。

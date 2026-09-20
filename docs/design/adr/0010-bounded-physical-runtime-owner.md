@@ -39,3 +39,10 @@ callback実行後にも時刻と終了状態を確認し、古い入力やstop�
 clockとidentityの不整合をfakeのみで試験する。既存permission・grant・evidence gateは緩めない。
 実機用の受信callback、校正/配備identity/物理停止、長時間運用、動的servoは#516以降へ残る。
 現在のcontractはphysical-output.mdへ同期し、本ADRを仕様の第二の正本にはしない。
+
+## 監査後の補完判断
+
+prepare中に375 msが経過すると、250 msの入力期限を超えても500 ms grant内で送信できる反例を確認した。
+submit前のfreshness確認だけでは足りないため、既存sessionへprepare後のoptional拒否専用callbackを追加する。
+True以外/例外で拒否し、Trueでも既存grant/generation/P5/permissionの最終照合を省略しない。
+新しいsender wrapperやtimerは作らず、runtimeはこのcallbackを必ず渡す。in-flight sendの取消保証ではない。

@@ -11,6 +11,7 @@ from selfrionette.runtime.control.input_source_state import (
     build_runtime_input_source_state_from_health,
 )
 from selfrionette.runtime.execution.input_step_loop import RuntimeInputSourceStepLoopPlan
+from selfrionette.runtime.execution.command_routes import project_joint_position_command
 from selfrionette.runtime.experiment.input_source import InputSourceHealth, ManagedInputSource
 from selfrionette.runtime.output.fast_arm_adapter import FastArmPhysicalOutputResult, FastArmPhysicalOutputSession
 from selfrionette.runtime.output.fast_arm_observation import (
@@ -203,6 +204,13 @@ class FastArmInputRuntime:
             source_kind=self.plan.selection.resolved_plugin.identity.name)
         return not build_runtime_input_safety_result(MotionCommand(0.0), source_state=state).is_stale
 
+    def _ready_to_dispatch(self) -> bool:
+        """送信先prepareの復帰後にも入力期限と終了/構成状態を確認する追加veto。"""
+        self._check_binding()
+        self._now()
+        fresh = self._fresh()
+        return not self._closed and fresh
+
     def tick(self) -> FastArmRuntimeTick:
         """1 tickで最大1指令。応答待ち・cadence待ちでは入力を消費しない。"""
         if not self._started or self._closed:
@@ -266,6 +274,8 @@ class FastArmInputRuntime:
             source_command = pipeline.simulator.last_joint_position_command
             if type(source_command) is not JointPositionCommand:
                 raise TypeError("backend did not retain a typed joint command")
+            if source_command != project_joint_position_command(safety.motion_command):
+                raise ValueError("backend command differs from route result")
             record = replace(record, simulation_before=before, source_command=source_command)
             if safety.is_stale or safety.qpos_feasibility_rejected or safety.motion_command.metadata.get("motion_status") == "held":
                 self._finish(safety.stale_reason or "local_motion_rejected_or_held")
@@ -292,7 +302,7 @@ class FastArmInputRuntime:
                 self._finish("source_stale_during_evaluation")
                 record = replace(record, reason=self.reason)
                 return record
-            output = self.session.submit(evaluation)
+            output = self.session.submit(evaluation, pre_dispatch_check=self._ready_to_dispatch)
             record = replace(record, output=output)
             if self._closed:
                 record = replace(record, reason=self.reason)
