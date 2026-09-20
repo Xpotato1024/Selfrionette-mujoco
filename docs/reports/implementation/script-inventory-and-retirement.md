@@ -72,3 +72,7 @@ Issue #436当時の分類と、Issue #416の合成log demo分類は変更しな�
 | script | consumer / evidence | 分類 | 判断と canonical replacement |
 | --- | --- | --- | --- |
 | `generate_contact_e2e_artifacts.py` | `r7-h-p7-contact-e2e.md`、`tests/integration/test_contact_e2e.py`、completion audit | developer validation toolとして維持 | copied RobotBundle assetにsoftware proxyを加え、規定qpos / `mj_forward`でcontact solverからraw evidenceを取得する。log、same-state payload、strict summaryを有限に生成する。hardware、`mj_step`、physical experimentを実行しない |
+
+## 2026-09-20: #543のsoftware-only統合入口
+
+`scripts/diagnostics/run_prehardware_signal_e2e.py`を追加した。local fixtureとoutputだけを受け取り、port/host/enableは持たない。既存retirementの履歴・移行数は変更しない。現行手順はpre-hardware-signal-emulation contractへ委譲する。

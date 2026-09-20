@@ -28,6 +28,7 @@ class HeadlessMuJoCoSimulator:
     _last_joint_position_command: JointPositionCommand | None = None
     _pending_joint_position_command: JointPositionCommand | None = None
     initial_keyframe_name: str | None = None
+    _command_group: tuple[tuple[int, ...], tuple[int, ...]] | None = None
 
     @classmethod
     def from_model_path(
@@ -136,7 +137,33 @@ class HeadlessMuJoCoSimulator:
 
         return mujoco
 
+    def bind_joint_position_group(self, joint_names: tuple[str, ...]) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        """sceneの一部へ指令する場合だけ、名前順をscalar qpos/dof addressへ固定する。"""
+        if type(joint_names) is not tuple or not joint_names or len(set(joint_names)) != len(joint_names):
+            raise ValueError("joint command group requires unique explicit names")
+        mujoco = self._import_mujoco()
+        qpos, dofs = [], []
+        for name in joint_names:
+            if type(name) is not str or not name:
+                raise ValueError("joint command group names must be nonempty strings")
+            index = int(mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name))
+            if index < 0 or int(self.model.jnt_type[index]) not in (
+                int(mujoco.mjtJoint.mjJNT_HINGE), int(mujoco.mjtJoint.mjJNT_SLIDE)
+            ):
+                raise ValueError("joint command group requires known scalar joints")
+            qpos.append(int(self.model.jnt_qposadr[index]))
+            dofs.append(int(self.model.jnt_dofadr[index]))
+        group = (tuple(qpos), tuple(dofs))
+        if self._command_group is not None and self._command_group != group:
+            raise ValueError("joint command group cannot change after binding")
+        if self._frame_index or self._pending_command is not None or self._pending_joint_position_command is not None:
+            raise ValueError("joint command group must be bound before execution")
+        self._command_group = group
+        return group
+
     def _resolve_joint_qpos_addresses(self) -> tuple[int, ...]:
+        if self._command_group is not None:
+            return self._command_group[0]
         mujoco = self._import_mujoco()
         joint_names = inspect_mujoco_model(self.model).joint_names
 
@@ -175,7 +202,12 @@ class HeadlessMuJoCoSimulator:
         # qpos/qvel pair on the next step and can drive the model into
         # BADQACC recovery.  This backend has no joint-velocity command
         # contract, so a direct qpos application starts from zero velocity.
-        self.data.qvel[:] = 0.0
+        if self._command_group is None:
+            self.data.qvel[:] = 0.0
+        else:
+            # 非指令対象（cube freejoint等）の運動状態を消さない。
+            for dof in self._command_group[1]:
+                self.data.qvel[dof] = 0.0
         self._import_mujoco().mj_forward(self.model, self.data)
 
     def step(self, dt_s: float) -> None:

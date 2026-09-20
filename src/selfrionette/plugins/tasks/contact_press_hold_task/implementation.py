@@ -169,7 +169,11 @@ def _normal_alignment(
     )
     if expected is None:
         return None
-    return _dot(measured, expected)
+    cosine = _dot(measured, expected)
+    # 両vectorは直前にnormalize済み。端点の数ulpだけを丸め、実際の範囲外値は拒否する。
+    if abs(cosine) > 1.0 + 8.0 * math.ulp(1.0):
+        raise ContactTaskContractError("normalized contact cosine exceeds floating-point tolerance")
+    return min(1.0, max(-1.0, cosine))
 
 
 def _penetration(observation: ContactTaskObservation) -> float | None:

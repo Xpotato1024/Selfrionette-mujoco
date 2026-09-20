@@ -368,3 +368,10 @@ Runtimeが構成する`EvaluatedJointRoute`はendpoint設定とRobot-owned joint
 そのstepのMapping contextへ渡す。source adapterは数式の切替authorityではない。明示readerはconcrete pipelineへ直接注入し、
 一時replay frameや別modelで取得経路を置換しない。実行側のcontextは固定configと分離する。
 設計正本は`docs/contracts/pre-hardware-signal-emulation.md`とする。
+
+## 信号/contactのsoftware-only統合
+
+`runtime/runners/signal_contact.py`が既存Source/Mapping/route、contact Environment/Task/Evaluationとno-I/O
+outputを結ぶ。`runtime/contact/robot_view.py`は単一sceneのRobot joint viewであり、第二のphysicsを持たない。
+`signal_contact_artifact.py`がlocal traceと既存contact log/payloadを検証する。
+実機permissionとP5のauthorityを作らず、詳細は`docs/contracts/pre-hardware-signal-emulation.md`へ委譲する。

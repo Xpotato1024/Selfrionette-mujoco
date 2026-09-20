@@ -225,3 +225,77 @@ P1は連続input / delta-routeの実装対象。P2-P4の完成は個別acceptanc
   wrong target/token/values、遅延、timeout境界、stop後応答、packet stormを確認する。
 
 実配備routerの互換性・認証・calibrationは主張しない。Input Source/Task/contact統合は#543へ残す。
+
+## P4の実行contract
+
+`runtime/runners/signal_contact.py`はsoftware-onlyの専門compositionを所有し、generic experiment契約層へ
+source-specificな分岐を追加しない。`signal_contact_artifact.py`がlocal artifactのread-backを検証する。
+
+### 単一の実行scene
+
+Robot-owned resourceでprofile・joint-limitのpreflightを行った後、既存contact Environmentで実行sceneを
+構成する。preflightやRobot-owned solverの内部modelを含めて「model生成が全体で一回」とは主張しない。
+実際の状態を進めるmodel/dataは一組であり、`ContactRobotView`はその名前付きjoint projectionである。
+backendの`bind_joint_position_group()`は実行前にscalar joint名を一度固定し、cube freejointを指令対象へ
+含めない。非指令対象のqpos/qvelは保持し、Robot4値とscene11値を無条件sliceで混同しない。
+
+Robotの既存direct-qpos適用（step前後で要求位置を適用）とcubeのMuJoCo stepを利用する。
+動的なRobot position servo、実機trajectory追従、力制御安定性のモデルではない。
+半径0.01 mの`signal_e2e_tool_proxy`はprivate asset copyだけへ追加するsynthetic sphereであり、実機形状ではない。
+compiled前scene XML・asset内容のdigest、MuJoCo version、固定source revisionをartifactへ結ぶ。
+
+### 入力・Task・出力の接続
+
+`prehardware-signal-scenario/v1`はSource、原wire payload、host clock列、Mapping selection/parameters、
+versioned route、既存contact manifest、Task条件、明示wire mapping、疑似応答modeを固定する。
+現在の対象は`selfrionette/v1`の7ch lineと`viewer/v1`のGamepad JSON ingressで、host/port/permissionは
+受理しない。host clockとdevice timestampを比較して一つの時刻に変換しない。tickは最大512回とする。
+
+既存のsource health照合、Mapping、typed route、qpos guardを通し、backendへ実際に渡った指令を記録する。
+同stepのsceneからcontact evidenceを取得し、raw evidenceをTaskとvirtual reaction-force処理へ別々に渡す。
+Task outcomeはTask owner、metricはEvaluation ownerが導出する。raw forceをderived forceで代用しない。
+
+出力requestごとに、未取得の物理limit/collision/dynamic根拠はNoneとして既存P5へ渡す。
+実機安全性を許可できない理由とrequest bindingを記録し、output permissionはdisabledとする。
+これと独立なP3のsignal preview / in-memory peer / 有限応答driverを使う。physical sendable wrapperや
+#509 evidenceを生成しない。synthetic correlationはphysical ACK・運動・停止を意味しない。
+
+### 失敗・ログ・再生成
+
+取得不能、malformed、EOFはそのtickの追加command/stepを生成しない。完了済みstepのtraceと元の
+終了理由を保存し、Taskの有限fixture結果とrunnerの異常終了を別々に保持する。Task成功であっても
+通信・cleanup failureがあればrunner全体の成功へ読み替えない。step後に内部処理が壊れた場合は
+古いcontact logと新しいsceneを混ぜたartifactを出さず、原例外を伝播する。
+
+`prehardware-signal-trace/v1`はscenario、固定parameters、input/intent、candidateとbackend指令、
+Robot projectionと全scene snapshot、P5 non-allow、OSC bytes、疑似応答、既存contact-task-log/v1、
+final payload v0、metric、終了理由、実施/未実施coverageを保存する。
+readerはunknown/missing/duplicate fields、非finite、truncation、revision違い、hash違いを拒否する。
+さらに原入力からのMapping、requestからのwire変換、Task evidenceからのmetricを再計算し、
+指令・scene・contactのframe/time/address bindingを照合する。hashは署名ではなく真正性の保証ではない。
+同じrevision/fixtureを二回実行してbyte一致を確認する。異なるMuJoCo環境を同一実験と扱わない。
+
+### 実行方法
+
+cleanなcheckoutで次を実行する。既存のoutput directoryは上書きしない。
+
+```powershell
+$revision = git rev-parse HEAD
+uv run python scripts/diagnostics/run_prehardware_signal_e2e.py `
+  --fixture tests/fixtures/prehardware_signal/gamepad.json `
+  --software-revision $revision `
+  --output-dir "$env:TEMP\selfrionette-gamepad-e2e"
+```
+
+Selfrionetteはfixtureを`tests/fixtures/prehardware_signal/selfrionette.json`へ変更する。
+出力は`signal-trace.json`、`contact-task.jsonl`、`final-payload.json`と、最後に書く`summary.json`である。
+正常なTask失敗も正しい実行結果であり、CLI終了コード0をTask成功と解釈しない。summaryの終了理由と
+traceのmetricを読む。summaryがなければfile batch完了とは扱わない。
+
+付属fixtureは同一Robot/contact条件、0.002秒/step、短いdwellの合成条件である。成功時間・force値は
+人間の操作性能や実機性能の研究結果ではない。物理測定、実serial/network、実機trajectory安全性、
+participant trialは未実施として残す。P0-P3の個別異常試験を、この短い接触成功だけで置き換えない。
+
+P4 readinessはcontact resetのRobot qposを既存joint-limit guardでも検査し、制約外の初期姿勢を拒否する。
+受信deadlineがfloatで開始時刻より後に表現できないclock条件も、実行前に拒否する。
+artifactのfinal payloadはprofile、contact presentation、joint address projectionまで照合する。

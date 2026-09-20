@@ -158,3 +158,10 @@ FK/qpos recomputeも追加しない。
 - browser-sideの第二のMuJoCo ownership
 - hardware / serial / OSC操作
 - legacy import / execution
+
+## Contact sceneの明示joint group
+
+`HeadlessMuJoCoSimulator.bind_joint_position_group(names)`は実行開始前にuniqueなscalar joint名を
+qpos/dof addressへ固定する追加境界である。未bind時の既存挙動は維持する。bind後の別groupへの変更、
+unknown/free/ball joint、次元不一致を拒否する。指令はnamed groupだけへ適用し、cube等の非対象qvelを
+ゼロへ置換しない。全scene snapshotとRobot-only projectionは別々に保持する。
