@@ -125,6 +125,10 @@ def validate_scenario(document: bytes | str | dict) -> dict:
     mapping.normalize_runtime_parameters(value["mapping_parameters"])
     mapping.resolve_command_semantics_route(VersionedIdentity(**value["route"]))
     manifest = decode_contact_manifest(value["contact_manifest"])
+    # このsingle-metric runnerは未対応の評価器を黙って切り捨てない。
+    if manifest.evaluators != (PluginSelection("contact_outcome", 1),):
+        raise ValueError("signal contact evaluator must be exactly contact_outcome/v1")
+    resolve_evaluation_plugin(manifest.evaluators[0])
     if manifest.robot_bundle != PluginSelection("fast_arm", 1) or not manifest.scene.enabled or not manifest.object.enabled:
         raise ValueError("signal contact runner requires enabled fast_arm contact scene")
     if manifest.reset.simulation_time_s != 0.0:
@@ -314,13 +318,13 @@ def capture_signal_contact(document: bytes | str | dict, *, software_revision: s
                 terminal={"kind":"task_terminal","reason":task_state.terminal_reason,"input_index":index,"exception_type":None};break
     except Exception as failure:
         primary=failure
-        terminal={"kind":"execution_failure","reason":str(failure),"input_index":len(records),"exception_type":type(failure).__name__}
+        terminal={"kind":"execution_failure","reason":str(failure) or type(failure).__name__,"input_index":len(records),"exception_type":type(failure).__name__}
     finally:
         if started:
             try: reader.close()
             except Exception as cleanup:
                 if primary is not None: primary.add_note(f"cleanup failed: {cleanup!r}")
-                else: terminal={"kind":"cleanup_failure","reason":str(cleanup),"input_index":len(records),"exception_type":type(cleanup).__name__}
+                else: terminal={"kind":"cleanup_failure","reason":str(cleanup) or type(cleanup).__name__,"input_index":len(records),"exception_type":type(cleanup).__name__}
         signal_session.stop(now_s=clock.value)
     if instance.simulator.snapshot().frame_index != len(records):
         # step後の内部失敗を、古い観測と新しいsnapshotの混在artifactへ変換しない。

@@ -25,3 +25,5 @@ ADRはdesign decisionを、その時点のcontextとprovenanceを含めて記録
 - `0007-no-io-protocol-observation.md`: 実機許可を維持した信号previewと応答判定共有。
 
 - [ADR 0008: 信号から接触までの単一scene統合](0008-signal-contact-integration.md)
+
+- [ADR 0009: 有限SILの対応範囲とtrace整合検証](0009-bounded-sil-validation.md)

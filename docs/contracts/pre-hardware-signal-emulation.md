@@ -303,3 +303,26 @@ artifactのfinal payloadはprofile、contact presentation、joint address projec
 read-backは元のfixtureを同じproduction Sourceへ再生し、各host tickのraw frame・typed healthも照合する。
 contact manifest内のsoftware revision identityは合成fixture定義の論理revision、trace/requestのsoftware_revisionは
 実行commit SHAである。両者を別fieldとして保存し、manifest単体を実行commitの証明とは扱わない。
+
+### 対応する評価器とtrace診断の検証
+
+現行のsingle-metric runnerは`contact_outcome/v1`を正確に1件だけ受け付ける。
+追加・unknown・version違いの評価器はSource開始とmodel生成の前に拒否する。manifestの後続要素を黙って無視しない。
+これは本runnerの対応範囲であり、汎用contact manifestの複数評価器契約を変更しない。
+
+`runtime_safety`は3 fieldの厳密objectとし、`is_stale` / `qpos_rejected`はbool、reasonは既存判定結果に一致する。
+元入力で照合済みのsource状態と保存candidateへ既存のinput safetyとRobot-owned joint-limit guardを再適用し、
+保持/拒否後のjoint指令、motion metadata、同stepのTask operator状態を照合する。
+保存candidateはsolver再計算で認証した値ではない。MuJoCo観測や実機安全性の証明を作らない。
+既存Robot preflight APIのためbase modelをload/validateするが、reader自身はsimulation stepやsolver replayを実行しない。
+
+terminationは最終advanceのTask状態から確認し、finalize後のoutcomeだけで自然終了を推論しない。
+`task_terminal`は最後の記録indexとTask終了理由、`response_failure`は最後の非成功応答と理由、
+`budget_exhausted`はbudget消費・index=null・未終了Task、`execution_failure`は次の未完了indexと
+非空のreason/exception_type、`cleanup_failure`は実行を終える条件と完了件数に一致しなければならない。
+例外messageが空の場合は、原因を推測せず例外型名をreasonにも記録する。
+内部例外のcause文字列や環境の真正性までは、整合検証だけでは保証しない。
+
+`mujoco_version`は3つの数値componentと任意のASCII英数字/点/プラス/ハイフンsuffixを持つ128文字以下の文字列とする。
+数値・空文字・改行等は拒否するが、読取り環境と異なる正しい形式の版は保持する。版一致は実験条件の比較側で明示確認する。
+単純なhash再計算で矛盾を隠せないことと、署名による真正性保証とは区別する。
