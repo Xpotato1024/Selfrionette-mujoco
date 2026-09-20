@@ -196,19 +196,21 @@ class FastArmInputRuntime:
         """local abort後にreaderを閉じる。新sessionなしの再armは許さない。"""
         self._finish("operator_abort", abort=True)
 
-    def _fresh(self) -> bool:
+    def _fresh(self, *, expected_source_kind: str | None = None) -> bool:
         health = self._reader.current_health()
         if health.age_ms is None:
             return False
         state = build_runtime_input_source_state_from_health(health,
             source_kind=self.plan.selection.resolved_plugin.identity.name)
+        if expected_source_kind is not None and state.source_kind != expected_source_kind:
+            raise ValueError("input source health identity changed")
         return not build_runtime_input_safety_result(MotionCommand(0.0), source_state=state).is_stale
 
-    def _ready_to_dispatch(self) -> bool:
-        """送信先prepareの復帰後にも入力期限と終了/構成状態を確認する追加veto。"""
+    def _ready_to_dispatch(self, expected_source_kind: str) -> bool:
+        """送信先prepareの復帰後にも入力期限・source identity・終了状態を確認する追加veto。"""
         self._check_binding()
         self._now()
-        fresh = self._fresh()
+        fresh = self._fresh(expected_source_kind=expected_source_kind)
         return not self._closed and fresh
 
     def tick(self) -> FastArmRuntimeTick:
@@ -258,13 +260,16 @@ class FastArmInputRuntime:
                 raise ValueError("raw input source identity mismatch")
             state = reconcile_runtime_input_source_state(frame, health,
                 source_kind=self.plan.selection.resolved_plugin.identity.name)
+            frame_source_kind = frame.metadata.get("source_kind")
+            if frame_source_kind is not None and str(frame_source_kind) != state.source_kind:
+                raise ValueError("input source frame and health identities differ")
             frame = annotate_raw_input_frame(frame, state)
             record = replace(record, frame=frame, health=health)
             self._now()
             if self._closed:
                 record = replace(record, reason=self.reason)
                 return record
-            if not self._fresh():
+            if not self._fresh(expected_source_kind=state.source_kind):
                 self._finish("source_not_fresh")
                 record = replace(record, reason=self.reason)
                 return record
@@ -298,11 +303,14 @@ class FastArmInputRuntime:
             if self._closed:
                 record = replace(record, reason=self.reason)
                 return record
-            if not self._fresh():
+            if not self._fresh(expected_source_kind=state.source_kind):
                 self._finish("source_stale_during_evaluation")
                 record = replace(record, reason=self.reason)
                 return record
-            output = self.session.submit(evaluation, pre_dispatch_check=self._ready_to_dispatch)
+            output = self.session.submit(
+                evaluation,
+                pre_dispatch_check=lambda: self._ready_to_dispatch(state.source_kind),
+            )
             record = replace(record, output=output)
             if self._closed:
                 record = replace(record, reason=self.reason)
