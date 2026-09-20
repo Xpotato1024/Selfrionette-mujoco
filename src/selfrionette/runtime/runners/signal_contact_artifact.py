@@ -41,6 +41,33 @@ def _vector(value, length):
     _require(all(type(x) in (int,float) and isfinite(x) for x in value), "invalid trace vector")
 
 
+def _validate_source_records(scenario, registration, initial_tip, records):
+    """原fixtureからproduction Sourceを再生し、raw frameとhealthの出所を照合する。"""
+    from selfrionette.runtime.experiment.input_source import InputSourceRuntimeDependencies
+    from selfrionette.runtime.control.input_source_state import reconcile_runtime_input_source_state, annotate_raw_input_frame
+    from selfrionette.runtime.runners.signal_contact import _Clock
+    clock=_Clock(float(scenario["host_times_s"][0]))
+    parameters=({"lines":tuple(scenario["payloads"])} if scenario["source"]=="selfrionette"
+                else {"metadata":{},"initial_endpoint_m":initial_tip})
+    reader=registration.plugin.create_runtime_reader(parameters,runtime_dependencies=InputSourceRuntimeDependencies(clock=clock))
+    try:
+        reader.start()
+        for index,record in enumerate(records):
+            clock.value=float(scenario["host_times_s"][index])
+            if scenario["source"]=="gamepad" and scenario["payloads"][index] is not None:
+                reader.viewer_bridge_capability.ingest_control_message_json(scenario["payloads"][index])
+            frame=reader.read_frame()
+            health=reader.current_health()
+            state=reconcile_runtime_input_source_state(frame,health,source_kind=registration.plugin.identity.name)
+            expected=annotate_raw_input_frame(frame,state)
+            _require(record["raw_frame"]==json_value(expected),"raw input differs from original scenario")
+            _require(record["health"]==json_value(health),"source health differs from original scenario")
+    except Exception as exc:
+        raise ValueError("source provenance replay failed") from exc
+    finally:
+        reader.close()
+
+
 def decode_signal_trace(document: bytes, *, expected_revision: str, expected_scenario_sha256: str | None = None) -> dict:
     """digestだけでなく、既存型・再変換・frame/time・Taskの再導出を検証する。
 
@@ -101,6 +128,7 @@ def decode_signal_trace(document: bytes, *, expected_revision: str, expected_sce
     records=p["records"]
     _require(type(records) is list and len(records)<=len(scenario["host_times_s"]) and len(log.samples)==len(records)+1,
              "missing or extra trace records")
+    _validate_source_records(scenario,registration,log.samples[0].observation.tip_position_world_m,records)
     wire_mapping=FastArmOutputMapping.from_mapping(scenario["wire_mapping"])
     before=initial
     for i,record in enumerate(records):

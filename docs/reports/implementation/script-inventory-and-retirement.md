@@ -75,4 +75,4 @@ Issue #436当時の分類と、Issue #416の合成log demo分類は変更しな�
 
 ## 2026-09-20: #543のsoftware-only統合入口
 
-`scripts/diagnostics/run_prehardware_signal_e2e.py`を追加した。local fixtureとoutputだけを受け取り、port/host/enableは持たない。既存retirementの履歴・移行数は変更しない。現行手順はpre-hardware-signal-emulation contractへ委譲する。
+`run_prehardware_signal_e2e.py`（`scripts/diagnostics/run_prehardware_signal_e2e.py`）を追加した。local fixtureとoutputだけを受け取り、port/host/enableは持たない。既存retirementの履歴・移行数は変更しない。現行手順はpre-hardware-signal-emulation contractへ委譲する。

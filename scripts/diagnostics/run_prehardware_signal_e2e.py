@@ -36,7 +36,9 @@ def main(argv=None) -> int:
     summary={'schema_version':'prehardware-signal-run/v1','software_revision':head,'scenario_sha256':digest,
              'trace_sha256':sha256(first).hexdigest(),'deterministic_reexecution':True,
              'executed_steps':len(payload['records']),'termination':payload['termination'],
-             'task_metric_status':payload['metric']['status'],'physical_readiness':False,
+             'task_metric_status':payload['metric']['status'],
+             'task_classification':payload['metric']['value'].get('classification') if isinstance(payload['metric']['value'],dict) else None,
+             'physical_readiness':False,
              'files':{name:sha256(data).hexdigest() for name,data in files.items()}}
     args.output_dir.mkdir(parents=True,exist_ok=False)
     for name,data in files.items():

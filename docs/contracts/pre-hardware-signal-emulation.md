@@ -299,3 +299,7 @@ participant trialは未実施として残す。P0-P3の個別異常試験を、�
 P4 readinessはcontact resetのRobot qposを既存joint-limit guardでも検査し、制約外の初期姿勢を拒否する。
 受信deadlineがfloatで開始時刻より後に表現できないclock条件も、実行前に拒否する。
 artifactのfinal payloadはprofile、contact presentation、joint address projectionまで照合する。
+
+read-backは元のfixtureを同じproduction Sourceへ再生し、各host tickのraw frame・typed healthも照合する。
+contact manifest内のsoftware revision identityは合成fixture定義の論理revision、trace/requestのsoftware_revisionは
+実行commit SHAである。両者を別fieldとして保存し、manifest単体を実行commitの証明とは扱わない。

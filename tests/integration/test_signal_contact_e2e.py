@@ -158,3 +158,17 @@ def test_final_payload_profile_tampering_is_rejected_after_rehash():
 def test_unrepresentable_ack_deadline_is_rejected_at_preflight():
     config=fixture('selfrionette');config['host_times_s']=[1e308];config['payloads']=config['payloads'][:1]
     with pytest.raises(ValueError):validate_scenario(config)
+
+
+@pytest.mark.parametrize('change',('fixture_payload','health'))
+def test_rehashed_source_provenance_must_match_execution(change):
+    config=json.loads((ROOT/'tests/fixtures/prehardware_signal/selfrionette.json').read_text(encoding='utf-8'))
+    envelope=strict_json(capture_signal_contact(config,software_revision='test-only-source-audit'))
+    p=envelope['payload']
+    if change=='fixture_payload':
+        p['scenario']['payloads'][1]='vector,2,1,0,0,0,0,0,0'
+        p['scenario_sha256']=sha256(canonical(p['scenario'])).hexdigest()
+    else:p['records'][1]['health']['status']='disconnected'
+    envelope['payload_sha256']=sha256(canonical(p)).hexdigest()
+    with pytest.raises(ValueError):
+        decode_signal_trace(canonical(envelope)+b'\n',expected_revision='test-only-source-audit')
