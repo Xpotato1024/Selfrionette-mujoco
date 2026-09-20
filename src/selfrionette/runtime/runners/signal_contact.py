@@ -125,6 +125,10 @@ def validate_scenario(document: bytes | str | dict) -> dict:
     mapping.normalize_runtime_parameters(value["mapping_parameters"])
     mapping.resolve_command_semantics_route(VersionedIdentity(**value["route"]))
     manifest = decode_contact_manifest(value["contact_manifest"])
+    # このsingle-metric runnerは未対応の評価器を黙って切り捨てない。
+    if manifest.evaluators != (PluginSelection("contact_outcome", 1),):
+        raise ValueError("signal contact evaluator must be exactly contact_outcome/v1")
+    resolve_evaluation_plugin(manifest.evaluators[0])
     if manifest.robot_bundle != PluginSelection("fast_arm", 1) or not manifest.scene.enabled or not manifest.object.enabled:
         raise ValueError("signal contact runner requires enabled fast_arm contact scene")
     if manifest.reset.simulation_time_s != 0.0:
