@@ -78,6 +78,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | runtime dry-run | `docs/operations/runtime-dry-run.md` | deterministic replayからpayload v0 NDJSONまで |
 | R7-G deterministic E2E | `docs/operations/r7-g-deterministic-e2e.md` | manifest、world/tool runner、motion log、canonical evidence、evaluation artifactの有限software-only統合 |
 | R7-H-P7 contact E2E | `docs/operations/r7-h-p7-contact-e2e.md` | manifest、contact solver、raw Task、derived signal、log、viewer payloadのsoftware-only smoke |
+| 起動プロファイル | `docs/contracts/launch-profile.md` | version付きJSON、既存resolverによる事前検証、設定表示 |
 | 統一 CLI | `docs/operations/unified-cli.md` | Robot Catalog / Bundleを使うinstallable command |
 | backend / viewer起動 | `docs/operations/backend-viewer-startup.md` | backend、publisher、viewerの起動入口 |
 | WebSocket host / port | `docs/operations/websocket-host-port-contract.md` | bind hostとbrowser-visible hostの分離 |

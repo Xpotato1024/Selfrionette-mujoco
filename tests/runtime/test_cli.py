@@ -94,7 +94,7 @@ def test_help_is_deterministic(capsys: pytest.CaptureFixture[str]) -> None:
         cli.main(["--help"])
 
     assert exc_info.value.code == 0
-    assert "{replay,viewer}" in capsys.readouterr().out
+    assert "{replay,viewer,profile}" in capsys.readouterr().out
 
 
 def test_invalid_argument_uses_argparse_exit_status(

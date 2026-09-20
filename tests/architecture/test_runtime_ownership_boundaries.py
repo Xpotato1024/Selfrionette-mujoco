@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_ROOT = ROOT / "src" / "selfrionette" / "runtime"
 EXPECTED_MODULES = {
     "composition": {
+        "launch_profile",
         "config",
         "concrete_mujoco_pipeline",
         "production_experiment",
