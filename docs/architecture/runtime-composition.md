@@ -375,3 +375,9 @@ Runtimeが構成する`EvaluatedJointRoute`はendpoint設定とRobot-owned joint
 outputを結ぶ。`runtime/contact/robot_view.py`は単一sceneのRobot joint viewであり、第二のphysicsを持たない。
 `signal_contact_artifact.py`がlocal traceと既存contact log/payloadを検証する。
 実機permissionとP5のauthorityを作らず、詳細は`docs/contracts/pre-hardware-signal-emulation.md`へ委譲する。
+
+## 入力とphysical outputの有限owner
+
+`runtime/runners/fast_arm_input_runtime.py`が既存のresolved input planとdisarmed physical sessionを専有し、
+明示start、有限tick、受信/expiry、P5 submit、stop/cleanupを接続する。生成や判定のownerを移さない。
+出力requestのhost clockとSource/MuJoCo時刻は別々に記録する。詳細は`docs/contracts/physical-output.md`を正本とする。

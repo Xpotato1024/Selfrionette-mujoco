@@ -378,3 +378,8 @@ execution loopはroute-bound `ControlMappedRuntimePipeline`とtyped command prov
 専門orchestrationであり、generic `runtime/experiment`のimport禁止を緩めない。
 同じrunner群のartifact readerは既存Task/Evaluationとwire変換を再利用する。contact Robot viewは
 model/dataを複製せず、backendが名前で固定したjoint groupへ委譲する。
+
+## 有限physical runtime接続
+
+`runtime/runners/fast_arm_input_runtime.py`は既存input planとoutput session/driverを合成する。
+Robot-specific codec、P5判断、Source取得は再実装しない。testsの合成acceptance/senderをproductionへimportしない。

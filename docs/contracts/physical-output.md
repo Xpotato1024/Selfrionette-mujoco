@@ -310,3 +310,56 @@ thread、timer、auto retry、socket listenerは持たない。actual receive wi
 
 この段階はprogrammaticなprotocol E2Eである。Input Source、Task/contact、trace/artifactをまとめる
 実験runnerは#543に残る。previewや疑似受信だけをphysical stop、実測ACK、検証環境全体の完成と呼ばない。
+
+## #551 入力runtimeとphysical sessionの有限接続
+
+`runtime.runners.fast_arm_input_runtime.FastArmInputRuntime`は既存のresolved input planと
+新しいdisarmed `FastArmPhysicalOutputSession`を専有する。session生成を複製せず、accepted evidence、
+Robot Profile、mapping、transport configの検証は既存constructorへ委譲する。
+constructorはSource開始、arm、socket、送信を行わない。plan/Source/Mapping/route/Profileと明示revision、
+正整数のtick上限/受信packet上限を検査する。未知の実機設定を埋めるdefaultやtest-only acceptance flagはない。
+
+### 時刻と出力証拠
+
+callerはSourceのreceipt clock、runtime、session、transportを同じhost monotonic基準で構成する。
+装置timestampはraw frameとsource commandに保持し、absolute値をhost timeと比較しない。
+physical requestは生成時のhost timestampを持つ別JointPositionCommandを作り、qposは変えない。
+request発行、P5確認、実dispatch開始の時刻を混ぜず、次のcadenceは実dispatch開始から測る。
+MuJoCo snapshotはlocal command生成用simulationで、physical stateの測定値ではない。
+
+P5用のSafetyInputはcallerの明示producerから受ける。ownerが既存evaluate_and_bindを呼び、
+exact request/candidate/evidenceを既存sessionへsubmitする。未取得の根拠からallowを作らない。
+試験の正常系は既存test-only evidenceとin-memory senderで検証し、productionへimportしない。
+
+FastArmRuntimeTickはsource frame/health、simulation before/after、source command、host request、
+P5 evaluation、physical-session result、受信driver resultを別fieldに保持する。
+P5が拒否してもlocal simulationが候補生成のため進んだ場合がある。simulationのstepを実機dispatchと数えない。
+ownerはlast_tickだけ保持し、履歴の保存はcallerが既存recording機構へ渡す。新しいartifact schemaは設けない。
+
+### lifecycle
+
+`start(physical_permission, transmission_permission)`は既存の二重permission gateを通し、受理後にだけreaderを開始する。
+reader startが途中で失敗してもlocal authorizationを撤回してcloseする。自動arm/rearm/reconnectはしない。
+
+各tickは受信/expiryを先に処理する。pendingとcadence待ちの間は入力を消費せず、追加commandを生成しない。
+pending/cadence待ちでstaleを検出した場合もstopする。最後のbudget tickは応答検査とcloseに使い、新規dispatchしない。
+新しい入力のread後、P5 callback後にhost clockとsource healthを再検査し、age不明や期限超過をfresh扱いしない。
+inactive/stale、local hold/reject、P5 non-allow、dispatch不受理で閉じる。正常ゼロ入力は新しい有効sampleとして処理する。
+取得/評価/clock等の例外ではabortし、原例外を伝播する。cleanupも失敗した場合は原例外へ注記する。
+既存sessionがfailedになった場合は、そのACK/timeout理由をstopによって上書きしない。
+
+stop/abortは同じownerから明示実行する。stop後の再start/tickは拒否する。
+同一threadの専有運用を前提にし、tick再入やactiveなSource/Mapping/route/出力identityの差替えを拒否する。
+callback中にstopされた場合も、そのtickを続けて新規dispatchしない。
+
+### 呼出側に残る責務
+
+ownerはschedulerではない。callerがtickしなければ期限を検査できず、blocking callbackを中断もしない。
+finite tick budgetはwall-clock上限やhard real-time watchdogではない。
+receiver callbackはnonblockingとし、callerは例外を含む終了経路でstopを呼ぶ。
+実送信するcallerは既存hardware authorization、配備receiver、#509の実測証拠、校正、
+clearance/stop/rollbackを別途満たす。local stopは許可撤回であり、実機停止packetや実機停止の証明ではない。
+本段階ではactual socket receiver/bind、hardware CLI、独自thread、汎用schedulerを追加しない。
+
+viewer bridgeのstart/closeは既存のno-op契約を維持する。ownerのcloseはブラウザやWebSocket取得の停止を意味しない。
+close呼出しと出力ownerのterminal性を検証し、外側の取得停止はその取得ownerへ委譲する。
