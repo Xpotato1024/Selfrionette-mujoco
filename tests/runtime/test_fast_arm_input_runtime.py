@@ -471,6 +471,55 @@ def test_wrong_raw_source_is_rejected_before_mapping(monkeypatch):
     assert not h.evaluations and not h.sender.prepare_calls and h.runtime.closed
 
 
+def test_frame_and_health_source_subtype_mismatch_is_rejected(monkeypatch):
+    """同一readのframe/healthでsource subtypeが食い違えばMapping前に拒否する。"""
+    h = Harness("gamepad"); h.start()
+    current_health = h.reader.current_health
+
+    def changed_health():
+        health = current_health()
+        metadata = dict(health.metadata)
+        metadata["source_kind"] = "keyboard"
+        return replace(health, metadata=metadata)
+
+    monkeypatch.setattr(h.reader, "current_health", changed_health)
+    with pytest.raises(ValueError, match="frame and health identities"):
+        h.runtime.tick()
+    assert not h.evaluations and not h.sender.prepare_calls and not h.sender.send_calls
+    assert h.runtime.closed
+
+
+def test_source_subtype_change_during_transport_prepare_is_not_sent(monkeypatch):
+    """read済みcommandのsource subtypeがprepare中に変われば送信直前に拒否する。"""
+    h = Harness("gamepad")
+    current_health = h.reader.current_health
+    prepared = False
+
+    def changing_health():
+        health = current_health()
+        if not prepared:
+            return health
+        metadata = dict(health.metadata)
+        metadata["source_kind"] = "keyboard"
+        return replace(health, metadata=metadata)
+
+    original_prepare = h.sender.prepare
+
+    def prepare(endpoint):
+        nonlocal prepared
+        result = original_prepare(endpoint)
+        prepared = True
+        return result
+
+    monkeypatch.setattr(h.reader, "current_health", changing_health)
+    monkeypatch.setattr(h.sender, "prepare", prepare)
+    h.start()
+    with pytest.raises(ValueError, match="health identity changed"):
+        h.runtime.tick()
+    assert h.sender.prepare_calls and not h.sender.send_calls
+    assert h.runtime.closed and h.session.state == "failed"
+
+
 def test_recorded_route_command_must_equal_backend_command(monkeypatch):
     """backendが別の指令を保持した場合に、その値を黙って出力しない。"""
     h = Harness()
