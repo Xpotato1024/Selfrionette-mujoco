@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-09-21
 canonical_for:
   - product viewer wasm scene renderer operation
 related:
@@ -21,7 +21,7 @@ renderer、tests、fixture、operator pathはproduct viewer側に一本化する
 - Browser WASM MuJoCo は visual renderer only
 - browser 側で IK / FK / qpos recompute はしない
 - browser 側で qpos correction はしない
-- qpos は runtime payload を優先し、未接続時は compiled MuJoCo model default qpos を startup pose として使う
+- qpos は runtime payload を優先し、未接続時はpluginが宣言したMuJoCo named home keyframeをstartup poseとして使う
 
 ## product viewer entrypoint
 
@@ -105,6 +105,10 @@ intentional terminal holdを持つ30 framesである。current SHA-256は
 
 ## 実行
 
+通常はrepository rootから`uv run selfrionette app --profile sim-keyboard`を使う。
+Webとbackendを起動し、接続先と入力providerを指定したURLを一度だけ開く。
+起動・終了・障害時の正本は`backend-viewer-startup.md`である。以下はWeb単体の開発手順。
+
 ```powershell
 cd apps\mujoco-viewer
 npm ci
@@ -144,3 +148,27 @@ git diff --check
 - fixture qpos は debug 用の参照としてのみ扱い、startup では自動適用しない
 - live WebSocket qpos availability depends on publisher payloads
 - browser-side payload correction is intentionally absent
+
+## 操作画面と状態表示
+
+画面は3D中心のworkbenchである。上部に接続/受信age/描画/入力取得、右に入力・手先・タスクの概要、
+下部にqposを置く。モデルpath、内部統計、生の診断、contact log/payloadの読込みは詳細診断を開いて確認する。
+狭い画面では状態→3D→qpos→概要の順とし、内部モデル情報を3Dより先に並べない。
+
+`ready`は描画準備であり、接続や実機安全性の証拠ではない。接続は未指定/接続中/受信待ち/受信中/
+更新停止/配信終了/エラーを区別する。受信ageはbrowserのmonotonic receipt時刻から表示し、
+1000 ms超を表示上の更新停止とする。この閾値はbackendの入力staleやphysical safety gateではない。
+閉じた接続では最終受信値を表示中と明記する。invalid payloadをfresh/安全へ変換しない。
+
+カメラの斜め/正面/側面/上面/全体は、既にMuJoCoが算出したbody位置を使ってviewだけを変える。
+受信qposを編集・再計算せず、body範囲から算出する表示marginを可動域や安全clearanceと扱わない。
+canvas実寸とResizeObserverでaspectを追従し、小画面を固定最小幅へ引き伸ばさない。
+
+「入力取得を停止」はbrowser providerをdisposeする。これはlocalな取得停止であり、実機非常停止、
+backend session停止、即時physical stopの通知ではない。backend側は既存のneutral/stale契約に従う。
+再開は既存のconnection/error gateを満たす場合だけ可能で、終了済みの接続では入力を再開しない。
+input/textarea/select/contenteditableやUIボタンでのキーはrobot入力へ渡さず、編集中に保持キーを解放する。
+blur/非表示/disposeの既存契約を維持し、dispose後に追加publishしない。
+
+概要に現れないcontact evidenceや各種provenanceは削除せず、詳細診断で従来どおり検証・表示する。
+状態表示とカメラ、編集field隔離は`workbenchPresentation.test.ts`で検証する。

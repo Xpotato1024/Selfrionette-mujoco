@@ -33,6 +33,7 @@ export interface ViewerInputProviderWindowLike extends ViewerGamepadLifecycleWin
 }
 
 export interface ViewerInputProviderDocumentLike {
+  readonly activeElement?: unknown;
   visibilityState: string;
   hasFocus(): boolean;
   addEventListener(type: "visibilitychange", listener: () => void): void;
@@ -40,6 +41,10 @@ export interface ViewerInputProviderDocumentLike {
 }
 
 export interface ViewerKeyboardEventLike {
+  target?: unknown;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
   code: string;
   repeat: boolean;
   preventDefault(): void;
@@ -70,10 +75,20 @@ export interface ViewerInputProviderRegistration {
   create(options: ViewerInputProviderOptions): ViewerInputProvider;
 }
 
+/** 編集fieldやUI操作中のキーをrobot入力へ渡さない。 */
+export function isInputEditingTarget(target: unknown): boolean {
+  if (typeof target !== "object" || target === null) return false;
+  const element = target as { tagName?: string; isContentEditable?: boolean; closest?: (selector: string) => unknown };
+  return element.isContentEditable === true ||
+    ["INPUT", "TEXTAREA", "SELECT", "BUTTON", "SUMMARY", "A"].includes(element.tagName?.toUpperCase() ?? "") ||
+    Boolean(element.closest?.('input, textarea, select, button, summary, a[href], [contenteditable="true"], [role="textbox"], [role="slider"], [role="tab"]'));
+}
+
 function createKeyboardProvider(options: ViewerInputProviderOptions): ViewerInputProvider {
   let active = false;
   let animationFrameId: number | null = null;
   let sender: ViewerKeyboardControlSender | null = null;
+  let editingSuppressed = false;
 
   const publish = (): void => {
     sender?.publish(options.keyboardCapture.snapshot(), undefined, {
@@ -88,7 +103,16 @@ function createKeyboardProvider(options: ViewerInputProviderOptions): ViewerInpu
     });
   };
   const onKeyDown = (event: ViewerKeyboardEventLike): void => {
+    if (isInputEditingTarget(event.target) || event.ctrlKey || event.altKey || event.metaKey) {
+      editingSuppressed = true;
+      if (options.keyboardCapture.handleBlur()) publish();
+      return;
+    }
     if (!options.keyboardCapture.isBoundKey(event.code)) return;
+    if (editingSuppressed && options.document.hasFocus()) {
+      editingSuppressed = false;
+      options.keyboardCapture.handleFocus();
+    }
     event.preventDefault();
     if (options.keyboardCapture.handleKeyDown(event.code, event.repeat)) publish();
   };
@@ -109,6 +133,13 @@ function createKeyboardProvider(options: ViewerInputProviderOptions): ViewerInpu
   };
   const schedule = (): void => {
     if (!active) return;
+    if (isInputEditingTarget(options.document.activeElement)) {
+      editingSuppressed = true;
+      options.keyboardCapture.handleBlur();
+    } else if (editingSuppressed && options.document.hasFocus() && options.document.visibilityState === "visible") {
+      editingSuppressed = false;
+      options.keyboardCapture.handleFocus();
+    }
     publish();
     animationFrameId = options.window.requestAnimationFrame(schedule);
   };

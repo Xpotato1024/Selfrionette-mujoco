@@ -74,6 +74,8 @@ import {
   type ViewerPayloadCandidate,
 } from "./viewerFrameTiming.js";
 
+import { cameraPresentation, type CameraView } from "./cameraPresentation.js";
+
 export interface MujocoSceneRendererOptions {
   canvas: HTMLCanvasElement;
   profile: ViewerRobotProfile | null;
@@ -87,6 +89,7 @@ export interface MujocoSceneRendererOptions {
 /** render resource lifecycle。dispose後はcanvas/scene resourceを再利用しない。 */
 export interface MujocoSceneRenderer {
   applyOfflinePayload(payload: TransportPayloadV0): void;
+  setCameraView(view: CameraView | "fit"): void;
   start(): Promise<void>;
   setContactTaskPresentation(
     presentation: ContactTaskPresentationV1,
@@ -109,14 +112,14 @@ function createCheckerFloorTexture(): CanvasTexture {
 
   const tiles = 4;
   const tileSize = canvas.width / tiles;
-  context.fillStyle = "#f8fafc";
+  context.fillStyle = "#303d43";
   context.fillRect(0, 0, canvas.width, canvas.height);
   for (let y = 0; y < tiles; y += 1) {
     for (let x = 0; x < tiles; x += 1) {
       if ((x + y) % 2 === 0) {
-        context.fillStyle = "#0f172a";
+        context.fillStyle = "#27343a";
       } else {
-        context.fillStyle = "#f8fafc";
+        context.fillStyle = "#303d43";
       }
       context.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
     }
@@ -601,13 +604,27 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     applyStartupPose();
   };
 
+  let selectedCameraView: CameraView = "iso";
+  const setCameraView = (view: CameraView | "fit"): void => {
+    if (view !== "fit") selectedCameraView = view;
+    if (data === null) return;
+    const framing = cameraPresentation(data.xpos, selectedCameraView);
+    if (framing === null) return;
+    controls.target.set(...framing.target);
+    camera.position.set(...framing.position);
+    camera.up.set(...framing.up);
+    controls.update();
+  };
+
   const setCanvasSize = (): void => {
-    const width = Math.max(640, options.canvas.clientWidth || DEFAULT_WIDTH);
-    const height = Math.max(480, options.canvas.clientHeight || DEFAULT_HEIGHT);
+    const width = Math.max(1, options.canvas.clientWidth || DEFAULT_WIDTH);
+    const height = Math.max(1, options.canvas.clientHeight || DEFAULT_HEIGHT);
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
   };
+
+  const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(setCanvasSize);
 
   const animate = (): void => {
     if (disposed) {
@@ -929,6 +946,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
       hasLoaded = true;
       syncToLatestSource();
+      setCameraView("iso");
       updateRendererStatus({
         status: "ready",
         sceneSummaryText: `loaded ${model.ngeom} geoms and ${model.nmesh} compiled meshes`,
@@ -960,6 +978,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
           statusText: formatViewerStatusText(state),
         });
         window.addEventListener("resize", setCanvasSize);
+        resizeObserver?.observe(options.canvas);
         frameHandle = window.requestAnimationFrame(animate);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -980,6 +999,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       }
     },
     applyOfflinePayload,
+    setCameraView,
     setContactTaskPresentation,
     dispose() {
       disposed = true;
@@ -989,6 +1009,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
         frameHandle = null;
       }
       window.removeEventListener("resize", setCanvasSize);
+      resizeObserver?.disconnect();
       websocketClient?.stop();
       websocketClient = null;
       meshGeometryCache.clear();

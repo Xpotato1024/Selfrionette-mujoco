@@ -80,3 +80,9 @@ http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 
 `/apps/mujoco-viewer/`だけを開いた場合はdisconnected viewerになる。canonical live
 viewer URLは、同じrouteへ`?websocketUrl=ws://127.0.0.1:8766`を付けたものである。
+
+## 操作画面
+
+3D中心のworkbench。上部の接続/更新/入力取得は描画準備と別の状態として表示する。
+モデル詳細とcontact log/payloadの読込みは「詳細診断」から開く。カメラ操作はviewだけを変更する。
+入力取得停止は物理非常停止ではない。操作の正本は`../../docs/operations/product-viewer-wasm-scene-renderer.md`。
