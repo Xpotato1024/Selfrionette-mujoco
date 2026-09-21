@@ -28,6 +28,9 @@ import { loadDefaultViewerRobotProfile } from "../robot-profiles/registry.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import { viewerVisualLegend } from "../wasm-scene/visualStyles.js";
 import { describeWorkbenchConnection, formatWorkbenchAge } from "./workbenchPresentation.js";
+import { createPresentationCadence, presentationCriticalKey } from "./presentationCadence.js";
+import { JointInstruments } from "../ui/JointInstruments.js";
+import { InputInstruments } from "../ui/InputInstruments.js";
 import "./productViewer.css";
 
 function formatNumber(value: number | null): string {
@@ -122,7 +125,10 @@ function EndpointEvaluationPanel({ state }: { state: ProductViewerState }) {
 }
 
 function InputOverlayPanel({ state }: { state: ProductViewerState }) {
-  return <pre className="viewer-input-overlay__text">{formatInputOverlayText(state.inputOverlay)}</pre>;
+  return <><pre className="viewer-input-overlay__text">{formatInputOverlayText(state.inputOverlay)}</pre>
+    <pre className="viewer-input-overlay__text">{state.inputOverlay?.rawSignal
+      ? JSON.stringify(state.inputOverlay.rawSignal, null, 2)
+      : "raw input signal: unavailable / invalid"}</pre></>;
 }
 
 export function ProductViewerApp() {
@@ -144,6 +150,22 @@ export function ProductViewerApp() {
   const [profile, setProfile] = useState<ViewerRobotProfile | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
   const [state, setState] = useState<ProductViewerState>(() => createInitialProductViewerState());
+  const [numbers, setNumbers] = useState<ProductViewerState>(() => createInitialProductViewerState());
+  const latestDisplayState = useRef(state);
+  const numberCriticalKey = useRef(presentationCriticalKey(state));
+  const [diagnosticSnapshot, setDiagnosticSnapshot] = useState<{ state: ProductViewerState; capturedAt: string } | null>(null);
+  useEffect(() => {
+    latestDisplayState.current = state;
+    const key = presentationCriticalKey(state);
+    if (key !== numberCriticalKey.current) {
+      numberCriticalKey.current = key;
+      setNumbers(state);
+    }
+  }, [state]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNumbers(latestDisplayState.current), 250);
+    return () => window.clearInterval(timer);
+  }, []);
   const endpointConfig = useMemo(() => {
     if (typeof window === "undefined") {
       return { websocketUrl: null as string | null };
@@ -151,6 +173,8 @@ export function ProductViewerApp() {
 
     return readViewerEndpointConfig(window.location);
   }, []);
+  const launchProfileLabel = useMemo(() => typeof window === "undefined" ? null
+    : new URLSearchParams(window.location.search).get("launchProfile"), []);
   const requestedProfileId = useMemo(() => {
     if (typeof window === "undefined") {
       return null;
@@ -168,6 +192,9 @@ export function ProductViewerApp() {
       return;
     }
     let disposed = false;
+    const presentation = createPresentationCadence<ProductViewerState>({
+      intervalMs: 50, criticalKey: presentationCriticalKey, deliver: setState,
+    });
     let renderer: ReturnType<typeof createMujocoSceneRenderer> | null = null;
     const start = async (): Promise<void> => {
       try {
@@ -192,8 +219,10 @@ export function ProductViewerApp() {
           expectedProfileId: requestedProfileId,
           websocketUrl: endpointConfig.websocketUrl,
           onProfileResolved: setProfile,
-          onStateChange: setState,
+          onStateChange: presentation.push,
           onError(error) {
+            presentation.discardPending(); // pendingな正常表示でfatal errorを上書きしない。
+            if (disposed) return;
             setState((current) => ({
               ...current,
               status: "error",
@@ -210,6 +239,8 @@ export function ProductViewerApp() {
           setRendererReady(true);
         }
       } catch (error) {
+        presentation.discardPending();
+        if (disposed) return;
         const message = error instanceof Error ? error.message : String(error);
         setRendererReady(false);
         setState((current) => ({
@@ -225,6 +256,7 @@ export function ProductViewerApp() {
     void start();
     return () => {
       disposed = true;
+      presentation.dispose();
       setRendererReady(false);
       if (rendererRef.current === renderer) {
         rendererRef.current = null;
@@ -257,6 +289,7 @@ export function ProductViewerApp() {
   }, [endpointConfig.websocketUrl, liveInputEnabled, inputSelection]);
 
   const onContactTaskLogChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    setDiagnosticSnapshot(null);
     const input = event.currentTarget;
     const file = input.files?.[0];
     input.value = "";
@@ -290,6 +323,7 @@ export function ProductViewerApp() {
   const onTransportPayloadFileChange = async (
     event: ChangeEvent<HTMLInputElement>,
   ): Promise<void> => {
+    setDiagnosticSnapshot(null);
     const input = event.currentTarget;
     const file = input.files?.[0];
     input.value = "";
@@ -329,7 +363,8 @@ export function ProductViewerApp() {
   const connection = describeWorkbenchConnection(state, Math.max(nowMs, performance.now()));
   const overlay = state.inputOverlay;
   const inputLabel = inputSelection.providerIds.length === 0 ? "入力なし" : inputSelection.providerIds.join(" / ");
-  const endpointError = state.endpointEvaluation?.desired_to_site_error_norm_m;
+  const endpointError = state.endpointEvaluation === null ? null : numbers.endpointEvaluation?.desired_to_site_error_norm_m;
+  const diagnosticState = diagnosticSnapshot?.state ?? state;
   const openDiagnostics = (): void => {
     const element = diagnosticsRef.current;
     if (element !== null) {
@@ -342,7 +377,7 @@ export function ProductViewerApp() {
     <main className="viewer-shell">
       <header className="workbench-header">
         <div className="workbench-brand"><span className="brand-mark" aria-hidden="true">S</span><h1>Selfrionette</h1><span className="brand-section">WORKBENCH</span></div>
-        <div className="workbench-identity">{state.robotProfileId ?? "model loading"}<span>MuJoCo viewer</span></div>
+        <div className="workbench-identity">{state.robotProfileId ?? "model loading"}<span title="起動URLの表示名。backendのidentityは受信データで検証します。">{launchProfileLabel ?? "MuJoCo viewer"}</span></div>
         <nav className="workbench-actions" aria-label="表示と入力">
           <button type="button" onClick={() => setInputPaused((paused) => !paused)}
             disabled={inputSelection.providerIds.length === 0 || state.connectionStatus !== "open"}
@@ -385,17 +420,14 @@ export function ProductViewerApp() {
           <div className="scene-timeline"><span>SIMULATION TIME</span><strong>{state.currentTimestampS === null ? "—" : state.currentTimestampS.toFixed(2) + " s"}</strong><span>FRAME</span><strong>{state.currentFrameIndex ?? "—"}</strong><span className="timeline-note">表示値は実機計測ではありません</span></div>
         </section>
       <section className="joint-strip" aria-label="現在のqpos">
-        <div className="strip-heading"><h2>姿勢</h2><span className="section-kicker">QPOS · {state.sourceLabel}</span></div>
-        <div className="joint-values">
-          {state.currentQpos === null ? <p>姿勢データなし</p> : state.currentQpos.map((value, index) => (
-            <div className="joint-value" key={index}><span>qpos {index}</span><strong>{value.toFixed(3)}</strong></div>
-          ))}
-        </div>
+        <div className="strip-heading"><h2>関節</h2><span className="section-kicker">JOINT POSITION · {state.sourceLabel}</span><span className="instrument-heading-note">角度指標 · 可動域は未表示</span></div>
+        <JointInstruments state={state} numbers={numbers} />
       </section>
         <aside className="workbench-inspector" aria-label="状態の概要">
           <section className="inspector-section">
             <div className="inspector-heading"><h2>入力</h2><span className="section-kicker">INPUT</span></div>
             <p className="inspector-primary">{overlay?.sourceKind ?? "入力情報なし"}</p>
+            <InputInstruments state={state} numbers={numbers} />
             <div className="inspector-row"><span>取得</span><strong>{inputPaused ? "一時停止" : liveInputEnabled ? "有効" : "停止"}</strong></div>
             <div className="inspector-row"><span>backend状態</span><strong>{overlay === null ? "未取得" : overlay.sourceActive ? "入力あり" : "待機 / 保持"}</strong></div>
             <div className="inspector-row"><span>入力age</span><strong>{overlay?.commandAgeMs === null || overlay?.commandAgeMs === undefined ? "—" : overlay.commandAgeMs + " ms"}</strong></div>
@@ -420,30 +452,39 @@ export function ProductViewerApp() {
       <details className="workbench-diagnostics" ref={diagnosticsRef}>
         <summary>詳細診断<span>model / payload / contact / input</span></summary>
         <div className="diagnostics-body">
+          <div className="diagnostic-snapshot-bar">
+            <button type="button" data-testid="diagnostic-snapshot" aria-pressed={diagnosticSnapshot !== null}
+              onClick={() => setDiagnosticSnapshot(diagnosticSnapshot === null
+                ? { state: structuredClone(state), capturedAt: new Date().toISOString() } : null)}>
+              {diagnosticSnapshot === null ? "診断値を固定" : "live診断へ戻る"}
+            </button>
+            <span>{diagnosticSnapshot === null ? "詳細診断は更新中" : `固定: ${diagnosticSnapshot.capturedAt} / frame ${diagnosticSnapshot.state.currentFrameIndex ?? '—'}`}</span>
+            <span>固定はこの診断欄だけです。3D・入力・接続状態は停止しません。</span>
+          </div>
           <dl className="model-diagnostics">
-            <div><dt>モデル</dt><dd>{state.modelPath}</dd></div>
-            <div><dt>fixture参照</dt><dd>{state.fixturePath}</dd></div>
-            <div><dt>nq / nv / ngeom / nmesh</dt><dd>{[state.modelNq, state.modelNv, state.modelNgeom, state.modelNmesh].map(formatNumber).join(" / ")}</dd></div>
+            <div><dt>モデル</dt><dd>{diagnosticState.modelPath}</dd></div>
+            <div><dt>fixture参照</dt><dd>{diagnosticState.fixturePath}</dd></div>
+            <div><dt>nq / nv / ngeom / nmesh</dt><dd>{[diagnosticState.modelNq, diagnosticState.modelNv, diagnosticState.modelNgeom, diagnosticState.modelNmesh].map(formatNumber).join(" / ")}</dd></div>
           </dl>
         <section className="viewer-panel viewer-panel--status">
           <div className="viewer-status__header">
             <h2>Status</h2>
             <div className="viewer-subtle">qpos path is render-only; diagnostics are read-only</div>
           </div>
-        <pre className="viewer-status">{state.statusText}</pre>
-        {state.qposError === null ? null : <div className="viewer-error">{state.qposError}</div>}
+        <pre className="viewer-status">{diagnosticState.statusText}</pre>
+        {diagnosticState.qposError === null ? null : <div className="viewer-error">{diagnosticState.qposError}</div>}
         <div className="viewer-endpoint-evaluation">
           <div className="viewer-endpoint-evaluation__header">
             <h3>Endpoint evaluation</h3>
             <div className="viewer-subtle">read-only diagnostic overlay</div>
           </div>
-          <EndpointEvaluationPanel state={state} />
+          <EndpointEvaluationPanel state={diagnosticState} />
         </div>
         <div className="viewer-contact-task">
           <div className="viewer-contact-task__header">
             <h3>接触証拠と仮想反力</h3>
-            <div className={`viewer-subtle viewer-contact-task__status viewer-contact-task__status--${state.contactTaskPresentation.status}`}>
-              {state.contactTaskPresentation.status}
+            <div className={`viewer-subtle viewer-contact-task__status viewer-contact-task__status--${diagnosticState.contactTaskPresentation.status}`}>
+              {diagnosticState.contactTaskPresentation.status}
             </div>
           </div>
           <div className="viewer-contact-task__controls">
@@ -471,13 +512,13 @@ export function ProductViewerApp() {
               接触表示を消去
             </button>
           </div>
-          {state.contactTaskPresentation.reason === null ? null : (
-            <p className="viewer-contact-task__reason">{state.contactTaskPresentation.reason}</p>
+          {diagnosticState.contactTaskPresentation.reason === null ? null : (
+            <p className="viewer-contact-task__reason">{diagnosticState.contactTaskPresentation.reason}</p>
           )}
-          {state.contactTaskPresentation.evidenceNotice === null ? null : (
-            <p className="viewer-contact-task__notice">{state.contactTaskPresentation.evidenceNotice}</p>
+          {diagnosticState.contactTaskPresentation.evidenceNotice === null ? null : (
+            <p className="viewer-contact-task__notice">{diagnosticState.contactTaskPresentation.evidenceNotice}</p>
           )}
-          {state.contactTaskInputSource === "offline_log" ? (
+          {diagnosticState.contactTaskInputSource === "offline_log" ? (
             <p className="viewer-contact-task__notice">
               offline_log の contact sample と表示中の robot qpos は別入力です。contact-task-log/v1 に robot qpos は含まれず、同一時刻の姿勢と接触の同期を保証しません。同期した表示には、同じ payload-v0 の qpos と metadata.contact_task_v1 を使用してください。
             </p>
@@ -485,92 +526,92 @@ export function ProductViewerApp() {
           <dl className="viewer-contact-task__kv">
             <div>
               <dt>入力元</dt>
-              <dd>{state.contactTaskInputSource}</dd>
+              <dd>{diagnosticState.contactTaskInputSource}</dd>
             </div>
             <div>
               <dt>証拠の種別</dt>
-              <dd>{state.contactTaskPresentation.sourceKind ?? "unavailable"}</dd>
+              <dd>{diagnosticState.contactTaskPresentation.sourceKind ?? "unavailable"}</dd>
             </div>
             <div>
               <dt>シーン / object identity</dt>
               <dd>
-                {state.contactTaskPresentation.binding === null
+                {diagnosticState.contactTaskPresentation.binding === null
                   ? "unavailable"
-                  : `${state.contactTaskPresentation.binding.scene_identity.name}/v${state.contactTaskPresentation.binding.scene_identity.version} / ${state.contactTaskPresentation.binding.object_identity.name}/v${state.contactTaskPresentation.binding.object_identity.version}`}
+                  : `${diagnosticState.contactTaskPresentation.binding.scene_identity.name}/v${diagnosticState.contactTaskPresentation.binding.scene_identity.version} / ${diagnosticState.contactTaskPresentation.binding.object_identity.name}/v${diagnosticState.contactTaskPresentation.binding.object_identity.version}`}
               </dd>
             </div>
             <div>
               <dt>試行 (trial)</dt>
-              <dd>{state.contactTaskPresentation.binding?.trial.trial_id ?? "unavailable"}</dd>
+              <dd>{diagnosticState.contactTaskPresentation.binding?.trial.trial_id ?? "unavailable"}</dd>
             </div>
             <div>
               <dt>サンプル時刻 / frame</dt>
               <dd>
-                {state.contactTaskPresentation.sample === null
+                {diagnosticState.contactTaskPresentation.sample === null
                   ? "unavailable"
-                  : `${state.contactTaskPresentation.sample.simulationTimeS.toFixed(3)} s / ${state.contactTaskPresentation.sample.frameIndex ?? "n/a"}`}
+                  : `${diagnosticState.contactTaskPresentation.sample.simulationTimeS.toFixed(3)} s / ${diagnosticState.contactTaskPresentation.sample.frameIndex ?? "n/a"}`}
               </dd>
             </div>
             <div>
               <dt>payloadとの経過時間 / max age</dt>
               <dd>
-                {state.contactTaskInputSource === "offline_log"
+                {diagnosticState.contactTaskInputSource === "offline_log"
                   ? "offline_log では算出対象外"
-                  : state.contactTaskPresentation.payloadAgeS === null ||
-                      state.contactTaskPresentation.maxAgeS === null
+                  : diagnosticState.contactTaskPresentation.payloadAgeS === null ||
+                      diagnosticState.contactTaskPresentation.maxAgeS === null
                     ? "unavailable"
-                    : state.contactTaskPresentation.payloadAgeS.toFixed(3) +
+                    : diagnosticState.contactTaskPresentation.payloadAgeS.toFixed(3) +
                       " / " +
-                      state.contactTaskPresentation.maxAgeS.toFixed(3) +
+                      diagnosticState.contactTaskPresentation.maxAgeS.toFixed(3) +
                       " s"}
               </dd>
             </div>
             <div>
               <dt>立方体の位置 / half-size</dt>
               <dd>
-                {state.contactTaskPresentation.cube === null
+                {diagnosticState.contactTaskPresentation.cube === null
                   ? "unavailable"
-                  : `${formatContactVector(state.contactTaskPresentation.cube.positionWorldM)} / ${formatContactVector(state.contactTaskPresentation.cube.halfSizeM)} m`}
+                  : `${formatContactVector(diagnosticState.contactTaskPresentation.cube.positionWorldM)} / ${formatContactVector(diagnosticState.contactTaskPresentation.cube.halfSizeM)} m`}
               </dd>
             </div>
             <div>
               <dt>生の接触証拠 (raw contact evidence)</dt>
               <dd>
-                {state.contactTaskPresentation.rawEvidence === null
+                {diagnosticState.contactTaskPresentation.rawEvidence === null
                   ? "unavailable"
-                  : `${state.contactTaskPresentation.rawEvidence.status}; contacts ${state.contactTaskPresentation.rawEvidence.contactCount ?? "n/a"}; force ${formatContactVector(state.contactTaskPresentation.rawEvidence.forceWorldN)} N`}
+                  : `${diagnosticState.contactTaskPresentation.rawEvidence.status}; contacts ${diagnosticState.contactTaskPresentation.rawEvidence.contactCount ?? "n/a"}; force ${formatContactVector(diagnosticState.contactTaskPresentation.rawEvidence.forceWorldN)} N`}
               </dd>
             </div>
             <div>
               <dt>導出反力 (derived reaction force)</dt>
               <dd>
-                {state.contactTaskPresentation.derivedForce === null
+                {diagnosticState.contactTaskPresentation.derivedForce === null
                   ? "unavailable"
-                  : `${state.contactTaskPresentation.derivedForce.status}; ${state.contactTaskPresentation.derivedForce.frame}; ${formatContactVector(state.contactTaskPresentation.derivedForce.forceN)} N`}
+                  : `${diagnosticState.contactTaskPresentation.derivedForce.status}; ${diagnosticState.contactTaskPresentation.derivedForce.frame}; ${formatContactVector(diagnosticState.contactTaskPresentation.derivedForce.forceN)} N`}
               </dd>
             </div>
             <div>
               <dt>対象 task の状態</dt>
               <dd>
-                {state.contactTaskPresentation.taskState === null
+                {diagnosticState.contactTaskPresentation.taskState === null
                   ? "unavailable"
-                  : `${state.contactTaskPresentation.taskState.phase} / ${state.contactTaskPresentation.taskState.classification}`}
+                  : `${diagnosticState.contactTaskPresentation.taskState.phase} / ${diagnosticState.contactTaskPresentation.taskState.classification}`}
               </dd>
             </div>
             <div>
               <dt>生の接触証拠に基づく判定 (raw-evidence outcome)</dt>
               <dd>
-                {state.contactTaskPresentation.outcome === null
+                {diagnosticState.contactTaskPresentation.outcome === null
                   ? "unavailable"
-                  : `${state.contactTaskPresentation.outcome.phase} / ${state.contactTaskPresentation.outcome.classification}`}
+                  : `${diagnosticState.contactTaskPresentation.outcome.phase} / ${diagnosticState.contactTaskPresentation.outcome.classification}`}
               </dd>
             </div>
             <div>
               <dt>接触点 / 法線 (world frame)</dt>
               <dd>
-                {state.contactTaskPresentation.contacts.length === 0
+                {diagnosticState.contactTaskPresentation.contacts.length === 0
                   ? "none"
-                  : state.contactTaskPresentation.contacts.map((contact) =>
+                  : diagnosticState.contactTaskPresentation.contacts.map((contact) =>
                       `${contact.contactIdentity}: point ${formatContactVector(contact.pointWorldM)} m, normal ${formatContactVector(contact.normalWorld)}`,
                     ).join("; ")}
               </dd>
@@ -583,7 +624,7 @@ export function ProductViewerApp() {
             <h3>Input overlay</h3>
             <div className="viewer-subtle">source, keys, axes, buttons, age, stale state</div>
           </div>
-          <InputOverlayPanel state={state} />
+          <InputOverlayPanel state={diagnosticState} />
         </div>
       </section>
           <Legend profile={profile} />

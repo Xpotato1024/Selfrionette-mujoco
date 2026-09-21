@@ -209,12 +209,45 @@ def annotate_runtime_input_state(
     )
 
 
+def input_signal_display_projection(frame: RawInputFrame, *, sample_schema: str,
+                                    state: MuJoCoState) -> dict[str, object]:
+    """取得済みraw値を同じsimulation frameへ結ぶ。写像・校正・単位を推定しない。"""
+    from math import isfinite
+
+    if type(sample_schema) is not str or not sample_schema or sample_schema != sample_schema.strip() or "\x00" in sample_schema:
+        raise ValueError("input signal sample schema is required")
+    if type(frame) is not RawInputFrame or type(state) is not MuJoCoState:
+        raise TypeError("input signal display requires typed frame/state")
+    if type(frame.source) is not str or not frame.source or frame.source != frame.source.strip() or "\x00" in frame.source:
+        raise ValueError("input signal source must be a canonical string")
+    if type(state.frame_index) is not int or not 0 <= state.frame_index <= 2**53 - 1:
+        raise ValueError("input signal frame index must be a non-negative safe integer")
+    values = tuple(frame.values)
+    try:
+        valid = all(type(value) in (int, float) and isfinite(value)
+                    for value in (*values, frame.timestamp_s, state.time_s))
+    except OverflowError:
+        valid = False
+    if not valid:
+        raise ValueError("input signal display requires finite raw values and timestamps")
+    return {
+        "schema_version": "input-signal-display/v1",
+        "source": frame.source,
+        "sample_schema": sample_schema,
+        "source_timestamp_s": frame.timestamp_s,
+        "frame_index": state.frame_index,
+        "simulation_time_s": state.time_s,
+        "values": list(values),
+    }
+
+
 __all__ = [
     "PostStepMeasurement",
     "TargetFeedbackAnnotation",
     "annotate_runtime_input_state",
     "annotate_target_feedback",
     "build_diagnostic_metadata",
+    "input_signal_display_projection",
     "measure_post_step_tip",
     "measure_post_step_endpoint",
 ]

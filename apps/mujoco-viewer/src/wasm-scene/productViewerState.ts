@@ -9,6 +9,8 @@ import {
   type ContactTaskInputSource,
   type ContactTaskPresentationV1,
 } from "../contact/contactTaskLog.js";
+import { parseRawInputSignal, normalizedAxes, pressedGamepadButtons, type RawInputSignal } from "../app/instrumentPresentation.js";
+import type { JointDisplayLayout } from "./jointPresentation.js";
 import { formatQpos } from "./mujocoQposSync.js";
 import type { ViewerFrameTimingSnapshot } from "./viewerFrameTiming.js";
 import {
@@ -30,6 +32,7 @@ export interface ProductViewerInputOverlayButtonState {
 export interface ProductViewerInputOverlayState {
   endpointPresentation: EndpointPresentationState;
   sourceKind: string;
+  rawSignal: RawInputSignal | null;
   intentKind: string | null;
   inputContinuity: string | null;
   sourceActive: boolean;
@@ -63,6 +66,8 @@ export interface ProductViewerInputOverlayState {
   gamepadIndex: number | null;
   gamepadId: string | null;
   gamepadAxes: number[];
+  gamepadInstrumentAxes: number[];
+  gamepadInstrumentPressedButtons: number[] | null;
   gamepadButtons: ProductViewerInputOverlayButtonState[];
   gamepadStale: boolean | null;
   gamepadZeroState: boolean | null;
@@ -83,6 +88,7 @@ export interface ProductViewerState {
   currentFrameIndex: number | null;
   currentTimestampS: number | null;
   currentQpos: number[] | null;
+  jointLayout: JointDisplayLayout | null;
   currentQposText: string;
   endpointEvaluation: TransportEndpointEvaluationPayload | null;
   contactTaskPresentation: ContactTaskPresentationV1;
@@ -136,6 +142,7 @@ export function createInitialProductViewerState(profile?: ViewerRobotProfile): P
     currentFrameIndex: null,
     currentTimestampS: null,
     currentQpos: null,
+    jointLayout: null,
     currentQposText: "[]",
     endpointEvaluation: null,
     contactTaskPresentation: unavailableContactTaskPresentation("No contact task log or metadata loaded."),
@@ -323,6 +330,7 @@ function parseInputOverlayState(
   return {
     endpointPresentation: buildEndpointPresentationState(metadata),
     sourceKind: typeof metadata.source_kind === "string" ? metadata.source_kind : "n/a",
+    rawSignal: isPayload ? parseRawInputSignal(metadata.input_signal_v1, payloadOrMetadata.frame_index, payloadOrMetadata.time_s) : null,
     intentKind: parseOptionalString(metadata.intent_kind),
     inputContinuity: parseOptionalString(metadata.input_continuity),
     sourceActive: metadata.source_active === true,
@@ -364,8 +372,9 @@ function parseInputOverlayState(
     gamepadIndex: gamepad === null ? null : parseOptionalInteger(gamepad.index),
     gamepadId: gamepad === null ? null : parseOptionalString(gamepad.id),
     gamepadAxes: gamepad === null || !Array.isArray(gamepad.axes)
-      ? []
-      : gamepad.axes.filter((axis: unknown): axis is number => isFiniteNumber(axis)),
+      ? [] : gamepad.axes.filter((axis: unknown): axis is number => isFiniteNumber(axis)),
+    gamepadInstrumentAxes: normalizedAxes(gamepad?.axes),
+    gamepadInstrumentPressedButtons: pressedGamepadButtons(gamepad?.buttons),
     gamepadButtons: gamepad === null ? [] : parseInputOverlayButtons(gamepad.buttons),
     gamepadStale: gamepad === null ? null : parseOptionalBoolean(gamepad.stale),
     gamepadZeroState: gamepad === null ? null : parseOptionalBoolean(gamepad.zero_state),

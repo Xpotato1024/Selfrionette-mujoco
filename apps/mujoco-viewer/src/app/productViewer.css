@@ -75,11 +75,7 @@ button[aria-pressed="true"] { background: #e4eee8; color: var(--accent); border-
 .joint-strip { grid-area: joints; min-width: 0; padding: 12px 16px; background: var(--surface); }
 .strip-heading { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
 .strip-heading h2 { margin: 0; font-size: 12px; font-weight: 600; }
-.joint-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 16px; }
-.joint-value { border-left: 1px solid var(--line); padding-left: 12px; display: grid; gap: 5px; }
 .joint-value:first-child { border-left: 0; padding-left: 0; }
-.joint-value span { font-size: 10px; color: var(--muted); }
-.joint-value strong { font-family: ui-monospace, Consolas, monospace; font-size: 19px; font-weight: 400; }
 .workbench-diagnostics { border-top: 1px solid var(--line); }
 .workbench-diagnostics > summary { padding: 12px 18px; font-size: 12px; cursor: pointer; min-height: 42px; }
 .workbench-diagnostics > summary span { font-size: 10px; margin-left: 16px; color: var(--muted); }
@@ -131,9 +127,6 @@ button[aria-pressed="true"] { background: #e4eee8; color: var(--accent); border-
   .scene-timeline .timeline-note { display: none; }
   .scene-caption { left: 10px; bottom: 9px; font-size: 9px; gap: 6px; }
   .joint-strip { padding: 12px; }
-  .joint-values { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-  .joint-value { padding-left: 7px; }
-  .joint-value strong { font-size: 17px; }
   .workbench-inspector { display: grid; grid-template-columns: 1fr 1fr; border-left: 0; border-top: 1px solid var(--line); }
   .inspector-section { padding: 15px 12px; }
   .inspector-section:first-child { border-right: 1px solid var(--line); }
@@ -143,4 +136,66 @@ button[aria-pressed="true"] { background: #e4eee8; color: var(--accent); border-
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }
 
-.joint-values > p { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+
+/* 一つの計器帯。可動域や安全帯は表示metadataなしに描かない。 */
+.joint-instruments { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.joint-instrument { min-width: 0; border-left: 1px solid var(--line); padding: 0 14px; }
+.joint-instrument:first-child { border-left: 0; padding-left: 0; }
+.joint-instrument__label { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.joint-instrument__label span { font: 10px ui-monospace, monospace; color: var(--muted); }
+.joint-instrument__label strong { font-size: 11px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.joint-instrument__body { display: flex; align-items: center; gap: 10px; min-height: 76px; }
+.angle-indicator { width: 76px; height: 72px; flex-shrink: 0; overflow: visible; }
+.dial-track { fill: none; stroke: #b6c4bc; stroke-width: 1; }
+.dial-tick { stroke: #9cafa3; stroke-width: 1; }
+.dial-zero { fill: var(--muted); font: 8px ui-monospace, monospace; }
+.dial-needle { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+.dial-hub { fill: var(--accent); }
+.dial-missing { fill: var(--muted); font-size: 13px; }
+.joint-readout { display: grid; gap: 6px; min-width: 0; }
+.joint-readout__number { font: 23px ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing: -.9px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.joint-readout__number small { font-size: 12px; margin-left: 1px; color: var(--muted); }
+.joint-readout__source { font-size: 9px; line-height: 1.45; color: var(--muted); }
+.joint-kind { min-width: 48px; color: var(--muted); font-size: 12px; }
+.instrument-empty { font-size: 11px; color: var(--muted); }
+.gamepad-display { display: flex; align-items: center; gap: 12px; }
+.stick-indicator { width: 80px; height: 80px; flex-shrink: 0; }
+.stick-bound { stroke: #b6c4bc; fill: none; stroke-width: 1; }
+.stick-cross { stroke: #d0dbd4; fill: none; stroke-width: 1; }
+.stick-point { fill: var(--accent); }
+.gamepad-display > div { display: grid; gap: 7px; }
+.gamepad-display strong { font-size: 12px; font-weight: 500; }
+.gamepad-display span { font-size: 9px; color: var(--muted); }
+.signal-row { display: grid; grid-template-columns: 28px minmax(0,1fr) 45px; gap: 7px; align-items: center; padding: 4px 0; font: 10px ui-monospace, monospace; }
+.signal-row > span { color: var(--muted); }
+.signal-row output { text-align: right; font-variant-numeric: tabular-nums; }
+.signal-track { position: relative; height: 5px; background: #e3ebe6; }
+.signal-zero { position: absolute; left: 50%; top: -3px; height: 11px; border-left: 1px solid #a3b5a9; }
+.signal-fill { position: absolute; top: 0; height: 5px; background: var(--accent); }
+.instrument-caption { font-size: 9px; line-height: 1.6; color: var(--muted); margin: 7px 0 0; }
+.keyboard-instruments { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.keyboard-instruments kbd { display: inline-grid; place-items: center; min-width: 23px; padding: 5px 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; font: 10px ui-monospace, monospace; }
+.keyboard-instruments kbd[data-active="true"] { color: white; background: var(--accent); border-color: var(--accent); }
+.keyboard-instruments .instrument-caption { flex-basis: 100%; }
+.diagnostic-snapshot-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; font-size: 11px; color: var(--muted); }
+@media (min-width: 651px) and (max-width: 1050px) {
+  .joint-instrument { padding: 0 8px; }
+  .joint-instruments { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .joint-instrument__body { flex-direction: column; gap: 0; }
+  .joint-readout { gap: 3px; text-align: center; }
+  .joint-readout__number { font-size: 18px; }
+}
+@media (max-width: 650px) {
+  .joint-instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 12px; }
+  .joint-instrument { padding: 0 8px; }
+  .joint-instrument:nth-child(odd) { border-left: 0; padding-left: 0; }
+  .angle-indicator { width: 62px; height: 62px; }
+  .joint-instrument__body { gap: 5px; }
+  .joint-readout__number { font-size: 19px; }
+  .joint-readout__source { font-size: 8px; }
+}
+
+.instrument-heading-note { font-size: 9px; color: var(--muted); margin-left: auto; }
+@media (max-width: 650px) { .strip-heading { flex-wrap: wrap; gap: 7px; } .instrument-heading-note { width: 100%; margin: 0; } }
+
+.input-instruments[data-stale="true"] .signal-track, .input-instruments[data-stale="true"] .stick-indicator { opacity: .5; }

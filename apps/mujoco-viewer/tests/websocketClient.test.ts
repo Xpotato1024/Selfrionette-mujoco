@@ -341,6 +341,9 @@ function testBuildProductViewerInputOverlayStateFormatsKeyboardPayload(): void {
   assert.equal(endpointPresentation.requested.desiredEndpointM, null);
   assert.deepEqual(legacyOverlay, {
     sourceKind: "viewer_keyboard",
+    rawSignal: null,
+    gamepadInstrumentAxes: [],
+    gamepadInstrumentPressedButtons: null,
     intentKind: null,
     inputContinuity: null,
     sourceActive: true,
@@ -397,6 +400,9 @@ function testBuildProductViewerInputOverlayStateFormatsGamepadPayloadAndFallsBac
   assert.equal(endpointPresentation.status.stale, true);
   assert.deepEqual(legacyOverlay, {
     sourceKind: "viewer_gamepad",
+    rawSignal: null,
+    gamepadInstrumentAxes: [],
+    gamepadInstrumentPressedButtons: [0],
     intentKind: null,
     inputContinuity: null,
     sourceActive: false,

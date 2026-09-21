@@ -74,6 +74,7 @@ import {
   type ViewerPayloadCandidate,
 } from "./viewerFrameTiming.js";
 
+import { decodeJointDisplayLayout } from "./jointPresentation.js";
 import { cameraPresentation, type CameraView } from "./cameraPresentation.js";
 
 export interface MujocoSceneRendererOptions {
@@ -905,6 +906,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
           `viewer model/profile joint name/order mismatch: expected ${activeProfile.jointNames.join(",")}, got ${modelJointNames.join(",")}`,
         );
       }
+      const jointLayout = decodeJointDisplayLayout(modelJointNames, model.jnt_type, model.jnt_qposadr, model.nq);
       const initialKeyframe = resolveNamedInitialKeyframe(model, activeProfile);
       startupQpos = Array.from(initialKeyframe.qpos);
       startupPoseSourceLabel = initialKeyframe.sourceLabel;
@@ -934,6 +936,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       mjvCamera = new mujocoApi.MjvCamera();
 
       updateRendererStatus({
+        jointLayout,
         robotProfileId: activeProfile.profileId,
         modelContractVersion: activeProfile.modelContractVersion,
         modelPath: activeProfile.modelUrl,
