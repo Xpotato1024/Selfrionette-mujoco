@@ -383,3 +383,9 @@ model/dataを複製せず、backendが名前で固定したjoint groupへ委譲�
 
 `runtime/runners/fast_arm_input_runtime.py`は既存input planとoutput session/driverを合成する。
 Robot-specific codec、P5判断、Source取得は再実装しない。testsの合成acceptance/senderをproductionへimportしない。
+
+## 起動設定のcomposition
+
+`runtime/composition/launch_profile.py`はJSON検証と既存Robot/Input/Mapping/command resolverへの
+結線を所有する。CLIは設定の選択・表示だけを担当する。profile解決はprocess、network、
+serial、model stepを開始せず、実機permissionを生成しない。

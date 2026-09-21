@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -121,6 +122,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=CLI_INPUT_SOURCE_NAMES,
         default=None,
     )
+    profile = commands.add_parser("profile", help="起動プロファイルを検証・表示する（実行しない）")
+    profile.add_argument("selector", nargs="?", help="profile名またはJSON path。省略時は一覧")
     return parser
 
 
@@ -131,6 +134,11 @@ def _resolve_runtime_capabilities(robot_id: str) -> None:
 
 
 def _run(args: argparse.Namespace) -> int:
+    if args.command == "profile":
+        from selfrionette.runtime.composition.launch_profile import list_launch_profiles, load_launch_profile
+        value = list_launch_profiles() if args.selector is None else load_launch_profile(args.selector).to_dict()
+        print(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False))
+        return 0
     _resolve_runtime_capabilities(args.robot)
     if args.command == "replay":
         output = args.output if args.output is not None else sys.stdout
@@ -192,7 +200,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return _run(args)
-    except (RuntimeError, ValueError) as exc:
+    except (RuntimeError, ValueError, OSError) as exc:
         print(f"selfrionette: error: {exc}", file=sys.stderr)
         return 1
 

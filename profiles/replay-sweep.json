@@ -1,0 +1,37 @@
+{
+  "schema_version": "selfrionette-launch-profile/v1",
+  "name": "replay-sweep",
+  "workspace": "..",
+  "mode": "replay",
+  "robot": {
+    "name": "fast_arm",
+    "version": 1
+  },
+  "input": {
+    "plugin": {
+      "name": "programmed_target",
+      "version": 1
+    },
+    "provider": null,
+    "preset": "sweep_x"
+  },
+  "mapping": {
+    "plugin": {
+      "name": "replay_mapping",
+      "version": 1
+    },
+    "parameters": {}
+  },
+  "execution": {
+    "steps": 600,
+    "dt_s": 0.016666666666666666,
+    "interval_s": 0.016666666666666666,
+    "grace_period_s": 60
+  },
+  "web": {
+    "host": "127.0.0.1",
+    "port": 5173,
+    "websocket_port": 8766,
+    "open_browser": true
+  }
+}

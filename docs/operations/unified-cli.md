@@ -53,3 +53,10 @@ CLI behaviorを維持する。
 未知 robot、必要 capability の欠落、runtime failure は終了 status `1`、help は `0`、引数
 構文エラーは `argparse` の status `2` とする。diagnostics module は診断 command が存在しない
 限り import しない。
+
+## 起動設定の検査
+
+`uv run selfrionette profile`でcheckoutの起動profileを一覧表示し、
+`uv run selfrionette profile sim-gamepad`で検証・解決済み設定をJSON表示する。
+この操作はSource、model、サーバー、ブラウザを開始しない。
+JSONの仕様とpath解決は`docs/contracts/launch-profile.md`を参照する。
