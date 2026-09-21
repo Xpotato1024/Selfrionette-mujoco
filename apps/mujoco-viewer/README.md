@@ -86,3 +86,12 @@ viewer URLは、同じrouteへ`?websocketUrl=ws://127.0.0.1:8766`を付けたも
 3D中心のworkbench。上部の接続/更新/入力取得は描画準備と別の状態として表示する。
 モデル詳細とcontact log/payloadの読込みは「詳細診断」から開く。カメラ操作はviewだけを変更する。
 入力取得停止は物理非常停止ではない。操作の正本は`../../docs/operations/product-viewer-wasm-scene-renderer.md`。
+
+## 計器と診断の使い方
+
+関節欄の針は回転角の方向、数値はdegree表示である。可動域や実機の安全帯は表していない。
+入力欄はbackendが記録したGamepad axes/buttons、Keyboard、またはSelfrionette 7chを表示する。
+不正・未取得値をzeroに置き換えず、力の単位や校正値を推測しない。
+「詳細診断」の「診断値を固定」で生値を読める。固定中も3D・接続状態・入力取得は継続する。
+表示更新周期、出所、欠測の扱いは
+[viewer操作の正本](../../docs/operations/product-viewer-wasm-scene-renderer.md)を参照する。

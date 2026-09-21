@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-17
+last_verified: 2026-09-21
 canonical_for:
   - transport payload v0
 related:
@@ -83,3 +83,28 @@ production live viewerはbounded latest-state slotを使用してよい。coales
 同じ`target_position_m`というwire名でも、top-levelは`Vector3 | null`のviewer feedback、
 `metadata.target_position_m`は存在する場合だけ`Vector3`のcompatibility fieldであり、
 layerとnullability contractを共有しない。
+
+## `input_signal_v1` metadata extension
+
+`runtime/control/input_step_diagnostics.py::input_signal_display_projection`は、Input Sourceの取得済み
+`RawInputFrame`を、同じ入力step後のsimulation frameへ結ぶread-only表示projectionを作る。
+`input_step_loop.py`はMappingで正規化されたcompatibility frameとは別に、元の取得frameからこの値を作る。
+新しい入力取得、校正、単位変換、安全判定、物理出力許可は行わない。
+
+field setは`schema_version`（`input-signal-display/v1`）、`source`、`sample_schema`、
+`source_timestamp_s`、`frame_index`、`simulation_time_s`、`values`である。source時刻とsimulation時刻を
+同一clockと仮定しない。sourceとschemaはcanonicalな文字列、frame indexは非負のsafe integer、
+時刻と各valueはfiniteな数値とし、boolや変換overflowを受理しない。valuesは元frameと独立したコピーである。
+
+viewerはfield set/version、finite値、outer payloadとのframe index/time一致を検査する。
+Selfrionette 7ch表示は`selfrionette`と`loadcell_vector_sample/v1`、7要素の一致に限り、
+別sourceの表示へ取り違えない。未取得・不正なprojectionは未取得表示にし、過去の値やzeroで埋めない。
+sourceのactive/stale判定は既存health metadataを使い、このprojectionから推測しない。
+
+これはopen metadataのoptional extensionで、payload-v0、既存Robot declaration、Mapping、
+command、qpos、experiment logのschemaを変更しない。このkeyを持たない既存payloadも従来どおり読める。
+このprojectionを受信しただけで実機計測やphysical authorityの成立とは扱わない。
+
+入力step loopは上流frame・intent・commandから引き継いだ`input_signal_v1`を必ず除去し、
+そのstepの取得済みraw frameと既知sample schemaからのみ再生成する。sample schemaが不明なら
+extension自体を省略する。上流metadataの自己申告をruntime由来の表示証拠へ昇格しない。

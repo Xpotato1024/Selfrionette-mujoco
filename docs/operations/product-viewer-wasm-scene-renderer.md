@@ -172,3 +172,33 @@ blur/非表示/disposeの既存契約を維持し、dispose後に追加publish�
 
 概要に現れないcontact evidenceや各種provenanceは削除せず、詳細診断で従来どおり検証・表示する。
 状態表示とカメラ、編集field隔離は`workbenchPresentation.test.ts`で検証する。
+
+## 関節・入力計器と診断固定
+
+関節欄はloaded MuJoCo modelのjoint name/type/`jnt_qposadr`を検証し、hingeを角度指標へ投影する。
+針は0を上、正方向を時計回りとして円周方向を示す。短いdegree数値は累積角度を保持し、
+360度で数値をwrapしない。slideはmeter単位の並進座標、ball/freeは複数座標として角度計非対応を示す。
+欠測・次元不一致・非finite値は針を消し、`—`を表示する。raw qposは詳細診断で確認できる。
+この指標は可動域meterではなく、モデルlimitや実機safe zoneを捏造しない。表示値の出所も併記する。
+
+Gamepadは取得されたnormalized axesの順序を保つXY表示と符号付きバー、押下button番号を示す。
+不正な軸をfilterして番号を詰め直さず、配列全体を計器表示から除外する。不正buttonを未押下へ変換しない。
+Selfrionetteは`input_signal_v1`を検証して生の7chを示す。単位・指との対応・力への換算は未校正と明記する。
+バーは同一sample内の相対比で、表示scaleを併記する。異なる時刻の絶対振幅比較は生値で行う。
+Keyboardはbackendが記録した押下キーとfocus状態を示す。staleの表示は既存backend診断から導出する。
+raw signalのsource、sample schema、source時刻、値は詳細診断へ残す。wire仕様の正本は
+[transport payload契約](../contracts/transport-payload.md)である。
+
+React計器表示は50 ms（最大20 Hz）、通常の数値ラベルは250 ms（4 Hz）を目安にcoalesceする。
+接続、error、stale、hold/reject、欠測、sourceやbutton/keyboard状態の変化は待たずに更新する。
+3D適用、入力取得、安全判定、backend周期、実験記録はこの表示間引きへ接続しない。
+これはbrowser schedulerの目安でありhard real-time保証ではない。fatal error/dispose時はpending更新を破棄する。
+
+「診断値を固定」はその時点の詳細診断だけをコピーし、取得日時とframeを表示する。
+固定中も3D、接続表示、入力取得は継続する。解除は「live診断へ戻る」を使う。
+固定操作はsession停止や物理停止ではない。表示revisionは参加者実験の比較条件として固定する。
+
+詳細診断も軸配列の不正要素を除去してindexを詰め直さない。不正・未取得のaxesは
+`unavailable / invalid`と表示し、正常な数値列は元の順序を保持する。
+buttonの押下状態が不明なら`invalid`とし、`released`へ補完しない。
+この変更は表示内部の状態型だけに適用し、入力wire形式やbackendへの操作値を変えない。

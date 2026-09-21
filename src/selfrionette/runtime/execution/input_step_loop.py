@@ -20,6 +20,7 @@ from selfrionette.runtime.composition.config import RuntimeConfig
 from selfrionette.runtime.composition.concrete_mujoco_pipeline import build_concrete_mujoco_pipeline
 from selfrionette.runtime.control.input_step_diagnostics import (
     PostStepMeasurement,
+    input_signal_display_projection,
     annotate_runtime_input_state,
     measure_post_step_endpoint,
 )
@@ -577,6 +578,14 @@ async def _run_runtime_input_source_step_loop(
             safety_result=safety_result,
             authoritative_profile_metadata=plan.pipeline.robot_profile_metadata,
         )
+        # 上流metadataの自己申告は除去し、このframeのraw projectionだけを公開する。
+        display_metadata = dict(annotated_state.metadata)
+        display_metadata.pop("input_signal_v1", None)
+        if plan.selection.produced_sample_schema is not None:
+            display_metadata["input_signal_v1"] = input_signal_display_projection(
+                raw_frame, sample_schema=plan.selection.produced_sample_schema.canonical_id,
+                state=annotated_state)
+        annotated_state = replace(annotated_state, metadata=display_metadata)
         annotation_finished_s = timing_metrics.clock() if timing_metrics is not None else 0.0
         publish_started_s = annotation_finished_s
         await plan.pipeline.publisher.publish(annotated_state)
