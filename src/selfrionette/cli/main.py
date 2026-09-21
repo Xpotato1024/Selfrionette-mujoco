@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -124,6 +125,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profile = commands.add_parser("profile", help="起動プロファイルを検証・表示する（実行しない）")
     profile.add_argument("selector", nargs="?", help="profile名またはJSON path。省略時は一覧")
+    app = commands.add_parser("app", help="profileからWebとbackendを一括起動する")
+    app.add_argument("--profile", required=True)
+    app.add_argument("--web-port", type=_port, default=None)
+    app.add_argument("--backend-port", type=_port, default=None)
+    app.add_argument("--no-browser", action="store_true")
+    mode = app.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="設定と依存だけを検査（起動しない）")
+    mode.add_argument("--startup-check", action="store_true", help="両serverの起動と終了だけを検証")
     return parser
 
 
@@ -139,6 +148,16 @@ def _run(args: argparse.Namespace) -> int:
         value = list_launch_profiles() if args.selector is None else load_launch_profile(args.selector).to_dict()
         print(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False))
         return 0
+    if args.command == "app":
+        from selfrionette.runtime.composition.launch_profile import load_launch_profile, override_launch_profile
+        from selfrionette.runtime.runners.application import application_url, preflight_application, run_application
+        profile = override_launch_profile(load_launch_profile(args.profile), web_port=args.web_port,
+            backend_port=args.backend_port, open_browser=False if args.no_browser else None)
+        preflight_application(profile)
+        if args.check:
+            print(json.dumps({**profile.to_dict(), "viewer_url": application_url(profile)}, ensure_ascii=False, indent=2))
+            return 0
+        return run_application(profile, startup_check=args.startup_check)
     _resolve_runtime_capabilities(args.robot)
     if args.command == "replay":
         output = args.output if args.output is not None else sys.stdout
@@ -198,11 +217,21 @@ def _run(args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    previous_break = None
+    if args.command == "app" and hasattr(signal, "SIGBREAK"):
+        def interrupt(signum, frame):
+            raise KeyboardInterrupt
+        previous_break = signal.signal(signal.SIGBREAK, interrupt)
     try:
         return _run(args)
+    except KeyboardInterrupt:
+        return 130
     except (RuntimeError, ValueError, OSError) as exc:
         print(f"selfrionette: error: {exc}", file=sys.stderr)
         return 1
+    finally:
+        if previous_break is not None:
+            signal.signal(signal.SIGBREAK, previous_break)
 
 
 __all__ = ["build_parser", "main"]

@@ -12,8 +12,9 @@ export default defineConfig({
   base: "./",
   appType: "mpa",
   publicDir: false,
+  cacheDir: resolve(appRoot, "node_modules/.vite"),
   server: {
-    open: "/apps/mujoco-viewer/",
+    open: process.env.SELFRIONETTE_LAUNCHER === "1" ? false : "/apps/mujoco-viewer/",
     fs: {
       allow: [repoRoot, appRoot],
     },

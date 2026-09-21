@@ -4,11 +4,10 @@ import { describe, it } from "node:test";
 import { resolve } from "node:path";
 
 describe("vite config", () => {
-  it("opens the product viewer path automatically", () => {
-    const viteConfigPath = resolve(process.cwd(), "vite.config.ts");
-    const source = readFileSync(viteConfigPath, "utf8");
-
-    assert.match(source, /open:\s*["']\/apps\/mujoco-viewer\/["']/);
+  it("keeps manual dev opening and delegates app browser ownership", () => {
+    const source = readFileSync(resolve(process.cwd(), "vite.config.ts"), "utf8");
+    assert.ok(source.includes('open: process.env.SELFRIONETTE_LAUNCHER === "1" ? false : "/apps/mujoco-viewer/"'));
+    assert.ok(source.includes('cacheDir: resolve(appRoot, "node_modules/.vite")'));
     assert.match(source, /publicDir:\s*false/);
     assert.match(source, /createViewerPackageResourcePlugin\(repoRoot\)/);
     assert.doesNotMatch(source, /fastArmPackageResources/);

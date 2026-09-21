@@ -30,7 +30,10 @@ def build_viewer_input_source(
 def ingest_viewer_control_message(
     source: ViewerBridgeRuntimeCapability,
     message: ViewerControlMessage | str | Mapping[str, object],
+    *, expected_provider_id: str | None = None,
 ) -> RawInputFrame:
+    if expected_provider_id not in (None, "keyboard/v1", "gamepad/v1"):
+        raise ValueError("unknown expected viewer input provider")
     try:
         if isinstance(message, str):
             validated_message = parse_viewer_control_message_json(message)
@@ -38,6 +41,8 @@ def ingest_viewer_control_message(
             validated_message = message
         else:
             validated_message = coerce_viewer_control_message(message)
+        if expected_provider_id is not None and validated_message.source_kind != expected_provider_id.split("/", 1)[0]:
+            raise ValueError("viewer input provider does not match launch profile")
     except Exception as exc:
         source.record_ingress_failure(str(exc))
         raise

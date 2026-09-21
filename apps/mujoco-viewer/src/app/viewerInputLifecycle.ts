@@ -24,6 +24,20 @@ export interface ViewerInputLifecycle {
 
 const DEFAULT_PROVIDER_IDS: readonly ViewerInputProviderId[] = ["gamepad/v1", "keyboard/v1"];
 
+/** URLは入力取得の選択だけを渡す。未知/重複指定では取得を開始しない。 */
+export function readViewerInputSelection(search: string): {
+  providerIds: readonly ViewerInputProviderId[];
+  error: string | null;
+} {
+  const values = new URLSearchParams(search).getAll("inputProvider");
+  if (values.length === 0) return { providerIds: DEFAULT_PROVIDER_IDS, error: null };
+  if (values.length === 1 && values[0] === "none") return { providerIds: [], error: null };
+  if (values.length === 1 && (values[0] === "keyboard/v1" || values[0] === "gamepad/v1")) {
+    return { providerIds: [values[0]], error: null };
+  }
+  return { providerIds: [], error: "入力providerの指定が不正です。取得を開始しません。" };
+}
+
 export function createViewerInputLifecycle(options: ViewerInputLifecycleOptions): ViewerInputLifecycle {
   const registry = options.providerRegistry ?? createDefaultViewerInputProviderRegistry();
   const providerIds = options.providerIds ?? DEFAULT_PROVIDER_IDS;

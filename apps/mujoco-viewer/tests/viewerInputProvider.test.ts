@@ -5,7 +5,7 @@ import {
   type ViewerInputProvider,
   type ViewerInputProviderOptions,
 } from "../src/input/viewerInputProvider.js";
-import { createViewerInputLifecycle, type ViewerInputLifecycleOptions } from "../src/app/viewerInputLifecycle.js";
+import { createViewerInputLifecycle, readViewerInputSelection, type ViewerInputLifecycleOptions } from "../src/app/viewerInputLifecycle.js";
 
 function testDefaultRegistryIsKnownAndVersioned(): void {
   const registry = createDefaultViewerInputProviderRegistry();
@@ -67,3 +67,13 @@ testLifecycleActivatesAndDisposesSelectedProvider();
 testLifecycleFailsClosedForDuplicateSelection();
 
 console.log("viewer input provider registry and lifecycle tests passed");
+
+assert.deepEqual(readViewerInputSelection("?inputProvider=gamepad%2Fv1").providerIds, ["gamepad/v1"]);
+assert.deepEqual(readViewerInputSelection("?inputProvider=keyboard%2Fv1").providerIds, ["keyboard/v1"]);
+assert.deepEqual(readViewerInputSelection("?inputProvider=none").providerIds, []);
+assert.equal(readViewerInputSelection("").providerIds.length, 2);
+for (const search of ["?inputProvider=unknown", "?inputProvider=", "?inputProvider=keyboard/v1&inputProvider=gamepad/v1"]) {
+  const result = readViewerInputSelection(search);
+  assert.deepEqual(result.providerIds, []);
+  assert.notEqual(result.error, null);
+}

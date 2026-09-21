@@ -60,3 +60,10 @@ CLI behaviorを維持する。
 `uv run selfrionette profile sim-gamepad`で検証・解決済み設定をJSON表示する。
 この操作はSource、model、サーバー、ブラウザを開始しない。
 JSONの仕様とpath解決は`docs/contracts/launch-profile.md`を参照する。
+
+## 統一起動
+
+`uv run selfrionette app --profile sim-gamepad`はprofileからWeb/backendを起動する。
+`--check`は依存と設定だけ、`--startup-check`はloopback serverの起動/終了だけを検証する。
+profileにrobotが明記されるので、このsubcommandに別の`--robot`はない。
+既存replay/viewerの選択肢と引数は維持する。手順は`backend-viewer-startup.md`を参照する。

@@ -10,7 +10,7 @@ import {
   DEFAULT_VIEWER_KEYBOARD_CAPTURE_KEYS,
 } from "../input/keyboardInput.js";
 import type { ViewerGamepadLike } from "../input/gamepadInput.js";
-import { createViewerInputLifecycle } from "./viewerInputLifecycle.js";
+import { createViewerInputLifecycle, readViewerInputSelection } from "./viewerInputLifecycle.js";
 import { formatQpos } from "../wasm-scene/mujocoQposSync.js";
 import {
   formatEndpointEvaluationAngles,
@@ -150,7 +150,10 @@ export function ProductViewerApp() {
     }
     return new URLSearchParams(window.location.search).get("robotProfileId");
   }, []);
-  const liveInputEnabled = isProductViewerLiveInputEnabled(state);
+  const inputSelection = useMemo(() => readViewerInputSelection(
+    typeof window === "undefined" ? "" : window.location.search,
+  ), []);
+  const liveInputEnabled = inputSelection.error === null && isProductViewerLiveInputEnabled(state);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -229,6 +232,7 @@ export function ProductViewerApp() {
     }
 
     const inputLifecycle = createViewerInputLifecycle({
+      providerIds: inputSelection.providerIds,
       window,
       document,
       url: endpointConfig.websocketUrl,
@@ -243,7 +247,7 @@ export function ProductViewerApp() {
     });
     inputLifecycle.setLiveInputEnabled(liveInputEnabled);
     return () => inputLifecycle.dispose();
-  }, [endpointConfig.websocketUrl, liveInputEnabled]);
+  }, [endpointConfig.websocketUrl, liveInputEnabled, inputSelection]);
 
   const onContactTaskLogChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const input = event.currentTarget;
@@ -328,6 +332,7 @@ export function ProductViewerApp() {
         <div className={`viewer-badge viewer-badge--${state.status}`}>{state.status}</div>
       </header>
 
+      {inputSelection.error === null ? null : <p role="alert">{inputSelection.error}</p>}
       <div className="viewer-grid">
         <section className="viewer-panel viewer-panel--info">
           <h2>Runtime</h2>

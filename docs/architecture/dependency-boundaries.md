@@ -389,3 +389,7 @@ Robot-specific codec、P5判断、Source取得は再実装しない。testsの�
 `runtime/composition/launch_profile.py`はJSON検証と既存Robot/Input/Mapping/command resolverへの
 結線を所有する。CLIは設定の選択・表示だけを担当する。profile解決はprocess、network、
 serial、model stepを開始せず、実機permissionを生成しない。
+
+`runtime/runners/application.py`はLaunchProfileから既存publisherとWeb dev serverを起動する。
+`application_process.py`はそのworkerのprocess/job所有権と有限cleanupだけを所有する。
+CLIやPowerShellはこのownerへ委譲し、別control loop、physics、hardware permissionを持たない。
