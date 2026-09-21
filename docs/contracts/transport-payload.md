@@ -104,3 +104,7 @@ sourceのactive/stale判定は既存health metadataを使い、このprojection�
 これはopen metadataのoptional extensionで、payload-v0、既存Robot declaration、Mapping、
 command、qpos、experiment logのschemaを変更しない。このkeyを持たない既存payloadも従来どおり読める。
 このprojectionを受信しただけで実機計測やphysical authorityの成立とは扱わない。
+
+入力step loopは上流frame・intent・commandから引き継いだ`input_signal_v1`を必ず除去し、
+そのstepの取得済みraw frameと既知sample schemaからのみ再生成する。sample schemaが不明なら
+extension自体を省略する。上流metadataの自己申告をruntime由来の表示証拠へ昇格しない。

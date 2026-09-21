@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { decodeJointDisplayLayout, jointReadouts, angleNeedle } from "../src/wasm-scene/jointPresentation.js";
 import { parseRawInputSignal, loadcellDisplayValues, normalizedAxes, signedBar, pressedGamepadButtons } from "../src/app/instrumentPresentation.js";
 import { createPresentationCadence, presentationCriticalKey } from "../src/app/presentationCadence.js";
-import { createInitialProductViewerState, buildProductViewerInputOverlayState } from "../src/wasm-scene/productViewerState.js";
+import { createInitialProductViewerState, buildProductViewerInputOverlayState, formatInputOverlayText } from "../src/wasm-scene/productViewerState.js";
 
 const layout = decodeJointDisplayLayout(["hinge", "slide", "ball", "free"], [3, 2, 1, 0], [0, 1, 2, 6], 13);
 const qpos = [Math.PI / 2, .02, 1, 0, 0, 0, 1, 2, 3, 1, 0, 0, 0];
@@ -87,7 +87,7 @@ assert.deepEqual(buildProductViewerInputOverlayState(payload)?.rawSignal?.values
 assert.equal(buildProductViewerInputOverlayState({ ...payload, time_s: .3 })?.rawSignal, null);
 const invalidAxesPayload = { ...payload, metadata: { source_kind: "viewer_gamepad",
   viewer_control_message: { gamepad: { axes: [.5, "bad", -.2], buttons: [] } } } };
-assert.deepEqual(buildProductViewerInputOverlayState(invalidAxesPayload)?.gamepadAxes, [.5, -.2]);
+assert.equal(buildProductViewerInputOverlayState(invalidAxesPayload)?.gamepadAxes, null);
 assert.deepEqual(buildProductViewerInputOverlayState(invalidAxesPayload)?.gamepadInstrumentAxes, []);
 
 // 表示用button解析は旧診断の欠落→false変換に依存しない。
@@ -135,3 +135,15 @@ assert.equal(lifecycleCallbacks.size, 0);
 lifecycleGate.push('closed:3');
 assert.deepEqual(lifecycleDelivered, ['open:1', 'closed:3']);
 lifecycleGate.dispose();
+
+// 独立監査: 詳細診断でも軸indexを維持し、不正buttonをreleasedへ変換しない。
+const malformedDiagnostic = buildProductViewerInputOverlayState({ source_kind: "viewer_gamepad",
+  viewer_control_message: { gamepad: { axes: [.5, "bad", -.2], buttons: [{ pressed: true, value: 1 }, "bad", { pressed: false, value: 0 }] } } })!;
+assert.equal(malformedDiagnostic.gamepadAxes, null);
+assert.equal(malformedDiagnostic.gamepadButtons[1].pressed, null);
+const malformedText = formatInputOverlayText(malformedDiagnostic);
+assert.match(malformedText, /gamepad axes: unavailable \/ invalid/);
+assert.match(malformedText, /0:pressed 1.00, 1:invalid, 2:released 0.00/);
+const missingPress = buildProductViewerInputOverlayState({viewer_control_message: {gamepad: {buttons: [{}]}}})!;
+assert.equal(missingPress.gamepadButtons[0].pressed, null);
+console.log("acceptance diagnostic integrity regressions passed");

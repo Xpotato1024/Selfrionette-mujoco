@@ -82,3 +82,21 @@ def test_projection_rejects_float_overflow_without_relabelling():
     with pytest.raises(ValueError):
         input_signal_display_projection(RawInputFrame('test', 1.0, (10**1000,)),
                                         sample_schema='test/v1', state=MuJoCoState(0, 0.0))
+
+
+@pytest.mark.parametrize("has_schema", [False, True])
+def test_upstream_signal_metadata_cannot_claim_runtime_provenance(has_schema):
+    forged = {"source": "forged", "values": [999] * 7}
+    frame = RawInputFrame("replay", 0.0, metadata={
+        "target_position_m": (0.6, 0.0, 0.1), "desired_endpoint_m": (0.6, 0.0, 0.1),
+        "input_signal_v1": forged})
+    selection = select_runtime_input_source("replay", steps=1, frames=(frame,))
+    plan = build_runtime_input_source_step_loop_plan(selection)
+    if not has_schema:
+        plan = replace(plan, selection=replace(plan.selection, produced_sample_schema=None))
+    record = asyncio.run(run_runtime_input_source_step_loop(plan, steps=1, dt_s=0.02))[0]
+    if has_schema:
+        assert record.state.metadata["input_signal_v1"]["source"] == "replay"
+        assert record.state.metadata["input_signal_v1"]["values"] == list(frame.values)
+    else:
+        assert "input_signal_v1" not in record.state.metadata

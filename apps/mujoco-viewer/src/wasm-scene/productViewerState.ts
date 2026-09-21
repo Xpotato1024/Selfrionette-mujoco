@@ -25,7 +25,7 @@ export type ProductViewerStatus = "booting" | "loading" | "ready" | "warning" | 
 export type ProductViewerQposStatus = "loading" | "ready" | "unavailable" | "invalid";
 
 export interface ProductViewerInputOverlayButtonState {
-  pressed: boolean;
+  pressed: boolean | null;
   value: number | null;
 }
 
@@ -65,7 +65,7 @@ export interface ProductViewerInputOverlayState {
   gamepadConnected: boolean | null;
   gamepadIndex: number | null;
   gamepadId: string | null;
-  gamepadAxes: number[];
+  gamepadAxes: number[] | null;
   gamepadInstrumentAxes: number[];
   gamepadInstrumentPressedButtons: number[] | null;
   gamepadButtons: ProductViewerInputOverlayButtonState[];
@@ -280,12 +280,13 @@ function parseInputOverlayButtons(value: unknown): ProductViewerInputOverlayButt
   }
 
   return value.map((button) => {
+    if (typeof button === "boolean") return { pressed: button, value: null };
     if (!isRecord(button)) {
-      return { pressed: false, value: null };
+      return { pressed: null, value: null };
     }
 
     return {
-      pressed: button.pressed === true,
+      pressed: parseOptionalBoolean(button.pressed),
       value: parseOptionalFiniteNumber(button.value),
     };
   });
@@ -371,8 +372,9 @@ function parseInputOverlayState(
     gamepadConnected: gamepad === null ? null : parseOptionalBoolean(gamepad.connected),
     gamepadIndex: gamepad === null ? null : parseOptionalInteger(gamepad.index),
     gamepadId: gamepad === null ? null : parseOptionalString(gamepad.id),
-    gamepadAxes: gamepad === null || !Array.isArray(gamepad.axes)
-      ? [] : gamepad.axes.filter((axis: unknown): axis is number => isFiniteNumber(axis)),
+    // 診断でも軸を詰め直さず、既知の値列と不正・未取得を区別する。
+    gamepadAxes: gamepad === null ? [] : Array.isArray(gamepad.axes) && gamepad.axes.every(isFiniteNumber)
+      ? [...gamepad.axes] : null,
     gamepadInstrumentAxes: normalizedAxes(gamepad?.axes),
     gamepadInstrumentPressedButtons: pressedGamepadButtons(gamepad?.buttons),
     gamepadButtons: gamepad === null ? [] : parseInputOverlayButtons(gamepad.buttons),
@@ -419,7 +421,7 @@ function formatButtonList(buttons: readonly ProductViewerInputOverlayButtonState
   return buttons
     .map((button, index) => {
       const value = button.value === null ? "" : ` ${button.value.toFixed(2)}`;
-      return `${index}:${button.pressed ? "pressed" : "released"}${value}`;
+      return `${index}:${button.pressed === null ? "invalid" : button.pressed ? "pressed" : "released"}${value}`;
     })
     .join(", ");
 }
@@ -503,7 +505,7 @@ export function formatInputOverlayText(inputOverlay: ProductViewerInputOverlaySt
     `gamepad connected: ${inputOverlay.gamepadConnected === null ? "n/a" : String(inputOverlay.gamepadConnected)}`,
     `gamepad index: ${inputOverlay.gamepadIndex === null ? "n/a" : String(inputOverlay.gamepadIndex)}`,
     `gamepad id: ${inputOverlay.gamepadId ?? "n/a"}`,
-    `gamepad axes: ${formatNumberList(inputOverlay.gamepadAxes)}`,
+    `gamepad axes: ${inputOverlay.gamepadAxes === null ? "unavailable / invalid" : formatNumberList(inputOverlay.gamepadAxes)}`,
     `gamepad buttons: ${formatButtonList(inputOverlay.gamepadButtons)}`,
     `gamepad stale: ${inputOverlay.gamepadStale === null ? "n/a" : String(inputOverlay.gamepadStale)}`,
     `gamepad zero state: ${inputOverlay.gamepadZeroState === null ? "n/a" : String(inputOverlay.gamepadZeroState)}`,

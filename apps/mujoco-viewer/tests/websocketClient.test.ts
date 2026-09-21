@@ -512,7 +512,8 @@ function testBuildProductViewerInputOverlayStateFallsBackSafelyWhenMetadataIsMal
   assert.equal(overlay.gamepadConnected, null);
   assert.equal(overlay.gamepadIndex, null);
   assert.equal(overlay.gamepadId, null);
-  assert.deepEqual(overlay.gamepadAxes, [0.5]);
+  assert.equal(overlay.gamepadAxes, null);
+  assert.match(formatInputOverlayText(overlay), /gamepad axes: unavailable \/ invalid/);
   assert.deepEqual(overlay.gamepadButtons, [{ pressed: true, value: null }]);
   assert.equal(overlay.gamepadStale, null);
   assert.equal(overlay.gamepadZeroState, null);
