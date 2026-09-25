@@ -73,8 +73,9 @@ qpos、dof、actuator、siteのindexを混同しない。対象物にfreejoint�
 右だけ成功を返し、左を無視するfallbackはない。
 
 既存wireのアドレスは `/source_token/target_robot_id/joint` でありendpoint_idを含まない。
-したがって本bindingは腕ごとに異なるtargetを必須とする。同じtargetでendpointだけ変えると区別できない。
-実配置routerが異なるアドレス契約を要求する場合は、backend/routerの現行原典を確認して別versionで対応する。
+本bindingは誤配置を避ける保守的な規約として、腕ごとに異なるtargetを必須とする。
+同じtarget名を異なる通信endpointで使う構成が一般に不可能という意味ではない。その構成は今回の対象外であり、
+必要な場合は実配備routerとtransport endpointを含む対応・応答相関を確認して、明示契約として追加する。
 
 各腕のrequestは同じsequence/時刻/cadence/software revisionを持ち、session_idは元sessionとarm_idで分離する。
 batch identityはassembly/modelと全request/mapping digestを含む。model_sha256はcallerの明示provenanceであり、
