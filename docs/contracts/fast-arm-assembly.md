@@ -118,3 +118,10 @@ actuator時間発展、freejointを前置したaddress、明示校正を使う�
 [MuJoCo MJCF](https://mujoco.readthedocs.io/en/stable/XMLreference.html)、
 [MuJoCo型定義](https://mujoco.readthedocs.io/en/stable/APIreference/APItypes.html)。
 実行試験は導入済みMuJoCo 3.9.0で実施し、実物の鏡映精度・出力校正の測定ではない。
+
+## 共同runtime接続の追加
+
+[共同実行契約](coordinated-arm-runtime.md) に、左右Gamepadから同一snapshotの全腕候補・一括反映、
+名前付き関節指令から既存OSC要求/permission/codecを経る接続を定義する。
+運動学診断と全側出力監督のsoftware経路を追加した。GUI同時操作、contact/全体collision、
+実機receiver停止とwatchdogが完成したことを意味しない。上記の全体完了条件は維持する。

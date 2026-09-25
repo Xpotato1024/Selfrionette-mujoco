@@ -393,3 +393,11 @@ serial、model stepを開始せず、実機permissionを生成しない。
 `runtime/runners/application.py`はLaunchProfileから既存publisherとWeb dev serverを起動する。
 `application_process.py`はそのworkerのprocess/job所有権と有限cleanupだけを所有する。
 CLIやPowerShellはこのownerへ委譲し、別control loop、physics、hardware permissionを持たない。
+
+## 共同arm診断の具体composition
+
+`runtime/composition/fast_arm_coordinated.py` だけがRobot-ownedな
+`plugins.robots.fast_arm.adapter.coordinated.FastArmAssemblyMotionProvider` を直接構築する。
+この限定依存はarchitecture testでfile/symbolを固定し、他のconcrete Robot importへ一般化しない。
+`runtime/execution/coordinated.py` はtyped providerとschemasだけを使い、Robot IK・geometry・送信を所有しない。
+`runtime/output/coordinated.py` は既存physical sessionを監督し、codecやevidence判定を複製しない。

@@ -20,6 +20,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 
 | Topic | Canonical document | Notes |
 |---|---|---|
+| 複数手先の共同実行・出力監督 | `docs/contracts/coordinated-arm-runtime.md` | 同一snapshot、一括反映、全側prepare、fault latchと停止確認の境界 |
 | Gamepad片側XYZ / 左右独立mode | `docs/contracts/gamepad-plane-control.md` | XY/XZ、中立復帰、session、単腕での左右検証 |
 | FastArm片腕/双腕assemblyと出力対応 | `docs/contracts/fast-arm-assembly.md` | core鏡映生成、joint address、左右OSC target、全体完了境界 |
 | 開発方針 | `docs/architecture/development-policy.md` | 現在のtaskに適用するlayer責務と責務driftの防止 |

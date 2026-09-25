@@ -41,6 +41,7 @@ from selfrionette.runtime.output.transport_adapter import (
     PhysicalOutputTransportAuthorizationGrant,
     PhysicalOutputTransportConfig,
     PhysicalOutputTransportResult,
+    PhysicalOutputTransportPreparedDispatch,
     PhysicalOutputWireMessage,
     _create_physical_output_transport_authorization_grant,
 )
@@ -380,6 +381,17 @@ def fast_arm_codec_identity(mapping: FastArmOutputMapping) -> PhysicalOutputCode
 def create_fast_arm_wire_encoder(mapping: FastArmOutputMapping) -> FastArmWireEncoder:
     return FastArmWireEncoder(mapping, fast_arm_codec_identity(mapping))
 
+@dataclass(frozen=True, slots=True)
+class FastArmPreparedSubmission:
+    """当該sessionだけが消費できる要求。コピー・再使用・別session流用を拒否。"""
+    owner: object
+    prepared: PhysicalOutputTransportPreparedDispatch
+    sendable: PhysicalOutputSendableRequest
+    grant: PhysicalOutputTransportAuthorizationGrant
+    generation: int
+    transmission_permission: PhysicalOutputPermission
+
+
 class FastArmPhysicalOutputSession:
     """明示gate後にだけFastArm generic transportへ一回分を渡す。"""
 
@@ -468,6 +480,7 @@ class FastArmPhysicalOutputSession:
         self._generation = 0
         self._state: FAST_ARM_SESSION_STATE = "disarmed"
         self._dispatch_inflight = False
+        self._prepared_submission: FastArmPreparedSubmission | None = None
         self._active_grant: PhysicalOutputTransportAuthorizationGrant | None = None
         self._pending_acknowledgement: _PendingAcknowledgement | None = None
         self._physical_permission: PhysicalOutputPermission | None = None
@@ -639,12 +652,38 @@ class FastArmPhysicalOutputSession:
 
     def submit(self, evaluation: PhysicalOutputSafetyEvaluation, *, now_s: float | None = None,
                pre_dispatch_check: Callable[[], bool] | None = None) -> FastArmPhysicalOutputResult:
-        """既存gate通過後、prepare復帰時の追加vetoを確認してからdispatchする。
-
-        callbackは許可を生成せず、True以外/例外で送信を拒否する。未指定は既存経路を維持する。
-        """
+        """旧単腕入口を維持。callbackは追加vetoのみで許可を生成しない。"""
         if pre_dispatch_check is not None and not callable(pre_dispatch_check):
             raise TypeError("pre_dispatch_check must be callable or None")
+        ticket = self.prepare_submission(evaluation, now_s=now_s)
+        if type(ticket) is not FastArmPreparedSubmission:
+            return ticket
+        grant = ticket.grant
+        if pre_dispatch_check is not None:
+            try:
+                ready = pre_dispatch_check()
+            except Exception as failure:
+                with self._lock:
+                    grant.revoke()
+                    if self._state in {"armed", "active"}:
+                        try:
+                            self._fail_closed_locked("fast_arm_pre_dispatch_check_failed")
+                        except Exception as cleanup:
+                            failure.add_note(f"pre-dispatch cleanup failed: {cleanup!r}")
+                raise
+            if ready is not True:
+                with self._lock:
+                    grant.revoke()
+                    life = (
+                        self._fail_closed_locked("fast_arm_pre_dispatch_check_rejected")
+                        if self._state in {"armed", "active"} else None
+                    )
+                return FastArmPhysicalOutputResult("rejected", "fast_arm_pre_dispatch_check_rejected", lifecycle_result=life)
+        return self.dispatch_submission(ticket, now_s=now_s)
+
+    def prepare_submission(self, evaluation: PhysicalOutputSafetyEvaluation, *, now_s: float | None = None
+                           ) -> FastArmPreparedSubmission | FastArmPhysicalOutputResult:
+        """既存permission/evidence/lifecycle/transport検査を全て通す。送信はまだ行わない。"""
         try:
             now = self._now(now_s)
         except Exception:
@@ -717,38 +756,53 @@ class FastArmPhysicalOutputSession:
             generation = self._generation
             transmission_permission = self._transmission_permission
 
-        prepared = self.transport_adapter.prepare_dispatch(self.lifecycle, sendable, now_s=now_s, authorization_grant=grant, authorization_context_sha256=context_digest)
+        try:
+            prepared = self.transport_adapter.prepare_dispatch(self.lifecycle, sendable, now_s=now_s, authorization_grant=grant, authorization_context_sha256=context_digest)
+        except Exception:
+            with self._lock:
+                grant.revoke()
+                self._fail_closed_locked("fast_arm_prepare_exception")
+            raise
         if type(prepared) is PhysicalOutputTransportResult:
             with self._lock:
                 if generation == self._generation:
                     self._invalidate_locked()
                     self._state = "failed" if self.lifecycle.state in {"failed", "aborted", "stopped"} else "armed"
             return FastArmPhysicalOutputResult("failed" if prepared.status == "rejected" else "rejected", prepared.reason or "fast_arm_transport_preflight_rejected", transport_result=prepared)
-        if pre_dispatch_check is not None:
-            try:
-                ready = pre_dispatch_check()
-            except Exception as failure:
-                with self._lock:
-                    grant.revoke()
-                    if self._state in {"armed", "active"}:
-                        try:
-                            self._fail_closed_locked("fast_arm_pre_dispatch_check_failed")
-                        except Exception as cleanup:
-                            failure.add_note(f"pre-dispatch cleanup failed: {cleanup!r}")
-                raise
-            if ready is not True:
-                with self._lock:
-                    grant.revoke()
-                    life = (
-                        self._fail_closed_locked("fast_arm_pre_dispatch_check_rejected")
-                        if self._state in {"armed", "active"} else None
-                    )
-                return FastArmPhysicalOutputResult("rejected", "fast_arm_pre_dispatch_check_rejected", lifecycle_result=life)
+        with self._lock:
+            if generation != self._generation or self._state not in {"armed", "active"} or self._active_grant is not grant:
+                grant.revoke()
+                return FastArmPhysicalOutputResult("rejected", "fast_arm_operator_state_changed_during_preflight")
+            ticket = FastArmPreparedSubmission(self, prepared, sendable, grant, generation, transmission_permission)
+            self._prepared_submission = ticket
+            return ticket
+
+    def dispatch_submission(self, ticket: FastArmPreparedSubmission, *, now_s: float | None = None
+                            ) -> FastArmPhysicalOutputResult:
+        """同一objectを一度だけ消費し、既存transportの最終検査へ渡す。"""
+        with self._lock:
+            if type(ticket) is not FastArmPreparedSubmission or ticket.owner is not self or self._prepared_submission is not ticket:
+                return FastArmPhysicalOutputResult("rejected", "foreign_consumed_or_stale_prepared_submission")
+            self._prepared_submission = None
+        prepared, sendable, grant = ticket.prepared, ticket.sendable, ticket.grant
+        generation, transmission_permission = ticket.generation, ticket.transmission_permission
+        try:
+            now = self._now(now_s)
+        except Exception:
+            with self._lock:
+                grant.revoke()
+                life = self._fail_closed_locked("fast_arm_clock_invalid")
+            return FastArmPhysicalOutputResult("failed", "fast_arm_clock_invalid", lifecycle_result=life)
         with self._lock:
             if generation != self._generation or not self._dispatch_inflight or self._state not in {"armed", "active"} or self.lifecycle.latest_sendable_request is not sendable or self._active_grant is not grant or self._pending_acknowledgement is not None or self._transmission_permission != transmission_permission:
                 grant.revoke()
                 return FastArmPhysicalOutputResult("rejected", "fast_arm_operator_state_changed_during_preflight", acknowledgement=FastArmAcknowledgementEvidence("unavailable", "transport_not_attempted"))
-            result = self.transport_adapter.dispatch_prepared(prepared, now_s=now_s)
+            try:
+                result = self.transport_adapter.dispatch_prepared(prepared, now_s=now_s)
+            except Exception:
+                grant.revoke()
+                self._fail_closed_locked("fast_arm_dispatch_exception")
+                raise
             self._active_grant = None
             self._dispatch_inflight = False
             self._state = "active" if self.lifecycle.state == "active" else "failed"
@@ -844,6 +898,7 @@ class FastArmPhysicalOutputSession:
 
     def _invalidate_locked(self) -> None:
         self._generation += 1
+        self._prepared_submission = None
         self._dispatch_inflight = False
         if self._active_grant is not None:
             self._active_grant.revoke()

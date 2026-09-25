@@ -236,6 +236,11 @@ class ViewerInputSource:
             self._last_update_monotonic_s = new_now_s - elapsed_s
         self._clock = clock
 
+    @property
+    def last_received_at_s(self) -> float | None:
+        """最新sampleの実受信host monotonic時刻。read時に新鮮な測定へ読み替えない。"""
+        return self._last_update_monotonic_s
+
     def health_snapshot(self) -> tuple[str, str | None, int, dict[str, object]]:
         """Return source-owned health primitives without importing runtime contracts."""
 
