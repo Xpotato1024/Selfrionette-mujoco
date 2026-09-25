@@ -414,6 +414,7 @@ async def run_runtime_input_source_step_loop(
     start_attempted = False
     close_attempted = False
     primary_failure: BaseException | None = None
+    plan.pipeline.reset_mapping_session()
     try:
         if managed_reader is not None:
             start_attempted = True
@@ -431,6 +432,7 @@ async def run_runtime_input_source_step_loop(
         primary_failure = failure
         raise
     finally:
+        plan.pipeline.reset_mapping_session()
         if start_attempted and managed_reader is not None and not close_attempted:
             close_attempted = True
             try:

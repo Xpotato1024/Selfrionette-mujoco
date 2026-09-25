@@ -580,8 +580,11 @@ class ControlMappingPlugin:
     parameter_normalizer: Callable[[Mapping[str, object]], Mapping[str, object]] | None = None
     runtime_context_parameters: frozenset[str] = frozenset()
     runtime_parameter_normalizer: Callable[[Mapping[str, object]], Mapping[str, object]] | None = None
+    session_strategy_factory: Callable[[], ControlMappingStrategy] | None = None
 
     def __post_init__(self) -> None:
+        if self.session_strategy_factory is not None and not callable(self.session_strategy_factory):
+            raise TypeError("session_strategy_factory must be callable")
         if not isinstance(self.strategy, ControlMappingStrategy):
             raise TypeError("control mapping plugin requires a typed mapping strategy")
         schemas = frozenset(self.accepted_input_sample_schemas)
@@ -639,6 +642,17 @@ class ControlMappingPlugin:
         object.__setattr__(self, "runtime_context_parameters", context)
         if self.runtime_parameter_normalizer is not None and not callable(self.runtime_parameter_normalizer):
             raise TypeError("runtime_parameter_normalizer must be callable")
+
+    def create_session_strategy(self) -> ControlMappingStrategy:
+        """runtime単位のMappingを生成し、catalogのsingletonへ可変状態を残さない。"""
+        if self.session_strategy_factory is None:
+            return self.strategy
+        strategy = self.session_strategy_factory()
+        if strategy is self.strategy or not isinstance(strategy, ControlMappingStrategy):
+            raise TypeError("mapping session factory must return a separate typed strategy")
+        if getattr(strategy, "mapping_semantics_identity", None) != self.mapping_semantics_identity:
+            raise ValueError("mapping session semantic identity mismatch")
+        return strategy
 
     def resolve_command_semantics_route(
         self,

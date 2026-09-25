@@ -93,3 +93,8 @@ cwdとprofile相対path、override、CLI表示、および取得・process・net
 実機種のstandard配置確認と、固定したviewでの操作受入は別途必要。
 旧`sim-gamepad`の設定・digest・挙動は変更しない。任意cameraのscreen方向へは追従しない。
 `selfrionette profile sim-gamepad-world-xy`で解決後の設定を表示できる。
+
+## 左右独立の1スティックXYZ操作
+
+新しい`sim-gamepad-left-xyz`／`sim-gamepad-right-xyz`と、XY/XZ切替・中立復帰・取得session・表示の規約は
+[Gamepad平面操作契約](gamepad-plane-control.md)を参照する。現行の片腕へ選択した片側を適用する段階であり、双腕モデル完成ではない。

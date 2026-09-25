@@ -20,6 +20,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 
 | Topic | Canonical document | Notes |
 |---|---|---|
+| Gamepad片側XYZ / 左右独立mode | `docs/contracts/gamepad-plane-control.md` | XY/XZ、中立復帰、session、単腕での左右検証 |
 | 開発方針 | `docs/architecture/development-policy.md` | 現在のtaskに適用するlayer責務と責務driftの防止 |
 | 研究実行優先順位 / 実機contact roadmap | `docs/architecture/research-execution-roadmap.md` | R7-G後のcontact-core、physical safety、minimal output、pilotのdependency |
 | skeleton構造とlayer責務 | `docs/architecture/mujoco-skeleton-first-spec.md` | MuJoCo SoT、Three.js rendering-only、layer ownership |

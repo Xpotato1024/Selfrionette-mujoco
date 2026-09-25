@@ -65,3 +65,8 @@ activeなsampleで明示選択した軸が欠落すればrejectする。inactive
 
 この変更は単腕の明示設定と回帰検証まで。利用者の実Gamepad症状の再現、
 カメラ投影を含む操作受入、双腕bindingは未完で、Issue #563を継続する。
+
+## 左右独立の1スティックXYZ操作
+
+新しい`sim-gamepad-left-xyz`／`sim-gamepad-right-xyz`と、XY/XZ切替・中立復帰・取得session・表示の規約は
+[Gamepad平面操作契約](../../../../../docs/contracts/gamepad-plane-control.md)を参照する。現行の片腕へ選択した片側を適用する段階であり、双腕モデル完成ではない。

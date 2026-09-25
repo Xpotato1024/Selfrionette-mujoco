@@ -100,3 +100,8 @@ http://127.0.0.1:5173/apps/mujoco-viewer/?websocketUrl=ws://127.0.0.1:8766
 同じlauncherへ委譲する。独自process管理は行わない。`-NoBrowser`はstartup-check、`-OpenBrowser`は
 明示openに対応する。v1のloopback、正の時間値などの検査に従い、旧版の広いhost/zero間隔を
 無検証で通さない。LAN配信は上記低位CLIへ明示的に分ける。
+
+## 左右独立の1スティックXYZ操作
+
+新しい`sim-gamepad-left-xyz`／`sim-gamepad-right-xyz`と、XY/XZ切替・中立復帰・取得session・表示の規約は
+[Gamepad平面操作契約](../contracts/gamepad-plane-control.md)を参照する。現行の片腕へ選択した片側を適用する段階であり、双腕モデル完成ではない。

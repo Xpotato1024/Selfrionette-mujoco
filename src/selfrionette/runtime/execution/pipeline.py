@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from selfrionette.motion import MotionGenerator
@@ -18,7 +18,7 @@ from selfrionette.runtime.control.input_source_state import (
     reconcile_runtime_input_source_state,
     annotate_raw_input_frame,
 )
-from selfrionette.runtime.experiment.contracts import ControlMappingPlugin
+from selfrionette.runtime.experiment.contracts import ControlMappingPlugin, ControlMappingStrategy
 from selfrionette.runtime.experiment.input_source import HealthyInputSource, ManagedInputSource
 from selfrionette.runtime.experiment.input_source import InputSourceMappingAdapterContract
 from selfrionette.runtime.safety.qpos_feasibility import QposFeasibilityGuard
@@ -51,6 +51,7 @@ class ControlMappedRuntimePipeline:
     state_metadata: Mapping[str, object] | None = None
     robot_profile_metadata: Mapping[str, object] | None = None
     endpoint_pose_provider: EndpointPoseProvider | None = None
+    _mapping_strategy: ControlMappingStrategy | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         from selfrionette.runtime.execution.command_routes import (
@@ -75,6 +76,10 @@ class ControlMappedRuntimePipeline:
                 "runtime pipeline command route/execution binding mismatch"
             )
 
+    def reset_mapping_session(self) -> None:
+        """試行境界で状態を破棄する。run_onceを連続利用するcallerは新試行前に呼ぶ。"""
+        self._mapping_strategy = None
+
     def map_input(self, frame: RawInputFrame, *, pre_step_state: MuJoCoState | None = None,
                   endpoint_pose_provider: EndpointPoseProvider | None = None) -> InputIntent:
         """固定Mappingと同stepのroute-owned観測contextから入力を変換する。"""
@@ -88,7 +93,13 @@ class ControlMappedRuntimePipeline:
             state = self.simulator.snapshot() if pre_step_state is None else pre_step_state
             parameters = self.command_execution.mapping_parameters(parameters, state=state, provider=provider)
         mapping_input = self.mapping_input_adapter(frame) if self.mapping_input_adapter is not None else frame
-        intent = self.control_mapping.strategy.map_input(mapping_input, parameters)
+        if self._mapping_strategy is None:
+            self._mapping_strategy = self.control_mapping.create_session_strategy()
+        try:
+            intent = self._mapping_strategy.map_input(mapping_input, parameters)
+        except Exception:
+            self.reset_mapping_session()
+            raise
         if not isinstance(intent, InputIntent):
             raise TypeError("control mapping strategy must return a typed InputIntent")
         return intent
