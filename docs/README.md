@@ -21,8 +21,9 @@ completion audit、implementation report、inventory、handoff、historical reco
 | Topic | Canonical document | Notes |
 |---|---|---|
 | Gamepad片側XYZ / 左右独立mode | `docs/contracts/gamepad-plane-control.md` | XY/XZ、中立復帰、session、単腕での左右検証 |
+| FastArm片腕/双腕assemblyと出力対応 | `docs/contracts/fast-arm-assembly.md` | core鏡映生成、joint address、左右OSC target、全体完了境界 |
 | 開発方針 | `docs/architecture/development-policy.md` | 現在のtaskに適用するlayer責務と責務driftの防止 |
-| 研究実行優先順位 / 実機contact roadmap | `docs/architecture/research-execution-roadmap.md` | R7-G後のcontact-core、physical safety、minimal output、pilotのdependency |
+| 研究実行優先順位 / 実機contact roadmap | `docs/architecture/research-execution-roadmap.md` | simulation主経路と実機オプション、左右共通の完了条件 |
 | skeleton構造とlayer責務 | `docs/architecture/mujoco-skeleton-first-spec.md` | MuJoCo SoT、Three.js rendering-only、layer ownership |
 | 文書governance | `docs/architecture/documentation-sot-policy.md` | 文書role、配置、1 topic = 1 canonical document |
 | code / plugin documentation | `docs/architecture/code-documentation-policy.md` | comment、docstring / JSDoc、TODO、suppression、README責務 |
