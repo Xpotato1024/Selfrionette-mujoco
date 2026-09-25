@@ -10,6 +10,8 @@ from types import MappingProxyType
 from selfrionette.plugins.mappings._continuous_endpoint_velocity import (
     build_continuous_endpoint_velocity_intent,
 )
+from .gamepad_axes import GamepadAxisMap, coerce_gamepad_axis_map, apply_gamepad_axis_map
+
 from selfrionette.plugins.mappings._command_routes import (
     local_endpoint_velocity_command_route,
 )
@@ -161,8 +163,11 @@ class ViewerControlMappingParameters:
     gamepad_speed_m_s: float = _DEFAULT_GAMEPAD_SPEED_M_S
     gamepad_deadzone: float = _DEFAULT_GAMEPAD_DEADZONE
     gamepad_max_delta_m: float = _DEFAULT_GAMEPAD_MAX_DELTA_M
+    gamepad_axis_map: GamepadAxisMap | None = None
 
     def __post_init__(self) -> None:
+        if self.gamepad_axis_map is not None and not isinstance(self.gamepad_axis_map, GamepadAxisMap):
+            raise TypeError("gamepad_axis_map must be a validated GamepadAxisMap")
         if not isinstance(self.keyboard_config, KeyboardInputConfig):
             raise ValueError("keyboard_config must be a KeyboardInputConfig")
         for name, value in (
@@ -183,6 +188,7 @@ def build_viewer_control_mapping_parameters(
         "gamepad_speed_m_s",
         "gamepad_deadzone",
         "gamepad_max_delta_m",
+        "gamepad_axis_map",
     }
     unknown = tuple(sorted(set(values) - allowed))
     if unknown:
@@ -225,6 +231,7 @@ def build_viewer_control_mapping_parameters(
         gamepad_speed_m_s=float(values.get("gamepad_speed_m_s", _DEFAULT_GAMEPAD_SPEED_M_S)),
         gamepad_deadzone=float(values.get("gamepad_deadzone", _DEFAULT_GAMEPAD_DEADZONE)),
         gamepad_max_delta_m=float(values.get("gamepad_max_delta_m", _DEFAULT_GAMEPAD_MAX_DELTA_M)),
+        gamepad_axis_map=(coerce_gamepad_axis_map(values["gamepad_axis_map"]) if "gamepad_axis_map" in values else None),
     )
 
 
@@ -242,14 +249,18 @@ def normalize_viewer_control_mapping_parameters(
         deadzone=normalized.keyboard_config.deadzone,
         max_delta_m=normalized.keyboard_config.max_delta_m,
     )
-    return MappingProxyType(
-        {
+    result = {
             "keyboard_config": keyboard_config,
             "gamepad_speed_m_s": normalized.gamepad_speed_m_s,
             "gamepad_deadzone": normalized.gamepad_deadzone,
             "gamepad_max_delta_m": normalized.gamepad_max_delta_m,
         }
-    )
+    if normalized.gamepad_axis_map is not None:
+        result["gamepad_axis_map"] = MappingProxyType({
+            "axis_indices": normalized.gamepad_axis_map.axis_indices,
+            "axis_signs": normalized.gamepad_axis_map.axis_signs,
+        })
+    return MappingProxyType(result)
 
 
 class ViewerKeyboardGamepadMappingStrategy:
@@ -326,6 +337,13 @@ class ViewerKeyboardGamepadMappingStrategy:
             ) if sample.source_active else (0.0, 0.0, 0.0)
             if not sample.source_active:
                 supplements = [0.0, 0.0, 0.0]
+            axis_map = mapping_parameters.gamepad_axis_map
+            if sample.source_active and axis_map is not None:
+                mapping_axes = apply_gamepad_axis_map(mapping_axes, axis_map)
+            diagnostics = {"raw_axes": tuple(source_axes)}
+            if axis_map is not None:
+                diagnostics["axis_indices"] = axis_map.axis_indices
+                diagnostics["axis_signs"] = axis_map.axis_signs
             intent = build_continuous_endpoint_velocity_intent(
                 _coerce_axis_vector3(mapping_axes),
                 source_kind="viewer_gamepad",
@@ -342,7 +360,7 @@ class ViewerKeyboardGamepadMappingStrategy:
                 source_active=sample.source_active,
                 stale_reason=sample.stale_reason,
                 supplemental_axis_values=tuple(supplements),
-                source_diagnostics={"raw_axes": tuple(source_axes)},
+                source_diagnostics=diagnostics,
             )
             buttons = tuple(button.pressed for button in sample.gamepad.buttons)
 
@@ -387,6 +405,7 @@ VIEWER_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(
             ParameterField("gamepad_speed_m_s", float, required=False),
             ParameterField("gamepad_deadzone", float, required=False),
             ParameterField("gamepad_max_delta_m", float, required=False),
+            ParameterField("gamepad_axis_map", object, required=False),
         )
     ),
     control_frame=None,

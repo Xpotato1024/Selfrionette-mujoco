@@ -358,3 +358,57 @@ def test_viewer_gamepad_button_supplement_remains_mapping_owned(
     assert "axis_values" not in frame.metadata
     assert frame.metadata["source_active"] is any(buttons)
     assert map_frame(frame).values[2] == pytest.approx(expected_z, abs=1e-12)
+
+
+@pytest.mark.parametrize("control_frame", ("world", "tool"))
+@pytest.mark.parametrize("raw, expected", [
+    ((1.0, 0.0, 0.0, 0.0), (0.1, 0.0, 0.0)),
+    ((-1.0, 0.0, 0.0, 0.0), (-0.1, 0.0, 0.0)),
+    ((0.0, -1.0, 0.0, 0.0), (0.0, 0.1, 0.0)),
+    ((0.0, 1.0, 0.0, 0.0), (0.0, -0.1, 0.0)),
+    ((0.0, 0.0, 0.0, -1.0), (0.0, 0.0, 0.1)),
+    ((0.0, 0.0, 0.0, 1.0), (0.0, 0.0, -0.1)),
+    ((0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0)),
+    ((0.55, 0.0, 0.0, 0.0), (0.05, 0.0, 0.0)),
+    ((0.0, -0.55, 0.0, 0.0), (0.0, 0.05, 0.0)),
+    ((0.0, -0.19, 0.0, 0.0), (0.0, 0.0, 0.0)),
+    ((1.0, -1.0, 0.0, 0.0), (0.1 / 2**0.5, 0.1 / 2**0.5, 0.0)),
+])
+def test_explicit_axis_map_keeps_raw_frame_and_requested_control_frame(raw, expected, control_frame):
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(gamepad_message(
+        1.0, tuple(_baseline_frontend_gamepad_projection(v) for v in raw),
+        raw_axes=raw, control_frame=control_frame,
+    ))
+    intent = map_frame(frame, {"gamepad_axis_map": {
+        "axis_indices": [0, 1, 3], "axis_signs": [1, -1, -1],
+    }})
+    assert frame.metadata["viewer_input_sample"]["gamepad"]["raw_axes"] == raw
+    assert intent.metadata["local_endpoint_velocity_m_s"] == pytest.approx(expected)
+    assert intent.metadata["control_frame"] == control_frame
+    assert intent.metadata["source_diagnostics"]["axis_indices"] == (0, 1, 3)
+
+
+@pytest.mark.parametrize("connected,stale,zero", [(False, False, False), (True, True, False), (True, False, True)])
+def test_custom_axis_map_does_not_turn_inactive_into_motion(connected, stale, zero):
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(gamepad_message(
+        1.0, (), raw_axes=(), connected=connected, stale=stale, zero_state=zero,
+    ))
+    intent = map_frame(frame, {"gamepad_axis_map": {"axis_indices": [0, 1, 3], "axis_signs": [1, -1, -1]}})
+    assert intent.values == (0.0, 0.0, 0.0)
+
+
+def test_custom_axis_map_rejects_active_missing_axis_instead_of_zero_padding():
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(gamepad_message(1.0, (1.0, 0.0, 0.0), raw_axes=(1.0, 0.0, 0.0)))
+    with pytest.raises(ValueError, match="missing an explicitly selected axis"):
+        map_frame(frame, {"gamepad_axis_map": {"axis_indices": [0, 1, 3], "axis_signs": [1, -1, -1]}})
+
+
+@pytest.mark.parametrize("buttons,expected", [((True, False), 0.1), ((False, True), -0.1), ((True, True), 0.0)])
+def test_custom_axis_map_keeps_button_z_supplement_in_command_coordinates(buttons, expected):
+    source = ViewerInputSource(clock=lambda: 0.0)
+    frame = source.ingest_control_message(gamepad_message(1.0, (0.0,) * 4, buttons=buttons))
+    intent = map_frame(frame, {"gamepad_axis_map": {"axis_indices": [0, 1, 3], "axis_signs": [-1, -1, -1]}})
+    assert intent.metadata["local_endpoint_velocity_m_s"] == pytest.approx((0.0, 0.0, expected))

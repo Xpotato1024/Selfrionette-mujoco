@@ -609,3 +609,43 @@ def test_viewer_step_loop_scales_large_dt_boundary_motion() -> None:
     assert record.motion_command.metadata["motion_status"] == "scaled"
     assert record.motion_command.metadata["endpoint_delta_m"] == pytest.approx((0.01, 0.0, 0.0), abs=1e-12)
     assert record.motion_command.metadata["motion_rejection_reason"] is None
+
+
+@pytest.mark.parametrize("key,raw", [
+    ("KeyD", (1.0, 0.0, 0.0, 0.0)), ("KeyA", (-1.0, 0.0, 0.0, 0.0)),
+    ("KeyW", (0.0, -1.0, 0.0, 0.0)), ("KeyS", (0.0, 1.0, 0.0, 0.0)),
+    ("Space", (0.0, 0.0, 0.0, -1.0)), ("ShiftLeft", (0.0, 0.0, 0.0, 1.0)),
+])
+def test_explicit_gamepad_world_axes_match_keyboard_mujoco_motion(key, raw):
+    # 期待の運動経路を別入力で照合し、到達不能を軸符号の誤りと混同しない。
+    keyboard_source, keyboard_plan = _build_viewer_plan(_ClockSequence((0.0, 0.0)))
+    ingest_viewer_control_message(keyboard_source, _keyboard_message(1.0, key))
+    keyboard_record = _run_single_viewer_step(keyboard_plan, dt_s=1.0 / 60.0)
+    clock = _ClockSequence((0.0, 0.0))
+    source = ViewerInputSource(clock=clock.monotonic)
+    selection = select_runtime_input_source(
+        "viewer", steps=1,
+        control_mapping_selection=PluginSelection("viewer_keyboard_gamepad_mapping", 1),
+        control_mapping_parameters={"gamepad_axis_map": {
+            "axis_indices": (0, 1, 3), "axis_signs": (1, -1, -1),
+        }},
+    )
+    plan = build_runtime_input_source_step_loop_plan(
+        selection, viewer_clock=clock.monotonic, viewer_input_source=source,
+        publisher=NoOpStatePublisher(),
+    )
+    ingest_viewer_control_message(source, ViewerControlMessage(
+        type="viewer_control_message", timestamp_s=1.0, source_kind="gamepad",
+        gamepad=ViewerControlGamepadMessage(
+            connected=True, raw_axes=raw, axes=raw, buttons=(), stale=False, zero_state=False,
+        ),
+    ))
+    record = _run_single_viewer_step(plan, dt_s=1.0 / 60.0)
+    assert record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"] == pytest.approx(
+        keyboard_record.motion_command.metadata["resolved_world_endpoint_velocity_m_s"], abs=1e-12,
+    )
+    assert record.state.qpos == pytest.approx(keyboard_record.state.qpos, abs=1e-12)
+    assert record.state.metadata["actual_tip_delta_m"] == pytest.approx(
+        keyboard_record.state.metadata["actual_tip_delta_m"], abs=1e-12,
+    )
+    assert record.state.metadata["motion_status"] == keyboard_record.state.metadata["motion_status"]

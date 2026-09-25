@@ -146,3 +146,28 @@ def test_profile_cli_and_errors(capsys):
     assert json.loads(capsys.readouterr().out)["configuration"]["input"]["provider"] == "keyboard/v1"
     assert cli.main(["profile", "missing-profile"]) == 1
     assert "error" in capsys.readouterr().err
+
+
+def test_world_xy_profile_resolves_axis_map_and_retains_legacy_profile():
+    profile = load_launch_profile("sim-gamepad-world-xy")
+    assert profile.mapping_parameters["gamepad_axis_map"] == {
+        "axis_indices": [0, 1, 3], "axis_signs": [1, -1, -1],
+    }
+    assert profile.to_dict()["resolved"]["mapping_parameters"]["gamepad_axis_map"] == profile.mapping_parameters["gamepad_axis_map"]
+    assert load_launch_profile("sim-gamepad").mapping_parameters == {}
+    altered = json.loads(profile.document_json)
+    altered["mapping"]["parameters"]["gamepad_axis_map"]["axis_signs"][0] = -1
+    other = decode_launch_profile(json.dumps(altered).encode(), source_path=profile.source_path)
+    assert profile.configuration_sha256 != other.configuration_sha256
+
+
+@pytest.mark.parametrize("axis_map", [
+    {"axis_indices": [0, 1, 3], "axis_signs": [1, 0, -1]},
+    {"axis_indices": [0, 1, True], "axis_signs": [1, -1, -1]},
+    {"axis_indices": [0, 1, 3]}, None,
+])
+def test_invalid_axis_map_profile_is_rejected_without_execution(axis_map):
+    raw = raw_profile()
+    raw["mapping"]["parameters"] = {"gamepad_axis_map": axis_map}
+    with pytest.raises((ValueError, TypeError)):
+        decode(raw)
