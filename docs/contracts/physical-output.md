@@ -373,3 +373,12 @@ FastArmPhysicalOutputSession.submitのoptional `pre_dispatch_check`は、送信�
 許可を撤回する。callback自体は既存gateを許可に変更できず、既存callerは未指定で従来動作を保つ。
 FastArmInputRuntimeはclock・source age・構成・終了状態を確認するcallbackを必ず渡す。
 開始済みのsendを中断する保証はなく、callerのbounded transport contractを維持する。
+
+## FastArm assemblyの左右対応
+
+[片腕/双腕assembly契約](fast-arm-assembly.md)のnamed request batchは、全armの
+target/endpoint/個別mappingを必須とし、既存のrequest・wire codecへ投影する。
+片側欠落やOSC target重複を拒否する。batchはrequested-levelであり、既存P5評価、
+#509 evidence、二重permission、transport grantを置き換えるものではない。
+左右の名前対応・codec・応答試験と、連成preflight/部分失敗/協調停止を含む実機用runtimeは
+別の受入範囲である。独立した2 sessionを、原子的送信・実機同時動作と表現しない。

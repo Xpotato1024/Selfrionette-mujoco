@@ -82,3 +82,12 @@ genericなDTO、resolver、providerはruntimeが所有する。
 
 - [Robot Profile / Runtime / Viewer contract](../../../../../docs/contracts/robot-profile-runtime-viewer-profile.md)
 - [asset contract](../../../../../docs/contracts/assets.md)
+
+## 片腕・双腕の組立API
+
+[FastArm assembly契約](../../../../../docs/contracts/fast-arm-assembly.md)に、core原本からの
+原型/鏡映model生成、名前によるjoint/site/actuator address、左右の出力要求bindingを定義する。
+`fast_arm_core.assembly` / `assembly_model` は配置とモデルを所有し、
+`adapter/assembly_output.py` は全armを既存typed requestへ投影する。
+既存単腕v1 profileの8関節化や第二のcatalog登録は行わない。GUI双腕操作・全scene衝突・
+連成物理出力の完了とは区別する。原本meshの衝突無効設定と実機校正unknownは保持する。
