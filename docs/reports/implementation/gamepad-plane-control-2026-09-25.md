@@ -1,3 +1,11 @@
+---
+status: historical
+owner: implementation
+last_verified: 2026-09-25
+related:
+  - docs/contracts/gamepad-plane-control.md
+---
+
 # 左右独立スティック平面操作の実装・検証
 
 ## 範囲
@@ -44,3 +52,22 @@ legacy UIのobject shapeを変えないよう、新しい表示fieldは存在す
 上記はソフトウェアの回帰・統合検証。参加者実験、実Gamepad機種の識別・軸校正、使いやすさや学習負荷の評価ではない。
 双腕モデルの同時駆動、実機安全性、接触力の評価をこれらの成功へ読み替えない。
 実機/serial/OSC、既存安全限界、既存PDFや論文repositoryは変更していない。
+
+## PR #568のCI失敗と補修（2026-09-25）
+
+初回GitHub Actions run `36125050979` はPython job内の変更Markdown検査で停止した。
+本報告にfront matterのstatusがなく、文書の配置規約に違反していた。
+そのrunのPythonテスト・compileは未実行であり、ローカルpytest成功をCI成功へ読み替えない。
+同じbase SHAを渡したstrict map/link検査で再現し、実装証拠の役割に合わせて
+`status: historical`と既存canonical契約への参照を追加した。既存本文は保持した。
+validator、workflow、テスト、入力・制御の挙動は変更していない。
+
+再検証では、pytestとは別に次のPR差分検査を明示実行する。
+
+```text
+python scripts/repository/validate_markdown_docs.py --base-ref 833c3fe3c71f33ff675c2eb4dc1e7708a70be07b --strict-map --strict-links
+```
+
+最終commitに対応するローカル検証とGitHub Actions結果はPR本文へ記録する。
+これは文書メタデータとCI確認の補修であり、研究能力・実験条件は変わらないため、
+月次研究ログとexperiment noteの追加更新は行わない。
