@@ -11,6 +11,7 @@ from selfrionette.plugins.mappings._continuous_endpoint_velocity import (
     build_continuous_endpoint_velocity_intent,
 )
 from .gamepad_axes import GamepadAxisMap, coerce_gamepad_axis_map, apply_gamepad_axis_map
+from .gamepad_planes import PlaneControlConfig, PlaneControlSession, SIDES, coerce_plane_control
 
 from selfrionette.plugins.mappings._command_routes import (
     local_endpoint_velocity_command_route,
@@ -164,8 +165,14 @@ class ViewerControlMappingParameters:
     gamepad_deadzone: float = _DEFAULT_GAMEPAD_DEADZONE
     gamepad_max_delta_m: float = _DEFAULT_GAMEPAD_MAX_DELTA_M
     gamepad_axis_map: GamepadAxisMap | None = None
+    gamepad_plane_control: PlaneControlConfig | None = None
 
     def __post_init__(self) -> None:
+        if self.gamepad_plane_control is not None:
+            if not isinstance(self.gamepad_plane_control, PlaneControlConfig):
+                raise TypeError("gamepad_plane_control must be validated")
+            if self.gamepad_axis_map is not None:
+                raise ValueError("static axis map and plane control are mutually exclusive")
         if self.gamepad_axis_map is not None and not isinstance(self.gamepad_axis_map, GamepadAxisMap):
             raise TypeError("gamepad_axis_map must be a validated GamepadAxisMap")
         if not isinstance(self.keyboard_config, KeyboardInputConfig):
@@ -189,6 +196,7 @@ def build_viewer_control_mapping_parameters(
         "gamepad_deadzone",
         "gamepad_max_delta_m",
         "gamepad_axis_map",
+        "gamepad_plane_control",
     }
     unknown = tuple(sorted(set(values) - allowed))
     if unknown:
@@ -232,6 +240,7 @@ def build_viewer_control_mapping_parameters(
         gamepad_deadzone=float(values.get("gamepad_deadzone", _DEFAULT_GAMEPAD_DEADZONE)),
         gamepad_max_delta_m=float(values.get("gamepad_max_delta_m", _DEFAULT_GAMEPAD_MAX_DELTA_M)),
         gamepad_axis_map=(coerce_gamepad_axis_map(values["gamepad_axis_map"]) if "gamepad_axis_map" in values else None),
+        gamepad_plane_control=(coerce_plane_control(values["gamepad_plane_control"]) if "gamepad_plane_control" in values else None),
     )
 
 
@@ -260,17 +269,25 @@ def normalize_viewer_control_mapping_parameters(
             "axis_indices": normalized.gamepad_axis_map.axis_indices,
             "axis_signs": normalized.gamepad_axis_map.axis_signs,
         })
+    if normalized.gamepad_plane_control is not None:
+        result["gamepad_plane_control"] = normalized.gamepad_plane_control.to_mapping()
     return MappingProxyType(result)
 
 
 class ViewerKeyboardGamepadMappingStrategy:
     mapping_semantics_identity = VIEWER_MAPPING_SEMANTICS_IDENTITY
 
+    def __init__(self, *, session: bool = False) -> None:
+        self._plane_session = PlaneControlSession() if session else None
+
     def map_input(self, input_intent: object, parameters: Mapping[str, object]) -> InputIntent:
         if not isinstance(input_intent, RawInputFrame):
             raise TypeError("viewer mapping accepts a canonical RawInputFrame sample")
         mapping_parameters = build_viewer_control_mapping_parameters(parameters)
         sample_payload = input_intent.metadata.get("viewer_input_sample")
+        if mapping_parameters.gamepad_plane_control is not None:
+            sample = _coerce_frame_sample(input_intent) if isinstance(sample_payload, Mapping) else None
+            return self._map_planes(input_intent, sample, mapping_parameters)
         if not isinstance(sample_payload, Mapping):
             intent = build_continuous_endpoint_velocity_intent(
                 (0.0, 0.0, 0.0),
@@ -284,6 +301,7 @@ class ViewerKeyboardGamepadMappingStrategy:
                 stale_reason=input_intent.metadata.get("stale_reason"),
             )
             metadata = dict(input_intent.metadata)
+            metadata.pop("gamepad_plane_control_v1", None)
             metadata.update(intent.to_metadata())
             metadata.update(
                 {
@@ -365,6 +383,7 @@ class ViewerKeyboardGamepadMappingStrategy:
             buttons = tuple(button.pressed for button in sample.gamepad.buttons)
 
         metadata = dict(input_intent.metadata)
+        metadata.pop("gamepad_plane_control_v1", None)
         metadata.update(intent.to_metadata())
         metadata.update(
             {
@@ -395,9 +414,55 @@ class ViewerKeyboardGamepadMappingStrategy:
         )
 
 
+    def _map_planes(self, frame: RawInputFrame, sample: ViewerCanonicalInputSample | None,
+                    parameters: ViewerControlMappingParameters) -> InputIntent:
+        # catalogの共有strategyで状態を作らず、runtime sessionを必須にする。
+        if self._plane_session is None:
+            raise ValueError("plane control requires a runtime mapping session")
+        config = parameters.gamepad_plane_control
+        assert config is not None
+        if sample is not None and sample.source_kind != "gamepad":
+            self._plane_session.reset()
+            raise ValueError("plane control accepts only gamepad samples")
+        control_frame = "world" if sample is None else sample.requested_control_frame
+        if control_frame not in {"world", "tool"}:
+            self._plane_session.reset()
+            raise ValueError("plane control requires an explicit world/tool frame")
+        raw = () if sample is None or sample.gamepad is None or sample.gamepad.raw_axes is None else sample.gamepad.raw_axes
+        projected = tuple(_normalize_gamepad_axis_for_legacy_frontend(v) for v in raw)
+        outputs, reason = self._plane_session.update(
+            sample, config, projected,
+            settings_key=(parameters.gamepad_speed_m_s, parameters.gamepad_deadzone,
+                          parameters.gamepad_max_delta_m, control_frame),
+        )
+        intents = {side: build_continuous_endpoint_velocity_intent(
+            outputs[side], source_kind="viewer_gamepad", source_timestamp_s=frame.timestamp_s,
+            speed_m_s=parameters.gamepad_speed_m_s, deadzone=parameters.gamepad_deadzone,
+            max_delta_m=parameters.gamepad_max_delta_m, control_frame=control_frame,
+            source_active=bool(sample is not None and sample.source_active),
+            stale_reason=frame.metadata.get("stale_reason") if sample is None else sample.stale_reason,
+            source_diagnostics={"raw_axes": tuple(raw), "input_side": side},
+        ) for side in SIDES}
+        intent = intents[config.output_side]
+        metadata = dict(frame.metadata)
+        metadata.update(intent.to_metadata())
+        metadata.update({
+            "endpoint_velocity_m_s": intent.local_endpoint_velocity_m_s,
+            "resolved_world_endpoint_velocity_m_s": intent.local_endpoint_velocity_m_s if control_frame == "world" else None,
+            "endpoint_velocity_frame": "mujoco_world",
+            "viewer_source_kind": "gamepad", "sequence": None if sample is None else sample.sequence,
+            "gamepad_plane_control_v1": self._plane_session.presentation(
+                config, {side: intents[side].local_endpoint_velocity_m_s for side in SIDES}, reason),
+        })
+        return InputIntent(source="viewer", timestamp_s=frame.timestamp_s, values=intent.axis_values,
+                           buttons=() if sample is None or sample.gamepad is None else tuple(b.pressed for b in sample.gamepad.buttons),
+                           metadata=metadata)
+
+
 VIEWER_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(
     identity=VIEWER_CONTROL_MAPPING_IDENTITY,
     strategy=ViewerKeyboardGamepadMappingStrategy(),
+    session_strategy_factory=lambda: ViewerKeyboardGamepadMappingStrategy(session=True),
     accepted_input_sample_schemas=frozenset({VIEWER_CONTROL_SAMPLE_IDENTITY}),
     parameter_contract=ParameterContract(
         (
@@ -406,6 +471,7 @@ VIEWER_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(
             ParameterField("gamepad_deadzone", float, required=False),
             ParameterField("gamepad_max_delta_m", float, required=False),
             ParameterField("gamepad_axis_map", object, required=False),
+            ParameterField("gamepad_plane_control", object, required=False),
         )
     ),
     control_frame=None,

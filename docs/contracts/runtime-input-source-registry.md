@@ -388,3 +388,8 @@ runtime parameter precedenceは`explicit runtime mapping parameters > Mapping pl
 plan readinessでMapping contractを正規化・freezeしてからruntimeへ渡し、source instance / frame metadata /
 source registrationからMapping parameterを投影しない。source-owned mapping input adapterはsample
 representation変換だけを行い、Mapping operational parameterを所有しない。
+
+## 左右独立の1スティックXYZ操作
+
+新しい`sim-gamepad-left-xyz`／`sim-gamepad-right-xyz`と、XY/XZ切替・中立復帰・取得session・表示の規約は
+[Gamepad平面操作契約](gamepad-plane-control.md)を参照する。現行の片腕へ選択した片側を適用する段階であり、双腕モデル完成ではない。

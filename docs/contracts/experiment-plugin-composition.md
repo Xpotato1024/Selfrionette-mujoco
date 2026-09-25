@@ -619,3 +619,9 @@ continuous selectionの`normalize_runtime_parameters`はこの項目だけを後
 構築・context供給・world/tool解決のoptional capabilityは、既存routeを壊さず必要な処理を
 共有するためのものに限定する。新しいregistry、独立pipeline、汎用middlewareは設けない。
 legacy replay/absolute-targetは従来の明示builder契約を維持する。
+
+## 状態を持つMappingの実行session
+
+optionalな`ControlMappingPlugin.session_strategy_factory`はruntime pipelineごとのstrategyを生成する。
+省略した既存Mappingはstatelessな共有strategyを維持する。実行中の可変modeをcatalogや固定parameterへ保存しない。
+利用例とresetの責任は[Gamepad平面操作契約](gamepad-plane-control.md)を参照する。

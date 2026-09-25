@@ -91,6 +91,12 @@ def _canonical_sample(
     stale_reason: str | None,
 ) -> ViewerCanonicalInputSample:
     provider_id, provider_schema, legacy_message = _provider_contract(message)
+    session_id = message.metadata.get("viewer_provider_session_id")
+    if "viewer_provider_session_id" in message.metadata and (
+        not isinstance(session_id, str) or not 1 <= len(session_id) <= 128
+        or any(not (c.isascii() and (c.isalnum() or c in "-_")) for c in session_id)
+    ):
+        raise ValueError("invalid viewer_provider_session_id")
     return ViewerCanonicalInputSample(
         provider_id=provider_id,  # type: ignore[arg-type]
         provider_schema=provider_schema,  # type: ignore[arg-type]
@@ -109,6 +115,7 @@ def _canonical_sample(
         stale_reason=stale_reason,
         diagnostics={
             "legacy_message": legacy_message,
+            **({"provider_session_id": session_id} if session_id is not None else {}),
             "provider_id": provider_id,
             "provider_schema": provider_schema,
         },
