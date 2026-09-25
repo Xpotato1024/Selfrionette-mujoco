@@ -84,3 +84,12 @@ robot、写像、実験意味条件を環境変数やlocal storageから黙っ�
 cwdとprofile相対path、override、CLI表示、および取得・process・networkのno-I/O境界を検証する。
 後続のアプリ起動はこの設定を入力とし、起動・終了の操作手順は
 `docs/operations/backend-viewer-startup.md`を正本とする。
+
+## Gamepadのworld-XY確認用profile
+
+`sim-gamepad-world-xy`は、既存`sim-gamepad`の軸対応だけを明示変更した追加profile。
+`gamepad_axis_map={axis_indices:[0,1,3], axis_signs:[1,-1,-1]}`をMappingへ渡す。
+左stick右/上をworld +X/+Y、右stick上をworld +Zへ対応させる案で、
+実機種のstandard配置確認と、固定したviewでの操作受入は別途必要。
+旧`sim-gamepad`の設定・digest・挙動は変更しない。任意cameraのscreen方向へは追従しない。
+`selfrionette profile sim-gamepad-world-xy`で解決後の設定を表示できる。

@@ -128,3 +128,15 @@ frontend schema、research comparison design、viewer presentation、
 composition-root redesign、logging record、raw force mapping、loadcell serial、
 Arduino、OSC、hardware runtime、IK/FK/Jacobian、MuJoCo XML、transport serializer、
 CI workflow、dependency changeは含めない。
+
+## Gamepadの明示的な軸選択・符号（#563）
+
+Mapping parameter `gamepad_axis_map`を指定した場合だけ、既存raw/legacy正規化後、
+common builderのdeadzone前に、`axis_indices`の3軸を選択して`axis_signs`を乗じる。
+省略時は従来の先頭3軸を同符号で使い、既存parameter projectionも変更しない。
+index/signは共に3要素integerで、indexは相異なる非負値、signは+1/-1。
+unknown field、bool、重複軸、不正長、nullをstartup前に拒否する。
+active sampleの選択軸欠落はzero paddingせずrejectし、inactiveの停止は維持する。
+keyboard、buttonのZ補助、速度・deadzone・frame resolution、最終指令意味は変更しない。
+実装ownerと条件例は[Mapping README](../../src/selfrionette/plugins/mappings/viewer_keyboard_gamepad_mapping/README.md)を参照する。
+画面方向との対応、個々のcontrollerの配置、左右armの割当はこの設定だけで実測済みとはしない。

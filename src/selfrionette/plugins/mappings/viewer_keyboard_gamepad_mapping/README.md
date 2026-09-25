@@ -40,3 +40,28 @@ local endpoint velocityをjoint position commandへ解決するtyped routeを宣
 
 - [continuous endpoint velocity](../../../../../docs/contracts/continuous-endpoint-velocity-input.md)
 - [viewer control schema](../../../../../docs/contracts/viewer-control-message-schema.md)
+
+## 明示的なGamepad軸対応
+
+optionalな`gamepad_axis_map`は`axis_indices`と`axis_signs`を持つ。
+各3要素が、要求制御座標系のX/Y/Zへ対応する。indexは相異なる非負integer、
+signはintegerの+1/-1のみ。設定はstartup前に検証・copy/freezeする。
+
+```json
+{"gamepad_axis_map": {"axis_indices": [0, 1, 3], "axis_signs": [1, -1, -1]}}
+```
+
+上記は標準配置の左stick右→+X、左stick上→+Y、右stick上→+Zという
+world-XY操作の確認用割当。カメラのscreen右を保証するものではない。
+`sim-gamepad-world-xy`はこの設定を明示するsimulation専用起動profileである。
+実機種の軸順は別途確認し、非標準配置へ自動適用しない。
+
+省略時は従来の先頭3軸・同符号を維持する。既存`sim-gamepad`、二段deadzone、
+速度scale、norm clamp、button 0/1のZ補助、world/toolの意味は変更しない。
+raw sampleは保持し、取得層やrendererでは符号を補正しない。
+`source_diagnostics`へ適用したindex/signを追加する。
+activeなsampleで明示選択した軸が欠落すればrejectする。inactive/staleは
+既存の停止処理を維持し、欠落軸を新しい有効な中立測定として扱わない。
+
+この変更は単腕の明示設定と回帰検証まで。利用者の実Gamepad症状の再現、
+カメラ投影を含む操作受入、双腕bindingは未完で、Issue #563を継続する。
