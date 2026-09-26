@@ -70,3 +70,9 @@ activeなsampleで明示選択した軸が欠落すればrejectする。inactive
 
 新しい`sim-gamepad-left-xyz`／`sim-gamepad-right-xyz`と、XY/XZ切替・中立復帰・取得session・表示の規約は
 [Gamepad平面操作契約](../../../../../docs/contracts/gamepad-plane-control.md)を参照する。現行の片腕へ選択した片側を適用する段階であり、双腕モデル完成ではない。
+
+## 複数手先へのtyped projection
+
+`map_coordinated_input` は明示side-to-endpoint bindingに従って左右の速度を型付き要求へ返す。
+旧single-endpoint入口と平面状態機械・正規化・ゲインを共有し、表示用metadataをcommandへ逆変換しない。
+[共同実行契約](../../../../../docs/contracts/coordinated-arm-runtime.md) を参照する。

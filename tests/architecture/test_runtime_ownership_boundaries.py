@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_ROOT = ROOT / "src" / "selfrionette" / "runtime"
 EXPECTED_MODULES = {
     "composition": {
+        "fast_arm_coordinated",
         "launch_profile",
         "config",
         "concrete_mujoco_pipeline",
@@ -55,6 +56,7 @@ EXPECTED_MODULES = {
         "r7_g_free_space",
     },
     "execution": {
+        "coordinated",
         "command_routes",
         "input_step_loop",
         "input_source_adapters",
@@ -73,6 +75,7 @@ EXPECTED_MODULES = {
         "world_tool_runner",
     },
     "runners": {
+        "coordinated_gamepad",
         "application",
         "application_process",
         "fast_arm_input_runtime",
@@ -88,6 +91,7 @@ EXPECTED_MODULES = {
         "websocket_publisher",
     },
     "output": {
+        "coordinated",
         "fast_arm_adapter",
         "fast_arm_observation",
         "fast_arm_emulation",

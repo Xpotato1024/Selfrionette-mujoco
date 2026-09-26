@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite
+from hashlib import sha256
+import json
 from types import MappingProxyType
 
 from selfrionette.plugins.mappings._continuous_endpoint_velocity import (
@@ -30,6 +32,7 @@ from selfrionette.runtime.experiment.contracts import (
     VersionedIdentity,
 )
 from selfrionette.schemas import InputIntent, RawInputFrame, coerce_viewer_control_message
+from selfrionette.schemas.coordinated import CoordinatedInput, EndpointVelocity
 from selfrionette.schemas.viewer_input import (
     VIEWER_CONTROL_SAMPLE_SCHEMA,
     ViewerCanonicalInputSample,
@@ -414,8 +417,9 @@ class ViewerKeyboardGamepadMappingStrategy:
         )
 
 
-    def _map_planes(self, frame: RawInputFrame, sample: ViewerCanonicalInputSample | None,
-                    parameters: ViewerControlMappingParameters) -> InputIntent:
+    def _build_plane_intents(self, frame: RawInputFrame, sample: ViewerCanonicalInputSample | None,
+                            parameters: ViewerControlMappingParameters):
+        """単一手先と共同実行が共有する唯一の平面・ゲイン計算。"""
         # catalogの共有strategyで状態を作らず、runtime sessionを必須にする。
         if self._plane_session is None:
             raise ValueError("plane control requires a runtime mapping session")
@@ -443,6 +447,13 @@ class ViewerKeyboardGamepadMappingStrategy:
             stale_reason=frame.metadata.get("stale_reason") if sample is None else sample.stale_reason,
             source_diagnostics={"raw_axes": tuple(raw), "input_side": side},
         ) for side in SIDES}
+        return intents, reason, control_frame, raw
+
+    def _map_planes(self, frame: RawInputFrame, sample: ViewerCanonicalInputSample | None,
+                    parameters: ViewerControlMappingParameters) -> InputIntent:
+        intents, reason, control_frame, _ = self._build_plane_intents(frame, sample, parameters)
+        config = parameters.gamepad_plane_control
+        assert config is not None and self._plane_session is not None
         intent = intents[config.output_side]
         metadata = dict(frame.metadata)
         metadata.update(intent.to_metadata())
@@ -457,6 +468,37 @@ class ViewerKeyboardGamepadMappingStrategy:
         return InputIntent(source="viewer", timestamp_s=frame.timestamp_s, values=intent.axis_values,
                            buttons=() if sample is None or sample.gamepad is None else tuple(b.pressed for b in sample.gamepad.buttons),
                            metadata=metadata)
+
+
+    def map_coordinated_input(self, frame: RawInputFrame, parameters: Mapping[str, object], *,
+                              side_to_endpoint: Mapping[str, str], received_at_s: float) -> CoordinatedInput:
+        """明示した腕へtyped指令を返す。診断metadataから指令を逆生成しない。"""
+        if (not isinstance(frame, RawInputFrame) or not isinstance(side_to_endpoint, Mapping)
+                or not 1 <= len(side_to_endpoint) <= 2 or not set(side_to_endpoint) <= set(SIDES)
+                or len(set(side_to_endpoint.values())) != len(side_to_endpoint)):
+            raise ValueError("explicit distinct side-to-endpoint binding required")
+        normalized = build_viewer_control_mapping_parameters(parameters)
+        if normalized.gamepad_plane_control is None:
+            raise ValueError("coordinated input requires explicit gamepad_plane_control")
+        sample = _coerce_frame_sample(frame) if isinstance(frame.metadata.get("viewer_input_sample"), Mapping) else None
+        intents, reason, control_frame, raw = self._build_plane_intents(frame, sample, normalized)
+        available = reason is None and sample is not None
+        neutral = available and all(abs(raw[i]) <= normalized.gamepad_plane_control.neutral_threshold
+            for side in side_to_endpoint for i in getattr(normalized.gamepad_plane_control, side).axes)
+        provider_epoch = None if sample is None else sample.diagnostics.get("provider_session_id")
+        device = None if sample is None or sample.gamepad is None else (sample.gamepad.index, sample.gamepad.id)
+        # 接続系列が同じでも装置報告IDが変わったら共同runtimeの再preflightを必要とする。
+        source_epoch = None if provider_epoch is None else sha256(
+            json.dumps((provider_epoch, device), separators=(",", ":")).encode()).hexdigest()
+        payload = {"raw": raw, "buttons": [] if sample is None or sample.gamepad is None else
+                   [(b.pressed, b.value) for b in sample.gamepad.buttons], "frame": control_frame,
+                   "sequence": None if sample is None else sample.sequence,
+                   "timestamp": frame.timestamp_s, "source_epoch": source_epoch}
+        digest = sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+        return CoordinatedInput(tuple(EndpointVelocity(endpoint, intents[side].local_endpoint_velocity_m_s, control_frame)
+                for side, endpoint in side_to_endpoint.items()), source_epoch,
+                None if sample is None else sample.sequence, frame.timestamp_s, received_at_s,
+                available, bool(neutral), digest)
 
 
 VIEWER_CONTROL_MAPPING_PLUGIN = ControlMappingPlugin(

@@ -9,6 +9,7 @@ import selfrionette.schemas as schemas
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_ROOT = ROOT / "src" / "selfrionette" / "schemas"
 DOMAIN_MODULES = {
+    "coordinated": set(),
     "command": {"types"},
     "endpoint": {"types"},
     "experiment_log": {"endpoint"},

@@ -91,3 +91,9 @@ genericなDTO、resolver、providerはruntimeが所有する。
 `adapter/assembly_output.py` は全armを既存typed requestへ投影する。
 既存単腕v1 profileの8関節化や第二のcatalog登録は行わない。GUI双腕操作・全scene衝突・
 連成物理出力の完了とは区別する。原本meshの衝突無効設定と実機校正unknownは保持する。
+
+## 共同位置更新provider
+
+`adapter/coordinated.py` は同じassemblyの名前付き全腕を一つのsnapshotから解き、一括反映する。
+明示的な運動学診断経路であり、元のjoint limit/DLSを再利用する。動的接触や実機の安全認定ではない。
+[共同実行契約](../../../../../docs/contracts/coordinated-arm-runtime.md) に操作入口、OSC接続と未実装範囲を示す。

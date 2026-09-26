@@ -35,6 +35,10 @@ FAST_ARM_RUNTIME_COMPOSITION_IMPORTS = frozenset(
     }
 )
 FAST_ARM_NO_IO_COMPOSITION_IMPORTS = {
+    SRC / "runtime" / "composition" / "fast_arm_coordinated.py": frozenset({
+        f"{FAST_ARM_PACKAGE}.adapter.coordinated",
+        f"{FAST_ARM_PACKAGE}.adapter.coordinated.FastArmAssemblyMotionProvider",
+    }),
     SRC / "runtime" / "output" / "fast_arm_observation.py": frozenset({
         FAST_ARM_PHYSICAL_OUTPUT_MODULE,
         f"{FAST_ARM_PHYSICAL_OUTPUT_MODULE}.FastArmJointWireCommand",

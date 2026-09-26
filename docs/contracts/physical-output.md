@@ -382,3 +382,10 @@ target/endpoint/個別mappingを必須とし、既存のrequest・wire codecへ�
 #509 evidence、二重permission、transport grantを置き換えるものではない。
 左右の名前対応・codec・応答試験と、連成preflight/部分失敗/協調停止を含む実機用runtimeは
 別の受入範囲である。独立した2 sessionを、原子的送信・実機同時動作と表現しない。
+
+## 複数腕の準備・送信・停止
+
+共同runtimeの新しい入口は [共同実行契約](coordinated-arm-runtime.md) を参照する。
+既存単腕submitのgateを維持し、全側prepare後の逐次dispatchを監督する。
+一側拒否・部分送信・timeoutで両側をlatchし停止要求を試行するが、実機停止確認ではない。
+受信側watchdog/停止命令/独立非常停止が未検証のまま、このsoftware testから実機を有効化しない。

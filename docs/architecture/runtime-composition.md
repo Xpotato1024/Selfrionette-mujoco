@@ -381,3 +381,10 @@ outputを結ぶ。`runtime/contact/robot_view.py`は単一sceneのRobot joint vi
 `runtime/runners/fast_arm_input_runtime.py`が既存のresolved input planとdisarmed physical sessionを専有し、
 明示start、有限tick、受信/expiry、P5 submit、stop/cleanupを接続する。生成や判定のownerを移さない。
 出力requestのhost clockとSource/MuJoCo時刻は別々に記録する。詳細は`docs/contracts/physical-output.md`を正本とする。
+
+## 共同armの診断実行
+
+[共同実行契約](../contracts/coordinated-arm-runtime.md) に従い、compositionがSource/Mapping/assembly providerを結ぶ。
+`execution/coordinated.py` は候補の一括反映と全体latch、`output/coordinated.py` は全側の既存prepare/dispatchを監督する。
+`schemas/coordinated.py` は名前付き複数手先と時計を分離する。旧単腕v1のrouteを暗黙に双腕へ拡張しない。
+`runners/coordinated_gamepad.py` は有限な保存入力の診断入口であり、participant Task/metricの第二SoTではない。
