@@ -17,8 +17,8 @@ related:
 routerの角度補正とMuJoCoの固定mount geometryのどちらが所有すべきか切り分けた記録である。
 hardware、serial、OSC送信、robot actuationは行わず、sourceとconfigだけを静的に確認した。
 
-監査した外部working copyは `D:\Xpotato-apps\fast-arm-router`、
-Git revisionは `8d8c3a6` で、branchは `main...origin/main` のclean stateだった。
+監査した外部`fast-arm-router` working copyのGit revisionは `8d8c3a6` で、
+branchは `main...origin/main` のclean stateだった。
 
 ## 確認した実装
 
@@ -26,6 +26,7 @@ Git revisionは `8d8c3a6` で、branchは `main...origin/main` のclean stateだ
 - `config/router.toml`: armL / armRのDOF、motor ID、gain、Pi endpointを宣言する。
 - configとmapperのどちらにも30 degreeのmount角、3D base transform、target別mount offsetはない。
 - control protocolにはencoder zero操作があるが、これは固定base geometryとは別の状態・校正操作である。
+
 ## 判定
 
 30 degreeの開きはjoint-spaceからmotor-spaceへの差動変換ではない。
