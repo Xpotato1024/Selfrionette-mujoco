@@ -112,16 +112,21 @@ def test_inbox_overflow_is_a_visible_failure(op, limit):
 
 def test_real_async_socket_backpressure_still_receives_input_and_stop():
     import asyncio
+    import socket
     from threading import Thread
     from time import monotonic, sleep
     from websockets.asyncio.server import serve
     from xpotato_sim.runtime.application.workbench_projection import AsyncWorkerConnection
-    ready, inject, done = Event(), Event(), Event()
+    ready, inject, done, read_paused = Event(), Event(), Event(), Event()
     address=[];errors=[];finished=Event()
     async def server():
         async def peer(ws):
             # recvを呼ばず実socketのflow controlを詰まらせる。
-            while not inject.is_set():await asyncio.sleep(.005)
+            ws.transport.get_extra_info("socket").setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256*1024)
+            while not inject.is_set():
+                # 一時的なwrite buffer増加ではなく、相手側のread-pauseを同期する。
+                if not ws.transport.is_reading():read_paused.set()
+                await asyncio.sleep(.005)
             await ws.send(json.dumps({"op":"input","received_at_s":123.25,"sequence":7}))
             await ws.send(json.dumps({"op":"stop","id":"urgent"}))
             while not done.is_set():await asyncio.sleep(.005)
@@ -140,6 +145,7 @@ def test_real_async_socket_backpressure_still_receives_input_and_stop():
     try:
         async def buffer_size():return wire.ws.transport.get_write_buffer_size()
         deadline=monotonic()+5
+        assert read_paused.wait(max(0.,deadline-monotonic())),"peer transport did not pause reading"
         while asyncio.run_coroutine_threadsafe(buffer_size(),wire.loop).result()<65536 and monotonic()<deadline:sleep(.005)
         assert not finished.is_set(),"real display socket did not reach backpressure"
         assert asyncio.run_coroutine_threadsafe(buffer_size(),wire.loop).result()>=65536
@@ -148,7 +154,10 @@ def test_real_async_socket_backpressure_still_receives_input_and_stop():
         assert json.loads(wire.recv(timeout=2))["op"]=="stop"
         assert not finished.is_set(),"receive only progressed after display unblocked"
     finally:
-        wire.close();done.set();sending.join(3);thread.join(3)
+        try:
+            wire.close()
+        finally:
+            done.set();sending.join(3);thread.join(3)
     assert not wire.thread.is_alive() and not sending.is_alive() and not thread.is_alive()
 
 
