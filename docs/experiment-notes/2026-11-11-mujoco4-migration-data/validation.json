@@ -1,0 +1,71 @@
+{
+  "base_commit": "d3e667b461ff0d795c03afb9bbe43fc7c68201da",
+  "baseline": {
+    "total": 4231,
+    "passed": 4218,
+    "skipped": 13,
+    "failures": 0,
+    "junit_sha256": "33630d01faa2cda6b1945d0fd783cfc82af69b1f5c11609effea947342338b6b"
+  },
+  "candidate": {
+    "total": 4252,
+    "passed": 4239,
+    "skipped": 13,
+    "failures": 0,
+    "junit_sha256": "022f886b0f3c93b9940ad32cc319a2f5180ec95691a3a18eaa0d96dd6cad0b80"
+  },
+  "removed_tests": [],
+  "added_test_count": 21,
+  "same_skips": true,
+  "added_test_ids": [
+    "tests.integration.fast_arm.test_neutral_initial_pose::test_ranking_preserves_raw_metrics_and_declares_resolution",
+    "tests.integration.fast_arm.test_neutral_initial_pose::test_ranking_tie_is_stable_under_roundoff_and_candidate_order[-2e-16]",
+    "tests.integration.fast_arm.test_neutral_initial_pose::test_ranking_tie_is_stable_under_roundoff_and_candidate_order[0.0]",
+    "tests.integration.fast_arm.test_neutral_initial_pose::test_ranking_tie_is_stable_under_roundoff_and_candidate_order[2e-16]",
+    "tests.mujoco_backend.test_engine_compatibility::test_current_profiles_keep_dense_newton_and_speculative_disabled[tasks/dynamic-cube-drop-14]",
+    "tests.mujoco_backend.test_engine_compatibility::test_current_profiles_keep_dense_newton_and_speculative_disabled[tasks/dynamic-cube-push-14]",
+    "tests.mujoco_backend.test_engine_compatibility::test_current_profiles_keep_dense_newton_and_speculative_disabled[tasks/dynamic-fixed-contact-8]",
+    "tests.mujoco_backend.test_engine_compatibility::test_current_profiles_keep_dense_newton_and_speculative_disabled[tasks/research-spring-5]",
+    "tests.mujoco_backend.test_engine_compatibility::test_effective_solver_gate_without_changing_options[auto-Newton-59-False]",
+    "tests.mujoco_backend.test_engine_compatibility::test_effective_solver_gate_without_changing_options[auto-Newton-60-True]",
+    "tests.mujoco_backend.test_engine_compatibility::test_effective_solver_gate_without_changing_options[auto-Newton-61-True]",
+    "tests.mujoco_backend.test_engine_compatibility::test_effective_solver_gate_without_changing_options[dense-Newton-1-False]",
+    "tests.mujoco_backend.test_engine_compatibility::test_effective_solver_gate_without_changing_options[dense-Newton-61-False]",
+    "tests.mujoco_backend.test_engine_compatibility::test_effective_solver_gate_without_changing_options[sparse-CG-61-False]",
+    "tests.mujoco_backend.test_engine_compatibility::test_effective_solver_gate_without_changing_options[sparse-Newton-1-True]",
+    "tests.mujoco_backend.test_engine_compatibility::test_effective_solver_gate_without_changing_options[sparse-PGS-61-False]",
+    "tests.mujoco_backend.test_engine_compatibility::test_gate_is_limited_to_known_affected_version[3.9.0]",
+    "tests.mujoco_backend.test_engine_compatibility::test_gate_is_limited_to_known_affected_version[4.0.1]",
+    "tests.mujoco_backend.test_engine_compatibility::test_loader_rejects_before_forward[False]",
+    "tests.mujoco_backend.test_engine_compatibility::test_loader_rejects_before_forward[True]",
+    "tests.mujoco_backend.test_engine_compatibility::test_provider_reset_rechecks_effective_solver_before_forward"
+  ],
+  "followup": "同点時に候補名が逆の順でもqpos規則が優先するようtestを強化後、neutral_initial_pose 11件を再実行して成功。production codeの変更なし。",
+  "other_checks": {
+    "viewer_test": "passed",
+    "viewer_typecheck": "passed",
+    "viewer_build": "passed with Vite warnings",
+    "mypy_scoped": "passed (4 files)",
+    "mypy_launcher": "passed (1 file)",
+    "ruff": "passed",
+    "compileall": "passed",
+    "in_place_uv_upgrade": "3.9.0 -> 4.0.0/core/studio一致、research-spring denseモデル構築成功"
+  },
+  "not_run": [
+    "実入力デバイスを使うend-to-end RTF受入",
+    "実機動作",
+    "参加者実験"
+  ],
+  "source_sha256": {
+    "apps/mujoco-viewer/package-lock.json": "7f17c8a87b70b7a6f3ff5a1a5383aea22ef8e03f31a5ff24e068a94447ce1919",
+    "apps/mujoco-viewer/package.json": "bece25165226cc1dac0f2e54be3e5e5d4c57ff58aaacf41e394a5f5bae1cf665",
+    "apps/mujoco-viewer/tests/mujocoDisplayPose.test.ts": "d829014f8625ab513ab4e414bcc7531eb59d596076187a51e98f33b119a8ecb5",
+    "pyproject.toml": "a13068504f2f0632ad419443a7ff9b305b9905cec553792d635ee0ad4cef91ac",
+    "src/xpotato_sim/mujoco_backend/README.md": "73ee617792fb1470a0bdab6bd03e63ece27683d4becbeadebed8268979090a87",
+    "src/xpotato_sim/mujoco_backend/compatibility.py": "ed7f92fa4f9c25cda7cf8bdcc9fb7b6072898a47bb715a443c086349a05b0dd2",
+    "src/xpotato_sim/mujoco_backend/model_loader.py": "fac3694436ff5458042de1e6c7f33c82be58d8aeed61588b38b0f841425b3a03",
+    "src/xpotato_sim/plugins/robots/fast_arm/adapter/coordinated.py": "a45a6ce8605288e4702a90f943a2537769e220161698fc110bc677fc959241e0",
+    "src/xpotato_sim/plugins/robots/fast_arm/adapter/diagnostics/neutral_initial_pose.py": "a2a6426b10a7e0ae04800ad2c8e553b8cf92188bfe5bd680084f2e135970b867",
+    "uv.lock": "cae24b1fdec01a22e3dee5b18367ef351af915eb5e1de547ff6ee1080bc13bcd"
+  }
+}

@@ -47,6 +47,7 @@ MAXIMUM_PER_JOINT_BASELINE_DELTA_RAD = math.pi
 NEUTRAL_HEIGHT_DROP_REACH_FRACTION = 0.50
 NEUTRAL_EXTENSION_RATIO = 0.75
 NEARBY_PERTURBATION_RAD = math.pi / 90.0
+RANKING_DECIMAL_PLACES = 12
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,6 +438,13 @@ def _nearby_sensitivity(
     )
 
 
+def _stable_ranking_key(metrics, qpos, candidate_id):
+    """評価値を保持したまま順位だけ量子化し、対称姿勢の丸め誤差逆転を避ける。"""
+    scores = tuple(round(value, RANKING_DECIMAL_PLACES) for value in metrics)
+    # 同点の姿勢はqpos辞書順（小さい方）で決め、候補名・生成順に依存させない。
+    return (*scores, tuple(-round(value, RANKING_DECIMAL_PLACES) for value in qpos), candidate_id)
+
+
 def _ranking_key(
     *,
     candidate_id: str,
@@ -464,7 +472,7 @@ def _ranking_key(
     height_error = abs(tip_height_m - target_height) / nominal_reach_m
     extension_error = abs(extension_ratio - NEUTRAL_EXTENSION_RATIO)
     simplicity = sum(abs(value) for value in qpos)
-    return (
+    return _stable_ranking_key((
         progressing_count,
         pose.native.effective_rank,
         row_balance,
@@ -475,8 +483,7 @@ def _ranking_key(
         -nearby.maximum_row_norm_relative_change,
         -nearby.maximum_tip_shift_m,
         -simplicity,
-        candidate_id,
-    )
+    ), qpos, candidate_id)
 
 
 def evaluate_fast_arm_neutral_initial_pose_candidates() -> NeutralPoseEvaluation:
@@ -601,6 +608,7 @@ def evaluate_fast_arm_neutral_initial_pose_candidates() -> NeutralPoseEvaluation
         "neutral_height_drop_reach_fraction": NEUTRAL_HEIGHT_DROP_REACH_FRACTION,
         "neutral_extension_ratio": NEUTRAL_EXTENSION_RATIO,
         "nearby_perturbation_rad": NEARBY_PERTURBATION_RAD,
+        "ranking_decimal_places": RANKING_DECIMAL_PLACES,
         "ranking_order": (
             "six_direction_progressing_count_desc",
             "effective_rank_desc",
@@ -612,6 +620,7 @@ def evaluate_fast_arm_neutral_initial_pose_candidates() -> NeutralPoseEvaluation
             "nearby_row_norm_sensitivity_asc",
             "nearby_tip_sensitivity_asc",
             "qpos_l1_simplicity_asc",
+            "qpos_lexicographic_asc_tiebreak",
             "candidate_id_desc_tiebreak",
         ),
         "rank_three_required": False,

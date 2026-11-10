@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-10-19
+last_verified: 2026-11-11
 canonical_for:
   - product viewer wasm scene renderer operation
 related:
@@ -328,3 +328,12 @@ scaleを超えた矢印は橙で示し、数値を切り詰めず「表示上限
 source hostとbrowser時計を減算しない。offline payloadの読込は`receiptKind=offline`としてWebSocket受信と区別する。
 control tickの省略とbrowserの提出前置換は別counterであり、physics dropやsensor欠測と呼ばない。
 全sampleの永続evidenceや知覚効果の評価はこの表示adapterの責務ではない。
+
+## MuJoCo 4.0.0の依存同期
+
+Python nativeの`mujoco`とViewerの`@mujoco/mujoco`を4.0.0に固定する。package分割後も既存の
+`mujoco` distributionを使い、core/studioの対応版は`uv.lock`で確定する。Studioを通常UIへ導入しない。
+変更後はrepository rootの`just setup`で両依存と固定buildを更新し、`just doctor`で検査する。
+WASMだけの更新でnativeの物理計算が速くなったとは扱わず、描画専用の境界を維持する。
+実installed WASMのversion、`mj_fwdKinematics`、model/pose/scene同期の既存テストで4.0.0を検証する。
+過去のfixture生成元3.9.0などの来歴は、実行版へ機械的に書き換えない。

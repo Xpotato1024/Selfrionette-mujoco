@@ -8,6 +8,7 @@ from fast_arm_core.assembly import FastArmAssembly, resolve_assembly_addresses
 from fast_arm_core.assembly_model import FastArmAssemblyModel, build_fast_arm_assembly_model
 from xpotato_sim.motion import LocalEndpointMotionGenerator
 from xpotato_sim.mujoco_backend.snapshot import _read_synchronized_mujoco_state, _SnapshotLayout
+from xpotato_sim.mujoco_backend.compatibility import validate_solver_compatibility
 from xpotato_sim.schemas import InputIntent, MuJoCoState
 from xpotato_sim.schemas.command import JointPositionCommand
 from xpotato_sim.schemas.coordinated import CoordinatedSnapshot, EndpointObservation, EndpointVelocity, number
@@ -140,6 +141,7 @@ class FastArmAssemblyMotionProvider:
 
     def reset(self) -> None:
         with self._lock:
+            validate_solver_compatibility(self.model)
             self._pending = None
             data = mujoco.MjData(self.model)
             key = int(mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_KEY, "home"))

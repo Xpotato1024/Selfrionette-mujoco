@@ -162,3 +162,23 @@ def test_selected_candidate_is_the_canonical_home_startup_and_reset_qpos() -> No
     simulator.reset()
 
     assert simulator.snapshot().qpos == pytest.approx(home_qpos, rel=0.0, abs=1e-12)
+
+
+@pytest.mark.parametrize("delta", [-2e-16, 0.0, 2e-16])
+def test_ranking_tie_is_stable_under_roundoff_and_candidate_order(delta):
+    key = neutral_initial_pose._stable_ranking_key
+    negative = key((6, 3, .8749260552058572), (0., -.5, 0., -1.), "a")
+    positive = key((6, 3, .8749260552058572 + delta), (0., -.5, 0., 1.), "z")
+    assert negative > positive
+    assert max([negative, positive]) == max([positive, negative]) == negative
+    # 明確な評価改善は、同点時の姿勢選好より優先する。
+    better = key((6, 3, .8749260552058572 + 1e-8), (0., -.5, 0., 1.), "z")
+    assert better > negative
+
+
+def test_ranking_preserves_raw_metrics_and_declares_resolution():
+    result = evaluate_fast_arm_neutral_initial_pose_candidates()
+    assert result.selection_contract["ranking_decimal_places"] == 12
+    assert "qpos_lexicographic_asc_tiebreak" in result.selection_contract["ranking_order"]
+    for candidate in result.candidates:
+        assert candidate.ranking_key[2] == round(candidate.row_norm_balance, 12)
