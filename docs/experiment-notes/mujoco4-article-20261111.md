@@ -3,6 +3,9 @@ status: supporting
 owner: research
 last_verified: 2026-11-11
 canonical_for: []
+related:
+  - docs/README.md
+  - research/README.md
 ---
 
 # MuJoCo 4.0 記事素材の観測
