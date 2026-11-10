@@ -1,0 +1,804 @@
+{
+  "source_base": "d3e667b461ff0d795c03afb9bbe43fc7c68201da",
+  "method": "既存measure_simulation_hot_path.py --ticks 120 --no-profile --plain。3反復・版順を交互にし、両全集合testの終了後に実行。provider+sample+serializationでありGUI/通信/保存/入力デバイスを含むRTFではない。controlled synthetic wide cubeの接触保持で、通常製品sceneではない。OS・他アプリ負荷は制御していない。",
+  "python": "3.12.13",
+  "numpy": "2.4.6",
+  "model_sha256_equal": true,
+  "scene_equal": true,
+  "native_parameters_equal": true,
+  "options_equal": true,
+  "comparison_first_repetition": {
+    "free_space": {
+      "qpos_max_abs_difference": 2.220446049250313e-16,
+      "qvel_max_abs_difference": 1.3769476010783155e-14,
+      "summed_world_contact_force_max_abs_difference_n": 0.0,
+      "contact_endpoint_sets_equal": true,
+      "per_geom_pair_force_max_abs_difference_n": 0.0,
+      "geom_pair_sets_equal": true
+    },
+    "one_contact": {
+      "qpos_max_abs_difference": 6.272258268325004e-10,
+      "qvel_max_abs_difference": 1.3078323313209239e-08,
+      "summed_world_contact_force_max_abs_difference_n": 1.4635664769002688e-07,
+      "contact_endpoint_sets_equal": true,
+      "per_geom_pair_force_max_abs_difference_n": 1.4635664769002688e-07,
+      "geom_pair_sets_equal": true
+    },
+    "two_contact": {
+      "qpos_max_abs_difference": 6.272258268325004e-10,
+      "qvel_max_abs_difference": 1.3078323313209239e-08,
+      "summed_world_contact_force_max_abs_difference_n": 2.065167521436706e-07,
+      "contact_endpoint_sets_equal": true,
+      "per_geom_pair_force_max_abs_difference_n": 1.4635664769002688e-07,
+      "geom_pair_sets_equal": true
+    }
+  },
+  "runs": [
+    {
+      "version": "3.9.0",
+      "repeat": 1,
+      "report_file": "hot-sim-1.json",
+      "original_report_sha256": "6934caded85eb659aa769aa51e50cb9bb54b6223a260a54d5f23260ba4fc4363",
+      "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+      "scenarios": {
+        "free_space": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.1739316666666666,
+            "p50_ms": 1.0748,
+            "p95_ms": 1.1849,
+            "max_ms": 11.3013,
+            "total_ms": 140.8718
+          },
+          "contact_endpoint_sets": [
+            []
+          ],
+          "solver_niter_max": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "one_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.3531758333333332,
+            "p50_ms": 1.3383,
+            "p95_ms": 1.4649,
+            "max_ms": 1.5395,
+            "total_ms": 162.3811
+          },
+          "contact_endpoint_sets": [
+            [
+              "left"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "two_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.5370025,
+            "p50_ms": 1.51045,
+            "p95_ms": 1.6656,
+            "max_ms": 1.8472,
+            "total_ms": 184.4403
+          },
+          "contact_endpoint_sets": [
+            [
+              "left",
+              "right"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "version": "4.0.0",
+      "repeat": 1,
+      "report_file": "hot-candidate-1.json",
+      "original_report_sha256": "7b4c4611ba46d48327b4e144789c6dfca45035c8928a17cd8b5fcee4154fdbaf",
+      "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+      "scenarios": {
+        "free_space": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.1379325,
+            "p50_ms": 1.0258500000000002,
+            "p95_ms": 1.1443,
+            "max_ms": 12.5926,
+            "total_ms": 136.5519
+          },
+          "contact_endpoint_sets": [
+            []
+          ],
+          "solver_niter_max": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "one_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.2771333333333332,
+            "p50_ms": 1.2693500000000002,
+            "p95_ms": 1.3235,
+            "max_ms": 1.4285,
+            "total_ms": 153.256
+          },
+          "contact_endpoint_sets": [
+            [
+              "left"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "two_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.5191358333333334,
+            "p50_ms": 1.51,
+            "p95_ms": 1.596,
+            "max_ms": 1.8282,
+            "total_ms": 182.2963
+          },
+          "contact_endpoint_sets": [
+            [
+              "left",
+              "right"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "version": "4.0.0",
+      "repeat": 2,
+      "report_file": "hot-candidate-2.json",
+      "original_report_sha256": "20cef35e6adb0b841726c8c82471820ba9266285dc3c02f3e804c5974400da3f",
+      "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+      "scenarios": {
+        "free_space": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.1351325,
+            "p50_ms": 1.02005,
+            "p95_ms": 1.1348,
+            "max_ms": 12.9191,
+            "total_ms": 136.2159
+          },
+          "contact_endpoint_sets": [
+            []
+          ],
+          "solver_niter_max": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "one_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.31943,
+            "p50_ms": 1.305,
+            "p95_ms": 1.4562,
+            "max_ms": 1.611,
+            "total_ms": 158.3316
+          },
+          "contact_endpoint_sets": [
+            [
+              "left"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "two_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.5604416666666667,
+            "p50_ms": 1.5199,
+            "p95_ms": 1.8057,
+            "max_ms": 2.4945,
+            "total_ms": 187.253
+          },
+          "contact_endpoint_sets": [
+            [
+              "left",
+              "right"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "version": "3.9.0",
+      "repeat": 2,
+      "report_file": "hot-sim-2.json",
+      "original_report_sha256": "2fb96c7cc2b317a1c834359fe1919fe7af1ef12b3ab523c8ec3ae0b7903d4bcf",
+      "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+      "scenarios": {
+        "free_space": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.2899008333333333,
+            "p50_ms": 1.1499,
+            "p95_ms": 1.3358,
+            "max_ms": 15.0036,
+            "total_ms": 154.78810000000001
+          },
+          "contact_endpoint_sets": [
+            []
+          ],
+          "solver_niter_max": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "one_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.4039616666666668,
+            "p50_ms": 1.3832499999999999,
+            "p95_ms": 1.5249,
+            "max_ms": 1.7354,
+            "total_ms": 168.4754
+          },
+          "contact_endpoint_sets": [
+            [
+              "left"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "two_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.5851133333333334,
+            "p50_ms": 1.55365,
+            "p95_ms": 1.8219,
+            "max_ms": 2.0228,
+            "total_ms": 190.2136
+          },
+          "contact_endpoint_sets": [
+            [
+              "left",
+              "right"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "version": "3.9.0",
+      "repeat": 3,
+      "report_file": "hot-sim-3.json",
+      "original_report_sha256": "d59d84c12b86fbc524dd6c6a40912dc8d22a140a6828ff2131f9e3df230a049d",
+      "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+      "scenarios": {
+        "free_space": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.2332808333333334,
+            "p50_ms": 1.1051,
+            "p95_ms": 1.2366,
+            "max_ms": 14.0698,
+            "total_ms": 147.9937
+          },
+          "contact_endpoint_sets": [
+            []
+          ],
+          "solver_niter_max": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "one_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.3493241666666667,
+            "p50_ms": 1.34125,
+            "p95_ms": 1.399,
+            "max_ms": 1.4908,
+            "total_ms": 161.9189
+          },
+          "contact_endpoint_sets": [
+            [
+              "left"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "two_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.4979625,
+            "p50_ms": 1.486,
+            "p95_ms": 1.5786,
+            "max_ms": 1.9326,
+            "total_ms": 179.7555
+          },
+          "contact_endpoint_sets": [
+            [
+              "left",
+              "right"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "version": "4.0.0",
+      "repeat": 3,
+      "report_file": "hot-candidate-3.json",
+      "original_report_sha256": "a6d12bdbbd45c6782b80d15e323c39c5a05fe32ce8fc18308aa0f2a7f7f98797",
+      "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+      "scenarios": {
+        "free_space": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.1672566666666666,
+            "p50_ms": 1.04475,
+            "p95_ms": 1.1763,
+            "max_ms": 13.183,
+            "total_ms": 140.0708
+          },
+          "contact_endpoint_sets": [
+            []
+          ],
+          "solver_niter_max": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "one_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.3208408333333332,
+            "p50_ms": 1.3047,
+            "p95_ms": 1.4104,
+            "max_ms": 1.9957,
+            "total_ms": 158.5009
+          },
+          "contact_endpoint_sets": [
+            [
+              "left"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "two_contact": {
+          "tick": {
+            "count": 120,
+            "mean_ms": 1.4557,
+            "p50_ms": 1.4372500000000001,
+            "p95_ms": 1.5845,
+            "max_ms": 1.7295,
+            "total_ms": 174.684
+          },
+          "contact_endpoint_sets": [
+            [
+              "left",
+              "right"
+            ]
+          ],
+          "solver_niter_max": [
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    }
+  ],
+  "summary": {
+    "3.9.0": {
+      "free_space": {
+        "p50_ms_median_of_three": 1.1051,
+        "p95_ms_median_of_three": 1.2366,
+        "max_ms_median_of_three": 14.0698
+      },
+      "one_contact": {
+        "p50_ms_median_of_three": 1.34125,
+        "p95_ms_median_of_three": 1.4649,
+        "max_ms_median_of_three": 1.5395
+      },
+      "two_contact": {
+        "p50_ms_median_of_three": 1.51045,
+        "p95_ms_median_of_three": 1.6656,
+        "max_ms_median_of_three": 1.9326
+      }
+    },
+    "4.0.0": {
+      "free_space": {
+        "p50_ms_median_of_three": 1.0258500000000002,
+        "p95_ms_median_of_three": 1.1443,
+        "max_ms_median_of_three": 12.9191
+      },
+      "one_contact": {
+        "p50_ms_median_of_three": 1.3047,
+        "p95_ms_median_of_three": 1.4104,
+        "max_ms_median_of_three": 1.611
+      },
+      "two_contact": {
+        "p50_ms_median_of_three": 1.51,
+        "p95_ms_median_of_three": 1.596,
+        "max_ms_median_of_three": 1.8282
+      }
+    }
+  },
+  "cpu": "Intel Core i7-9700K (8 cores / 8 logical processors)",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "measured_velocity_m_s": 0.0,
+  "working_tree_modified": true,
+  "candidate_source_sha256": {
+    "apps/mujoco-viewer/package-lock.json": "7f17c8a87b70b7a6f3ff5a1a5383aea22ef8e03f31a5ff24e068a94447ce1919",
+    "apps/mujoco-viewer/package.json": "bece25165226cc1dac0f2e54be3e5e5d4c57ff58aaacf41e394a5f5bae1cf665",
+    "apps/mujoco-viewer/tests/mujocoDisplayPose.test.ts": "d829014f8625ab513ab4e414bcc7531eb59d596076187a51e98f33b119a8ecb5",
+    "pyproject.toml": "a13068504f2f0632ad419443a7ff9b305b9905cec553792d635ee0ad4cef91ac",
+    "src/xpotato_sim/mujoco_backend/README.md": "73ee617792fb1470a0bdab6bd03e63ece27683d4becbeadebed8268979090a87",
+    "src/xpotato_sim/mujoco_backend/compatibility.py": "ed7f92fa4f9c25cda7cf8bdcc9fb7b6072898a47bb715a443c086349a05b0dd2",
+    "src/xpotato_sim/mujoco_backend/model_loader.py": "fac3694436ff5458042de1e6c7f33c82be58d8aeed61588b38b0f841425b3a03",
+    "src/xpotato_sim/plugins/robots/fast_arm/adapter/coordinated.py": "a45a6ce8605288e4702a90f943a2537769e220161698fc110bc677fc959241e0",
+    "src/xpotato_sim/plugins/robots/fast_arm/adapter/diagnostics/neutral_initial_pose.py": "a2a6426b10a7e0ae04800ad2c8e553b8cf92188bfe5bd680084f2e135970b867",
+    "uv.lock": "cae24b1fdec01a22e3dee5b18367ef351af915eb5e1de547ff6ee1080bc13bcd"
+  }
+}

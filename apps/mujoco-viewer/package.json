@@ -23,7 +23,7 @@
     "vite": "^7.1.6"
   },
   "dependencies": {
-    "@mujoco/mujoco": "^3.9.0",
+    "@mujoco/mujoco": "4.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "three": "^0.184.0"

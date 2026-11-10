@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-11-10
+last_verified: 2026-11-11
 canonical_for:
   - product viewer wasm scene renderer operation
 related:
@@ -366,3 +366,12 @@ model切替とdisposeで資源を解放する。固定端を含む表示範囲�
 [raw動画出力](offline-video-export.md)は同じrendererを使い、表示専用WASMから受信姿勢を描く。
 ばね用の報告UI・入力列・解析結果を動画エンジンへ埋め込まない。
 可動板のコイル径は軸に直交する面寸法から決め、薄い物理板には表示用の座金を重ねない。
+
+## MuJoCo 4.0.0の依存同期
+
+Python nativeの`mujoco`とViewerの`@mujoco/mujoco`を4.0.0に固定する。package分割後も既存の
+`mujoco` distributionを使い、core/studioの対応版は`uv.lock`で確定する。Studioを通常UIへ導入しない。
+変更後はrepository rootの`just setup`で両依存と固定buildを更新し、`just doctor`で検査する。
+WASMだけの更新でnativeの物理計算が速くなったとは扱わず、描画専用の境界を維持する。
+実installed WASMのversion、`mj_fwdKinematics`、model/pose/scene同期の既存テストで4.0.0を検証する。
+過去のfixture生成元3.9.0などの来歴は、実行版へ機械的に書き換えない。

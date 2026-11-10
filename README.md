@@ -4,7 +4,7 @@ MuJoCoを物理状態の正本とするロボット実験環境です。Workbenc
 
 ## 初回の準備
 
-ローカルランチャーにはPython **3.12**、uv、Git、Node.js **20.xの20.19以上、または22.12以上（21.x／22.0〜22.11は対象外）**、npm、WebGL2対応ブラウザを用意します。既存の直接CLIのPython対応範囲は`pyproject.toml`を維持します。依存versionの正本は`uv.lock`と`apps/mujoco-viewer/package-lock.json`です。
+ローカルランチャーにはPython **3.12**、uv、Git、Node.js **20.xの20.19以上、または22.12以上（21.x／22.0〜22.11は対象外）**、npm、WebGL2対応ブラウザを用意します。既存の直接CLIのPython対応範囲は`pyproject.toml`を維持します。依存versionの正本は`uv.lock`と`apps/mujoco-viewer/package-lock.json`です。 native / WASM MuJoCoは**4.0.0**を固定し、現行タスクでは投機的接触を使いません。既知の疎行列Newton不具合に該当する構成は起動前に拒否します。
 
 標準ユーティリティのjustは[公式マニュアルのuv経路](https://just.systems/man/en/packages.html)で導入します。runtime依存ではありません。
 
