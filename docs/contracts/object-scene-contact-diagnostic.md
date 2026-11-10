@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-10-26
+last_verified: 2026-11-10
 canonical_for:
   - fixed object definitions and instances in shared robot scenes
   - geometry-only contact diagnostic task and viewer presentation
@@ -28,6 +28,10 @@ kinematic実行と旧fixed/v1への混入は拒否する。joint limitの数値�
 実物材料特性とは別物である。`scene_dynamics_v1.springs` は変位・速度・復元力・減衰力・合計軸力を
 同一MjDataから記録し、接触原力は引き続き `contacts` に分離する。resetは初期変位・速度も復元する。
 `compression_spring` は正規実機値を主張しないソフト用presetである。
+
+ばねの可動boxは接触用の押圧ブロックとして保持し、通常Viewerでコイル・座金・固定端を可視化する。
+これらは非接触の表示部品であり、ばねの物理パラメータや独立した物理worldを追加しない。
+外観・寿命・比較条件への影響は[Viewerのばね外観契約](../operations/product-viewer-wasm-scene-renderer.md#一自由度ばねの外観)を参照する。
 
 ## 目的と責務
 

@@ -81,6 +81,7 @@ declare module "three" {
 
   export class BufferAttribute {
     constructor(array: ArrayLike<number>, itemSize: number);
+    needsUpdate: boolean;
   }
 
   export class Float32BufferAttribute extends BufferAttribute {

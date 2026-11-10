@@ -45,6 +45,7 @@ import { SceneContactOverlay } from "./sceneContactOverlay.js";
 import { DynamicsStream } from "./dynamicsPresentation.js";
 import { ForcePresentationStream, type ForcePresentation } from "./forcePresentation.js";
 import { ForceOverlay } from "./forceOverlay.js";
+import { SpringVisuals } from "./springVisuals.js";
 import type { ViewerRobotProfile } from "../robot-profiles/types.js";
 import {
   loadViewerRobotProfileFromPayload,
@@ -210,6 +211,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
 
   const scene = new Scene();
   scene.background = new Color("#08111f");
+  const springVisuals = new SpringVisuals();
+  scene.add(springVisuals.group);
   const contactOverlay = new Group();
   contactOverlay.name = "read-only contact-task overlay";
   scene.add(contactOverlay);
@@ -280,6 +283,12 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       all.union(box);
       // bodyに属するRobotと物体を優先。world直下の固定支持台は「全体」で含める。
       if (typeof mesh.userData.nativeBodyId === "number" && mesh.userData.nativeBodyId > 0) working.union(box);
+    }
+    const springBounds = springVisuals.bounds;
+    if (springBounds) {
+      const springBox = new Box3();
+      springBox.min.set(...springBounds.min); springBox.max.set(...springBounds.max);
+      all.union(springBox); working.union(springBox);
     }
     const box = focus && !working.isEmpty() ? working : all;
     return box.isEmpty() ? null : {min:[box.min.x,box.min.y,box.min.z],max:[box.max.x,box.max.y,box.max.z]};
@@ -375,6 +384,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
   let renderResourcesReleased = false;
   const releaseModel = (): void => {
     hasLoaded = false;
+    springVisuals.clear();
     const geometries = new Set<BufferGeometry>();
     const materials = new Set<MeshPhongMaterial>();
     for (const object of objectByGeomIndex.values()) {
@@ -651,6 +661,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       geom.delete();
     }
     geoms.delete();
+    springVisuals.update(data);
   };
 
   const applyModelPose = (
@@ -1169,6 +1180,8 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
       }
 
       applyMujocoDisplayPose(mujocoApi, model, data, startupQpos);
+      springVisuals.configure(model, joint => String(
+        mujocoApi.mj_id2name(model, mujocoApi.mjtObj.mjOBJ_JOINT.value, joint) ?? ""));
       mjvScene = new mujocoApi.MjvScene(model, MAX_GEOMS);
       mjvOption = createMujocoDisplayOption(mujocoApi);
       mjvPerturb = new mujocoApi.MjvPerturb();
@@ -1278,6 +1291,7 @@ export function createMujocoSceneRenderer(options: MujocoSceneRendererOptions): 
     counters() { return {modelBuilds, modelDeletes, liveVfs, wasmModules: mujocoWasmModuleBuilds(),
       wasmHeapBytes: exportedHeapBytes(mujocoApi), nativeModels: model ? 1 : 0, nativeData: data ? 1 : 0,
       geometries: objectByGeomIndex.size, meshCache: meshGeometryCache.size, materials: materialByKey.size,
+      springVisualAssemblies: springVisuals.count,
       gpuGeometries: renderer.info.memory.geometries, gpuTextures: renderer.info.memory.textures,
       programs: renderer.info.programs?.length ?? 0, windowResizeListeners: Number(listening && !disposed),
       resizeObservers: Number(listening && !disposed && resizeObserver !== null), orbitControls: Number(!renderResourcesReleased),

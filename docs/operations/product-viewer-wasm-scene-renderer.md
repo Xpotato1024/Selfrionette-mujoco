@@ -329,6 +329,32 @@ source hostとbrowser時計を減算しない。offline payloadの読込は`rece
 control tickの省略とbrowserの提出前置換は別counterであり、physics dropやsensor欠測と呼ばない。
 全sampleの永続evidenceや知覚効果の評価はこの表示adapterの責務ではない。
 
+
+## 一自由度ばねの外観
+
+`springVisuals.ts`は、Environmentが生成する`object__<instance_id>__spring`という名前の
+world固定基部・単一slide joint・単一boxのモデルにだけ、コイル、座金、固定端を追加描画する。
+立方体は従来の接触形状を持つ可動押圧ブロックであり、コイルそのものではない。
+通常Viewer、Workbench、offline payloadは同じ表示を使用する。床と照明は通常rendererを維持する。
+
+姿勢は公式MuJoCoの描画更新後の`geom_xpos`、`geom_xmat`、`xaxis`と適用済み`qpos`を読む。
+正のばね変位だけコイルを短縮し、固定端は`qpos_spring`を基準に復元する。前frameから積分せず、
+任意のworld配置・回転とresetに追従する。範囲外の変位を正常範囲へ丸めない。
+不正値では表示を無効化し、見た目の長さが潰れた場合はコイルを消す。接触判定や停止判定は追加しない。
+
+コイル・座金・固定端は非接触の表示部品である。水平なworld支持面がある場合だけ固定端の支持柱を描く。
+表示用の自然長は最大圧縮量の1.8倍とbox最小半寸法の1.6倍の大きい方、コイル半径は最小半寸法の0.45倍、
+線径は最小半寸法の0.1倍、巻数は7とする。これらは線形ばねを識別する外観規則であり、実物の寸法同定や
+コイルの弾性体解析ではない。MuJoCoの接触形状・質量・剛性・減衰・solver・ログは変更しない。
+
+コイルの頂点buffer、mesh、materialはmodel準備時に確保し、変位の更新で再確保しない。
+model切替とdisposeで資源を解放する。固定端を含む表示範囲を初期カメラと明示fitへ反映する。
+`springVisualAssemblies`は現modelに確保した表示機構数を示す。
+
+この形状表示は`force_cue`と`no_force_cue`の両方に共通であり、追加の力数値・矢印とは区別する。
+通常映像の変更なので、旧Viewerと新Viewerの参加者データを同一提示条件として混在させない。
+合成入力のログ再生動画は描画確認であり、実入力遅延・実操作RTF・知覚効果の検証ではない。
+
 ## MuJoCo 4.0.0の依存同期
 
 Python nativeの`mujoco`とViewerの`@mujoco/mujoco`を4.0.0に固定する。package分割後も既存の
