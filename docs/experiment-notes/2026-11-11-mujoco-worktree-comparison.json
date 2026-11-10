@@ -1,0 +1,458 @@
+{
+  "schema_version": "pinned-worktree-comparison/v1",
+  "recorded_at_utc": "2026-11-10T21:35:11.455325+00:00",
+  "baseline": {
+    "worktree_name": "mj390-d3e667b",
+    "commit": "d3e667b461ff0d795c03afb9bbe43fc7c68201da",
+    "engine_version": "3.9.0",
+    "python": "3.12.13",
+    "numpy": "2.4.6",
+    "node": "24.22.1",
+    "wasm_package": "3.9.0",
+    "wasm_runtime": "3.9.0",
+    "wasm_sha256": "9eb895c79cb4d4a6d88bf2d9a449081a5a5c132e6a705ed90252a14b7f21ade8",
+    "wasm_js_sha256": "1b74d494f7b0c8aa42629d105de4707a361c7b01065e47d3a100790d2951e008",
+    "native_extension_sha256": "561eb6d494b6723d7935d5ee73373376fe8dcf6b3d62c34cd5606c6126c05f99",
+    "diagnostic_sha256": "65e8b0ea75cade92c9b33bcdaeb2dc9cbb7d18f00eb1472854c3d1e5531ca258",
+    "lock_hashes": {
+      "pyproject.toml": "a63ea06e2d483fa75d68bb979f9247d7f4ebb892d537d6dcf1c0690631854cea",
+      "uv.lock": "440e17b22b34bea614d45c05baaf7f1268bd51880c887b8c502f3551ba1bf6a2",
+      "apps/mujoco-viewer/package.json": "c652560a83d616d995ced947b097b5375d0185641d86294c046e782c7df203ba",
+      "apps/mujoco-viewer/package-lock.json": "723015e464dfcbdd0cb84b4585d0c9e934142b6e6541a62aee8cc470f7d2a38d"
+    },
+    "models": {
+      "dynamic-cube-drop": {
+        "nv": 14,
+        "sparse": false,
+        "solver": 2,
+        "integrator": 3,
+        "timestep_s": 0.0016666666666666668,
+        "iterations": 50,
+        "tolerance": 1e-10,
+        "speculative_supported": false,
+        "speculative_enabled": false,
+        "model_sha256": "f8739e0242312160a680e78784257aaff644c6c6218b113616dfbc06dc3976da"
+      },
+      "dynamic-cube-push": {
+        "nv": 14,
+        "sparse": false,
+        "solver": 2,
+        "integrator": 3,
+        "timestep_s": 0.0016666666666666668,
+        "iterations": 50,
+        "tolerance": 1e-10,
+        "speculative_supported": false,
+        "speculative_enabled": false,
+        "model_sha256": "37de10998d14bfdaa422b54838003f596bfd9ea28d27ca9890cd740e101665e4"
+      },
+      "dynamic-fixed-contact": {
+        "nv": 8,
+        "sparse": false,
+        "solver": 2,
+        "integrator": 3,
+        "timestep_s": 0.0016666666666666668,
+        "iterations": 50,
+        "tolerance": 1e-10,
+        "speculative_supported": false,
+        "speculative_enabled": false,
+        "model_sha256": "ad1be5652f37724e203b0b616afbcc59b3305ad5031e57f84f8f8a7fe2125510"
+      },
+      "research-spring": {
+        "nv": 5,
+        "sparse": false,
+        "solver": 2,
+        "integrator": 3,
+        "timestep_s": 0.0016666666666666668,
+        "iterations": 50,
+        "tolerance": 1e-10,
+        "speculative_supported": false,
+        "speculative_enabled": false,
+        "model_sha256": "8ca9aa66ec723a6657c4e297eb76843974cb013540b393e50f7372cb267970f3"
+      }
+    },
+    "setup_steps": {
+      "python-sync": 0,
+      "python-check": 0,
+      "npm-ci": 0,
+      "viewer-tests": 0,
+      "viewer-typecheck": 0,
+      "viewer-build": 0
+    },
+    "locks_unchanged": true,
+    "backend_tests": {
+      "tests": 51,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "npm": "11.19.1",
+    "backend_junit_sha256": "6029b8c26273e97082419d2d257bba976a2f802c2b7edcc9cbfbe3626b81ea74",
+    "separate_directories": {
+      ".venv": true,
+      "apps/mujoco-viewer/node_modules": true,
+      "apps/mujoco-viewer/dist": true
+    }
+  },
+  "candidate": {
+    "worktree_name": "mj400-2a65e30",
+    "commit": "2a65e30ea0ca8557eee3241591e4ab3953f34459",
+    "engine_version": "4.0.0",
+    "python": "3.12.13",
+    "numpy": "2.4.6",
+    "node": "24.22.1",
+    "wasm_package": "4.0.0",
+    "wasm_runtime": "4.0.0",
+    "wasm_sha256": "51ae58ae3c69145f6570aeb1fae27f8f142b2d883c804c4747c1a0c3bc80b0de",
+    "wasm_js_sha256": "85fdadb2c5acee97756e2b0257085f795a2af542f0c4cb97412a6d377abe39e2",
+    "native_extension_sha256": "1b69020fd7cf2bd242d250abd1ec6f49a3dcbcf7faa469d09d84ad532a2b4ebb",
+    "diagnostic_sha256": "65e8b0ea75cade92c9b33bcdaeb2dc9cbb7d18f00eb1472854c3d1e5531ca258",
+    "lock_hashes": {
+      "pyproject.toml": "a13068504f2f0632ad419443a7ff9b305b9905cec553792d635ee0ad4cef91ac",
+      "uv.lock": "cae24b1fdec01a22e3dee5b18367ef351af915eb5e1de547ff6ee1080bc13bcd",
+      "apps/mujoco-viewer/package.json": "bece25165226cc1dac0f2e54be3e5e5d4c57ff58aaacf41e394a5f5bae1cf665",
+      "apps/mujoco-viewer/package-lock.json": "7f17c8a87b70b7a6f3ff5a1a5383aea22ef8e03f31a5ff24e068a94447ce1919"
+    },
+    "models": {
+      "dynamic-cube-drop": {
+        "nv": 14,
+        "sparse": false,
+        "solver": 2,
+        "integrator": 3,
+        "timestep_s": 0.0016666666666666668,
+        "iterations": 50,
+        "tolerance": 1e-10,
+        "speculative_supported": true,
+        "speculative_enabled": false,
+        "model_sha256": "f8739e0242312160a680e78784257aaff644c6c6218b113616dfbc06dc3976da"
+      },
+      "dynamic-cube-push": {
+        "nv": 14,
+        "sparse": false,
+        "solver": 2,
+        "integrator": 3,
+        "timestep_s": 0.0016666666666666668,
+        "iterations": 50,
+        "tolerance": 1e-10,
+        "speculative_supported": true,
+        "speculative_enabled": false,
+        "model_sha256": "37de10998d14bfdaa422b54838003f596bfd9ea28d27ca9890cd740e101665e4"
+      },
+      "dynamic-fixed-contact": {
+        "nv": 8,
+        "sparse": false,
+        "solver": 2,
+        "integrator": 3,
+        "timestep_s": 0.0016666666666666668,
+        "iterations": 50,
+        "tolerance": 1e-10,
+        "speculative_supported": true,
+        "speculative_enabled": false,
+        "model_sha256": "ad1be5652f37724e203b0b616afbcc59b3305ad5031e57f84f8f8a7fe2125510"
+      },
+      "research-spring": {
+        "nv": 5,
+        "sparse": false,
+        "solver": 2,
+        "integrator": 3,
+        "timestep_s": 0.0016666666666666668,
+        "iterations": 50,
+        "tolerance": 1e-10,
+        "speculative_supported": true,
+        "speculative_enabled": false,
+        "model_sha256": "8ca9aa66ec723a6657c4e297eb76843974cb013540b393e50f7372cb267970f3"
+      }
+    },
+    "setup_steps": {
+      "python-sync": 0,
+      "python-check": 0,
+      "npm-ci": 0,
+      "viewer-tests": 0,
+      "viewer-typecheck": 0,
+      "viewer-build": 0
+    },
+    "locks_unchanged": true,
+    "backend_tests": {
+      "tests": 68,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "npm": "11.19.1",
+    "backend_junit_sha256": "6af3982224b86cbca981c24b4b9fe752aa403e69ace5c876e017427816229186",
+    "separate_directories": {
+      ".venv": true,
+      "apps/mujoco-viewer/node_modules": true,
+      "apps/mujoco-viewer/dist": true
+    }
+  },
+  "verification": {
+    "scope": "full effective condition intentionally differs in mujoco_version; compare other fields explicitly",
+    "excluded_fields": [
+      "condition.mujoco_version"
+    ],
+    "remaining_condition_exact_match": true,
+    "raw_condition_match": false,
+    "model_match": true,
+    "scene_match": true,
+    "run_count": 6,
+    "native_and_wasm_versions": {
+      "mj390-d3e667b": {
+        "native": "3.9.0",
+        "wasm": "3.9.0"
+      },
+      "mj400-2a65e30": {
+        "native": "4.0.0",
+        "wasm": "4.0.0"
+      }
+    },
+    "worktree_clean_after": {
+      "mj390-d3e667b": true,
+      "mj400-2a65e30": true
+    },
+    "identity_gate_tests": {
+      "passed": 11,
+      "log_sha256": "672cfb45bf9ff893f8dc4882e999f4cf9a44ce868091439a7a56fe03a4423588"
+    },
+    "diagnostic_source_identical": true
+  },
+  "measurement": {
+    "recorded_at_utc": "2026-11-10T21:34:22.502392+00:00",
+    "scope": "Existing synthetic provider diagnostic, not end-to-end RTF or an engine-only attribution",
+    "ticks_per_scenario": 120,
+    "repeats": 3,
+    "runs": [
+      {
+        "label": "01-mj390-d3e667b",
+        "commit": "d3e667b461ff0d795c03afb9bbe43fc7c68201da",
+        "mujoco": "3.9.0",
+        "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+        "condition_sha256": "19eb3d99b4c9e2b0c9b95d6897de30e8f95f8c709f7bb7809c1d1ae5a7f4e0d2",
+        "scene_sha256": "4398acd5087f242811843c8c4e1c840723badf173d84900dcf01cdec1ed0c2d0",
+        "report_sha256": "c4247cc195c724b112aa9857e3eb935b341a0e6b8035ba6a75bcdea7863baefd",
+        "scenarios": {
+          "free_space": {
+            "count": 120,
+            "mean_ms": 1.3254941666666666,
+            "p50_ms": 1.1296,
+            "p95_ms": 1.2532,
+            "max_ms": 14.5284,
+            "total_ms": 159.0593
+          },
+          "one_contact": {
+            "count": 120,
+            "mean_ms": 1.4934216666666666,
+            "p50_ms": 1.4663,
+            "p95_ms": 1.7638,
+            "max_ms": 2.2942,
+            "total_ms": 179.2106
+          },
+          "two_contact": {
+            "count": 120,
+            "mean_ms": 1.7083333333333333,
+            "p50_ms": 1.65835,
+            "p95_ms": 2.0059,
+            "max_ms": 2.6956,
+            "total_ms": 205.0
+          }
+        }
+      },
+      {
+        "label": "01-mj400-2a65e30",
+        "commit": "2a65e30ea0ca8557eee3241591e4ab3953f34459",
+        "mujoco": "4.0.0",
+        "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+        "condition_sha256": "975e95846e2b79d7d9e21270934fbf5de5193aed6822c19fdec78cd73c23eb21",
+        "scene_sha256": "4398acd5087f242811843c8c4e1c840723badf173d84900dcf01cdec1ed0c2d0",
+        "report_sha256": "534c9e4963500a4edd6b03fc1f570c767ec39183d9a76add83bf952b5a06b0d6",
+        "scenarios": {
+          "free_space": {
+            "count": 120,
+            "mean_ms": 1.1485525,
+            "p50_ms": 1.0352000000000001,
+            "p95_ms": 1.127,
+            "max_ms": 11.5604,
+            "total_ms": 137.8263
+          },
+          "one_contact": {
+            "count": 120,
+            "mean_ms": 1.3228025,
+            "p50_ms": 1.2969499999999998,
+            "p95_ms": 1.4672,
+            "max_ms": 2.0217,
+            "total_ms": 158.7363
+          },
+          "two_contact": {
+            "count": 120,
+            "mean_ms": 1.5050333333333332,
+            "p50_ms": 1.4835500000000001,
+            "p95_ms": 1.6406,
+            "max_ms": 2.1169,
+            "total_ms": 180.60399999999998
+          }
+        }
+      },
+      {
+        "label": "02-mj400-2a65e30",
+        "commit": "2a65e30ea0ca8557eee3241591e4ab3953f34459",
+        "mujoco": "4.0.0",
+        "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+        "condition_sha256": "975e95846e2b79d7d9e21270934fbf5de5193aed6822c19fdec78cd73c23eb21",
+        "scene_sha256": "4398acd5087f242811843c8c4e1c840723badf173d84900dcf01cdec1ed0c2d0",
+        "report_sha256": "f51bf4861f16cb47d1702c7829ef7dd5dc7e59d90b138e1b125f5569ea364f55",
+        "scenarios": {
+          "free_space": {
+            "count": 120,
+            "mean_ms": 1.201255,
+            "p50_ms": 1.07795,
+            "p95_ms": 1.1895,
+            "max_ms": 14.3623,
+            "total_ms": 144.1506
+          },
+          "one_contact": {
+            "count": 120,
+            "mean_ms": 1.3321208333333334,
+            "p50_ms": 1.3166,
+            "p95_ms": 1.4622,
+            "max_ms": 1.582,
+            "total_ms": 159.8545
+          },
+          "two_contact": {
+            "count": 120,
+            "mean_ms": 1.4943666666666666,
+            "p50_ms": 1.4583,
+            "p95_ms": 1.6203,
+            "max_ms": 2.3575,
+            "total_ms": 179.324
+          }
+        }
+      },
+      {
+        "label": "02-mj390-d3e667b",
+        "commit": "d3e667b461ff0d795c03afb9bbe43fc7c68201da",
+        "mujoco": "3.9.0",
+        "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+        "condition_sha256": "19eb3d99b4c9e2b0c9b95d6897de30e8f95f8c709f7bb7809c1d1ae5a7f4e0d2",
+        "scene_sha256": "4398acd5087f242811843c8c4e1c840723badf173d84900dcf01cdec1ed0c2d0",
+        "report_sha256": "84954a9313c146213c00f9dceeede362557b92dd0bf8d6e4ec797deb34f178ba",
+        "scenarios": {
+          "free_space": {
+            "count": 120,
+            "mean_ms": 1.21567,
+            "p50_ms": 1.1045500000000001,
+            "p95_ms": 1.1791,
+            "max_ms": 13.5438,
+            "total_ms": 145.8804
+          },
+          "one_contact": {
+            "count": 120,
+            "mean_ms": 1.45967,
+            "p50_ms": 1.43265,
+            "p95_ms": 1.6242,
+            "max_ms": 2.1109,
+            "total_ms": 175.1604
+          },
+          "two_contact": {
+            "count": 120,
+            "mean_ms": 1.5753791666666668,
+            "p50_ms": 1.5641,
+            "p95_ms": 1.6534,
+            "max_ms": 1.8847,
+            "total_ms": 189.0455
+          }
+        }
+      },
+      {
+        "label": "03-mj390-d3e667b",
+        "commit": "d3e667b461ff0d795c03afb9bbe43fc7c68201da",
+        "mujoco": "3.9.0",
+        "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+        "condition_sha256": "19eb3d99b4c9e2b0c9b95d6897de30e8f95f8c709f7bb7809c1d1ae5a7f4e0d2",
+        "scene_sha256": "4398acd5087f242811843c8c4e1c840723badf173d84900dcf01cdec1ed0c2d0",
+        "report_sha256": "4fa312968621d42a34df8335934598a542e79215be8ee685f9c83c39d8507f8f",
+        "scenarios": {
+          "free_space": {
+            "count": 120,
+            "mean_ms": 1.2200341666666668,
+            "p50_ms": 1.10825,
+            "p95_ms": 1.2251,
+            "max_ms": 12.6833,
+            "total_ms": 146.4041
+          },
+          "one_contact": {
+            "count": 120,
+            "mean_ms": 1.3520225,
+            "p50_ms": 1.3416000000000001,
+            "p95_ms": 1.4283,
+            "max_ms": 1.5359,
+            "total_ms": 162.2427
+          },
+          "two_contact": {
+            "count": 120,
+            "mean_ms": 1.5485025000000001,
+            "p50_ms": 1.5296500000000002,
+            "p95_ms": 1.5901,
+            "max_ms": 2.4386,
+            "total_ms": 185.8203
+          }
+        }
+      },
+      {
+        "label": "03-mj400-2a65e30",
+        "commit": "2a65e30ea0ca8557eee3241591e4ab3953f34459",
+        "mujoco": "4.0.0",
+        "model_sha256": "5856d7252c923980ca6ee3f5b1132cc9e280ebce41def17f7f444f8a317d2ab2",
+        "condition_sha256": "975e95846e2b79d7d9e21270934fbf5de5193aed6822c19fdec78cd73c23eb21",
+        "scene_sha256": "4398acd5087f242811843c8c4e1c840723badf173d84900dcf01cdec1ed0c2d0",
+        "report_sha256": "7d92720f7c571538494f29a40562916a36c966b25fa48371f97204b827cd0df4",
+        "scenarios": {
+          "free_space": {
+            "count": 120,
+            "mean_ms": 1.1932125,
+            "p50_ms": 1.06215,
+            "p95_ms": 1.1985,
+            "max_ms": 14.4339,
+            "total_ms": 143.1855
+          },
+          "one_contact": {
+            "count": 120,
+            "mean_ms": 1.4478675,
+            "p50_ms": 1.44235,
+            "p95_ms": 1.5515,
+            "max_ms": 1.7325,
+            "total_ms": 173.7441
+          },
+          "two_contact": {
+            "count": 120,
+            "mean_ms": 1.5652016666666666,
+            "p50_ms": 1.5401500000000001,
+            "p95_ms": 1.7546,
+            "max_ms": 1.9725,
+            "total_ms": 187.8242
+          }
+        }
+      }
+    ],
+    "model_match": true,
+    "condition_match": false,
+    "scene_match": true,
+    "median_of_run_p50_ms": {
+      "3.9.0": {
+        "free_space": 1.10825,
+        "one_contact": 1.43265,
+        "two_contact": 1.5641
+      },
+      "4.0.0": {
+        "free_space": 1.06215,
+        "one_contact": 1.3166,
+        "two_contact": 1.4835500000000001
+      }
+    }
+  },
+  "raw_archive": {
+    "name": "sim-worktree-comparison-20261111.zip",
+    "bytes": 1028530,
+    "sha256": "8db677589ae034874c7c0b9c609452e9d2d905efac6c6ec69a09e32f2cd5a52a",
+    "note": "Local raw evidence archive; public compact receipt stored separately to avoid a hash cycle"
+  },
+  "sealed_at_utc": "2026-11-10T21:37:06.070282+00:00"
+}

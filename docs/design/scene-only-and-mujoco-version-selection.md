@@ -17,6 +17,13 @@ related:
 
 ## 状態と目的
 
+2026-11-11の追加方針により、3.9.0/4.0.0を同じsource内で切り替える案は撤回する。
+PR #644でmainは既に4.0.0へ移行済み。3.9.0は移行前 `d3e667b461ff0d795c03afb9bbe43fc7c68201da`、
+4.0.0は選定時の更新後main `2a65e30ea0ca8557eee3241591e4ab3953f34459` の独立worktreeで比較する。
+各worktreeのPython環境・WASM依存・lock・buildを分離し、測定ごとに実版とcommitを記録する。
+準備・6回の測定は[固定worktreeの検証記録](../experiment-notes/2026-11-11-mujoco-worktree-comparison.md)を参照する。
+Robotなし・柔軟体等の汎用機能は4.0.0のmainから開発し、比較のためだけに旧版へbackportしない。
+
 2026-11-11の本人の方針修正を受けた設計案。現行仕様・実装済み機能・merge承認ではない。
 PR #643の `mujoco4_article` 専用実行・専用収録経路は予備検証として扱い、そのまま恒久機能として採用しない。
 取得済みの素材・数値・固定upstream原本は保全する。次の実装は研究用Simの通常機能へ統合し、記事はその利用者とする。
@@ -24,7 +31,7 @@ PR #643の `mujoco4_article` 専用実行・専用収録経路は予備検証と
 
 ## 確認した現状
 
-調査基点はmain `d3e667b461ff0d795c03afb9bbe43fc7c68201da`。並行PR #640〜#642の未マージ差分を現行仕様と混同しない。
+下表の初回構造調査は移行前 `d3e667b461ff0d795c03afb9bbe43fc7c68201da` に基づく。現在の開発基点は移行後mainである。並行PR #640〜#642の未マージ差分を現行仕様と混同しない。
 
 | 現行の所有者 | 確認した制約・再利用点 |
 |---|---|
@@ -97,22 +104,29 @@ solver/integrator/flagの選択は、エンジン版の実測済み能力と選�
 全柔軟体を4.0専用とはしない。弾性体、弾塑性、投機的接触など、機能ごとに必要条件を管理する。
 未対応flagを無視、solverを暗黙変更、flexを剛体に代替することは禁止する。
 
-## 4. 3.9.0 / 4.0.0は起動前に固定環境を選ぶ
+## 4. 版比較はsourceと依存を含む独立worktreeで行う
 
-同じsourceと共通の依存定義から、MuJoCo版ごとの固定依存環境を準備する。
-既存launcherが、選択環境のPythonで同じWorkbenchとworkerを起動する。別launcherや記事専用runnerは増やさない。
-選択はMuJoCoをimportしてmodelを構築する前に確定する。通常起動中にpipで版を入れ替えない。
-初回setupは明示操作、通常起動は用意済み環境を検証して使用する。未準備なら準備方法を示して拒否し、別版へfallbackしない。
+3.9.0用のsourceは移行前 `d3e667b461ff0d795c03afb9bbe43fc7c68201da` に固定する。
+4.0.0用のsourceは更新後mainからfull SHAを選んで固定する。今回の選定値は
+`2a65e30ea0ca8557eee3241591e4ab3953f34459` で、mainの進行に自動追従させない。
+同じsourceに二版を維持する互換層、pip上書き、試行中のengine切替は追加しない。
 
-Profile/CLIで要求した版と、実workerが報告する版・lock・Sim revisionを照合する。
-CLI overrideを提供する場合はProfileの無言の書換えではなく、新しい実効条件として表示・保存・再検証する。
-旧Profileの保存bytes/digestは書き換えず、旧来歴と新しい実効条件のdigestを区別する。
-バージョンはlatestでなく3.9.0/4.0.0等のexact pin。初期対応は起動session中固定とし、変更は終了・再起動して新session/epochで行う。
+それぞれのworktreeに独立した `.venv`、`apps/mujoco-viewer/node_modules`、build出力を持たせる。
+Pythonの `uv.lock` とWASMの `package-lock.json` は各commitのものを使用する。
+`uv sync --locked` / `npm ci` で導入し、前後のhashとGit差分でlockが不変であることを確認する。
+Gitオブジェクトの共有と実行依存の共有は区別する。別worktreeのvenv、editable source、WASMを流用しない。
 
-Pythonだけでなく、ViewerのWASM・model宣言・描画変換の整合も扱う。
-初期方針は検証した同一版のnative/WASM組を選ぶこと。異版組合せを使う場合は別の互換性検証が必要。
-同じViewer shellと描画adapterを使い、固定の資源選択表から対応WASMを選ぶ。4.0専用UIは作らない。
-通常Viewerで使えるWASM版・APIの実在性と、flexの表示を受入時に確認する。native成功だけでブラウザ成功としない。
+起動・計測時は選択したworktreeの実行fileと作業場所を明示する。nativeの実API版、WASM実API版、
+Python/Node/NumPy、source commit、clean/dirty状態、lock、model/condition、診断sourceを記録する。
+実行前後で不一致を検出したrunは正式測定に採用しない。別版へfallbackしない。
+
+旧版worktreeは回帰比較用であり、柔軟体・Robotなし等の新機能の開発先ではない。
+それらは4.0.0の更新後mainから別の開発branch/worktreeで作り、比較専用worktreeを直接編集しない。
+新しいmainと比較する場合も、新しい固定commit・worktree・測定記録を用意する。
+
+比較には移行のAPI適応や互換性guard等のsource差分も含まれる。モデルと数値条件を照合したうえで、
+「移行前後の構成比較」と記述し、MuJoCoライブラリだけの因果効果とは断定しない。
+4.0.0内部の投機的接触OFF/ONは別の機能比較として扱う。
 
 ## 5. 記録・再生・出力を共通化する
 
@@ -142,9 +156,9 @@ MuJoCo4.0では `mjSTATE_PLASTIC` があり、qpos/qvelだけで塑性を含む�
 
 ## 実装順序と受入条件
 
-1. **版と構成の共通契約**：現行3.9条件の回帰を基準化し、optional Robot/Control/Task、PhysicsとRobot制御の分離、engine identityを設計・実装する。未知条件を拒否し旧保存データを改変しない。
-2. **Scene単独のsphere実験**：まず既存3.9でも扱える小さい物理実験を通常TrialRunnerで成立させ、start/stop/reset/記録/通常Viewerを端まで検証する。Robot不在を一時的な例外経路で済ませない。
-3. **固定4.0環境と表示・保存**：同じprofile解決・実行ownerに4.0を加え、native/WASM照合、版別能力、途中変更拒否、epoch/資源の廃棄を確認する。
+1. **構成の共通契約**：固定した3.9.0/4.0.0の移行前後比較を保存し、更新後mainでoptional Robot/Control/Task、PhysicsとRobot制御の分離、engine identityを設計・実装する。未知条件を拒否し旧保存データを改変しない。
+2. **Scene単独のsphere実験**：更新後mainの4.0.0で小さい物理実験を通常TrialRunnerで成立させ、start/stop/reset/記録/通常Viewerを端まで検証する。Robot不在を一時的な例外経路で済ませない。
+3. **表示・保存**：移行済み4.0.0の通常経路でnative/WASM照合、modelの必要能力、epoch/資源の廃棄を確認する。3.9.0切替の製品UIや互換層は作らない。
 4. **柔軟体と接触機能**：登録resourceから弾性/弾塑性を構成し、reset・checkpoint・通常Viewer・記録で同じ状態を確認する。既存Robotを同じSceneに追加できることも試験する。
 5. **共通exportと記事**：任意の検証済みtrialから同じexportを使う。旧専用loop/CI/モデル固定分岐をPR差分から除き、通常機能で再生成した素材を記事に採用する。
 
