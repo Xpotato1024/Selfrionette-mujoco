@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-10-26
+last_verified: 2026-11-10
 canonical_for:
   - finite model trial condition lifecycle and local result
 related:
@@ -29,14 +29,56 @@ experimentは既存start保存後に `samples.jsonl.pending` を新規作成す�
 表示OFFでもこのraw値を保存する。欠測はnull/失敗のままにし、無接触を測定力0やTask成功へ補完しない。
 上限・書込・read-back失敗はrecording_failedとなり、成功markerを作らない。
 
+tick行のoptional `signals` objectには、同じcommitで利用可能な`scene_force_signal_v1`、
+`force_presentation_v1`、`command_mapping_v1`、`coordinated_runtime_v1`を保存する。
+未取得fieldを捏造せず、`signals`のない過去記録も受理する。接触原力は`dynamics`、派生signalと
+表示縮尺・抑制は`signals`へ分離する。表示OFFでも原力の取得・保存を止めない。
+これは保存時のprojectionであり、ブラウザの描画完了や参加者が見たことを証明する記録ではない。
+
 終端前にflush/fsync・SHA-256 read-backを確認し、`samples.jsonl` を排他的公開する。
 既存terminal markerに `continuous_ref` を追加する。中断・切断・再試行も同じ有限trial境界で記録する。
 途中のpendingやterminalのないdirectoryを完了データとして読まない。常時同期のdisk書込は周期性能へ影響し得る。
 これは最小ローカル連続記録であり、OS crash耐久性・改竄防止・完全な再生基盤を保証しない。
 
-`comparison_metrics(directory)` は完了marker・identity・hash・連続tickを照合し、tick数、
+`trial_analysis.load_validated_trial(directory)`はterminalからstart、condition、初期・最終state、
+連続ログまでの固定参照、SHA-256、byte数、trial/epoch/条件/revision、時計・tick・物理観測identityを照合する。
+通常artifactは4 MiB、連続ログは64 MiB、1行は4 MiB以内のregular fileを要求し、
+参照fileのsymlinkや任意pathを受け入れない。検証後の不変bytesだけを列挙・解析し、diskを再読込みしない。
+保存済みの失敗・中断も整合していれば受理し、欠測・記録不正を成功や0へ補完しない。
+SHA-256は参照整合性の検査であり、電子署名、改竄不能性、取得元の真正性の証明ではない。
+
+`comparison_metrics(directory)` はこの検証を再利用し、tick数、
 最大ばね変位、最大接触原力ノルム、欠測件数、Task結果と停止理由を保存値から再計算する。
+接触原力peakは保存された全接触点のノルムであり、対象物への押圧法線力ではない。
+追加の対象手先・物体別集計、ばね別集計、保存site間の経路長は`trial-analysis/v1`へ返す。
+観測位相は各control commitの最後のsubstepであり、未保存substepのpeakは復元しない。
 研究の成功閾値や知覚成績を決める指標ではない。
+
+## 自己pilotの予定と保存trialの対応
+
+`pilot_session.py`は明示したG/S条件を照合し、共通速度係数と表示ON/OFFによる4条件を
+`pilot-session/v1`として新規directoryへ保存する。`session.json`を最後の準備完了markerとし、
+条件fileのhashと意味条件、匿名participant/session ID、実行revision、順序を保持する。
+Input固有の校正・軸重みは推測しない。`software_validation`と`operator_pilot`を分離し、
+実機検証済み・protocol凍結済みへreadinessを昇格させない。追加力覚提示デバイスは`frozen`とする。
+
+`attach_trial`は完了trialの意味条件とrevisionをslotへ照合し、`pilot-trial-link/v1`を別fileへ追記する。
+operator用はproduction Viewerとlive入力来歴も要求するが、Task成立や実機校正の認定ではない。
+同一trialの重複登録を拒否し、再試行は前attemptと理由を必要とする。同じsessionへの書込みは
+単一writerで順次行い、複数processの同時attachは対応しない。任意回答JSONは8 KiB以内で保持し、採点しない。
+既存linkの読込みでは固定file名、attemptの連番・理由、regular file・件数上限を検査し、
+exportでも予定slotの意味条件・revision・production/live来歴を共通validatorで再照合する。
+
+`pilot_export.py`は直属trialを全件検査し、整合した失敗・中断と不完全・不正記録を区別して
+`pilot-analysis/v1`、一覧CSV、ばね時系列CSV/図へ出す。出力先は新規directoryのみで、
+`analysis.json`はpendingのflush/fsync・read-back後の排他的公開を最後の完了markerとする。
+session指定時はlink先の欠落、未attachの整合trial、一度もattachされていないslotを別々に列挙する。
+`software_validation`の参加者数は0とし、fixture ID数は`software_fixture_id_count`へ分ける。
+hash、marker、対応完了やID数を実験成功・参加者実在の外部認証へ読み替えない。
+任意の目標誤差は明示したobject/目標/区間のばね復元荷重`kq`に限定し、接触力・指先入力力と区別する。
+Task時間満了を押圧成功にせず、不完全試行や短い解析区間を黙って除かない。
+CLI引数は[統一CLI](../operations/unified-cli.md)、prepare→Workbench→attach→analyzeの手順は
+[自己pilot運用](../operations/experiment-pilot.md)を正本とする。
 
 ## 所有と対応範囲
 
@@ -56,7 +98,8 @@ providerが公開する関節・actuator・controller数値条件をcanonical JS
 変更済みfieldを古い`document_json`や`effective_parameters_json`で置き換えない。矛盾するroute/providerは拒否する。
 不変のJSON bytesを保存し、閲覧用objectはcopyとする。host/port/workspace/result root、旧profile epoch、trial ID、
 profile名・保存pathは意味digestへ含めない。元profileのcanonical bytesとSHA-256は別のprovenanceとして保持する。
-Evaluation、participant、seedによる乱数試験は本経路で選択せず、未評価を明示する。
+Evaluation、seedによる乱数試験は本経路で選択せず、未評価を明示する。
+participant/sessionの対応は上記の別session記録が所有し、実効物理条件へ混入させない。
 dynamic sceneの追加接触力表示は、以下の限定したversion付き比較条件を選択できる。
 sceneがある場合の`force_signal`は、明示した手先・Task対象物集合、world/N/作用方向、
 filter設定、観測位相を固定する。signalはcontrol commitの最後のsubstep後に取得し、
@@ -133,7 +176,8 @@ active中のprepare/編集は既存のrunner/Workbench gateで拒否する。切
 元launch JSONのbyteを変更せず、追加の実効field`LaunchProfile.display_comparison_json`から検証済み条件を取り出す。
 backendは`force-presentation-binding/v1`をmodel/scene/settings/epochへ束縛して各payloadへ投影する。
 raw dynamics取得、派生signal、物理step、Task、有限結果の保存は表示modeへ依存しない。
-連続raw/derived/presentation evidenceの永続保存や正式Evaluationは既存の後続課題として残る。
+連続raw値と同じcommitの派生signal・presentationは上記のJSONLへ保存する。
+表示device上の描画完了の連続証拠や正式Evaluationの受入は、この保存だけでは充足しない。
 
 ## 独立したcommand Mapping
 
@@ -147,7 +191,7 @@ raw dynamics取得、派生signal、物理step、Task、有限結果の保存は
 `command_mapping_v1`は最新commandのinput ref、前commitの原力ref、処理前後velocityを分離する。
 Deviceのinput refでは鮮度用`received_at_s`とproducer順序用`ordering_receipt_s`を別fieldに保存し、
 順序時計を持たない従来入力は後者を省略する。条件切替後もDeviceの個体・profile・role bindingを保持する。
-既存の終端記録やraw dynamicsを正式な連続evidenceに読み替えず、#583/#584の責務を維持する。
+同じcommitのcommand traceはoptional signalsへ保存するが、それだけで#583/#584の正式Task・Evaluationの受入を充足したとしない。
 
 ## ローカル結果
 

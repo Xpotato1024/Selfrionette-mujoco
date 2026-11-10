@@ -1,5 +1,6 @@
 """接触達成を成功条件にせず、有限期間の幾何観測だけを行うTask。"""
 from dataclasses import dataclass
+from math import isclose
 from numbers import Real
 from xpotato_sim.runtime.scene.task import GeometryTaskContext, GeometryTaskObservation
 from xpotato_sim.runtime.scene.objects import identifier, number
@@ -46,7 +47,11 @@ class ObservationBinding:
             cls,phase,reason=TaskTerminalClassification.TECHNICAL_INVALID,"invalid","geometry identity/time mismatch"
         elif observation.stopped_reason is not None:
             cls,phase,reason=TaskTerminalClassification.FAILURE,"aborted",observation.stopped_reason
-        elif g.simulation_time_s >= self.duration_s:
+        elif g.simulation_time_s >= self.duration_s or isclose(
+            g.simulation_time_s, self.duration_s,
+            rel_tol=0., abs_tol=min(1e-9, self.duration_s * 1e-9),
+        ):
+            # native substep時刻の累積丸めだけを吸収し、生時刻と先行停止判定は維持する。
             cls,phase,reason=TaskTerminalClassification.SUCCESS,"completed","observation window completed; not contact success"
         elif observation.budget_exhausted:
             cls,phase,reason=TaskTerminalClassification.FAILURE,"aborted","execution_budget_exhausted"

@@ -96,6 +96,7 @@ force_status=`not_evaluated_kinematic`、force_n=nullで固定し、zero-force/�
 
 `contact_observation_task/v1`はtarget_object_idsとduration_sを明示し、scene全体の接触を構成し直さず対象のみを選ぶ。
 無接触でも期間終了ならcompleted。success classificationは「診断期間を終えた」の意味で、接触達成ではない。
+期間到達の比較だけに`min(1 ns, duration_s × 10⁻⁹)`の絶対許容差を使ってnative時刻の累積丸めを吸収し、保存する生時刻・時刻後退検査・先行する明示停止の優先は変えない。
 入力停止/切断、先に尽きた実行step budgetはaborted。異なるscene/instance/epoch、旧frame、時刻後退はinvalid。
 terminal後は再advanceせず、common runtimeも停止。新session/epochと中立確認なしに自動再開しない。
 

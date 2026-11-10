@@ -7,6 +7,7 @@
 
 `GeometryTaskContext`の解決済みscene、手先ID、epochと、`target_object_ids`、`duration_s`をfreezeする。
 Taskは同じscene/frame/timeの`GeometryTaskObservation`を受け、観測した対象pairを保持する。
+期間到達の比較だけに`min(1 ns, duration_s × 10⁻⁹)`の絶対許容差を使ってnative時刻の累積丸めを吸収し、保存する生時刻・時刻後退検査・先行する明示停止の優先は変えない。
 近接（signed distance > 0）や対象外物体の接触は対象pairへ追加しない。
 
 - RUNNING / observing: 正常な観測期間。

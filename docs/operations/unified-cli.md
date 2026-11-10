@@ -1,13 +1,14 @@
 ---
 status: canonical
 owner: operations
-last_verified: 2026-10-07
+last_verified: 2026-11-10
 canonical_for:
   - installable unified CLI
 related:
   - docs/architecture/runtime-composition.md
   - docs/operations/runtime-dry-run.md
   - docs/operations/websocket-publisher-runner.md
+  - docs/operations/experiment-pilot.md
 ---
 
 # 統一 CLI
@@ -33,10 +34,13 @@ sourceだけの変更はbuild、依存定義・lock変更や準備不一致はse
 開発用Vite serverは`--dev-server`を明示し、buildとの自動fallbackはない。`--run-once --profile <登録ID> --fixture <path>`は
 同じservice/TrialRunnerの有限headless実行である。詳細なPowerShell起動例、期限、復旧、権限は
 [Workbench契約](../contracts/workbench.md)を参照する。旧commandの引数・動作は維持する。
+Gamepadと品質付きSelfrionette入力を扱う。実Selfrionetteには既存の`--device-config`を明示し、
+画面で接続・tare・neutral・profile適用を確認する。起動だけではこれらを実行しない。
+`--device-config`は`--fixture` / `--run-once`と排他である。
 
 ## 有限試行
 
-`trial`は名前付きモデルv2〜v4と明示Gamepad fixtureを共通TrialRunnerへ渡し、ローカル結果を保存する。
+`trial`は名前付きモデルv2〜v4と明示した有限入力fixtureを共通TrialRunnerへ渡し、ローカル結果を保存する。
 GUI/control serverは`workbench`、構造化editorはWorkbenchへ接続済み。正式な全metric artifactは#584の範囲である。
 
 ```powershell
@@ -45,6 +49,45 @@ uv run xpotato-sim trial --profile tasks/dynamic-cube-drop --fixture tests/fixtu
 
 保存先・fixture・tick予算・software revisionは必須。既存の`profile`、`app`、`viewer`、`replay`の意味は変えない。
 待機期限、終了理由、保存file、非対応経路は[有限試行契約](../contracts/finite-trial-runtime.md)を参照する。
+
+## 自己pilotの条件準備・対応付け・再解析
+
+`experiment`は3つの処理を持つ。入力装置へ接続せず、WorkbenchのStartや回答取得を自動実行しない。
+実行順序は`prepare` → Workbenchで各条件を実行・保存 → `attach` → `analyze`。
+実物条件の準備、PowerShell例、4条件の順序、再試行、研究上の未確定事項は
+[自己pilot運用](experiment-pilot.md)を正本とする。
+
+| command | flag | 必須・既定・単位 | 契約 |
+| --- | --- | --- | --- |
+| `experiment prepare` | `--gamepad-condition`, `--selfrionette-condition` | 必須 | 共通モデル・scene・Task等を持つexport済み条件JSON |
+| `experiment prepare` | `--output` | 必須 | 存在しないdirectory。4条件JSONと最後に`session.json`を保存 |
+| `experiment prepare` | `--participant-id`, `--session-id` | 必須 | 英数字で開始する英数字・`_`・`-`の1〜64文字。氏名を含めない |
+| `experiment prepare` | `--repetitions`, `--order-row` | 必須・1〜100 / 0〜3 | 4条件の反復数と釣合い順序の開始行。反復ごとに次行へ進む |
+| `experiment prepare` | `--speed-m-s` | 必須・正の有限m/s | G/S共通の単軸速度係数。Sはworld座標・軸重み制約を満たすこと |
+| `experiment prepare` | `--software-revision`, `--protocol-note` | 必須・空でない文字列 | 実行revisionと課題・目標・待機・練習・休止規則等の所在。メモの本文読込み・hash固定はしない |
+| `experiment prepare` | `--software-fixture` | 任意・off | 合成入力の確認専用session。同梱Selfrionette fixtureでは必須 |
+| `experiment attach` | `--session`, `--slot`, `--trial-directory` | 必須 | 既存session、予定slot、保存完了trial。意味条件・revision等を照合 |
+| `experiment attach` | `--attempt`, `--retry-reason` | 任意・1 / なし | 再試行は連番で、前attemptの登録と空でない理由が必要 |
+| `experiment attach` | `--response` | 任意・なし | 8 KiB以内のJSON object。回答を保持し、自動採点しない |
+| `experiment analyze` | `--result-root`, `--output` | 必須 | 既存単一trialまたは直属trialの集合、新規出力directory |
+| `experiment analyze` | `--session` | 任意・なし | 条件・匿名ID・slot・回答を対応付け、未対応も報告 |
+| `experiment analyze` | `--spring-object`, `--target-force-n`, `--window-start-s`, `--window-end-s` | 任意・4項目を全指定または全省略 | `kq`の誤差。目標は非負N、simulation区間は`0 ≤ start < end`で開始を含み終了を含まない |
+| `experiment analyze` | `--no-plots` | 任意・off | 時系列PNGだけを省略。JSON/CSVは出力 |
+
+prepareは入力固有の校正値・軸重みを変更せず、指定速度と画面力表示ON/OFFから4条件を作る。
+追加の力覚提示デバイス開発は凍結中であり、準備結果の実機・研究protocol readinessはfalseを維持する。
+operator用attachはproduction Viewerとlive入力来歴も要求するが、実機校正や正式Taskを認定しない。
+同じsessionへのattachは単一writerで順に実行する。
+
+analyzeは最大1,000の直属trialを検査し、失敗・中断・不完全な記録も一覧へ残す。
+`analysis.json`が解析完了markerであり、保存参照・hashの整合性は電子署名や課題成功の証明ではない。
+session指定時は`missing_linked_trial_ids`、`unlinked_trial_ids`、`unattempted_slots`を報告し、
+不完全・不正記録または`session_linkage_complete=false`なら終了status `1`。
+sessionなしでは対応完了判定はnullで、整合したTask失敗・中断だけならstatus `0`となる。
+software sessionの`participant_count`は0で、ID数は`software_fixture_id_count`へ分離する。
+引数構文エラーはstatus `2`、helpは`0`とする。
+
+## ReplayとViewerの入口
 
 installable entry point は `xpotato-sim` である。robot は暗黙選択せず、既存の Robot
 Catalog と Robot Bundle から `--robot` で解決する。runtime command の実行前に、必要な
@@ -79,7 +122,7 @@ CLI behaviorを維持する。
 
 | 候補 | 理由 |
 | --- | --- |
-| live Selfrionette runtime | hardware / serial operator gate を含み、generic CLI の対象外 |
+| `replay` / `viewer`へのlive Selfrionette追加 | hardware / serial operator gateを持つ入口はWorkbench。standalone publisherのinput-sourceへは追加していない |
 | robot diagnostics | 現在は `fast_arm` 固有で、Robot Bundle に対応する typed capability がない |
 | evaluation | R7-Gの専用plugin-aware runnerは実装済みだが、generic CLIのsubcommandには統合していない。`docs/operations/r7-g-deterministic-e2e.md`を参照 |
 | fixture export | repository developer tool であり、production CLI の責務ではない |

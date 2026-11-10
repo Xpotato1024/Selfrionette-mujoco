@@ -89,6 +89,8 @@ def _add_robot_argument(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="xpotato-sim")
     commands = parser.add_subparsers(dest="command", required=True)
+    from xpotato_sim.cli.experiment import add_experiment_parser
+    add_experiment_parser(commands)
 
     replay = commands.add_parser("replay", help="run the deterministic MuJoCo replay")
     _add_robot_argument(replay)
@@ -174,6 +176,9 @@ def _resolve_runtime_capabilities(robot_id: str) -> None:
 
 
 def _run(args: argparse.Namespace) -> int:
+    if args.command == "experiment":
+        from xpotato_sim.cli.experiment import run_experiment
+        return run_experiment(args)
     if args.command == "workbench":
         from xpotato_sim.runtime.runners.workbench import run_workbench
         return run_workbench(args)
