@@ -1,0 +1,55 @@
+{
+  "source_commit": "d3e667b461ff0d795c03afb9bbe43fc7c68201da",
+  "archive": "mujoco_collision_audit_2026-11-11.zip",
+  "archive_sha256": "f9ac71ebb4852b5f79cad691f22b5c5b9bdf15b56d513cf987f3cfef0d3b172b",
+  "manifest_files_verified": 26,
+  "raw_batches_per_scenario": 600,
+  "note": "元archiveの26 file hash/sizeと、比較6試行のraw batch中央値を2026-11-11に検証。native-only合成試験であり製品RTFではない。",
+  "free_model_sha256": "ca038f3a5d9e62413c174d422aa651c86c832115800b7b08711d7e132355ef2e",
+  "contact_model_sha256": "3fff79a4e8c3e8488320e3fa993a9315e154619e818a36b4f93b995a99d71195",
+  "invariants_sha256": "d8b3d35f8b05aebdc11838ecf213b908eb7b20e1dada32ba363ae9d0a4e2c890",
+  "runs": [
+    {
+      "file": "39-proxy-off-1.json",
+      "sha256": "9eb865164ec6baeb0f01285681bf0dca30d59a41219520bcf318015e7b559cca",
+      "version": "3.9.0",
+      "free_p50_ms": 0.050505,
+      "contact_p50_ms": 0.072459
+    },
+    {
+      "file": "39-proxy-off-2.json",
+      "sha256": "39dfbd94f7ef945de45bd2cf862884c203aefe91b2a155dc1e922108f1f09560",
+      "version": "3.9.0",
+      "free_p50_ms": 0.051006,
+      "contact_p50_ms": 0.0722085
+    },
+    {
+      "file": "39-proxy-off-3.json",
+      "sha256": "07209545f290cc45447ac6977e5b62d8457afd475f5d420b6aded83da47001dd",
+      "version": "3.9.0",
+      "free_p50_ms": 0.051226,
+      "contact_p50_ms": 0.071677
+    },
+    {
+      "file": "40-proxy-off-1.json",
+      "sha256": "983a1352f68934c8729331f58156609dd876e3782e1bfd4039e500a7673cb29d",
+      "version": "4.0.0",
+      "free_p50_ms": 0.038739,
+      "contact_p50_ms": 0.058692999999999995
+    },
+    {
+      "file": "40-proxy-off-2.json",
+      "sha256": "1ddad04e89938121553764f1b36876c88e1e9dc0f0ca22c318a53405d4b2159a",
+      "version": "4.0.0",
+      "free_p50_ms": 0.038728,
+      "contact_p50_ms": 0.0580475
+    },
+    {
+      "file": "40-proxy-off-3.json",
+      "sha256": "e74c6f1f93e38a703744d63436a60e0b77fabfe515ac2e18d92fe7c2e9f65884",
+      "version": "4.0.0",
+      "free_p50_ms": 0.039259,
+      "contact_p50_ms": 0.0578115
+    }
+  ]
+}

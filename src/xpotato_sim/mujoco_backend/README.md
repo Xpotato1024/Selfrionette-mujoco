@@ -37,3 +37,9 @@ Three.js描画禁止、runtime依存禁止。
 - [dependency boundary](../../../docs/architecture/dependency-boundaries.md)
 - [MuJoCoState](../../../docs/contracts/mujoco-state.md)
 - [Robot Plugin axis](../plugins/robots/README.md)
+
+## エンジン互換性
+
+現行依存はMuJoCo 4.0.0。`compatibility.py`は既知の疎行列Newton不具合を実効native設定で検出し、
+初期化・resetのforward前に拒否する。モデル条件を自動変更せず、将来版への互換保証もしない。
+loaderとRobot providerが同じ判定を利用し、物理stepの別実装やsolver fallbackは追加しない。
