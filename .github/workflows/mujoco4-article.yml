@@ -1,0 +1,38 @@
+name: MuJoCo 4 article media
+on:
+  pull_request:
+    paths:
+      - 'scripts/diagnostics/mujoco4_article/**'
+      - '.github/workflows/mujoco4-article.yml'
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      MUJOCO_GL: egl
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated rendering dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg libegl1 libgl1-mesa-dri fonts-dejavu-core
+          python -m pip install -r scripts/diagnostics/mujoco4_article/requirements.txt
+      - name: Check reproducible comparisons
+        run: python -m pytest scripts/diagnostics/mujoco4_article/test_capture.py -q
+      - name: Render real simulations and encode identical frames
+        run: |
+          python scripts/diagnostics/mujoco4_article/capture.py --output /tmp/mujoco4-media
+          python scripts/diagnostics/mujoco4_article/contact.py --output /tmp/mujoco4-media/contact
+          cp -R scripts/diagnostics/mujoco4_article /tmp/mujoco4-media/reproduce
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mujoco4-article-media
+          path: /tmp/mujoco4-media
+          if-no-files-found: error
+          retention-days: 14

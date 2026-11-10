@@ -1,0 +1,3 @@
+models/*.xml text eol=lf
+models/LICENSE text eol=lf
+models/provenance.json text eol=lf

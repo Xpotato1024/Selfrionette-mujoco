@@ -29,3 +29,5 @@ diagnosticsやdry-runをhardware validationと呼ばない。
 - [hardware safety](../docs/operations/hardware-safety.md)
 
 信号からcontactまでのhardware-free実行は[pre-hardware contract](../docs/contracts/pre-hardware-signal-emulation.md)のCLI手順を参照する。
+
+記事用の隔離MuJoCo4素材生成は[専用診断](diagnostics/mujoco4_article/README.md)を参照する。通常runtimeの更新や公開処理とは分離する。
