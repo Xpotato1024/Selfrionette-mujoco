@@ -74,6 +74,7 @@ EXPECTED_MODULES = {
     "experiment": {
         "continuous_record",
         "trial_analysis",
+        "video_bundle",
         "pilot_session",
         "pilot_export",
         "session_input",

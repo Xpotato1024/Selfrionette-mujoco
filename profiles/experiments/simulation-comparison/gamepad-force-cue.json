@@ -148,17 +148,17 @@
           {
             "appearance": {
               "rgba": [
-                0.75,
-                0.25,
-                0.1,
-                0.85
+                0.72,
+                0.78,
+                0.85,
+                1.0
               ]
             },
-            "definition_id": "test_cube_100mm",
+            "definition_id": "spring_plate_100x10x100mm",
             "geometry": {
               "half_extents_m": [
                 0.05,
-                0.05,
+                0.005,
                 0.05
               ],
               "type": "box"
@@ -167,7 +167,7 @@
               "mass_kg": 0.1,
               "mode": "uniform_box"
             },
-            "provenance": "simulation diagnostic assumption; not measured material properties",
+            "provenance": "simulation assumption: 100 x 10 x 100 mm moving spring plate; 0.1 kg retained; not measured hardware",
             "surface": {
               "rolling_friction_m": 0.0,
               "sliding_friction": 0.8,
@@ -179,10 +179,10 @@
         "objects": [
           {
             "definition": {
-              "name": "test_cube_100mm",
+              "name": "spring_plate_100x10x100mm",
               "version": 1
             },
-            "instance_id": "cube",
+            "instance_id": "plate",
             "motion_type": "spring",
             "pose": {
               "frame": "mujoco_world",
@@ -194,7 +194,7 @@
               ],
               "position_m": [
                 0.24,
-                -0.36,
+                -0.315,
                 0.28
               ]
             },
@@ -215,7 +215,7 @@
             }
           }
         ],
-        "scene_id": "compression_spring",
+        "scene_id": "compression_spring_plate",
         "schema_version": "object-scene/v2",
         "world": {
           "frame": "mujoco_world",
@@ -268,13 +268,13 @@
     "wall_s": 360.0
   },
   "model_configuration_sha256": "40846a802b33f774e4d008a0607fd2838c2dfac640f424e3a37fde38e8d68f0e",
-  "preset_id": "tasks/research-spring",
+  "preset_id": "tasks/research-spring-plate",
   "schema_version": "workbench-condition/v1",
   "task": {
     "parameters": {
       "duration_s": 60.0,
       "target_object_ids": [
-        "cube"
+        "plate"
       ]
     },
     "plugin": {

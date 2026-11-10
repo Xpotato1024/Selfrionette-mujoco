@@ -24,7 +24,10 @@ CONDITIONS = ROOT / "profiles" / "experiments" / "simulation-comparison"
 ])
 def test_migrated_tracked_condition(name, provider, mode):
     profile, _, document = resolve_condition((CONDITIONS / f"{name}.json").read_bytes())
-    assert document["preset_id"] == "tasks/research-spring"
+    # 比較用に追跡する新4条件は押し板のmodel identityを固定する。
+    # 旧`tasks/research-spring`の互換変換は以下の独立テストで保持する。
+    assert document["preset_id"] == "tasks/research-spring-plate"
+    assert profile.scene_plan.manifest.objects[0].instance_id == "plate"
     assert profile.provider_id == provider
     assert document["display_comparison"]["mode"] == mode
 

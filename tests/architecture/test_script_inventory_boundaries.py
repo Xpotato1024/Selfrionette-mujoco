@@ -33,6 +33,8 @@ EXPECTED_SCRIPTS = {
     "scripts/diagnostics/fast_arm/run_fast_arm_neutral_pose_startup_smoke.py",
     "scripts/diagnostics/fast_arm/view_fast_arm_native_mujoco.py",
     "scripts/viewer/export_wasm_qpos_fixture.py",
+    "scripts/viewer/export_trial_video.py",
+    "scripts/viewer/video_server.mjs",
     "scripts/viewer/run_live_viewer_smoke.py",
     "scripts/viewer/generate_contact_e2e_artifacts.py",
     "scripts/viewer/generate_contact_task_log_demo.py",

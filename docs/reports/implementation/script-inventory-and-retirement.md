@@ -117,3 +117,13 @@ option/default/validationを再定義せず、実機操作のmonitor/measure/liv
 ## 2026-10-28: 保存済み Workbench 条件の明示的変換
 
 `convert_workbench_condition.py`（`scripts/repository/convert_workbench_condition.py`）を追加した。旧 profile ID を分類別 ID へ一度だけ変換し、新しい出力先へ保存する。通常の条件読込には旧 ID の暗黙互換を追加しない。
+
+
+## 2026-11-10: 保存trialのraw動画出力
+
+| Script | 責務 |
+|---|---|
+| `export_trial_video.py` | 検証済みtrialの描画・符号化・出力検証。物理試行は再実行しない |
+| `video_server.mjs` | 既存Viewer資源と記録姿勢の専用loopback配信。終了時に回収する |
+
+いずれも`scripts/viewer/`へ置き、動画・試行ログの生成物はrepository外に保存する。
