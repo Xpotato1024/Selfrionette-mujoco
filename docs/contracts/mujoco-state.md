@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-07-16
+last_verified: 2026-11-11
 canonical_for:
   - MuJoCoState contract
 related:
@@ -49,3 +49,16 @@ controller state、transport state、viewer stateではない。
   また、snapshotをdirect qpos reflection contractと整合させるため、`mj_step`後に
   joint qposを再適用する。
 - 他の文書ではfield ruleを再記載せず、この文書へlinkする。
+
+## エンジン版と既知不具合の境界
+
+現行のPython nativeとViewer WASMは4.0.0をlockで固定する。投機的接触は現行タスクでは使わない。
+モデル/条件を記録する既存の`mujoco_version`は実行版を示し、同じモデルXMLでも異なる版の試行を
+同一条件へ混合しない。nativeは唯一の物理状態の正本、WASMは描画専用という境界を維持する。
+
+4.0.0の疎行列Newtonはupstream #3767のため未対応とする。共通loaderとFastArm providerの
+初期化・resetで、`mj_isSparse`と実効solverを検査し、最初の`mj_forward`前に拒否する。
+自由度数の独自判定、密行列/CGへのfallback、試行中のsolver変更で回避しない。
+現行タスクは密行列であり、その数値条件は変えない。別engine版への移行には再検証が必要である。
+判断根拠は[ADR 0016](../design/adr/0016-mujoco4-dense-migration.md)、観測値は
+[移行検証記録](../experiment-notes/2026-11-11-mujoco4-migration.md)に分離する。

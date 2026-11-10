@@ -1,7 +1,7 @@
 ---
 status: supporting
 owner: architecture
-last_verified: 2026-08-27
+last_verified: 2026-11-11
 canonical_for: []
 related:
   - docs/README.md
@@ -39,3 +39,5 @@ ADRはdesign decisionを、その時点のcontextとprovenanceを含めて記録
 - [ADR 0014: 現役consumerを保持した起動寿命の集約](0014-shared-publisher-lifecycle.md)
 
 - [ADR 0015: offline操作のPython ownerとPowerShell互換入口](0015-offline-python-operation-owners.md)
+
+- [ADR 0016: 投機的接触を使わないMuJoCo 4.0.0への移行](0016-mujoco4-dense-migration.md)

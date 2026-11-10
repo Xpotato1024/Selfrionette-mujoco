@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from xpotato_sim.mujoco_backend.compatibility import validate_solver_compatibility
+
 
 @runtime_checkable
 class ModelResourceBundle(Protocol):
@@ -35,6 +37,7 @@ def reset_mujoco_data_to_initial_state(
     """Reset data, optionally applying an explicitly supplied named keyframe."""
 
     mujoco = _import_mujoco()
+    validate_solver_compatibility(model)
     if initial_keyframe_name is not None:
         keyframe_id = int(
             mujoco.mj_name2id(

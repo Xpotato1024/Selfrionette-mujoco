@@ -122,7 +122,7 @@ function compareSequence(xml: string, poses: readonly number[][], vfs?: any, con
 
 describe("installed MuJoCo display pose", () => {
   it("uses the installed single WASM API and checks both binding declarations", () => {
-    assert.equal(api.mj_versionString(), "3.9.0");
+    assert.equal(api.mj_versionString(), "4.0.0");
     assert.equal(typeof api.mj_fwdKinematics, "function");
     for (const path of ["mujoco.d.ts", "mt/mujoco.d.ts"]) {
       assert.match(readFileSync(resolve(process.cwd(), "node_modules/@mujoco/mujoco", path), "utf8"), /mj_fwdKinematics\(_0: MjModel, _1: MjData\): void/);

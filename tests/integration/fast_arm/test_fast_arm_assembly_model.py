@@ -75,7 +75,7 @@ def test_random_pose_fk_jacobian_mass_and_gravity_are_true_reflections():
         np.testing.assert_allclose(jr_l[:,dls], -S@jr_r[:,drs], atol=1e-12)
         np.testing.assert_allclose(jp_r[:,dls], 0, atol=1e-12)
         np.testing.assert_allclose(jp_l[:,drs], 0, atol=1e-12)
-        mass = np.zeros((model.nv,model.nv)); mujoco.mj_fullM(model,mass,data.qM)
+        mass = np.zeros((model.nv,model.nv)); mujoco.mj_fullM(model,data,mass)
         np.testing.assert_allclose(mass[np.ix_(drs,drs)],mass[np.ix_(dls,dls)],atol=1e-11)
         np.testing.assert_allclose(mass[np.ix_(drs,dls)],0,atol=1e-12)
         np.testing.assert_allclose(data.qfrc_bias[drs],data.qfrc_bias[dls],atol=1e-10)

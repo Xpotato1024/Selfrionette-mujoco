@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fast-arm-core",
     "matplotlib>=3.11.0",
-    "mujoco>=3.9.0",
+    "mujoco==4.0.0",
     "websockets>=16.0",
 ]
 
