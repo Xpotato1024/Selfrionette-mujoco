@@ -117,3 +117,21 @@ option/default/validationを再定義せず、実機操作のmonitor/measure/liv
 ## 2026-10-28: 保存済み Workbench 条件の明示的変換
 
 `convert_workbench_condition.py`（`scripts/repository/convert_workbench_condition.py`）を追加した。旧 profile ID を分類別 ID へ一度だけ変換し、新しい出力先へ保存する。通常の条件読込には旧 ID の暗黙互換を追加しない。
+
+
+## 2026-11-11: MuJoCo4記事用の隔離診断
+
+`scripts/diagnostics/mujoco4_article/` は記事素材のsoftware-only再現入口であり、通常の研究runtimeやhardware経路に接続しない。既存の退役判断は変更しない。
+
+| file | consumer / evidence | 分類・判断 |
+| --- | --- | --- |
+| `capture.py` | 記事素材CI、実験note | 固定モデルを実計算し、時刻・状態・hash付きでGIF/動画を生成する明示実行診断 |
+| `contact.py` | 記事素材CI、実験note | 同じ4.0の投機的接触OFF/ON比較。実アーム改善の証明ではない |
+| `test_capture.py` | 隔離4.0専用CI | 条件の同一性、状態の有限性、塑性の残留、出力保護を検査 |
+| `requirements.txt` | 専用venvと専用CI | 4.0の固定依存。通常のpyproject/uv.lockを変更しない |
+| `torsion.xml` / `foil.xml` | capture.py | Apache-2.0公式モデルをexact commitで保持 |
+| `LICENSE` / `provenance.json` | hash検査、配布素材 | 上流ライセンスと固定入力の来歴 |
+| `.gitattributes` | Git checkout | Windows/Linuxで固定モデルのLFを保持 |
+| `README.md` | 記事制作担当 | 実行、比較条件、再生速度、公開との境界を明記 |
+
+現行手順は[記事素材診断](../../../scripts/diagnostics/mujoco4_article/README.md)、観測結果は[実験note](../../experiment-notes/mujoco4-article-20261111.md)を参照する。

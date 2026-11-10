@@ -1,0 +1,11 @@
+{
+  "repository": "google-deepmind/mujoco",
+  "revision": "ac60eae30fa7e0d31315c38d9476752fb81be67e",
+  "license": "Apache-2.0",
+  "source_directory": "model/plastic",
+  "files": {
+    "torsion.xml": "d8c6a4500a269ac974667c34b93588eccf8f11ff9d6a00ce5a5385b413d42b73",
+    "foil.xml": "cd01973b8c76494e3d988c053f60861fbd00b901f60cde10a80c5fd0614dd0a1",
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  }
+}
