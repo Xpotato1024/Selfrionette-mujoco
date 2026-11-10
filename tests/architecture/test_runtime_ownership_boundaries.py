@@ -73,6 +73,9 @@ EXPECTED_MODULES = {
     },
     "experiment": {
         "continuous_record",
+        "trial_analysis",
+        "pilot_session",
+        "pilot_export",
         "session_input",
         "edited_condition",
         "trial_condition",

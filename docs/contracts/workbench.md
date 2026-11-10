@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: runtime
-last_verified: 2026-10-26
+last_verified: 2026-11-10
 canonical_for:
   - local simulation workbench control and resource lifetime
 related:
@@ -336,6 +336,9 @@ ready初期frameとterminal最終frameはworkerとbrowser中継Peerの両方で�
 STOP/fault時はFIFO内を含む未送信frameだけを失効し、制御応答・完了eventの順序と配送は維持する。
 旧generation/ticketとSTOP後frameはserviceで拒否する。IDなしのvalid late入力は検査・棄却し、制御応答を毎sample生成しない。
 送受信・overflow障害はactive試行を`technical_invalid`として原因とともに記録してから資源を回収する。
+資源解放時はWebSocketのclose全体へ1秒の期限を設け、handshake送信前のdrain待ちも期限へ含める。
+期限到達時はsocketを所有する同じIO loopでtransportをabortし、接続終了を確認する。
+IO threadのjoin上限は3秒のままとし、相手が受信できない切断時の未送信データを配送済みとは扱わない。
 message frameworkや第二の試行SoTは作らない。senderはthreadなのでGIL競合とowner上のsnapshot/payload変換負荷は残る。
 shared-memory snapshot専用processへの完全分離は未実装である。
 

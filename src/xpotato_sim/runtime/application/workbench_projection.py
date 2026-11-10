@@ -57,6 +57,13 @@ class AsyncWorkerConnection:
             finally:
                 reader.cancel(); stop.cancel()
                 await asyncio.gather(reader, stop, return_exceptions=True)
+                try:
+                    # close_timeoutだけでは送信bufferのdrain待ちを覆わない。
+                    await asyncio.wait_for(self.ws.close(), timeout=1)
+                except TimeoutError:
+                    # 終了要求後の詰まった表示送信は同じIO loop内で回収する。
+                    self.ws.transport.abort()
+                    await self.ws.wait_closed()
 
     def send(self, raw):
         if self.error is not None or self.closed:

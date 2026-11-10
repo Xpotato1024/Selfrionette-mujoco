@@ -1,10 +1,11 @@
 ---
 status: canonical
 owner: research
-last_verified: 2026-09-25
+last_verified: 2026-11-10
 canonical_for:
-  - R7-G完了後の研究実行優先順位
-  - 実機接触成立までのcross-round dependency roadmap
+  - 1自由度ばねと4条件の自己pilotに向けた研究実行優先順位
+  - 追加力覚提示デバイスの凍結と将来拡張の境界
+  - 実機接触成立までの過去の依存関係
 related:
   - docs/design/adr/0004-prioritize-physical-contact-bringup.md
   - docs/contracts/runtime-input-source-registry.md
@@ -18,29 +19,49 @@ related:
 
 # 研究実行ロードマップ
 
-基盤名はXpotato-Simへ移行した。上記の関連Issueは改名前と同じ履歴を参照し、研究の優先順位は変更しない。
+基盤名はXpotato-Simへ移行した。上記の関連Issueは改名前と同じ履歴を参照する。
 
 ## 目的と位置付け
 
-この文書は、R7-G完了後にSelfrionette-mujocoで何を先に成立させるかを定めるcurrentな研究実行順序の正本である。
+この文書は、Xpotato-Simで何を先に成立させるかを定める研究実行順序の正本である。
 研究目的そのものや卒業論文の主張を置き換える文書ではなく、既存の研究目的を最短で検証可能な状態へ運ぶためのsoftware / experiment execution roadmapを定める。
 
-現在の最優先milestoneは、**共通の速度写像・腕identity・シミュレーション状態を使い、片腕/双腕の操作予備、ばね押圧・推定、協調接触の実験を実行・記録できる状態**である。実機は時間と受入条件が整った場合の追加検証であり、シミュレーション主経路の必須前提にしない。
+現在の最優先目標は、**1自由度ばねを用いたS-rate / G-rate × 画面力表示ON / OFFの4条件について、条件固定、有限試行、連続ログ保存、集計までを通し、自己pilotを実施できるソフトウェアを準備すること**である。入力装置の実接続・校正・操作確認は別の受入段階とし、コード統合や合成入力の成功で代替しない。
 
-```text
-Gamepad / Selfrionette
-  -> Input Source -> common rate Mapping -> arm binding
-  -> one MuJoCo scene -> task / evaluation / record
-  -> optional physical output (separate manual gate)
-```
+## 現行方針：2026-10-26研究相談と2026-11-10の再確認
 
-2026-09-25の利用者追認済み作業基準は、論文repositoryの
+根拠は、相談日2026-10-26の[研究相談計画（research-consultation-plan.pdf）](https://chatgpt.com/library?file_id=libfile_dd950108f8f48191a1a50a693e333daf&account_id=personal)の第1ページである。参照版はversion 2、更新日時は2026-10-26 07:38 UTC。同資料は空圧反力提示を本題から除外し、M、3課題、12条件以上の旧案を採用しないと記録している。2026-11-10に利用者が追加の力覚提示デバイス計画の凍結を再確認した。
+
+**追加の力覚提示デバイス開発は凍結する。** 空圧提示を含む人体への追加出力装置を、今回のコード準備や実験開始の条件に含めず、任意の追加実装としても再開しない。再開する場合は研究範囲の変更として別途判断する。画面上の接触力数値・矢印等は継続する比較対象であり、ハードウェア凍結の対象と混同しない。
+
+| 入力条件 | 画面力表示OFF | 画面力表示ON |
+|---|---|---|
+| S-rate：Selfrionetteの指先力から手先速度を生成 | S / OFF | S / ON |
+| G-rate：Gamepad入力から共通の手先速度を生成 | G / OFF | G / ON |
+
+主たる比較は、**表示OFFでのS/G差と、表示ONでのS/G差**である。表示切替に伴って制御・写像・減速処理を変えず、通常映像と接触力の連続記録も両表示条件で維持する。入力装置ごとの校正・正規化は明示して保存し、入力装置への力と仮想対象の接触力を別の量として扱う。
+
+課題は「押圧再現」または「強弱判断」が候補で、選択は未確定である。成功閾値、主指標、試行回数、待機時間、練習・休止の規則も未確定のままとする。4条件の自己pilotに必要な実行・記録経路を整えることと、本実験の数値条件・参加者規模・解析を凍結することは別である。既存の技術確認用設定を、採択済みの研究条件として扱わない。
+
+### 今回のコード準備の順序
+
+1. 既存の1自由度ばね、S/G入力、画面力表示の4条件を、同じ有限試行経路へ接続する。
+2. 表示ON/OFFで物理・制御・減速・通常映像を維持し、OFF時の追加力情報の漏れと条件の取り違えを防ぐ。
+3. reset、開始、中断、有限終了、再試行、記録失敗を扱い、完了した記録と不完全な記録を区別する。
+4. 条件・モデル・入力・時刻・接触力・ばね状態・終了理由を対応づけた連続ログを保存し、全試行から集計・図を再生成できるようにする。
+5. 実入力でしか確認できない個体識別、校正、鮮度、遅延、操作性を、自己pilot前の受入項目として残す。鮮度閾値を緩めて受入済みにしない。
+
+## 以前の計画と将来拡張
+
+以下の双腕・協調接触・実機出力の経路は、過去の判断と将来拡張の依存関係として保持する。今回の4条件の自己pilotへ追加する必須作業ではない。既存機能やIssueの受入条件を削除・完了扱いにするものでもない。
+
+2026-09-25時点の利用者追認済み作業基準は、論文repositoryの
 [RM004](https://github.com/Xpotato1024/Selfrionette-Mujoco-paper/blob/721c119537f51f582094fcb610b4b6bfa4349e67/research-memos/RM004_SimulationBimanualExperimentDesign.md)
-である。Gamepad対Selfrionetteの共通rate比較、双腕とばね課題を改訂可能な作業方針として扱う。
-以前の「実機優先・入力装置間比較は対象外」を現在の主経路へ適用しない。これは新規性確定・数値条件凍結・参加者実験開始許可ではない。
+である。当時の共通rate比較、双腕とばね課題の構成は改訂可能な方針だった。現在の実施範囲には上記の10月26日相談と11月10日の再確認を適用し、旧案を自動的に戻さない。
+以前の「実機優先・入力装置間比較は対象外」も現在の主経路へ適用しない。今回の方針同期は新規性確定・数値条件凍結・参加者実験開始許可ではない。
 判断の来歴は [ADR 0011](../design/adr/0011-simulation-first-bimanual-scope.md) に保存し、過去ADRは変更しない。
 
-## 現在成立している前提
+## 以前の計画が前提にした基盤
 
 R7-G / #404までに、versioned manifest / readiness、production six-axis composition、world / tool MuJoCo execution、`experiment-motion-log/v1`、canonical Task evidence reconstruction、production Evaluation Plugin、`evaluation-artifact/v1`、deterministic software-only E2Eが成立した。
 
@@ -50,10 +71,12 @@ R7-G / #404までに、versioned manifest / readiness、production six-axis comp
 - `viewer/v1`はbrowser keyboard / gamepad bridgeであり、gamepad入力は`viewer_gamepad` subtypeとしてruntimeへ到達する。
 - Input Sourceはacquisitionとhealthを所有し、Control Mappingはsampleからcontrol intentへの変換を所有する。
 
-したがって主経路は、左右独立入力、片腕/双腕model・複数手先route、同一worldの接触と記録を接続することにある。
-実機出力は左右の共通codec/要求とgateを維持して整備するが、実機受入待ちでsimulation作業を停止しない。
+当時の主経路は、左右独立入力、片腕/双腕model・複数手先route、同一worldの接触と記録を接続することにあった。
+実機出力を将来追加する場合は左右の共通codec/要求とgateを維持する。実機受入待ちで今回のシミュレーション準備を停止しない。
 
-## シミュレーション主経路の優先順位
+## 双腕・協調接触へ拡張する場合の依存関係
+
+以下は9月時点の実装順であり、現在の未完了一覧や今回の自己pilotの開始条件ではない。再開時にcurrent codeと既存の受入証拠を照合する。
 
 1. 左右独立の1スティックXYZと明示的な入力座標を成立させる（#563/#567、PR #568）。
 2. coreの左右共通assembly、arm/joint identity、片腕/双腕の複数手先provider・routeを接続する（#569と後続）。
@@ -226,7 +249,7 @@ serial open、OSC send、network transmission、physical robot outputは、該�
 - bounded physical operationだけでauthoritative physical safety全体を証明したとは言えない。
 - operator smokeをparticipant experimentとして扱わない。
 
-formal evaluationでは入力装置、写像、補助、反力条件を同時に増やしすぎず、解釈可能な最小比較を維持する。
+今回の自己pilotでは上記の4条件を準備し、追加力覚提示デバイスの凍結を維持する。将来のformal evaluationでも入力装置、写像、補助、反力条件を同時に増やしすぎず、解釈可能な比較を維持する。
 
 ## Roadmap更新ルール
 

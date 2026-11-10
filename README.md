@@ -100,12 +100,12 @@ uv run --no-project --no-config --no-cache --no-env-file --offline --no-python-d
 
 ## Workbenchでの操作
 
-Workbenchは未選択・無入力・無physics stepで待機します。`--open-browser`が自動で開いた操作ページで「操作権を取得」し、presetを選択してください。端末に表示されるURLは閲覧専用で、操作資格は印字しません。自動で開いた操作URLの一時資格は他人へ共有しません。資格なしのURLは表示できても試行を操作できません。通常の入力はGamepadです。実機、serial、OSCへ出力しません。
+Workbenchは未選択・無入力・無physics stepで待機します。`--open-browser`が自動で開いた操作ページで「操作権を取得」し、presetを選択してください。端末に表示されるURLは閲覧専用で、操作資格は印字しません。自動で開いた操作URLの一時資格は他人へ共有しません。資格なしのURLは表示できても試行を操作できません。通常の入力はGamepadで、条件とDevice接続設定を明示すると品質付きSelfrionette入力も使えます。実Selfrionetteのserial接続・tare・neutral・適用は画面で確認します。ロボット実機へのOSC出力は行いません。
 
-1. preset選択で次条件をcloneします。旧v1などの非対応presetは理由付きで無効です。
+1. preset選択で次条件をcloneします。旧v1などの非対応presetは理由付きで無効です。初期モードは記録しない「デモ」です。試行を保存する場合は「実験」を選びます。
 2. 「Advanced設定」でRobotモデル、Environment物体、Input、Mapping、Task、Evaluationと有限予算を確認・編集します。単位・可否はbackendが提供します。物体定義の半寸法・質量・摩擦とworld配置の位置・単位quaternion・fixed/dynamicは別項目です。
 3. 「次条件を検証」でparameter契約を検査し、「検証・準備」でnative modelを構築して初期貫通も検査します。成功した同一MuJoCo worldだけをpreviewします。
-4. 初期sceneとshaderの準備完了後に「操作画面へ」を選び、明示的に「開始」します。画面切替だけでは開始せず、Gamepadの新しい中立入力から有限試行が進みます。
+4. 初期sceneとshaderの準備完了後に「操作画面へ」を選び、明示的に「開始」します。画面切替だけでは開始せず、選択したSourceの新しい中立入力から有限試行が進みます。
 5. 終端・保存完了後に「同じ条件で再試行」、または次条件を編集して「検証・準備」。ページの再読込は不要です。適用中の条件とtrial ID/epochは書き換えません。
 
 モデル選択は登録されたendpoint bindingも明示変更します。bindingはフォームに表示されます。非対応軸・組合せは理由を表示し、代替を暗黙選択しません。接触観測Taskは診断であり、正式experimentの保持・持上げ評価や未実装metricを0・成功として報告しません。
@@ -120,7 +120,7 @@ Workbenchは未選択・無入力・無physics stepで待機します。`--open-
 
 角度計はqposのdegree表示で、上0°、時計回りの正角を赤、負角を青で塗ります。±180°は表示範囲であって可動域・安全範囲ではありません。範囲外や失効を0°へ置換しません。
 
-入力計器はGamepad／キーボード／Selfrionette／genericの共通表示枠です。**Workbenchの実行Sourceは引き続きGamepadのみ**で、表示対応だけでは別deviceを接続できるようにはなりません。Selfrionetteの7chは未校正rawで、指やNへの対応を推測しません。詳細は[Viewer表示契約](docs/operations/product-viewer-wasm-scene-renderer.md)を参照してください。
+入力計器はGamepad／キーボード／Selfrionette／genericの共通表示枠です。Workbenchの実行SourceはGamepadと品質付きSelfrionetteに対応します。Selfrionetteのraw値と校正済みの正規化入力は区別し、指・軸との対応は明示した条件を使います。正規化値を指先力のNと見なさず、表示枠の存在だけで未知deviceへ対応したとは扱いません。詳細は[Viewer表示契約](docs/operations/product-viewer-wasm-scene-renderer.md)と[Device入力契約](docs/contracts/selfrionette-device-input.md)を参照してください。
 
 ### 操作画面の見方
 
@@ -128,8 +128,22 @@ Assistは自由視点と上面・正面を2:1で配分します。「フォー�
 「全体」は有限の支持台なども含めます。「操作視点」は固定operator方向へ戻ります。移動中の自動追従はしません。
 Gamepad入力帯は中央の **左Z・左XY・右XY・右Z** のみです。Zは中央0から上が正、下が負の縦バーで、
 backendが同じsampleで確定した符号付きtrigger量を表します。速度・力の表示ではありません。
-ボタン押下やraw indexは設定画面の入力診断に残します。Selfrionette・Keyboardの既存表示も維持しますが、
-これらをWorkbenchの実行入力へ追加したわけではありません。
+ボタン押下やraw indexは設定画面の入力診断に残します。Selfrionetteの実行入力には対応する条件・校正・接続設定が必要です。
+Keyboard等の表示対応だけで、Workbenchの実行Sourceへ追加されたとは扱いません。
+
+## 4条件の自己pilotを準備する
+
+`xpotato-sim experiment prepare`でS-rate / G-rate × 画面力表示ON / OFFの4条件と試行順を準備し、
+Workbenchの実験モードで各slotを実行・保存します。`experiment attach`で保存trialをslotへ対応付け、
+`experiment analyze`で整合性、停止理由、ばね時系列をJSON/CSV/図へ出します。
+[自己pilotの実行手順](docs/operations/experiment-pilot.md)に実物条件の準備から集計までのコマンドをまとめています。
+
+同梱の比較条件はGの速度係数0.1 m/s、Sは0.02 m/sであり、prepareで共通速度を明示します。
+同梱Selfrionette identityは合成fixtureで、ソフトウェア確認には`--software-fixture`を使います。
+追加の力覚提示デバイス開発は凍結中です。画面の力表示は比較対象として残します。
+押圧再現か強弱判断かの課題選択、主指標、成功閾値、反復数、待機・練習・休止規則は未確定です。
+Taskの時間満了と押圧成功、ばね復元荷重`kq`と接触力・指先入力力はそれぞれ区別します。
+条件準備や整合性検査を、実機受入・正式Taskの認定や実験実施済みの証拠にはしません。
 
 ## 条件をheadlessで再現する
 
@@ -146,7 +160,7 @@ uv run xpotato-sim workbench --condition $condition --fixture tests/fixtures/tri
 
 短いfixtureで試す場合、export前にAdvancedの`limits.max_ticks`を **5** にしてください。`--condition`と`--profile`／`--ticks`は排他です。条件内の有限予算を使用します。fixtureのないheadless実行や隠れた中立入力の補完はありません。
 
-結果は`$results/<新しいtrial ID>/`に`condition.json`、`initial-state.json`、`start.json`、`final-state.json`、`terminal.json`として保存します。`terminal.json`が保存完了のmarkerです。過去結果は上書きしません。途中fileだけを正常結果と見なさないでください。CLIのexit 0は`recording=complete`かつ`runner_stop_reason=simulation_budget`または`task_success`です。任意のTask終端や診断期間終了だけではexit 0にならず、正式な課題達成も保証しません。
+結果は`$results/<新しいtrial ID>/`に`condition.json`、`initial-state.json`、`start.json`、`samples.jsonl`、`final-state.json`、`terminal.json`として保存します。`terminal.json`が保存完了のmarkerです。過去結果は上書きしません。途中fileだけを正常結果と見なさないでください。CLIのexit 0は`recording=complete`かつ`runner_stop_reason=simulation_budget`または`task_success`です。任意のTask終端や診断期間終了だけではexit 0にならず、正式な課題達成も保証しません。
 
 ## Workbenchオプション
 
@@ -166,7 +180,8 @@ uv run xpotato-sim workbench --condition $condition --fixture tests/fixtures/tri
 | `--open-browser` | 任意・off | 操作URLをブラウザで開く。run-onceと排他 |
 | `--startup-check` | 任意・off | Web/worker起動・終了だけを確認。run-onceと排他 |
 | `--run-once` | 任意・off | headless有限実行。profileまたはconditionとfixtureが必須 |
-| `--fixture` | 任意・live Gamepad | 有限software入力JSON。browser入力とは排他 |
+| `--fixture` | 任意・未指定は選択Sourceのlive入力 | 有限software入力JSON。browser入力・device-configとは排他 |
+| `--device-config` | 任意・なし | 既存Device bridge executableとrole別port/校正profileを指定するlocal JSON。fixture/run-onceと排他。接続・tare・neutral・適用は別操作 |
 | `--ticks` | 任意・profileのsteps | 有限commit数。正整数。conditionと排他 |
 | `--input-wait-s` | 任意・5 s | 開始後の入力準備上限。正の有限秒 |
 | `--wall-s` | 任意・360 s | 開始後の総実時間上限。正の有限秒 |
@@ -190,6 +205,7 @@ uv run xpotato-sim workbench --help
 | --- | --- | --- |
 | `profile` | selector任意・省略は一覧 | 登録名または明示JSON pathを解決。起動・stepしない |
 | `trial` | profile/fixture/result-root/ticks/software-revision必須 | 共通runnerによる有限headless。input-wait/wall/prepareは5/60/30 s |
+| `experiment` | prepare / attach / analyze | 4条件と予定slotの準備、保存trialの対応付け、全試行の整合性検査と集計 |
 | `replay` | robot必須、steps=1、preset任意 | NDJSON dry-run。WebSocketやGUIを起動しない |
 | `app` | profile必須、`--check`任意 | 旧profile起動／依存検査。Workbench editorとは別の既存入口 |
 

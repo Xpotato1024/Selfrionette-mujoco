@@ -420,6 +420,10 @@ class TrialRunner:
                             sites=[asdict(site) for site in sample.sites],
                             dynamics=sample.metadata.get("scene_dynamics_v1"),
                             geometry=sample.metadata.get("scene_contact_geometry_v1"),
+                            signals={key: sample.metadata[key] for key in (
+                                "scene_force_signal_v1", "force_presentation_v1",
+                                "command_mapping_v1", "coordinated_runtime_v1")
+                                if key in sample.metadata},
                             task=self._execution.task_view)
                     task = self._execution.task_state
                     if task is not None and task.classification is not TaskTerminalClassification.RUNNING:

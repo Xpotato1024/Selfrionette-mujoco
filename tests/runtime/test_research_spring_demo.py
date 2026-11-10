@@ -97,6 +97,11 @@ def test_saved_metrics_and_cue_independence(tmp_path):
                  for row in lines if row["kind"] == "tick"]
         for row in ticks:
             row["task"] = {k:v for k,v in row["task"].items() if k != "epoch"}
+            presentation = row["signals"].pop("force_presentation_v1")
+            assert presentation["condition"]["mode"] == cue
+            # 表示policyは条件差として保存する。原力と制御状態はepoch以外同一である。
+            for signal in row["signals"].values():
+                signal.pop("epoch", None)
             assert row["sites"] and len(row["qvel"]) == len(row["qpos"])
         # geometry/dynamicsとTaskのraw値はdisplay modeから独立する。
         records.append(ticks)

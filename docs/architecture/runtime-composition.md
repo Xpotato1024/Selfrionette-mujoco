@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-10-26
+last_verified: 2026-11-10
 canonical_for:
   - runtime composition root
 related:
@@ -60,6 +60,14 @@ provider identity、plugin identityはこの移動で変更しない。
 有限試行寿命、排他的ローカル記録、明示fixtureを所有する。`runners/finite_trial.py`と既存model publisherは
 同じ実行を呼び、physics/Taskを二重実装しない。旧publisherのframe予算と新trialのcommit予算を分ける。
 具体契約は[有限試行](../contracts/finite-trial-runtime.md)だけを正本とする。
+
+`experiment/trial_analysis.py`は完了trialの参照・SHA-256・identity・時刻・連続tickを検証し、
+検証時の不変bytesから保存値を再集計する。`experiment/pilot_session.py`は明示G/S条件からの
+4条件生成、共通速度係数、試行順、session保存と完了trialのslot対応を所有する。
+`experiment/pilot_export.py`は全trialの検査結果、不完全一覧、ばね時系列CSV/図の出力を所有する。
+これらは入力接続、MuJoCo step、Task判定、実機・研究protocolの認定を行わない。
+`cli/experiment.py`は引数と終了codeの薄い入口とし、解析やsession規則を複製しない。
+操作手順は[自己pilot](../operations/experiment-pilot.md)を参照する。
 
 `experiment/edited_condition.py`はWorkbenchの展開条件/v1、descriptor、strict編集入口、clone/diffを所有する。
 既存catalogとlaunch-profile decoderへ接続し、任意pathやcodeを含むGUI専用設定engineを作らない。

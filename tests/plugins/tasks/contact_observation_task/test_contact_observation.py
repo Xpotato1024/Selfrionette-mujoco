@@ -62,3 +62,44 @@ def test_fresh_task_has_no_prior_pairs_or_clock():
     fresh=b.initial_state()
     assert fresh.frame_index==-1 and fresh.time_s==0 and fresh.observed_pairs==()
     assert b.advance(fresh,GeometryTaskObservation(g)).state==s
+
+
+def test_native_sixty_second_accumulation_completes_before_equal_tick_budget():
+    """600 Hz×60秒で観測した加算丸めを、時間切れの失敗へ読み替えない。"""
+    binding, geometry = setup()
+    binding = replace(binding, duration_s=60.)
+    native_time = 0.
+    for _ in range(36000):
+        native_time += 1 / 600
+    assert native_time < 60. and 60. - native_time < 1e-9
+    observation = replace(geometry, frame_index=3600, simulation_time_s=native_time)
+    result = binding.advance(binding.initial_state(), GeometryTaskObservation(observation, budget_exhausted=True))
+    assert result.classification is C.SUCCESS
+    assert result.state.phase == "completed" and "not contact success" in result.state.reason
+    assert result.state.time_s == native_time
+
+
+@pytest.mark.parametrize("remaining", [2e-9, 1 / 60])
+def test_observation_duration_tolerance_cannot_consume_remaining_time(remaining):
+    binding, geometry = setup()
+    binding = replace(binding, duration_s=60.)
+    observation = replace(geometry, simulation_time_s=60. - remaining)
+    assert binding.advance(binding.initial_state(), GeometryTaskObservation(observation)).classification is C.RUNNING
+    result = binding.advance(binding.initial_state(), GeometryTaskObservation(observation, budget_exhausted=True))
+    assert result.classification is C.FAILURE and result.state.reason == "execution_budget_exhausted"
+
+
+def test_subnanosecond_duration_does_not_complete_at_zero_time():
+    binding, geometry = setup()
+    binding = replace(binding, duration_s=1e-12)
+    assert binding.advance(binding.initial_state(), GeometryTaskObservation(geometry)).classification is C.RUNNING
+
+
+def test_duration_rounding_does_not_override_stop_or_reverse_clock():
+    binding, geometry = setup()
+    binding = replace(binding, duration_s=60.)
+    observation = replace(geometry, frame_index=1, simulation_time_s=60. - 5e-10)
+    result = binding.advance(binding.initial_state(), GeometryTaskObservation(observation, "disconnected", True))
+    assert result.classification is C.FAILURE and result.state.reason == "disconnected"
+    state = replace(binding.initial_state(), frame_index=0, time_s=60.)
+    assert binding.advance(state, GeometryTaskObservation(observation)).classification is C.TECHNICAL_INVALID
