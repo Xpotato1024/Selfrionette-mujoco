@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-11-10
+last_verified: 2026-11-11
 canonical_for:
   - product viewer wasm scene renderer operation
 related:
@@ -354,3 +354,12 @@ model切替とdisposeで資源を解放する。固定端を含む表示範囲�
 この形状表示は`force_cue`と`no_force_cue`の両方に共通であり、追加の力数値・矢印とは区別する。
 通常映像の変更なので、旧Viewerと新Viewerの参加者データを同一提示条件として混在させない。
 合成入力のログ再生動画は描画確認であり、実入力遅延・実操作RTF・知覚効果の検証ではない。
+
+## MuJoCo 4.0.0の依存同期
+
+Python nativeの`mujoco`とViewerの`@mujoco/mujoco`を4.0.0に固定する。package分割後も既存の
+`mujoco` distributionを使い、core/studioの対応版は`uv.lock`で確定する。Studioを通常UIへ導入しない。
+変更後はrepository rootの`just setup`で両依存と固定buildを更新し、`just doctor`で検査する。
+WASMだけの更新でnativeの物理計算が速くなったとは扱わず、描画専用の境界を維持する。
+実installed WASMのversion、`mj_fwdKinematics`、model/pose/scene同期の既存テストで4.0.0を検証する。
+過去のfixture生成元3.9.0などの来歴は、実行版へ機械的に書き換えない。

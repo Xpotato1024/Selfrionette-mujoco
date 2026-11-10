@@ -1,7 +1,7 @@
 ---
 status: canonical
 owner: architecture
-last_verified: 2026-09-28
+last_verified: 2026-11-11
 canonical_for:
   - Robot Plugin registration and bounded discovery
   - Robot Profile contract and registry
@@ -336,3 +336,11 @@ WASMの`mj_forward`は描画用のpose投影に限り、制御・接触力はPyt
 
 geometryとdynamic evidenceは同一のscene/model/epoch/frame/timeだけを表示する。異なる数値設定digest、
 欠落したdynamic evidence、不正なqpos/layout、切断では前回forceを有効な観測として残さない。
+
+## 初期姿勢の固定と診断順位
+
+FastArmの実行時初期姿勢はnamed homeを正とし、起動時に候補探索で置き換えない。
+`adapter/diagnostics/neutral_initial_pose.py`の候補評価では、順位用の連続値だけを小数12桁に丸める。
+同点時はqpos辞書順昇順、最後にcandidate ID降順で決定し、`selection_contract`に規則と精度を記録する。
+raw評価値、到達/接触判定、hard constraintの閾値は丸めない。モデルのhomeや可動域をこの診断で変更しない。
+対称候補の丸め誤差による版間の選択逆転を防ぐための規則であり、物理的優劣を付加するものではない。
