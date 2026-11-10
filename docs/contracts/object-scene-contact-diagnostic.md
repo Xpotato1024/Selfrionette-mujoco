@@ -165,3 +165,16 @@ force_on_geom2_world_n/torque_on_geom2_world_nmはgeom2へ働くworld wrench（�
 形状・慣性・摩擦・外観は物体定義、world固定と位置はinstance、観測目標cubeはTaskの対象選択とし、
 Robotモデルの高さやsupport planeで台を代用しない。床はz=0に置き、押し診断では底面z=0・上面z=0.41 m・有限幅/奥行のworld固定box台を別objectとして置く。
 初期cubeの底面は台上面から1 mm離し、既存の初期重なり検査を緩めず、開始後に自然に支持される。
+
+
+## 可動板の押込ばね条件
+
+`compression_spring_plate` / `tasks/research-spring-plate`は、100×10×100 mmの不透明な可動板を使う。
+押込方向はworld -Y、初期中心は(0.24, -0.315, 0.28) mで、手先側の接触面をY=-0.31 mに置く。
+接触面の面積・位置、質量0.1 kg、剛性100 N/m、減衰2 N s/m、可動域0–50 mmを旧立方体条件と揃える。
+質量は比較のため保持したsimulation仮定であり、実物の板や材料の測定値ではない。
+慣性は板の寸法から一様boxとして再計算し、見た目だけ薄くした立方体にはしない。
+
+旧`compression_spring` / `tasks/research-spring`は過去の条件・保存ログ用に保持する。
+新条件のinstance IDは`plate`、Task対象も`plate`であり、scene/model/condition digestは旧条件と異なる。
+現行の4条件例は可動板へ揃える。過去ログの立方体を新しい板へ読み替えない。

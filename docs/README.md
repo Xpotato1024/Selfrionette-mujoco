@@ -99,6 +99,7 @@ completion audit、implementation report、inventory、handoff、historical reco
 | runtime-to-viewer smoke | `docs/operations/runtime-to-viewer-e2e-smoke.md` | backendからbrowser viewerまでの診断入口 |
 | browser visual smoke | `docs/operations/browser-visual-smoke.md` | browser-visible sceneの反復確認 |
 | product viewer WASM scene renderer | `docs/operations/product-viewer-wasm-scene-renderer.md` | current product viewerのoperator path |
+| 保存trialのraw動画 | `docs/operations/offline-video-export.md` | タスク非依存・単一視点・装飾なしのログ動画出力 |
 | keyboard / gamepad live viewer smoke | `docs/operations/r6-l-keyboard-gamepad-live-viewer-smoke.md` | viewer inputのmanual smoke |
 | Selfrionette serial dry-run smoke | `docs/operations/r7-a-lite-serial-dry-run-smoke.md` | recorded fixtureによるoffline serial検証 |
 | live Selfrionette runtime | `docs/operations/r7-b-manual-live-selfrionette-runtime-runner.md` | operator-gated live source手順 |

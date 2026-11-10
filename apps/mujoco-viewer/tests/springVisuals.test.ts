@@ -114,3 +114,21 @@ describe("コイルのbuffer",()=>{
     assert.throws(()=>coil.update(0));assert.throws(()=>coil.update(NaN));coil.dispose();
   });
 });
+
+describe("可動板のコイル径",()=>{
+  it("板厚ではなくばね軸に直交する面幅で径を決め、物理板へ表示板を重ねない",()=>{
+    withModel((model,data,name)=>{
+      const b=springBindings(model,name)[0];close(b.radius,.0225);close(b.wire,.0025);
+      const visual=new SpringVisuals();visual.configure(model,name);
+      applyMujocoDisplayPose(api,model,data,[.02]);visual.update(data);
+      assert.equal(visual.group.children[0].children[1].visible,false);
+      close(springPose(b,data)!.depth,.005);visual.clear();
+    },xml().replace('size=".05 .05 .05"','size=".05 .005 .05"'));
+  });
+  it("geomを回転した薄板もnative局所軸と整合する",()=>{
+    withModel((model,data,name)=>{
+      const b=springBindings(model,name)[0];close(b.radius,.0225);
+      applyMujocoDisplayPose(api,model,data,[0]);close(springPose(b,data)!.depth,.005);
+    },xml().replace('size=".05 .05 .05"','size=".005 .05 .05" quat="0.7071067811865476 0 0 0.7071067811865476"'));
+  });
+});

@@ -5,7 +5,8 @@ import type {DisplayBounds} from "./sceneFraming.js";
 export interface SpringModel {
   njnt: number; ngeom: number;
   jnt_type: ArrayLike<number>; jnt_bodyid: ArrayLike<number>; jnt_qposadr: ArrayLike<number>;
-  jnt_range: ArrayLike<number>; qpos_spring: ArrayLike<number>;
+  jnt_range: ArrayLike<number>; qpos_spring: ArrayLike<number>; jnt_axis: ArrayLike<number>;
+  geom_quat: ArrayLike<number>;
   body_parentid: ArrayLike<number>; body_jntnum: ArrayLike<number>;
   geom_type: ArrayLike<number>; geom_bodyid: ArrayLike<number>; geom_size: ArrayLike<number>;
 }
@@ -33,7 +34,18 @@ export function springBindings(model: SpringModel, jointName: (id: number) => st
     if (!Number.isInteger(address) || address<0 || model.jnt_range[2*joint]!==0
       || !Number.isFinite(hi) || hi<=0 || !Number.isFinite(reference)
       || reference<0 || reference>=hi || half.some(v=>!Number.isFinite(v)||v<=0)) continue;
-    const size=Math.min(...half);
+    // 軸に直交する断面の内接円。薄い板の軸方向厚さをコイル径に使わない。
+    const [w,x,y,z]=Array.from({length:4},(_,i)=>Number(model.geom_quat[4*geom+i]));
+    const a=Array.from({length:3},(_,i)=>Number(model.jnt_axis[3*joint+i]));
+    const local=[
+      (1-2*(y*y+z*z))*a[0]+2*(x*y+w*z)*a[1]+2*(x*z-w*y)*a[2],
+      2*(x*y-w*z)*a[0]+(1-2*(x*x+z*z))*a[1]+2*(y*z+w*x)*a[2],
+      2*(x*z+w*y)*a[0]+2*(y*z-w*x)*a[1]+(1-2*(x*x+y*y))*a[2],
+    ];
+    const radii=half.map((h,i)=>Math.sqrt(Math.max(0,1-local[i]*local[i]))>1e-6
+      ? h/Math.sqrt(Math.max(0,1-local[i]*local[i])) : Infinity);
+    const size=Math.min(...radii);
+    if(!Number.isFinite(size)||size<=0) continue;
     result.push({id:match[1],joint,address,geom,reference,half,
       restLength:Math.max(1.8*(hi-reference),size*1.6),radius:size*.45,wire:size*.05});
   }
@@ -51,7 +63,7 @@ export function springPose(binding: SpringBinding, data: SpringData) {
   const start=center.map((v,i)=>v+axis[i]*depth);
   const length=binding.restLength-(q-binding.reference);
   const anchor=start.map((v,i)=>v+axis[i]*length);
-  return {q,axis,start,anchor,length};
+  return {q,axis,start,anchor,length,depth};
 }
 
 /** 頂点bufferを一度だけ確保。長さ変更でwireの太さを縮めず、meshを再生成しない。 */
@@ -142,6 +154,8 @@ export class SpringVisuals {
       else {const s=Math.sqrt(2*(1+axis[2]));group.quaternion.set(-axis[1]/s,axis[0]/s,0,s/2);}
       mesh.visible=length>binding.wire*2;
       if(mesh.visible) coil.update(length);
+      // 薄い物理板自体が座金を兼ねる場合は、表示用の板を重ねない。
+      moving.visible=pose.depth>binding.radius;
       moving.position.set(0,0,0);fixed.position.set(0,0,length);
       const width=2*Math.max(...binding.half),pad=width*.9;
       entry.bounds={min:[0,1,2].map(i=>Math.min(start[i],anchor[i])-pad) as [number,number,number],

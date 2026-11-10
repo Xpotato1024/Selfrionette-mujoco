@@ -276,6 +276,7 @@ declare module "three" {
     setScissorTest(enabled:boolean):void;
     setClearColor(color: unknown, alpha?: number): void;
     render(scene: Scene, camera: PerspectiveCamera | OrthographicCamera): void;
+    compile(scene: Object3D, camera: PerspectiveCamera, targetScene?: Scene): unknown;
     compileAsync(scene: Object3D, camera: PerspectiveCamera, targetScene?: Scene): Promise<unknown>;
     dispose(): void;
   }

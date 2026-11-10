@@ -471,3 +471,11 @@ encode/decodeを行わない。wireと保存結果のfield・値・分類は維�
 ModelExecutionがtrial/epochとcommit寿命を束ね、Taskは引き続きraw ownerの観測を使う。
 `contact/force_filter.py`は旧R7-Hと新sceneの共通filter primitiveだけを所有し、
 scene、Task、native physics、表示をimportしない。表示再取得によるfilter更新や追加physicsは行わない。
+
+
+### 保存trialからの動画用姿勢bundle
+
+`experiment/video_bundle.py`は既存strict readerの記録を読み、保存条件からmodelを構築してdigestを照合する。
+公式MuJoCoで記録サイトの位置整合を検査し、タスク固有UIを含まないraw描画用姿勢列を出力する。
+入力接続・制御・physics stepは行わない。browserと符号化のprocess所有は`scripts/viewer/export_trial_video.py`、
+描画は既存Viewerの`wasm-scene/offlineVideo.ts`が担当する。

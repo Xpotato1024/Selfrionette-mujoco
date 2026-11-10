@@ -354,3 +354,15 @@ model切替とdisposeで資源を解放する。固定端を含む表示範囲�
 この形状表示は`force_cue`と`no_force_cue`の両方に共通であり、追加の力数値・矢印とは区別する。
 通常映像の変更なので、旧Viewerと新Viewerの参加者データを同一提示条件として混在させない。
 合成入力のログ再生動画は描画確認であり、実入力遅延・実操作RTF・知覚効果の検証ではない。
+
+
+## 装飾なしのオフライン動画
+
+`offline:true`はWebSocketと自動animationを使わず、`renderFrame()`で現在の検証済み姿勢を明示描画する。
+`overlays:false`は軸・contact/force診断groupを描画提出時に隠すが、床・Robot・物体は残す。
+既定の対話操作経路は従来どおりである。headless時だけ同期shader compileを使用し、sourceの
+文字列差替えや描画内部への外部hookは不要である。
+
+[raw動画出力](offline-video-export.md)は同じrendererを使い、表示専用WASMから受信姿勢を描く。
+ばね用の報告UI・入力列・解析結果を動画エンジンへ埋め込まない。
+可動板のコイル径は軸に直交する面寸法から決め、薄い物理板には表示用の座金を重ねない。

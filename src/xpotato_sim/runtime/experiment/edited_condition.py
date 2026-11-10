@@ -17,12 +17,13 @@ from xpotato_sim.runtime.scene.command_mapping import validate_command_mapping
 
 SCHEMA = "workbench-condition/v1"
 MAX_BYTES = 60000
-SHARED_SPRING_TASK = "tasks/research-spring"
+SHARED_SPRING_TASK = "tasks/research-spring-plate"
 SHARED_TASK_MODELS = {
     "tasks/dynamic-cube-drop": "bimanual",
     "tasks/dynamic-cube-push": "bimanual",
     "tasks/dynamic-fixed-contact": "bimanual",
     SHARED_SPRING_TASK: "single_original",
+    "tasks/research-spring": "single_original",
 }
 INPUT_BINDINGS = {
     "bimanual": {"gamepad/v1": "inputs/bimanual-gamepad",

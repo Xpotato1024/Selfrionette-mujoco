@@ -32,3 +32,8 @@ prepare → Workbenchの実験モードで記録 → attach → analyzeのコマ
 [有限試行](../../../docs/contracts/finite-trial-runtime.md)、
 [Workbench](../../../docs/contracts/workbench.md)、
 [profile 配置と移行](../../../docs/operations/profile-roles-and-migration.md)を参照。
+
+
+現在の4条件例は`tasks/research-spring-plate`を使用する。可動端は100×10×100 mmの板であり、
+旧`tasks/research-spring`の立方体とは異なるscene/model条件である。旧保存結果を上書きしない。
+記録から装飾なしの動画を出す手順は[raw動画出力](../../../docs/operations/offline-video-export.md)を参照する。
