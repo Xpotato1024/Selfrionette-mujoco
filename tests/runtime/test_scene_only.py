@@ -126,3 +126,16 @@ def test_scene_only_saved_trial_reanalysis(tmp_path):
     assert trial.analysis()["condition"]["schema_version"]=="trial-condition/v2"
     assert len(list(trial.iter_rows(kind="tick")))==8
     runner.close()
+
+
+def test_flex_impact_sphere_is_registered_and_separate_from_fast_wall_ball():
+    flex=load("scene-elastic-plastic").scene_plan.manifest
+    wall=load("scene-sphere-wall").scene_plan.manifest
+    assert len(flex.definitions)==1 and len(wall.definitions)==2
+    assert flex.definitions[0].radius_m == pytest.approx(.03)
+    assert flex.definitions[0].mass_kg == pytest.approx(.44)
+    assert flex.definitions[0].diagonal_inertia_kg_m2[0] == pytest.approx(2*.44*.03**2/5)
+    assert flex.objects[0].position_m[2] == pytest.approx(.46)
+    sphere=next(d for d in wall.definitions if d.radius_m is not None)
+    assert sphere.radius_m == pytest.approx(.01)
+    assert sphere.mass_kg == pytest.approx(.05)

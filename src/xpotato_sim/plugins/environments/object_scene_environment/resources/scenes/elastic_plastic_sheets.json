@@ -2,13 +2,13 @@
   "schema_version": "object-scene-preset/v4",
   "scene_id": "elastic_plastic_sheets",
   "definition_resources": [
-    "simulation_ball_10mm"
+    "simulation_impact_ball_30mm"
   ],
   "objects": [
     {
       "instance_id": "ball_elastic",
       "definition": {
-        "name": "simulation_ball_10mm",
+        "name": "simulation_impact_ball_30mm",
         "version": 1
       },
       "motion_type": "dynamic",
@@ -17,7 +17,7 @@
         "position_m": [
           -0.19,
           0,
-          0.38
+          0.46
         ],
         "orientation_wxyz": [
           1.0,
@@ -43,7 +43,7 @@
     {
       "instance_id": "ball_plastic",
       "definition": {
-        "name": "simulation_ball_10mm",
+        "name": "simulation_impact_ball_30mm",
         "version": 1
       },
       "motion_type": "dynamic",
@@ -52,7 +52,7 @@
         "position_m": [
           0.19,
           0,
-          0.38
+          0.46
         ],
         "orientation_wxyz": [
           1.0,

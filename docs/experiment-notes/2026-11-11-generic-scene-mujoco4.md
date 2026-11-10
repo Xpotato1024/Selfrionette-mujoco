@@ -35,10 +35,10 @@ related:
 - `examples/scene-sphere-wall` / `...-speculative` の同一MuJoCo 4.0.0 flag OFF/ONを比較。
 - OFFは20 ms後の球中心x=+120 mm（壁を通過）、ONはx=-17.1 mm（壁手前にとどまる）。初期位置は両方x=-120 mm。3.9.0との比較ではない。
 - `examples/scene-elastic-plastic` の120 tickを通常 `TrialRunner` で保存。simulation時間1.8 s、`recording=complete`、`runner_stop_reason=simulation_budget`、Task判定なし。
-- 1.8 sの全flex頂点の初期状態との差のRMSは弾性0.000514893454472 m、弾塑性0.003208879286058 m（約0.515 / 3.209 mm）。頂点は各169個。RMSは材料ひずみや最大へこみを示さない。
-- 最終plastics状態L2ノルム3878.264119098701。L2ノルムそのものは物理的な塑性ひずみの単位付き評価値と呼ばない。
+- 1.8 sの全flex頂点の初期状態との差のRMSは弾性0.0004889420600824247 m、弾塑性0.013594226370945893 m（約0.489 / 13.594 mm）。頂点は各169個。RMSは材料ひずみや最大へこみを示さない。
+- 最終plastics状態L2ノルム21750.807697877644。L2ノルムそのものは物理的な塑性ひずみの単位付き評価値と呼ばない。
 
-柔軟体側のYoung=10 MPa、Poisson=0.3、厚さ4.8 mm、減衰設定0.010で、弾塑性側に `yield="0.00016 0.0016"`。初期条件・材料設定の詳細は登録済みresourceのJSONを正本とする。
+柔軟体への衝突球は半径30 mm・質量0.44 kg（左右とも同条件）。柔軟体側のYoung=10 MPa、Poisson=0.3、厚さ4.8 mm、減衰設定0.010で、弾塑性側に `yield="0.00016 0.0016"`。初期条件・材料設定の詳細は登録済みresourceのJSONを正本とする。
 
 ## 記録と媒体
 
@@ -47,7 +47,7 @@ related:
 
 `scripts/viewer/export_trial_video.py` から読み出し、`mj_setState` / `mj_forward` で再描画する。export時に`mj_step`で再積分しない。FFmpegで同じフレーム列からGIF・MP4・WebMを出力する。
 
-予備素材（800×500、20 fps、0.5倍速）の実ファイル容量は柔軟体GIF 97,047 bytes、MP4 14,417 bytes、WebM 10,834 bytes。別codec/品質条件であり同品質比較ではない。これらは**コミット前の開発worktreeで作成した予備観測**であり、最終PR headでの再実行・最終媒体hashが確定した場合はそちらを正として記録する。
+予備素材（800×500、20 fps、0.5倍速）の実ファイル容量は柔軟体GIF 699,098 bytes、MP4 44,196 bytes、WebM 31,432 bytes。別codec/品質条件であり同品質比較ではない。これらは**コミット前の開発worktreeで作成した予備観測**であり、最終PR headでの再実行・最終媒体hashが確定した場合はそちらを正として記録する。
 
 **制限**：現時点のScene単独の動画はnative rendererで取得した。ブラウザ版WASM Viewer内でRobotなしSceneの描画を正式に受け入れたわけではない。GUI込みRTFや実装の統計的優越を示す測定ではない。
 

@@ -25,7 +25,6 @@ def _hash(path):
 
 def _state_frames(trial, provider, model):
     """検証済みフル積分状態だけを返す。qpos-onlyでplastic stateを作り直さない。"""
-    initial=trial.analysis()
     checkpoints=[]
     # Initial state is validated by the trial analyzer's hash/reference chain.
     # The tick records contain complete native integration checkpoints.
@@ -52,8 +51,15 @@ def _native_camera(model,preset):
         raise ValueError("unsupported named camera")
     camera=mujoco.MjvCamera()
     mujoco.mjv_defaultFreeCamera(model,camera)
-    camera.lookat[:]=model.stat.center
-    camera.distance=max(float(model.stat.extent)*2.5,0.75)
+    # Frame the participating geometry, not the large support plane.
+    initial=mujoco.MjData(model)
+    mujoco.mj_forward(model,initial)
+    centers=[initial.geom_xpos[i] for i in range(model.ngeom)
+             if model.geom_type[i] != mujoco.mjtGeom.mjGEOM_PLANE]
+    if model.nflex:
+        centers.extend(initial.flexvert_xpos)
+    camera.lookat[:]=np.mean(np.asarray(centers),axis=0) if centers else model.stat.center
+    camera.distance=max(float(model.stat.extent)*.9,0.45)
     camera.azimuth={"operator":110,"iso":135,"front":90,"side":0,"top":90}[preset]
     camera.elevation={"operator":-28,"iso":-30,"front":0,"side":0,"top":-90}[preset]
     return camera
@@ -139,6 +145,8 @@ def export_scene_only_video(args, *, trial):
             produced[suffix]={"path":path.name,"bytes":path.stat().st_size,"sha256":_hash(path)}
         evidence={"schema_version":"scene-recorded-video/v1",
                   "trial_id":analysis["trial_id"],"source_commit":analysis["software_revision"],
+                  "native_exporter_sha256":_hash(Path(__file__)),"camera_lookat":camera.lookat.tolist(),
+                  "camera_distance":camera.distance,"renderer":"MuJoCo 4 native OpenGL",
                   "native_mujoco_version":mujoco.__version__,"model_sha256":provider.model_sha256,
                   "scene_digest":profile.scene_plan.manifest.digest,
                   "terminal_sha256":analysis["terminal_sha256"],
